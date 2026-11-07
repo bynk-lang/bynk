@@ -25,7 +25,7 @@ fn fixture() -> PathBuf {
 #[test]
 fn match_after_expect_is_type_checks() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -44,7 +44,7 @@ fn match_after_expect_is_type_checks() {
         .arg("--output")
         .arg(&out_root)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut report = String::from_utf8_lossy(&out.stdout).into_owned();
     report.push_str(&String::from_utf8_lossy(&out.stderr));
     assert!(

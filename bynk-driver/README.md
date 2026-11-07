@@ -4,14 +4,12 @@
 [![docs.rs](https://img.shields.io/docsrs/bynk-driver)](https://docs.rs/bynk-driver)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-The **shared front-end of the `bynkc` and `bynk` CLIs**, for the
+The **shared front-end of the `bynk` CLI**, for the
 [Bynk](https://github.com/bynk-lang/bynk) compiler.
 
-Both binaries expose `fmt` and `check` with identical semantics; this crate
-holds the one implementation of each command body — project rooting,
-project-failure flattening, and output writing — parameterised by the
-program name that prefixes messages, instead of each binary carrying its own
-by-hand copy pinned together only by a parity test.
+This crate holds the command bodies the `bynk` CLI runs (`check`, `compile`,
+`fmt`, `test`) — project rooting, project-failure flattening, and output
+writing — parameterised by the program name that prefixes messages.
 
 It holds:
 
@@ -46,21 +44,21 @@ bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
 
 Each crate depends on its parent in the tree, plus any crates listed after
-its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
+its `+`. The front-ends sit on top: the `bynk` CLI over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
 the unpublished `bynk-wasm` playground module over `bynk-driver`
 and `bynk-ide`.
 
-The `bynkc` and `bynk` binaries are the two front-ends built on top of it.
+The `bynk` binary is the front-end built on top of it.
 
 ## Use
 
-`bynk-driver` is consumed by the `bynkc` and `bynk` binaries directly; it has
+`bynk-driver` is consumed by the `bynk` binary directly; it has
 no standalone CLI of its own.
 
 ```toml
 [dependencies]
-bynk-driver = "0.510"
+bynk-driver = "0.512"
 ```
 
 See the [API docs](https://docs.rs/bynk-driver) for the full surface.

@@ -217,6 +217,15 @@ types over one base) agree at the base, but unrelated types do not
 from its expected type when that type is either, and otherwise from the enclosing
 return type, so it is never ambiguous (#1659).
 
+The operands of `==` and `!=` are same-typed, so one operand's type is the
+expected type for the other. An operand that can take its type only from its
+context — a bare `None`, `Ok(…)`, `Err(…)`, an empty list, or an `HttpResult`
+or `QueueResult` variant (`NotFound`, `BadRequest("…")`, `HttpResult.NotFound`,
+`Ack`, `Retry("…")`) — is typed against the other operand, so
+`r == BadRequest("msg")` and `r != NotFound` type-check for
+`r: HttpResult[String]`. A variant with nothing to infer from keeps the `()`
+payload fallback; `expect r is …` is unchanged (#2839).
+
 **The bottom type and deliberate faults** (#2620). `unreachable(message)` and
 `todo(message)` are ambient built-in functions, not keywords: each takes one
 `String` (`bynk.types.argument_mismatch`, `bynk.types.call_arity`), and a `fn`,
@@ -631,6 +640,13 @@ instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
 
+**`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
+rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
+route, [§5.7.5](/book/spec/static-semantics/#response-json)). It is refused when the type
+of `v` contains an `Option` whose payload can encode as `null`
+(`bynk.json.nested_option_plain`, the injectivity rule of §5.7.5), or mentions a type
+parameter (`bynk.json.encode_plain_generic`).
+
 **The typed JSON codec** (v0.22b, ADR 0045). `Json.encode(v) -> String` and
 `Json.decode[T](s) -> Result[T, JsonError]` are compiler-backed statics on
 the built-in `Json` module: `encode` dispatches to the generated
@@ -747,7 +763,7 @@ separator MUST fall between two digits: a leading (`_1`), trailing (`1_`), or
 doubled (`1__2`) separator, or one adjacent to the decimal point or exponent
 marker, is a lexical error. The separators are **purely visual** — they are
 stripped before the value is parsed, so `1_000` and `1000` denote the same value.
-As with `Float` literals, the **as-written lexeme is preserved**, so `bynkc fmt`
+As with `Float` literals, the **as-written lexeme is preserved**, so `bynk fmt`
 keeps the author's grouping verbatim.
 
 ### §5.2b Record field defaults {#field-defaults}
@@ -1058,8 +1074,8 @@ Renaming a field is a removal plus an addition. A shape recorded before position
 were (an older lock) has none: an unchanged build fills them in without changing
 the version, and until then a change inside a stored value is judged as a change of
 the field's value types. A recorded class no
-longer declared is `bynk.agent.class_removed`. As for events, `bynkc check` and
-`bynkc test` reconcile without writing the lock, and only a build records a new
+longer declared is `bynk.agent.class_removed`. As for events, `bynk check` and
+`bynk test` reconcile without writing the lock, and only a build records a new
 version.
 
 **The schema-version marker.** A build with the lock stamps every committed record
@@ -2097,8 +2113,8 @@ every added field has a default and no field is removed, retyped, or loses a
 default, increments it by one; any other change is
 `bynk.event.non_additive_schema_change`. A declared `@schema(N)` MUST equal the
 version so computed (`bynk.event.schema_version_mismatch`). The computed version
-is the envelope's `schemaVersion`. A check (`bynkc check`) and a test run
-(`bynkc test`) reconcile against the committed registry the same way and report
+is the envelope's `schemaVersion`. A check (`bynk check`) and a test run
+(`bynk test`) reconcile against the committed registry the same way and report
 the same diagnostics, but never write it; only a build records a new version.
 
 **Idempotent handling.** `Idempotency` is a first-party capability of the `bynk`

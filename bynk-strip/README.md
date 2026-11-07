@@ -21,7 +21,7 @@ behaviour: it only deletes type syntax, it never has to rewrite semantics.
   occur, so it signals an emitter or toolchain bug rather than user error.
 
 The engine is [`oxc`](https://crates.io/crates/oxc) — a pure-Rust TypeScript
-parser, type-erasing transform, and codegen — so neither `bynkc --emit js` nor
+parser, type-erasing transform, and codegen — so neither `bynk compile --emit js` nor
 the in-browser compile path pulls in Node or `tsc`, and the crate compiles to
 `wasm32` for the playground. Stripping is configured for pure type-erasure
 (matching Node's `stripTypeScriptTypes`): every *value* import is kept even when
@@ -50,7 +50,7 @@ bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
 
 Each crate depends on its parent in the tree, plus any crates listed after
-its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
+its `+`. The front-ends sit on top: the `bynk` CLI over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
 the unpublished `bynk-wasm` playground module over `bynk-driver`
 and `bynk-ide`.
@@ -63,7 +63,7 @@ pulls in `oxc`.
 
 ```toml
 [dependencies]
-bynk-strip = "0.510"
+bynk-strip = "0.512"
 ```
 
 ```rust

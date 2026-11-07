@@ -1,11 +1,11 @@
 //! Regression for ADR 0117's warning channel being only half-wired: a
 //! warning-severity diagnostic printed `Error:` (`report_with_config`
-//! hardcoded `ReportKind::Error`), `bynkc check --format short` on a project
+//! hardcoded `ReportKind::Error`), `bynk check --format short` on a project
 //! ignored `short` entirely for a successful build, and a successful
 //! project build kept no per-file snapshots so a warning had no line/col to
 //! report even once `short` was consulted.
 //!
-//! Drives the real `bynkc check` CLI (no `tsc`/`node` dependency — `check`
+//! Drives the real `bynk check` CLI (no `tsc`/`node` dependency — `check`
 //! never compiles to JS) against two fixtures: a single-file `commons` with
 //! an orphaned doc block, and a project with an unused `given` capability.
 
@@ -17,7 +17,7 @@ fn run_check(path: &str, extra_args: &[&str]) -> (bool, String) {
     cmd.arg("check")
         .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path));
     cmd.args(extra_args);
-    let out = cmd.output().expect("run bynkc check");
+    let out = cmd.output().expect("run bynk check");
     let mut s = String::from_utf8_lossy(&out.stdout).into_owned();
     s.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), s)

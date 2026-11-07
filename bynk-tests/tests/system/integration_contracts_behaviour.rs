@@ -1,4 +1,4 @@
-//! Regression for `bynkc test`'s second, workers-target compile silently
+//! Regression for `bynk test`'s second, workers-target compile silently
 //! dropping `CompileOptions` fields the first compile carefully built.
 //!
 //! `run_test` compiles once (bundle target, `contracts: true`) and, when any
@@ -34,10 +34,10 @@ fn contracts_survive_the_integration_workers_recompile() {
         .arg(&out_root)
         .arg("--no-run")
         .output()
-        .expect("run bynkc test --no-run");
+        .expect("run bynk test --no-run");
     assert!(
         out.status.success(),
-        "bynkc test --no-run should succeed:\nstdout: {}\nstderr: {}",
+        "bynk test --no-run should succeed:\nstdout: {}\nstderr: {}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );

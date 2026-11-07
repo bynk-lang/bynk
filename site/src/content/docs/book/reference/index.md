@@ -42,5 +42,4 @@ guarded by tests so they cannot drift:
 - [Wire format](/book/reference/wire-format/) — the cross-context call format
   non-Bynk code can speak, from the emitter's own constants and codecs.
 
-The [CLI (`bynkc`)](/docs/cli/) reference is also generated (from the clap command
-tree); it now lives in [Developer Documentation](/docs/).
+The CLI reference lives in [Developer Documentation](/docs/bynk-cli/).

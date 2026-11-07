@@ -1,0 +1,10 @@
+context api
+
+uses shape.model
+
+// A type owned by the participant, naming commons types the suite also uses.
+type Wrap = { pull: Pull, shape: Shape }
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[Int]] by v: Visitor { Ok(1) }
+}

@@ -1,6 +1,6 @@
-//! v0.38 (ADR 0071): `bynkc check --format short` emits one terse line per
+//! v0.38 (ADR 0071): `bynk check --format short` emits one terse line per
 //! diagnostic — `path:line:col: severity[category]: message` — the exact shape
-//! the VS Code `bynkc` problem-matcher parses. This test pins that shape so the
+//! the VS Code `bynk` problem-matcher parses. This test pins that shape so the
 //! matcher can't silently break.
 
 /// A source with a deterministic type error (return type `Int`, body `String`).

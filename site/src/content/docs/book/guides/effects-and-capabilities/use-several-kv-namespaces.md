@@ -56,7 +56,7 @@ share a name (`bynk.context.duplicate_binding`).
 
 ## Test each instance on its own
 
-Under `bynkc test` every instance has its own fresh in-memory double, and
+Under `bynk test` every instance has its own fresh in-memory double, and
 `stub` and `expect` name the instance:
 
 ```bynk,fragment

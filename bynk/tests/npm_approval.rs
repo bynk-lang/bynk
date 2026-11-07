@@ -35,7 +35,6 @@ fn run(name: &str, cwd: &Path, root: &Path, args: &[&str]) -> (i32, String, Stri
         .args(args)
         .current_dir(cwd)
         .env("BYNK_HOME", root.join("home"))
-        .env_remove("BYNK_BYNKC")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -147,12 +146,9 @@ fn lock(app: &Path) -> String {
 }
 
 fn compiled_package_json(app: &Path, root: &Path) -> Option<String> {
-    if !bin("bynkc").exists() {
-        return None;
-    }
     let out = root.join("out");
     let (code, o, e) = run(
-        "bynkc",
+        "bynk",
         app,
         root,
         &["compile", ".", "-o", out.to_str().unwrap()],
@@ -187,11 +183,6 @@ fn a_registry_adapters_npm_package_enters_the_build_only_once_approved() {
             && !text.contains("approved"),
         "{text}"
     );
-    if bin("bynkc").exists() {
-        let (code, o, e) = run("bynkc", &app, &root, &["check", "."]);
-        assert_eq!(code, 1, "{o}{e}");
-        assert!(format!("{o}{e}").contains("bynk.requires.unapproved"));
-    }
 
     let (code, out, err) = run("bynk", &app, &root, &["approve", "--list"]);
     assert_eq!(code, 0, "{err}");

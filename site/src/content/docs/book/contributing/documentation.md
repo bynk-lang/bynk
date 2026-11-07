@@ -151,7 +151,7 @@ its captured transcript:
    example to copy.
 
 The `.txt` transcripts are **generated — never hand-edit them**;
-`doc_diagnostics` (run in CI) re-derives them from `bynkc` and fails if the
+`doc_diagnostics` (run in CI) re-derives them from the compiler and fails if the
 committed copy drifts, and fails if a fixture ever starts compiling. The fixtures
 live outside the Book pages, so the doc-example gate skips a fenced block whose
 body is only an `{{#include}}` (it is display-only; the fixture's own compile is
@@ -202,14 +202,13 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    Bynk uses `//` for comments; a retired `--` comment fails the gate
    (`bynk.lex.legacy_comment`).
 
-2. **Generated reference is generated.** Four reference pages are emitted from the
+2. **Generated reference is generated.** Three reference pages are emitted from the
    compiler/grammar and guarded by tests, so they cannot drift:
 
    | Page | Source | Test |
    |---|---|---|
-   | `reference/diagnostics.md` | `bynkc/src/diagnostics.rs` registry | `diagnostics_registry.rs` |
-   | `reference/keywords.md` | `bynkc/src/keywords.rs` (lexer keywords) | `keywords_reference.rs` |
-   | `reference/cli.md` | the clap command tree (`bynkc/src/cli.rs`) | `cli_reference.rs` |
+   | `reference/diagnostics.md` | `bynk-syntax/src/diagnostics.rs` registry | `diagnostics_registry.rs` |
+   | `reference/keywords.md` | the lexer's keyword tokens | `keywords_reference.rs` |
    | `reference/grammar-appendix.md` | `tree-sitter-bynk/src/grammar.json` | `grammar_reference.rs` |
 
    Each test renders the page and asserts it matches the committed file. They
@@ -219,7 +218,6 @@ rest are Rust drift-guard tests and Node `--check` scripts that CI runs.
    ```sh
    BYNK_BLESS=1 cargo test -p xtask --test docs_consistency -- diagnostics_registry:: \
                                                             keywords_reference:: \
-                                                            cli_reference:: \
                                                             grammar_reference::
    ```
 

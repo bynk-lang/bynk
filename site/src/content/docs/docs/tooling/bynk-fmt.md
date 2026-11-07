@@ -3,7 +3,7 @@ title: "`bynk-fmt`"
 ---
 Bynk's formatter. There is one implementation, in the `bynk-fmt` crate — a leaf
 over `bynk-syntax` that never links the compiler; the CLI (via `bynk-driver`)
-and the language server both drive that one copy. You invoke it as `bynkc fmt`
+and the language server both drive that one copy. You invoke it as `bynk fmt`
 (or `bynk fmt`) — see the how-to
 [Format your code with `bynk-fmt`](/docs/editor-and-tooling/format/) for usage.
 
@@ -40,7 +40,7 @@ server call, so a manifest they can both read is interpreted identically.
 A manifest that does *not* read is where they differ: the CLI reports the error
 and formats nothing; the language server falls back to the canonical style,
 since it cannot refuse to serve. A typo therefore shows up as an editor that
-quietly stops honouring the section and a `bynkc fmt` that fails loudly.
+quietly stops honouring the section and a `bynk fmt` that fails loudly.
 
 ## Canonical style
 
@@ -67,7 +67,7 @@ use bynk_fmt::{format_source, FormatOptions};
 let formatted = format_source(source, &FormatOptions::default())?;
 ```
 
-This is exactly what `bynkc fmt` and the language server's formatting requests
+This is exactly what `bynk fmt` and the language server's formatting requests
 call, and both resolve their `FormatOptions` through the same `[fmt]` reader, so
 editor format-on-save and CLI formatting agree on any project whose manifest
 parses.

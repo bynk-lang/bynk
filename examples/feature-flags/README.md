@@ -31,8 +31,8 @@ feature-flags/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text
@@ -47,7 +47,7 @@ keys:
 
 The `FlagKey` boundary and the `keyOf`/`nameOf` helpers live in `commons keys`,
 so they are unit-tested without a KV binding. The HTTP handlers themselves
-consume the platform `Kv`, which is in memory under `bynkc test`. Exercise them
+consume the platform `Kv`, which is in memory under `bynk test`. Exercise them
 end to end under `bynk dev`, below.
 
 ## Run it

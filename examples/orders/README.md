@@ -17,7 +17,7 @@ What it shows:
   filter on that field (`linesFor`, `unitsFor`) routes through a posting list
   rather than scanning every entry.
 - **Tests with no harness** — the agent uses no platform capability (a `Map`
-  needs no clock), so `bynkc test .` constructs it by key, drives its handlers,
+  needs no clock), so `bynk test .` constructs it by key, drives its handlers,
   and asserts on the scalar aggregates directly.
 
 ## Layout
@@ -34,8 +34,8 @@ orders/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text

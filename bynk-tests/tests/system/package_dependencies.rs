@@ -1,6 +1,6 @@
 //! Path dependencies (packaging slice 2a, #2223): the build and the editor
 //! resolve the same package graph and report the same diagnostics. One
-//! consumer with a dependency, run through `bynkc check` and through the
+//! consumer with a dependency, run through `bynk check` and through the
 //! editor's analysis over the content the language server would sweep
 //! (`bynk_testkit::read_project_sources`, which walks the dependency's trees
 //! as `bynk-lsp`'s sweep does).
@@ -58,7 +58,7 @@ fn the_build_and_the_editor_resolve_the_same_graph() {
         .args(["check", "--format", "short"])
         .arg(&root)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     let out = format!(
         "{}{}",
         String::from_utf8_lossy(&checked.stdout),

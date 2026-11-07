@@ -1661,17 +1661,18 @@ impl<'a> Formatter<'a> {
     }
 
     fn format_pred(&mut self, p: &RefinementPred) {
+        let arg = |n: i64| p.arg_text.clone().unwrap_or_else(|| n.to_string());
         match &p.kind {
             PredKind::Matches(re) => self.push(&format!(
                 "Matches({})",
                 literal_text(matches_argument_span(p), re)
             )),
-            PredKind::InRange(a, b) => self.push(&format!("InRange({}, {})", a.value, b.value)),
+            PredKind::InRange(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::InRangeF(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::InRangeD(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
-            PredKind::MinLength(n) => self.push(&format!("MinLength({n})")),
-            PredKind::MaxLength(n) => self.push(&format!("MaxLength({n})")),
-            PredKind::Length(n) => self.push(&format!("Length({n})")),
+            PredKind::MinLength(n) => self.push(&format!("MinLength({})", arg(*n))),
+            PredKind::MaxLength(n) => self.push(&format!("MaxLength({})", arg(*n))),
+            PredKind::Length(n) => self.push(&format!("Length({})", arg(*n))),
             PredKind::NonNegative => self.push("NonNegative"),
             PredKind::Positive => self.push("Positive"),
             PredKind::NonEmpty => self.push("NonEmpty"),

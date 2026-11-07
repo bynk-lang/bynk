@@ -93,7 +93,7 @@ pub(crate) fn process_tests(
     import_ext: ImportExt,
     // v0.115: whether the build emits the contract guard (dev/test). The runner
     // attack relies on the guard to assert `ensures`, so it is emitted only when
-    // the guard is (they are always paired — `bynkc test` sets both).
+    // the guard is (they are always paired — `bynk test` sets both).
     contracts: bool,
     // v0.132: running set of already-emitted barrel output paths, shared with the
     // integration pass so a commons imported by both is barrelled exactly once.
@@ -414,6 +414,7 @@ pub(crate) fn process_integration_tests(
             d1_migrations,
             errors,
             tys,
+            super::project_mentions_encode_plain(parsed),
         ) {
             outputs.push(StagedFile {
                 output_path: path,

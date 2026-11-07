@@ -1,0 +1,26 @@
+suite api as integration {
+  uses shape.model
+  // #3032: `Json.encode`/`Json.decode` in a integration suite generate their own codecs.
+  case "a commons record round-trips, tagged" {
+    let p = Pull { id: 7, draft: Some(true), closed_at: None, head: Head { ref: "b", repo: None }, labels: ["x", "y"] }
+    expect Json.decode[Pull](Json.encode(p)) == Ok(p)
+    expect Json.encode(Some(1)) == "{\"kind\":\"Some\",\"value\":1}"
+  }
+
+  case "a commons record round-trips, plain" {
+    let p = Pull { id: 7, draft: Some(true), closed_at: None, head: Head { ref: "b", repo: Some("r") }, labels: ["x"] }
+    expect Json.encodePlain(p) == "{\"id\":7,\"draft\":true,\"closed_at\":null,\"head\":{\"ref\":\"b\",\"repo\":\"r\"},\"labels\":[\"x\"]}"
+    expect Json.decode[Pull](Json.encodePlain(p)) == Ok(p)
+  }
+
+  case "a participant type, a sum and a generic instance round-trip" {
+    let h = Head { ref: "b", repo: None }
+    let p = Pull { id: 1, draft: None, closed_at: None, head: h, labels: [] }
+    let w = Wrap { pull: p, shape: Circle(Some(2)) }
+    expect Json.decode[Wrap](Json.encode(w)) == Ok(w)
+    expect Json.decode[Wrap](Json.encodePlain(w)) == Ok(w)
+    let r: Result[Pull, String] = Ok(p)
+    expect Json.decode[Result[Pull, String]](Json.encode(r)) == Ok(r)
+    expect Json.decode[Shape](Json.encodePlain(Dot)) == Ok(Dot)
+  }
+}

@@ -115,17 +115,17 @@ pub struct CompileOptions {
     pub platform: Platform,
     pub roots: Roots,
     /// The import-specifier extension (slice 2). `Js` (default) for normal builds;
-    /// `Ts` for the `bynkc test --inspect` debug build.
+    /// `Ts` for the `bynk test --inspect` debug build.
     pub import_ext: ImportExt,
     /// v0.115 (testing track slice 3, DECISION J): the build profile for function
     /// contracts. `true` (dev/test) emits the call-site guard around a contracted
     /// `fn`; `false` (release/deploy) strips it entirely for zero runtime cost.
-    /// `bynkc test` and `--inspect` set it on; `bynkc compile` leaves it off.
+    /// `bynk test` and `--inspect` set it on; `bynk compile` leaves it off.
     pub contracts: bool,
     /// #1821 (ADR 0147 D3): whether `suite`s are type-checked and emitted (the
-    /// `tests/` modules and `tests/main.ts`). On by default; `bynkc compile`
+    /// `tests/` modules and `tests/main.ts`). On by default; `bynk compile`
     /// and the driver's dev/deploy build turn it off, so a suite never reaches
-    /// the deployable. `bynkc test` leaves it on. Off strips suites after
+    /// the deployable. `bynk test` leaves it on. Off strips suites after
     /// parsing: a file that does not parse still fails the build, since it
     /// cannot be told apart from production source.
     pub tests: bool,
@@ -141,7 +141,7 @@ pub struct CompileOptions {
     /// *do* set this now — the real CLI entry points walk and read every
     /// project file themselves and hand the result here, so `bynk-emit`
     /// itself no longer discovers or reads anything on disk for the CLI
-    /// path. `bynkc`/the LSP still don't: `bynkc` routes through
+    /// path. `bynk`/the LSP still don't: `bynk` routes through
     /// `bynk-driver`, and the LSP (`bynk_check::analysis::analyse_project`
     /// since P4.2) never goes through `CompileOptions` at all — it has its
     /// own, separate discovery path (#1079). `bynk-emit`'s own tests also
@@ -150,7 +150,7 @@ pub struct CompileOptions {
     /// workers-mode emission, …) without an on-disk fixture tree.
     pub sources: Option<HashMap<PathBuf, String>>,
     /// Events track, slice 3c (#980): reconcile against `bynk.schema.lock`.
-    /// **Off by default** — `bynkc compile`'s directory branch and `bynk`'s
+    /// **Off by default** — `bynk compile`'s directory branch and `bynk`'s
     /// deploy/dev build turn it on and write the reconciled lock back;
     /// `check`'s and `test`'s directory paths (#2078) turn it on read-only,
     /// so a non-additive change fails them too, and never write it. Every
@@ -289,7 +289,7 @@ impl CompileOptions {
 
     /// v0.9.1 split layout (source and test units in separate subdirectories
     /// under `project_root`), bundle target, default platform. Use this from
-    /// `bynkc test` so its rooting matches `bynkc compile`'s.
+    /// `bynk test` so its rooting matches `bynk compile`'s.
     pub fn split(project_root: impl Into<PathBuf>, paths: ProjectPaths) -> Self {
         Self {
             target: BuildTarget::Bundle,
@@ -329,14 +329,14 @@ impl CompileOptions {
     }
 
     /// Slice 2: select the import-specifier extension. `Ts` is the debug build
-    /// for `bynkc test --inspect` (run the `.ts` directly under Node strip-only).
+    /// for `bynk test --inspect` (run the `.ts` directly under Node strip-only).
     pub fn import_ext(mut self, ext: ImportExt) -> Self {
         self.import_ext = ext;
         self
     }
 
     /// v0.115: enable the function-contract call-site guard (dev/test profile).
-    /// `bynkc test` and `--inspect` call this; the deploy build leaves it off so
+    /// `bynk test` and `--inspect` call this; the deploy build leaves it off so
     /// contract checks never reach production (DECISION J).
     pub fn contracts(mut self, on: bool) -> Self {
         self.contracts = on;
@@ -344,7 +344,7 @@ impl CompileOptions {
     }
 
     /// #1821 (ADR 0147 D3): whether to type-check and emit `suite`s. A build
-    /// that produces a deployable (`bynkc compile`, `bynk dev`/`deploy`) turns
+    /// that produces a deployable (`bynk compile`, `bynk dev`/`deploy`) turns
     /// it off; a suite is test-only.
     pub fn tests(mut self, on: bool) -> Self {
         self.tests = on;
@@ -704,8 +704,8 @@ pub fn compile_in_memory(
 /// disk (`demo/shop.bynk` for `context demo.shop`, `tests/shop.bynk` for a
 /// suite). Test-only, so a unit test can build a multi-unit project, or a
 /// unit with its suite, without a fixture directory; reach it through
-/// `crate::testkit`. `tests` keeps the suites, as `bynkc test` does; off is
-/// the deployable build `bynkc compile` makes.
+/// `crate::testkit`. `tests` keeps the suites, as `bynk test` does; off is
+/// the deployable build `bynk compile` makes.
 #[doc(hidden)] // test support: `bynk-emit`'s tests drive the pipeline through it
 pub fn compile_files_in_memory(
     files: &[(&str, &str)],
@@ -1489,6 +1489,14 @@ fn build_emit_unit_ctx(
     }
 }
 
+/// #2991: whether any source file of the project mentions `Json.encodePlain`.
+/// Textual on purpose: it only decides whether the generated `Option` encoders
+/// carry their (inert unless raised) plain branch, so a mention in a comment
+/// costs a few bytes and nothing else.
+pub(crate) fn project_mentions_encode_plain(parsed: &[ParsedFile]) -> bool {
+    parsed.iter().any(|p| p.source().contains("encodePlain"))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_unit(
     name: &str,
@@ -1510,6 +1518,7 @@ fn emit_unit(
     agent_deps_plan: Option<&AgentDepsPlan>,
     compiled: &mut Vec<StagedFile>,
     schema_effective_versions: &SchemaVersions,
+    plain_encode_in_project: bool,
 ) {
     let typed = program.program();
     // Build the emitter context.
@@ -1706,10 +1715,13 @@ fn emit_unit(
     // the branch is inert unless `withPlainJson` sets the flag) switches the generated `Option`
     // encoders to carry the plain branch (a response type can live in a commons
     // another unit's route serialises through).
+    // #2991: so does any `Json.encodePlain` call in the project's sources (a
+    // textual over-approximation: the branch is inert unless a call raises the flag).
     emit_ctx.runtime_use.set_plain_json(
-        unit_info
-            .values()
-            .any(|i| emitter::table_has_plain_json(&i.table)),
+        plain_encode_in_project
+            || unit_info
+                .values()
+                .any(|i| emitter::table_has_plain_json(&i.table)),
     );
     // v0.72: the map's `source` is the absolute path the compiler read the file
     // from, so an editor breakpoint set on the real `.bynk` resolves to the same
@@ -1977,6 +1989,7 @@ fn check_unit_files(
             agent_deps_plan,
             compiled,
             schema_effective_versions,
+            project_mentions_encode_plain(parsed),
         );
     }
     if mode == Mode::Build && split_worker {
@@ -2020,7 +2033,7 @@ fn emit_worker_handlers_barrel(
     modules.sort();
     modules.dedup();
     let mut stmts = vec![TsStmt::comment(
-        "Generated by bynkc — do not edit by hand.",
+        "Generated by bynk — do not edit by hand.",
         None,
     )];
     for module in &modules {
@@ -2488,9 +2501,9 @@ fn run_checks(
     );
     // #1883, slice 2: fixed asset paths against each Worker's routes.
     bynk_check::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
-    // A deployable Bundle build (no tests: `bynkc compile` without
+    // A deployable Bundle build (no tests: `bynk compile` without
     // `--target workers`) ships no files, so each asset's `.url` would 404:
-    // say so. `bynkc test` also builds a Bundle, with tests, and stays quiet.
+    // say so. `bynk test` also builds a Bundle, with tests, and stays quiet.
     if mode == Mode::Build && target == BuildTarget::Bundle && !tests {
         for pf in &parsed {
             for warning in bynk_check::assets::bundle_not_served_warnings(pf.items()) {
@@ -3124,7 +3137,7 @@ fn build_output(
     // #1655 (runtime-semantics track S6): a `--target workers` build writes the
     // workers layout (`workers/<ctx>/…`), but a *unit* test module imports the
     // bundle layout (`./../<ctx>.js`), so `tsc` over the output failed
-    // (TS2307). Those modules had no consumer either: `bynkc test` compiles the
+    // (TS2307). Those modules had no consumer either: `bynk test` compiles the
     // bundle target for them and overlays a workers compile *excluding*
     // `tests/`. A workers build therefore drops the unit modules. Integration
     // modules stand their participants up as real Workers and import this
@@ -3153,7 +3166,7 @@ fn build_output(
     // anything consumes it, so `--no-run --format json` lists suites/cases without
     // running. Ordered by the runner's sort key to match a run's suite order.
     // On `workers` it lists only what this build writes and `tests/main.ts` runs
-    // (#1655, review of #1695): the integration suites. `bynkc test` reads the
+    // (#1655, review of #1695): the integration suites. `bynk test` reads the
     // manifest from its bundle compile, so the unit suites are still listed
     // there.
     let discovered = if workers {
@@ -4550,7 +4563,7 @@ fn emit_composition_root(
     // provider expressions reference.
     let mut program = TsProgram::new();
     program.push(TsStmt::comment(
-        "Generated by bynkc — do not edit by hand.",
+        "Generated by bynk — do not edit by hand.",
         None,
     ));
     program.push(TsStmt::comment("composition root", None));
@@ -5033,7 +5046,7 @@ mod tests {
     /// Regression (code review of the #1114 fix itself): `tree_root_for`
     /// compared `pf.abs_path()` (always absolute, via `std::path::absolute`)
     /// against `trees`' roots as-is — for the ordinary CLI shape (a relative
-    /// project root, e.g. `bynkc build .`), every tree root stays relative,
+    /// project root, e.g. `bynk compile .`), every tree root stays relative,
     /// so `starts_with` never matched and this silently fell back to
     /// `trees[0]` for every file, reproducing the exact bug the fix above
     /// exists to close. `scratch_project`-based tests never caught this
@@ -5120,7 +5133,7 @@ mod tests {
     /// `scratch_project` below has to fake with real temp-directory I/O.
     /// Before this seam, exercising `uses` across two units from inside
     /// `bynk-emit`'s own tests meant either a `scratch_project` (real files,
-    /// cleaned up on drop) or `bynkc`'s on-disk fixtures one crate up.
+    /// cleaned up on drop) or `bynk`'s on-disk fixtures one crate up.
     #[test]
     fn compile_project_with_in_memory_sources_resolves_a_cross_unit_uses() {
         let mut sources = HashMap::new();
@@ -5266,7 +5279,7 @@ mod tests {
                 // the file is read, which is the path slice 0 changed. (A
                 // checker-level error would not do: test bodies are checked by
                 // `process_tests` during emit, not in `Mode::Analyse` — which is
-                // also why `bynkc check` is silent on a broken `case`.)
+                // also why `bynk check` is silent on a broken `case`.)
                 ("tests/thing.bynk", "suite thing\n\ncase {{{ \n"),
             ],
         );

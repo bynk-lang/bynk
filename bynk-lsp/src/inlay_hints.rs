@@ -1,7 +1,7 @@
 //! v0.27 (ADR 0056): pure `inlayHint` computation — inferred-type hints
 //! from a cached analysis round's harvested hint set.
 //!
-//! The hints arrive pre-curated from `bynkc` (annotation-absent `let` /
+//! The hints arrive pre-curated from `bynk` (annotation-absent `let` /
 //! `let <-` bindings and lambda parameters, labels pre-rendered via
 //! `Ty::display()`); this module only filters to the requested visible
 //! range and converts positions against the analysed snapshot (the v0.24

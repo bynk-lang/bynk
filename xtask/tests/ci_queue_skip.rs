@@ -21,8 +21,8 @@ const EXEMPT: [(&str, &str); 6] = [
     // A matrix job whose `name:` interpolates the leg, so there is no single
     // name to look up; it runs only on installer-script edits and the schedule.
     ("installers-smoke", "matrix; rare trigger"),
-    // Never runs in the queue; on a push it follows `test_os`'s Linux leg.
-    ("coverage", "follows test_os"),
+    // Runs on the nightly only: never in the queue, never on a push.
+    ("coverage", "nightly only"),
     // The complement of `test`'s gate: `all` is true on every push, so it
     // never runs on `main` at all.
     ("drift", "never runs on push"),
@@ -204,14 +204,14 @@ fn rust_caches_names_every_job_that_saves_one_on_main() {
     listed_jobs.dedup();
     let mut expected: Vec<String> = jobs()
         .into_iter()
-        .filter(|j| j.uses_rust_cache && j.key != "drift")
+        .filter(|j| j.uses_rust_cache && !["drift", "coverage"].contains(&j.key.as_str()))
         .map(|j| j.key)
         .collect();
     expected.sort_unstable();
     assert_eq!(
         listed_jobs, expected,
         "RUST_CACHES in ci.yml's `queue` step must name every job that uses \
-         Swatinem/rust-cache (bar `drift`, which never runs on a push)"
+         Swatinem/rust-cache (bar `drift` and `coverage`, which never run on a push)"
     );
     for os in ["test-Linux", "test-Windows_NT", "test-Darwin"] {
         assert!(

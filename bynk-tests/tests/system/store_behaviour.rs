@@ -796,7 +796,7 @@ console.log("ALL OK");
 ///
 /// This drives the bundle's own `__makeCart` factory, and with it the runtime's
 /// `StateRegistry`/`InMemoryStorage` rather than a fake, so it pins the storage
-/// `bynkc test` and bundle deployments actually use.
+/// `bynk test` and bundle deployments actually use.
 const REFUSED_LEAK_SOURCE: &str = "context shop\n\
 \n\
 agent Cart {\n\

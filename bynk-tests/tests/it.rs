@@ -319,6 +319,8 @@ mod system {
     mod fetch_headers;
     #[path = "float_codec_behaviour.rs"]
     mod float_codec_behaviour;
+    #[path = "header_question_lint.rs"]
+    mod header_question_lint;
     #[path = "history_behaviour.rs"]
     mod history_behaviour;
     #[path = "http_caching_behaviour.rs"]

@@ -186,7 +186,7 @@ fn absent_with_no_npx_is_missing() {
 
 #[test]
 fn bare_compile_only_env_exits_zero_with_test_dev_flagged() {
-    // Only bynkc; no node/tsc/tsx/wrangler.
+    // Only bynk; no node/tsc/tsx/wrangler.
     let fake = Fake::default();
     let report = doctor::diagnose(&fake, &ctx(false), &bare());
     assert_eq!(cap(&report, Capability::Compile).level, Level::Ok);
@@ -374,7 +374,7 @@ fn strict_escalates_optional_only_gap() {
 #[test]
 fn in_process_compile_floor_is_always_ok() {
     // Slice 7 (ADR 0084 amended): the compiler is linked in-process, so the
-    // compile floor is always satisfiable — a missing *external* bynkc is no
+    // compile floor is always satisfiable — a missing *external* bynk is no
     // longer a failure (the driver doesn't shell it). Compile is ok, bare.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
@@ -507,7 +507,7 @@ fn tsc_is_checked_against_the_verified_majors() {
         assert!(!row.detail.contains("untested"), "{}", row.detail);
     }
 
-    // `tsc` is the runner whenever it is present (`bynkc test` prefers it), so a
+    // `tsc` is the runner whenever it is present (`bynk test` prefers it), so a
     // below-floor `tsc` still warns even when a healthy `tsx` is installed too.
     let fake = Fake::default()
         .path_tool("node", "/usr/bin/node", Some(node_at_floor()))

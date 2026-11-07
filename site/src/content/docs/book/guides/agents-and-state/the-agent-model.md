@@ -81,7 +81,7 @@ type with no honest zero does not build:
 {{#include ../../../diagnostics/agents_non_zeroable.bynk}}
 ```
 
-and the compiler says so — verbatim, captured from `bynkc`:
+and the compiler says so — verbatim, captured from `bynk`:
 
 ```text
 {{#include ../../../diagnostics/agents_non_zeroable.txt}}

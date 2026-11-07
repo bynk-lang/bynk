@@ -171,7 +171,7 @@ mod line_index_tests {
 
 /// 1-indexed (line, column) of a byte offset in `source`. Columns count
 /// characters, not bytes. Lives in the syntax leaf so every layer that maps a
-/// span to a position — the emitter's assertion locations, `bynkc`'s `short`
+/// span to a position — the emitter's assertion locations, `bynk`'s `short`
 /// rendering, and (slice 6) `bynk_driver::render` — shares one implementation.
 ///
 /// This scans from byte 0, so it is O(offset). For repeated lookups over one

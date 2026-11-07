@@ -1012,7 +1012,7 @@ otherwise clean build, after the Worker bindings are known.
 
 A platform capability that a context consumes (`consumes bynk { Clock, Logger }`,
 `consumes bynk.cloudflare { Kv }`) has no real provider in a test. At the `unit`
-and `integration` tiers `bynkc test` gives each one a **deterministic test
+and `integration` tiers `bynk test` gives each one a **deterministic test
 double** instead. It returns the same answer on every run, does no I/O, and is
 fresh for each case:
 
@@ -1289,7 +1289,7 @@ fn discount(p: Int, pct: Int) -> Int
 1. **At every call** in the dev/test build, a call-site guard checks each
    `requires` on entry and each `ensures` on exit, throwing a contract failure
    that names the clause and the offending arguments/`result`. The guard is
-   **stripped from the deploy build** (`bynkc compile`) — contracts add no
+   **stripped from the deploy build** (`bynk compile`) — contracts add no
    production cost and never change production behaviour.
 2. **By the runner.** For every contracted function reachable from a test target,
    the runner **generates** arguments over the parameter domains (the same engine
@@ -1399,7 +1399,7 @@ record's fields are the operation's parameters (`{ msg: String }` for `Logger.lo
 `any`, indexing). There is no test-only iteration construct: "for every recorded
 call …" is `calls.all((c) => …)`.
 
-Recording is emitted **only** under `bynkc test`; the deploy build calls the seam
+Recording is emitted **only** under `bynk test`; the deploy build calls the seam
 directly, so observation adds no production cost. Observation is *scenario-specific*
 — a claim about one case; a *universal* guarantee ("every payment audits, on every
 path") is a policy, not a test.
@@ -1442,7 +1442,7 @@ in-memory Durable Object instances — same key, same instance **within a case**
 state starts empty and is **fresh per case**. See
 [Test tiers](/book/guides/testing/integration/).
 
-`bynkc test` runs `system` cases in plain Node alongside the in-process tiers — it
+`bynk test` runs `system` cases in plain Node alongside the in-process tiers — it
 compiles the inferred participants in workers mode under `out/workers/`, stands
 them up in-process, and routes the real wire between them. No
 `wrangler`/`miniflare` needed.
@@ -1560,20 +1560,20 @@ the flags, and for which routes run against a deployment.
 ## Running
 
 ```sh
-bynkc test .
+bynk test .
 ```
 
-`bynkc test` compiles the project (including tests), type-checks the output with
+`bynk test` compiles the project (including tests), type-checks the output with
 `tsc`, and runs it with Node — both must be on your path. `--no-run` emits the
 TypeScript without running it. Exit code is non-zero if any test fails.
 
 ### Debugging under Node (`--inspect`)
 
-`bynkc test --inspect` launches the test runner under Node's inspector
+`bynk test --inspect` launches the test runner under Node's inspector
 (`node --inspect-brk`) and prints an inspector URL:
 
 ```sh
-bynkc test . --inspect
+bynk test . --inspect
 # → Debugger listening on ws://127.0.0.1:9229/…
 ```
 
@@ -1592,7 +1592,7 @@ handler bodies per-statement). A one-click VS Code launch is in progress.
 
 ### Machine-readable output (`--format json`)
 
-`bynkc test --format json` emits a single pinned JSON document of results
+`bynk test --format json` emits a single pinned JSON document of results
 instead of the human ✓ / ✗ output — one `suites` array of `{ name, kind, cases }`,
 each case `{ name, outcome, message?, location? }` with `outcome` one of `"pass"`
 or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
@@ -1601,7 +1601,7 @@ or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
 
 A project that takes [snapshots](#snapshots) gains a last field, `snapshots`: `{ "written", "updated", "obsolete" }`, the counts of snapshots the run wrote, updated and found obsolete (deleted, under `--update-snapshots`).
 
-Add `--no-run` for **discovery**: `bynkc test --no-run --format json` lists every
+Add `--no-run` for **discovery**: `bynk test --no-run --format json` lists every
 suite and case **without running them** — a pure compile (no `tsc`, no Node, no
 `out/` written). Each case carries `outcome: "discovered"` and its declaration
 `location` (the `case "…"` name). The suite/case names match a normal run's, so a

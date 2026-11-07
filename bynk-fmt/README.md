@@ -13,10 +13,10 @@ Formatting is fundamentally an AST walk, so this crate depends on the
 type checker or emitter. That keeps it small: downstream consumers (the
 [`bynk-lsp`](https://crates.io/crates/bynk-lsp) language server and third-party
 tools) get the formatter without pulling in the whole compiler. The
-[`bynkc`](https://crates.io/crates/bynkc) compiler's `bynkc fmt` command
-reaches it via `bynk-driver`, not a `bynkc::fmt` re-export.
+[`bynk`](https://crates.io/crates/bynk) CLI's `bynk fmt` command
+reaches it via `bynk-driver`.
 
-Most users format Bynk through the CLI (`bynkc fmt`) or format-on-save in the
+Most users format Bynk through the CLI (`bynk fmt`) or format-on-save in the
 editor, rather than depending on this crate directly. See
 [Format your code with `bynk-fmt`](https://bynk-lang.org/docs/editor-and-tooling/format/).
 
@@ -40,12 +40,12 @@ bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
 
 Each crate depends on its parent in the tree, plus any crates listed after
-its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
+its `+`. The front-ends sit on top: the `bynk` CLI over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
 the unpublished `bynk-wasm` playground module over `bynk-driver`
 and `bynk-ide`.
 
-[`bynk-driver`](https://crates.io/crates/bynk-driver) (behind `bynkc fmt` /
+[`bynk-driver`](https://crates.io/crates/bynk-driver) (behind `bynk fmt` /
 `bynk fmt`) and [`bynk-lsp`](https://crates.io/crates/bynk-lsp) format through
 it; [`bynk-ide`](https://crates.io/crates/bynk-ide) uses its expression and
 annotation printers to render types and signatures for hover.
@@ -54,7 +54,7 @@ annotation printers to render types and signatures for hover.
 
 ```toml
 [dependencies]
-bynk-fmt = "0.510"
+bynk-fmt = "0.512"
 ```
 
 ```rust
@@ -73,7 +73,7 @@ The public API is small:
   `bynk.toml`, applied over a base `FormatOptions`.
 
 `FormatOptions`'s three fields are reachable from a project's `bynk.toml` and
-from the command line — `bynkc fmt` / `bynk fmt` take `--indent tab|spaces`,
+from the command line — `bynk fmt` take `--indent tab|spaces`,
 `--indent-width N`, `--max-line-width COLUMNS`, and `--trailing-comma` /
 `--no-trailing-comma`, overriding the project's `[fmt]` section for one run
 (`--no-config` ignores that section entirely).

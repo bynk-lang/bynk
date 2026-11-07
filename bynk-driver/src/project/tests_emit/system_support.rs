@@ -1030,7 +1030,7 @@ pub(super) fn emit_system_http_support(
                             &key,
                             raw_params.clone(),
                             None,
-                            url.clone(),
+                            raw_url.clone(),
                             raw_bearer_options.clone(),
                             &binding,
                             "__responseToUnauthOutcome",

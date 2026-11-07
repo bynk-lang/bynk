@@ -17,7 +17,7 @@ its layout. Its keys:
 | `[paths]` | `include` | the trees to compile (array; defaults below) |
 | | `exclude` | subtrees to skip during discovery (array) |
 | | `out` | the default output directory |
-| `[fmt]` | `indent`, `indent_width`, `max_line_width`, `trailing_comma` | formatter settings (read by `bynkc fmt` / `bynk fmt` and by format-on-save; CLI flags override them) |
+| `[fmt]` | `indent`, `indent_width`, `max_line_width`, `trailing_comma` | formatter settings (read by `bynk fmt` and by format-on-save; CLI flags override them) |
 | `[lsp]` | `diagnostics_mode` | language-server settings |
 | `[workers]` | `compatibility_flags` | extra Cloudflare compatibility flags for every emitted `wrangler.toml`, after the default `global_fetch_strictly_public` (array of strings) |
 
@@ -76,7 +76,7 @@ Bynk compiles in one of two modes.
 
 **Project mode** — a `bynk.toml` is present (or a `src/` directory exists). The
 `.bynk` files under the `[paths] include` trees are compiled together, and
-`bynkc test` is available. `include` defaults to the conventional roots that
+`bynk test` is available. `include` defaults to the conventional roots that
 exist (`src`, and `tests` when present) or the project root itself, so a
 conventional `src/`(+`tests/`) project and a flat project both need no `[paths]`
 config; `exclude`, and the tool's own `out`/`node_modules`/dot-directories, are
@@ -105,8 +105,8 @@ A `suite` is a test-only declaration (at any tier — `unit` / `integration` /
 hold more than one top-level declaration — an *atomic* file containing a
 `commons`/`context` **and** a `suite` together is well-formed. Discovery scans the
 whole `include` tree for declarations; a `suite` MAY appear in any file. A
-production build (`bynkc compile`) MUST skip every `suite`: it is neither
-type-checked for the build nor emitted into the deployable. `bynkc test` compiles
+production build (`bynk compile`) MUST skip every `suite`: it is neither
+type-checked for the build nor emitted into the deployable. `bynk test` compiles
 and runs the suites. There is no `.test.bynk` filename marker.
 
 ## §8.4 Build pipeline & conformance to TypeScript
@@ -145,7 +145,7 @@ themselves are compiler built-ins, not commons functions.
 A successful Bynk build emits TypeScript that is **type-correct end to end**: it
 compiles under `tsc --strict` with no errors. This is the final gate of the
 compilation model — a Bynk program's well-formedness is realised, not merely
-asserted, in a type-checked TypeScript program. `bynkc test` continues past this
+asserted, in a type-checked TypeScript program. `bynk test` continues past this
 gate, running the compiled, aggregated test runner on Node.
 
 > [!NOTE]

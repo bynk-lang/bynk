@@ -1,0 +1,19 @@
+// #2839 (Decision C): a bare `QueueResult` variant on one side of `==`/`!=`
+// takes the other side's type, so a verdict compares as it reads.
+suite ops.inbox {
+  case "a verdict is compared with == and !=" {
+    let r <- inbox.message(Job { id: "j1", attempt: 1 })
+    expect r == Ack
+    expect Ack == r
+    expect r != Retry("again")
+    expect r is Ack
+  }
+
+  case "a retry compares with its reason" {
+    let r <- inbox.message(Job { id: "j2", attempt: 4 })
+    expect r == Retry("too many attempts")
+    expect r != Retry("other")
+    expect r != Ack
+    expect r is Retry("too many attempts")
+  }
+}

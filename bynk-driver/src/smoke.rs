@@ -234,20 +234,25 @@ impl Smoke {
                     source,
                     renders_rejections,
                 };
+                let principal = principal(handler, service, actors);
+                let cases = route.cases(&principal);
                 if methods == Methods::SafeOnly && method != IrHttpMethod::Get {
-                    self.skipped.push(Skip {
-                        suite: name.clone(),
-                        case: route.case_name("answers"),
-                        code: "smoke".to_string(),
-                        reason: format!(
-                            "a `{}` route writes, so a run against a named target calls only `GET` routes; pass `--smoke-unsafe` to call it",
-                            method.as_str()
-                        ),
-                    });
+                    // One skip per case the route would have run, so the
+                    // skip list agrees with the run's own count (#3008).
+                    for (case, _) in cases {
+                        self.skipped.push(Skip {
+                            suite: name.clone(),
+                            case: case.name,
+                            code: "smoke".to_string(),
+                            reason: format!(
+                                "a `{}` route writes, so a run against a named target calls only `GET` routes; pass `--smoke-unsafe` to call it",
+                                method.as_str()
+                            ),
+                        });
+                    }
                     continue;
                 }
-                let principal = principal(handler, service, actors);
-                suite.cases.extend(route.cases(&principal));
+                suite.cases.extend(cases);
             }
         }
         if !suite.cases.is_empty() {
@@ -368,12 +373,12 @@ impl Smoke {
 /// declared type, where an author's own case gets the raw value to judge.
 pub const STRICT_WIRE_ENV: &str = "BYNK_TEST_STRICT_WIRE";
 
-/// #2685: the environment variable `bynk test --smoke` sets for `bynkc`, the path of a
+/// #2685: the environment variable `bynk test --smoke` sets for `bynk`, the path of a
 /// file holding a JSON object from each route's key (`<context> <service> <METHOD> <path>`) to the
 /// statuses its handler can answer. `bynk` computes it, since the response set
-/// is walked by `bynk-ide`, which the `bynkc` binary does not carry; the test
+/// is walked by `bynk-ide`, which the `bynk` binary does not carry; the test
 /// runtime warns (`bynk.test.smoke_undeclared_status`) when a smoke case gets a
-/// non-5xx answer outside its route's set. Without it, as in a direct `bynkc
+/// non-5xx answer outside its route's set. Without it, as in a direct `bynk
 /// test --smoke`, a smoke run compares nothing.
 pub const DECLARED_ENV: &str = "BYNK_SMOKE_DECLARED_FILE";
 
@@ -760,9 +765,19 @@ service api from http {
         assert!(!text.contains("PUT"), "{text}");
         let (_, cases, skipped) = smoke.summary();
         assert_eq!(cases, 1);
-        assert_eq!(skipped.len(), 1);
-        assert_eq!(skipped[0].case, "smoke: PUT /cart/:sku answers");
-        assert!(skipped[0].reason.contains("--smoke-unsafe"));
+        // Every case the write route would have run is named, not only its
+        // first (#3008).
+        let names: Vec<&str> = skipped.iter().map(|s| s.case.as_str()).collect();
+        let mut all = Smoke::collect(&src, Methods::All);
+        let _ = all.overlay(&src);
+        let (_, run, _) = all.summary();
+        // The skipped cases plus the ones that run are every case there is.
+        assert_eq!(names.len() + cases, run, "{names:?}");
+        assert!(
+            names.contains(&"smoke: PUT /cart/:sku answers"),
+            "{names:?}"
+        );
+        assert!(skipped.iter().all(|s| s.reason.contains("--smoke-unsafe")));
     }
 
     #[test]

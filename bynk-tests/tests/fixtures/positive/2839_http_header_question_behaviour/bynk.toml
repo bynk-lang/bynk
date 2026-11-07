@@ -1,0 +1,6 @@
+[project]
+name = "2839-http-header-question-behaviour"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

@@ -210,14 +210,15 @@ pub fn matches_argument_span(p: &RefinementPred) -> Span {
 }
 
 fn pred_to_string(p: &RefinementPred) -> String {
+    let arg = |n: i64| p.arg_text.clone().unwrap_or_else(|| n.to_string());
     match &p.kind {
         PredKind::Matches(re) => format!("Matches({})", literal_text(matches_argument_span(p), re)),
-        PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
+        PredKind::InRange(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
-        PredKind::MinLength(n) => format!("MinLength({n})"),
-        PredKind::MaxLength(n) => format!("MaxLength({n})"),
-        PredKind::Length(n) => format!("Length({n})"),
+        PredKind::MinLength(n) => format!("MinLength({})", arg(*n)),
+        PredKind::MaxLength(n) => format!("MaxLength({})", arg(*n)),
+        PredKind::Length(n) => format!("Length({})", arg(*n)),
         PredKind::NonNegative => "NonNegative".to_string(),
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),

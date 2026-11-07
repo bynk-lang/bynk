@@ -11,7 +11,7 @@ service github from http {
 	// name from a header the actor does not describe.
 	@raw(contentType: "application/json")
 	on POST("/github") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[String]] by GitHub {
-		let event = headers.get("X-GitHub-Event")?
+		let Some(event) = headers.get("X-GitHub-Event") else { BadRequest("missing X-GitHub-Event") }
 		Ok("\(event) \(body.toBase64())")
 	}
 

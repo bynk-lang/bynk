@@ -36,8 +36,8 @@ greeter-i18n/
 ## Check and test
 
 ```sh
-bynkc check src
-bynkc test .
+bynk check src
+bynk test .
 ```
 
 ```text
@@ -53,7 +53,7 @@ greeter.messages:
 
 `greeter.messages` (the bundle and its `greet` wrapper) is unit-tested by
 passing locale tags as literals — no `Locale` binding needed. `greeter.web`
-consumes the platform capability, which `bynkc test` replaces with a test double
+consumes the platform capability, which `bynk test` replaces with a test double
 that answers `"en"` (or whatever a `stub Locale.current()` says). Exercise it end
 to end under `bynk dev`, below.
 
@@ -87,7 +87,7 @@ curl -H "Accept-Language: fr" http://localhost:8787/bye/Ada
 *Under the hood,* `bynk dev` runs the manual recipe:
 
 ```sh
-bynkc compile src --output out --target workers
+bynk compile src --output out --target workers
 cd out/workers/greeter-web
 npx wrangler dev
 ```

@@ -24,7 +24,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// The library crates whose READMEs carry the diagram — every crate in the
-/// tree. The front-ends (`bynkc`, `bynk`, `bynk-lsp`, `bynk-wasm`) sit on top
+/// tree. The front-ends (`bynk`, `bynk-lsp`, `bynk-wasm`) sit on top
 /// of it and are described in prose, not drawn.
 const LIBRARY_CRATES: &[&str] = &[
     "bynk-syntax",

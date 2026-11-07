@@ -85,6 +85,52 @@ pub(crate) fn json_codable(
     }
 }
 
+/// #2991: the first `Option` payload that can encode as `null` in `t`, as plain
+/// JSON would write it (`context_checks::null_payload_option`, the rule of a
+/// plain HTTP route), for a checked type. `t` must already be `Codable`: types
+/// with no codec are not walked.
+pub(crate) fn null_payload_option_ty(
+    t: TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> Option<String> {
+    let tref = codable_type_ref(t, tys)?;
+    crate::context_checks::null_payload_option(&tref, types, &mut HashSet::new())
+}
+
+/// A `Codable` checker type as the `TypeRef` the codec machinery reads. `None`
+/// for a type with no codec (it never reaches here: `json_codable` ran first).
+fn codable_type_ref(t: TyId, tys: &Types) -> Option<bynk_syntax::ast::TypeRef> {
+    use bynk_syntax::ast::{Ident, TypeRef};
+    let sp = Span::new(0, 0);
+    let b = |t: TyId| codable_type_ref(t, tys).map(Box::new);
+    Some(match &*tys.get(t) {
+        Ty::Base(base) => TypeRef::Base(*base, sp),
+        Ty::Named { name, args, .. } if !args.is_empty() => TypeRef::App {
+            name: Ident {
+                name: name.clone(),
+                span: sp,
+            },
+            args: args
+                .iter()
+                .map(|a| codable_type_ref(*a, tys))
+                .collect::<Option<Vec<_>>>()?,
+            span: sp,
+        },
+        Ty::Named { name, .. } => TypeRef::Named(Ident {
+            name: name.clone(),
+            span: sp,
+        }),
+        Ty::Result(a, e) => TypeRef::Result(b(*a)?, b(*e)?, sp),
+        Ty::Option(a) => TypeRef::Option(b(*a)?, sp),
+        Ty::List(a) => TypeRef::List(b(*a)?, sp),
+        Ty::Set(a) => TypeRef::Set(b(*a)?, sp),
+        Ty::Map(k, v) => TypeRef::Map(b(*k)?, b(*v)?, sp),
+        Ty::Unit => TypeRef::Unit(sp),
+        _ => return None,
+    })
+}
+
 /// The `bynk.crypto` key type (`SigningKey`/`VerifyKey`) `t` is or contains, if any.
 pub(crate) fn crypto_key_in(
     t: TyId,

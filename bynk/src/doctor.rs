@@ -7,7 +7,7 @@
 //! doctor output / exit-code contract):
 //!
 //! - **Bare `bynk doctor`** is informational. It surveys everything but treats
-//!   only the *compile floor* (`bynkc` resolvable and not majorly skewed) as
+//!   only the *compile floor* (the linked-in compiler) as
 //!   required, so it exits `0` even with `test`/`dev` unavailable.
 //! - **`--only <capability>`** promotes that capability's tools to required.
 //! - **`--strict`** promotes *all* warnings (optional gaps, `npx`
@@ -20,8 +20,7 @@ use crate::probe::{self, DetectOpts, Probe, Provenance, Toolbox};
 /// A unit of work a user might want to do, and the tools it needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Capability {
-    /// `bynkc` compile / check / fmt. Always satisfiable if `bynkc` resolved;
-    /// also the home of the driver↔compiler skew check.
+    /// Compile / check / fmt. Always satisfiable: the compiler is linked in.
     Compile,
     /// `bynk test` — Node and one of `tsc`/`tsx` (the runner ladder).
     Test,
@@ -190,7 +189,7 @@ pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report
 
 /// Compile/check/fmt/test. The compiler is **linked in-process** (ADR 0101), so it
 /// is always available and cannot skew against itself — the always-ok row. There
-/// is no external-`bynkc` resolution to report any more (#2998, ADR 0736).
+/// is no external compiler to resolve or report on (#2998, ADR 0736).
 fn compile_report() -> CapabilityReport {
     CapabilityReport {
         capability: Capability::Compile,

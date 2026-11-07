@@ -25,7 +25,7 @@ service api from http {
 }
 ```
 
-Compiling this with `bynkc` produces TypeScript you can read, run, and deploy —
+Compiling this with `bynk` produces TypeScript you can read, run, and deploy —
 the router, boundary validation, and the Worker entry point are generated for
 you.
 
@@ -46,7 +46,7 @@ you.
 
 ## Install
 
-Prebuilt binaries (`bynkc`, `bynk` and the `bynk-lsp` language server) are
+Prebuilt binaries (`bynk` and the `bynk-lsp` language server) are
 published with every [release](https://github.com/bynk-lang/bynk/releases) for
 Linux (x86_64, aarch64), macOS (Intel, Apple silicon) and Windows (x86_64). No
 Rust toolchain is needed.
@@ -73,8 +73,8 @@ need a recent glibc; on musl (Alpine) use cargo. Then run `bynk doctor`.
 If you already have Rust (stable, 2024 edition — see [rustup](https://rustup.rs/)):
 
 ```sh
-cargo binstall bynkc bynk bynk-lsp   # prebuilt, via cargo-binstall
-cargo install bynkc bynk bynk-lsp    # or compile from crates.io
+cargo binstall bynk bynk-lsp         # prebuilt, via cargo-binstall
+cargo install bynk bynk-lsp          # or compile from crates.io
 ```
 
 To build from source (`main` moves on with every merged increment; check out a
@@ -83,7 +83,6 @@ To build from source (`main` moves on with every merged increment; check out a
 ```sh
 git clone https://github.com/bynk-lang/bynk.git
 cd bynk
-cargo install --path bynkc
 cargo install --path bynk
 cargo install --path bynk-lsp   # optional: the language server
 ```
@@ -91,9 +90,8 @@ cargo install --path bynk-lsp   # optional: the language server
 Before 1.0, a release is cut when a track of work retires ([release
 discipline](design/bynk-release-discipline.md)).
 
-`bynkc --help` lists the four compiler commands (`compile`, `check`, `fmt`,
-`test`); `bynk --help` lists the driver's (`doctor`, `dev`, `deploy`, `new`,
-`check`, `fmt`, `test`, `explain`, `mcp`).
+`bynk --help` lists the commands (`doctor`, `dev`, `deploy`, `new`, `check`,
+`compile`, `fmt`, `test`, `explain`, `mcp`, and more).
 
 To let an AI agent ask the toolchain about Bynk (diagnostics, symbols,
 documentation, architecture, wire contracts), point its MCP client at
@@ -114,14 +112,14 @@ bynk dev             # compile and serve it locally
 `bynk new` only writes files (no toolchain needed), and `bynk dev` serves what it
 wrote unmodified. Prefer a worked example? The bundled
 [`examples/hello-world`](examples/hello-world/) is a complete project you can also
-`bynkc check src`, `bynkc test .`, and deploy.
+`bynk check src`, `bynk test .`, and deploy.
 
 See [Start a new project](https://bynk-lang.org/book/guides/projects-build-and-deployment/start-a-project/)
 or [Compile your first program](https://bynk-lang.org/book/tutorials/01-first-program/).
 
 ## Repository layout
 
-This is a Cargo workspace. The three user-facing tools — `bynkc`, `bynk`, and
+This is a Cargo workspace. The two user-facing tools — `bynk` and
 `bynk-lsp` — are front-ends over a layered set of library crates; every crate
 except `bynk-wasm`, `bynk-testkit`, `bynk-tests`, `tree-sitter-bynk`'s Rust binding, `xtask`,
 and `fuzz` is published to crates.io at each release. Each crate's README
@@ -129,8 +127,7 @@ says where it sits in the layering.
 
 | Path | What it is | Published as |
 | ---- | ---------- | ------------ |
-| [`bynkc/`](bynkc/) | The `bynkc` compiler CLI (`compile` / `check` / `fmt` / `test`) — a thin front-end over the library crates. | [crates.io](https://crates.io/crates/bynkc) |
-| [`bynk/`](bynk/) | The `bynk` driver — links the compiler in-process and orchestrates the Node toolchain (`doctor` / `new` / `dev` / `deploy`, plus `check` / `fmt` / `test` / `explain`). | [crates.io](https://crates.io/crates/bynk) |
+| [`bynk/`](bynk/) | The `bynk` CLI — links the compiler in-process (`compile` / `check` / `fmt` / `test`) and orchestrates the Node toolchain (`doctor` / `new` / `dev` / `deploy`, plus `explain`). | [crates.io](https://crates.io/crates/bynk) |
 | [`bynk-lsp/`](bynk-lsp/) | The `bynk-lsp` Language Server (diagnostics, hover, go-to-definition, …). | [crates.io](https://crates.io/crates/bynk-lsp) |
 | [`bynk-syntax/`](bynk-syntax/), [`bynk-std/`](bynk-std/), [`bynk-project/`](bynk-project/), [`bynk-check/`](bynk-check/), [`bynk-model/`](bynk-model/), [`bynk-ts/`](bynk-ts/), [`bynk-emit/`](bynk-emit/), [`bynk-strip/`](bynk-strip/), [`bynk-fmt/`](bynk-fmt/), [`bynk-ide/`](bynk-ide/), [`bynk-driver/`](bynk-driver/) | The compiler's library crates: syntax, the standard library's first-party sources (as data), the project model, checking, the declaration IR, TypeScript emission and stripping, diagnostic rendering, formatting, editor analysis, and the command bodies the CLIs share. | crates.io |
 | [`bynk-tests/`](bynk-tests/) | The integration-test corpus (`tests/`, one `it` binary) and the grammar-reference renderer. | — (unpublished) |
@@ -181,7 +178,7 @@ each topic keeps its explanation, recipes, and reference together:
 - **[Guides](https://bynk-lang.org/book/guides/)** — task-focused recipes, each section
   opening with the *why* before the *how*.
 - **[Reference](https://bynk-lang.org/book/reference/)** — exact behaviour, including the
-  [normative spec](https://bynk-lang.org/book/spec/) and [CLI reference](https://bynk-lang.org/docs/cli/).
+  [normative spec](https://bynk-lang.org/book/spec/) and [CLI reference](https://bynk-lang.org/docs/bynk-cli/).
 
 The online Book's source lives in [`site/`](site/). Build it locally with
 [Astro](https://astro.build/): `cd site && npm install && npm run dev`.

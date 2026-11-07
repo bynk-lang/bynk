@@ -249,7 +249,7 @@ If the agent has never been deployed, there is no data to protect: you can inste
 delete its `[agents."<context>.<Agent>"]` entry from `bynk.schema.lock`, and the
 next build records the new shape as a fresh start.
 
-`bynkc check` and `bynkc test` check against the lock without changing it; a
+`bynk check` and `bynk test` check against the lock without changing it; a
 build records each new shape.
 
 Every record an agent stores carries that version, as a `__v` field written with

@@ -1,4 +1,4 @@
-//! #1758: `bynkc test` spawns each runner by the path detection resolved, and a
+//! #1758: `bynk test` spawns each runner by the path detection resolved, and a
 //! runner that is found but will not start is reported as such, not as missing.
 //!
 //! The Windows failure was a `tsc.cmd` shim that detection found (through
@@ -40,7 +40,7 @@ fn one_case_project(project: &Path) {
 }
 
 /// #1758 acceptance: on Windows an npm-installed `tsc` is a `tsc.cmd` shim,
-/// which `bynkc test` used to find but never start. Runs whenever `tsc`
+/// which `bynk test` used to find but never start. Runs whenever `tsc`
 /// resolves; under `BYNK_REQUIRE_TSC` (set on CI, which installs
 /// `typescript@5` with npm) a missing `tsc` fails rather than skips.
 #[cfg(windows)]
@@ -60,7 +60,7 @@ fn an_npm_installed_tsc_shim_runs_the_suite() {
         .args(["test", "."])
         .current_dir(&project)
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     assert!(
         out.status.success(),
         "stdout:\n{}\nstderr:\n{}",
@@ -69,7 +69,7 @@ fn an_npm_installed_tsc_shim_runs_the_suite() {
     );
 }
 
-/// Run `bynkc test <extra>` on the one-case project with only a `tsc` on
+/// Run `bynk test <extra>` on the one-case project with only a `tsc` on
 /// `PATH` that is executable, so detection finds it, but whose interpreter
 /// does not exist, so spawning it fails. Returns the path of that `tsc` and
 /// the run's output.
@@ -92,7 +92,7 @@ fn run_with_unstartable_tsc(tag: &str, extra: &[&str]) -> (PathBuf, std::process
         .current_dir(&project)
         .env("PATH", &bin)
         .output()
-        .expect("bynkc runs");
+        .expect("bynk runs");
     (tsc, out)
 }
 

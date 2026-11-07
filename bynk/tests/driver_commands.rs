@@ -1,16 +1,9 @@
 //! `bynk check` / `bynk fmt` / `bynk test` — the everyday commands the driver
 //! grew in v0.138 (#487).
 //!
-//! Two things are pinned:
-//!  1. **The in-process commands work through the driver** — `check` and `fmt`
-//!     run with no `bynkc` binary in play, over the real CLI wiring (clap →
-//!     dispatch → module), with deterministic (relative-path) output.
-//!  2. **Drop-in equivalence with `bynkc`** — when the sibling `bynkc` binary is
-//!     present next to `bynk` (a full workspace build), `bynk check`/`fmt` are
-//!     byte-for-byte identical to `bynkc check`/`fmt`, and `bynk test` delegates
-//!     to it. These parity checks **skip** (rather than fail) when `bynkc` was
-//!     not built — e.g. under a bare `cargo test -p bynk` — so the file is green
-//!     either way and exhaustive under a workspace test run.
+//! The in-process commands work through the driver: `check`, `fmt` and `test`
+//! run over the real CLI wiring (clap → dispatch → module), with deterministic
+//! (relative-path) output.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -22,24 +15,6 @@ use std::process::{Command, Stdio};
 /// The `bynk` binary under test.
 fn bynk() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_bynk"))
-}
-
-/// The sibling `bynkc` the driver would resolve — present only when the whole
-/// workspace was built. Parity tests gate on this.
-fn bynkc_sibling() -> Option<PathBuf> {
-    let p = bynk().parent().unwrap().join("bynkc");
-    p.exists().then_some(p)
-}
-
-/// `bynkc`'s stderr without the one-line retirement notice it prints (#3013):
-/// what the equivalence tests compare against `bynk`'s.
-fn without_notice(out: (i32, String, String)) -> (i32, String, String) {
-    let (code, stdout, stderr) = out;
-    let kept: String = stderr
-        .split_inclusive('\n')
-        .filter(|line| !line.starts_with("bynkc: notice:"))
-        .collect();
-    (code, stdout, kept)
 }
 
 /// A clean, empty scratch directory unique to `name`, under the crate's test
@@ -130,31 +105,6 @@ fn check_single_file_error_short_is_deterministic() {
         first.starts_with("bad.bynk:") && first.contains("error["),
         "expected a `bad.bynk:line:col: error[...]` short line, got:\n{err}"
     );
-}
-
-#[test]
-fn check_matches_bynkc_when_present() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built (run the workspace test suite for parity)");
-        return;
-    };
-    let dir = scratch("check-parity");
-    write(&dir.join("bad.bynk"), BAD_SOURCE);
-    write(&dir.join("ok.bynk"), CLEAN_COMMONS);
-    for args in [
-        vec!["check", "bad.bynk"],
-        vec!["check", "bad.bynk", "--format", "short"],
-        vec!["check", "ok.bynk"],
-    ] {
-        let driven = run_bynk_in(&dir, &args);
-        let direct = without_notice(run_in(&bynkc, &dir, &args, None));
-        assert_eq!(
-            driven,
-            direct,
-            "`bynk {0}` must match `bynkc {0}` exactly",
-            args.join(" ")
-        );
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -518,44 +468,13 @@ fn fmt_check_is_judged_against_the_overridden_style() {
 }
 
 #[test]
-fn fmt_style_overrides_match_bynkc_when_present() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built (run the workspace test suite for parity)");
-        return;
-    };
-    let dir = scratch("fmt-override-parity");
-    for args in [
-        vec!["fmt", "--indent", "spaces", "--indent-width", "4", "-"],
-        vec!["fmt", "--max-line-width", "50", "-"],
-        vec!["fmt", "--max-line-width", "50", "--no-trailing-comma", "-"],
-        vec!["fmt", "--indent", "tab", "--indent-width", "4", "-"],
-    ] {
-        let driven = run_in(&bynk(), &dir, &args, Some(WIDE_LIST));
-        let direct = run_in(&bynkc, &dir, &args, Some(WIDE_LIST));
-        assert_eq!(
-            driven.0,
-            direct.0,
-            "`bynk {0}` exit must match `bynkc {0}`",
-            args.join(" ")
-        );
-        assert_eq!(
-            driven.1,
-            direct.1,
-            "`bynk {0}` output must match `bynkc {0}`",
-            args.join(" ")
-        );
-    }
-}
-
-#[test]
 fn fmt_style_overrides_are_honoured_in_process() {
     // The style flags must reach the formatter, or a run silently formats to the
     // canonical style instead of the one asked for. (They once had to be
-    // respelled onto the argv of a shelled `bynkc`; #2998 removed that path.)
+    // respelled onto the argv of a shelled compiler; #2998 removed that path.)
     let dir = scratch("fmt-style-overrides");
     let mut cmd = Command::new(bynk());
     cmd.args(["fmt", "--indent", "spaces", "--indent-width", "3", "-"])
-        .env_remove("BYNK_BYNKC")
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -858,45 +777,11 @@ fn a_broken_manifest_is_reported_not_ignored() {
 }
 
 #[test]
-fn the_manifest_layer_matches_bynkc_when_present() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built (run the workspace test suite for parity)");
-        return;
-    };
-    let dir = project_with_fmt(
-        "fmt-manifest-parity",
-        "[fmt]\nindent = \"spaces\"\nindent_width = 4\nmax_line_width = 50\n",
-    );
-    for args in [
-        vec!["fmt", "-"],
-        vec!["fmt", "--no-config", "-"],
-        vec!["fmt", "--indent", "tab", "-"],
-        vec!["fmt", "--max-line-width", "100", "-"],
-    ] {
-        let driven = run_in(&bynk(), &dir, &args, Some(WIDE_LIST));
-        let direct = run_in(&bynkc, &dir, &args, Some(WIDE_LIST));
-        assert_eq!(
-            driven.0,
-            direct.0,
-            "`bynk {0}` exit must match `bynkc {0}`",
-            args.join(" ")
-        );
-        assert_eq!(
-            driven.1,
-            direct.1,
-            "`bynk {0}` output must match `bynkc {0}`",
-            args.join(" ")
-        );
-    }
-}
-
-#[test]
 fn the_manifest_layer_reaches_the_in_process_formatter() {
     // A resolved default must not override the project's own `[fmt]` style.
     let dir = project_with_fmt("fmt-manifest-in-process", "[fmt]\nmax_line_width = 50\n");
     let mut cmd = Command::new(bynk());
     cmd.args(["fmt", "-"])
-        .env_remove("BYNK_BYNKC")
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -922,37 +807,6 @@ fn the_manifest_layer_reaches_the_in_process_formatter() {
     assert!(
         stdout.contains("\n\t\t\tguestName,"),
         "the project's 50-column budget must reach the formatter:\n{stdout}"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// bynk test (delegation)
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_discovery_delegates_and_matches_bynkc() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling bynkc not built (delegation parity needs it)");
-        return;
-    };
-    // `--no-run --format json` is a pure compile — no `tsc`/`node` needed — so
-    // this exercises delegation and the discovery document on any machine.
-    let proj = scratch("test-discovery");
-    write(
-        &proj.join("bynk.toml"),
-        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
-    );
-    write(
-        &proj.join("src/calc.bynk"),
-        "commons calc {\n  fn dbl(n: Int) -> Int { n + n }\n}\n\nsuite calc {\n  case \"doubles\" {\n    expect dbl(3) == 6\n  }\n}\n",
-    );
-    let args = ["test", ".", "--no-run", "--format", "json"];
-    let driven = run_bynk_in(&proj, &args);
-    let direct = run_in(&bynkc, &proj, &args, None);
-    assert_eq!(driven.0, direct.0, "delegated exit code must match bynkc's");
-    assert_eq!(
-        driven.1, direct.1,
-        "delegated discovery document must match bynkc's byte-for-byte"
     );
 }
 
@@ -1103,24 +957,6 @@ fn a_bad_directory_argument_writes_nothing() {
     );
 }
 
-/// `bynkc fmt` shares `run_fmt`, so a directory behaves the same through it.
-#[test]
-fn fmt_directory_matches_bynkc_when_present() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: sibling `bynkc` not built");
-        return;
-    };
-    let dir = layout_project("fmt-dir-parity");
-    let ours = run_bynk_in(&dir, &["fmt", "--check", "."]);
-    let theirs = without_notice(run_in(&bynkc, &dir, &["fmt", "--check", "."], None));
-    assert_eq!(ours.0, theirs.0, "exit codes differ");
-    assert_eq!(
-        ours.2.replace("bynk fmt:", "fmt:"),
-        theirs.2.replace("bynkc fmt:", "fmt:"),
-        "stderr differs"
-    );
-}
-
 // ---------------------------------------------------------------------------
 // bynk fmt and CRLF line endings (#1763)
 // ---------------------------------------------------------------------------
@@ -1182,13 +1018,12 @@ fn a_crlf_canonical_source_on_stdin_passes_check() {
 }
 
 // ---------------------------------------------------------------------------
-// bynk compile (#2998): in-process, equivalent to `bynkc compile`
+// bynk compile (#2998): in-process, equivalent to `bynk compile`
 // ---------------------------------------------------------------------------
 
-/// `bynk compile` needs no `bynkc`: with an empty `PATH` and no override, and
-/// no sibling consulted, it still writes the project's modules.
+/// `bynk compile` needs no separate compiler: with an empty `PATH`, it still writes the project's modules.
 #[test]
-fn compile_runs_in_process_with_no_bynkc_available() {
+fn compile_runs_in_process_with_an_empty_path() {
     let proj = scratch("compile-in-process");
     write(
         &proj.join("bynk.toml"),
@@ -1201,7 +1036,6 @@ fn compile_runs_in_process_with_no_bynkc_available() {
         .arg(&out)
         .current_dir(&proj)
         .env("PATH", "")
-        .env_remove("BYNK_BYNKC")
         .output()
         .expect("spawn");
     assert!(
@@ -1212,136 +1046,15 @@ fn compile_runs_in_process_with_no_bynkc_available() {
     assert!(out.join("calc.ts").exists(), "the module is written");
 }
 
-/// `--emit js` is the flag E1 adds to `bynk compile`: the same files `bynkc`
-/// writes, as JavaScript.
-#[test]
-fn compile_emit_js_matches_bynkc_when_present() {
-    let Some(bynkc) = bynkc_sibling() else {
-        eprintln!("skipping: no sibling `bynkc`");
-        return;
-    };
-    let proj = scratch("compile-emit-js");
-    write(
-        &proj.join("bynk.toml"),
-        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
-    );
-    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
-    let (a, _, ea) = run_bynk_in(&proj, &["compile", ".", "-o", "out-bynk", "--emit", "js"]);
-    let (b, _, eb) = run_in(
-        &bynkc,
-        &proj,
-        &["compile", ".", "-o", "out-bynkc", "--emit", "js"],
-        None,
-    );
-    assert_eq!((a, b), (0, 0), "{ea}\n{eb}");
-    for name in ["calc.js", "package.json"] {
-        let x = std::fs::read(proj.join("out-bynk").join(name));
-        let y = std::fs::read(proj.join("out-bynkc").join(name));
-        assert!(x.is_ok(), "bynk wrote {name}");
-        assert_eq!(x.ok(), y.ok(), "{name} differs");
-    }
-}
-
-/// #2998: `bynk compile` ignores `BYNK_BYNKC` (there is no second compiler to
-/// pin), even when it names a binary that does not exist.
-#[test]
-fn compile_ignores_a_missing_bynk_bynkc_override() {
-    let proj = scratch("compile-ignores-override");
-    write(
-        &proj.join("bynk.toml"),
-        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
-    );
-    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
-    let out = proj.join("out");
-    let run = Command::new(bynk())
-        .args(["compile", ".", "-o"])
-        .arg(&out)
-        .current_dir(&proj)
-        .env("BYNK_BYNKC", "/nonexistent/bynkc")
-        .output()
-        .expect("spawn");
-    assert!(
-        run.status.success(),
-        "stderr:\n{}",
-        String::from_utf8_lossy(&run.stderr)
-    );
-    assert!(out.join("calc.ts").exists(), "the module is written");
-}
-
-// ---------------------------------------------------------------------------
-// BYNK_BYNKC is retired (#2998, ADR 0736)
-// ---------------------------------------------------------------------------
-
-/// A `bynkc` stand-in that records that it ran.
-fn marker_bynkc(dir: &Path) -> (PathBuf, PathBuf) {
-    let ran = dir.join("ran");
-    let bin = dir.join("fake-bynkc");
-    write(
-        &bin,
-        &format!(
-            "#!/bin/sh\ntouch '{}'\necho FAKE BYNKC RAN\n",
-            ran.display()
-        ),
-    );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
-    (bin, ran)
-}
-
-/// Every command runs in-process, so a `bynkc` named by `BYNK_BYNKC` is never
-/// run; the variable draws one warning, and the command succeeds on its own.
-#[cfg(unix)]
-#[test]
-fn bynk_bynkc_is_warned_about_once_and_never_run() {
-    let proj = scratch("retired-override");
-    write(
-        &proj.join("bynk.toml"),
-        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
-    );
-    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
-    let (fake, ran) = marker_bynkc(&proj);
-    for args in [
-        vec!["check", "."],
-        vec!["fmt", "src/calc.bynk"],
-        vec!["compile", ".", "-o", "out"],
-        vec!["test", ".", "--no-run", "--format", "json"],
-    ] {
-        let out = Command::new(bynk())
-            .args(&args)
-            .current_dir(&proj)
-            .env("BYNK_BYNKC", &fake)
-            .env("BYNK_ALLOW_SKEW", "1")
-            .output()
-            .expect("spawn");
-        let (stdout, stderr) = (
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr),
-        );
-        assert!(out.status.success(), "{args:?}: {stderr}");
-        assert_eq!(
-            stderr.matches("BYNK_BYNKC=").count(),
-            1,
-            "{args:?} warns exactly once: {stderr}"
-        );
-        assert!(stderr.contains("is ignored"), "{args:?}: {stderr}");
-        assert!(!stdout.contains("FAKE BYNKC RAN"), "{args:?}: {stdout}");
-    }
-    assert!(!ran.exists(), "the stand-in was never spawned");
-}
-
-/// The replacement for the skew tests: `bynk test` on a real project discovers
-/// its suites, with no `bynkc` involved, and `--allow-skew` is still accepted.
+/// `bynk test` on a real project discovers
+/// its suites.
 #[test]
 fn test_discovers_the_projects_suites_in_process() {
     let proj = scratch("test-discovers-suites");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/hello-world");
     copy_dir(&fixture, &proj);
-    for extra in [&[][..], &["--allow-skew"][..]] {
-        let mut args = vec!["test", ".", "--no-run", "--format", "json"];
-        args.extend_from_slice(extra);
+    {
+        let args = vec!["test", ".", "--no-run", "--format", "json"];
         let (code, out, err) = run_bynk_in(&proj, &args);
         assert_eq!(code, 0, "{err}");
         let doc: serde_json::Value = serde_json::from_str(&out).expect("a JSON document");
@@ -1367,62 +1080,18 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// `bynk` answers to the name `bynkc` (#3013, E3): the path the archives, the
-// loose assets and the installers actually ship is a copy named `bynkc`.
-// ---------------------------------------------------------------------------
-
-/// A copy of the `bynk` under test, named `bynkc` (`bynkc.exe` on Windows).
-fn bynkc_copy(name: &str) -> (PathBuf, PathBuf) {
-    let dir = scratch(name);
-    let copy = dir.join(format!("bynkc{}", std::env::consts::EXE_SUFFIX));
-    std::fs::copy(bynk(), &copy).unwrap();
-    (dir, copy)
-}
-
+/// `--allow-skew` went with `bynkc`: there is no separate compiler to drift
+/// from, so the flag is an ordinary unknown flag on the two commands that had it.
 #[test]
-fn a_copy_named_bynkc_checks_like_bynk_and_prints_the_notice_exactly_once() {
-    let (dir, copy) = bynkc_copy("bynkc-copy-check");
-    write(&dir.join("ok.bynk"), CLEAN_COMMONS);
-    let args = ["check", "ok.bynk"];
-    let as_bynkc = run_in(&copy, &dir, &args, None);
-    let as_bynk = run_bynk_in(&dir, &args);
-    let notices = as_bynkc
-        .2
-        .lines()
-        .filter(|l| *l == bynk::bynkc_compat::RETIREMENT_NOTICE)
-        .count();
-    assert_eq!(
-        notices, 1,
-        "exactly one notice, got stderr:\n{}",
-        as_bynkc.2
-    );
-    assert_eq!(as_bynkc.0, as_bynk.0, "same exit code");
-    assert_eq!(as_bynkc.1, as_bynk.1, "same stdout");
-    assert_eq!(
-        without_notice(as_bynkc).2.replace("bynkc", "bynk"),
-        as_bynk.2
-    );
-}
-
-#[test]
-fn a_copy_named_bynkc_shows_bynkcs_usage_line() {
-    let (dir, copy) = bynkc_copy("bynkc-copy-help");
-    let (code, out, err) = run_in(&copy, &dir, &["--help"], None);
-    assert_eq!(code, 0, "{err}");
-    // clap names the program in the usage line from argv[0], as the old `bynkc`
-    // binary's did (`#[command(name = "bynkc")]` without a `bin_name`), so on
-    // Windows it reads `bynkc.exe`. The test accepts both, and rejects `bynk`.
-    let usage = out
-        .lines()
-        .find(|l| l.starts_with("Usage: "))
-        .unwrap_or_default();
-    assert!(
-        usage.starts_with("Usage: bynkc ") || usage.starts_with("Usage: bynkc.exe "),
-        "bynkc's usage line, got:\n{out}"
-    );
-    assert!(
-        !err.contains(bynk::bynkc_compat::RETIREMENT_NOTICE),
-        "--help stays byte-for-byte: {err}"
-    );
+fn allow_skew_is_an_unknown_flag() {
+    let dir = scratch("allow-skew-rejected");
+    for args in [
+        &["test", "--allow-skew"][..],
+        &["compile", "--allow-skew", "."][..],
+    ] {
+        let (code, _out, err) = run_bynk_in(&dir, args);
+        assert_ne!(code, 0, "{args:?}: {err}");
+        assert!(err.contains("unexpected argument"), "{args:?}: {err}");
+        assert!(err.contains("--allow-skew"), "{args:?}: {err}");
+    }
 }

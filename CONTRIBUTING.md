@@ -69,6 +69,11 @@ CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
 5. The required check is `CI green`. `main` is protected and merges go through
    the merge queue, so you do not merge by hand and do not need to rebase just to
    stay current.
+6. CI runs in stages (the table at the top of `.github/workflows/ci.yml`). A PR
+   runs the fast Linux checks only. The merge queue adds the Linux system tests
+   and the Windows and macOS legs, so a cross-OS or system-test failure can
+   first show up there, as an ejection from the queue. A nightly run covers the
+   rest and opens a `Nightly CI failed` issue when it goes red.
 
 ## Licence
 

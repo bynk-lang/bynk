@@ -25,12 +25,6 @@ need "$rel" '-DestinationPath "$stage.zip"' 'windows archive'
 need "$rel" '> SHA256SUMS' 'checksum file'
 need "$rel" 'cp "$bin/bynk" "$bin/bynk-lsp"' 'unix archive contents'
 need "$rel" 'Copy-Item "$bin/bynk.exe","$bin/bynk-lsp.exe"' 'windows archive contents'
-# Overlap release (crate-hygiene E3): `bynkc` is a copy of `bynk`, which answers to
-# the name; E3-4 deletes these. The installers extract the archive as it is.
-need "$rel" 'cp "$bin/bynk" "$stage/bynkc"' 'unix archive bynkc copy'
-need "$rel" 'Copy-Item "$bin/bynk.exe" "$stage/bynkc.exe"' 'windows archive bynkc copy'
-need "$rel" 'cp "$bin/bynk" "bynkc-${{ matrix.target }}"' 'loose bynkc asset (a copy of bynk)'
-need "$rel" 'Copy-Item "$bin/bynk.exe" "bynkc-${{ matrix.target }}.exe"' 'loose bynkc asset (windows)'
 need "$rel" 'cp "$bin/bynk-lsp" "bynk-lsp-${{ matrix.target }}"' 'loose server asset'
 need "$rel" 'Copy-Item "$bin/bynk-lsp.exe" "bynk-lsp-${{ matrix.target }}.exe"' 'loose server asset (windows)'
 
@@ -55,7 +49,7 @@ need scripts/install.ps1 "x86_64-pc-windows-msvc" 'supported target'
 # binstall: same layout in every installable crate.
 url='pkg-url = "{ repo }/releases/download/v{ version }/bynk-v{ version }-{ target }{ archive-suffix }"'
 bindir='bin-dir = "bynk-v{ version }-{ target }/{ bin }{ binary-ext }"'
-for c in bynk bynkc bynk-lsp; do
+for c in bynk bynk-lsp; do
   need "$c/Cargo.toml" "$url" 'binstall pkg-url'
   need "$c/Cargo.toml" "$bindir" 'binstall bin-dir'
   need "$c/Cargo.toml" 'pkg-fmt = "tgz"' 'binstall default format'

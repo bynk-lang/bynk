@@ -32,7 +32,7 @@
 //! parses); candidates are semantic. Unit/type/capability/member enumeration
 //! parses the project's `.bynk` files (and the embedded `bynk` surface) with
 //! recovery, so it works even while the file the cursor sits in is mid-edit.
-//! Built-ins, keywords, and constructors come from the static `bynkc` registries
+//! Built-ins, keywords, and constructors come from the static `bynk` registries
 //! (`keywords`/`builtin_names`/`firstparty`/`ast`), never the index — first-party
 //! symbols aren't indexed (the v0.28 finding); the project parse supplies only
 //! *project* symbols.
@@ -1961,6 +1961,10 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         "Json",
         &[
             ("encode", "encode(value) -> String"),
+            (
+                "encodePlain",
+                "encodePlain(value) -> String - Option as `v` / `null`",
+            ),
             ("decode", "decode[T](s: String) -> Result[T, JsonError]"),
             (
                 "decodeSql",

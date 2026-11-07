@@ -1,8 +1,8 @@
 #!/bin/sh
 # Dev Container feature: the Bynk toolchain (#2103).
 #
-# Installs `bynk`, `bynkc` and `bynk-lsp` from ONE GitHub Release of
-# bynk-lang/bynk, so the driver, compiler and language server never skew,
+# Installs `bynk` and `bynk-lsp` from ONE GitHub Release of
+# bynk-lang/bynk, so the compiler and language server never skew,
 # verifying the archive against that release's SHA256SUMS before anything is
 # unpacked. Then, optionally, `wrangler@4` and `typescript@7` with npm.
 #
@@ -111,6 +111,7 @@ for bin in bynk bynkc bynk-lsp bynkc-lsp; do
     # may be absent, but not both.
     if [ ! -f "$STAGE/$bin" ]; then
         case "$bin" in
+            bynkc) continue ;; # absent from a current release; present in an older pin
             bynk-lsp | bynkc-lsp)
                 [ -f "$STAGE/bynk-lsp" ] || [ -f "$STAGE/bynkc-lsp" ] || die "$ASSET has no language server"
                 continue ;;

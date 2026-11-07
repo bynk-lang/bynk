@@ -9,9 +9,8 @@ a recent Rust toolchain, or, in a container, use the
 
 ## Download a release binary
 
-Each release has one archive per platform, holding the driver `bynk`, the
-compiler `bynkc` and the language server `bynk-lsp`, all from the same
-build:
+Each release has one archive per platform, holding the compiler and driver `bynk` and the language server `bynk-lsp`, from
+the same build:
 
 | Platform              | Archive                                         |
 |-----------------------|-------------------------------------------------|
@@ -42,21 +41,21 @@ archive's line in `SHA256SUMS`, then extract the `.zip`. Releases also carry
 signed build provenance, which `gh attestation verify <archive> --repo
 bynk-lang/bynk` checks.
 
-Put the three binaries on your `PATH`. On Linux and macOS, for example:
+Put the two binaries on your `PATH`. On Linux and macOS, for example:
 
 ```sh
-install -m 0755 "bynk-$tag-$target"/bynk "bynk-$tag-$target"/bynkc \
-  "bynk-$tag-$target"/bynk-lsp ~/.local/bin/
+install -m 0755 "bynk-$tag-$target"/bynk "bynk-$tag-$target"/bynk-lsp \
+  ~/.local/bin/
 bynk --version
 ```
 
 Any directory on your `PATH` works; the example assumes `~/.local/bin` is on
-it. On Windows, move `bynk.exe`, `bynkc.exe` and `bynk-lsp.exe` into a folder
+it. On Windows, move `bynk.exe` and `bynk-lsp.exe` into a folder
 and add that folder to `Path`.
 
 ## Prerequisites for testing and deploying
 
-`bynkc` compiles on its own. To type-check or run the emitted TypeScript you
+`bynk` compiles on its own. To type-check or run the emitted TypeScript you
 also need Node **22 or newer** and TypeScript (`tsc`), plus `wrangler` to
 deploy to Cloudflare Workers. You don't have to work out which you're missing:
 `bynk doctor`, below, checks them and prints the command that fixes each gap.
@@ -78,16 +77,16 @@ listed. See [Check your environment with `bynk
 doctor`](/docs/editor-and-tooling/doctor/) for the capability groups, exit
 codes, and `--format` outputs.
 
-`bynkc` exposes four commands:
+`bynk` compiles, checks, formats and tests with four commands:
 
 | Command          | Purpose                                            |
 |------------------|----------------------------------------------------|
-| `bynkc compile`  | Compile Bynk source to TypeScript.                 |
-| `bynkc check`    | Type-check without emitting.                        |
-| `bynkc fmt`      | Format Bynk source.                                |
-| `bynkc test`     | Compile and run `suite` blocks.                     |
+| `bynk compile`  | Compile Bynk source to TypeScript.                 |
+| `bynk check`    | Type-check without emitting.                        |
+| `bynk fmt`      | Format Bynk source.                                |
+| `bynk test`     | Compile and run `suite` blocks.                     |
 
-See the [CLI reference](/docs/cli/) for every flag and exit code.
+See the [CLI reference](/docs/bynk-cli/) for every flag and exit code.
 
 ## Editor support
 
@@ -101,7 +100,7 @@ See the [CLI reference](/docs/cli/) for every flag and exit code.
 through the VS Code extension rather than directly. Install it from the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode) (`bynk-lang.bynk-vscode`). It uses the
 `bynk-lsp` on your `PATH`, or downloads the matching release if there isn't
-one. It does the same for `bynk` and `bynkc`, so with the extension you need no
+one. It does the same for `bynk`, so with the extension you need no
 separate install or `cargo`: the downloaded tools go on the `PATH` of its
 integrated terminals. See [Set up editor support](/docs/editor-and-tooling/editor-support/).
 
@@ -109,13 +108,12 @@ integrated terminals. See [Set up editor support](/docs/editor-and-tooling/edito
 
 To build instead, you need **Rust** (stable, 2024 edition, via
 [rustup](https://rustup.rs/)) and **Git**. Clone the repository and install the
-driver, the compiler and the language server with `cargo`:
+compiler and driver, and the language server with `cargo`:
 
 ```sh
 git clone https://github.com/bynk-lang/bynk.git
 cd bynk
 cargo install --path bynk
-cargo install --path bynkc
 cargo install --path bynk-lsp
 ```
 
@@ -139,7 +137,7 @@ installs the toolchain for you. Add it, with the official Node feature, to your
 }
 ```
 
-The feature installs `bynk`, `bynkc` and `bynk-lsp` from one GitHub Release
+The feature installs `bynk` and `bynk-lsp` from one GitHub Release
 (checked against that release's `SHA256SUMS`), then `wrangler@4` and
 TypeScript 7 with npm. In the finished container `bynk doctor --strict` is all
 green. The feature also lists the VS Code extension (`bynk-lang.bynk-vscode`),

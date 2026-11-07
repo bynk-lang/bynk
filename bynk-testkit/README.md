@@ -23,7 +23,7 @@ files" diverged from the compiler's own.
 ```rust
 // In an integration test:
 let opts = bynk_testkit::compile_options_single(src_dir);
-let output = bynkc::compile_project(&opts)?;
+let output = bynk_driver::project::compile_project(&opts)?;
 ```
 
 This crate ships no production code, and is invisible to

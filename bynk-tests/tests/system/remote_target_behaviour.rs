@@ -1,4 +1,4 @@
-//! #2138 (end-to-end testing track §3.5, §3.7, §3.8): `bynkc test --against
+//! #2138 (end-to-end testing track §3.5, §3.7, §3.8): `bynk test --against
 //! <name>` runs the `system` suites against a deployment named under
 //! `[test.targets]`.
 //!
@@ -279,7 +279,7 @@ fn start_stand_in(dir: &Path, out_js: &Path, secret: &str) -> (StandIn, u16) {
     (StandIn(child), port)
 }
 
-fn bynkc_test(
+fn bynk_test(
     proj: &Path,
     out: &Path,
     extra: &[&str],
@@ -297,7 +297,7 @@ fn bynkc_test(
     for (k, v) in env {
         cmd.env(k, v);
     }
-    let o = cmd.output().expect("run bynkc test");
+    let o = cmd.output().expect("run bynk test");
     (
         o.status.success(),
         String::from_utf8_lossy(&o.stdout).into_owned(),
@@ -336,7 +336,7 @@ fn system_suites_run_against_a_named_target() {
     // An in-process run first: it writes the compiled Worker the stand-in
     // serves (`out-js/workers/shop-api`).
     let proj = project(&dir, &[SUITE, RUN_ID_LOCAL], "");
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &proj,
         &dir.join("build/out"),
         &[],
@@ -348,7 +348,7 @@ fn system_suites_run_against_a_named_target() {
     let proj = project(&dir, &[SUITE, RUN_ID], &target(port));
 
     // Against the stand-in, signing with the secret from the environment.
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &proj,
         &dir.join("remote/out"),
         &["--against", "local"],
@@ -371,7 +371,7 @@ fn system_suites_run_against_a_named_target() {
     // `--settle`: a failing `expect` is retried, replaying the read before
     // it, until it holds; the document counts the retries.
     let settling = project(&dir, &[SETTLES], &target(port));
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &settling,
         &dir.join("settle/out"),
         &["--against", "local", "--settle", "5s"],
@@ -384,7 +384,7 @@ fn system_suites_run_against_a_named_target() {
     );
     assert_eq!(doc["suites"][0]["cases"][0]["retries"], 2, "{doc:#}");
     // With `--settle 0` nothing is retried: the fourth read is not `3`.
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &settling,
         &dir.join("nosettle/out"),
         &["--against", "local", "--settle", "0"],
@@ -400,7 +400,7 @@ fn system_suites_run_against_a_named_target() {
     // ...and an unsafe address before the read is never replayed: the read
     // is retried twice, the write runs once.
     let writes = project(&dir, &[WRITES_ONCE], &target(port));
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &writes,
         &dir.join("writes/out"),
         &["--against", "local", "--settle", "5s"],
@@ -415,7 +415,7 @@ fn system_suites_run_against_a_named_target() {
     // credential, so the runner really signs with the environment's value.
     // (`project` rewrites the one project directory, so restore its suite.)
     let proj = project(&dir, &[SUITE], &target(port));
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &proj,
         &dir.join("wrong/out"),
         &["--against", "local"],
@@ -427,7 +427,7 @@ fn system_suites_run_against_a_named_target() {
 
     // A case a remote run can't honour refuses the run before any request...
     let proj = project(&dir, &[SUITE, ADVANCES], &target(port));
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &proj,
         &dir.join("refused/out"),
         &["--against", "local"],
@@ -444,7 +444,7 @@ fn system_suites_run_against_a_named_target() {
     );
 
     // ...and `--skip-unsupported` skips it, saying why.
-    let (ok, stdout, stderr) = bynkc_test(
+    let (ok, stdout, stderr) = bynk_test(
         &proj,
         &dir.join("skipped/out"),
         &["--against", "local", "--skip-unsupported"],
@@ -475,7 +475,7 @@ fn system_suites_run_against_a_named_target() {
 #[test]
 fn unsafe_targets_are_refused_before_any_request() {
     // No runner is needed: each refusal happens before the build. (`--against dev`
-    // was refused here when this drove `bynkc`, which cannot start `bynk dev`; `bynk`
+    // was refused here when this drove `bynk`, which cannot start `bynk dev`; `bynk`
     // starts it, and `bynk/tests/test_against_dev.rs` covers that.)
     let dir = scratch("refuse");
     let manifest = "[test.targets.prod]\nurl.shop-api = \"http://127.0.0.1:9\"\nproduction = true\n\n[test.targets.preview]\nurl.shop-api = \"http://127.0.0.1:9\"\nsecrets = [\"AUTH_SECRET\"]\n";
@@ -495,7 +495,7 @@ fn unsafe_targets_are_refused_before_any_request() {
             "needs the secret `AUTH_SECRET`",
         ),
     ] {
-        let (ok, stdout, stderr) = bynkc_test(&proj, &dir.join("out"), &args, &[]);
+        let (ok, stdout, stderr) = bynk_test(&proj, &dir.join("out"), &args, &[]);
         assert!(!ok, "{args:?} is refused");
         let doc = json(&stdout, &stderr);
         let message = doc["error"]["message"].as_str().unwrap_or_default();

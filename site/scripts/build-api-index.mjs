@@ -110,7 +110,7 @@ const html = `<!doctype html>
       <p class="lede">
         Generated <code>rustdoc</code> for the Bynk workspace crates — the compiler
         internals behind the <a href="/docs/">toolchain</a>. Most users compile Bynk
-        through the <code>bynkc</code> / <code>bynk</code> CLIs rather than depending on
+        through the <code>bynk</code> CLI rather than depending on
         these crates directly. Back to the <a href="/docs/">Developer Documentation</a>.
       </p>
       <ul>

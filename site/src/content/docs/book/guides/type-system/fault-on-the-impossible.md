@@ -34,7 +34,7 @@ fn refund(o: Order) -> Effect[Result[(), RefundError]] {
 
 `todo` type-checks as whatever the position needs, so the rest of the program
 builds around it. It reports the warning `bynk.fault.todo`; run
-`bynkc check --deny-warnings` in CI to refuse a build that still contains one.
+`bynk check --deny-warnings` in CI to refuse a build that still contains one.
 
 ## Assert the fault in a test
 

@@ -5,7 +5,7 @@
 //! `trace(Cap.op)` escape hatch agrees with the sugar — same count, same
 //! arguments, in call order.
 //!
-//! Drives the real `bynkc test` CLI against a fixture project, so it exercises
+//! Drives the real `bynk test` CLI against a fixture project, so it exercises
 //! the recording proxy, the sugar lowering, and the trace lowering end to end.
 //! Like the other toolchain-driving tests it skips loudly when no TypeScript
 //! runner (`tsx` or `tsc`+`node` or `npx`) is available; `BYNK_REQUIRE_TSC=1`
@@ -35,12 +35,12 @@ fn fixture() -> PathBuf {
 
 #[test]
 fn observation_sugar_and_trace_agree_at_runtime() {
-    // `bynkc test`'s runner detection is Unix-only (it shells out to `which`), so
+    // `bynk test`'s runner detection is Unix-only (it shells out to `which`), so
     // the CLI cannot locate a runner on Windows and never runs the emitted tests.
     // This test drives that CLI end to end — skip on Windows. (The *emission* is
     // covered platform-independently by the golden fixture `246_observation_surface`.)
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -64,7 +64,7 @@ fn observation_sugar_and_trace_agree_at_runtime() {
         .arg("--output")
         .arg(&out_root)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let mut report = String::from_utf8_lossy(&out.stdout).into_owned();
     report.push_str(&String::from_utf8_lossy(&out.stderr));
 
@@ -80,6 +80,6 @@ fn observation_sugar_and_trace_agree_at_runtime() {
     );
     assert!(
         out.status.success(),
-        "expected `bynkc test` to exit 0, got:\n{report}"
+        "expected `bynk test` to exit 0, got:\n{report}"
     );
 }

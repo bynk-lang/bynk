@@ -246,7 +246,7 @@ pub enum AnalysisRoots {
     /// pre-slice-A behaviour and what [`diagnose_project`] still means.
     SingleTree(PathBuf),
     /// A manifest-backed project rooted here: `bynk.toml`'s `[paths]
-    /// include`/`exclude` decide the trees, exactly as `bynkc` reads them.
+    /// include`/`exclude` decide the trees, exactly as `bynk` reads them.
     /// Mirrors `bynk-driver`'s `project_options` — the compiler's own choice.
     Project(PathBuf),
 }
@@ -341,7 +341,7 @@ pub fn diagnose_project(root: &Path, overlay: &HashMap<PathBuf, String>) -> Proj
 }
 
 /// Slice A: project diagnostics over manifest-resolved roots — the LSP analyses
-/// exactly the files `bynkc` compiles, from the same manifest, through the same
+/// exactly the files `bynk` compiles, from the same manifest, through the same
 /// discovery.
 ///
 /// Every path in the result is **project-relative** (ADR 0198), so a file is

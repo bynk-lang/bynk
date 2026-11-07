@@ -250,7 +250,7 @@ fn run_smoke_with(
         .arg(tmp.join("out"))
         .arg(tmp.join("proj"))
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         compiled.status.success(),
         "the {project} smoke does not compile:\n{}",

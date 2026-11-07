@@ -191,7 +191,7 @@ fn compile(proj: &Path, out: &Path, emit: &str) {
         .arg(out)
         .arg(proj)
         .output()
-        .expect("run bynkc");
+        .expect("run bynk");
     assert!(
         compiled.status.success(),
         "the client smoke does not compile (--emit {emit}):\n{}",

@@ -458,7 +458,7 @@ pub fn run(
         return ExitCode::FAILURE;
     }
     // 2. Compile — in-process (slice 7: the driver links the pipeline instead of
-    //    shelling `bynkc`). Into the managed `.bynk/dev/` build dir (D1).
+    //    shelling a separate compiler). Into the managed `.bynk/dev/` build dir (D1).
     //    Compilation is additive (never prunes), so clear `workers/` first;
     //    otherwise a renamed/deleted context would linger and spuriously trip the
     //    §2.4 ambiguity check.
@@ -467,7 +467,7 @@ pub fn run(
         eprintln!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
-    // #524: compile the SAME project shape as `bynkc compile <project_root>`
+    // #524: compile the SAME project shape as `bynk compile <project_root>`
     // — the shared rooting rule over the full `[paths]` layout. `dev`
     // previously re-rooted on the first `include` entry only, silently
     // dropping further includes and the whole `exclude` list.

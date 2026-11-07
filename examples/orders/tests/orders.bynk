@@ -1,7 +1,7 @@
 suite orders
 
 // The `Book` agent uses no platform capability (a storage `Map` needs no clock),
-// so `bynkc test .` constructs it by key, drives its handlers, and asserts on the
+// so `bynk test .` constructs it by key, drives its handlers, and asserts on the
 // query results directly — no KV, no Durable Object, no harness. The aggregate
 // handlers return scalars, so each assertion exercises a real join / group / sum
 // over storage. Each test uses its own channel so state never bleeds across tests.

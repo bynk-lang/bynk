@@ -31,7 +31,7 @@ service api from http {
 }
 ```
 
-Compiling either with `bynkc` produces TypeScript you can read, run, and deploy.
+Compiling either with `bynk` produces TypeScript you can read, run, and deploy.
 To see all of this wired together in one complete program — types, a context, a
 capability, a stateful agent, and an HTTP service — read
 [Anatomy of a Bynk service](/book/introduction/anatomy-of-a-service/).

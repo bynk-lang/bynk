@@ -3,8 +3,8 @@ title: "§1 Scope & conformance"
 ---
 ## §1.1 Scope
 
-This specification defines the Bynk language as accepted and compiled by `bynkc`
-at the **current version, v0.510**. It is maintained as the single source of
+This specification defines the Bynk language as accepted and compiled by `bynk`
+at the **current version, v0.512**. It is maintained as the single source of
 truth: each language increment updates the affected chapters of this document,
 so its scope is always the shipped language. It is normative for shipped
 behaviour: where this document and the compiler disagree about a program that
@@ -55,7 +55,7 @@ The static-semantics rules (the §5 chapter) state the conditions for
 well-formedness; each is tied to the `bynk.*` diagnostic code that a conforming
 implementation MUST emit when the condition is violated.
 
-The **conformance suite is the `bynkc` fixture corpus** — its positive fixtures
+The **conformance suite is the `bynk` fixture corpus** — its positive fixtures
 (which MUST compile) and its negative fixtures (which MUST fail, with the stated
 diagnostic). The gates that enforce this, and the corpus's role as the
 authoritative suite, are detailed in the later Conformance & test corpus chapter

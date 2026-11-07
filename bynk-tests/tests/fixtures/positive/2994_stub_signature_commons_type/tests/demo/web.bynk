@@ -1,0 +1,9 @@
+// #2994: the stub class's method signature names the operation's return type
+// (`LocaleTag`); the context does not `uses` that namespace.
+suite demo.web
+
+case "a stub over a capability whose type the context does not use" {
+	stub Locale.current() returns "pl"
+	let r <- api.call()
+	expect r == "hello"
+}

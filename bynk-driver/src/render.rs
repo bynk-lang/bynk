@@ -469,10 +469,10 @@ pub fn print_project_errors(root: &Path, errors: &[CompileError]) {
 }
 
 /// v0.38 (ADR 0071): one terse line per diagnostic for tooling consumers
-/// (`bynkc check --format short`):
+/// (`bynk check --format short`):
 /// `path:line:col: <severity>[<category>]: <message>`. Line/column are
 /// 1-indexed, computed from the byte span against the source. The VS Code
-/// `bynkc` problem-matcher keys off this exact shape — keep it stable.
+/// `bynk` problem-matcher keys off this exact shape — keep it stable.
 pub fn print_errors_short(errors: &[CompileError], source: &str, filename: &str) {
     eprint!("{}", render_errors_short(errors, source, filename));
 }

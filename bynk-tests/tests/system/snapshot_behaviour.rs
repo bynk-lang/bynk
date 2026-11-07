@@ -72,7 +72,7 @@ fn test(project: &Path, args: &[&str]) -> Run {
         .arg(project.parent().unwrap().join("out"))
         .args(args)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     Run {
         ok: out.status.success(),
         stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -94,7 +94,7 @@ fn rewrite(path: &Path, from: &str, to: &str) {
 /// Whether the toolchain is there; the test returns early when it is not.
 fn ready() -> bool {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return false;
     }
     if !have_runner() {

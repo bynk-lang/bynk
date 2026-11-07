@@ -18,7 +18,7 @@ What it shows:
   tallies it with `summarise` from `commons digest`, whose `groupBy` runs eagerly
   over a `List` — the same vocabulary the agent runs lazily over storage.
 
-- **Testing against the platform clock** — under `bynkc test` the platform
+- **Testing against the platform clock** — under `bynk test` the platform
   `Clock` is a deterministic test double that reads the epoch, and a case can
   `stub Clock.now()` to read any instant. The tests append events through the
   agent and the `POST` route, read them back through the time-window routes,
@@ -39,8 +39,8 @@ event-log/
 ## Check and test
 
 ```sh
-bynkc check src      # type-check, no output
-bynkc test .
+bynk check src      # type-check, no output
+bynk test .
 ```
 
 ```text

@@ -2,12 +2,12 @@
 title: Diagnostic index
 ---
 <!-- GENERATED FILE — do not edit by hand.
-     Source: bynkc/src/diagnostics.rs (`render_markdown`).
+     Source: bynk-syntax/src/diagnostics.rs (`render_markdown`).
      Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry:: -->
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **758** codes in total.
+There are **760** codes in total.
 
 ## Agents
 
@@ -210,6 +210,7 @@ There are **758** codes in total.
 | `bynk.http.duplicate_route` | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
 | `bynk.http.extra_param` | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.header_question_not_found` | `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`). |  | Warning |
 | `bynk.http.headers_wrong_type` | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.invalid_path` | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.json_duplicate` | A handler carries more than one `@json` annotation. |  | — |
@@ -421,7 +422,8 @@ There are **758** codes in total.
 | `bynk.invariant.duplicate_name` | An agent declares two invariants with the same name. |  | — |
 | `bynk.invariant.impure_predicate` | An invariant predicate uses an effectful or test-only construct. |  | — |
 | `bynk.invariant.not_bool` | An invariant predicate does not have type `Bool`. |  | — |
-| `bynk.json.nested_option_plain` | A plain-JSON route's response type contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`. |  | — |
+| `bynk.json.encode_plain_generic` | `Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type. |  | — |
+| `bynk.json.nested_option_plain` | A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`. |  | — |
 | `bynk.lambda.unannotated_param` | A lambda parameter has no type annotation in a position where no function type is expected to infer it from. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | `bynk.list.deprecated_function` | A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable). |  | Warning |
 | `bynk.locale.multiple_message_bundles` | A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against. |  | — |

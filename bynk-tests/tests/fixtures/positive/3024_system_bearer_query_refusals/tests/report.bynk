@@ -1,0 +1,6 @@
+suite qrepro
+
+case "a reader gets the report" {
+	let r <- api.GET("/report", Window { days: 7 }) by Reader("someone")
+	expect r == Ok("7 days for someone")
+}

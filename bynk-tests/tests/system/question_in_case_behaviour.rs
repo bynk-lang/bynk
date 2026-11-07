@@ -1,7 +1,7 @@
 //! #2857: `?` on a `Result` in a test `case` fails the case (reporting the `Err`
 //! and the `?`'s location) instead of lowering to an early `return` of the
 //! `Err`, which `tsc` rejected against the case's `CaseResult`. Drives the real
-//! `bynkc test` CLI against `fixtures/behaviour/question_in_case`.
+//! `bynk test` CLI against `fixtures/behaviour/question_in_case`.
 //!
 //! Like the other toolchain-driving tests it skips on Windows and, loudly, when
 //! no TypeScript runner is on `PATH`; `BYNK_REQUIRE_TSC` makes the skip a failure.
@@ -28,7 +28,7 @@ fn have_runner() -> bool {
 #[test]
 fn question_on_an_err_fails_the_case() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {
@@ -49,7 +49,7 @@ fn question_on_an_err_fails_the_case() {
         .arg("--output")
         .arg(&out_root)
         .output()
-        .expect("run bynkc test");
+        .expect("run bynk test");
     let all = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

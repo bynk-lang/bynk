@@ -19,7 +19,7 @@ whole point. `bynk new` is the first step of the driver arc *is my machine ready
 
 > **`bynk new` needs no toolchain.** Unlike `dev`, it only writes files — it
 > shells nothing, compiles nothing, and reads no network. It works *before*
-> `bynkc`, Node, or `wrangler` are installed, which is exactly why it can be your
+> Node or `wrangler` are installed, which is exactly why it can be your
 > very first command. (Run [`bynk doctor`](/docs/editor-and-tooling/doctor/) once
 > you want to build or serve.)
 

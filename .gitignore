@@ -9,12 +9,12 @@ target/
 # mdBook build output
 docs/book/
 
-# `bynkc test` build output written into a fixture dir (never tracked; the
+# `bynk test` build output written into a fixture dir (never tracked; the
 # fixtures are driven from temp dirs, so a committed out/ is stale cruft)
 bynk-tests/tests/fixtures/**/out/
 bynk-tests/tests/fixtures/**/out-js/
 
-# Likewise for the examples: `bynkc test` and `bynkc compile` write here
+# Likewise for the examples: `bynk test` and `bynk compile` write here
 examples/**/out/
 examples/**/out-js/
 examples/**/bynk.schema.lock

@@ -1,4 +1,4 @@
-# Install the Bynk toolchain (bynkc, bynk, bynk-lsp) from a GitHub Release,
+# Install the Bynk toolchain (bynk, bynk-lsp) from a GitHub Release,
 # without needing Rust or cargo.
 #
 #   irm https://github.com/bynk-lang/bynk/releases/latest/download/install.ps1 | iex
@@ -21,7 +21,7 @@ $repo = 'bynk-lang/bynk'
 $base = "https://github.com/$repo/releases"
 $target = 'x86_64-pc-windows-msvc'
 if (-not [Environment]::Is64BitOperatingSystem) {
-    throw "No prebuilt Bynk binaries for 32-bit Windows; use 'cargo install bynkc bynk' instead."
+    throw "No prebuilt Bynk binaries for 32-bit Windows; use 'cargo install bynk' instead."
 }
 if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
     Write-Warning 'No native ARM64 build; installing the x64 binaries, which run under emulation.'
@@ -59,11 +59,12 @@ try {
     Expand-Archive (Join-Path $tmp "$stage.zip") -DestinationPath $tmp
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     if (-not ((Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -or (Test-Path (Join-Path $tmp "$stage\bynkc-lsp.exe")))) { throw "The archive has no language server." }
-    foreach ($bin in 'bynkc', 'bynk', 'bynk-lsp', 'bynkc-lsp') {
+    foreach ($bin in 'bynk', 'bynkc', 'bynk-lsp', 'bynkc-lsp') {
         $src = Join-Path $tmp "$stage\$bin.exe"
         # A release before the rename ships only bynkc-lsp, and a current one only
         # bynk-lsp (a pinned older release is still installable): either server
         # name may be absent, but not both.
+        if (-not (Test-Path $src) -and $bin -eq 'bynkc') { continue }
         if (-not (Test-Path $src) -and $bin -like '*-lsp') {
             # An upgrade from the overlap release: its bynkc-lsp is skewed against
             # this release, so drop it rather than leave an editor starting it.
@@ -75,6 +76,14 @@ try {
             continue
         }
         Copy-Item $src (Join-Path $dest "$bin.exe") -Force
+    }
+    # A release without bynkc, installed over one that shipped it: the leftover
+    # would keep running the old compiler beside the new bynk. (A pinned older
+    # release ships bynkc and gets it installed above.)
+    $oldBynkc = Join-Path $dest 'bynkc.exe'
+    if (-not (Test-Path (Join-Path $tmp "$stage\bynkc.exe")) -and (Test-Path $oldBynkc)) {
+        Remove-Item $oldBynkc -Force
+        Write-Host "Removed the old $oldBynkc; use bynk."
     }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -92,4 +101,4 @@ if ($env:BYNK_NO_MODIFY_PATH) {
     $env:Path = "$env:Path;$dest"
     Write-Host "Added $dest to your PATH (open a new terminal to pick it up)."
 }
-Write-Host "Installed bynkc, bynk and bynk-lsp. Run 'bynk doctor' to check your setup."
+Write-Host "Installed bynk and bynk-lsp. Run 'bynk doctor' to check your setup."

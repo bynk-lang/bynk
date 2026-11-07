@@ -1,7 +1,7 @@
 //! In-process test helpers shared across `bynk-emit`'s `#[cfg(test)]` modules
 //! (#57, testing track). Before this existed, driving anything beyond a
 //! self-contained single-file commons through the emitter meant going through
-//! `bynkc`'s on-disk fixture directories — the only fs-free seam
+//! `bynk`'s on-disk fixture directories — the only fs-free seam
 //! (`project::compile_in_memory`) was private to one test module
 //! (`emitter::conditional_runtime_import_tests`), so every other test that
 //! needed the project pipeline (cross-context `uses`, multi-file `Split`
@@ -72,7 +72,7 @@ pub(crate) fn emit_project(
 }
 
 /// [`emit_project`], choosing whether `suite`s are kept: `tests: false` is the
-/// deployable build (`bynkc compile`, `bynk deploy`).
+/// deployable build (`bynk compile`, `bynk deploy`).
 pub(crate) fn emit_project_with_tests(
     files: &[(&str, &str)],
     target: bynk_check::project_model::BuildTarget,

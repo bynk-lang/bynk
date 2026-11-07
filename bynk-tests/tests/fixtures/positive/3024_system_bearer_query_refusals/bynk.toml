@@ -1,0 +1,6 @@
+[project]
+name = "3024-system-bearer-query-refusals"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

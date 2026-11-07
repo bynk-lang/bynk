@@ -1,27 +1,59 @@
 name: CI
 
+# Stages. Each event runs what is worth its cost at that point, and no more.
+# Path filters (`changes`) apply on top, in every stage but the nightly.
+#
+#   pull_request   Fast feedback, Linux only: lint, clippy, API docs, the
+#                  Linux unit + integration tiers, and the cheap path-gated
+#                  jobs (wasm, site, grammar, runtime, drift, ...). `CI green`
+#                  reports from these, so a PR can be reviewed and queued in
+#                  minutes. Not here: Windows/macOS, the Linux system tier,
+#                  TS7, the Node floor, MSRV, coverage.
+#   merge_group    The real gate. Everything on a PR, plus the Linux system
+#                  tier, TS7, the Node floor, MSRV (on a global change) and the
+#                  Windows + macOS legs. Off Linux those legs run `ci-os`: the
+#                  whole suite minus the corpus-wide tsc/node passes, which are
+#                  OS-independent and already run on Linux here (see the
+#                  `test` job).
+#   push (main)    The backstop: every job the queue did NOT pass on this
+#                  commit (see `queue_passed`), plus what only `main` does
+#                  (saving Rust caches; deploy-site.yml follows this run).
+#   schedule       Nightly, on `main`, unfiltered: every job, the full `ci`
+#                  profile on all three OSes, coverage, the Dev Container
+#                  feature and installer smokes. A failure opens (or comments
+#                  on) one tracking issue (`nightly-report`).
+#
+# Why the PR stage is Linux-only, given the `test_os` history below (Windows
+# joined the PR gate in July 2026 because Windows breakage kept reaching
+# `main`): the merge queue now sits between a PR and `main`, and it runs
+# Windows and macOS, so that class of defect is still stopped before `main`.
+# What moves is WHEN the author hears about it: in the queue, at the cost of an
+# ejection, instead of on every PR push. The PR stage was running ~20 jobs per
+# push, and with the queue building up to 5 entries at once the hosted pool
+# (concurrency-capped for a free public org) was saturated: p95 runner waits of
+# ~8 min in November 2026.
 on:
   push:
     branches: [main]
   pull_request:
-  # Merge queue: whenever `test` runs here it runs the full three-OS matrix (see
-  # the `test` job's dynamic matrix), so macOS first runs before a PR lands
-  # rather than on the post-merge push to `main` (Linux and Windows are both on
-  # the PR gate too; see the `test_os` note). The queue's run is on the
-  # critical path of every merge, so work with no gating value stays out of it:
-  # `coverage` skips it, and no job saves a Rust cache from it (see the
-  # rust-cache note below).
+  # Merge queue: whenever `test` runs here it runs the three-OS matrix (see
+  # the `test` job's dynamic matrix), so Windows and macOS run before a PR
+  # lands. The queue's run is on the critical path of every merge, so work with
+  # no gating value stays out of it: `coverage` skips it, and no job saves a
+  # Rust cache from it (see the rust-cache note below).
   #
   # `CI green` is the only required status check and this workflow reports it,
   # so a queue cannot wedge waiting on a check that never arrives. codeql.yml
   # has no `merge_group` trigger, which is safe precisely because it is not
   # required — do not make it required without adding the trigger.
   merge_group:
-  # Weekly health check: re-run the full pipeline so dependency/advisory drift
+  # Nightly: re-run the full pipeline, unfiltered, so dependency/advisory drift
   # (a freshly published RUSTSEC advisory, a bitrotted dep) is caught even when
-  # no one has opened a PR. Mondays 07:00 UTC.
+  # no one has opened a PR, and so the full `ci` profile runs on every OS (the
+  # queue runs `ci-os` off Linux). Daily 07:00 UTC; it was weekly before the
+  # PR and queue stages were narrowed.
   schedule:
-    - cron: "0 7 * * 1"
+    - cron: "0 7 * * *"
 
 # A new push to a PR branch cancels the superseded run for that ref.
 #
@@ -37,8 +69,12 @@ on:
 #
 # The deploy pipeline (deploy-site.yml) has its own non-cancelling concurrency
 # group.
+#
+# The nightly gets a group of its own. A concurrency group keeps only one
+# PENDING run, so sharing `main`'s group would let the next push to `main`
+# displace a nightly that was still waiting for the previous push's run.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ github.event_name == 'schedule' && '-nightly' || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least privilege by default; jobs that need more opt in (changes needs
@@ -73,7 +109,7 @@ jobs:
   # requires only the `ci-green` aggregator below — not the individual (now
   # skippable) job names.
   #
-  # `all` is the escape hatch: on push/main and the weekly schedule, or when a
+  # `all` is the escape hatch: on push/main and the nightly schedule, or when a
   # global file changed (a workflow, the lockfile, the toolchain), every job
   # runs regardless of which paths the diff touched. On a push, that is every
   # job the merge queue did not already pass on the same commit (`queue_passed`).
@@ -128,13 +164,16 @@ jobs:
       # Each skippable job's `if:` checks its own `name:` against it; the `test`
       # legs are dropped from `test_os` instead.
       queue_passed: ${{ steps.queue.outputs.passed }}
-      # JSON array of OSes for the `test` matrix. PRs run Linux + Windows; every
-      # other event (push to main, merge_group, the weekly schedule) adds macOS,
+      # JSON array of OSes for the `test` matrix. PRs run Linux only (see the
+      # stage table at the top: Windows moved to the merge queue); every
+      # other event (push to main, merge_group, the nightly) runs all three,
       # except a stamp commit whose parent already passed macOS (see the step).
       # On a push, an OS whose leg the queue passed on this commit is dropped,
       # so the array can be empty (`test` then skips).
       #
-      # Windows is on the PR gate because the evidence said it had to be. This
+      # History, kept because it is why Windows still gates every merge (now in
+      # the queue rather than on each PR push). Windows was on the PR gate
+      # because the evidence said it had to be. This
       # leg was Linux-only on PRs until 2026-07-29, on the theory that cross-OS
       # breakage was rare enough to fix forward on `main`. It was not: the last
       # six CI failures on `main` were ALL `Test suite (windows-latest)` — not
@@ -261,7 +300,7 @@ jobs:
               - 'site/src/content/docs/docs/manifest.md'
               - 'scripts/build-registry-core.sh'
               - 'scripts/registry-core-parity.mjs'
-              # bynkc's textmate_keywords test reads the site's copy of the
+              # the textmate_keywords test reads the site's copy of the
               # TextMate grammar (under site/, which `rust` does not cover).
               - 'site/src/grammars/bynk.tmLanguage.json'
             grammar:
@@ -309,7 +348,7 @@ jobs:
             npm_audit:
               # The npm audit gate and its allowlist. An edit to either (such as
               # dropping an allowlist entry) touches no npm tree, so without this
-              # the `npm-audit` job would skip on the very PR that changes it.
+              # the `lint` job's npm audit would skip on the very PR that changes it.
               - *global
               - 'scripts/npm-audit-gate.mjs'
               - 'scripts/npm-audit-allowlist.json'
@@ -322,7 +361,7 @@ jobs:
             installer_scripts:
               # Deliberately NOT `*global`: the smoke downloads the latest
               # published release, so only an edit to the scripts themselves
-              # (or the weekly schedule) should run it. A workflow/lockfile PR
+              # (or the nightly schedule) should run it. A workflow/lockfile PR
               # must not go red over a bad asset on the latest release, and a PR
               # that renames assets with the scripts can't pass until released.
               - 'scripts/install.sh'
@@ -335,7 +374,6 @@ jobs:
               - 'scripts/install.ps1'
               - 'scripts/check-installer-naming.sh'
               - 'bynk/Cargo.toml'
-              - 'bynkc/Cargo.toml'
               - 'bynk-lsp/Cargo.toml'
       # Collapse "neither a PR nor the merge queue" (push/schedule) and "a global
       # file changed" into one boolean the downstream `if:`s can OR against.
@@ -372,14 +410,14 @@ jobs:
       #     `main` are the only ones that SAVE Rust caches, and a cache is saved
       #     only when its key is new, i.e. after exactly such a change. Skipping
       #     those legs here would leave PRs restoring a stale cache and
-      #     recompiling the changed dependencies on every run until the weekly
+      #     recompiling the changed dependencies on every run until the nightly
       #     schedule refreshed it;
       #   - `main` still holds a Rust cache for every job and OS that saves one
       #     there (`RUST_CACHES`). A key is also new on `main` after LRU
       #     eviction, which the 10 GB cap has caused before (see the rust-cache
       #     note at the top). The full run refills whichever entry is missing,
       #     rather than leaving every PR and queue leg to cold-compile until
-      #     the next cache-key change or the weekly schedule.
+      #     the next cache-key change or the nightly schedule.
       #
       # Any lookup error falls back to `[]` (run everything). The two aggregators
       # never consult this list.
@@ -400,10 +438,12 @@ jobs:
           SELF_HOSTED_CACHES: ${{ steps.runner.outputs.caches }}
           CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
           # `<job>-<runner OS>` for every job that saves a Rust cache on `main`
-          # (`drift` never runs on a push). rust-cache keys start
+          # (`drift` and `coverage` never run on a push: coverage is nightly
+          # only, so a push could never refill its cache, and listing it would
+          # make every push run everything after an eviction). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-ts7-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-ts7-Linux test-Windows_NT test-Darwin msrv-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -434,9 +474,10 @@ jobs:
             echo "This push changes a rust-cache key input - running everything so main saves fresh caches."
           fi
           echo "passed=$passed" >> "$GITHUB_OUTPUT"
-      # Decide the `test` job's OS matrix from the event: Linux + Windows on PRs,
+      # Decide the `test` job's OS matrix from the event: Linux only on PRs,
       # all three OSes on everything else (push/main, merge_group, schedule) —
-      # except a stamp commit whose code macOS and Windows have already passed.
+      # except a stamp commit whose parent already passed macOS (the step checks
+      # the macOS leg only, and off the nightly that leg runs `ci-os`).
       #
       # The stamp commit changes no code: it rewrites version strings, the
       # changelog, ADR files and the greenfield table, and stamp.yml already
@@ -486,7 +527,7 @@ jobs:
             exit 0
           }
           if [ "$EVENT" = "pull_request" ]; then
-            emit '["ubuntu-latest","windows-latest"]'
+            emit '["ubuntu-latest"]'
           fi
           if [ "$EVENT" != "push" ] || [[ "$HEAD_MESSAGE" != "chore(stamp):"* ]] \
              || [ "$HEAD_AUTHOR" != "bynk-stamp[bot]" ]; then
@@ -519,24 +560,92 @@ jobs:
             emit "$three"
           fi
 
-  fmt:
-    name: Formatting (cargo fmt)
+  lint:
+    # The checks that need no build, in one job. Each was its own job, and each
+    # ran for 10-60 s but waited for a hosted runner like any other: in
+    # November 2026 `cargo audit` waited 366 s to run for 18 s, on runs that
+    # already started ~20 jobs at once against the org's concurrent-job cap.
+    # One job takes one slot. Every check keeps its own path gate as a step
+    # `if:`, and each runs on `!cancelled()`, so one failing check does not
+    # hide the others: the job reports every failure from one run, as the
+    # separate jobs did. Each also requires the checkout to have succeeded, so
+    # a failed checkout fails the job once rather than in every step.
+    #
+    #   - fmt: `cargo fmt --check`. rustfmt parses, it doesn't compile.
+    #   - cargo audit: Cargo.lock against the RustSec advisory database. The
+    #     schedule (an `all` run) catches advisories published after a merge.
+    #   - cargo-deny: licence policy, duplicate/wildcard detection and source
+    #     allowlisting (deny.toml). Advisories overlap `cargo audit` by design.
+    #   - npm audit: every npm tree with a committed lockfile, through
+    #     `scripts/npm-audit-gate.mjs` (high/critical gates, except an entry
+    #     in `scripts/npm-audit-allowlist.json` before its `review_by` date).
+    #     Covers site, whose deploy job holds the Cloudflare token.
+    #   - installers (#2558): shellcheck both POSIX scripts, and check that
+    #     release.yml's `binaries` job still produces the asset names they and
+    #     binstall expect, so a rename fails here, not for a user.
+    name: Lints (fmt, audit, deny, npm, installers)
     needs: changes
     if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Formatting (cargo fmt)')
+      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true')
+      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Lints (fmt, audit, deny, npm, installers)')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
         with:
           persist-credentials: false
+      # Define the toolchain explicitly (rust-toolchain.toml would otherwise
+      # trigger an implicit download when `cargo audit` dispatches in-repo).
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        if: ${{ (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         with:
           components: rustfmt
-      # No build/cache: rustfmt parses, it doesn't compile.
       - name: Check formatting
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         run: cargo fmt --all --check
+      # Prebuilt binary — avoids compiling cargo-audit from source on every run.
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        with:
+          tool: cargo-audit
+      - name: Audit dependencies (cargo audit)
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        run: cargo audit
+      - name: Supply chain (cargo-deny)
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          command: check
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
+        with:
+          node-version: "24"
+      - name: Audit every npm tree
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true') }}
+        run: |
+          failed=""
+          audit() {
+            tree="$1"; shift
+            echo "::group::npm audit: $tree"
+            node scripts/npm-audit-gate.mjs "$tree" -- "$@" || failed="$failed $tree"
+            echo "::endgroup::"
+          }
+          audit tree-sitter-bynk
+          audit bynk-emit/runtime
+          audit site
+          if [ -n "$failed" ]; then
+            echo "::error::npm audit gate failed for:$failed"
+            exit 1
+          fi
+          echo "All three trees passed the npm audit gate."
+      # shellcheck is preinstalled on ubuntu-latest.
+      - name: shellcheck (POSIX sh)
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
+        run: shellcheck --shell=sh scripts/install.sh scripts/check-installer-naming.sh
+      - name: Asset naming ↔ release.yml
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true') }}
+        run: sh scripts/check-installer-naming.sh
 
   clippy:
     name: Lint (clippy -D warnings)
@@ -618,17 +727,16 @@ jobs:
     #
     # fail-fast is off on PRs and `main`, so one OS's failure doesn't abandon
     # the others' results: an author fixing a PR wants every OS's failures from
-    # one run. In the merge queue it is ON. There the only question is pass or
+    # one run (on a PR that is the Linux leg alone). In the merge queue it is ON. There the only question is pass or
     # fail, and the answer is on the critical path of every entry queued
     # behind: a failed group is ejected only when `CI green` reports, and every
     # group stacked on it is then rebuilt. With fail-fast off, a failure on the
     # Linux leg (~10 min) still waited for the Windows leg (~15 min) before the
     # queue heard about it (run 39901658983: Linux red at 04:51:48, `CI green`
     # red at 04:58:19). Cancelling the sibling legs reports the failure as soon
-    # as the first leg fails. The PR's own run is unaffected and still shows
-    # every OS.
+    # as the first leg fails.
     #
-    # bynkc's suite reads the Book (site/src/content/docs/book/**) — the
+    # The test corpus reads the Book (site/src/content/docs/book/**) — the
     # doc_examples compile gate and the reference-page assertions — so the `rust`
     # filter includes the Book content; a content change can legitimately flip a test.
     name: Test suite (${{ matrix.os }})
@@ -648,7 +756,7 @@ jobs:
     strategy:
       fail-fast: ${{ github.event_name == 'merge_group' }}
       matrix:
-        # Linux + Windows on PRs, all three OSes on push/merge_group/schedule —
+        # Linux only on PRs, all three OSes on push/merge_group/schedule —
         # see the `test_os` output on the `changes` job.
         os: ${{ fromJSON(needs.changes.outputs.test_os) }}
     steps:
@@ -675,7 +783,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
-      # `tsc` is needed by the tsc-verify stage and the `bynkc test` fixtures.
+      # `tsc` is needed by the tsc-verify stage and the `bynk test` fixtures.
       # Pinned to the verified floor, v5 (TYPESCRIPT_MAJOR_FLOOR): an unpinned
       # `typescript` could turn CI red on a new TS major with no repo change.
       # The verified current major, v7, runs as a second pass below (#1672).
@@ -708,9 +816,9 @@ jobs:
         run: npx -y wrangler@4 --version
         continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite (no rustdoc
-      # doctests exist in the tree, so nextest loses nothing). bynkc's includes:
+      # doctests exist in the tree, so nextest loses nothing). The corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
-      #   - diagnostics_registry / keywords_reference / cli_reference / grammar_reference
+      #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date
       #   - the fixture suite and the tsc-strict verification stage
       # The other crates (bynk-fmt, bynk-lsp) contribute their own
@@ -732,8 +840,21 @@ jobs:
         run: cargo nextest run --workspace --locked --profile ci-lower
         env:
           BYNK_REQUIRE_TSC: "1"
+      # Off Linux, the queue and `main` run `ci-os`: the `ci` profile minus
+      # the corpus-wide tsc/node passes (tsc_verify, behaviour_fixtures,
+      # examples, example_tests_behaviour). Those check emitted code with the
+      # same Node and tsc on every OS, they already ran on Linux in this same
+      # stage (`test-system`, `test-ts7`), and they were ~900 of the ~2100
+      # test-seconds on the 3-core macOS runner. Byte-for-byte emit checks
+      # (the integration tier) and the OS-touching system tests (CLI, paths,
+      # workerd) still run here. The nightly runs the full `ci` profile.
+      - name: Run tests (OS tier)
+        if: matrix.os != 'ubuntu-latest' && github.event_name != 'schedule'
+        run: cargo nextest run --workspace --locked --profile ci-os
+        env:
+          BYNK_REQUIRE_TSC: "1"
       - name: Run tests
-        if: matrix.os != 'ubuntu-latest'
+        if: matrix.os != 'ubuntu-latest' && github.event_name == 'schedule'
         run: cargo nextest run --workspace --locked --profile ci
         env:
           BYNK_REQUIRE_TSC: "1"
@@ -778,6 +899,7 @@ jobs:
     # gated on the change filters alone: `test_os` names the legs of `test`.
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && github.event_name != 'pull_request'
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'System tests (Linux)')
     # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
     # pilot: a pool of one runner would run these jobs back to back (measured on
@@ -837,7 +959,7 @@ jobs:
     # Scope: the two whole-corpus type-check suites, plus the behaviour fixtures
     # (#2146): tsc_verify type-checks with `--noEmit`, so it never sees an error
     # tsc reports only while emitting (a top-level name the module transform
-    # reserves), and `bynkc test` emits. The other behaviour suites, which also
+    # reserves), and `bynk test` emits. The other behaviour suites, which also
     # type-check before running, stay on v5.
     name: Type-check under TypeScript 7
     needs: changes
@@ -845,6 +967,7 @@ jobs:
     # gated on the change filters alone: `test_os` names the legs of `test`.
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && github.event_name != 'pull_request'
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Type-check under TypeScript 7')
     # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
     # pilot: a pool of one runner would run these jobs back to back (measured on
@@ -893,6 +1016,7 @@ jobs:
     needs: changes
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && github.event_name != 'pull_request'
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 30
@@ -923,7 +1047,7 @@ jobs:
       # BYNK_REQUIRE_TSC turns a skipped strip-types check into a failure, so a
       # floor too old for them cannot pass by skipping. `cargo test` rather than
       # nextest: a handful of tests, so the install step would cost more than it
-      # saves. bynkc's integration tests are one binary (`it`), selected by
+      # saves. the integration tests are one binary (`it`), selected by
       # their file's module prefix.
       - name: Type-stripping and inspect tests under the floor
         run: "cargo test -p bynk-tests --locked --test it -- tsc_verify:: debug_inspect::"
@@ -961,6 +1085,7 @@ jobs:
     # build (the main 1.95 legs already compile that code on the same toolchain).
     if: >-
       (needs.changes.outputs.all == 'true')
+      && github.event_name != 'pull_request'
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
@@ -1016,8 +1141,8 @@ jobs:
     #
     # Off the PR path deliberately. It cannot block a merge (that is the point
     # of report-only), yet it was spending ~5 min of a runner on every Rust PR.
-    # It now reports on pushes to `main` and the weekly schedule, where the
-    # summary is just as useful for aiming new fixtures. Note this buys COMPUTE,
+    # It moved to pushes to `main` and the schedule (now nightly only; see
+    # below), where the summary is just as useful for aiming new fixtures. Note this buys COMPUTE,
     # not latency: it ran in parallel with `test`, so removing it does not
     # shorten the PR gate — `test` still sets the critical path.
     #
@@ -1025,16 +1150,14 @@ jobs:
     # queue run's coverage leg held a runner (up to ~28 min under contention)
     # while the gating legs waited for one.
     #
-    # And on a push only when that run re-runs the Linux suite. When the queue
-    # already passed it on the same commit (see the `queue` step), coverage
-    # would be the slowest job left (~8 min), holding the run, the stamp
-    # commit's run serialised behind it and the deploys waiting on both, for a
-    # report alone. A stamp commit's run (the same code, with its own Linux
-    # suite) still reports when a stamp follows, as does the weekly schedule.
+    # And now off pushes to `main` too: it reports on the nightly only. On a
+    # push it held the run (and the stamp commit's run serialised behind it,
+    # and the deploys waiting on both) for a report alone, and one summary a
+    # day is as useful for aiming fixtures as one per merge.
     name: Coverage (report-only)
     needs: changes
     if: >-
-      (github.event_name == 'push' || github.event_name == 'schedule')
+      github.event_name == 'schedule'
       && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && contains(fromJSON(needs.changes.outputs.test_os), 'ubuntu-latest')
     runs-on: ubuntu-latest
@@ -1404,104 +1527,6 @@ jobs:
       - name: Docs and index guards; pending-increment files; bynk.toml schema
         run: cargo test -p xtask
 
-  audit:
-    # Scans Cargo.lock against the RustSec advisory database. Only the lockfile
-    # and manifests matter here, both of which live in the `rust`/`global`
-    # filters; the weekly schedule (an `all` run) catches advisories published
-    # after a PR merges.
-    name: Security audit (cargo audit)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (cargo audit)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Define the toolchain explicitly (rust-toolchain.toml would otherwise
-      # trigger an implicit download when `cargo audit` dispatches in-repo).
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      # Prebuilt binary — avoids compiling cargo-audit from source on every run.
-      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
-        with:
-          tool: cargo-audit
-      - name: Audit dependencies
-        run: cargo audit
-
-  deny:
-    # Licence-policy enforcement, duplicate/wildcard detection, and source
-    # allowlisting (deny.toml). Complements `audit` — advisories overlap by
-    # design (defence in depth); the unique value is licences + bans + sources.
-    name: Supply chain (cargo-deny)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Supply chain (cargo-deny)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          command: check
-
-  npm-audit:
-    # Audit every npm package's dependency tree against the npm advisory DB —
-    # the JS-side parallel of `cargo audit`, closing the un-audited dependency
-    # surface. Reads the committed lockfiles (no install). A high-severity
-    # advisory gates; low/moderate are signal, not a blocker. Covers all four
-    # trees with committed lockfiles, including site, whose deploy job holds the
-    # Cloudflare token.
-    #
-    # The gate is `scripts/npm-audit-gate.mjs`: `npm audit --json`, failing on any
-    # high/critical advisory except one listed for that tree in
-    # `scripts/npm-audit-allowlist.json`. The allowlist is only for advisories
-    # with no patched release; each entry carries a `review_by` date past which
-    # it stops exempting.
-    #
-    # One job for all three trees, not a three-leg matrix. Each audit takes ~10 s,
-    # but each leg also queued for a runner, and a CI run already starts ~25
-    # jobs at once: on busy runs the legs waited 3-5 min for a runner apiece
-    # (run 39910638379), holding `ci-fast` and `ci-green` back with them. The
-    # step keeps the matrix's `fail-fast: false` behaviour: every tree is
-    # audited, each in its own log group, and the job fails at the end naming
-    # every tree that failed.
-    name: Security audit (npm)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.grammar == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.site == 'true' || needs.changes.outputs.npm_audit == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Security audit (npm)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "24"
-      - name: Audit every tree
-        run: |
-          failed=""
-          audit() {
-            tree="$1"; shift
-            echo "::group::npm audit: $tree"
-            node scripts/npm-audit-gate.mjs "$tree" -- "$@" || failed="$failed $tree"
-            echo "::endgroup::"
-          }
-          audit tree-sitter-bynk
-          audit bynk-emit/runtime
-          audit site
-          if [ -n "$failed" ]; then
-            echo "::error::npm audit gate failed for:$failed"
-            exit 1
-          fi
-          echo "All three trees passed the npm audit gate."
-
   dependency-review:
     # On PRs, flag newly-introduced dependencies that carry known advisories or
     # disallowed licences before they merge. Complements Dependabot (which acts
@@ -1525,7 +1550,7 @@ jobs:
     # #2103: build each scenario in features/test/bynk/scenarios.json with the
     # devcontainer CLI and run its checks, including `bynk doctor --strict`
     # with the Node feature. It installs a real GitHub Release and real npm
-    # packages, so it runs when the feature changes and on the weekly schedule
+    # packages, so it runs when the feature changes and on the nightly schedule
     # (a new release, wrangler or TypeScript can break it with no repo change),
     # not on every push to `main`. `--skip-autogenerated`: the autogenerated
     # test runs the defaults on a base image with no Node, which fails by
@@ -1547,28 +1572,6 @@ jobs:
           node-version: "24"
       - name: Test the feature
         run: npx --yes @devcontainers/cli@0.89.0 features test --project-folder features --features bynk --skip-autogenerated
-
-  installers-lint:
-    # #2558 shipped install.sh / install.ps1 / cargo-binstall metadata with
-    # nothing exercising them. This lints both scripts and statically checks
-    # that release.yml's `binaries` job still produces the asset names they
-    # (and binstall) expect, so a rename fails here, not for a user.
-    name: Installers (lint + naming)
-    needs: changes
-    if: >-
-      (needs.changes.outputs.installers == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Installers (lint + naming)')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # shellcheck is preinstalled on ubuntu-latest.
-      - name: shellcheck (POSIX sh)
-        run: shellcheck --shell=sh scripts/install.sh scripts/check-installer-naming.sh
-      - name: Asset naming ↔ release.yml
-        run: sh scripts/check-installer-naming.sh
 
   installers-lint-ps:
     name: Installers (PSScriptAnalyzer)
@@ -1597,7 +1600,7 @@ jobs:
     # PUBLISHED release (the stable releases/latest/download/install.sh URL
     # only exists once a release has been cut with the script attached). It
     # downloads real binaries, so it runs when the installers change and on the
-    # weekly schedule (a release can break them with no repo change).
+    # nightly schedule (a release can break them with no repo change).
     name: Installer smoke (${{ matrix.os }})
     needs: changes
     if: >-
@@ -1618,10 +1621,9 @@ jobs:
           BYNK_INSTALL_DIR: ${{ runner.temp }}/b
         run: |
           sh scripts/install.sh
-          for bin in bynk bynkc; do test -x "$BYNK_INSTALL_DIR/$bin"; done
+          test -x "$BYNK_INSTALL_DIR/bynk"
           test -x "$BYNK_INSTALL_DIR/bynk-lsp"
           "$BYNK_INSTALL_DIR/bynk" --version
-          "$BYNK_INSTALL_DIR/bynkc" --version
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
@@ -1631,14 +1633,10 @@ jobs:
           BYNK_NO_MODIFY_PATH: "1"
         run: |
           ./scripts/install.ps1
-          foreach ($bin in 'bynk', 'bynkc') {
-            if (-not (Test-Path "$env:BYNK_INSTALL_DIR\$bin.exe")) { throw "$bin.exe was not installed" }
-          }
+          if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk.exe")) { throw "bynk.exe was not installed" }
           if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk-lsp.exe")) { throw "bynk-lsp.exe was not installed" }
           & "$env:BYNK_INSTALL_DIR\bynk.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "bynk --version failed" }
-          & "$env:BYNK_INSTALL_DIR\bynkc.exe" --version
-          if ($LASTEXITCODE -ne 0) { throw "bynkc --version failed" }
 
   # ---------------------------------------------------------------------------
   # Early signal, so a PR can be marked ready for review without waiting on the
@@ -1680,7 +1678,7 @@ jobs:
     if: always()
     needs:
       - changes
-      - fmt
+      - lint
       - clippy
       - api-docs
       - msrv
@@ -1690,9 +1688,6 @@ jobs:
       - grammar
       - runtime
       - drift
-      - audit
-      - deny
-      - npm-audit
       - dependency-review
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1830,7 +1825,7 @@ jobs:
     if: always()
     needs:
       - changes
-      - fmt
+      - lint
       - clippy
       - api-docs
       - test
@@ -1845,12 +1840,8 @@ jobs:
       - grammar
       - runtime
       - drift
-      - audit
-      - deny
-      - npm-audit
       - dependency-review
       - devcontainer-feature
-      - installers-lint
       - installers-lint-ps
       - installers-smoke
       # Needed rather than exempted: it makes `ci-green` subsume the fast tier
@@ -1874,13 +1865,13 @@ jobs:
       #
       # EXEMPT is the honest record of what does not gate: `coverage` is
       # report-only by design (#520), `promote` only marks a draft ready (a
-      # failed promotion must not block a merge), and `ci-green` cannot need
-      # itself.
+      # failed promotion must not block a merge), `ci-green` cannot need
+      # itself, and `nightly-report` needs `ci-green` (it reports the result).
       - name: Every job is gated (or explicitly exempt)
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          EXEMPT="coverage promote ci-green"
+          EXEMPT="coverage promote ci-green nightly-report"
           jobs="$(sed -n '/^jobs:$/,$p' .github/workflows/ci.yml \
                   | sed -n 's/^  \([a-z][a-z0-9-]*\):$/\1/p')"
           needed="$(printf '%s' "$NEEDS" | jq -r 'keys[]')"
@@ -1905,3 +1896,42 @@ jobs:
             fi
           done
           echo "All upstream jobs succeeded or were skipped."
+
+  # ---------------------------------------------------------------------------
+  # Nightly failure report. The nightly is the only stage that runs the full
+  # `ci` profile off Linux, coverage, and the release-facing smokes, and no PR
+  # is waiting on it, so a red nightly would otherwise go unseen. One open
+  # issue tracks it: the first failure opens it, later ones comment on it, and
+  # whoever fixes the cause closes it. Not gating (see ci-green's EXEMPT).
+  # ---------------------------------------------------------------------------
+  nightly-report:
+    name: Report a failed nightly
+    needs: ci-green
+    # Anything but success: a cancelled or timed-out `ci-green` is as unseen
+    # as a red one. Coverage is report-only and never fails `ci-green`, so a
+    # coverage failure does not open the issue, by design.
+    if: always() && github.event_name == 'schedule' && needs.ci-green.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          title="Nightly CI failed"
+          body="The nightly CI run failed on \`main\` at $SHA: $RUN_URL"
+          number="$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+            --jq "[.[] | select(.title == \"$title\")][0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Failed again. $body"
+            echo "Commented on #$number."
+          else
+            gh issue create --title "$title" --body "$body
+
+          The nightly runs the full suite on all three OSes, coverage, and the installer and Dev Container smokes (see the stage table at the top of ci.yml). Close this issue once the cause is fixed; the next failure opens a new one."
+          fi

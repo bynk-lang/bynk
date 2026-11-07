@@ -137,7 +137,7 @@ In order of preference:
    baseline. Do this only when no deployment holds data for the class, since the
    lock is what protects stored data.
 
-`bynkc check` and `bynkc test` reconcile against the lock without writing it; only
+`bynk check` and `bynk test` reconcile against the lock without writing it; only
 a build records a new version.
 
 ## A lock written by an older toolchain

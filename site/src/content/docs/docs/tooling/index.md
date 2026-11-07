@@ -7,7 +7,7 @@ is the quickest path; the pages here are the reference for each tool.
 
 | Tool | Binary / package | Purpose |
 |---|---|---|
-| [`bynk-fmt`](/docs/tooling/bynk-fmt/) | `bynkc fmt` | The canonical source formatter. |
+| [`bynk-fmt`](/docs/tooling/bynk-fmt/) | `bynk fmt` | The canonical source formatter. |
 | [`bynk-lsp`](/docs/tooling/bynk-lsp/) | `bynk-lsp` | The language server (diagnostics, hover, go-to-definition, formatting). |
 | [`bynk mcp`](/docs/tooling/bynk-mcp/) | `bynk mcp` | A Model Context Protocol server, so AI agents outside VS Code can ask the toolchain about Bynk. |
 | [`bynk openapi`](/docs/tooling/bynk-openapi/) | `bynk openapi` | An OpenAPI 3.1 document for a project's `from http` services, for client codegen, docs and CI. |
@@ -15,4 +15,4 @@ is the quickest path; the pages here are the reference for each tool.
 | [`vscode-bynk`](/docs/tooling/vscode-bynk/) | VS Code extension | Editor integration built on `bynk-lsp`. |
 
 All are built from the same repository as the compiler, so they track the
-language version for version (currently v0.510).
+language version for version (currently v0.512).

@@ -48,16 +48,16 @@ bynk dev          # compile + serve on http://localhost:8787 (local mode)
 
 That's the compile-and-run recipe in one step — it runs `wrangler dev` in local
 mode, so KV / Durable Objects / queues are simulated and there's nothing to
-provision. It compiles in-process; the manual equivalent with `bynkc` is:
+provision. It compiles in-process; the manual equivalent is:
 
 ```sh
-bynkc check .                                     # type-check, no output
-bynkc compile . --output out --target workers     # emit a Worker per context
+bynk check .                                     # type-check, no output
+bynk compile . --output out --target workers     # emit a Worker per context
 cd out/workers/<name> && npx wrangler dev         # run it locally
 ```
 
-`bynk` and `bynkc` live at `target/release/` after
-`cargo build --release -p bynk -p bynkc` (see the
+`bynk` lives at `target/release/` after
+`cargo build --release -p bynk` (see the
 [install page](https://bynk-lang.org/book/introduction/install/)). The generated
 `wrangler.toml` carries the bindings each example needs — a `[[kv_namespaces]]`
 stanza, `[[durable_objects.bindings]]`, or `crons` — with placeholder ids to fill
@@ -66,7 +66,7 @@ in at deploy time.
 To run an example's tests:
 
 ```sh
-bynkc test .      # from the example directory
+bynk test .      # from the example directory
 ```
 
 Ten of the thirteen examples ship tests. Each factors its testable logic — a refined
@@ -89,7 +89,7 @@ These examples are honest about what compiles *today* (Bynk is pre-1.0):
   `List` terminal in a test needs a typed receiver the test harness does not yet
   track — so `orders` and `todo` test through their aggregate handlers.
 - **A test can target a `commons`, an agent, or a context's handlers** — including
-  a context that `consumes bynk { … }`. Under `bynkc test` each platform
+  a context that `consumes bynk { … }`. Under `bynk test` each platform
   capability is a deterministic test double (the clock reads the epoch, `Secrets`
   holds nothing, `Kv` is in memory, `Fetch` never reaches the network), and a
   `stub` overrides any one operation. `sessions` stubs the `Clock` to test expiry,

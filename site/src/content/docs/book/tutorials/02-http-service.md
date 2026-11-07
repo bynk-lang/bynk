@@ -6,7 +6,7 @@ across the rest of the tutorials. We begin with its HTTP front door: a service
 with a couple of endpoints, compiled to a ready-to-run Cloudflare Worker. Along
 the way you will meet `context`, `service`, HTTP handlers, and `HttpResult`.
 
-This builds on [Tutorial 1](/book/tutorials/01-first-program/). You need `bynkc` installed.
+This builds on [Tutorial 1](/book/tutorials/01-first-program/). You need `bynk` installed.
 
 ## Start a project
 
@@ -58,7 +58,7 @@ A few new things:
 Compile the project, targeting Cloudflare Workers:
 
 ```sh
-bynkc compile . --output out --target workers
+bynk compile . --output out --target workers
 ```
 
 This writes a complete Worker under `out/`:
@@ -98,7 +98,7 @@ if (method === "GET" && __m) {
 }
 ```
 
-You wrote the *what* (answer `GET /links/:code` with `NotFound`); `bynkc`
+You wrote the *what* (answer `GET /links/:code` with `NotFound`); `bynk`
 generated the *how* (the router, the response encoding, the Worker scaffold).
 
 ## Accept a request body
@@ -130,7 +130,7 @@ parameter typed as `CreateLinkRequest`, and returns `Created(…)` — the
 `HttpResult` variant for `201 Created`. (For now it just echoes the target back;
 real storage and a minted code come later.)
 
-Recompile (`bynkc compile . --output out --target workers`) and look again at
+Recompile (`bynk compile . --output out --target workers`) and look again at
 `handlers.ts`. Your handler is there:
 
 ```typescript
@@ -139,7 +139,7 @@ async http_POST_links(body: CreateLinkRequest, deps: {}): globalThis.Promise<Htt
 },
 ```
 
-…and `bynkc` has *also* generated a validator that parses and type-checks the
+…and `bynk` has *also* generated a validator that parses and type-checks the
 incoming JSON before your handler ever runs:
 
 ```typescript

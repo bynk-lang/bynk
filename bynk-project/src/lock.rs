@@ -5,7 +5,7 @@
 //! git dependency's requested revision, the commit it resolved to and the
 //! sha256 of its canonical tree, and each path dependency's directory (never
 //! hashed — it is the author's working copy). Only the `bynk` CLI writes it
-//! and fills the store; the compile, `bynkc` and the editor read both and
+//! and fills the store; the compile, `bynk` and the editor read both and
 //! never fetch ([`crate::resolve_graph`]).
 //!
 //! The format is versioned and written in one deterministic order, and a file

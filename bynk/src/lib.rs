@@ -1,20 +1,15 @@
 //! `bynk` — the Bynk driver.
 //!
-//! A thin orchestrator over the `bynkc` compiler and the Node toolchain:
-//! `bynk` is to `bynkc` what `cargo` is to `rustc`. The compiler stays pure
-//! (compile / check / fmt / test); environment orchestration — "is `wrangler`
-//! installed", "is your machine ready" — lives here (ADR: introduce the `bynk`
-//! driver).
+//! The compiler, linked in, and an orchestrator over the Node toolchain. The
+//! compiler stays pure (compile / check / fmt / test); environment orchestration
+//! — "is `wrangler` installed", "is your machine ready" — lives here (ADR:
+//! introduce the `bynk` driver).
 //!
 //! v0.46 ships the first command, [`doctor`], an upfront environment check. The
 //! crate is deliberately split into single-concern modules (per ADR 0060):
 //!
 //! - [`probe`] — the portable detection primitive (presence + version +
 //!   provenance), backed by the `which` crate so it is not Unix-only.
-//! - [`bynkc_compat`] — `bynkc` as a name this binary answers to, for one release
-//!   (#3013, E3).
-//! - [`compiler`] — the retired `BYNK_BYNKC` pin: a one-line warning that it is
-//!   ignored (#2998).
 //! - [`doctor`] — the capability model, the checks, and the exit-code contract.
 //! - [`report`] — render a [`doctor::Report`] as a human table, `--format
 //!   short`, or `--format json`.
@@ -32,11 +27,9 @@
 
 pub mod approve;
 pub mod book;
-pub mod bynkc_compat;
 pub mod check;
 pub mod cli;
 pub mod compile;
-pub mod compiler;
 pub mod deploy;
 pub mod dev;
 pub mod diagnostics;
@@ -55,9 +48,8 @@ pub mod ready;
 pub mod token;
 
 // The shared detection probe (Wave 5 §5.4, findings #40/#72) moved down into
-// `bynk-driver` — `bynkc` needs it too (replacing its old `tool_exists`
-// PATH-only check), and `bynk-driver` is the crate both binaries already
-// depend on (`bynk` cannot depend on `bynkc`, and vice versa). Re-exported
+// `bynk-driver` (it replaced the old `tool_exists`
+// PATH-only check). Re-exported
 // here so every `crate::probe`/`bynk::probe` path in this crate resolves
 // unchanged.
 pub use bynk_driver::probe;

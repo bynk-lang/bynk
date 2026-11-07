@@ -1,4 +1,4 @@
-//! #2185: `bynkc test` heads a `system` suite's results with its tier.
+//! #2185: `bynk test` heads a `system` suite's results with its tier.
 //!
 //! A suite declared `suite shop.orders as system { … }` runs as built Workers
 //! over the JSON wire, and its human results heading is `system · shop.orders:`.
@@ -30,7 +30,7 @@ fn tool_exists(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// The same fallback chain `bynkc test` itself walks.
+/// The same fallback chain `bynk test` itself walks.
 fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
@@ -40,7 +40,7 @@ fn fixture() -> PathBuf {
         .join("tests/fixtures/positive/171_integration_two_context_service/src")
 }
 
-/// Run `bynkc test` on the fixture with `extra` arguments, into its own
+/// Run `bynk test` on the fixture with `extra` arguments, into its own
 /// output tree (the runner writes a sibling `out-js`, so runs must not share
 /// a parent).
 fn run(out_dir: &str, extra: &[&str]) -> std::process::Output {
@@ -54,13 +54,13 @@ fn run(out_dir: &str, extra: &[&str]) -> std::process::Output {
         .arg(&out_root)
         .args(extra)
         .output()
-        .expect("run bynkc test")
+        .expect("run bynk test")
 }
 
 #[test]
 fn a_system_suite_is_headed_system() {
     if cfg!(windows) {
-        eprintln!("skipping on Windows: `bynkc test` runner detection is Unix-only");
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
         return;
     }
     if !have_runner() {

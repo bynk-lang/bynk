@@ -443,7 +443,7 @@ pub fn parse_sources(
 ) -> Result<(Vec<ParsedFile>, Vec<CompileError>), Vec<CompileError>> {
     // v0.72: cache (and identify a `ParsedFile`) by the *absolute* path —
     // `path` is relative when the compiler was invoked with a relative input
-    // (`bynkc test .`), and a relative cache key would let the same file seen
+    // (`bynk test .`), and a relative cache key would let the same file seen
     // through two differently-rooted calls collide, or worse, miss. Falls
     // back to `path` itself on the rare `std::path::absolute` failure, same
     // as the pre-existing `abs_path` field it also feeds.
@@ -453,7 +453,7 @@ pub fn parse_sources(
     // file holding `commons`/`context` alongside a `suite` (DECISION S). Each
     // unit becomes its own `ParsedFile` sharing the file's source and path, so
     // the downstream grouping partitions *declarations* by kind: the source
-    // units flow to the build, the suites to `bynkc test` only.
+    // units flow to the build, the suites to `bynk test` only.
     // ADR 0117: a warning-severity parse diagnostic (an orphan doc block)
     // must not hard-fail discovery — the parsed units flow to the build and
     // the warnings ride out to the caller's severity-aware sink.

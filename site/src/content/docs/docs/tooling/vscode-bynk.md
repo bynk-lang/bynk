@@ -50,7 +50,7 @@ WebAssembly) for diagnostics, hover and completion across each project; see
   `doc-example`, so the Testing view's tag filter groups the doc examples.
 - **Per-case run/debug lenses** — a `▷ Run Test` / `Debug Test` CodeLens above
   each `case` runs (or debugs) *that* case, not the whole project — it shells
-  `bynkc test --case "<name>"`, the CLI's exact-name run filter.
+  `bynk test --case "<name>"`, the CLI's exact-name run filter.
 - **Provider CodeLens on capabilities** — a `capability` declaration shows an
   `N providers` lens listing the services that `provides` it, alongside the
   `N references` lens; click to peek the provider definitions.

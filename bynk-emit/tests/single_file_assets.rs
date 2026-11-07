@@ -2,7 +2,7 @@
 //! as the project pipeline (review of #1903), and refuses to build one:
 //! `bynk.asset.needs_project`, since a single file has no project root to find
 //! `assets/` under and emits no Worker to serve it beside. `bynk check
-//! page.bynk` goes through `check_with_warnings`; `bynkc compile page.bynk`
+//! page.bynk` goes through `check_with_warnings`; `bynk compile page.bynk`
 //! through `compile_with_warnings`.
 
 const PAGE: &str = "commons compat.page\n\nasset style = \"assets/board.css\"\n\nfn sheet() -> String {\n  style.url\n}\n";

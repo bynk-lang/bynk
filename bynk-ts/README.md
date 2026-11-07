@@ -46,7 +46,7 @@ bynk-strip                 TS → JS type-stripping (text level), on oxc alone
 ```
 
 Each crate depends on its parent in the tree, plus any crates listed after
-its `+`. The front-ends sit on top: the `bynkc` and `bynk` CLIs over
+its `+`. The front-ends sit on top: the `bynk` CLI over
 `bynk-driver`, the `bynk-lsp` language server (`bynk-lsp`) over `bynk-ide`, and
 the unpublished `bynk-wasm` playground module over `bynk-driver`
 and `bynk-ide`.
@@ -64,7 +64,7 @@ that just needs bytes (golden fixtures, `bynk-wasm`'s JS-facing API).
 
 ```toml
 [dependencies]
-bynk-ts = "0.510"
+bynk-ts = "0.512"
 ```
 
 ```rust

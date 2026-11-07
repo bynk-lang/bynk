@@ -1,4 +1,4 @@
-//! Slice A (#647): the LSP analyses the project `bynkc` compiles.
+//! Slice A (#647): the LSP analyses the project `bynk` compiles.
 //!
 //! The defect: `bynk-lsp` reduced `bynk.toml`'s `[paths] include` to a single
 //! `src_dir` string — first entry only, `exclude` ignored — and handed
@@ -6,7 +6,7 @@
 //! tree was invisible, `exclude` did nothing, and a flat project failed.
 //!
 //! These fixtures measure the **file set**, which is the thing that was wrong.
-//! They read sibling directories (`../examples`, `../bynkc`) deliberately — the
+//! They read sibling directories (`../examples`, `../bynk`) deliberately — the
 //! point is agreement with the real compiler on real projects — so this file
 //! rides `Cargo.toml`'s `exclude` list alongside `hover_references.rs` and
 //! `declaration_spans.rs`, keeping it out of the published tarball where those
@@ -64,7 +64,7 @@ fn the_todo_example_s_tests_tree_is_analysed() {
     let files = rel_files(&root);
     assert!(
         files.contains(&"tests/todos.bynk".to_string()),
-        "the LSP must analyse the tests tree `bynkc` compiles; got {files:?}",
+        "the LSP must analyse the tests tree `bynk` compiles; got {files:?}",
     );
     assert!(
         files.contains(&"src/todos.bynk".to_string()),

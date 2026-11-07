@@ -35,7 +35,7 @@ allow = [
 # and Dependabot grooms duplicates. Wildcard requirements are denied — the
 # ratchet against unpinned `*` deps on crates.io stays live; the one
 # deliberate exception is bynk-testkit's own path-only dev-dependency (#1560:
-# a version there would break `cargo publish` for bynk/bynkc/bynk-lsp
+# a version there would break `cargo publish` for bynk/bynk-lsp
 # unconditionally, since bynk-testkit is `publish = false` and can never
 # resolve against the registry). allow-wildcard-paths scopes that exception
 # to path dependencies specifically — every workspace.dependencies entry
