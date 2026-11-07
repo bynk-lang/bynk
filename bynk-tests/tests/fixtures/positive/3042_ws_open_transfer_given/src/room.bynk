@@ -1,0 +1,29 @@
+context room
+
+consumes bynk { Clock }
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3042: `on open` cannot declare `given`, but the agent handler it transfers the
+// connection to can. The Durable Object's `fetch` builds that handler's
+// capabilities from `env`, as its `/_bynk/agent/` branch does.
+service chat from websocket(in: Frame, out: Frame) {
+	on open(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).join("\(u.identity)", connection)
+	}
+}
+
+agent Room {
+	key id: RoomKey
+
+	store conns: Map[String, Connection[Frame]]
+
+	on call join(name: String, conn: Connection[Frame]) -> Effect[()] given Clock {
+		let now <- Clock.now()
+		let _ <- conns.put("\(name)-\(now.toEpochMillis())", conn)
+	}
+}

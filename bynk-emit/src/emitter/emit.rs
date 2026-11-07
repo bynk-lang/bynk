@@ -3325,15 +3325,11 @@ pub(crate) fn emit_service(
             // stays opaque text" precedent this track uses elsewhere, not a
             // gap this slice leaves unclosed.
             ActorSeamIr::Sum(members) => {
-                let union = members
-                    .iter()
-                    .map(|m| match m.identity_type() {
-                        Some(id) => format!("{{ tag: \"{}\", identity: {id} }}", m.actor_name),
-                        None => format!("{{ tag: \"{}\" }}", m.actor_name),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                append_deps_field(&mut deps_members, "who", bynk_ts::TsType::named(union));
+                append_deps_field(
+                    &mut deps_members,
+                    "who",
+                    bynk_ts::TsType::named(actor_sum_ts_union(members)),
+                );
             }
             // I3 (#1971): a `call` sum. `Caller` carries the calling context's
             // name; a foreign caller is its actor alone.
@@ -7477,7 +7473,11 @@ pub(crate) fn emit_agent(
         // client end. The verified identity and route arguments ride in a trusted
         // internal header (the DO is only reachable through the Worker).
         for host in &ws_open_hosts {
-            fetch_stmts.push(ws_open_fetch_branch_stmt(host, tys));
+            fetch_stmts.push(ws_open_fetch_branch_stmt(
+                host,
+                tys,
+                given_deps_expr.as_deref(),
+            ));
         }
         // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake,
         // a branch of its own before the method dispatch. It carries no key
@@ -7586,14 +7586,7 @@ pub(crate) fn emit_agent(
             // `this.__env as unknown as Record<string, unknown>` stays one
             // opaque `TsExpr::Ident` — the same nested-`As`-chain gap the
             // dispatch callee above hits.
-            agent_dispatch_stmts.push(bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::Ident("env".to_string()),
-                None,
-                bynk_ts::TsExpr::Ident(
-                    "this.__env as unknown as globalThis.Record<string, unknown>".to_string(),
-                ),
-                None,
-            ));
+            agent_dispatch_stmts.push(agent_env_const_stmt());
             let mut entries = vec![bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Paren(
                 Box::new(bynk_ts::TsExpr::As {
                     expr: Box::new(bynk_ts::TsExpr::Binary {
@@ -8135,6 +8128,10 @@ struct WsOpenHost<'a> {
     message: Option<&'a Handler>,
     close: Option<&'a Handler>,
     seam: Option<bynk_check::actors::BearerSeam>,
+    /// An actor-sum `by who: A | B`: the members in first-wins order. The edge
+    /// forwards which one verified (`{ tag, identity? }`) and the DO rebuilds
+    /// `deps.who` from it. Mutually exclusive with `seam`, which a sum never has.
+    sum: Option<Vec<bynk_check::actors::SumMember>>,
     // #1818: for a hosting agent that reads its own key, the key codec's name
     // and the key's TS type. A WebSocket body runs through these entry points,
     // not the `/_bynk/agent/` dispatch, so each sets `this.__key` itself.
@@ -8148,6 +8145,21 @@ impl WsOpenHost<'_> {
     fn has_inbound(&self) -> bool {
         self.message.is_some() || self.close.is_some()
     }
+}
+
+/// The TS type of a resolved actor sum (`deps.who`): each member's tagged
+/// shape, `{ tag: "User", identity: UserId }` or `{ tag: "Visitor" }`, joined
+/// as a union. The HTTP wrapper builds this value and the WebSocket Durable
+/// Object rebuilds it, so both read the one shape.
+fn actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> String {
+    members
+        .iter()
+        .map(|m| match m.identity_type() {
+            Some(id) => format!("{{ tag: \"{}\", identity: {id} }}", m.actor_name),
+            None => format!("{{ tag: \"{}\" }}", m.actor_name),
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 
 /// The DO method name a hosted `on open` lowers to (`__wsOpen_<Service>`). The
@@ -8205,7 +8217,12 @@ fn ws_open_hosts_for<'a>(
                         .handlers
                         .iter()
                         .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Close)),
-                    seam: bynk_check::actors::bearer_seam_for(h, actors),
+                    sum: bynk_check::actors::sum_members_for(h, actors),
+                    seam: if h.by_clause.as_ref().is_some_and(|by| by.is_sum()) {
+                        None
+                    } else {
+                        bynk_check::actors::bearer_seam_for(h, actors)
+                    },
                     agent_key: None,
                 });
             }
@@ -8289,7 +8306,23 @@ fn emit_ws_do_method(
                 owning_context: ctx.commons_name.clone(),
                 ..HandlerShared::default()
             },
-            deps_identity_binder: host.seam.as_ref().and_then(|s| s.binder.clone()),
+            // Each lifecycle handler names its own binder: `on message`/`on close`
+            // carry their own `by`, and nothing requires the name to match
+            // `on open`'s. The principal itself comes from the `on open`
+            // verification (the attachment), whichever name a handler gives it.
+            deps_identity_binder: host.seam.as_ref().and_then(|_| {
+                h.by_clause
+                    .as_ref()
+                    .and_then(|by| by.binder.as_ref())
+                    .map(|b| b.name.clone())
+            }),
+            actor_sum_binder: host
+                .sum
+                .as_ref()
+                .and(h.by_clause.as_ref())
+                .filter(|by| by.is_sum())
+                .and_then(|by| by.binder.as_ref())
+                .map(|b| b.name.clone()),
             ws_self_agent: Some(agent.name.name.clone()),
         },
     )
@@ -8321,6 +8354,13 @@ fn emit_ws_do_method(
             &mut deps_members,
             "identity",
             bynk_ts::TsType::named(seam.identity_type.clone()),
+        );
+    }
+    if let Some(members) = &host.sum {
+        append_deps_field(
+            &mut deps_members,
+            "who",
+            bynk_ts::TsType::named(actor_sum_ts_union(members)),
         );
     }
     params.push(bynk_ts::TsParam {
@@ -8419,19 +8459,45 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
     )
 }
 
-fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts::TsStmt {
+/// `const env = this.__env as unknown as Record<string, unknown>;` — the DO's own
+/// `env`, which the `given` providers (and the events fan-out) are rebuilt from.
+fn agent_env_const_stmt() -> bynk_ts::TsStmt {
+    bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("env".to_string()),
+        None,
+        bynk_ts::TsExpr::Ident(
+            "this.__env as unknown as globalThis.Record<string, unknown>".to_string(),
+        ),
+        None,
+    )
+}
+
+fn ws_open_fetch_branch_stmt(
+    host: &WsOpenHost<'_>,
+    tys: &Arc<Types>,
+    given_deps_expr: Option<&str>,
+) -> bynk_ts::TsStmt {
     let h = host.handler;
     let path = format!("/_bynk/ws/open/{}", host.service);
     let method = ws_open_do_method_name(host.service);
     // The trusted internal header carries the route args, and the verified
     // identity only when the actor binds one (a binder-less `by` forwards none).
     let binds_identity = host.seam.as_ref().is_some_and(|s| s.binder.is_some());
-    let payload_ty = match (binds_identity, host.agent_key.is_some()) {
-        (true, false) => "{ args: unknown[]; identity: string }",
-        (false, false) => "{ args: unknown[] }",
-        (true, true) => "{ args: unknown[]; identity: string; key: unknown }",
-        (false, true) => "{ args: unknown[]; key: unknown }",
+    // An actor sum forwards the member that verified (`who`) in place of a bare
+    // identity: the DO cannot tell which member it was from an identity alone.
+    let id_field = if host.sum.is_some() {
+        "; who: unknown"
+    } else if binds_identity {
+        "; identity: string"
+    } else {
+        ""
     };
+    let key_field = if host.agent_key.is_some() {
+        "; key: unknown"
+    } else {
+        ""
+    };
+    let payload_ty = format!("{{ args: unknown[]{id_field}{key_field} }}");
     let mut stmts = vec![
         bynk_ts::TsStmt::const_stmt(
             bynk_ts::TsBindingName::Ident("__pair".to_string()),
@@ -8510,6 +8576,17 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts
                 },
             ),
         ];
+        // An actor sum's resolved member rides in the attachment too, so a
+        // waking `webSocketMessage`/`webSocketClose` rebuilds `deps.who`.
+        if host.sum.is_some() {
+            meta.push((
+                "who".to_string(),
+                bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Ident("__payload".to_string())),
+                    property: "who".to_string(),
+                },
+            ));
+        }
         // #1818: a waking `webSocketMessage`/`webSocketClose` recovers the key
         // from the attachment, as it does the identity and route args.
         if host.agent_key.is_some() {
@@ -8557,12 +8634,39 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts
             bynk_ts::VerbatimOrigin::Emit,
         ));
     }
-    let deps_arg = match host.seam.as_ref().filter(|s| s.binder.is_some()) {
-        Some(seam) => format!(
-            "{{ identity: __payload.identity as {} }}",
+    // #3042: the agent handler an `on open` transfers to may declare `given`,
+    // and `on open` hands it `deps` as they stand. Providers cannot cross the
+    // wire, so rebuild them from this DO's own `env`, exactly as the
+    // `/_bynk/agent/` branch does, and let them lead the deps object.
+    let mut deps_fields = Vec::new();
+    if let Some(expr) = given_deps_expr {
+        stmts.push(agent_env_const_stmt());
+        stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__givenDeps".to_string()),
+            None,
+            bynk_ts::TsExpr::Ident(expr.to_string()),
+            None,
+        ));
+    }
+    if let Some(members) = &host.sum {
+        deps_fields.push(format!(
+            "who: __payload.who as {}",
+            actor_sum_ts_union(members)
+        ));
+    } else if let Some(seam) = host.seam.as_ref().filter(|s| s.binder.is_some()) {
+        deps_fields.push(format!(
+            "identity: __payload.identity as {}",
             seam.identity_type
-        ),
-        None => "{}".to_string(),
+        ));
+    }
+    // Last, as in the `/_bynk/agent/` branch: the rebuilt providers win.
+    if given_deps_expr.is_some() {
+        deps_fields.push("...__givenDeps".to_string());
+    }
+    let deps_arg = if deps_fields.is_empty() {
+        "{}".to_string()
+    } else {
+        format!("{{ {} }}", deps_fields.join(", "))
     };
     // An object-literal expression — tagged `VerbatimExpr`, not `Ident`
     // (#1539).
@@ -8614,8 +8718,11 @@ fn ws_open_fetch_branch_stmt(host: &WsOpenHost<'_>, tys: &Arc<Types>) -> bynk_ts
 /// v0.106 (slice 3b-iii): the deps argument a hosted `on message`/`on close` body
 /// receives — the verified identity recovered from the socket attachment, when the
 /// actor binds one (else `{}`).
-fn ws_attachment_deps_arg(seam: &Option<bynk_check::actors::BearerSeam>) -> String {
-    match seam.as_ref().filter(|s| s.binder.is_some()) {
+fn ws_attachment_deps_arg(host: &WsOpenHost<'_>) -> String {
+    if let Some(members) = &host.sum {
+        return format!("{{ who: __att.who as {} }}", actor_sum_ts_union(members));
+    }
+    match host.seam.as_ref().filter(|s| s.binder.is_some()) {
         Some(seam) => format!("{{ identity: __att.identity as {} }}", seam.identity_type),
         None => "{}".to_string(),
     }
@@ -8653,17 +8760,22 @@ fn emit_ws_dispatch_handlers(
         return;
     }
     let out_ts = ts_ty(host.out_ty, tys);
-    let att_ty = if host.agent_key.is_some() {
-        "{ connId: string; identity: string; args: unknown[]; key: unknown }"
+    let att_who = if host.sum.is_some() {
+        "; who: unknown"
     } else {
-        "{ connId: string; identity: string; args: unknown[] }"
+        ""
+    };
+    let att_ty = if host.agent_key.is_some() {
+        format!("{{ connId: string; identity: string{att_who}; args: unknown[]; key: unknown }}")
+    } else {
+        format!("{{ connId: string; identity: string{att_who}; args: unknown[] }}")
     };
     // The firing socket's minimal structural surface (attachment + send/close), so
     // emitted code stays free of `@cloudflare/workers-types`.
     let ws_ty = "{ deserializeAttachment(): unknown; send(data: string): void; close(code?: number, reason?: string): void }";
-    let deps_arg = ws_attachment_deps_arg(&host.seam);
+    let deps_arg = ws_attachment_deps_arg(host);
     let att_or_null = bynk_ts::TsType::union(vec![
-        bynk_ts::TsType::named(att_ty),
+        bynk_ts::TsType::named(att_ty.clone()),
         bynk_ts::TsType::named("null"),
     ]);
     // `const __att = ws.deserializeAttachment() as {att_ty} | null;` / the

@@ -785,7 +785,14 @@ pub fn emit_worker_compose(
                     queue_idx += 1;
                 }
                 bynk_model::IrHandlerKind::Open => {
-                    let seam = bynk_check::actors::bearer_seam_for(h, &table.actors);
+                    // An actor sum (`by who: A | B`) resolves member by member at the
+                    // edge; `bearer_seam_for` would see only its first member.
+                    let sum = bynk_check::actors::sum_members_for(h, &table.actors);
+                    let seam = if sum.is_some() {
+                        None
+                    } else {
+                        bynk_check::actors::bearer_seam_for(h, &table.actors)
+                    };
                     let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
                     // #1818: hosting agents that read their key are forwarded it.
                     let key_readers: HashSet<String> = table
@@ -798,6 +805,7 @@ pub fn emit_worker_compose(
                         sname,
                         h,
                         seam.as_ref(),
+                        sum.as_deref(),
                         &local_agents,
                         &key_readers,
                         &visible_consts,
@@ -1430,10 +1438,12 @@ fn emit_queue_wrapper(sname: &str, queue_idx: usize, h: &Handler) -> TsObjectEnt
 /// (the DO is only reachable through this Worker, the same Internal-channel trust
 /// the cross-context caller seam relies on). A failure returns `401`/`426` and
 /// **does not forward** — no socket is accepted unauthenticated.
+#[allow(clippy::too_many_arguments)]
 fn emit_websocket_upgrade(
     sname: &str,
     h: &Handler,
     seam: Option<&bynk_check::actors::BearerSeam>,
+    sum: Option<&[bynk_check::actors::SumMember]>,
     local_agents: &HashSet<String>,
     key_readers: &HashSet<String>,
     consts: &HashMap<String, bynk_check::consts::VisibleConst<'_>>,
@@ -1489,6 +1499,141 @@ fn emit_websocket_upgrade(
     // scheme may be `None` (an intentional anonymous channel): then `seam` is
     // `None` and no token is read. `Signature` is rejected at the WS boundary (a
     // browser cannot sign the handshake), so a present seam is always Bearer.
+    // An actor sum (`by who: User | Visitor`): resolve first-wins, as the HTTP
+    // sum wrapper does, with the same token source as the single-actor path. A
+    // `None` member (`Visitor`) always resolves, so a bad or absent token falls
+    // through to it; with no catch-all member nothing resolving is a `401`.
+    // The member that verified is forwarded as a tagged `who`, the shape the
+    // HTTP path threads through `deps.who`, so the Durable Object rebuilds it.
+    if let Some(members) = sum {
+        use bynk_check::actors::SumMemberSeam;
+        stmts.push(const_(
+            "__proto",
+            method_call(
+                member(ident("request"), "headers"),
+                "get",
+                vec![str_lit("Sec-WebSocket-Protocol")],
+            ),
+        ));
+        stmts.push(TsStmt::let_stmt(
+            TsBindingName::Ident("__token".to_string()),
+            Some(TsType::named("string | undefined")),
+            Some(ident("undefined")),
+            None,
+        ));
+        stmts.push(if_(
+            strict_neq(ident("__proto"), null_lit()),
+            TsStmt::assign(
+                ident("__token"),
+                method_call(
+                    TsExpr::Index {
+                        object: Box::new(method_call(
+                            ident("__proto"),
+                            "split",
+                            vec![str_lit(",")],
+                        )),
+                        index: Box::new(num_lit("0")),
+                    },
+                    "trim",
+                    vec![],
+                ),
+                None,
+            ),
+        ));
+        stmts.push(TsStmt::let_stmt(
+            TsBindingName::Ident("__who".to_string()),
+            Some(TsType::named(
+                "{ tag: string; identity?: string } | undefined",
+            )),
+            Some(ident("undefined")),
+            None,
+        ));
+        for m in members {
+            let tag = crate::emitter::escape_ts_string(&m.actor_name);
+            let inner: Vec<TsStmt> = match &m.seam {
+                SumMemberSeam::None => vec![TsStmt::assign(
+                    ident("__who"),
+                    TsExpr::object(vec![("tag".to_string(), str_lit(tag))]),
+                    None,
+                )],
+                SumMemberSeam::Bearer {
+                    secret,
+                    identity_type,
+                } => {
+                    let secret = crate::emitter::escape_ts_string(secret);
+                    vec![if_(
+                        strict_neq(ident("__token"), ident("undefined")),
+                        block(vec![
+                            const_("__secret", secret_probe_expr(&secret)),
+                            if_(
+                                strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
+                                block(vec![
+                                    const_(
+                                        "__claims",
+                                        await_expr(call(
+                                            ident("__verifyBearerJwtHs256"),
+                                            vec![ident("__token"), ident("__secret")],
+                                        )),
+                                    ),
+                                    if_(
+                                        strict_eq(member(ident("__claims"), "tag"), str_lit("Ok")),
+                                        block(vec![
+                                            const_(
+                                                "__id",
+                                                method_call(
+                                                    member(
+                                                        ident("handlers"),
+                                                        identity_type.clone(),
+                                                    ),
+                                                    "of",
+                                                    vec![member(
+                                                        member(ident("__claims"), "value"),
+                                                        "sub",
+                                                    )],
+                                                ),
+                                            ),
+                                            if_(
+                                                strict_eq(
+                                                    member(ident("__id"), "tag"),
+                                                    str_lit("Ok"),
+                                                ),
+                                                TsStmt::assign(
+                                                    ident("__who"),
+                                                    TsExpr::object(vec![
+                                                        ("tag".to_string(), str_lit(tag)),
+                                                        (
+                                                            "identity".to_string(),
+                                                            member(ident("__id"), "value"),
+                                                        ),
+                                                    ]),
+                                                    None,
+                                                ),
+                                            ),
+                                        ]),
+                                    ),
+                                ]),
+                            ),
+                        ]),
+                    )]
+                }
+                // Rejected at the WebSocket boundary (no body to sign), so a
+                // checked program has none; resolve nothing, fail closed.
+                SumMemberSeam::Signature(_) => Vec::new(),
+            };
+            stmts.push(if_(
+                strict_eq(ident("__who"), ident("undefined")),
+                block(inner),
+            ));
+        }
+        stmts.push(if_(
+            strict_eq(ident("__who"), ident("undefined")),
+            return_(Some(new_response(vec![
+                str_lit("Unauthorized"),
+                status_object("401"),
+            ]))),
+        ));
+    }
+
     if let Some(seam) = seam {
         let secret = crate::emitter::escape_ts_string(&seam.secret);
         stmts.push(const_(
@@ -1763,6 +1908,9 @@ fn emit_websocket_upgrade(
     let mut fwd_entries = vec![("args".to_string(), TsExpr::array(args_json))];
     if has_identity {
         fwd_entries.push(("identity".to_string(), member(ident("__id"), "value")));
+    }
+    if sum.is_some() {
+        fwd_entries.push(("who".to_string(), ident("__who")));
     }
     // #1818: the hosting agent reads its key, so the upgrade carries it, encoded
     // by the agent's key codec.
