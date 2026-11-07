@@ -1001,7 +1001,7 @@ pub(crate) fn emit_free_fn(
     runtime_use: &RuntimeUse,
     cross_context: &bynk_check::resolver::CrossContextInfo,
 ) -> Vec<bynk_ts::TsStmt> {
-    emit_free_fn_in(f, commons, contracts, runtime_use, cross_context, true)
+    emit_free_fn_in(f, commons, contracts, runtime_use, cross_context, true, false)
 }
 
 /// #2834: a suite-local helper `fn` — `emit_free_fn` without the `export`,
@@ -1014,7 +1014,7 @@ pub fn emit_suite_fn(
     // A suite is only ever built for `bynkc test`, which guards every contract.
     // A suite helper cannot declare `given`, so it has no capability types to name.
     let empty = bynk_check::resolver::CrossContextInfo::default();
-    emit_free_fn_in(f, commons, true, runtime_use, &empty, false)
+    emit_free_fn_in(f, commons, true, runtime_use, &empty, false, true)
 }
 
 fn emit_free_fn_in(
@@ -1024,6 +1024,7 @@ fn emit_free_fn_in(
     runtime_use: &RuntimeUse,
     cross_context: &bynk_check::resolver::CrossContextInfo,
     export: bool,
+    suite_fn: bool,
 ) -> Vec<bynk_ts::TsStmt> {
     let FnName::Free(name) = &f.name else {
         return Vec::new();
@@ -1077,9 +1078,9 @@ fn emit_free_fn_in(
         )
     }
     .with_source_map(Some(&body_smb));
-    // #2990: a suite helper (the only non-exported caller) records its `Json`
-    // codec roots for the test module that splices it in.
-    let mut cx = if export { cx } else { cx.with_suite_fn() };
+    // #2990: a suite helper records its `Json` codec roots for the test module
+    // that splices it in.
+    let mut cx = if suite_fn { cx.with_suite_fn() } else { cx };
     // Constrained generics slice 1: one trailing comparator parameter per
     // `Ord`-bounded type parameter.
     params.extend(cx.declare_witnesses(f));
