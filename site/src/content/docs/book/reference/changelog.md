@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.510**.
+written against **v0.511**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.511.1** | "`bynk test`: a suite helper's `Json.encode`/`Json.decode` of a commons type, and a stub method's signature naming a capability's `uses`d-commons type, no longer fail `tsc` with TS2304" |
+| **v0.511.0** | "`headers.get(\"X\")?` in an `HttpResult` handler warns (`bynk.http.header_question_not_found`) with a `let … else` fix answering `400`; hover on `?` says `None → 404 NotFound`; `==`/`!=` against a bare `HttpResult`/`QueueResult` variant type-checks" |
 | **v0.510.39** | A test `case` or `property` accepts D1 `select[T]` / `firstAs[T]` on a derived capability, as a handler does |
 | **v0.510.38** | fmt keeps digit separators in InRange, MinLength, MaxLength and Length arguments |
 | **v0.510.37** | "`bynk test --smoke` against a named target now lists every case a write route would have run as skipped, not only its `answers` case, so the skip count agrees with the cases `--smoke-unsafe` adds ([#3008](https://github.com/bynk-lang/bynk/issues/3008))" |

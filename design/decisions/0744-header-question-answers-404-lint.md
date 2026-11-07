@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "`headers.get(\"X\")?` in an `HttpResult` handler warns (`bynk.http.header_question_not_found`) with a `let … else` fix answering `400`; hover on `?` says `None → 404 NotFound`; `==`/`!=` against a bare `HttpResult`/`QueueResult` variant type-checks"
-probes: diagnostic_coverage, span_keyed_maps, emit_diagnostics
----
+# 0744 — A header read under `?` is linted, because `?` on an Option means 404
 
-## ADR: header-question-answers-404-lint
-title: A header read under `?` is linted, because `?` on an Option means 404
-summary: Warn on RequestHeaders.get(…)? in HttpResult handlers, fix to let … else; type bare variants under ==/!=
+- **Status:** Accepted (v0.511)
 
 **Context.** `?` on an `Option` in an `HttpResult` handler answers `404
 NotFound` (ADR 0177). For a missing request header that is the wrong status

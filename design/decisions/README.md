@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0744](0744-header-question-answers-404-lint.md) | **A header read under `?` is linted, because `?` on an Option means 404** (v0.511) — Warn on RequestHeaders.get(…)? in HttpResult handlers, fix to let … else; type bare variants under ==/!= | Accepted (v0.511) |
 | [0743](0743-render-module-guard.md) | **Diagnostic rendering is a `bynk-driver` module, guarded by a test instead of the crate graph** (v0.510.35) — Amends ADR 0100 - the "no render to emit edge" guarantee moves from `bynk-render`'s dependency list to a source-level guard test | Accepted (v0.510.35) |
 | [0742](0742-system-model-b4.md) | **The system model stays above the checker, with the wire contract and the architecture map left where they are** (v0.510.29) — Slice B4 of the crate-hygiene track settles where the system model sits, where WireModel and ArchModel live, which AST matches stay under M-1's domain clause for good, and defers EntryShape-over-TypeShape and the public interface past 1.0 | Accepted (v0.510.29) |
 | [0741](0741-retire-bynkc-lookup-and-skew-gate.md) | **bynk compiles in-process everywhere; the bynkc lookup and the version-skew gate are retired** (v0.510.28) — Implements ADR 0736 for E1-E2: what happens to BYNK_BYNKC, --allow-skew and doctor's compiler row | Accepted (v0.510.28) |
