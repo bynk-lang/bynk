@@ -439,10 +439,12 @@ jobs:
           SELF_HOSTED_CACHES: ${{ steps.runner.outputs.caches }}
           CACHE_KEYS: ${{ steps.filter.outputs.cache_keys }}
           # `<job>-<runner OS>` for every job that saves a Rust cache on `main`
-          # (`drift` never runs on a push). rust-cache keys start
+          # (`drift` and `coverage` never run on a push: coverage is nightly
+          # only, so a push could never refill its cache, and listing it would
+          # make every push run everything after an eviction). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-ts7-Linux test-Windows_NT test-Darwin msrv-Linux coverage-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-ts7-Linux test-Windows_NT test-Darwin msrv-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
