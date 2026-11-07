@@ -1,7 +1,7 @@
 //! `bynk test` — discover and run a project's test declarations.
 //!
 //! Runs in-process (#2998, E1): the body is [`bynk_driver::test_runner::run_test`],
-//! the one `bynk test` runs, so no `bynk` binary is needed and no second
+//! the one `bynk test` runs, so no separate compiler binary is needed and no second
 //! compiler can skew from this one. What stays a child process is what always
 //! was: `tsc`/`node` for the runner, and the `bynk dev` that `--against dev`
 //! starts. This module adds what only `bynk` can supply: the workspace loop,

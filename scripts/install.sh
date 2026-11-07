@@ -80,11 +80,12 @@ fi
 
 tar -xzf "$tmp/$stage.tar.gz" -C "$tmp"
 mkdir -p "$dest"
-for bin in bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped in E4b
+for bin in bynk bynkc bynk-lsp bynkc-lsp; do # bynkc: only in releases before its removal
   # A release before the rename ships only bynkc-lsp, and the overlap copy goes
   # in E4b: either server name may be absent, but not both.
   if [ ! -f "$tmp/$stage/$bin" ]; then
     case "$bin" in
+      bynkc) continue ;; # absent from a current release; present in an older pin
       bynk-lsp | bynkc-lsp)
         [ -f "$tmp/$stage/bynk-lsp" ] || [ -f "$tmp/$stage/bynkc-lsp" ] || die "the archive has no language server"
         continue ;;
@@ -96,9 +97,10 @@ for bin in bynk bynk-lsp bynkc-lsp; do # bynkc-lsp: overlap copy, dropped in E4b
   mv -f "$dest/.$bin.new" "$dest/$bin"
 done
 
-# The upgrade from a release that shipped bynkc: it is gone, and a leftover
-# would keep running the old compiler beside the new bynk.
-if [ -f "$dest/bynkc" ]; then
+# A release without bynkc, installed over one that shipped it: the leftover
+# would keep running the old compiler beside the new bynk. (A pinned older
+# release ships bynkc and gets it installed above.)
+if [ ! -f "$tmp/$stage/bynkc" ] && [ -f "$dest/bynkc" ]; then
   rm -f "$dest/bynkc"
   say "Removed the old $dest/bynkc; use bynk."
 fi

@@ -59,17 +59,19 @@ try {
     Expand-Archive (Join-Path $tmp "$stage.zip") -DestinationPath $tmp
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     if (-not ((Test-Path (Join-Path $tmp "$stage\bynk-lsp.exe")) -or (Test-Path (Join-Path $tmp "$stage\bynkc-lsp.exe")))) { throw "The archive has no language server." }
-    foreach ($bin in 'bynk', 'bynk-lsp', 'bynkc-lsp') {
+    foreach ($bin in 'bynk', 'bynkc', 'bynk-lsp', 'bynkc-lsp') {
         $src = Join-Path $tmp "$stage\$bin.exe"
         # A release before the rename ships only bynkc-lsp, and the overlap copy
         # goes in E4b: either server name may be absent, but not both.
+        if (-not (Test-Path $src) -and $bin -eq 'bynkc') { continue }
         if (-not (Test-Path $src) -and $bin -like '*-lsp') { continue }
         Copy-Item $src (Join-Path $dest "$bin.exe") -Force
     }
-    # The upgrade from a release that shipped bynkc: it is gone, and a leftover
-    # would keep running the old compiler beside the new bynk.
+    # A release without bynkc, installed over one that shipped it: the leftover
+    # would keep running the old compiler beside the new bynk. (A pinned older
+    # release ships bynkc and gets it installed above.)
     $oldBynkc = Join-Path $dest 'bynkc.exe'
-    if (Test-Path $oldBynkc) {
+    if (-not (Test-Path (Join-Path $tmp "$stage\bynkc.exe")) -and (Test-Path $oldBynkc)) {
         Remove-Item $oldBynkc -Force
         Write-Host "Removed the old $oldBynkc; use bynk."
     }

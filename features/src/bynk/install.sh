@@ -105,11 +105,12 @@ log "checksum verified ($ASSET)"
 
 tar -xzf "$WORK/$ASSET" -C "$WORK"
 STAGE="$WORK/bynk-$TAG-$TARGET"
-for bin in bynk bynk-lsp bynkc-lsp; do
+for bin in bynk bynkc bynk-lsp bynkc-lsp; do
     # A release before the rename ships only bynkc-lsp, and the overlap copy goes
     # in E4b: either server name may be absent, but not both.
     if [ ! -f "$STAGE/$bin" ]; then
         case "$bin" in
+            bynkc) continue ;; # absent from a current release; present in an older pin
             bynk-lsp | bynkc-lsp)
                 [ -f "$STAGE/bynk-lsp" ] || [ -f "$STAGE/bynkc-lsp" ] || die "$ASSET has no language server"
                 continue ;;
