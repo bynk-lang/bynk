@@ -187,7 +187,17 @@ fn write_outputs(out: &bynk_driver::project::ProjectOutput, root: &Path) -> std:
 /// `main` from then on. (Linux and Windows still fitted, and PRs don't run
 /// macOS, so it first showed up post-merge.) 4 GiB leaves headroom on the
 /// 7 GB macOS runner alongside nextest's other test processes.
-const TSC_MAX_OLD_SPACE_MIB: u32 = 4096;
+///
+/// On 7 November 2026, at 787 staged fixtures, 4 GiB was exceeded on the
+/// Linux `Node floor` job (Node 22.13), ejecting merge-queue groups. Linux
+/// and Windows runners have 16 GB, so they get 8 GiB; macOS keeps 4 GiB
+/// until its runner has room. The real fix for corpus growth is to shard the
+/// single pass, not to keep raising this.
+const TSC_MAX_OLD_SPACE_MIB: u32 = if cfg!(target_os = "macos") {
+    4096
+} else {
+    8192
+};
 
 /// `NODE_OPTIONS` for the `tsc` child: the caller's own options, plus
 /// [`TSC_MAX_OLD_SPACE_MIB`] unless the caller already set a heap limit (an
