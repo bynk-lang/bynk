@@ -1463,6 +1463,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
         &["http_handler"],
     ),
+    warn(d(
+        "bynk.http.header_question_not_found",
+        "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
+    )),
     dg(
         "bynk.http.headers_wrong_type",
         "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",

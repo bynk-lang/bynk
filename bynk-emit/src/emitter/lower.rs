@@ -6774,6 +6774,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
+        cx.note_queue_result();
         return format!("QueueResult.{}", id.name);
     }
     // A bare ident whose name matches a declared variant of a sum
@@ -6931,6 +6932,7 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
         cx.commons().callee(e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == QUEUE_RESULT
     ) {
+        cx.note_queue_result();
         return pre.finish(format!(
             "QueueResult.{}({})",
             name.name,

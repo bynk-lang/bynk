@@ -109,6 +109,15 @@ silently emitting the `Result` branch on an untyped operand.
   hover target, token type, or signature. The change is a typing/lowering rule,
   invisible to the editor surface beyond the new diagnostic.
 
+## Note (#2839): `let … else` is the explicit-status spelling
+
+`?` on an `Option` means `404 NotFound`, and is documented as exactly that. The
+spelling that names another status is `let Some(x) = e else { BadRequest("…") }`
+(#2010); it needs no new `?` rule. Point D (a `Result → HttpResult` lift) stays
+deferred with #543. For the case where the default is almost always wrong, a
+missing `RequestHeaders.get(…)`, `bynk.http.header_question_not_found` warns and
+carries a machine-applicable rewrite, and hovering the `?` states the `404`.
+
 ## Alternatives considered
 
 - **Lift `Result` too, defaulting `Err` to 500.** Rejected (Decision D) — no

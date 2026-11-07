@@ -5944,6 +5944,11 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_http_result();
     }
 
+    /// Record that this lowering constructed a `QueueResult` variant (#2839).
+    fn note_queue_result(&self) {
+        self.runtime_use().note_queue_result();
+    }
+
     /// Record that this lowering emitted a reference to `__bynkEq` (#1652), so
     /// the module imports it.
     fn note_eq(&self) {

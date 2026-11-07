@@ -598,6 +598,49 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
     );
 }
 
+/// #2839: `let x = headers.get("X")?` in an `HttpResult` handler is flagged,
+/// and the quick fix rewrites it to the `let … else` that answers `400`.
+#[test]
+fn header_question_quick_fix_answers_bad_request() {
+    const SRC: &str = "context demo.hooks\n\nservice hooks from http {\n  on GET(\"/e\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {\n    let event = headers.get(\"X-Event\")?\n    Ok(event)\n  }\n}\n";
+    let root = setup_project("headerq", &[("demo/hooks.bynk", SRC)]);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("demo/hooks.bynk"))
+        .expect("context file analysed");
+    let uri = Url::from_file_path(root.join("demo/hooks.bynk")).unwrap();
+    let diag = file
+        .diagnostics
+        .iter()
+        .find(|d| d.error.category == "bynk.http.header_question_not_found")
+        .expect("the header `?` is flagged");
+    let actions = code_actions::quick_fixes(
+        &file.text,
+        &file.diagnostics,
+        diag.error.span,
+        &uri,
+        Some(1),
+    );
+    let CodeActionOrCommand::CodeAction(action) = &actions[0] else {
+        panic!("expected a CodeAction");
+    };
+    let Some(DocumentChanges::Edits(doc_edits)) = &action.edit.as_ref().unwrap().document_changes
+    else {
+        panic!("expected versioned document edits");
+    };
+    let fixed = apply_text_edits(&file.text, &doc_edits[0].edits);
+    assert!(
+        fixed.contains(
+            "let Some(event) = headers.get(\"X-Event\") else { BadRequest(\"missing X-Event\") }"
+        ),
+        "the fix answers 400; got:\n{fixed}"
+    );
+}
+
 /// #2641: the two record-pattern parse errors each carry a machine-applicable
 /// fix (#2654: and so does the irrefutable record `let … else`), offered as a quick fix and leaving the file clean once applied.
 #[test]

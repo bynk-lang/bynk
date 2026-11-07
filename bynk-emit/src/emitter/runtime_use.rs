@@ -144,6 +144,9 @@ pub struct RuntimeUse {
     /// imports `HttpResult` by its own structural scan; a test module, whose
     /// case compares a typed outcome with `Ok(…)`, reads this.
     http_result: Cell<bool>,
+    /// #2839: the module constructs a `QueueResult` variant (a test case
+    /// comparing a verdict with a bare `Ack`/`Retry(…)`).
+    queue_result: Cell<bool>,
     /// #917: for a test-scaffold module, the type-only namespace each
     /// codec-eligible named type reaches through (`"Order" -> "orders."`) — the
     /// module has no local declaration of its own, only a namespace import of
@@ -308,6 +311,16 @@ impl RuntimeUse {
     /// Record that the module constructs an `HttpResult` variant (#1934).
     pub fn note_http_result(&self) {
         self.http_result.set(true);
+    }
+
+    /// Record that the module constructs a `QueueResult` variant (#2839).
+    pub fn note_queue_result(&self) {
+        self.queue_result.set(true);
+    }
+
+    /// Whether a test module must import `QueueResult` (#2839).
+    pub fn queue_result(&self) -> bool {
+        self.queue_result.get()
     }
 
     /// Whether a test module must import `HttpResult` (#1934).
