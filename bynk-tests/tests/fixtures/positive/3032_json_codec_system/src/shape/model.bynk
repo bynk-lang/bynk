@@ -9,3 +9,5 @@ type Pull = {
   head: Head,
   labels: List[String],
 }
+
+type Shape = | Circle(radius: Option[Int]) | Dot

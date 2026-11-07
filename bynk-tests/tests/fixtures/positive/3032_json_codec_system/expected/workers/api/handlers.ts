@@ -6,6 +6,19 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
+import { Pull as __CommonsPull, Shape as __CommonsShape } from "../../shape/model.js";
+
+export type Pull = __CommonsPull & { readonly __ctxBrand?: "api" };
+export type Shape = __CommonsShape & { readonly __ctxBrand?: "api" };
+
+export interface Wrap {
+  readonly pull: Pull;
+  readonly shape: Shape;
+}
+
+export const Wrap = {
+};
+
 export const api = {
   async http_GET_ping(deps: {}): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok(1);

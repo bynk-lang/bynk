@@ -24,6 +24,15 @@ export interface Pull {
 export const Pull = {
 };
 
+export type Shape =
+    { readonly tag: "Circle"; readonly radius: Option<number> }
+  | { readonly tag: "Dot" };
+
+export const Shape = {
+  Circle: (radius: Option<number>): Shape => ({ tag: "Circle", radius }),
+  Dot: { tag: "Dot" } as Shape,
+};
+
 export function __serialise_Head(value: Head): __JsonValue {
   return {
     ref: value.ref as __JsonValue,
@@ -81,6 +90,36 @@ export function __deserialise_Pull(json: __JsonValue, path: string = "$"): Resul
   if (__r_labels.tag === "Err") return __r_labels;
   const __labels = __r_labels.value;
   return Ok({ id: __id, draft: __draft, closed_at: __closed_at, head: __head, labels: __labels } as Pull);
+}
+
+export function __serialise_Shape(value: Shape): __JsonValue {
+  switch (value.tag) {
+    case "Circle": {
+      return { kind: "Circle", radius: __serialise_Option_Int(value.radius) };
+    }
+    case "Dot":
+      return { kind: "Dot" };
+  }
+}
+
+export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Result<Shape, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Circle": {
+  const __r_radius = __deserialise_Option_Int(obj["radius"], `${path}.radius`);
+  if (__r_radius.tag === "Err") return __r_radius;
+  const __radius = __r_radius.value;
+      return Ok({ tag: "Circle", radius: __radius } as Shape);
+    }
+    case "Dot":
+      return Ok({ tag: "Dot" } as Shape);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 
@@ -184,4 +223,48 @@ export function __deserialise_List_String(json: __JsonValue, path: string = "$")
   out.push(__el as string);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_Int(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) : { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return (globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true ? null : { kind: "None" };
+}
+
+function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Int(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Int(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
