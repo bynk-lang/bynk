@@ -146,6 +146,17 @@ default-filter = 'not (((binary_id(bynk-tests::it) & test(/^system::/)) | (binar
 inherits = "ci"
 default-filter = 'not ((binary_id(bynk-tests::it) & test(/^system::/)) | (binary_id(/^bynk::/) & not binary_id(/^bynk::(compile_once_strips_suites|dev|doctor|new)$/)) | binary_id(xtask::ci_command))'
 
+# The Windows and macOS legs in the merge queue and on `main` (ci.yml's
+# `test` job; the nightly runs the full `ci` profile there instead). The whole
+# suite minus the corpus-wide passes that type-check or run every fixture's
+# emitted code under tsc/node. Those are OS-independent (the same emitted code,
+# the same Node and tsc), they run on Linux in the same stage (`test-system`,
+# `test-ts7`), and on the 3-core macOS runner they were ~900 of ~2100
+# test-seconds. Not a tier profile: the tier probe does not partition it.
+[profile.ci-os]
+inherits = "ci"
+default-filter = 'not (binary_id(bynk-tests::it) & (test(/^system::tsc_verify::/) | test(/^system::behaviour_fixtures::/) | test(/^system::examples::/) | test(/^system::example_tests_behaviour::/)))'
+
 [profile.default]
 # Local runs keep the default (0) retries so flakes surface immediately.
 retries = 0
