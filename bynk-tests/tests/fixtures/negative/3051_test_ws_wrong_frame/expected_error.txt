@@ -1,0 +1,2 @@
+bynk.types.type_mismatch the frame of `ChatGateway.message` has type `String`, but `ClientFrame` is required
+# exact

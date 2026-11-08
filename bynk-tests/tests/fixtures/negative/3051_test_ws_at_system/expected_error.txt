@@ -1,0 +1,2 @@
+bynk.test.ws_needs_in_process case `"an upgrade at system"` drives the WebSocket service `ChatGateway` by address, but is a `system`-tier case
+# exact

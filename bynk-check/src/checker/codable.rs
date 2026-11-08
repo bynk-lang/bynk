@@ -69,6 +69,7 @@ pub(crate) fn json_codable(
         | Ty::Effect(_)
         | Ty::Query(_)
         | Ty::Stream(_)
+        | Ty::TestConnection(_)
         | Ty::Connection(_)
         | Ty::HttpResult(_)
         | Ty::HttpOutcome(_)

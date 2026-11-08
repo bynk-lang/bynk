@@ -3086,6 +3086,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.ws_lifecycle_by",
+        "A case's `svc.message(tc, frame)` or `svc.close(tc)` on a `from websocket` service carries a `by` clause; the connection's principal is given once, at `open`, and carried from there.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.ws_needs_in_process",
+        "A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
         "bynk.tier.cross_context_needs_system",
         "A `unit` or `integration` case, or a `property`, reaches another context's service, directly or through a target service or agent handler that calls one; below `system` no other context is stood up to call, so the flow belongs in a `suite … as system`.",
         &["case"],
