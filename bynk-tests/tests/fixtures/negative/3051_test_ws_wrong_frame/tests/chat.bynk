@@ -1,0 +1,8 @@
+// #3051: `message` takes a value of the service's `in` frame type.
+suite chat {
+  case "a frame of the wrong type" {
+    let tc = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(tc, RoomId.unsafe("r")) by Participant(UserId.unsafe("a"))
+    let _ <- ChatGateway.message(tc, "not a frame")
+  }
+}

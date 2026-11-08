@@ -1,0 +1,2 @@
+bynk.test.service_call_arity `ChatGateway.open` takes the case's `TestConnection` as its first argument
+# exact

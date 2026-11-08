@@ -381,6 +381,17 @@ pub(crate) fn deploy_one(
         environment,
     )?;
     let deployed = deployed_worker_name(environment, worker);
+    // #3073: the facts this version carries about itself, for `bynk revert`.
+    let facts_args = facts::var_args(&facts::build_facts(
+        worker,
+        environment,
+        declared,
+        &read_contracts_manifest(&worker_dir).unwrap_or_default(),
+        lock,
+        &schema_agent_versions(project_root),
+    ));
+    let wrangler_args: Vec<String> = wrangler_args.iter().cloned().chain(facts_args).collect();
+    let wrangler_args = wrangler_args.as_slice();
     if !first_deploy {
         apply_secrets(provenance, &worker_dir, worker, &prepared, environment)?;
         return push(
@@ -1360,6 +1371,24 @@ pub(crate) fn set_secret(
     Err(wrangler_said(&output))
 }
 
+/// #3073: each agent class's current schema version, from the project's
+/// `bynk.schema.lock` (what the build just compiled against). Empty when the
+/// project has no lock or it cannot be read: the facts then record no agents,
+/// and a revert treats the version as having none to compare.
+fn schema_agent_versions(project_root: &Path) -> BTreeMap<String, i64> {
+    let Ok(existing) = bynk_driver::schema_lock::read(project_root) else {
+        return BTreeMap::new();
+    };
+    let Ok(registry) = bynk_project::schema_registry::parse(existing.as_deref(), project_root)
+    else {
+        return BTreeMap::new();
+    };
+    registry
+        .agents()
+        .map(|(class, entry)| (class.clone(), entry.version))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1716,6 +1745,23 @@ mod tests {
         assert!(wrote.success(), "the stand-in wrangler is written");
     }
 
+    /// #3073: every push carries the facts variable (asserted here, for every
+    /// test that runs one); the tests then compare the rest of the call.
+    #[cfg(unix)]
+    fn strip_facts_var(call: &str) -> String {
+        if !call.starts_with("deploy") {
+            return call.to_string();
+        }
+        let marker = format!(" --var {}:", facts::FACTS_VAR);
+        let (head, rest) = call
+            .split_once(&marker)
+            .unwrap_or_else(|| panic!("a push carries the facts variable: {call}"));
+        match rest.split_once(' ') {
+            Some((_, tail)) => format!("{head} {tail}"),
+            None => head.to_string(),
+        }
+    }
+
     /// What `deploy_one` ran, one line per `wrangler` invocation, and the
     /// ledger it left, for one Worker `api` that binds only the bare `KV`.
     #[cfg(unix)]
@@ -1841,7 +1887,7 @@ mod tests {
         let calls = std::fs::read_to_string(&log)
             .unwrap_or_default()
             .lines()
-            .map(str::to_owned)
+            .map(strip_facts_var)
             .collect();
         let config = std::fs::read_to_string(workers_dir.join("api/wrangler.toml")).unwrap();
         let _ = std::fs::remove_dir_all(root);
@@ -2552,7 +2598,7 @@ mod tests {
             std::fs::read_to_string(path)
                 .unwrap_or_default()
                 .lines()
-                .map(str::to_owned)
+                .map(strip_facts_var)
                 .collect()
         };
         let left_in_project = walk(&root)

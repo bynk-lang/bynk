@@ -519,6 +519,7 @@ pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         | Ty::Set(a)
         | Ty::Query(a)
         | Ty::Stream(a)
+        | Ty::TestConnection(a)
         | Ty::Connection(a) => collect_vars(*a, tys, out),
         Ty::Fn { params, ret } => {
             for p in params {
@@ -697,6 +698,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
     match &*tys.get(ty) {
         Ty::Stream(_) => Some(NotComparable::Stream),
         Ty::Connection(_) => Some(NotComparable::Held(tys.display(ty))),
+        Ty::TestConnection(_) => Some(NotComparable::Held(tys.display(ty))),
         Ty::Fn { .. } | Ty::Effect(_) | Ty::Query(_) => {
             Some(NotComparable::Computation(tys.display(ty)))
         }
@@ -901,7 +903,12 @@ pub(crate) fn check_declared_eq_args(
             let shown = arg_ty.display(tys);
             let top = matches!(
                 &*tys.get(arg_ty),
-                Ty::Stream(_) | Ty::Connection(_) | Ty::Fn { .. } | Ty::Effect(_) | Ty::Query(_)
+                Ty::Stream(_)
+                    | Ty::Connection(_)
+                    | Ty::TestConnection(_)
+                    | Ty::Fn { .. }
+                    | Ty::Effect(_)
+                    | Ty::Query(_)
             );
             let (code, why) = explain(blocker, top);
             let mut err = CompileError::new(
