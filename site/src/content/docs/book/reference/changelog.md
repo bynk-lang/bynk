@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.517**.
+written against **v0.518**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.518.0** | "`bynk revert` makes a Worker's previous deployment live again without a rebuild, after checking D1 migrations, agent schema versions, contracts, ids and secrets; each deploy records `BYNK_DEPLOY_FACTS` on the version it pushes" |
 | **v0.517.0** | A case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`) against a recording `TestConnection[F]()` |
 | **v0.516.0** | "`bynk test --mutate` applies one typed mutation at a time (comparison operators, `&&`/`||`) and reports the mutants the suites don't catch, with source spans; `[test.mutate] exclude` in `bynk.toml`" |
 | **v0.515.0** | A field added to a service's request or response type with a default is a compatible contract change, so a callee deploys ahead of its callers; the contract hash still covers the field, and the stored shape records which fields have a default (shape text with a default is unreadable by earlier versions, so upgrade every deployer together) |

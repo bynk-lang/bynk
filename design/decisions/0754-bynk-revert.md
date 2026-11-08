@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk revert` makes a Worker's previous deployment live again without a rebuild, after checking D1 migrations, agent schema versions, contracts, ids and secrets; each deploy records `BYNK_DEPLOY_FACTS` on the version it pushes"
----
+# 0754 — bynk revert drives Cloudflare's rollback after checks only Bynk can make
 
-## ADR: bynk-revert
-title: bynk revert drives Cloudflare's rollback after checks only Bynk can make
-summary: Per-version deploy facts travel on the Worker version; every unknown is a refusal
+- **Status:** Accepted (v0.518)
 
 **Context.** After a bad release the options were to redeploy an old tag (a rebuild) or to use Cloudflare's version rollback, which knows nothing of D1 migrations, agents' stored schema versions (ADR 0545, 0558), contract skew (#643, #2077) or the ids the lock records (#3073). The lock holds only what is live, and #3072 stopped it recording derived data, so a revert cannot read the target's facts from it, and there is no build tree on a CI checkout.
 
