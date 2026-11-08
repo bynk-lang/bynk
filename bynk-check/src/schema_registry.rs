@@ -546,7 +546,7 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
             retyped.push(format!("{name} ({})", paths.problems.join(", ")));
             continue;
         }
-        if n.ty != o.ty && paths.added.is_empty() {
+        if n.ty != o.ty && paths.added.is_empty() && paths.variants.is_empty() {
             // The strings differ but no path explains it: never guess.
             retyped.push(name.to_string());
             continue;
@@ -558,6 +558,7 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
                 .map(|p| format!("{p} added with a default")),
         );
         nested.extend(paths.gained.iter().map(|p| format!("{p} gained a default")));
+        nested.extend(paths.variants.iter().map(|p| format!("{p} variant added")));
         // The whole-value strings differ whenever a field is added, so a
         // refinement change is read position by position.
         if paths.refined {
@@ -594,6 +595,9 @@ struct PathChange {
     added: Vec<String>,
     /// Existing record fields that gained a default.
     gained: Vec<String>,
+    /// #2691: the topmost new sum variants. No stored value names one, so each
+    /// is additive, payload fields included.
+    variants: Vec<String>,
     /// Whether a position both shapes have changed its predicates only.
     refined: bool,
 }
@@ -604,7 +608,9 @@ struct PathChange {
 /// under a new record field that declares a default: that field is absent from
 /// every stored record and decodes to its default, and whatever lies beneath it
 /// comes with it. Anything else (a removed or retyped position, a field added
-/// without a default, a new variant) is a problem.
+/// without a default) is a problem. A new sum variant is additive (#2691): a
+/// value stored before it cannot name it, and a newer record is stopped on
+/// rollback by the `__v` marker.
 fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
     let old: BTreeMap<&str, &PathShape> = stored.iter().map(|p| (p.path.as_str(), p)).collect();
     let new: BTreeMap<&str, &PathShape> = live.iter().map(|p| (p.path.as_str(), p)).collect();
@@ -641,7 +647,7 @@ fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
         if node.default {
             change.added.push(path.to_string());
         } else if node.ty == "variant" {
-            change.problems.push(format!("{path} variant added"));
+            change.variants.push(path.to_string());
         } else {
             change
                 .problems
@@ -1700,14 +1706,42 @@ mod path_tests {
             compare_paths(&old, &lost).problems,
             ["p.size lost its default"]
         );
+    }
 
+    #[test]
+    fn a_new_variant_is_additive_but_a_removed_one_is_not() {
         let sum = [at("e", "|", false), at("e|A", "variant", false)];
         let more = [
             at("e", "|", false),
             at("e|A", "variant", false),
             at("e|B", "variant", false),
+            at("e|B.sku", "String", false),
         ];
-        assert_eq!(compare_paths(&sum, &more).problems, ["e|B variant added"]);
+        let change = compare_paths(&sum, &more);
+        assert!(change.problems.is_empty(), "{change:?}");
+        assert_eq!(change.variants, ["e|B"]);
+        // Removal (and so a rename) stays refused.
+        assert_eq!(
+            compare_paths(&more, &sum).problems,
+            ["e|B removed", "e|B.sku removed"]
+        );
+        // An existing variant gaining a payload field stays refused.
+        let grown = [
+            at("e", "|", false),
+            at("e|A", "variant", false),
+            at("e|A.x", "Int", false),
+        ];
+        assert_eq!(
+            compare_paths(&sum, &grown).problems,
+            ["e|A.x added without a default"]
+        );
+        // The accepted variant is recorded, so the change bumps the version.
+        let old = vec![store("|", sum.to_vec())];
+        let new = vec![store("|", more.to_vec())];
+        match classify_agent_change(&new, &old) {
+            AgentChange::Additive { nested, .. } => assert_eq!(nested, ["e|B variant added"]),
+            other => panic!("expected Additive, got {other:?}"),
+        }
     }
 
     fn store(ty: &str, paths: Vec<PathShape>) -> StoreShape {
