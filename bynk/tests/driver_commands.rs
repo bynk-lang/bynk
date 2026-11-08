@@ -1046,6 +1046,68 @@ fn compile_runs_in_process_with_an_empty_path() {
     assert!(out.join("calc.ts").exists(), "the module is written");
 }
 
+/// #3054: `bynk build` with no flags writes what `bynk compile . -o out` writes.
+#[test]
+fn build_with_no_flags_matches_compile() {
+    let proj = scratch("build-matches-compile");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (code, _, err) = run_bynk_in(&proj, &["build"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("built bundle -> "), "summary line: {err}");
+    let (code, _, err) = run_bynk_in(&proj, &["compile", ".", "-o", "ref"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        std::fs::read(proj.join("out/calc.ts")).expect("build output"),
+        std::fs::read(proj.join("ref/calc.ts")).expect("compile output"),
+    );
+}
+
+/// #3054: `[build]` supplies `out` and `emit`; a flag overrides it; `compile`
+/// ignores the table.
+#[test]
+fn build_reads_the_build_table_and_flags_override_it() {
+    let proj = scratch("build-table");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\nout = \"dist\"\nemit = \"js\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (code, _, err) = run_bynk_in(&proj, &["build"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(proj.join("dist/calc.js").exists(), "emit = js into dist");
+    let (code, _, err) = run_bynk_in(&proj, &["build", "--emit", "ts", "--out", "other"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(proj.join("other/calc.ts").exists(), "flags beat the table");
+    let (code, _, err) = run_bynk_in(&proj, &["compile", ".", "-o", "ref"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(proj.join("ref/calc.ts").exists(), "compile ignores [build]");
+}
+
+/// #3054: a bad `[build]` is refused and nothing is built.
+#[test]
+fn build_refuses_a_bad_build_table() {
+    for (body, needle) in [
+        ("out = \"../x\"", "inside the project"),
+        ("target = \"lambda\"", "must be one of"),
+        ("outt = \"x\"", "no key named"),
+    ] {
+        let proj = scratch("build-bad");
+        write(
+            &proj.join("bynk.toml"),
+            &format!("[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\n{body}\n"),
+        );
+        write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+        let (code, _, err) = run_bynk_in(&proj, &["build"]);
+        assert_ne!(code, 0, "{body}");
+        assert!(err.contains(needle), "{body}: {err}");
+        assert!(!proj.join("out").exists());
+    }
+}
+
 /// `bynk test` on a real project discovers
 /// its suites.
 #[test]

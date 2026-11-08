@@ -84,6 +84,80 @@ pub struct CompileArgs {
     pub sources_stdin: bool,
 }
 
+/// What a `build` run was asked to do: the flags given, over `[build]`.
+#[derive(Clone, Debug, Default)]
+pub struct BuildArgs {
+    /// A project directory.
+    pub input: PathBuf,
+    pub out: Option<PathBuf>,
+    pub target: Option<CliTarget>,
+    pub platform: Option<CliPlatform>,
+    pub emit: Option<EmitFormat>,
+}
+
+/// Run `build` (#3054): resolve each setting as flag, else `[build]`, else the
+/// built-in default, then run [`run_compile`]. `compile` itself never reads
+/// `[build]`.
+pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
+    let BuildArgs {
+        input,
+        out,
+        target,
+        platform,
+        emit,
+    } = args;
+    if !input.is_dir() {
+        eprintln!(
+            "{prog}: `build` takes a project directory; use `{prog} compile` for a single file"
+        );
+        return ExitCode::FAILURE;
+    }
+    let overlay = match std::fs::read_to_string(input.join("bynk.toml")) {
+        Ok(text) => std::collections::HashMap::from([(input.join("bynk.toml"), text)]),
+        Err(_) => std::collections::HashMap::new(),
+    };
+    let config = match bynk_project::try_read_build_config_with(&input, &overlay) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{prog}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // `build_config_from` has already checked each value against the set.
+    fn from_config(value: &Option<String>) -> Option<&str> {
+        value.as_deref()
+    }
+    let target = target
+        .or_else(|| from_config(&config.target).and_then(|v| CliTarget::from_str(v, true).ok()))
+        .unwrap_or(CliTarget::Bundle);
+    let platform = platform
+        .or_else(|| from_config(&config.platform).and_then(|v| CliPlatform::from_str(v, true).ok()))
+        .unwrap_or_default();
+    let emit = emit
+        .or_else(|| from_config(&config.emit).and_then(|v| EmitFormat::from_str(v, true).ok()))
+        .unwrap_or_default();
+    let output = out.unwrap_or_else(|| input.join(config.out.as_deref().unwrap_or("out")));
+    let code = run_compile(
+        prog,
+        CompileArgs {
+            input,
+            output: output.clone(),
+            target,
+            platform,
+            emit,
+            sources_stdin: false,
+        },
+    );
+    if code == ExitCode::SUCCESS {
+        let target = match target {
+            CliTarget::Bundle => "bundle",
+            CliTarget::Workers => "workers",
+        };
+        eprintln!("{prog}: built {target} -> {}", output.display());
+    }
+    code
+}
+
 /// Run `compile`. `prog` prefixes the messages (`"bynk"`).
 pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
     let CompileArgs {

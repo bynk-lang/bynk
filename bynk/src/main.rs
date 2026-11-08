@@ -210,6 +210,28 @@ fn run() -> ExitCode {
                 },
             )
         }
+        Command::Build {
+            input,
+            out,
+            target,
+            platform,
+            emit,
+            lock,
+        } => {
+            if !prepare(&input, lock.options()) {
+                return ExitCode::FAILURE;
+            }
+            bynk_driver::run_build(
+                "bynk",
+                bynk_driver::BuildArgs {
+                    input,
+                    out,
+                    target,
+                    platform,
+                    emit,
+                },
+            )
+        }
         Command::Compile {
             input,
             output,
