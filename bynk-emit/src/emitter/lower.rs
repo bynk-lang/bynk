@@ -846,6 +846,7 @@ fn lower_effect_let_value(
     // address-call lowering to fold into that call's deps.
     let saved_identity = cx.call_site_identity.take();
     let saved_claims = cx.call_site_claims.take();
+    let saved_claim_lines = cx.call_site_claim_lines.take();
     let saved_actor = cx.call_site_actor.take();
     let saved_no_credential = cx.call_site_no_credential;
     cx.call_site_no_credential = false;
@@ -864,12 +865,22 @@ fn lower_effect_let_value(
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
             cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
+            // #3052: a `system` call mints its `Oidc` token's claims from the
+            // lines of a literal `TokenClaims.of(lines)` (the checker admits
+            // no other form there).
+            cx.call_site_claim_lines = principal.claims.as_ref().and_then(|c| match &c.kind {
+                ExprKind::MethodCall { args, .. } if args.len() == 1 => {
+                    Some(pre.lower(&args[0], cx))
+                }
+                _ => None,
+            });
             cx.call_site_actor = Some(principal.actor.name.clone());
         }
     }
     let value = pre.lower(&l.value, cx);
     cx.call_site_identity = saved_identity;
     cx.call_site_claims = saved_claims;
+    cx.call_site_claim_lines = saved_claim_lines;
     cx.call_site_actor = saved_actor;
     cx.call_site_no_credential = saved_no_credential;
     cx.call_site_bad_signature = saved_bad_signature;
@@ -1769,6 +1780,9 @@ fn bad_signature_driver(actor: &str) -> Option<&'static str> {
         "Forged" => Some("forged"),
         "Stale" => Some("stale"),
         "Expired" => Some("expired"),
+        // #3052: an `Oidc` route's token for another issuer or audience.
+        "WrongIssuer" => Some("wrongissuer"),
+        "WrongAudience" => Some("wrongaudience"),
         _ => None,
     }
 }
