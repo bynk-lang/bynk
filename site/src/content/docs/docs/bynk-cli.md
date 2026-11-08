@@ -41,6 +41,7 @@ bynk <command> [options]
 | [`bynk fetch`](#bynk-fetch) | Resolve the project's dependencies, fetch git ones into the store, and write `bynk.lock`. |
 | [`bynk approve`](#bynk-approve) | Approve the npm packages dependencies' adapters bring into the build. |
 | [`bynk update`](#bynk-update) | Re-resolve git dependencies' revisions and rewrite `bynk.lock`. |
+| [`bynk revert`](#bynk-revert) | Make a Worker's previous deployment live again without a rebuild, after checking what makes that unsafe. |
 | [`bynk migrate`](#bynk-migrate) | Show where each agent class's stored state stands, and sweep deployed instances so old `migrate` steps can retire. |
 | [`bynk add`](#bynk-add) | Add a registry dependency to `bynk.toml`, then resolve and lock it. |
 | [`bynk search`](#bynk-search) | Look a package up on its registry: every version, and the newest usable one. |
@@ -1182,6 +1183,38 @@ branch moves upstream; `update` moves it. Name aliases or `org/package` names to
 update only those; with none, every git dependency is re-resolved. Changing a
 dependency's `rev` in `bynk.toml` re-resolves it on the next command, without
 `update`.
+
+---
+
+## `bynk revert`
+
+Makes the previous deployment live again, without rebuilding. It drives
+Cloudflare's own version rollback, after checking what a platform rollback
+cannot: migrations, agent schema versions, contracts, ids and secrets. See
+[Roll back a deployment](/book/guides/projects-build-and-deployment/roll-back-a-deployment/)
+for what each check means and how to read a refusal.
+
+```
+bynk revert [PATH] [--context NAME] [--env NAME] [--to VERSION] [--dry-run]
+            [--format short|json] [--yes]
+            [--accept-schema-ahead BINDING]... [--accept-secret-changes]
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--context NAME` | every recorded Worker | Revert this context alone (dotted name or Worker directory). |
+| `--env NAME` | `default` | The environment to revert. |
+| `--to VERSION` | what was live before the live release | A Cloudflare Worker version id to go back to; needs `--context`, since a version id belongs to one Worker. A git tag is not accepted: it names source, which means a rebuild. |
+| `--dry-run`, `--plan` | off | Print each check's verdict and stop. Unlike `deploy --dry-run` it reads Cloudflare, so it needs credentials. |
+| `--format short\|json` | `short` | Plan format. `json` is for CI. |
+| `--yes` | off | Skip the confirmation. Never overrides a refusal. |
+| `--accept-schema-ahead BINDING` | none | Assert that the D1 migrations applied after the target was built are additive, for this binding. Repeatable. |
+| `--accept-secret-changes` | off | Accept secret changes made after the target was live. This restores the old values of any rotated secret; a `bynk migrate sweep` makes two harmless changes. |
+
+It needs `CLOUDFLARE_API_TOKEN` (with Workers Scripts and D1 read access) and
+`CLOUDFLARE_ACCOUNT_ID`. A version can be reverted only if the `bynk` that
+deployed it recorded its deploy facts; for any earlier version, redeploy its
+tag. A refusal exits non-zero and changes nothing.
 
 ---
 

@@ -16,7 +16,7 @@ use bynk_project::schema_registry::SchemaRegistry;
 use serde::Serialize;
 
 pub(crate) mod live;
-mod sweep;
+pub(crate) mod sweep;
 
 /// Output choices for `bynk migrate status`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
