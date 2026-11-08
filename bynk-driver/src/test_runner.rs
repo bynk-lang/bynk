@@ -23,7 +23,7 @@ use crate::test_json::{Case, Location, Suite, TestRun};
 /// Where `name` is installed on `PATH`, if it is. #1758: callers spawn this
 /// path, not the bare name, so a Windows npm shim (`tsc.cmd`) that detection
 /// finds is also the program that runs.
-fn resolve_tool(name: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_tool(name: &str) -> Option<PathBuf> {
     crate::probe::detect(&SystemToolbox, name, DetectOpts::default())
         .provenance
         .path()
@@ -33,7 +33,7 @@ fn resolve_tool(name: &str) -> Option<PathBuf> {
 /// #1758: a runner that was found but would not start. Recorded instead of
 /// silently skipped, so a run with no working runner reports the real cause
 /// rather than advising an install of something already installed.
-fn start_failure(path: &Path, e: &std::io::Error) -> String {
+pub(crate) fn start_failure(path: &Path, e: &std::io::Error) -> String {
     format!(
         "`{}` was found but could not be started: {e}",
         path.display()
@@ -75,6 +75,11 @@ pub struct TestArgs {
     /// a pure compile, no `tsc`/Node.
     #[arg(long)]
     pub no_run: bool,
+    /// Fail (exit non-zero) when the project declares no tests, instead of the
+    /// default warning with exit 0. Applies with `--no-run` too, so a
+    /// discovery-only CI step can enforce it.
+    #[arg(long)]
+    pub require_tests: bool,
     /// Output format. `rich` (default) is the grouped ✓ / ✗ human output;
     /// `json` is a single pinned JSON document of results, for tooling;
     /// `ndjson` is the same results as one JSON event per line, written as
@@ -238,6 +243,7 @@ impl TestArgs {
             input,
             output: None,
             no_run: true,
+            require_tests: false,
             format: TestFormat::Json,
             inspect: false,
             seed: None,
@@ -318,6 +324,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         input,
         output,
         no_run,
+        require_tests,
         format,
         inspect,
         seed,
@@ -716,7 +723,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // already carries integration suites from the compile above). A compile
     // failure took the `compile`-error path above, exactly as a run would.
     if no_run && json {
-        crate::test_stream::print_run(stream, &TestRun::discovered(discovery_suites(&out)));
+        let suites = discovery_suites(&out);
+        if suites.is_empty() && require_tests {
+            return report_no_tests(program, &input, true, stream, true);
+        }
+        crate::test_stream::print_run(stream, &TestRun::discovered(suites));
         return ExitCode::SUCCESS;
     }
     // #2842: the project's snapshots for this run. A remote or smoke run builds
@@ -839,15 +850,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     if !wrote_any_test {
-        if json {
-            crate::test_stream::print_run(stream, &empty_run());
-        } else {
-            eprintln!(
-                "{program} test: no test declarations found in `{}`",
-                input.display()
-            );
-        }
-        return ExitCode::SUCCESS;
+        return report_no_tests(program, &input, require_tests, stream, json);
     }
 
     let main_ts = output_root.join("tests").join("main.ts");
@@ -933,53 +936,55 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         for p in prefix {
             cmd.arg(p);
         }
-        cmd.arg("-p").arg(&tsconfig);
-        let tsc_ok = if json {
-            match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
-                Ok(out) if out.status.success() => true,
-                Ok(out) => {
-                    // tsc writes its diagnostics to *stdout*; capturing only
-                    // stderr left the document's most useful field empty.
-                    let mut detail = String::from_utf8_lossy(&out.stdout).into_owned();
-                    let err_text = String::from_utf8_lossy(&out.stderr);
-                    if !err_text.trim().is_empty() {
-                        if !detail.is_empty() {
-                            detail.push('\n');
-                        }
-                        detail.push_str(&err_text);
+        // `--pretty false`: the plain `file(line,col): error TSn:` records
+        // `tsc_report` parses, whatever the terminal.
+        cmd.arg("-p").arg(&tsconfig).args(["--pretty", "false"]);
+        // Captured in both modes (#3068): a failure is reported as a Bynk
+        // diagnostic where the output parses, else as the raw text, as before.
+        let tsc_ok = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
+            Ok(o) if o.status.success() => true,
+            Ok(o) => {
+                // tsc writes its diagnostics to *stdout*.
+                let mut detail = String::from_utf8_lossy(&o.stdout).into_owned();
+                let err_text = String::from_utf8_lossy(&o.stderr);
+                if !err_text.trim().is_empty() {
+                    if !detail.is_empty() {
+                        detail.push('\n');
                     }
-                    crate::test_stream::print_run(
-                        stream,
-                        &TestRun::runtime_error(
+                    detail.push_str(&err_text);
+                }
+                let failure = crate::tsc_report::diagnose(
+                    &detail,
+                    &output_root,
+                    &out.snapshots,
+                    &out.display_root,
+                );
+                if json {
+                    let run = match &failure {
+                        Some(f) => {
+                            TestRun::codegen_error(crate::project_failure_short_lines(f), detail)
+                        }
+                        None => TestRun::runtime_error(
                             "tsc rejected the generated TypeScript",
                             Some(detail),
                         ),
-                    );
-                    return ExitCode::FAILURE;
-                }
-                Err(e) => {
-                    start_failures.push(start_failure(&path, &e));
-                    continue;
-                }
-            }
-        } else {
-            match cmd
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-            {
-                Ok(s) if s.success() => true,
-                Ok(_) => {
+                    };
+                    crate::test_stream::print_run(stream, &run);
+                } else {
+                    match &failure {
+                        Some(f) => crate::print_project_failure(f),
+                        None => eprint!("{detail}"),
+                    }
                     eprintln!(
                         "{program} test: tsc reported errors against {}",
                         tsconfig.display()
                     );
-                    return ExitCode::FAILURE;
                 }
-                Err(e) => {
-                    start_failures.push(start_failure(&path, &e));
-                    continue;
-                }
+                return ExitCode::FAILURE;
+            }
+            Err(e) => {
+                start_failures.push(start_failure(&path, &e));
+                continue;
             }
         };
         if tsc_ok {
@@ -1118,6 +1123,41 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         );
     }
     ExitCode::FAILURE
+}
+
+/// #3087: the project declares no tests. By default a warning and exit 0 (a
+/// library or a fresh project runs `bynk test` before it has tests); under
+/// `--require-tests` an error, `error.kind == "no_tests"` in JSON, and exit 1.
+fn report_no_tests(
+    program: &str,
+    input: &Path,
+    require_tests: bool,
+    stream: bool,
+    json: bool,
+) -> ExitCode {
+    if json {
+        let run = if require_tests {
+            TestRun::no_tests_error(format!("no tests found in {}", input.display()))
+        } else {
+            empty_run()
+        };
+        crate::test_stream::print_run(stream, &run);
+    } else if require_tests {
+        eprintln!(
+            "{program} test: error: no tests found in {}",
+            input.display()
+        );
+    } else {
+        eprintln!(
+            "{program} test: warning: no tests found in {}",
+            input.display()
+        );
+    }
+    if require_tests {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 /// #3069: the test process outlived `run_timeout` and was killed. Reported as
@@ -1758,5 +1798,113 @@ mod output_within_tests {
             .stderr(Stdio::piped());
         let out = output_within(&mut quick, Some(std::time::Duration::from_secs(30))).unwrap();
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
+    }
+
+    /// #3086: the Windows path of `kill_tree` (`taskkill /T /F`), unrun until a
+    /// Windows machine ran it. A runner whose grandchildren hold the output
+    /// pipes open must still come back `TimedOut` promptly and have its whole
+    /// tree killed. It carries its own outer deadline and prints what it saw, so
+    /// a failure is a diagnosis in the log rather than a hung job.
+    #[cfg(windows)]
+    #[test]
+    fn output_within_kills_a_windows_process_tree() {
+        use std::os::windows::process::CommandExt;
+        use std::time::{Duration, Instant};
+
+        // A count no other test or tool uses, so the survivors are ours alone.
+        const MARK: &str = "-n 37 127.0.0.1";
+
+        fn survivors() -> Result<String, String> {
+            let out = ProcCommand::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_Process -Filter \"Name='ping.exe'\" | \
+                     Where-Object { $_.CommandLine -like '*-n 37 127.0.0.1*' } | \
+                     ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }",
+                ])
+                .output()
+                .map_err(|e| format!("could not run powershell: {e}"))?;
+            if !out.status.success() {
+                return Err(format!(
+                    "powershell failed ({}): {}",
+                    out.status,
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+            }
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+        }
+        fn cleanup() {
+            let _ = ProcCommand::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_Process -Filter \"Name='ping.exe'\" | \
+                     Where-Object { $_.CommandLine -like '*-n 37 127.0.0.1*' } | \
+                     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+                ])
+                .output();
+        }
+
+        // `cmd` runs one ping detached (`start /b`) and waits on another: two
+        // grandchildren that both inherit the pipes `output_within` reads.
+        let mut cmd = ProcCommand::new("cmd");
+        cmd.raw_arg(format!("/c \"start /b ping {MARK} & ping {MARK}\""))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        // Its own deadline: if `output_within` hangs on the held pipes this
+        // test fails with output instead of stalling the merge queue.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            let _ = tx.send(output_within(&mut cmd, Some(Duration::from_millis(500))));
+        });
+        let result = match rx.recv_timeout(Duration::from_secs(60)) {
+            Ok(result) => result,
+            Err(_) => {
+                let seen = survivors();
+                cleanup();
+                panic!(
+                    "output_within did not return within 60s of a 500ms timeout: the \
+                     grandchildren still held the pipes after taskkill. ping processes \
+                     alive: {seen:?}. Switch kill_tree to a Job Object (kill on close)."
+                );
+            }
+        };
+        let elapsed = started.elapsed();
+        let err = match result {
+            Err(e) => e,
+            Ok(out) => {
+                cleanup();
+                panic!("expected a timeout, got status {:?}", out.status);
+            }
+        };
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut, "error: {err}");
+        assert!(
+            elapsed < Duration::from_secs(20),
+            "TimedOut took {elapsed:?}; the pings last about 37s, so the tree was not killed"
+        );
+
+        // The tree is gone: no ping of ours outlives the kill (a short settle
+        // for the OS to reap).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut seen;
+        loop {
+            seen = survivors();
+            if matches!(&seen, Ok(s) if s.is_empty()) || Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        match seen {
+            Ok(s) if s.is_empty() => {}
+            Ok(s) => {
+                cleanup();
+                panic!("taskkill left processes running after the timeout:\n{s}");
+            }
+            // No PowerShell to inspect with: the prompt return above is the check.
+            Err(e) => eprintln!("could not check for survivors ({e}); relying on the timing"),
+        }
     }
 }

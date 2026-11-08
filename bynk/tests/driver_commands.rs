@@ -1046,6 +1046,107 @@ fn compile_runs_in_process_with_an_empty_path() {
     assert!(out.join("calc.ts").exists(), "the module is written");
 }
 
+/// #3054: `bynk build` with no flags writes what `bynk compile . -o out` writes.
+#[test]
+fn build_with_no_flags_matches_compile() {
+    let proj = scratch("build-matches-compile");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (code, _, err) = run_bynk_in(&proj, &["build"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("built bundle -> "), "summary line: {err}");
+    let (code, _, err) = run_bynk_in(&proj, &["compile", ".", "-o", "ref"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        std::fs::read(proj.join("out/calc.ts")).expect("build output"),
+        std::fs::read(proj.join("ref/calc.ts")).expect("compile output"),
+    );
+}
+
+/// #3054: `[build]` supplies `out` and `emit`; a flag overrides it; `compile`
+/// ignores the table.
+#[test]
+fn build_reads_the_build_table_and_flags_override_it() {
+    let proj = scratch("build-table");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\nout = \"dist\"\nemit = \"js\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (code, _, err) = run_bynk_in(&proj, &["build"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(proj.join("dist/calc.js").exists(), "emit = js into dist");
+    let (code, _, err) = run_bynk_in(&proj, &["build", "--emit", "ts", "--out", "other"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(proj.join("other/calc.ts").exists(), "flags beat the table");
+    let (code, _, err) = run_bynk_in(&proj, &["compile", ".", "-o", "ref"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(proj.join("ref/calc.ts").exists(), "compile ignores [build]");
+}
+
+/// #3054: a bad `[build]` is refused and nothing is built.
+#[test]
+fn build_refuses_a_bad_build_table() {
+    #[allow(unused_mut)]
+    let mut cases = vec![
+        ("out = \"../x\"", "inside the project"),
+        ("target = \"lambda\"", "must be one of"),
+        ("outt = \"x\"", "no key named"),
+        ("out = \"src\"", "overlaps the source root"),
+        ("out = \"src/gen\"", "overlaps the source root"),
+        ("out = \"tests\"", "overlaps the source root"),
+    ];
+    // The symlink is only created on unix (unprivileged Windows runners can't
+    // make one), so without it `link` is a plain directory and rightly builds.
+    #[cfg(unix)]
+    cases.push(("out = \"link\"", "inside the project"));
+    for (body, needle) in cases {
+        let proj = scratch("build-bad");
+        write(
+            &proj.join("bynk.toml"),
+            &format!("[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\n{body}\n"),
+        );
+        write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+        write(&proj.join("src/keep.ts"), "// hand-written\n");
+        std::fs::create_dir_all(proj.join("tests")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(std::env::temp_dir(), proj.join("link")).unwrap();
+        let (code, _, err) = run_bynk_in(&proj, &["build"]);
+        assert_ne!(code, 0, "{body}");
+        assert!(proj.join("src/keep.ts").exists(), "{body}: nothing deleted");
+        assert!(err.contains(needle), "{body}: {err}");
+        assert!(!proj.join("out").exists());
+    }
+}
+
+/// #3054 review: `target` and `platform` from `[build]` take effect, and a
+/// `bynk build <dir>` from elsewhere resolves `[build] out` against that project.
+#[test]
+fn build_applies_target_and_resolves_out_against_the_project() {
+    let proj = scratch("build-target");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\nout = \"dist\"\ntarget = \"workers\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let elsewhere = scratch("build-target-cwd");
+    let (code, _, err) = run_bynk_in(&elsewhere, &["build", proj.to_str().unwrap()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("built workers -> "), "{err}");
+    assert!(proj.join("dist").is_dir(), "out is under the project");
+    assert!(!elsewhere.join("dist").exists(), "not under the cwd");
+    assert!(
+        std::fs::read_dir(proj.join("dist"))
+            .unwrap()
+            .next()
+            .is_some(),
+        "something was written"
+    );
+}
+
 /// `bynk test` on a real project discovers
 /// its suites.
 #[test]

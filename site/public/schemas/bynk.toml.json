@@ -4,6 +4,51 @@
   "additionalProperties": false,
   "description": "The Bynk project manifest. Every table and key is optional. Generated from the toolchain's manifest types by `cargo xtask manifest-schema`.",
   "properties": {
+    "build": {
+      "additionalProperties": false,
+      "description": "Defaults for `bynk build`, which takes no flags. A flag overrides its key.\n`bynk compile` and `bynk dev`/`deploy`/`test` do not read this table.",
+      "properties": {
+        "emit": {
+          "default": "ts",
+          "description": "The artefact language: `\"ts\"` (typed TypeScript) or `\"js\"` (types\nstripped). Default: `\"ts\"`.",
+          "enum": [
+            "ts",
+            "js"
+          ],
+          "type": "string"
+        },
+        "out": {
+          "default": "out",
+          "description": "The output directory, relative to the project root. Must stay inside\nthe project. Default: `\"out\"`.",
+          "type": "string"
+        },
+        "platform": {
+          "default": "cloudflare",
+          "description": "The surface binding: `\"cloudflare\"`, `\"node\"` or `\"browser\"` (`bundle`\nonly). Default: `\"cloudflare\"`.",
+          "enum": [
+            "cloudflare",
+            "node",
+            "browser"
+          ],
+          "type": "string"
+        },
+        "target": {
+          "default": "bundle",
+          "description": "The build topology: `\"bundle\"` is one deployment unit, `\"workers\"` one\nCloudflare Worker per context. Default: `\"bundle\"`.",
+          "enum": [
+            "bundle",
+            "workers"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#build"
+        }
+      }
+    },
     "dependencies": {
       "additionalProperties": {
         "additionalProperties": false,

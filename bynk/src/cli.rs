@@ -24,7 +24,9 @@ pub struct Cli {
 pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
-        &["new", "check", "fmt", "test", "compile", "openapi", "token"],
+        &[
+            "new", "check", "fmt", "test", "build", "compile", "openapi", "token",
+        ],
     ),
     (
         "Run and deploy",
@@ -338,11 +340,45 @@ pub enum Command {
         /// reported as usual.
         #[arg(long)]
         fix: bool,
+        /// After a passing check, generate the Workers TypeScript into a
+        /// temporary directory and type-check it with `tsc` (#3068). A failure
+        /// is reported as `bynk.codegen.tsc_failed` at the Bynk source the
+        /// failing line came from: it is a compiler bug. Needs `tsc` (with
+        /// Node.js); slower than a plain check, so off by default. Project
+        /// directories only.
+        #[arg(long)]
+        emit: bool,
         #[command(flatten)]
         lock: LockArgs,
     },
-    /// Compile a project to TypeScript.
+    /// Build a project from its `[build]` settings.
     ///
+    /// Needs no flags: `out`, `target`, `platform` and `emit` come from the
+    /// `[build]` table, else the defaults (`out`, `bundle`, `cloudflare`,
+    /// `ts`), and a flag overrides its key. `build` infers from the project;
+    /// `bynk compile` is told, and never reads `[build]`.
+    Build {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Output directory. Overrides `[build] out`.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Build target. Overrides `[build] target`.
+        #[arg(long, value_enum)]
+        target: Option<bynk_driver::CliTarget>,
+        /// Deploy platform. Overrides `[build] platform`.
+        #[arg(long, value_enum)]
+        platform: Option<bynk_driver::CliPlatform>,
+        /// Artefact language. Overrides `[build] emit`.
+        #[arg(long, value_enum)]
+        emit: Option<bynk_driver::EmitFormat>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Compile a project to TypeScript, settings as flags.
+    ///
+    /// Use `bynk build` for a project that takes its settings from `bynk.toml`.
     /// Runs in-process (#2471, #2998).
     ///
     /// The compiler is linked in. With `--sources-stdin` it compiles unsaved editor buffers:

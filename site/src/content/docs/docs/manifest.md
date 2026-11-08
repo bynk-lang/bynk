@@ -9,7 +9,7 @@ Every section and every key is optional. An omitted section falls back to its
 defaults, and a manifest that lists only `[project]` behaves identically to one
 that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
 (`bynk-fmt`), which both the CLI and the language server read it through;
-`[lsp]` by the language server; `[workers]` by the compiler, for a Workers
+`[lsp]` by the language server; `[build]` by `bynk build`; `[workers]` by the compiler, for a Workers
 build; `[test]` by the test runner, for a run against a deployment.
 
 A project is an **application** (`[project]`) or a shareable **package**
@@ -43,6 +43,12 @@ trailing_comma = true
 [lsp]
 diagnostics_mode = "live"
 diagnostics_debounce_ms = 300
+
+[build]
+out = "out"                 # where `bynk build` writes, relative to the project root
+target = "bundle"           # "bundle" or "workers"
+platform = "cloudflare"     # "cloudflare", "node" or "browser"
+emit = "ts"                 # "ts" or "js"
 
 [workers]
 compatibility_flags = []    # extra Cloudflare flags, after the default
@@ -404,8 +410,8 @@ not a source/test role split. Each path is resolved relative to the project root
 
 A conventional `src/`(+`tests/`) project and a flat project (`.bynk` at the root)
 both need no `[paths]` at all. Any other key is an error, including the legacy
-`src`/`tests` keys and `out`. The output directory comes from the command line
-(`bynk compile -o`), not the manifest.
+`src`/`tests` keys and `out`. The output directory is [`[build] out`](#build),
+or the command line (`bynk compile -o`), not `[paths]`.
 
 ### Path consistency
 
@@ -466,6 +472,25 @@ Language-server settings, consumed by `bynk-lsp`. See the
 |---|---|---|---|
 | `diagnostics_mode` | string | `"live"` | When diagnostics are computed: `"live"` or `"on_save"`. Any value other than `"on_save"` is treated as `"live"`. |
 | `diagnostics_debounce_ms` | integer | `300` | Debounce interval, in milliseconds, for live diagnostics. |
+
+## `[build]`
+
+The defaults `bynk build` takes, so a project builds with no flags. A flag
+overrides its key, and a key you leave out takes the default below.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `out` | string | `"out"` | The output directory, relative to the project root. It must stay inside the project (symlinks resolved), and `bynk build` refuses one that is the root, equals, contains or sits inside a `[paths]` source root, or already holds `.bynk` files, because a build deletes `.ts`, `.js`, `.json` and similar files in its output directory that it did not write. |
+| `target` | `"bundle"` or `"workers"` | `"bundle"` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
+| `platform` | `"cloudflare"`, `"node"` or `"browser"` | `"cloudflare"` | The surface binding (`browser` is `bundle` only). |
+| `emit` | `"ts"` or `"js"` | `"ts"` | `js` writes the same modules with types stripped. |
+
+Only `bynk build` reads this table. `bynk compile` takes every setting from its
+flags, and `bynk dev`, `bynk deploy` and `bynk test` fix their own topology and
+output directory, so editing `[build]` never changes what is deployed or what
+the editor's *Show Compiled Output* view shows. The table describes the
+artefact; how contexts map to deployment units belongs to `[deploy]`, which is
+reserved.
 
 ## `[workers]`
 
