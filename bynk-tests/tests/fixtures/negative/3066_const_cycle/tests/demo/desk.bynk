@@ -1,0 +1,8 @@
+suite demo.desk
+
+const A: Int = B
+const B: Int = A
+
+case "cycle" {
+  expect A == 1
+}

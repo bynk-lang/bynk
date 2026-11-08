@@ -683,10 +683,17 @@ pub(super) fn emit_integration_module(
     // the module's own codec closure over the harness view's types, naming each
     // through the namespace it is imported under (participants, `uses` commons
     // and the owners of reached types). Function declarations hoist.
+    // #3066: a root naming the suite's own type is served by its runner's local
+    // codecs.
+    let suite_type_names: std::collections::HashSet<String> = cases
+        .iter()
+        .flat_map(|c| c.suite_fns.types.iter().map(|t| t.name.name.clone()))
+        .collect();
     let json_codec_roots: Vec<bynk_syntax::ast::TypeRef> = runtime_use
         .take_json_codec_roots()
         .into_iter()
         .filter_map(|ty| bynk_emit::emitter::ty_to_type_ref(ty, tys))
+        .filter(|r| !bynk_emit::emitter::serialisation::root_names_any(r, &suite_type_names))
         .collect();
     if !json_codec_roots.is_empty() {
         let (codec_names, codec_insts) = bynk_emit::emitter::serialisation::collect_codec_closure(

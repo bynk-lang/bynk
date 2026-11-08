@@ -792,10 +792,18 @@ pub(super) fn emit_test_module(
     // effects, type variables) is silently dropped, the same filtering the old
     // push-time conversion already did — moving where the filter runs, not what
     // it filters.
+    // #3066: a root naming a suite's own type is served by that suite's runner
+    // (its codecs are declared inside it), not by this module-level closure.
+    let suite_type_names: HashSet<String> = indices
+        .iter()
+        .filter_map(|&i| parsed[i].test())
+        .flat_map(|d| d.types.iter().map(|t| t.name.name.clone()))
+        .collect();
     let json_codec_roots: Vec<TypeRef> = runtime_use
         .take_json_codec_roots()
         .into_iter()
         .filter_map(|ty| bynk_emit::emitter::ty_to_type_ref(ty, tys))
+        .filter(|r| !bynk_emit::emitter::serialisation::root_names_any(r, &suite_type_names))
         .collect();
     if !json_codec_roots.is_empty() {
         let synthetic = synthetic_typed_commons_for_target(

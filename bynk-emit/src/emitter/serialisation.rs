@@ -4937,3 +4937,14 @@ mod lenient_option_decode_tests {
         at(inner, &super::OPTION_FORMS_SUFFIX.replace('"', "\\\""));
     }
 }
+
+/// #3066: whether a codec root names one of `names` (a suite's own types)
+/// anywhere, through generic arguments. Such a root is served by the suite
+/// runner's own local codecs ([`super::emit::emit_suite_decls`]), not the
+/// module-level closure, which cannot name a type declared inside a runner.
+pub fn root_names_any(root: &TypeRef, names: &std::collections::HashSet<String>) -> bool {
+    !names.is_empty()
+        && super::workers::named_types_in(root)
+            .iter()
+            .any(|n| names.contains(n))
+}
