@@ -178,6 +178,10 @@ layers catch a contract that has moved under it:
 3. **The call.** A call stamped with another hash is refused with `409
    ContractMismatch`, and the callee logs it.
 
+A field added with a default moves the hash too, so a generated client is
+refused until you regenerate it and update its pin, even though a Bynk caller
+would be unaffected (the callee accepts its older hash).
+
 ### Pins
 
 The pins live in `bynk.foreign.toml`, beside `bynk.toml`, checked in. Each
