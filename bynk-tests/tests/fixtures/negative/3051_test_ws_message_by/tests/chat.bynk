@@ -1,0 +1,8 @@
+// #3051: the principal is given at `open`; `message` takes no `by`.
+suite chat {
+  case "a message with a principal" {
+    let tc = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(tc, RoomId.unsafe("r")) by Participant(UserId.unsafe("a"))
+    let _ <- ChatGateway.message(tc, ClientFrame { text: "x" }) by Participant(UserId.unsafe("a"))
+  }
+}

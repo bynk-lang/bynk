@@ -3433,6 +3433,9 @@ fn lower_method_call(
                 _ => None,
             },
             _ if method.name == "call" => Some("call".to_string()),
+            // #3051: a websocket `open` reads its principal as an `on call` or
+            // http handler does.
+            _ if method.name == "open" => Some("open".to_string()),
             _ => None,
         };
         let is_sum = sum_key
@@ -3509,6 +3512,64 @@ fn lower_method_call(
                 let mut all = rest;
                 all.push(deps_expr);
                 return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+            }
+            // #3051: the websocket lifecycle addresses. The `TestConnection`
+            // remembers the route values and `deps` (the principal) from `open`;
+            // `message`/`close` rebuild the handler's argument list from them. The
+            // checker encoded the shape in the callee's address.
+            if let Some(Callee::TestService { address, .. }) = cx.commons().callee(e.id)
+                && let Some(shape) = address.strip_prefix("ws ")
+            {
+                let mut parts = shape.split(' ');
+                let which = parts.next().unwrap_or_default();
+                let nums: Vec<usize> = parts.filter_map(|p| p.parse().ok()).collect();
+                let tc = args
+                    .first()
+                    .map(|a| pre.lower(a, cx))
+                    .unwrap_or_else(|| "undefined".to_string());
+                let svc = &id.name;
+                let call = match which {
+                    "open" => {
+                        let route: Vec<String> =
+                            args[1..].iter().map(|a| pre.lower(a, cx)).collect();
+                        format!(
+                            "((c: any, r: unknown[], d: unknown) => {{ c.route = r; c.deps = d; return ({svc}.open as any)(c, ...r, d); }})({tc}, [{}], {deps_expr})",
+                            route.join(", ")
+                        )
+                    }
+                    "message" => {
+                        let (frame_idx, n) = (
+                            nums.first().copied().unwrap_or(0),
+                            nums.get(1).copied().unwrap_or(1),
+                        );
+                        let frame = args
+                            .get(1)
+                            .map(|a| pre.lower(a, cx))
+                            .unwrap_or_else(|| "undefined".to_string());
+                        let mut k = 0usize;
+                        let list: Vec<String> = (0..n)
+                            .map(|i| {
+                                if i == frame_idx {
+                                    "f".to_string()
+                                } else {
+                                    k += 1;
+                                    format!("o.route[{}]", k - 1)
+                                }
+                            })
+                            .collect();
+                        format!(
+                            "((c: any, f: unknown) => {{ const o = c.opened(); return ({svc}.message as any)(c, {}, o.deps); }})({tc}, {frame})",
+                            list.join(", ")
+                        )
+                    }
+                    _ => {
+                        let n = nums.first().copied().unwrap_or(0);
+                        format!(
+                            "((c: any) => {{ const o = c.opened(); return ({svc}.close as any)(c, ...o.route.slice(0, {n}), o.deps); }})({tc})"
+                        )
+                    }
+                };
+                return pre.finish(settle(call));
             }
             if method.name == "message"
                 && handlers
@@ -3699,6 +3760,16 @@ fn lower_method_call(
                 if let Some(s) = lower_stream_method(recv, method, &a) {
                     return pre.finish(s);
                 }
+            }
+            // #3051: a case's recording `TestConnection[F]`.
+            Ty::TestConnection(_) => {
+                let recv = pre.lower(receiver, cx);
+                let s = match method.name.as_str() {
+                    "sent" => format!("[...({recv}).sent]"),
+                    "closed" => format!("({recv}).closed"),
+                    _ => format!("({recv}).mint()"),
+                };
+                return pre.finish(s);
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
@@ -6943,6 +7014,22 @@ fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCtx) -> Lower
             args_lowered.join(", ")
         ));
     }
+    // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
+    // connection.
+    if let Some(Callee::Intrinsic {
+        ns: "TestConnection",
+        ..
+    }) = cx.commons().callee(e.id)
+    {
+        cx.runtime_use().note_test_connection();
+        let frame = match cx.commons().expr_ty(e.id).as_deref() {
+            Some(Ty::TestConnection(f)) => {
+                bynk_ts::print_type(&crate::emitter::ts_ty_to_ts_type(*f, cx.commons().tys()))
+            }
+            _ => "unknown".to_string(),
+        };
+        return pre.finish(format!("new TestConnection<{frame}>()"));
+    }
     // v0.9: HttpResult variant call.
     //
     // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` instead of
@@ -7500,6 +7587,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::Effect(_)
         | Ty::Query(_)
         | Ty::Stream(_)
+        | Ty::TestConnection(_)
         | Ty::Connection(_) => EqualityLowering::Structural,
     }
 }

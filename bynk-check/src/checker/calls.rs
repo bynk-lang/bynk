@@ -892,6 +892,11 @@ pub(crate) fn check_call(
         }
         return ret;
     }
+    // #3051: `TestConnection[F]()` — a case's recording handle for a websocket
+    // connection.
+    if name.name == "TestConnection" {
+        return check_test_connection_new(type_args, args, span, expr_id, ctx);
+    }
     // v0.20a: explicit type arguments only apply to (generic) functions.
     if !type_args.is_empty() {
         ctx.errors.push(CompileError::new(
@@ -1064,6 +1069,39 @@ pub(crate) fn check_call(
         .with_note("only functions declared in this commons are callable"),
     );
     None
+}
+
+/// #3051: `TestConnection[F]()`. Only a test body can name it (elsewhere the
+/// resolver reports an unknown function, so a program has no way to make a
+/// connection); `F` is the service's `out` frame type.
+fn check_test_connection_new(
+    type_args: &[TypeRef],
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    for a in args {
+        let _ = type_of(a, None, ctx);
+    }
+    if type_args.len() != 1 || !args.is_empty() {
+        ctx.errors.push(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            span,
+            "`TestConnection[F]()` takes the service's `out` frame type as its one type argument and no value arguments",
+        ));
+        return None;
+    }
+    let frame = resolve_type_ref(&type_args[0], &ctx.input.types, tys)?;
+    ctx.callees.insert(
+        expr_id,
+        Callee::Intrinsic {
+            ns: "TestConnection",
+            op: "new".to_string(),
+        },
+    );
+    Some(tys.intern(Ty::TestConnection(frame)))
 }
 
 /// #2620 (DECISIONS A–F): `unreachable(message)` and `todo(message)` take one
@@ -3300,6 +3338,17 @@ pub(crate) fn check_method_call(
             );
             return check_connection_method(method, args, *frame, span, ctx);
         }
+        // #3051: a case's recording `TestConnection[F]`.
+        Ty::TestConnection(frame) => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::Kernel {
+                    recv: recv_ty,
+                    op: method.name.clone(),
+                },
+            );
+            return check_test_connection_method(method, args, *frame, span, ctx);
+        }
         Ty::Map(key, val) => {
             ctx.callees.insert(
                 expr_id,
@@ -4133,6 +4182,12 @@ fn check_test_service_address(
         return handler_outcome(handler, ctx);
     }
 
+    // #3051: `svc.open(tc, …)` / `svc.message(tc, frame)` / `svc.close(tc)` on a
+    // `from websocket` service.
+    if sig.ws_frames.is_some() && matches!(method.name.as_str(), "open" | "message" | "close") {
+        return check_ws_address(sig, id, method, args, expr_id, ctx);
+    }
+
     // `svc.<VERB>("/path", …)` — an http route. The first argument is the route
     // *pattern* (a compile-time-resolved name), the rest are positional path
     // params then the body, matched against the handler's declared params.
@@ -4518,6 +4573,153 @@ fn check_test_service_address(
     None
 }
 
+/// #3051: a `from websocket` service's lifecycle addresses. The first argument
+/// is the case's `TestConnection[out]`; `open` then takes the handler's route
+/// parameters, `message` the decoded inbound frame alone and `close` nothing —
+/// the connection remembers the route values and the principal from `open`, as
+/// the platform recovers them from the socket. The callee's address carries what
+/// the emitter needs: `ws open`, `ws message <frame index> <param count>`,
+/// `ws close <param count>`.
+fn check_ws_address(
+    sig: &TestServiceSig,
+    id: &Ident,
+    method: &Ident,
+    args: &[Expr],
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    use bynk_syntax::ast::HandlerKind;
+    let tys = ctx.tys;
+    let which = method.name.as_str();
+    let (in_ref, out_ref) = sig.ws_frames.clone()?;
+    let handler = sig
+        .handlers
+        .iter()
+        .find(|h| {
+            matches!(
+                (which, &h.kind),
+                ("open", HandlerKind::Open)
+                    | ("message", HandlerKind::Message)
+                    | ("close", HandlerKind::Close)
+            )
+        })
+        .cloned();
+    let service = id.name.clone();
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: service.clone(),
+            address: format!("ws {which}"),
+            extra_headers: false,
+        },
+    );
+    let Some(handler) = handler else {
+        ctx.errors.push(CompileError::new(
+            "bynk.test.service_unknown_route",
+            method.span,
+            format!("`{service}` declares no `on {which}` handler"),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let out_ty = resolve_type_ref(&out_ref, &ctx.input.types, tys)?;
+    let in_ty = resolve_type_ref(&in_ref, &ctx.input.types, tys)?;
+    let tc_ty = tys.intern(Ty::TestConnection(out_ty));
+    let Some(first) = args.first() else {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.test.service_call_arity",
+                method.span,
+                format!(
+                    "`{service}.{which}` takes the case's `TestConnection` as its first argument"
+                ),
+            )
+            .with_note(format!(
+                "build one with `TestConnection[{}]()`",
+                out_ty.display(tys)
+            )),
+        );
+        return None;
+    };
+    check_arg(
+        first,
+        tc_ty,
+        &format!("the connection of `{service}.{which}`"),
+        ctx,
+    );
+    let rest = &args[1..];
+    match which {
+        "open" => {
+            let params = handler.params.clone();
+            check_address_args(&service, "open", &params, rest, method.span, ctx);
+        }
+        "message" => {
+            let frame_idx = handler
+                .params
+                .iter()
+                .position(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, tys) == Some(in_ty))
+                .unwrap_or(0);
+            ctx.callees.insert(
+                expr_id,
+                Callee::TestService {
+                    service: service.clone(),
+                    address: format!("ws message {frame_idx} {}", handler.params.len()),
+                    extra_headers: false,
+                },
+            );
+            if rest.len() != 1 {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.test.service_call_arity",
+                        method.span,
+                        format!(
+                            "`{service}.message` takes the connection and one inbound frame, but {} argument(s) were given",
+                            args.len()
+                        ),
+                    )
+                    .with_note("the route values were given at `open`; the connection remembers them"),
+                );
+                for a in rest {
+                    let _ = type_of(a, None, ctx);
+                }
+            } else {
+                check_arg(
+                    &rest[0],
+                    in_ty,
+                    &format!("the frame of `{service}.message`"),
+                    ctx,
+                );
+            }
+        }
+        _ => {
+            ctx.callees.insert(
+                expr_id,
+                Callee::TestService {
+                    service: service.clone(),
+                    address: format!("ws close {}", handler.params.len()),
+                    extra_headers: false,
+                },
+            );
+            if !rest.is_empty() {
+                ctx.errors.push(CompileError::new(
+                    "bynk.test.service_call_arity",
+                    method.span,
+                    format!(
+                        "`{service}.close` takes only the connection, but {} argument(s) were given",
+                        args.len()
+                    ),
+                ));
+                for a in rest {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+        }
+    }
+    handler_outcome(&handler, ctx)
+}
+
 /// #1934: what a case's call to `handler` yields — its declared return type,
 /// an `Effect[_]` (`bynk.service.return_not_effect`). `None` if the type does
 /// not resolve in the case, which a checked target's handler always does.
@@ -4691,6 +4893,13 @@ fn resolve_test_address<'a>(
             .iter()
             .find(|h| matches!(&h.kind, HandlerKind::Message));
     }
+    // #3051: the websocket `on open` handler.
+    if method == "open" && sig.ws_frames.is_some() {
+        return sig
+            .handlers
+            .iter()
+            .find(|h| matches!(&h.kind, HandlerKind::Open));
+    }
     // #2052: the `on event` handler of a `from Events(E)` service.
     if method == "event" {
         return sig
@@ -4763,6 +4972,27 @@ pub(crate) fn check_effect_let_principal(
         }
         return;
     };
+    // #3051: a connection's principal is established once, at `open`
+    // (#3046): `message` and `close` carry it from there and take no `by`.
+    if sig.ws_frames.is_some() && matches!(method.name.as_str(), "message" | "close") {
+        if let Some(p) = principal {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.ws_lifecycle_by",
+                    p.span,
+                    format!(
+                        "`{}.{}` takes no `by`: the connection's principal was given at `open`",
+                        id.name, method.name
+                    ),
+                )
+                .with_note("open a new `TestConnection` to act as a different principal"),
+            );
+            if let Some(idv) = &p.identity {
+                let _ = type_of(idv, None, ctx);
+            }
+        }
+        return;
+    }
     let Some(handler) = resolve_test_address(&sig, &method.name, args).cloned() else {
         if let Some(p) = principal
             && args.first().is_some_and(|a| is_asset_value(a, ctx))

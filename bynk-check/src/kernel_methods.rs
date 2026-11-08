@@ -420,6 +420,14 @@ pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = &[
     m("has", "has(name: String) -> Bool"),
 ];
 
+/// `TestConnection[F]` (#3051): a case's recording handle for a `from
+/// websocket` connection; a test body only.
+pub const TEST_CONNECTION_METHODS: &[KernelMethod] = &[
+    m("sent", "sent() -> List[F]"),
+    m("closed", "closed() -> Bool"),
+    m("connection", "connection() -> Connection[F]"),
+];
+
 /// Every method table above, by the type a user writes. The one enumerable
 /// registry (read by the wasm `bynk_reference`); a test pins it against the
 /// `pub const *_METHODS` declarations, so a new table cannot be left out.
@@ -442,6 +450,7 @@ pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
     ("RequestHeaders", REQUEST_HEADERS_METHODS),
     ("RequestQuery", REQUEST_QUERY_METHODS),
     ("TokenClaims", TOKEN_CLAIMS_METHODS),
+    ("TestConnection", TEST_CONNECTION_METHODS),
 ];
 
 /// The value methods of a receiver type, or `&[]` for a type with no kernel
@@ -459,6 +468,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
         Ty::RequestQuery => REQUEST_QUERY_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
+        Ty::TestConnection(_) => TEST_CONNECTION_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,
         Ty::Set(_) => SET_METHODS,
