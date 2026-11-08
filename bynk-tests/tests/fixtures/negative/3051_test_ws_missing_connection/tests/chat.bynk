@@ -1,0 +1,6 @@
+// #3051: every websocket address takes the case's `TestConnection` first.
+suite chat {
+  case "open without a connection" {
+    let _ <- ChatGateway.open() by Participant(UserId.unsafe("a"))
+  }
+}

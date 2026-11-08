@@ -1297,6 +1297,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                 let top = matches!(
                     &*tys.get(operand),
                     Ty::Stream(_)
+                        | Ty::TestConnection(_)
                         | Ty::Connection(_)
                         | Ty::Fn { .. }
                         | Ty::Effect(_)

@@ -266,6 +266,21 @@ impl DeployLock {
             .is_some_and(|record| record.deployed)
     }
 
+    /// #3073: the Workers this ledger records as pushed in `environment`, by
+    /// logical name, sorted.
+    pub(crate) fn deployed_workers(&self, environment: &str) -> Vec<String> {
+        self.environments
+            .get(environment)
+            .map(|env| {
+                env.workers
+                    .iter()
+                    .filter(|(_, record)| record.deployed)
+                    .map(|(name, _)| name.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// State-migrations S4 (#2259): every environment this ledger records
     /// `worker` as pushed in, sorted. A floor-raising `bynk migrate sweep`
     /// must cover all of them.

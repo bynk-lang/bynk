@@ -388,6 +388,12 @@ pub enum Ty {
     /// non-boundary, non-comparable; storable only in `Cell[Option[Connection]]`
     /// / `Map[K, Connection]`.
     Connection(TyId),
+    /// `TestConnection[F]` (#3051) — a case-scoped recording handle for a
+    /// `from websocket` service's connection. Not held: a case reads what the
+    /// server sent (`.sent()`, `.closed()`) and mints the owned `Connection[F]`
+    /// an agent receives (`.connection()`). Suite-only; nameable only by the
+    /// `TestConnection[F]()` constructor call.
+    TestConnection(TyId),
     /// `ValidationError` — built-in error type.
     ValidationError,
     /// `JsonError` — built-in JSON-decode error type (v0.22b). A uniform
@@ -481,6 +487,7 @@ impl Ty {
             Ty::Query(t) => format!("Query[{}]", types.display(*t)),
             Ty::Stream(t) => format!("Stream[{}]", types.display(*t)),
             Ty::Connection(t) => format!("Connection[{}]", types.display(*t)),
+            Ty::TestConnection(t) => format!("TestConnection[{}]", types.display(*t)),
             Ty::ValidationError => "ValidationError".to_string(),
             Ty::JsonError => "JsonError".to_string(),
             Ty::Unit => "()".to_string(),
@@ -2829,6 +2836,9 @@ pub struct TestServiceSig {
     /// default envelope names; `Err` lists the candidates when there is no
     /// unique one. `None` for any other protocol.
     pub event_publisher: Option<Result<String, Vec<String>>>,
+    /// #3051: for a `from websocket(in: I, out: O)` service, `(I, O)`, so the
+    /// `open`/`message`/`close` addresses type a frame and the `TestConnection`.
+    pub ws_frames: Option<(bynk_syntax::ast::TypeRef, bynk_syntax::ast::TypeRef)>,
 }
 
 /// One service handler, as a test body sees it (v0.178 / v0.182).
@@ -3306,6 +3316,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         Ty::Query(a) => Ty::Query(substitute(*a, subst, tys)),
         Ty::Stream(a) => Ty::Stream(substitute(*a, subst, tys)),
         Ty::Connection(a) => Ty::Connection(substitute(*a, subst, tys)),
+        Ty::TestConnection(a) => Ty::TestConnection(substitute(*a, subst, tys)),
         Ty::Map(k, v) => Ty::Map(substitute(*k, subst, tys), substitute(*v, subst, tys)),
         Ty::Fn { params, ret } => Ty::Fn {
             params: params.iter().map(|p| substitute(*p, subst, tys)).collect(),
@@ -3358,6 +3369,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::Set(a)
         | Ty::Query(a)
         | Ty::Stream(a)
+        | Ty::TestConnection(a)
         | Ty::Connection(a) => contains_var(*a, tys),
         Ty::Fn { params, ret } => {
             params.iter().any(|p| contains_var(*p, tys)) || contains_var(*ret, tys)
@@ -3403,6 +3415,9 @@ fn merge_open(a: TyId, b: TyId, rigid: &HashSet<String>, tys: &Types) -> Option<
         (Ty::Stream(x), Ty::Stream(y)) => Ty::Stream(merge_open(x, y, rigid, tys)?),
         (Ty::Query(x), Ty::Query(y)) => Ty::Query(merge_open(x, y, rigid, tys)?),
         (Ty::Connection(x), Ty::Connection(y)) => Ty::Connection(merge_open(x, y, rigid, tys)?),
+        (Ty::TestConnection(x), Ty::TestConnection(y)) => {
+            Ty::TestConnection(merge_open(x, y, rigid, tys)?)
+        }
         (Ty::HttpOutcome(x), Ty::HttpOutcome(y)) => Ty::HttpOutcome(merge_open(x, y, rigid, tys)?),
         (
             Ty::Fn {
@@ -3474,6 +3489,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::Set(a)
         | Ty::Query(a)
         | Ty::Stream(a)
+        | Ty::TestConnection(a)
         | Ty::Connection(a) => contains_flexible_var(*a, rigid, tys),
         Ty::Fn { params, ret } => {
             params.iter().any(|p| contains_flexible_var(*p, rigid, tys))
@@ -3538,7 +3554,8 @@ pub(crate) fn unify(
         | (Ty::Set(a1), Ty::Set(a2))
         | (Ty::Query(a1), Ty::Query(a2))
         | (Ty::Stream(a1), Ty::Stream(a2))
-        | (Ty::Connection(a1), Ty::Connection(a2)) => unify(*a1, *a2, subst, tys),
+        | (Ty::Connection(a1), Ty::Connection(a2))
+        | (Ty::TestConnection(a1), Ty::TestConnection(a2)) => unify(*a1, *a2, subst, tys),
         (
             Ty::Fn {
                 params: p1,
@@ -3592,6 +3609,7 @@ pub(crate) fn unify(
             | Ty::Map(..)
             | Ty::Query(_)
             | Ty::Stream(_)
+            | Ty::TestConnection(_)
             | Ty::Connection(_)
             | Ty::ValidationError
             | Ty::JsonError
@@ -3943,6 +3961,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         // governs the move). Held values have identity, not value-equality, so
         // they are not `==`-comparable (guarded in the `Eq`/`NotEq` arm).
         (Ty::Connection(a), Ty::Connection(b)) => compatible(*a, *b, tys),
+        (Ty::TestConnection(a), Ty::TestConnection(b)) => compatible(*a, *b, tys),
         (Ty::Map(k1, v1), Ty::Map(k2, v2)) => k1 == k2 && compatible(*v1, *v2, tys),
         (Ty::QueueResult, Ty::QueueResult) | (Ty::BoundaryRejection, Ty::BoundaryRejection) => true,
         (Ty::Asset, Ty::Asset) => true,
@@ -3992,6 +4011,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::Map(..)
             | Ty::Query(_)
             | Ty::Stream(_)
+            | Ty::TestConnection(_)
             | Ty::Connection(_)
             | Ty::ValidationError
             | Ty::JsonError
@@ -4099,6 +4119,7 @@ pub(crate) fn contains_never(t: TyId, tys: &Types) -> bool {
         | Ty::Set(a)
         | Ty::Query(a)
         | Ty::Stream(a)
+        | Ty::TestConnection(a)
         | Ty::Connection(a) => contains_never(*a, tys),
         Ty::Fn { params, ret } => {
             params.iter().any(|p| contains_never(*p, tys)) || contains_never(*ret, tys)
@@ -5527,6 +5548,11 @@ pub(crate) fn rebrand_return_type(
         Ty::Query(t) => tys.intern(Ty::Query(rebrand_return_type(*t, caller_types, tys))),
         Ty::Stream(t) => tys.intern(Ty::Stream(rebrand_return_type(*t, caller_types, tys))),
         Ty::Connection(t) => tys.intern(Ty::Connection(rebrand_return_type(*t, caller_types, tys))),
+        Ty::TestConnection(t) => tys.intern(Ty::TestConnection(rebrand_return_type(
+            *t,
+            caller_types,
+            tys,
+        ))),
         Ty::Map(k, v) => tys.intern(Ty::Map(
             rebrand_return_type(*k, caller_types, tys),
             rebrand_return_type(*v, caller_types, tys),
@@ -5866,6 +5892,7 @@ fn structurally_compatible_inner(
             | Ty::Map(..)
             | Ty::Query(_)
             | Ty::Stream(_)
+            | Ty::TestConnection(_)
             | Ty::Connection(_)
             | Ty::ValidationError
             | Ty::JsonError

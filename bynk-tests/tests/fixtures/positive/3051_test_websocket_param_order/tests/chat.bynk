@@ -1,0 +1,18 @@
+// #3051: the address rebuilds the handler's arguments by position. Here `on
+// message` has its frame first and `on close` takes fewer route values than `on
+// open`, so a wrong index or slice would hand a handler the wrong value.
+suite chat {
+  case "message and close recover the right route values" {
+    let a = TestConnection[ServerFrame]()
+    let b = TestConnection[ServerFrame]()
+    let room = RoomId.unsafe("r1")
+    let _ <- ChatGateway.open(a, room, "news") by Participant(UserId.unsafe("alice"))
+    let _ <- ChatGateway.open(b, room, "news") by Participant(UserId.unsafe("bob"))
+    let _ <- ChatGateway.message(a, ClientFrame { text: "hi" })
+    expect b.sent() == [ServerFrame { text: "welcome to news" }, ServerFrame { text: "news: hi" }]
+    let _ <- ChatGateway.close(b)
+    let _ <- ChatGateway.message(a, ClientFrame { text: "again" })
+    expect b.sent().length() == 2
+    expect a.sent().length() == 3
+  }
+}

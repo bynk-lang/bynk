@@ -211,8 +211,14 @@ pub fn print_run(stream: bool, run: &TestRun) {
     } else {
         run.render()
     };
+    print_text(&text);
+}
+
+/// Print `text` to stdout, or to the [`capture`] in force (#3069: a finished
+/// `--format json` run is read back in process by `--mutate`).
+pub fn print_text(text: &str) {
     CAPTURE.with(|c| match c.borrow_mut().as_mut() {
-        Some(buf) => buf.push_str(&text),
+        Some(buf) => buf.push_str(text),
         None => print!("{text}"),
     });
 }

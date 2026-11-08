@@ -359,6 +359,8 @@ mod system {
     mod malformed_project_config_behaviour;
     #[path = "multi_actor_sum.rs"]
     mod multi_actor_sum;
+    #[path = "mutate_behaviour.rs"]
+    mod mutate_behaviour;
     #[path = "observation_behaviour.rs"]
     mod observation_behaviour;
     #[path = "oidc_auth.rs"]

@@ -124,6 +124,8 @@ pub struct RuntimeUse {
     request_query_search: Cell<bool>,
     /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
     token_claims: Cell<bool>,
+    /// #3051: the module builds a `TestConnection` (`TestConnection[F]()`).
+    test_connection: Cell<bool>,
     /// #1652: the module references `__bynkEq` (structural `==`).
     eq: Cell<bool>,
     /// #1657: the module references the `Int` domain traps (`__bynkIntDiv`,
@@ -285,6 +287,16 @@ impl RuntimeUse {
     /// Whether `__requestQuerySearch` must be imported (#2854).
     pub fn request_query_search(&self) -> bool {
         self.request_query_search.get()
+    }
+
+    /// Record that the module builds a `TestConnection` (#3051).
+    pub fn note_test_connection(&self) {
+        self.test_connection.set(true);
+    }
+
+    /// Whether the module builds a `TestConnection` (#3051).
+    pub fn test_connection(&self) -> bool {
+        self.test_connection.get()
     }
 
     /// Record that the module builds a `TokenClaims` value (#2380).

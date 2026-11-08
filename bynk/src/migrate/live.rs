@@ -85,7 +85,7 @@ pub(crate) struct Rest {
 }
 
 impl Rest {
-    fn get(&self, path: &str) -> Result<serde_json::Value, String> {
+    pub(crate) fn get(&self, path: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
         let mut response = self
             .agent
@@ -109,6 +109,45 @@ impl Rest {
                 .map(serde_json::Value::to_string)
                 .unwrap_or_default();
             return Err(format!("GET {path}: Cloudflare answered {status} {errors}"));
+        }
+        Ok(body)
+    }
+}
+
+impl Rest {
+    /// A `POST` with a JSON body, answered as [`Rest::get`] is (#3073: the D1
+    /// query that reads a database's applied migrations).
+    pub(crate) fn post(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
+        let mut response = self
+            .agent
+            .post(&url)
+            .header(
+                "Authorization",
+                &format!("Bearer {}", self.credentials.token),
+            )
+            .header("Content-Type", "application/json")
+            .send(body.to_string())
+            .map_err(|e| format!("POST {path}: {e}"))?;
+        let status = response.status().as_u16();
+        let text = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| format!("POST {path}: {e}"))?;
+        let body: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("POST {path}: unreadable answer ({e})"))?;
+        if status != 200 || body.get("success") != Some(&serde_json::Value::Bool(true)) {
+            let errors = body
+                .get("errors")
+                .map(serde_json::Value::to_string)
+                .unwrap_or_default();
+            return Err(format!(
+                "POST {path}: Cloudflare answered {status} {errors}"
+            ));
         }
         Ok(body)
     }
