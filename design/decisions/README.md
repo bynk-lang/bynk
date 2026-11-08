@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0748](0748-schema-lock-variant-additive.md) | **A sum variant added inside stored agent state is additive** (v0.513) — The lock accepts a new variant, bumping the class version; removal and rename stay refused | Accepted (v0.513) |
 | [0747](0747-codeql-over-emitted-typescript.md) | **CodeQL scans the emitted Workers TypeScript nightly, with Bynk's own models and canaries** (v0.512.11) — QL models of the Worker request + Location header, proved by canaries; out of band, never a gate | Accepted (v0.512.11) |
 | [0746](0746-ws-lifecycle-by-matches-open.md) | **A WebSocket `on message`/`on close` `by` names the same actors as `on open`** (v0.512.8) — The connection's principal is verified once at `on open` and carried; lifecycle handlers must name the same single actor or sum members | Accepted (v0.512.8) |
 | [0745](0745-json-encode-plain.md) | **`Json.encodePlain` writes the plain JSON form of `Option`** (v0.512) — A separate intrinsic, `Option` only, reusing the plain-route ambiguity rule, concrete types only | Accepted (v0.512) |

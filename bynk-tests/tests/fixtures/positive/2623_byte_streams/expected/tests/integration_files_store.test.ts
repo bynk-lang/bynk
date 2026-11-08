@@ -98,13 +98,13 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
 
-async function test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Ok() {
+async function test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Raw() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_files_Param_key("wire", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1103, 1113, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1104, 1118, "expect r is Raw(_, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -120,7 +120,7 @@ async function test_a_nested_stream_carrying_record_streams_too() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_shelves_Param_name("kept", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:46:10", 1237, 1247, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/store.bynk:46:10", 1242, 1256, "expect r is Raw(_, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -144,14 +144,14 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a RawStreamed body arrives over HTTP, read back as Ok", "a nested stream-carrying record streams too"];
+export const __bynkCases: readonly string[] = ["a RawStreamed body arrives over HTTP, read back as Raw", "a nested stream-carrying record streams too"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a RawStreamed body arrives over HTTP, read back as Ok")) {
+  if (want("a RawStreamed body arrives over HTTP, read back as Raw")) {
     const started = __bynkCaseNow();
-    const r = { name: "a RawStreamed body arrives over HTTP, read back as Ok", ...(await test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Ok()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "a RawStreamed body arrives over HTTP, read back as Raw", ...(await test_a_RawStreamed_body_arrives_over_HTTP__read_back_as_Raw()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

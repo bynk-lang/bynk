@@ -216,8 +216,12 @@ suite ci.release {
 ```
 
 Each line is a string claim. Only an `Oidc` actor's principal takes claims
-(`bynk.test.principal_claims_not_oidc`). A `system` case doesn't sign `Oidc`
-tokens; drive the real seam with a fake issuer through the actor's `trustFrom`.
+(`bynk.test.principal_claims_not_oidc`). A `system` case mints the token itself:
+the [driver is the issuer](#failure-principals), signing a token whose `sub` is
+the identity and whose claims are those lines, and the Worker's real seam
+verifies it. There the claims must be written as a literal `TokenClaims.of([…])`
+in the principal (`bynk.test.system_claims_need_literal`), because the driver
+writes the lines into the token.
 
 ### Sending request headers — `RequestHeaders.of` {#request-headers}
 
@@ -513,7 +517,7 @@ segment only: on a queue, cron, `on call` or event address it is
 `bynk.test.wire_http_only`, and a queue message is passed as a typed value. No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
-### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale` and `by Expired` {#failure-principals}
+### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer` and `by WrongAudience` {#failure-principals}
 
 `by User("bob")` presents a valid, framework-signed credential the real seam
 verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
@@ -535,16 +539,18 @@ the bytes it sends (the serialised JSON of a typed call, the raw string of a
 [`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
 `system` nothing changes: the handler runs in process and the seam is skipped.
 
-Four reserved principals drive the failures. Each yields the same
+Six reserved principals drive the failures. Each yields the same
 [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
 `Rejected(Unauthorized)`:
 
 | Principal | What the `system` driver sends | Legal on |
 |---|---|---|
-| `by Nobody` | no credential: no `Authorization` header, or no signature headers | a route with a Bearer or `Signature` actor |
-| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold | a route with a `Signature` or Bearer actor |
+| `by Nobody` | no credential: no `Authorization` header, or no signature headers | a route with a Bearer, `Oidc` or `Signature` actor |
+| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish | a route with a `Signature`, Bearer or `Oidc` actor |
 | `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
-| `by Expired` | a Bearer token with a valid `sub`, correctly signed, whose `exp` is one hour before the test clock | a route with a Bearer actor |
+| `by Expired` | a Bearer or `Oidc` token with a valid `sub`, correctly signed, whose `exp` is one hour before the test clock | a route with a Bearer or `Oidc` actor |
+| `by WrongIssuer` | an `Oidc` token correctly signed and unexpired, whose `iss` is not the actor's issuer | a route with an `Oidc` actor |
+| `by WrongAudience` | an `Oidc` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor |
 
 On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
 member: `by Forged` and `by Stale` sign as the sum's first `Signature` member,
@@ -553,11 +559,12 @@ for its first Bearer member. A sum that admits `Visitor` (`by who: Processor |
 Visitor`) never answers `401`: a request with a missing or bad credential
 resolves as `Visitor`. So none of the four is legal there.
 
-All four are `system`-tier only: below it the seam is skipped and the identity
+All six are `system`-tier only: below it the seam is skipped and the identity
 is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
-`by Expired` on any other route is `bynk.test.expired_needs_bearer_route`. An
-`Oidc` route has no forged or expired token to send yet, since the driver holds
-no test key pair for its JWKS.
+`by Expired` on any other route is `bynk.test.expired_needs_bearer_route`, and
+`by WrongIssuer` or `by WrongAudience` on a route with no `Oidc` actor is
+`bynk.test.wrong_issuer_needs_oidc_route` or
+`bynk.test.wrong_audience_needs_oidc_route`.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {
@@ -574,15 +581,54 @@ case "unsigned, forged and stale notices are refused" as system {
 They name no actor and present no identity (`by Nobody(...)` is an error).
 They are meaningful only at `system`, where the real seam exists:
 `bynk.test.credential_needs_system` for `Nobody`, `bynk.test.forged_needs_system`
-for `Forged` and `Stale`. `Forged` or `Stale` on a route with no `Signature`
-actor is `bynk.test.forged_needs_signature_route`, and `Stale` on an actor with
+for `Forged` and `Stale`. `Forged` on a route with no `Signature`, Bearer or `Oidc`
+actor, or `Stale` on one with no `Signature` actor, is `bynk.test.forged_needs_signature_route`, and `Stale` on an actor with
 no `timestamp` and `tolerance` is `bynk.test.stale_needs_timestamp`.
 
-The `system` driver has no token issuer for an `Oidc` actor yet, so a `system`
-case can't call a route an `Oidc` actor secures
-(`bynk.test.oidc_needs_in_process`): the request would reach the seam without a
-credential and could only be refused. Call it from a `unit` or `integration`
-case, where the handler runs in process.
+#### An `Oidc` route: the driver is the issuer {#oidc-issuer}
+
+A route an [`Oidc` actor](/book/reference/actors/#reading-claims) guards needs no
+fake issuer of your own. At `system` the driver generates a key pair for the
+test process, answers the Worker's JWKS fetch for the actor's `jwks` URL with it,
+and mints the token a call presents: `by Workload("wid", TokenClaims.of([…]))`
+sends a valid one (`iss` and `aud` the actor's, `sub` `"wid"`, the claim lines as
+string claims), and the four failure principals above send one the seam must
+refuse. The Worker is the unmodified emitted one: the key pair, the JWKS answer
+and the minting exist only in the test module, and nothing in the deployed
+Worker trusts them. Other requests, including any other `fetch` the code makes,
+go to the real network.
+
+```bynk,fragment
+suite ci.release as system {
+  case "a trusted workflow's token is admitted" {
+    let r <- api.POST("/release", Release { tag: "v1" })
+              by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+    expect r is Ok(_)
+  }
+
+  case "tokens the seam must refuse are refused" {
+    let forged   <- api.POST("/release", Release { tag: "v1" }) by Forged
+    let expired  <- api.POST("/release", Release { tag: "v1" }) by Expired
+    let wrongIss <- api.POST("/release", Release { tag: "v1" }) by WrongIssuer
+    let wrongAud <- api.POST("/release", Release { tag: "v1" }) by WrongAudience
+    expect forged   is Rejected(Unauthorized)
+    expect expired  is Rejected(Unauthorized)
+    expect wrongIss is Rejected(Unauthorized)
+    expect wrongAud is Rejected(Unauthorized)
+  }
+}
+```
+
+If the actor declares [`trustFrom`](/book/reference/actors/#trust-roots-from-the-environment)
+and the suite's [`env`](#env) sets that variable, the driver mints for, and
+answers the JWKS URL of, the roots the variable names, exactly as the seam reads
+them. A malformed value fails the case, as the seam refuses every request.
+
+The key is ES256 (the seam accepts RS256 as well; its RS256 path is covered by
+the compiler's own tests). Against a [remote target](/book/reference/testing/)
+the deployed Worker fetches its own JWKS, which the driver cannot answer, so a
+call that mints an `Oidc` token fails with a message saying so; `by Nobody` still
+works there.
 
 ### Testing the wrong method — the `405` fall-through
 

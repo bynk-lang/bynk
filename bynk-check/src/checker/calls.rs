@@ -4769,9 +4769,14 @@ fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> Co
 
 /// #2135, #2864: whether `name` is a reserved bad-credential principal —
 /// `Forged` (a wrong secret), `Stale` (a timestamp past the tolerance) or
-/// `Expired` (a Bearer token whose `exp` has passed).
+/// `Expired` (a Bearer or `Oidc` token whose `exp` has passed), or (#3052)
+/// `WrongIssuer` / `WrongAudience` (an `Oidc` token for another issuer or
+/// audience).
 pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
-    matches!(name, "Forged" | "Stale" | "Expired")
+    matches!(
+        name,
+        "Forged" | "Stale" | "Expired" | "WrongIssuer" | "WrongAudience"
+    )
 }
 
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
@@ -5060,7 +5065,7 @@ pub(crate) fn check_effect_let_principal(
         // (#2135) Signature-secured route — the no-auth driver leaves out the
         // `Authorization` header the Bearer seam checks, or the signature
         // headers the Signature seam checks. On an unsecured
-        // (`Visitor`/`None`) or `Oidc` route there is no such seam to reject a
+        // (`Visitor`/`None`) route there is no such seam to reject a
         // missing credential, so reject it here rather than emit a call to a
         // driver that was never generated.
         // #2155: an actor sum is secured when a member is.
@@ -5075,7 +5080,7 @@ pub(crate) fn check_effect_let_principal(
                 "`by Nobody` drives the auth seam to a `401`, but this handler's route has no seam that refuses a missing credential",
             )
             .with_note(
-                "use `by Nobody` only on a route guarded by a `Bearer` or `Signature` actor; a public (`Visitor`) route has no seam to test",
+                "use `by Nobody` only on a route guarded by a `Bearer`, `Oidc` or `Signature` actor; a public (`Visitor`) route has no seam to test",
             );
             ctx.errors.push(with_open_sum_note(err, &handler, ctx));
         }
@@ -5106,31 +5111,53 @@ pub(crate) fn check_effect_let_principal(
             by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
         let bearer =
             by.is_some_and(|by| crate::actors::route_has_bearer_seam(by, &ctx.test_actors));
+        // #3052: an `Oidc` route's seam refuses a bad token too.
+        let oidc = by.is_some_and(|by| crate::actors::by_clause_is_oidc(by, &ctx.test_actors));
         match (name, sig_seam) {
-            ("Expired", _) if !bearer => {
+            ("Expired", _) if !bearer && !oidc => {
                 let err = CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,
-                    "`by Expired` sends an expired token to a `Bearer` seam, but this handler's route has no `Bearer` seam that refuses one",
+                    "`by Expired` sends an expired token to a `Bearer` or `Oidc` seam, but this handler's route has no such seam that refuses one",
                 )
                 .with_note(
-                    "use `by Expired` on a route guarded by a `Bearer` actor; on a `Signature` route, `by Stale` sends a stale signature",
+                    "use `by Expired` on a route guarded by a `Bearer` or `Oidc` actor; on a `Signature` route, `by Stale` sends a stale signature",
                 );
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             ("Expired", _) => {}
-            ("Forged" | "Stale", None) if !(name == "Forged" && bearer) => {
+            ("WrongIssuer" | "WrongAudience", _) if !oidc => {
+                let (code, what) = if name == "WrongIssuer" {
+                    ("bynk.test.wrong_issuer_needs_oidc_route", "issuer")
+                } else {
+                    ("bynk.test.wrong_audience_needs_oidc_route", "audience")
+                };
+                ctx.errors.push(
+                    CompileError::new(
+                        code,
+                        p.span,
+                        format!(
+                            "`by {name}` sends a token for another {what} to an `Oidc` seam, but this handler's route has no `Oidc` seam that checks it"
+                        ),
+                    )
+                    .with_note(format!(
+                        "use `by {name}` on a route guarded by an `Oidc` actor; a `Bearer` token has no {what} to check"
+                    )),
+                );
+            }
+            ("WrongIssuer" | "WrongAudience", _) => {}
+            ("Forged" | "Stale", None) if !(name == "Forged" && (bearer || oidc)) => {
                 let err = CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
                     if name == "Forged" {
-                        "`by Forged` sends a bad credential to a `Signature` or `Bearer` seam, but this handler's route has neither seam to refuse one".to_string()
+                        "`by Forged` sends a bad credential to a `Signature`, `Bearer` or `Oidc` seam, but this handler's route has none of these seams to refuse one".to_string()
                     } else {
                         "`by Stale` sends a stale signature to a `Signature` seam, but this handler's route has no `Signature` seam that refuses one".to_string()
                     },
                 )
                 .with_note(
-                    "use `by Forged` on a route guarded by a `Signature` or `Bearer` actor, and `by Stale` on a `Signature` one; `by Nobody` drives either seam to a `401`",
+                    "use `by Forged` on a route guarded by a `Signature`, `Bearer` or `Oidc` actor, and `by Stale` on a `Signature` one; `by Nobody` drives any of them to a `401`",
                 );
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
@@ -5398,16 +5425,28 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,
-                    "`by Expired` sends an expired token to a `Bearer` seam, but this address reaches no `Bearer`-secured http route",
+                    "`by Expired` sends an expired token to a `Bearer` or `Oidc` seam, but this address reaches no `Bearer`- or `Oidc`-secured http route",
                 )
-                .with_note("use `by Expired` on an http route guarded by a `Bearer` actor")
+                .with_note("use `by Expired` on an http route guarded by a `Bearer` or `Oidc` actor")
+            } else if name == "WrongIssuer" || name == "WrongAudience" {
+                let (code, what) = if name == "WrongIssuer" {
+                    ("bynk.test.wrong_issuer_needs_oidc_route", "issuer")
+                } else {
+                    ("bynk.test.wrong_audience_needs_oidc_route", "audience")
+                };
+                CompileError::new(
+                    code,
+                    p.span,
+                    format!("`by {name}` sends a token for another {what} to an `Oidc` seam, but this address reaches no `Oidc`-secured http route"),
+                )
+                .with_note(format!("use `by {name}` on an http route guarded by an `Oidc` actor"))
             } else {
                 CompileError::new(
                     "bynk.test.forged_needs_signature_route",
                     p.span,
-                    format!("`by {name}` sends a bad credential to a `Signature` or `Bearer` seam, but this address reaches no `Signature`- or `Bearer`-secured http route"),
+                    format!("`by {name}` sends a bad credential to a `Signature`, `Bearer` or `Oidc` seam, but this address reaches no `Signature`-, `Bearer`- or `Oidc`-secured http route"),
                 )
-                .with_note("use `by Forged` on an http route guarded by a `Signature` or `Bearer` actor, and `by Stale` on a `Signature` one")
+                .with_note("use `by Forged` on an http route guarded by a `Signature`, `Bearer` or `Oidc` actor, and `by Stale` on a `Signature` one")
             };
             ctx.errors.push(err);
             if let Some(id) = &p.identity {

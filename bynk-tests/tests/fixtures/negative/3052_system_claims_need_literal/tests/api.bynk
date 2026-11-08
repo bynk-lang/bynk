@@ -1,0 +1,7 @@
+suite pay.api as system {
+	case "claims held in a let" {
+		let c = TokenClaims.of(["repository: acme/money"])
+		let r <- api.GET("/who") by Workload("wid", c)
+		expect r is Ok("wid")
+	}
+}

@@ -2913,7 +2913,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.expired_needs_bearer_route",
-        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum); it sends a correctly signed token whose `exp` has passed, so only a `Bearer` seam can refuse it.",
+        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it.",
         &["case"],
     ),
     dg(
@@ -2923,27 +2923,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.faults_needs_in_process",
-        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale` or `by Expired`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
+        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer` or `by WrongAudience`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(
         "bynk.test.forged_needs_signature_route",
-        "A case drives `by Forged` at an address that is not an http route with a `Signature` or `Bearer` actor, or `by Stale` at one with no `Signature` actor (alone, or as a member of an actor sum); they send a bad credential, so only a `Signature` or `Bearer` seam can refuse them.",
+        "A case drives `by Forged` at an address that is not an http route with a `Signature`, `Bearer` or `Oidc` actor, or `by Stale` at one with no `Signature` actor (alone, or as a member of an actor sum); they send a bad credential, so only a `Signature`, `Bearer` or `Oidc` seam can refuse them.",
         &["case"],
     ),
     dg(
         "bynk.test.forged_needs_system",
-        "A case drives `by Forged`, `by Stale` or `by Expired` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature` or `Bearer` seam see the bad credential.",
+        "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer` or `by WrongAudience` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
         &["case"],
     ),
     dg(
         "bynk.test.nobody_needs_secured_route",
-        "A case drives `by Nobody` at a route with no Bearer or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
-        &["case"],
-    ),
-    dg(
-        "bynk.test.oidc_needs_in_process",
-        "A `system`-tier case calls an http route whose actor is `Oidc`-secured; the `system` driver has no token issuer yet, so the request without a token could only be refused with a `401`, and the call belongs at `unit` or `integration`.",
+        "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
         &["case"],
     ),
     d(
@@ -3061,6 +3056,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.system_claims_need_literal",
+        "A `system`-tier case passes token claims to a call-site principal other than as a literal `TokenClaims.of([…])`; the driver mints the `Oidc` token's claims from those lines, which a `TokenClaims` value does not expose.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.unknown_actor",
         "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor.",
         &["case"],
@@ -3073,6 +3073,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.wire_needs_system",
         "A `Wire(...)` raw argument is used outside a `system`-tier service address; `Wire` hands pre-validation input to the boundary and is meaningless at `unit` or in any other position.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.wrong_audience_needs_oidc_route",
+        "A case drives `by WrongAudience` at an address that is not an http route with an `Oidc` actor; it sends a correctly signed token whose `aud` is not the actor's, so only an `Oidc` seam can refuse it.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.wrong_issuer_needs_oidc_route",
+        "A case drives `by WrongIssuer` at an address that is not an http route with an `Oidc` actor; it sends a correctly signed token whose `iss` is not the actor's, so only an `Oidc` seam can refuse it.",
         &["case"],
     ),
     dg(

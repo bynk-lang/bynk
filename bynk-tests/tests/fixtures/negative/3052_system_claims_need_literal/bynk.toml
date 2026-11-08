@@ -1,0 +1,6 @@
+[project]
+name = "3052-system-claims-need-literal"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

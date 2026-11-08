@@ -367,11 +367,15 @@ pub(super) fn emit_system_http_support(
     // #2135: whether some route is `Signature`-secured, so the module needs
     // the HMAC signer.
     let mut signs_hmac = false;
+    // #3052: whether some route is `Oidc`-secured, so the module needs the
+    // test issuer.
+    let mut has_oidc = false;
     // #2019: each refinement actor's witness claims, signed when a case acts
     // as it on a refinement-guarded route.
     let mut claims = emitter::SystemHttpClaims {
         routes: std::collections::HashSet::new(),
         sum_routes: HashMap::new(),
+        oidc_routes: std::collections::HashSet::new(),
         actors: table
             .actors
             .iter()
@@ -552,6 +556,8 @@ pub(super) fn emit_system_http_support(
             // claims the acting actor presents, signed next to `sub`.
             let mut signs_claims = false;
             let mut lone_bearer_read: Option<String> = None;
+            // #3052: the expression for an `Oidc` route's trust roots.
+            let mut oidc_trust: Option<String> = None;
             let (auth_header, _secret_name) = match bynk_check::actors::bearer_seam_for(
                 h,
                 &table.actors,
@@ -587,7 +593,38 @@ pub(super) fn emit_system_http_support(
                         Some(seam.secret),
                     )
                 }
-                None => (String::new(), None),
+                None => match bynk_check::actors::oidc_seam_for(h, &table.actors) {
+                    Some(seam) => {
+                        has_oidc = true;
+                        // The actor's declared roots, replaced by its
+                        // `trustFrom` variable's JSON when the case's `env`
+                        // sets it, as the Worker's seam reads them.
+                        let declared = format!(
+                            "{{ issuer: {:?}, audience: {:?}, jwks: {:?} }}",
+                            seam.issuer, seam.audience, seam.jwks
+                        );
+                        let trust = match &seam.trust_from {
+                            Some(var) => {
+                                format!("__bynkOidcTrustOf({declared}, {})", secret_read_of(var))
+                            }
+                            None => declared,
+                        };
+                        oidc_trust = Some(trust.clone());
+                        signs_claims = true;
+                        claims.oidc_routes.insert((
+                            sname.clone(),
+                            method.as_str().to_string(),
+                            path.clone(),
+                        ));
+                        (
+                            format!(
+                                "\"authorization\": `Bearer ${{await __bynkOidcToken(__bynkOidcRemote, {trust}, {{ sub: __sub, claims: __claims, kind: \"valid\" }})}}`, "
+                            ),
+                            None,
+                        )
+                    }
+                    None => (String::new(), None),
+                },
             };
             // #2155: an actor-sum route's credential depends on the member a
             // call acts as, so its drivers take that actor (`__as`) and build
@@ -1042,6 +1079,66 @@ pub(super) fn emit_system_http_support(
                     }
                 }
             }
+            // #3052: on an `Oidc` route, `by Forged` (signed by a key the
+            // JWKS does not publish), `by Expired`, `by WrongIssuer` and
+            // `by WrongAudience`, typed and raw, each decoding a `401` to
+            // `Rejected(Unauthorized)`.
+            if let Some(trust) = oidc_trust.as_deref() {
+                let oidc_options = ident(format!(
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {body_init}}}",
+                    method = method.as_str(),
+                ));
+                let raw_oidc_options = ident(format!(
+                    "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {raw_body_init}}}",
+                    method = method.as_str(),
+                    raw_body_init = match body_ps.first() {
+                        Some(p) =>
+                            format!("body: {}, ", bynk_emit::emitter::ts_ident(&p.name.name)),
+                        None => String::new(),
+                    },
+                ));
+                for name in ["forged", "expired", "wrongissuer", "wrongaudience"] {
+                    // A valid `sub`, so only the one thing under test is wrong.
+                    let sign_stmt = TsStmt::raw(
+                        format!(
+                            "const __token = `Bearer ${{await __bynkOidcToken(__bynkOidcRemote, {trust}, {{ sub: \"bynk-test\", claims: {{}}, kind: \"{name}\" }})}}`;"
+                        ),
+                        None,
+                    );
+                    routes.push(sysdrive_driver(
+                        &format!("{name}_"),
+                        sname,
+                        &key,
+                        driver_params.clone(),
+                        body_stmt.clone(),
+                        url.clone(),
+                        oidc_options.clone(),
+                        &binding,
+                        "__responseToUnauthOutcome",
+                        &payload_deser,
+                        false,
+                        vec![sign_stmt.clone()],
+                        false,
+                    ));
+                    if !h.params.is_empty() {
+                        routes.push(sysdrive_driver(
+                            &format!("raw{name}_"),
+                            sname,
+                            &key,
+                            raw_params.clone(),
+                            None,
+                            raw_url.clone(),
+                            raw_oidc_options.clone(),
+                            &binding,
+                            "__responseToUnauthOutcome",
+                            &payload_deser,
+                            false,
+                            vec![sign_stmt],
+                            false,
+                        ));
+                    }
+                }
+            }
         }
         // #707: one generic wrong-method driver per service — drives an arbitrary
         // `(method, path)` (an existing path, an undeclared method) and decodes
@@ -1156,6 +1253,18 @@ pub(super) fn emit_system_http_support(
     // treatment `expectation_runtime_helpers`/`stub_runtime_helpers` already
     // get, rather than an unexplained raw string literal with `\`-continuations.
     let mut code = vec![TsStmt::raw(jwt_signer_runtime_helpers(), None)];
+    // #3052: the test issuer an `Oidc` route's drivers mint tokens with.
+    if has_oidc {
+        let mut issuer = TsStmt::raw(
+            format!(
+                "const __bynkOidcRemote: boolean = {remote};\n{}",
+                include_str!("../test_runtime/oidc_issuer.ts")
+            ),
+            None,
+        );
+        issuer.no_blank_before = true;
+        code.push(issuer);
+    }
     if signs_hmac {
         let mut signer = TsStmt::raw(
             include_str!("../test_runtime/hmac_signer.ts").to_string(),

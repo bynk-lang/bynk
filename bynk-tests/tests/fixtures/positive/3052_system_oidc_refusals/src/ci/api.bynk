@@ -1,0 +1,29 @@
+context ci.api
+
+type WorkloadId = String where NonEmpty
+
+actor Workload {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+	identity = WorkloadId
+}
+
+// The same shape, pointed at another issuer by its `trustFrom` variable.
+actor Pinned {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json", trustFrom = "PINNED_OIDC_TRUST"),
+	identity = WorkloadId
+}
+
+service api from http {
+	on GET("/who") () -> Effect[HttpResult[String]] by w: Workload {
+		let repo = w.claims.get("repository").getOrElse("-")
+		Ok("\(w.identity) \(repo)")
+	}
+
+	on POST("/release") (body: String) -> Effect[HttpResult[String]] by Workload {
+		Ok("released \(body)")
+	}
+
+	on GET("/pinned") () -> Effect[HttpResult[String]] by p: Pinned {
+		Ok("pinned \(p.identity)")
+	}
+}

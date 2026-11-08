@@ -89,9 +89,9 @@ suite media.store {
 }
 
 suite media.store as system {
-	case "a streamed object arrives over HTTP, read back as Ok" {
+	case "a streamed object arrives over HTTP, read back as Raw" {
 		let r <- api.GET("/echo/:text", "frames") by Visitor
-		expect r is Ok(_)
+		expect r is Raw(_, _)
 	}
 
 	case "a missing object is NotFound over HTTP" {

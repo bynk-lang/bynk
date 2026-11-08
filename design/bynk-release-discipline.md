@@ -252,11 +252,11 @@ date.
   adoption, not on surface the project cannot yet back.
 - **With the §7(5) validation bar.** The cumulative migration note per milestone is
   exactly what the two proposed external deployments would be "carried through" to
-  prove the promise holds. §7(5) stays open on the tracking issue.
+  prove the promise holds. §7(5) is tracked on [#3055](https://github.com/bynk-lang/bynk/issues/3055).
 
 ## Out of scope here
 
 This closes §7(4) (the 1.0 definition, the milestone cadence, and the drift
 guards). The remaining §7 calls — the honest **comparison page** (§7(3)) and the
-**two-production-deployment validation bar** (§7(5)) — stay open on
-[#540](https://github.com/accuser/bynk/issues/540).
+**two-production-deployment validation bar** (§7(5)). The comparison page has since
+been written; §7(5) is tracked on [#3055](https://github.com/bynk-lang/bynk/issues/3055).

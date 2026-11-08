@@ -867,15 +867,6 @@ pub fn phase_integration_bodies(
                 None,
                 &view.hidden,
             ));
-            // #2132: the target's services and actors, to tell which route a
-            // `system` case's address reaches and how that route is secured.
-            let system_services = target_test_services(
-                participants.first().map(String::as_str),
-                unit_tables,
-                &cross_context.consumed_contexts,
-            );
-            let system_actors =
-                target_test_actors(participants.first().and_then(|t| unit_tables.get(t)));
             // #2834: the suite's helpers, checked once in the harness view.
             let mut helper_view = integration_resolved(&view, &cross_context, SuiteItems::NONE);
             check_suite_fixtures_in(
@@ -958,13 +949,7 @@ pub fn phase_integration_bodies(
                 );
                 check_extra_headers_let(case, &case_callees, &mut body_errs);
                 if case_effective_tier(case, d) == bynk_syntax::ast::TestTier::System {
-                    check_unsigned_route_at_system(
-                        case,
-                        &case_callees,
-                        &system_services,
-                        &system_actors,
-                        &mut body_errs,
-                    );
+                    check_system_claims_literal(case, &mut body_errs);
                 }
                 // Slice C: `Wire(…)` is a `system`-only raw argument (it drives the
                 // real wire); in a non-`system` case it has no wire to be raw
@@ -2939,117 +2924,41 @@ fn block_has_advance(block: &Block) -> bool {
     exprs.into_iter().any(walk)
 }
 
-/// #2150: report a `system`-tier case that calls an http route whose actor is
-/// `Oidc`-secured. The system driver presents a credential for a Bearer
-/// actor, signs for a `Signature` actor (#2135), and on an actor sum picks the
-/// credential from the call-site principal (#2155, which retired #2132's
-/// `bynk.test.signature_needs_in_process`), but it has no `Oidc` token issuer
-/// yet: the request reaches the real seam without a token and can only be
-/// refused with a `401` (`bynk.test.oidc_needs_in_process`). ADR 0212 D1: the
-/// check gates exactly what the emitter emits. A call driven `by Nobody` (or
-/// `by Forged`/`by Stale`/`by Expired`) is left to the checks of those principals.
-fn check_unsigned_route_at_system(
-    case: &Case,
-    callees: &HashMap<ExprId, checker::Callee>,
-    services: &HashMap<String, checker::TestServiceSig>,
-    actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
-    errors: &mut Vec<CompileError>,
-) {
-    use crate::actors::Scheme;
-    use bynk_syntax::ast::HandlerKind;
-    // The call-site principal of each `let x <- <address> by <Actor>`.
-    let mut principals: HashMap<ExprId, &str> = HashMap::new();
+/// #3052: at `system` the driver mints an `Oidc` actor's token, so the claims
+/// a call presents (`by Workload("wid", TokenClaims.of([…]))`) are written into
+/// it from their `"name: value"` lines. A `TokenClaims` is opaque (a view with
+/// `get`/`has`, never its lines), so only the literal `TokenClaims.of(…)` form
+/// can be minted from; any other claims expression is refused rather than
+/// sent as an empty set (`bynk.test.system_claims_need_literal`).
+fn check_system_claims_literal(case: &Case, errors: &mut Vec<CompileError>) {
     for b in blocks_deep(&case.body) {
         for st in flat_statements(b) {
-            if let Statement::EffectLet(l) = st
-                && let Some(p) = &l.principal
-            {
-                principals.insert(l.value.id, p.actor.name.as_str());
+            let Statement::EffectLet(l) = st else {
+                continue;
+            };
+            let Some(claims) = l.principal.as_ref().and_then(|p| p.claims.as_deref()) else {
+                continue;
+            };
+            let literal = matches!(
+                &claims.kind,
+                ExprKind::MethodCall { receiver, method, args, .. }
+                    if method.name == "of"
+                        && args.len() == 1
+                        && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "TokenClaims")
+            );
+            if !literal {
+                errors.push(
+                    CompileError::new(
+                        "bynk.test.system_claims_need_literal",
+                        claims.span,
+                        "a `system`-tier case mints the token's claims from the lines of a `TokenClaims.of([…])` written in the principal",
+                    )
+                    .with_note(
+                        "write `by Actor(\"id\", TokenClaims.of([\"name: value\"]))` here, or move the case to a suite `as integration`, where the handler reads the claims value as given",
+                    ),
+                );
             }
         }
-    }
-    // The schemes the system driver has no credential for, as the label
-    // that picks the diagnostic below.
-    let unsigned_scheme = |name: &str| -> Option<&'static str> {
-        let a = actors.get(name)?;
-        let base = a
-            .refinement
-            .as_ref()
-            .and_then(|r| actors.get(&r.base.name))
-            .unwrap_or(a);
-        match Scheme::from_name(base.auth.as_ref()?.name.as_str())? {
-            Scheme::Oidc => Some("Oidc"),
-            _ => None,
-        }
-    };
-    let mut found: Vec<(String, String, String, &'static str)> = Vec::new();
-    for (id, callee) in callees {
-        let checker::Callee::TestService {
-            service, address, ..
-        } = callee
-        else {
-            continue;
-        };
-        let Some((verb, path)) = address.split_once(' ') else {
-            continue;
-        };
-        let principal = principals.get(id).copied();
-        if principal == Some("Nobody") || principal.is_some_and(is_bad_signature_name) {
-            continue;
-        }
-        let Some(handler) = services.get(service).and_then(|sig| {
-            sig.handlers.iter().find(|h| {
-                matches!(&h.kind, HandlerKind::Http { method, path: p } if method.as_str() == verb && p == path)
-            })
-        }) else {
-            continue;
-        };
-        let Some(by) = handler.by_clause.as_ref() else {
-            continue;
-        };
-        // A sum runs as the member the call-site principal names. With no
-        // principal the system driver falls back to the primary member, as
-        // the sum's primary member, so an Oidc primary still goes out without a
-        // credential. A principal naming no member is
-        // `bynk.test.principal_identity_mismatch`'s, not this check's.
-        let actor = if by.is_sum() {
-            match principal {
-                Some(p) if by.actors.iter().any(|a| a.name == p) => p,
-                Some(_) => continue,
-                None => by.primary().name.as_str(),
-            }
-        } else {
-            by.primary().name.as_str()
-        };
-        if let Some(scheme) = unsigned_scheme(actor) {
-            found.push((
-                service.clone(),
-                format!("{verb}(\"{path}\")"),
-                actor.to_string(),
-                scheme,
-            ));
-        }
-    }
-    found.sort_unstable();
-    found.dedup();
-    for (service, route, actor, scheme) in found {
-        let (code, missing) = (
-            "bynk.test.oidc_needs_in_process",
-            "no `Oidc` token issuer yet, so the request reaches the seam with no token",
-        );
-        errors.push(
-            CompileError::new(
-                code,
-                case.name_span,
-                format!(
-                    "case `\"{}\"` calls `{service}.{route}`, whose actor `{actor}` is `{scheme}`-secured, but is a `system`-tier case",
-                    case.name
-                ),
-            )
-            .with_note(format!(
-                "the `system` driver has {missing} and is refused with a `401`; call the route from a suite `as integration` (or `unit`), where the handler runs in process"
-            )),
-        );
     }
 }
 
@@ -3147,7 +3056,10 @@ fn block_uses_nobody(block: &Block) -> bool {
 /// #2135, #2864: whether `name` is a reserved bad-credential principal (`by
 /// Forged`, `by Stale`, `by Expired`).
 fn is_bad_signature_name(name: &str) -> bool {
-    matches!(name, "Forged" | "Stale" | "Expired")
+    matches!(
+        name,
+        "Forged" | "Stale" | "Expired" | "WrongIssuer" | "WrongAudience"
+    )
 }
 
 /// #2135: `bynk.test.forged_needs_system` — a case below `system` that drives

@@ -61,6 +61,43 @@ To require a *claim* the token carries (an `admin` role, say), add an
 [authorisation invariant](/book/guides/actors/authorisation/) — that narrows
 *who*, still never *whose*.
 
+## Test an `Oidc` route's refusals
+
+An `Oidc` actor's main claims are that a token signed by another key, a token
+for another issuer or audience, and an expired token are all refused. A `system`
+suite checks them against the real seam without a fake issuer of your own: the
+test driver generates a key pair, serves the matching JWKS to the Worker's fetch
+of the actor's `jwks` URL, and mints the tokens.
+
+```bynk,fragment
+suite ci.release as system {
+  case "a trusted workflow is admitted" {
+    let r <- api.GET("/me") by User("ada")
+    expect r is Ok(_)
+  }
+
+  case "tokens the seam must refuse are refused" {
+    let none     <- api.GET("/me") by Nobody          // no token
+    let forged   <- api.GET("/me") by Forged          // signed by a key the JWKS lacks
+    let expired  <- api.GET("/me") by Expired         // correctly signed, `exp` an hour ago
+    let wrongIss <- api.GET("/me") by WrongIssuer     // correctly signed, another `iss`
+    let wrongAud <- api.GET("/me") by WrongAudience   // correctly signed, another `aud`
+    expect none     is Rejected(Unauthorized)
+    expect forged   is Rejected(Unauthorized)
+    expect expired  is Rejected(Unauthorized)
+    expect wrongIss is Rejected(Unauthorized)
+    expect wrongAud is Rejected(Unauthorized)
+  }
+}
+```
+
+The Worker under test is the one you deploy: only the test module holds the key
+and the JWKS answer, so nothing in production trusts them. To give a handler
+claims to read, pass them in the principal:
+`by Workload("wid", TokenClaims.of(["repository: acme/money"]))`. See
+[the failure principals](/book/reference/testing/#failure-principals) and
+[`Oidc` routes at `system`](/book/reference/testing/#oidc-issuer).
+
 ## Scope this slice
 
 `Oidc` is HTTP-only and used as a **single** actor: it is not yet a member of a
