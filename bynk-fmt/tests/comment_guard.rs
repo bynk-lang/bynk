@@ -54,14 +54,6 @@ fn refuses_to_drop_a_comment_inside_a_match() {
 }
 
 #[test]
-fn refuses_to_drop_a_comment_inside_a_list_literal() {
-    expect_refusal(
-        "in-list",
-        "commons demo\n\nfn f() -> List[Int] {\n  [\n    1,\n    // keep me\n    2,\n  ]\n}\n",
-    );
-}
-
-#[test]
 fn refuses_to_drop_a_comment_after_the_tail_expression() {
     expect_refusal(
         "after-tail",
@@ -738,5 +730,85 @@ fn refuses_to_drop_a_comment_inside_a_negative_literal_pattern() {
     expect_refusal(
         "neg-literal-pattern",
         "commons demo\n\nfn f(n: Int) -> Int {\n  match n {\n    -\n    // keep me\n    1_000 => 1,\n    _ => 0,\n  }\n}\n",
+    );
+}
+
+/// #3067: a comment in a list literal is kept: on the `[` line, above an
+/// element, at the end of its line, and before the `]`. A commented list
+/// breaks one element per line, whatever encloses it, and an empty list stays
+/// open for its comment.
+#[test]
+fn keeps_comments_in_a_list_literal() {
+    for (name, source, lines) in [
+        (
+            "between",
+            "commons demo\n\nfn f() -> List[Int] {\n  [\n    1,\n    -- the second\n    2,\n  ]\n}\n",
+            &["\t[\n\t\t1,\n\t\t// the second\n\t\t2,\n\t]\n"][..],
+        ),
+        (
+            "end of line",
+            "commons demo\n\nfn f() -> List[Int] {\n  [1, -- one\n   2 -- two\n  ]\n}\n",
+            &["\t\t1,  // one\n\t\t2,  // two\n\t]\n"][..],
+        ),
+        (
+            "after the last element",
+            "commons demo\n\nfn f() -> List[Int] {\n  [\n    1,\n    2,\n    -- the rest\n  ]\n}\n",
+            &["\t\t2,\n\t\t// the rest\n\t]\n"][..],
+        ),
+        (
+            "on the bracket line",
+            "commons demo\n\nfn f() -> List[Int] {\n  [ -- the list\n    1,\n  ]\n}\n",
+            &["\t[\n\t\t// the list\n\t\t1,\n\t]\n"][..],
+        ),
+        (
+            "empty",
+            "commons demo\n\nfn f() -> List[Int] {\n  [\n    -- none yet\n  ]\n}\n",
+            &["\t[\n\t\t// none yet\n\t]\n"][..],
+        ),
+        (
+            "in a let",
+            "commons demo\n\nfn f() -> List[Int] {\n  let xs = [\n    1,\n    -- two\n    2,\n  ]\n  xs\n}\n",
+            &["\tlet xs = [\n\t\t1,\n\t\t// two\n\t\t2,\n\t]\n"][..],
+        ),
+        (
+            "call argument",
+            "commons demo\n\nfn f() -> List[Int] {\n  g([\n    1,\n    -- two\n    2,\n  ])\n}\n",
+            &["\tg([\n\t\t1,\n\t\t// two\n\t\t2,\n\t])\n"][..],
+        ),
+        (
+            "nested list",
+            "commons demo\n\nfn f() -> List[List[Int]] {\n  [\n    [1, 2],\n    -- inner\n    [3, 4],\n  ]\n}\n",
+            &["\t\t[1, 2],\n\t\t// inner\n\t\t[3, 4],\n"][..],
+        ),
+    ] {
+        let out = format_source(source, &FormatOptions::default())
+            .unwrap_or_else(|e| panic!("{name}: refused: {}", e.errors[0].message));
+        for line in lines {
+            assert!(out.contains(line), "{name}: `{line}` not in place:\n{out}");
+        }
+        let again = format_source(&out, &FormatOptions::default()).expect("reformats");
+        assert_eq!(out, again, "{name}: not idempotent");
+    }
+}
+
+/// #3067: without a trailing comma the last element drops its `,` but keeps its
+/// end-of-line comment.
+#[test]
+fn keeps_an_end_of_line_comment_on_the_last_list_element_without_a_trailing_comma() {
+    let source =
+        "commons demo\n\nfn f() -> List[Int] {\n  [\n    1, -- one\n    2 -- two\n  ]\n}\n";
+    let opts = FormatOptions {
+        trailing_comma: false,
+        ..FormatOptions::default()
+    };
+    let out = format_source(source, &opts).expect("formats");
+    assert!(
+        out.contains("\t\t1,  // one\n\t\t2  // two\n\t]\n"),
+        "last element not in place:\n{out}"
+    );
+    assert_eq!(
+        out,
+        format_source(&out, &opts).expect("reformats"),
+        "not idempotent"
     );
 }

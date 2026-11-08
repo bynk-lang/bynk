@@ -267,7 +267,7 @@ fn first_non_static(
         | ExprKind::Some(inner)
         | ExprKind::Ok(inner)
         | ExprKind::Err(inner) => first_non_static(inner, consts, types),
-        ExprKind::ListLit(items) => all(items.iter()),
+        ExprKind::ListLit(items, ..) => all(items.iter()),
         ExprKind::RecordConstruction { fields, .. } => {
             for f in fields {
                 match &f.value {
