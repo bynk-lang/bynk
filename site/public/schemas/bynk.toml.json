@@ -351,6 +351,21 @@
       "additionalProperties": false,
       "description": "The deployments `bynk test --against <name>` may run the `system` suites\nagainst (end-to-end testing). A bare URL is never accepted on the command\nline: a target has to be named here.",
       "properties": {
+        "mutate": {
+          "additionalProperties": false,
+          "description": "What `bynk test --mutate` leaves unmutated.",
+          "properties": {
+            "exclude": {
+              "default": [],
+              "description": "Path globs (`src/generated/**`) and `unit.decl` names\n(`orders.legacy_refund`) whose operators are never mutated. Default: `[]`.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
         "targets": {
           "additionalProperties": {
             "additionalProperties": false,

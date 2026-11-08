@@ -1445,6 +1445,56 @@ pub(crate) fn check_connection_method(
     }
 }
 
+/// #3051: the operations on a case's `TestConnection[F]`. `sent()` is the frames
+/// the server wrote, `closed()` whether the server closed it, `connection()` the
+/// owned `Connection[F]` an agent receives (once per handle).
+pub(crate) fn check_test_connection_method(
+    method: &Ident,
+    args: &[Expr],
+    frame: TyId,
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let ret = match method.name.as_str() {
+        "sent" => Some(tys.intern(Ty::List(frame))),
+        "closed" => Some(tys.intern(Ty::Base(BaseType::Bool))),
+        "connection" => Some(tys.intern(Ty::Connection(frame))),
+        _ => None,
+    };
+    let Some(ret) = ret else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()` and `connection()`",
+                frame.display(tys),
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    if !args.is_empty() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`TestConnection.{}` takes no arguments, got {}",
+                method.name,
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    Some(ret)
+}
+
 /// v0.21: type a built-in numeric kernel method (ADR 0041). Conversions are
 /// value methods on the bare base types: `Int -> Float` is total
 /// (`toFloat`); `Float -> Int` is one of four named, lossy roundings — there
@@ -2814,6 +2864,7 @@ pub(crate) fn first_recursive_generic(
         | Ty::HttpOutcome(a)
         | Ty::Query(a)
         | Ty::Stream(a)
+        | Ty::TestConnection(a)
         | Ty::Connection(a) => first_recursive_generic(*a, types, tys),
         Ty::Fn { params, ret } => params
             .iter()

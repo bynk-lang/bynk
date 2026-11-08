@@ -137,6 +137,19 @@ struct TestTable {
     /// Named targets, as `[test.targets.<name>]`. `dev` is reserved for the
     /// local `bynk dev` the runner starts itself.
     targets: Option<std::collections::BTreeMap<String, TestTargetTable>>,
+    /// What `bynk test --mutate` leaves unmutated.
+    mutate: Option<TestMutateTable>,
+}
+
+/// `bynk test --mutate`'s configuration.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct TestMutateTable {
+    /// Path globs (`src/generated/**`) and `unit.decl` names
+    /// (`orders.legacy_refund`) whose operators are never mutated. Default: `[]`.
+    #[schemars(extend("default" = []))]
+    exclude: Option<Vec<String>>,
 }
 
 /// One deployment `bynk test --against <name>` runs against.

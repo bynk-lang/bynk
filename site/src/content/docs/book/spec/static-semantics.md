@@ -2352,6 +2352,20 @@ schema version. The publisher is the target if it declares `E`, else the one
 context it consumes that declares `E`. With no such unique context, `env` MUST
 be given (`bynk.test.event_publisher_ambiguous`).
 
+A WebSocket address (#3051) `svc.open(tc, r…)`, `svc.message(tc, f)` or
+`svc.close(tc)` MUST name a `from websocket` service that declares the matching
+handler (`bynk.test.service_unknown_route`). `tc` MUST have type
+`TestConnection[O]` for the service's `out` type `O`. `open` takes the handler's
+route parameters and the call-site `by`; `f` MUST have the service's `in` type;
+`message` and `close` take no other arguments (`bynk.test.service_call_arity`)
+and no `by` (`bynk.test.ws_lifecycle_by`), because the connection carries the
+route values and the principal from `open`. The address MUST NOT occur in a
+`system`-tier `case` (`bynk.test.ws_needs_in_process`). `TestConnection[O]()` is
+a value of a type that can be named only in a test body; `tc.sent()` has type
+`List[O]`, `tc.closed()` type `Bool`, and `tc.connection()` an owned
+`Connection[O]`, available once per `tc`. A `message` or `close` on a `tc` that
+was not opened is a failure of the case at run time.
+
 ### §5.9c Tiers (v0.118)
 
 *(ADR 0153)* A `case` runs at one of three **tiers** — `unit` | `integration` |
@@ -3001,7 +3015,7 @@ only at its exact path). A Worker with no assets gets none of these. The Bundle 
 files, so a deployable Bundle build (one without tests) warns about each
 asset whose `.url` it emits (`bynk.asset.not_served`). `bynk deploy` does not record the served paths in
 `bynk.deploy.lock`: they are a function of the build, so the lock changes only
-when a resource or a contract does.
+when what it records (resources, contracts, tombstones) does.
 
 **Single files.** A single file has no project root and no Worker, so building
 one that declares an asset is `bynk.asset.needs_project`. Checking it is

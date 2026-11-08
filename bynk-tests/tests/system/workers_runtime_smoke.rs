@@ -1003,3 +1003,216 @@ fn fetch(url: &str, path: &str) -> Result<String, String> {
     }
     Ok(response)
 }
+
+/// #2966: a broadcast reaches WebSocket connections opened through the Workers
+/// upgrade. #2959 had two bugs where the Worker passed `bynk check` and `tsc`
+/// but routed the upgrade to the wrong Durable Object, so a broadcast to
+/// `Board("ci")` reached no one. Only a run-time test sees a mismatch between
+/// the edge's `idFromName(...)` for the upgrade and the `__make<Agent>(key,
+/// env)` path an ordinary agent call takes.
+///
+/// The `on open` transfers to `Board("ci")` while carrying a route parameter
+/// (`user`), the #2959 misroute shape: the literal key must stay the literal.
+const WS_LITERAL_KEY_SOURCE: &str = r#"context smoke
+
+type Frame = { text: String }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (user: String) -> Effect[()] by v: Visitor {
+    let _ <- Board("ci").join(user, connection)
+    ()
+  }
+}
+
+agent Board {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(user: String, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(user, conn)
+    ()
+  }
+
+  on call post(text: String) -> Effect[()] {
+    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    ()
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/post") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Board("ci").post("hello")
+    Ok("posted")
+  }
+}
+"#;
+
+/// The route-parameter-keyed shape: the upgrade carries `room` and the
+/// connection is transferred to `Room(room)`; the broadcast reaches the same
+/// instance through the HTTP route's own `Room("r1")`.
+const WS_ROUTE_KEY_SOURCE: &str = r#"context smoke
+
+type Frame = { text: String }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (room: String, user: String) -> Effect[()] by v: Visitor {
+    let _ <- Room(room).join(user, connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(user: String, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(user, conn)
+    ()
+  }
+
+  on call post(text: String) -> Effect[()] {
+    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    ()
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/post") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Room("r1").post("hello")
+    Ok("posted")
+  }
+}
+"#;
+
+/// Real WebSocket clients (Node's built-in `WebSocket`, so no npm dependency)
+/// open upgrades at `ws://127.0.0.1:<port>/?<query>`, one per query. The test
+/// triggers the broadcast over HTTP; the first `expected` clients must each
+/// receive it, and any further clients (opened on another key) must not, which
+/// is checked after a short bounded wait. Prints the frames each client
+/// received, a JSON array of arrays in client order. Every await is bounded, so
+/// a misrouted upgrade fails fast with a message rather than hanging.
+const WS_CLIENTS_JS: &str = r#"
+const [port, expectedArg, ...queries] = process.argv.slice(2);
+const expected = Number(expectedArg);
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const open = (query) => within(new Promise((resolve, reject) => {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/?${query}`);
+  const frames = [];
+  const got = new Promise((done) => {
+    ws.addEventListener("message", (e) => { frames.push(String(e.data)); done(); });
+  });
+  ws.addEventListener("open", () => resolve({ ws, frames, got }));
+  ws.addEventListener("error", () => reject(new Error(`upgrade failed: ${query}`)));
+}), 15000, `the upgrade for ${query}`);
+(async () => {
+  const clients = [];
+  for (const query of queries) clients.push(await open(query));
+  const res = await within(fetch(`http://127.0.0.1:${port}/post`), 15000, "the /post route");
+  if (!res.ok) throw new Error(`POST route answered ${res.status}`);
+  await within(Promise.all(clients.slice(0, expected).map((c) => c.got)), 15000, "the broadcast on the expected clients");
+  // The clients on another key get nothing: give a stray frame time to arrive.
+  if (clients.length > expected) await new Promise((r) => setTimeout(r, 1500));
+  console.log(JSON.stringify(clients.map((c) => c.frames)));
+  clients.forEach((c) => c.ws.close());
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+/// Serve `source`, run the clients (`queries`; the first `expected` share the
+/// broadcast's instance), and assert the frames each received: the one
+/// `hello` frame for those, none for the rest.
+fn broadcast_reaches_clients(
+    source: &str,
+    tag: &str,
+    port_base: u16,
+    expected: usize,
+    queries: &[&str],
+) {
+    let Some(served) = serve_smoke(source, tag, port_base) else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    // A script file run by `node` itself: `base_command` would route through
+    // `cmd /C` on Windows, which ends a `-e` argument at its first newline and
+    // runs nothing (exit 0, empty stdout). `node` is an executable, not an npm
+    // `.cmd` shim, so it needs no such routing.
+    let script = served.tmp.join("ws-clients.js");
+    fs::write(&script, WS_CLIENTS_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(expected.to_string())
+        .args(queries)
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the clients must receive the broadcast:\n{report}"
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let frame = r#""{\"text\":\"hello\"}""#;
+    let want: Vec<String> = (0..queries.len())
+        .map(|i| {
+            if i < expected {
+                format!("[{frame}]")
+            } else {
+                "[]".to_string()
+            }
+        })
+        .collect();
+    assert_eq!(
+        stdout.trim(),
+        format!("[{}]", want.join(",")),
+        "the clients on the broadcast's key receive the one frame; the others none\n{report}"
+    );
+}
+
+#[test]
+fn a_broadcast_reaches_websockets_opened_through_a_literal_keyed_upgrade_on_workerd() {
+    broadcast_reaches_clients(
+        WS_LITERAL_KEY_SOURCE,
+        "ws-literal",
+        15000,
+        2,
+        &["user=alice", "user=bob"],
+    );
+}
+
+#[test]
+fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_workerd() {
+    // `carol` is in room `r2`: the route key separates instances, so the
+    // broadcast to `Room("r1")` must not reach her.
+    broadcast_reaches_clients(
+        WS_ROUTE_KEY_SOURCE,
+        "ws-route",
+        25000,
+        2,
+        &[
+            "room=r1&user=alice",
+            "room=r1&user=bob",
+            "room=r2&user=carol",
+        ],
+    );
+}

@@ -328,6 +328,16 @@ impl TestRun {
         }
     }
 
+    /// #3069: the document for a run killed after `--mutate`'s per-mutant
+    /// timeout. Its own kind, so no consumer reads a timeout from a message.
+    pub fn timeout_error(message: impl Into<String>) -> Self {
+        let mut run = Self::runtime_error(message, None);
+        if let Some(error) = run.error.as_mut() {
+            error.kind = "timeout".to_string();
+        }
+        run
+    }
+
     /// The document for a project that never compiled.
     pub fn compile_error(diagnostics: Vec<String>) -> Self {
         TestRun {

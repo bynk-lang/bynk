@@ -213,7 +213,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("build", &["out", "target", "platform", "emit"]),
     ("unstable", &["allow"]),
-    ("test", &["targets"]),
+    ("test", &["targets", "mutate"]),
     ("workspace", &["members", "exclude"]),
 ];
 
@@ -849,6 +849,49 @@ fn test_targets_from(
         out.insert(name.clone(), target);
     }
     Ok(out)
+}
+
+/// #3069: read `bynk.toml`'s `[test.mutate] exclude`, the path globs and
+/// `unit.decl` names `bynk test --mutate` leaves unmutated. No manifest, no
+/// `[test]` table or no `mutate` table is empty; anything but a list of strings
+/// is an error naming the problem.
+pub fn try_read_mutate_exclude(project_root: &Path) -> Result<Vec<String>, String> {
+    let Ok(content) = fs::read_to_string(project_root.join("bynk.toml")) else {
+        return Ok(Vec::new());
+    };
+    let doc = content
+        .parse::<toml::Table>()
+        .map_err(|_| "`bynk.toml` is not valid TOML".to_string())?;
+    let Some(mutate) = doc
+        .get("test")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("mutate"))
+    else {
+        return Ok(Vec::new());
+    };
+    let table = mutate
+        .as_table()
+        .ok_or_else(|| "`[test.mutate]` must be a table".to_string())?;
+    let mut exclude = Vec::new();
+    for (key, value) in table {
+        match key.as_str() {
+            "exclude" => {
+                let list = value
+                    .as_array()
+                    .and_then(|a| a.iter().map(|v| v.as_str().map(str::to_string)).collect())
+                    .ok_or_else(|| {
+                        "`[test.mutate] exclude` must be a list of strings".to_string()
+                    })?;
+                exclude = list;
+            }
+            other => {
+                return Err(format!(
+                    "`[test.mutate]` has no key named `{other}` — its only key is `exclude`"
+                ));
+            }
+        }
+    }
+    Ok(exclude)
 }
 
 /// #1890: the `bynk.project.duplicate_compatibility_flag` warning for one

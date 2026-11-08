@@ -37,7 +37,14 @@ fn offset_of(needle: &str, n: usize) -> usize {
 }
 
 fn analyse() -> (bynk_ide::ProjectDiagnostics, PathBuf) {
-    let root = std::env::temp_dir().join(format!("bynk-lsp-http-query-{}", std::process::id()));
+    // Both tests run in one process under `cargo test`, so the pid alone names a
+    // directory they would share and delete from under each other.
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!(
+        "bynk-lsp-http-query-{}-{unique}",
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(root.join("demo")).expect("create test root");
     fs::write(root.join(PATH), SRC).expect("write file");
