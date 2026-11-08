@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.514.1** | A `system` suite resolves an actor's `identity` type declared in a `commons` the context uses, so `by User("alice")` is accepted |
 | **v0.514.0** | An `Oidc` route is tested at the `system` tier. The driver is the issuer, and `by Forged`, `by Expired`, `by WrongIssuer` and `by WrongAudience` drive its seam |
 | **v0.513.1** | A `system` suite reads a `Raw` response back as `Raw(body, contentType)`, as the unit tier does (#3050); a `system` suite asserting `expect r is Ok(_)` on a raw or streamed route now sees `Raw`, so change it to `Raw(_, _)` |
 | **v0.513.0** | A sum variant added inside an agent's stored state is an additive change in bynk.schema.lock |
