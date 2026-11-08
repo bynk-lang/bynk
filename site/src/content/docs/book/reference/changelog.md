@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.513.1** | A `system` suite reads a `Raw` response back as `Raw(body, contentType)`, as the unit tier does (#3050); a `system` suite asserting `expect r is Ok(_)` on a raw or streamed route now sees `Raw`, so change it to `Raw(_, _)` |
 | **v0.513.0** | A sum variant added inside an agent's stored state is an additive change in bynk.schema.lock |
 | **v0.512.11** | A nightly CodeQL scan now covers the TypeScript the compiler emits for Cloudflare Workers, with models of the Worker request and the redirect `Location` header, and deliberately vulnerable canary projects that fail the scan if those models stop firing |
 | **v0.512.10** | Crate hygiene follow-up - comments that still described `bynkc` as re-exporting the extracted crates now describe the crates as they are, and the `bynk test --smoke` tests no longer carry a dead skip path |
