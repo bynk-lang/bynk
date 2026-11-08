@@ -4790,6 +4790,7 @@ impl SuiteView {
         imported: &[String],
         unit_tables: &HashMap<String, UnitTable>,
         unit_uses: &HashMap<String, Vec<String>>,
+        actor_identities: bool,
     ) {
         let reach = crate::project_model::close_view_types(
             imported,
@@ -4798,6 +4799,7 @@ impl SuiteView {
             &mut self.types,
             &self.fns,
             &mut self.methods,
+            actor_identities,
         );
         self.hidden = reach.hidden;
         self.conflicts = reach.conflicts;
@@ -4863,7 +4865,7 @@ pub fn privileged_view(
         .retain(|n, _| local.embeds.contains_key(n) || !hidden_by_local(n));
     view.consts
         .retain(|n, _| local.consts.contains_key(n) || !hidden_by_local(n));
-    view.close(&imported, unit_tables, unit_uses);
+    view.close(&imported, unit_tables, unit_uses, false);
     Some(view)
 }
 
@@ -4914,7 +4916,8 @@ pub fn integration_view(
             });
         }
     }
-    view.close(&imported, unit_tables, unit_uses);
+    // #3064: a participant's actors' identity types are reached too.
+    view.close(&imported, unit_tables, unit_uses, true);
     view
 }
 
