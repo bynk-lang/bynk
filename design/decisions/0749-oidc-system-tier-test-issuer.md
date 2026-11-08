@@ -1,12 +1,6 @@
----
-level: minor
-changelog: An `Oidc` route is tested at the `system` tier. The driver is the issuer, and `by Forged`, `by Expired`, `by WrongIssuer` and `by WrongAudience` drive its seam
-probes: diagnostic_coverage, emit_diagnostics, ts_writes
----
+# 0749 — The system driver is the issuer for an `Oidc` route
 
-## ADR: oidc-system-tier-test-issuer
-title: The system driver is the issuer for an `Oidc` route
-summary: A test-process ES256 issuer answers the Worker's JWKS fetch; four failure principals drive an `Oidc` seam
+- **Status:** Accepted (v0.514)
 
 **Context.** A `system` case could not call a route guarded by an `Oidc` actor
 (`bynk.test.oidc_needs_in_process`): the driver held no key pair for the JWKS, so

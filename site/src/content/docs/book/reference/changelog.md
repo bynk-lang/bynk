@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.513**.
+written against **v0.514**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.514.0** | An `Oidc` route is tested at the `system` tier. The driver is the issuer, and `by Forged`, `by Expired`, `by WrongIssuer` and `by WrongAudience` drive its seam |
 | **v0.513.1** | A `system` suite reads a `Raw` response back as `Raw(body, contentType)`, as the unit tier does (#3050); a `system` suite asserting `expect r is Ok(_)` on a raw or streamed route now sees `Raw`, so change it to `Raw(_, _)` |
 | **v0.513.0** | A sum variant added inside an agent's stored state is an additive change in bynk.schema.lock |
 | **v0.512.11** | A nightly CodeQL scan now covers the TypeScript the compiler emits for Cloudflare Workers, with models of the Worker request and the redirect `Location` header, and deliberately vulnerable canary projects that fail the scan if those models stop firing |
