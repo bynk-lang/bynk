@@ -1,0 +1,40 @@
+context room
+
+consumes bynk { Events }
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+event Said = {
+	text: String,
+}
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3045: the agent handler `on message` calls emits an event. Its fan-out
+// callback cannot cross the wire or the socket attachment, so the Durable
+// Object rebuilds `__eventsDeps` from its own `env` on this entry point too.
+service chat from websocket(in: Frame, out: Frame) {
+	on open(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).join("\(u.identity)", connection)
+	}
+
+	on message(room: RoomKey, frame: Frame) -> Effect[()] by u: User {
+		let _ <- Room(room).say(frame.text)
+	}
+}
+
+agent Room {
+	key id: RoomKey
+
+	store conns: Map[String, Connection[Frame]]
+
+	on call join(name: String, conn: Connection[Frame]) -> Effect[()] {
+		let _ <- conns.put(name, conn)
+	}
+
+	on call say(text: String) -> Effect[()] given Events {
+		let _ <- Events.emit[Said](Said { text: text })
+	}
+}

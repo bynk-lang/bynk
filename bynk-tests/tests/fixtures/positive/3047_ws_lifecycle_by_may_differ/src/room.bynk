@@ -1,0 +1,37 @@
+context room
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3046: `on message`/`on close` must name the same actors as `on open`, but the
+// binder names may differ and a sum's member order is irrelevant.
+service chat from websocket(in: Frame, out: Frame) {
+	on open(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).join("\(u.identity)", connection)
+	}
+
+	on message(room: RoomKey, frame: Frame) -> Effect[()] by x: User {
+		let _ <- Room(room).say("\(x.identity)")
+	}
+
+	on close(room: RoomKey) -> Effect[()] by y: User {
+		let _ <- Room(room).say("\(y.identity)")
+	}
+}
+
+agent Room {
+	key id: RoomKey
+
+	store conns: Map[String, Connection[Frame]]
+
+	on call join(name: String, conn: Connection[Frame]) -> Effect[()] {
+		let _ <- conns.put(name, conn)
+	}
+
+	on call say(text: String) -> Effect[()] {
+		()
+	}
+}

@@ -3733,6 +3733,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["method_call"],
     ),
     d(
+        "bynk.ws.lifecycle_by_mismatch",
+        "A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ).",
+    ),
+    d(
         "bynk.ws.message_frame_param",
         "A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii).",
     ),

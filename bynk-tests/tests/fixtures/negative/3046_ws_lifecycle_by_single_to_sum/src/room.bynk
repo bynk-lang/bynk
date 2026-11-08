@@ -1,0 +1,32 @@
+context room
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3046 (A): `on open` is the single actor `User`; `on message` is a sum.
+service chat from websocket(in: Frame, out: Frame) {
+  on open(room: RoomKey) -> Effect[()] by u: User {
+    let _ <- Room(room).join("\(u.identity)", connection)
+  }
+
+  on message(room: RoomKey, frame: Frame) -> Effect[()] by w: User | Visitor {
+    let n = match w {
+      User(x) => "\(x)",
+      Visitor => "v",
+    }
+    let _ <- Room(room).join(n, connection)
+  }
+}
+
+agent Room {
+  key id: RoomKey
+
+  store conns: Map[String, Connection[Frame]]
+
+  on call join(name: String, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(name, conn)
+  }
+}
