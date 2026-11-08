@@ -1,0 +1,19 @@
+suite app.web as system {
+	case "GET / serves a raw page" {
+		let r <- web.GET("/") by Visitor
+		expect r is Raw(_, _)
+		expect r is Raw(_, "text/html")
+	}
+
+	case "a content type with parameters is kept verbatim" {
+		let r <- web.GET("/utf8") by Visitor
+		expect r is Raw(_, "text/html; charset=utf-8")
+	}
+}
+
+suite app.web {
+	case "the unit tier agrees" {
+		let r <- web.GET("/") by Visitor
+		expect r is Raw(_, "text/html")
+	}
+}

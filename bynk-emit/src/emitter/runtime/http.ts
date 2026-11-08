@@ -434,6 +434,19 @@ export async function responseToHttpResult<T>(
     case "Ok":
     case "Accepted":
     case "Created": {
+      // #3050: a 200 whose content type is neither JSON nor an event stream is
+      // a `Raw` (or `RawTagged`/`RawStreamed`, which the wire cannot tell
+      // apart): surface the unit tier's `Raw(body, contentType)`, the type
+      // verbatim as the handler set it. A raw body that *says* JSON still
+      // reads as `Ok`, as it cannot be told from a JSON value.
+      if (tag === "Ok") {
+        const ct = response.headers.get("content-type");
+        const essence = (ct ?? "").split(";")[0].trim().toLowerCase();
+        if (ct !== null && essence !== "" && essence !== "application/json" && essence !== "text/event-stream") {
+          const body = new Uint8Array(await response.arrayBuffer());
+          return { tag: "Raw", body, contentType: ct } as unknown as HttpResult<T>;
+        }
+      }
       const text = await response.text();
       const saysJson =
         (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase() ===
