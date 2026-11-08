@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `tsc` failure on generated code is reported as `bynk.codegen.tsc_failed` at the Bynk source line it came from, by `bynk test` and the new opt-in `bynk check --emit`
-probes: diagnostic_coverage
----
+# 0758 — A tsc failure on generated TypeScript is a Bynk diagnostic at the source line it came from
 
-## ADR: tsc-failure-as-bynk-diagnostic
-title: A tsc failure on generated TypeScript is a Bynk diagnostic at the source line it came from
-summary: One code, line-level mapping through the .ts.map, opt-in check --emit
+- **Status:** Accepted (v0.521)
 
 **Context.** A program that passes `bynk check` can still produce TypeScript
 that `tsc` rejects (#2905, #2959, #3041, #3042). The error named a generated
