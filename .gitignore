@@ -18,6 +18,7 @@ bynk-tests/tests/fixtures/**/out-js/
 examples/**/out/
 examples/**/out-js/
 examples/**/bynk.schema.lock
+.github/codeql/bynk-emitted/canaries/**/bynk.schema.lock
 
 # Editor / OS
 .DS_Store

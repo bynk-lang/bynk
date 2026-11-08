@@ -1,0 +1,32 @@
+context relay
+
+consumes bynk { Fetch }
+
+---
+CANARY (CWE-918, server-side request forgery). Deliberately vulnerable: the
+caller picks the URL the Worker fetches. `js/request-forgery` must flag the
+`Fetch.send` below — if it does not, the models in `../../models/` no longer see
+the request body flowing into `Fetch`.
+---
+type RelayRequest = {
+  target:  String,
+  payload: String,
+}
+
+service api from http {
+  on POST("/relay") (body: RelayRequest) -> Effect[HttpResult[Int]] by Visitor given Fetch {
+    let req = Request {
+      method:        Post,
+      url:           body.target,
+      contentType:   Some("application/json"),
+      authorization: None,
+      headers:       Map.empty(),
+      body:          Some(body.payload),
+    }
+    let res <- Fetch.send(req)
+    match res {
+      Ok(r)  => Ok(r.status)
+      Err(_) => ServerError("relay failed")
+    }
+  }
+}

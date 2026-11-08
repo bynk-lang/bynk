@@ -1,0 +1,17 @@
+context go
+
+---
+CANARY (CWE-601, open redirect). Deliberately vulnerable: `?next=` is echoed
+into the `Location` header of a `302`. `js/server-side-unvalidated-url-redirection`
+must flag it — if it does not, the models no longer see the query decoder or
+the `Location` write in `httpResultToResponse`.
+---
+type GoQuery = {
+  next: String,
+}
+
+service api from http {
+  on GET("/go") (query: GoQuery) -> Effect[HttpResult[()]] by Visitor {
+    Found(query.next)
+  }
+}

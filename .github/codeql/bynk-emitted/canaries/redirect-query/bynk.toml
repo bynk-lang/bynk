@@ -1,0 +1,4 @@
+# CodeQL canary — deliberately vulnerable; see ../README.md.
+[project]
+name = "canary-redirect-query"
+version = "0.1.0"
