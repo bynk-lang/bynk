@@ -1092,13 +1092,21 @@ service api from http {
 }
 "#;
 
-/// Two real WebSocket clients (Node's built-in `WebSocket`, so no npm
-/// dependency) open upgrades at `ws://127.0.0.1:<port>/?<query>`, the test
-/// triggers the broadcast over HTTP, and each client prints the frames it
-/// received (a JSON array of arrays, one per client).
+/// Real WebSocket clients (Node's built-in `WebSocket`, so no npm dependency)
+/// open upgrades at `ws://127.0.0.1:<port>/?<query>`, one per query. The test
+/// triggers the broadcast over HTTP; the first `expected` clients must each
+/// receive it, and any further clients (opened on another key) must not, which
+/// is checked after a short bounded wait. Prints the frames each client
+/// received, a JSON array of arrays in client order. Every await is bounded, so
+/// a misrouted upgrade fails fast with a message rather than hanging.
 const WS_CLIENTS_JS: &str = r#"
-const [port, queryA, queryB] = process.argv.slice(1);
-const open = (query) => new Promise((resolve, reject) => {
+const [port, expectedArg, ...queries] = process.argv.slice(1);
+const expected = Number(expectedArg);
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const open = (query) => within(new Promise((resolve, reject) => {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/?${query}`);
   const frames = [];
   const got = new Promise((done) => {
@@ -1106,25 +1114,31 @@ const open = (query) => new Promise((resolve, reject) => {
   });
   ws.addEventListener("open", () => resolve({ ws, frames, got }));
   ws.addEventListener("error", () => reject(new Error(`upgrade failed: ${query}`)));
-});
-const within = (p, ms, what) => Promise.race([
-  p,
-  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
-]);
+}), 15000, `the upgrade for ${query}`);
 (async () => {
-  const a = await open(queryA);
-  const b = await open(queryB);
-  const res = await fetch(`http://127.0.0.1:${port}/post`);
+  const clients = [];
+  for (const query of queries) clients.push(await open(query));
+  const res = await within(fetch(`http://127.0.0.1:${port}/post`), 15000, "the /post route");
   if (!res.ok) throw new Error(`POST route answered ${res.status}`);
-  await within(Promise.all([a.got, b.got]), 15000, "the broadcast on both clients");
-  console.log(JSON.stringify([a.frames, b.frames]));
-  a.ws.close();
-  b.ws.close();
+  await within(Promise.all(clients.slice(0, expected).map((c) => c.got)), 15000, "the broadcast on the expected clients");
+  // The clients on another key get nothing: give a stray frame time to arrive.
+  if (clients.length > expected) await new Promise((r) => setTimeout(r, 1500));
+  console.log(JSON.stringify(clients.map((c) => c.frames)));
+  clients.forEach((c) => c.ws.close());
   process.exit(0);
 })().catch((e) => { console.error(String(e)); process.exit(1); });
 "#;
 
-fn broadcast_reaches_both_clients(source: &str, tag: &str, port_base: u16, queries: [&str; 2]) {
+/// Serve `source`, run the clients (`queries`; the first `expected` share the
+/// broadcast's instance), and assert the frames each received: the one
+/// `hello` frame for those, none for the rest.
+fn broadcast_reaches_clients(
+    source: &str,
+    tag: &str,
+    port_base: u16,
+    expected: usize,
+    queries: &[&str],
+) {
     let Some(served) = serve_smoke(source, tag, port_base) else {
         return;
     };
@@ -1139,9 +1153,9 @@ fn broadcast_reaches_both_clients(source: &str, tag: &str, port_base: u16, queri
             "-e",
             WS_CLIENTS_JS,
             &port.to_string(),
-            queries[0],
-            queries[1],
+            &expected.to_string(),
         ])
+        .args(queries)
         .output()
         .expect("node runs");
     assert!(
@@ -1152,29 +1166,46 @@ fn broadcast_reaches_both_clients(source: &str, tag: &str, port_base: u16, queri
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     let frame = r#""{\"text\":\"hello\"}""#;
+    let want: Vec<String> = (0..queries.len())
+        .map(|i| {
+            if i < expected {
+                format!("[{frame}]")
+            } else {
+                "[]".to_string()
+            }
+        })
+        .collect();
     assert_eq!(
         stdout.trim(),
-        format!("[[{frame}],[{frame}]]"),
-        "each client receives the one broadcast frame"
+        format!("[{}]", want.join(",")),
+        "the clients on the broadcast's key receive the one frame; the others none"
     );
 }
 
 #[test]
 fn a_broadcast_reaches_websockets_opened_through_a_literal_keyed_upgrade_on_workerd() {
-    broadcast_reaches_both_clients(
+    broadcast_reaches_clients(
         WS_LITERAL_KEY_SOURCE,
         "ws-literal",
         15000,
-        ["user=alice", "user=bob"],
+        2,
+        &["user=alice", "user=bob"],
     );
 }
 
 #[test]
 fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_workerd() {
-    broadcast_reaches_both_clients(
+    // `carol` is in room `r2`: the route key separates instances, so the
+    // broadcast to `Room("r1")` must not reach her.
+    broadcast_reaches_clients(
         WS_ROUTE_KEY_SOURCE,
         "ws-route",
         25000,
-        ["room=r1&user=alice", "room=r1&user=bob"],
+        2,
+        &[
+            "room=r1&user=alice",
+            "room=r1&user=bob",
+            "room=r2&user=carol",
+        ],
     );
 }
