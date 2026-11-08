@@ -11,21 +11,47 @@
 mod require;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 const SOURCE: &str =
     "commons greeting\n\nfn greet(name: String) -> String {\n  let msg = \"hi {name}\"\n  msg\n}\n";
 
+/// `Command` for `program`, via `cmd /C` on Windows so npm's `.cmd` shims
+/// (`tsc.cmd`, `npx.cmd`) resolve — the discovery `tsc_verify.rs` uses.
+fn base_command(program: &str) -> Command {
+    if cfg!(windows) {
+        let mut c = Command::new("cmd");
+        c.arg("/C").arg(program);
+        c
+    } else {
+        Command::new(program)
+    }
+}
+
+fn tool_exists(name: &str) -> bool {
+    let finder = if cfg!(windows) { "where" } else { "which" };
+    Command::new(finder)
+        .arg(name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 fn tsc_runner() -> Option<Command> {
-    let ok = |name: &str| {
-        Command::new(name)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    };
-    if ok("tsc") {
-        return Some(Command::new("tsc"));
+    if tool_exists("tsc") {
+        return Some(base_command("tsc"));
+    }
+    if tool_exists("npx") {
+        let mut c = base_command("npx");
+        c.args([
+            "--yes",
+            "-p",
+            &format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED),
+            "tsc",
+        ]);
+        return Some(c);
     }
     None
 }
