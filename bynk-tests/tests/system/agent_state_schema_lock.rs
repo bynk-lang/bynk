@@ -912,15 +912,40 @@ fn a_nested_change_that_is_not_a_defaulted_addition_names_its_path() {
     assert_eq!(p.lock(), before, "a refused build must not touch the lock");
 }
 
+/// #2691: no value stored before a variant exists can name it, so adding one
+/// is additive; removing or renaming one is not.
 #[test]
-fn a_new_variant_in_stored_state_stays_non_additive() {
+fn a_new_variant_in_stored_state_is_additive() {
     let p = Project::new("nested-variant");
     let with_sum = |sum: &str| with_decl(sum, &cart("  store last: Cell[Option[Event]]"));
     p.build_ok(&with_sum("type Event = | Added(sku: String) | Cleared"));
-    let err = p.build_err(&with_sum(
-        "type Event = | Added(sku: String) | Cleared | Paused",
+    assert_eq!(agent_version(&p.lock()), "1");
+
+    p.build_ok(&with_sum(
+        "type Event = | Added(sku: String) | Cleared | Paused | Moved(to: String)",
     ));
-    assert!(err.contains("last?|Paused variant added"), "{err}");
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "{lock}");
+    assert!(lock.contains("additive = true"), "{lock}");
+    assert!(lock.contains("path = \"last?|Moved.to\""), "{lock}");
+
+    let before = p.lock();
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(sku: String) | Paused | Moved(to: String)",
+    ));
+    assert!(err.contains("last?|Cleared removed"), "{err}");
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(sku: String) | Cleared | Halted | Moved(to: String)",
+    ));
+    assert!(err.contains("last?|Paused removed"), "{err}");
+    let err = p.build_err(&with_sum(
+        "type Event = | Added(sku: String, qty: Int) | Cleared | Paused | Moved(to: String)",
+    ));
+    assert!(
+        err.contains("last?|Added.qty added without a default"),
+        "{err}"
+    );
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
 }
 
 #[test]

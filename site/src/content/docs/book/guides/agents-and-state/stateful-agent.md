@@ -178,6 +178,9 @@ refuses a change that deployed data cannot be read through.
 
 - **Adding a field** is safe. Instances stored before it existed read it as its
   zero or initialiser.
+- **Adding a variant** to a sum held in a `store` field is safe: no stored value
+  names it. Your `match` expressions still need an arm for it. Once a record with the
+  new variant exists, deploy forward rather than rolling back.
 - **Removing, retyping, or changing the storage kind of a field** is refused with
   `bynk.agent.non_additive_state_change`. So is **renaming** one: the old values
   would be left behind under the old name while the new field reads as zero. When

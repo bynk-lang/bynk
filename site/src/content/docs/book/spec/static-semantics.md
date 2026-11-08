@@ -1059,6 +1059,10 @@ increment it:
   with whatever lies beneath it, since every record stored before decodes it as its
   default ([§5.2b](#field-defaults));
 - a record field gaining a default;
+- adding a **sum variant** anywhere inside a stored value, with its payload fields:
+  no value stored before it can name it, and a record holding the new variant is
+  stopped on rollback by the `__v` marker. This is a rule about stored data only: a
+  `match` over the sum must still handle the new variant, as always;
 - changing only a refinement, which also warns (`bynk.agent.refinement_changed`),
   since a narrowing faults on load as above.
 
@@ -1068,7 +1072,7 @@ names each position that broke:
 - changing a position's type, or a field's storage kind;
 - adding a record field without a default;
 - a record field losing its default;
-- adding a sum variant.
+- removing or renaming a sum variant, or changing an existing variant's payload.
 
 Renaming a field is a removal plus an addition. A shape recorded before positions
 were (an older lock) has none: an unchanged build fills them in without changing

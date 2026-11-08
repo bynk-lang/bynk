@@ -39,7 +39,7 @@ changed, followed by what happened there:
 | `prefs.theme removed` | A recorded record field, variant or element position no longer exists. |
 | `prefs.size retyped` | The position is still there but now holds a different type. |
 | `prefs.size lost its default` | A record field that had a default no longer has one, so a record stored without it would not decode. |
-| `last?\|Paused variant added` | A sum type gained a variant, which is refused like any other change to a sum. |
+| `last?\|Paused removed` | A sum type lost a variant (a rename is a removal plus an addition), so a value stored with it would not decode. |
 
 The path is built from these segments:
 
