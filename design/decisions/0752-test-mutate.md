@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk test --mutate` applies one typed mutation at a time (comparison operators, `&&`/`||`) and reports the mutants the suites don't catch, with source spans; `[test.mutate] exclude` in `bynk.toml`"
----
+# 0752 — `bynk test --mutate` reports the code changes the suites don't catch
 
-## ADR: test-mutate
-title: `bynk test --mutate` reports the code changes the suites don't catch
-summary: A flag on `bynk test`, mutants as in-memory source overlays, suites chosen by unit reach
+- **Status:** Accepted (v0.516)
 
 **Context.** A passing suite shows the code does what the tests ask, not that the tests would fail if it stopped. Authors checked this by editing sources with throwaway scripts, running `bynk test` and restoring the file (#3069). The toolchain already holds what a mutation run needs: spans, an in-memory source overlay, suite selection, and a runner it can drive in process.
 
