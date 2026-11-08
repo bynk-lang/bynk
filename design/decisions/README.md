@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0756](0756-field-default-generic-app.md) | **Field defaults on a field whose type applies a user generic** (v0.519) — The default renderers read a generic's fields at the instantiation, so a concrete instantiation, a pass-through parameter and a generic sum take a closed-form default | Accepted (v0.519) |
 | [0755](0755-bynk-build-verb.md) | **`bynk build` and the `[build]` table** (v0.518.1) — build infers from the project, compile is told; the first slice has no profiles | Accepted (v0.518.1) |
 | [0754](0754-bynk-revert.md) | **bynk revert drives Cloudflare's rollback after checks only Bynk can make** (v0.518) — Per-version deploy facts travel on the Worker version; every unknown is a refusal | Accepted (v0.518) |
 | [0753](0753-test-websocket-service-address.md) | **A case drives a WebSocket service by address against a recording TestConnection** (v0.517) — open/message/close addresses, a case-scoped TestConnection[F], and the principal given once at open | Accepted (v0.517) |
