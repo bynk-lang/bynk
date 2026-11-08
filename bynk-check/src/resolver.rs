@@ -3244,7 +3244,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         | ExprKind::None
         | ExprKind::UnitLit => {}
         // v0.20b: a list literal — each element resolves as a value.
-        ExprKind::ListLit(elems) => {
+        ExprKind::ListLit(elems, ..) => {
             for el in elems {
                 check_expr_references(el, cx);
             }

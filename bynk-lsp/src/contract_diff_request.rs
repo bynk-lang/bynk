@@ -401,12 +401,14 @@ refund = "bbbb"
                 name: "ok".into(),
                 ty: Shape::Base("Bool".into()),
                 preds: Vec::new(),
+                defaulted: false,
             }];
             if extra {
                 fields.push(Field {
                     name: "at".into(),
                     ty: Shape::Base("Int".into()),
                     preds: Vec::new(),
+                    defaulted: false,
                 });
                 fields.sort_by_key(|f| f.name.clone());
             }

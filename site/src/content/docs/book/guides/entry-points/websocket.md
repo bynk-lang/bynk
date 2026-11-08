@@ -115,25 +115,35 @@ the sender's key (`u != sender`); a `Connection` cannot be compared with `==`
 
 ## Test it with no Cloudflare runtime
 
-On the **bundle** target a connection is a `TestConnection` — it captures every
-frame sent (`.sent`) and whether it was closed (`.closed`) — so the whole flow runs
-under Node. Drive a handler by passing the connection, the route params, and the
-actor identity:
+A `suite` drives the service by address, against a `TestConnection[F]()` that
+records every frame the server sends (`.sent()`) and whether it closed the
+connection (`.closed()`). The whole flow runs under Node:
 
-```ts
-const tcA = new TestConnection<{ text: string }>();
-const tcB = new TestConnection<{ text: string }>();
+```bynk,fragment
+suite chat {
+  case "a message reaches the room, and a member who left hears nothing" {
+    let a = TestConnection[ServerFrame]()
+    let b = TestConnection[ServerFrame]()
+    let room = RoomId.unsafe("r1")
 
-await ChatGateway.open(tcA, roomId, { identity: alice });   // tcA.sent[0].text === "welcome"
-await ChatGateway.open(tcB, roomId, { identity: bob });
+    let _ <- ChatGateway.open(a, room) by Participant(UserId.unsafe("alice"))
+    let _ <- ChatGateway.open(b, room) by Participant(UserId.unsafe("bob"))
+    expect a.sent() == [ServerFrame { text: "welcome" }]
 
-await ChatGateway.message(tcA, roomId, { text: "hello room" }, { identity: alice });
-// both tcA.sent and tcB.sent now end with { text: "hello room" }
+    let _ <- ChatGateway.message(a, ClientFrame { text: "hello room" })
+    // both a.sent() and b.sent() now end with "hello room"
 
-await ChatGateway.close(tcB, roomId, { identity: bob });
-await ChatGateway.message(tcA, roomId, { text: "after leave" }, { identity: alice });
-// only tcA receives it — bob has left
+    let _ <- ChatGateway.close(b)
+    let _ <- ChatGateway.message(a, ClientFrame { text: "after leave" })
+    expect b.sent().length() == 2    // bob has left
+  }
+}
 ```
+
+`open` takes the route params and the actor (`by`); `message` and `close` reuse
+both from the connection, as the platform does. To test an agent without the
+service, pass it `tc.connection()`. See [Driving a WebSocket
+service](/book/reference/testing/#websocket-address).
 
 ## Build and run
 

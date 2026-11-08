@@ -4379,7 +4379,7 @@ pub(crate) fn holds_callee_typed(e: &Expr, cx: &LowerCtx) -> bool {
         | ExprKind::Some(inner)
         | ExprKind::Ok(inner)
         | ExprKind::Err(inner) => holds_callee_typed(inner, cx),
-        ExprKind::ListLit(items) => items.iter().any(|i| holds_callee_typed(i, cx)),
+        ExprKind::ListLit(items, ..) => items.iter().any(|i| holds_callee_typed(i, cx)),
         ExprKind::RecordConstruction { fields, .. } => fields
             .iter()
             .filter_map(|f| f.value.as_ref())

@@ -1082,6 +1082,7 @@ pub fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         | Ty::Effect(_)
         | Ty::Query(_)
         | Ty::Stream(_)
+        | Ty::TestConnection(_)
         | Ty::Connection(_)
         | Ty::HttpResult(_)
         | Ty::HttpOutcome(_)
@@ -3084,7 +3085,7 @@ fn collect_refs_in_expr(
                 collect_refs_in_expr(a, local_to_file, commons, ctx, out);
             }
         }
-        ExprKind::ListLit(elems) => {
+        ExprKind::ListLit(elems, ..) => {
             for el in elems {
                 collect_refs_in_expr(el, local_to_file, commons, ctx, out);
             }
@@ -3320,6 +3321,7 @@ fn record_ty_refs(
         | Ty::Set(t)
         | Ty::Query(t)
         | Ty::Stream(t)
+        | Ty::TestConnection(t)
         | Ty::Connection(t)
         | Ty::Actor(t) => record_ty_refs(*t, local_to_file, commons, ctx, out),
         Ty::Result(a, b) | Ty::Map(a, b) => {
@@ -7175,6 +7177,9 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         Ty::Stream(t) => TsType::named_with_args("AsyncIterable", vec![ts_ty_to_ts_type(*t, tys)]),
         // v0.102: a `Connection[F]` lowers to the runtime `Connection<F>` interface.
         Ty::Connection(t) => TsType::named_with_args("Connection", vec![ts_ty_to_ts_type(*t, tys)]),
+        Ty::TestConnection(t) => {
+            TsType::named_with_args("TestConnection", vec![ts_ty_to_ts_type(*t, tys)])
+        }
         Ty::Map(k, v) => TsType::named_with_args(
             "ReadonlyMap",
             vec![ts_ty_to_ts_type(*k, tys), ts_ty_to_ts_type(*v, tys)],

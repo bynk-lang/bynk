@@ -82,6 +82,8 @@ fn workspace_refusal(args: &TestArgs) -> Option<&'static str> {
         Some("`--format ndjson` streams one project — run it inside a member of this workspace")
     } else if args.output.is_some() {
         Some("`--output` names one project's output — run it inside a member of this workspace")
+    } else if args.mutate {
+        Some("`--mutate` mutates one project — run it inside a member of this workspace")
     } else if args.against.is_some() {
         Some("`--against` runs one project's suites — run it inside a member of this workspace")
     } else {

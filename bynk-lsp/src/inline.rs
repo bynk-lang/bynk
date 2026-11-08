@@ -231,7 +231,7 @@ fn atomic(e: &Expr) -> bool {
             | ExprKind::Some(_)
             | ExprKind::None
             | ExprKind::UnitLit
-            | ExprKind::ListLit(_)
+            | ExprKind::ListLit(..)
     )
 }
 

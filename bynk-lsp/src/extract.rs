@@ -746,7 +746,7 @@ fn locate<'a>(
         | ExprKind::Expect(_)
         | ExprKind::Val { .. }
         | ExprKind::Wire(_)
-        | ExprKind::ListLit(_)
+        | ExprKind::ListLit(..)
         | ExprKind::Observation(_)
         | ExprKind::Faults(_)
         | ExprKind::Trace { .. } => {
@@ -1062,7 +1062,7 @@ fn find_stmt_run_in_expr(e: &Expr, target: Span) -> Option<StmtRun<'_>> {
         | ExprKind::Expect(_)
         | ExprKind::Val { .. }
         | ExprKind::Wire(_)
-        | ExprKind::ListLit(_)
+        | ExprKind::ListLit(..)
         | ExprKind::Observation(_)
         | ExprKind::Faults(_)
         | ExprKind::Trace { .. } => expr_children(e)
@@ -1251,7 +1251,7 @@ fn expr_matches(e: &Expr, pred: &impl Fn(&Statement) -> bool) -> bool {
         | ExprKind::Expect(_)
         | ExprKind::Val { .. }
         | ExprKind::Wire(_)
-        | ExprKind::ListLit(_)
+        | ExprKind::ListLit(..)
         | ExprKind::Observation(_)
         | ExprKind::Faults(_)
         | ExprKind::Trace { .. } => expr_children(e).into_iter().any(|c| expr_matches(c, pred)),

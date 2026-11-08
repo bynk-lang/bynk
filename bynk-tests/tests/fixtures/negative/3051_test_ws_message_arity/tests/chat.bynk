@@ -1,0 +1,8 @@
+// #3051: `message` takes the connection and exactly one inbound frame.
+suite chat {
+  case "two frames" {
+    let tc = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(tc, RoomId.unsafe("r")) by Participant(UserId.unsafe("a"))
+    let _ <- ChatGateway.message(tc, ClientFrame { text: "x" }, ClientFrame { text: "y" })
+  }
+}

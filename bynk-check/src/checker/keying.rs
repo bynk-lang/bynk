@@ -331,6 +331,7 @@ pub(crate) fn require_key_positions(
         | Ty::HttpOutcome(a)
         | Ty::Query(a)
         | Ty::Stream(a)
+        | Ty::TestConnection(a)
         | Ty::Connection(a) => go(*a, errors),
         Ty::Result(a, b) => {
             go(*a, errors);

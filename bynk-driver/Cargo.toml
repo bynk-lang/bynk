@@ -38,3 +38,8 @@ which.workspace = true
 # `#[derive(Args)]` struct `bynk::cli` flattens instead
 # of hand-spelling the same 8 flags twice.
 clap.workspace = true
+
+# #3069: `--mutate`'s per-mutant timeout kills the runner's whole process group.
+# No new crate in the shipped binary: `bynk` already builds `libc` on Unix.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

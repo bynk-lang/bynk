@@ -1,0 +1,13 @@
+suite demo.limits {
+  // `within` is only tried away from its boundary, so `<` → `<=` goes unnoticed.
+  case "within holds below the bound" {
+    expect within(1, 5) == true
+    expect within(5, 1) == false
+  }
+
+  case "positive has a boundary" {
+    expect positive(1) == true
+    expect positive(0) == false
+    expect positive(-1) == false
+  }
+}

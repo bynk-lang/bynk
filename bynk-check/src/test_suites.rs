@@ -941,6 +941,12 @@ pub fn phase_integration_bodies(
                     &case_callees,
                     &mut body_errs,
                 );
+                check_ws_address_tier(
+                    case,
+                    case_effective_tier(case, d),
+                    &case_callees,
+                    &mut body_errs,
+                );
                 check_call_address_tier(
                     case,
                     case_effective_tier(case, d),
@@ -2589,6 +2595,46 @@ fn check_event_address_tier(
     }
 }
 
+/// #3051: a `system`-tier case cannot drive a WebSocket lifecycle address: a
+/// deployed WebSocket is a real upgrade through the Worker and a Durable Object,
+/// which the system harness does not drive. The address is an in-process one.
+fn check_ws_address_tier(
+    case: &Case,
+    tier: bynk_syntax::ast::TestTier,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    if tier != bynk_syntax::ast::TestTier::System {
+        return;
+    }
+    let mut services: Vec<&str> = callees
+        .values()
+        .filter_map(|c| match c {
+            checker::Callee::TestService {
+                service, address, ..
+            } if address.starts_with("ws ") => Some(service.as_str()),
+            _ => None,
+        })
+        .collect();
+    services.sort_unstable();
+    services.dedup();
+    for service in services {
+        errors.push(
+            CompileError::new(
+                "bynk.test.ws_needs_in_process",
+                case.name_span,
+                format!(
+                    "case `\"{}\"` drives the WebSocket service `{service}` by address, but is a `system`-tier case",
+                    case.name
+                ),
+            )
+            .with_note(
+                "a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive; drive the service at `unit` or `integration`",
+            ),
+        );
+    }
+}
+
 /// #2910: a trailing `RequestHeaders` sent to a route that declares no
 /// `headers:` parameter reaches the route only over a real request, so it is a
 /// `system`-tier form. Below `system` it stays the arity error it always was,
@@ -3417,6 +3463,12 @@ fn target_test_services(
                 ),
                 _ => (Default::default(), None),
             };
+            let ws_frames = match &decl.protocol {
+                ServiceProtocol::WebSocket {
+                    in_type, out_type, ..
+                } => Some((in_type.clone(), out_type.clone())),
+                _ => None,
+            };
             (
                 name.clone(),
                 checker::TestServiceSig {
@@ -3424,6 +3476,7 @@ fn target_test_services(
                     handlers,
                     known_events,
                     event_publisher,
+                    ws_frames,
                 },
             )
         })
@@ -4908,6 +4961,7 @@ impl SuiteView {
         imported: &[String],
         unit_tables: &HashMap<String, UnitTable>,
         unit_uses: &HashMap<String, Vec<String>>,
+        actor_identities: bool,
     ) {
         let reach = crate::project_model::close_view_types(
             imported,
@@ -4916,6 +4970,7 @@ impl SuiteView {
             &mut self.types,
             &self.fns,
             &mut self.methods,
+            actor_identities,
         );
         self.hidden = reach.hidden;
         self.conflicts = reach.conflicts;
@@ -4981,7 +5036,7 @@ pub fn privileged_view(
         .retain(|n, _| local.embeds.contains_key(n) || !hidden_by_local(n));
     view.consts
         .retain(|n, _| local.consts.contains_key(n) || !hidden_by_local(n));
-    view.close(&imported, unit_tables, unit_uses);
+    view.close(&imported, unit_tables, unit_uses, false);
     Some(view)
 }
 
@@ -5032,7 +5087,8 @@ pub fn integration_view(
             });
         }
     }
-    view.close(&imported, unit_tables, unit_uses);
+    // #3064: a participant's actors' identity types are reached too.
+    view.close(&imported, unit_tables, unit_uses, true);
     view
 }
 

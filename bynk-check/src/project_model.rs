@@ -5303,6 +5303,9 @@ pub fn close_view_types(
     types: &mut HashMap<String, Arc<TypeDecl>>,
     fns: &HashMap<String, Arc<FnDecl>>,
     methods: &mut HashMap<String, ResolverMethodTable>,
+    // #3064: also reach the `identity` types of the imported units' actors
+    // (a `system` suite's participants), resolved in the actor's own scope.
+    actor_identities: bool,
 ) -> ViewReach {
     let mut imported_from: HashMap<String, String> = HashMap::new();
     for u in imported {
@@ -5320,6 +5323,23 @@ pub fn close_view_types(
             }
         }
     }
+    let mut seeds: Vec<Reached> = Vec::new();
+    if actor_identities {
+        for u in imported {
+            let Some(t) = unit_tables.get(u) else {
+                continue;
+            };
+            let mut actors: Vec<_> = t.actors.iter().collect();
+            actors.sort_by_key(|(n, _)| n.as_str());
+            for (_, a) in actors {
+                if let Some(id) = &a.identity {
+                    let mut names = Vec::new();
+                    type_ref_names(id, &HashSet::new(), &mut names);
+                    push_refs(names, u, u, &mut seeds);
+                }
+            }
+        }
+    }
     let mut conflicts: Vec<ViewConflict> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     let hidden = close_imported(
@@ -5332,7 +5352,7 @@ pub fn close_view_types(
         methods,
         &mut imported_from,
         &mut HashMap::new(),
-        Vec::new(),
+        seeds,
         |r, owner, bound| {
             if bound != Some(owner) && seen.insert(r.name.clone()) {
                 conflicts.push(ViewConflict {
@@ -6266,6 +6286,7 @@ mod view_closure_tests {
             &mut types,
             &HashMap::new(),
             &mut HashMap::new(),
+            false,
         );
         assert_eq!(
             reach.hidden.get("Repo").map(String::as_str),
