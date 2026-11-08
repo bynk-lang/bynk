@@ -267,11 +267,11 @@ pub fn describe_agent_state_at(source: &str, offset: usize) -> Option<String> {
 pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
     (
         "Nobody",
-        "Sends no credential — no `Authorization` header on a Bearer route, no signature headers on a `Signature` route — so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
+        "Sends no credential — no `Authorization` header on a Bearer or `Oidc` route, no signature headers on a `Signature` route — so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
     ),
     (
         "Forged",
-        "Signs a `Signature` route's request, or a Bearer route's token (a valid `sub`, a future `exp`), with a secret the seam does not hold, so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
+        "Signs a `Signature` route's request, or a Bearer route's token (a valid `sub`, a future `exp`), with a secret the seam does not hold, or sends an `Oidc` route a token signed by a key its JWKS does not publish, so the real seam refuses it (`Rejected(Unauthorized)`). `system` tier only.",
     ),
     (
         "Stale",
@@ -279,12 +279,20 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
     ),
     (
         "Expired",
-        "Sends a Bearer route's token correctly signed, with a valid `sub` and an `exp` one hour in the past, so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `Bearer` actor. `system` tier only.",
+        "Sends a Bearer or `Oidc` route's token correctly signed, with a valid `sub` and an `exp` one hour in the past, so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `Bearer` or `Oidc` actor. `system` tier only.",
+    ),
+    (
+        "WrongIssuer",
+        "Sends an `Oidc` route a token correctly signed by the test issuer and unexpired, whose `iss` is not the actor's issuer, so the real seam refuses it (`Rejected(Unauthorized)`). Needs an `Oidc` actor. `system` tier only.",
+    ),
+    (
+        "WrongAudience",
+        "Sends an `Oidc` route a token correctly signed by the test issuer and unexpired, whose `aud` is not the actor's audience, so the real seam refuses it (`Rejected(Unauthorized)`). Needs an `Oidc` actor. `system` tier only.",
     ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -3385,6 +3393,12 @@ mod tests {
         assert!(
             expired.contains("by Expired") && expired.contains("`exp` one hour in the past"),
             "{expired}"
+        );
+        let src = "suite ci.api as system {\n\tcase \"c\" {\n\t\tlet r <- api.GET(\"/a\") by WrongIssuer\n\t\texpect r is Rejected(Unauthorized)\n\t}\n}\n";
+        let wrong = describe_reserved_principal_at(src, src.find("WrongIssuer").unwrap()).unwrap();
+        assert!(
+            wrong.contains("by WrongIssuer") && wrong.contains("`iss` is not the actor's"),
+            "{wrong}"
         );
     }
 
