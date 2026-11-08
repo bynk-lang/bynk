@@ -1289,6 +1289,7 @@ fn bound_value_names(resolved: &ResolvedCommons, target: Option<&UnitTable>) -> 
 /// `resolved` and are checked as a unit's own are. Returns the initialisers'
 /// `expr_types` and `Callee` classification for the emit path, which re-checks
 /// with throwaway sinks.
+#[allow(clippy::too_many_arguments)]
 pub fn check_suite_decls(
     types: &[TypeDecl],
     consts: &[ConstDecl],

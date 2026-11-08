@@ -2244,6 +2244,17 @@ the `case`s, `property` bodies and other helpers of the suite that declares it,
 and to no other suite. A helper body is checked in its suite's view and MAY use
 test-only values such as `Val[T]`. It is emitted into test output only.
 
+A suite MAY declare `type` and `const` items (#3066). A suite type MUST be
+non-generic (`bynk.suite.type_generic`); a suite constant follows the rules of §5.1
+for a constant (`bynk.resolve.const_name_case`, `bynk.resolve.bad_const_initialiser`,
+`bynk.resolve.const_cycle`). Neither MUST repeat the name of another `type` or
+`const` of its suite (`bynk.suite.duplicate_type`, `bynk.suite.duplicate_const`) or
+of any value, type or sum variant in scope in its cases (`bynk.suite.type_name_clash`,
+`bynk.suite.const_name_clash`). They are visible to the `case`s, `property` bodies,
+helper `fn`s and other suite items of the suite that declares them, and to no other
+suite. A suite type has the JSON codecs of any record or sum. Both are emitted into
+test output only.
+
 A suite below `system` sees its target as the target sees itself, so the
 target's private declarations (§5.1c) are in scope in its cases, stubs and
 properties: tests routinely exercise helpers. The exception covers the target

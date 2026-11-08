@@ -1371,10 +1371,7 @@ pub fn check_suite_decls(
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     locals: &mut LocalsSink,
-) -> (
-    HashMap<ExprId, TypedExpr>,
-    HashMap<ExprId, Callee>,
-) {
+) -> (HashMap<ExprId, TypedExpr>, HashMap<ExprId, Callee>) {
     let mut expr_types = HashMap::new();
     let mut callees = HashMap::new();
     let mut hints = HintSink::new();

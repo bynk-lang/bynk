@@ -15,9 +15,9 @@ use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
 use bynk_syntax::ast::{
-    AgentDecl, BaseType, CapabilityDecl, CommonsItem, ConstDecl, Expr, ExprKind, FnDecl, FnName, Handler,
-    Ident, MessageEntry, MessagesDecl, Param, PredKind, ProviderDecl, RecordField, Refinement,
-    ServiceDecl, StoreField, TypeBody, TypeDecl, TypeParam, TypeRef,
+    AgentDecl, BaseType, CapabilityDecl, CommonsItem, ConstDecl, Expr, ExprKind, FnDecl, FnName,
+    Handler, Ident, MessageEntry, MessagesDecl, Param, PredKind, ProviderDecl, RecordField,
+    Refinement, ServiceDecl, StoreField, TypeBody, TypeDecl, TypeParam, TypeRef,
 };
 
 use bynk_model::{
@@ -9906,10 +9906,7 @@ pub fn emit_suite_decls(
     }
     let empty = bynk_check::resolver::CrossContextInfo::default();
     for c in consts {
-        stmts.extend(emit_const_in(
-            c,
-            ModuleCtx::new(typed, &empty, runtime_use),
-        ));
+        stmts.extend(emit_const_in(c, ModuleCtx::new(typed, &empty, runtime_use)));
     }
     stmts
         .iter()

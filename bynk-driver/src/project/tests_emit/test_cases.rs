@@ -433,9 +433,7 @@ pub(super) fn suite_fn_decls(
     typed.expr_types.extend(decl_types);
     typed.callees.extend(decl_callees);
     for t in suite_fns.types {
-        typed
-            .types
-            .insert(t.name.name.clone(), Arc::new(t.clone()));
+        typed.types.insert(t.name.name.clone(), Arc::new(t.clone()));
         bound.insert(t.name.name.clone());
     }
     for c in suite_fns.consts {

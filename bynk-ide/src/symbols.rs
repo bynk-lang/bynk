@@ -16,10 +16,18 @@ use bynk_syntax::parser::parse_unit_with_recovery;
 use bynk_syntax::span::Span;
 
 /// #2834: a suite's helper `fn`s as declarations, so they hover and
-/// go-to-definition like any `fn`. Empty for every other unit.
+/// go-to-definition like any `fn`; #3066: and its own `type`s and `const`s.
+/// Empty for every other unit.
 fn suite_fn_items(unit: &SourceUnit) -> Vec<CommonsItem> {
     match unit {
-        SourceUnit::Suite(s) => s.fns.iter().cloned().map(CommonsItem::Fn).collect(),
+        SourceUnit::Suite(s) => s
+            .fns
+            .iter()
+            .cloned()
+            .map(CommonsItem::Fn)
+            .chain(s.types.iter().cloned().map(CommonsItem::Type))
+            .chain(s.consts.iter().cloned().map(CommonsItem::Const))
+            .collect(),
         _ => Vec::new(),
     }
 }
