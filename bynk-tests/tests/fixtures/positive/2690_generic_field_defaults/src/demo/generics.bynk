@@ -1,0 +1,58 @@
+---
+#2690: a field whose type applies a user generic may declare a default. At a
+concrete instantiation it is an ordinary value of that type; inside a generic
+record it must hold for every instantiation.
+---
+commons demo.generics
+
+type Paginated[T] = { items: List[T] = [], next: Option[String] = None }
+
+type Outcome[T] =
+  | Done(value: T)
+  | Pending(reason: String)
+
+type Search = {
+  query: String,
+  page: Paginated[String] = Paginated { items: ["first"] },
+  outcome: Outcome[Int] = Pending("queued"),
+}
+
+type Cache[T] = {
+  key: String,
+  warm: Paginated[T] = Paginated {},
+  last: Outcome[T] = Pending("cold"),
+}
+
+fn pending(r: String) -> Outcome[Int] { Pending(r) }
+
+fn isPending[T](o: Outcome[T], r: String) -> Bool {
+  match o {
+    Pending(x) => x == r
+    Done(_) => false
+  }
+}
+
+fn search(q: String) -> Search { Search { query: q } }
+
+fn cache(k: String) -> Cache[Int] { Cache { key: k } }
+
+fn decodedSearch(json: String) -> Search {
+  match Json.decode[Search](json) {
+    Ok(s) => s
+    Err(_) => Search { query: "failed" }
+  }
+}
+
+fn decodedCache(json: String) -> Cache[Int] {
+  match Json.decode[Cache[Int]](json) {
+    Ok(c) => c
+    Err(_) => Cache { key: "failed" }
+  }
+}
+
+fn decodedCacheOf[T: Codable](json: String) -> Option[Cache[T]] {
+  match Json.decode[Cache[T]](json) {
+    Ok(c) => Some(c)
+    Err(_) => None
+  }
+}

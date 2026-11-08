@@ -68,12 +68,65 @@ pub fn lower_field_default_wire(
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
 ) -> Result<String, DefaultReason> {
+    lower_field_default_wire_in(init, expected, types, &[])
+}
+
+/// The deepest chain of generic instantiations a default may expand through.
+/// A default that names its own type (`type Tree[T] = { kid: Tree[T] = Tree {} }`)
+/// would otherwise render forever (#2690).
+const MAX_DEFAULT_DEPTH: usize = 16;
+
+/// Where a default is being rendered: the type parameters of the declaration it
+/// belongs to (#2690), which stand for no value whatever `types` holds under the
+/// same name, and how deep the instantiations nest.
+#[derive(Clone, Copy)]
+struct Cx<'a> {
+    params: &'a [String],
+    depth: usize,
+}
+
+impl<'a> Cx<'a> {
+    fn deeper(self) -> Result<Self, DefaultReason> {
+        if self.depth >= MAX_DEFAULT_DEPTH {
+            return Err(DefaultReason::from(
+                "the default refers to its own type, so it never ends".to_string(),
+            ));
+        }
+        Ok(Cx {
+            depth: self.depth + 1,
+            ..self
+        })
+    }
+}
+
+/// [`lower_field_default_wire`] for a field of a declaration whose type
+/// parameters are `params` (#2690): a default that needs a value of one of them
+/// is [`DefaultReason::UnresolvedType`], even when a type of that name is
+/// declared.
+pub fn lower_field_default_wire_in(
+    init: &Expr,
+    expected: &TypeRef,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    params: &[String],
+) -> Result<String, DefaultReason> {
+    wire_in(init, expected, types, Cx { params, depth: 0 })
+}
+
+fn wire_in(
+    init: &Expr,
+    expected: &TypeRef,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    cx: Cx<'_>,
+) -> Result<String, DefaultReason> {
     if let ExprKind::Paren(inner) = &init.kind {
-        return lower_field_default_wire(inner, expected, types);
+        return wire_in(inner, expected, types, cx);
     }
     match expected {
         TypeRef::Base(b, _) => lower_base_literal(*b, init),
         TypeRef::Named(id) => {
+            if cx.params.contains(&id.name) {
+                return Err(DefaultReason::UnresolvedType(id.name.clone()));
+            }
             let Some(decl) = types.get(&id.name) else {
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
             };
@@ -98,14 +151,36 @@ pub fn lower_field_default_wire(
                         id.name
                     ))),
                 },
-                TypeBody::Sum(s) => lower_sum_default(&id.name, s, init, types),
-                TypeBody::Record(r) => lower_record_default(r, init, types),
+                TypeBody::Sum(s) => lower_sum_default(&id.name, &body_variants(s), init, types, cx),
+                TypeBody::Record(r) => lower_record_default(&body_fields(r), init, types, cx),
+            }
+        }
+        // #2690: a field typed by a generic record or sum. The declaration's
+        // fields are read at the instantiation, so a default is a closed-form
+        // value of `Paginated[String]`; an argument that is the enclosing
+        // declaration's own parameter stays unresolved, so only a value with no
+        // content of that type qualifies.
+        TypeRef::App { name, args, .. } => {
+            let cx = cx.deeper()?;
+            match types.get(&name.name).map(|d| &d.body) {
+                Some(TypeBody::Record(_)) => {
+                    let fields = inst_record_fields(&name.name, args, types)?;
+                    lower_record_default(&fields, init, types, cx)
+                }
+                Some(TypeBody::Sum(_)) => {
+                    let variants = crate::wire::sum_inst_variants(&name.name, args, types)
+                        .ok_or_else(|| {
+                            DefaultReason::from("a generic sum's arity does not match".to_string())
+                        })?;
+                    lower_sum_default(&name.name, &variants, init, types, cx)
+                }
+                _ => Err(DefaultReason::UnresolvedType(name.name.clone())),
             }
         }
         TypeRef::Option(inner, _) => match &init.kind {
             ExprKind::None => Ok("{ kind: \"None\" }".to_string()),
             ExprKind::Some(e) => {
-                let v = lower_field_default_wire(e, inner, types)?;
+                let v = wire_in(e, inner, types, cx)?;
                 Ok(format!("{{ kind: \"Some\", value: {v} }}"))
             }
             _ => Err(DefaultReason::from(
@@ -114,11 +189,11 @@ pub fn lower_field_default_wire(
         },
         TypeRef::Result(ok, err, _) => match &init.kind {
             ExprKind::Ok(e) => {
-                let v = lower_field_default_wire(e, ok, types)?;
+                let v = wire_in(e, ok, types, cx)?;
                 Ok(format!("{{ kind: \"Ok\", value: {v} }}"))
             }
             ExprKind::Err(e) => {
-                let v = lower_field_default_wire(e, err, types)?;
+                let v = wire_in(e, err, types, cx)?;
                 Ok(format!("{{ kind: \"Err\", error: {v} }}"))
             }
             _ => Err(DefaultReason::from(
@@ -129,7 +204,7 @@ pub fn lower_field_default_wire(
             ExprKind::ListLit(items) => {
                 let parts = items
                     .iter()
-                    .map(|e| lower_field_default_wire(e, elem, types))
+                    .map(|e| wire_in(e, elem, types, cx))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(format!("[{}]", parts.join(", ")))
             }
@@ -142,9 +217,6 @@ pub fn lower_field_default_wire(
         // as its entries, a set as its elements), so both are `[]`.
         TypeRef::Map(..) => empty_collection(init, "Map").map(|()| "[]".to_string()),
         TypeRef::Set(..) => empty_collection(init, "Set").map(|()| "[]".to_string()),
-        TypeRef::App { .. } => Err(DefaultReason::from(
-            "a field whose type applies a generic record or sum cannot carry a default".to_string(),
-        )),
         TypeRef::Effect(..)
         | TypeRef::HttpResult(..)
         | TypeRef::QueueResult(_)
@@ -259,26 +331,80 @@ fn lower_base_literal(base: BaseType, e: &Expr) -> Result<String, DefaultReason>
 /// a foreign module regenerating this codec cannot import.
 fn lower_sum_default(
     sum_name: &str,
-    body: &SumBody,
+    variants: &InstVariants,
     init: &Expr,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    cx: Cx<'_>,
 ) -> Result<String, DefaultReason> {
-    let (variant, args) = sum_default_parts(sum_name, body, init)?;
-    let mut parts = vec![format!("kind: \"{}\"", variant.name.name)];
-    for (field, arg) in variant.payload.iter().zip(args.iter()) {
-        let v = lower_field_default_wire(arg, &field.type_ref, types)?;
-        parts.push(format!("{}: {v}", field.name.name));
+    let (variant, args) = sum_default_parts(sum_name, variants, init)?;
+    let mut parts = vec![format!("kind: \"{}\"", variant.0)];
+    for ((field, ty), arg) in variant.1.iter().zip(args.iter()) {
+        let v = wire_in(arg, ty, types, cx)?;
+        parts.push(format!("{field}: {v}"));
     }
     Ok(format!("{{ {} }}", parts.join(", ")))
+}
+
+/// A sum's variants with their payload field types, as written (a non-generic
+/// sum) or substituted (an instantiation, `wire::sum_inst_variants`).
+type InstVariants = Vec<InstVariant>;
+
+/// One variant: its name and payload `(field, type)` list.
+type InstVariant = (String, Vec<(String, TypeRef)>);
+
+fn body_variants(body: &SumBody) -> InstVariants {
+    body.variants
+        .iter()
+        .map(|v| {
+            (
+                v.name.name.clone(),
+                v.payload
+                    .iter()
+                    .map(|f| (f.name.name.clone(), f.type_ref.clone()))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// A record's fields as `(name, type, declared default)`: as written (a
+/// non-generic record) or substituted (an instantiation).
+type InstFields<'a> = Vec<(String, TypeRef, Option<&'a Expr>)>;
+
+fn body_fields(body: &RecordBody) -> InstFields<'_> {
+    body.fields
+        .iter()
+        .map(|f| (f.name.name.clone(), f.type_ref.clone(), f.init.as_ref()))
+        .collect()
+}
+
+/// #2690: the fields of the generic record `name[args]`, types substituted, each
+/// with the default the declaration gives it.
+fn inst_record_fields<'a>(
+    name: &str,
+    args: &[TypeRef],
+    types: &'a std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> Result<InstFields<'a>, DefaultReason> {
+    let inst = crate::wire::record_inst_fields(name, args, types).ok_or_else(|| {
+        DefaultReason::from("a generic record's arity does not match".to_string())
+    })?;
+    let Some(TypeBody::Record(r)) = types.get(name).map(|d| &d.body) else {
+        return Err(DefaultReason::UnresolvedType(name.to_string()));
+    };
+    Ok(inst
+        .into_iter()
+        .zip(r.fields.iter())
+        .map(|((n, t), f)| (n, t, f.init.as_ref()))
+        .collect())
 }
 
 /// The variant a sum default names, and its payload arguments — shared by the
 /// wire and in-memory renderings so both read a default identically.
 fn sum_default_parts<'a>(
     sum_name: &str,
-    body: &'a SumBody,
+    variants: &'a InstVariants,
     init: &'a Expr,
-) -> Result<(&'a bynk_syntax::ast::Variant, &'a [Expr]), DefaultReason> {
+) -> Result<(&'a InstVariant, &'a [Expr]), DefaultReason> {
     let (variant_name, args): (&str, &[Expr]) = match &init.kind {
         ExprKind::Ident(id) => (id.name.as_str(), &[]),
         ExprKind::FieldAccess { receiver, field } => {
@@ -310,15 +436,15 @@ fn sum_default_parts<'a>(
             }
         },
     };
-    let Some(variant) = body.variants.iter().find(|v| v.name.name == variant_name) else {
+    let Some(variant) = variants.iter().find(|v| v.0 == variant_name) else {
         return Err(DefaultReason::from(format!(
             "`{variant_name}` is not a variant of `{sum_name}`"
         )));
     };
-    if args.len() != variant.payload.len() {
+    if args.len() != variant.1.len() {
         return Err(DefaultReason::from(format!(
             "`{variant_name}` takes {} payload field(s), got {}",
-            variant.payload.len(),
+            variant.1.len(),
             args.len()
         )));
     }
@@ -330,37 +456,38 @@ fn sum_default_parts<'a>(
 /// wire-shaped (never tagged, never a named constructor), so this never
 /// needs qualification either.
 fn lower_record_default(
-    body: &RecordBody,
+    fields_of: &InstFields<'_>,
     init: &Expr,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    cx: Cx<'_>,
 ) -> Result<String, DefaultReason> {
     let ExprKind::RecordConstruction { fields, .. } = &init.kind else {
         return Err(DefaultReason::from("expected a record literal".to_string()));
     };
     let mut parts = Vec::new();
-    for f in &body.fields {
-        let value = record_default_field(fields, f)?;
-        let v = lower_field_default_wire(value, &f.type_ref, types)?;
-        parts.push(format!("{}: {v}", f.name.name));
+    for (name, ty, declared) in fields_of {
+        let value = record_default_field(fields, name, *declared)?;
+        let v = wire_in(value, ty, types, cx)?;
+        parts.push(format!("{name}: {v}"));
     }
     Ok(format!("{{ {} }}", parts.join(", ")))
 }
 
-/// #2607: the value a record literal written as a default gives field `f` —
-/// its own written value, or, when it leaves `f` out, `f`'s declared default.
+/// #2607: the value a record literal written as a default gives field `name` —
+/// its own written value, or, when it leaves it out, the field's declared default.
 fn record_default_field<'a>(
     fields: &'a [bynk_syntax::ast::FieldInit],
-    f: &'a bynk_syntax::ast::RecordField,
+    name: &str,
+    declared: Option<&'a Expr>,
 ) -> Result<&'a Expr, DefaultReason> {
-    match fields.iter().find(|fi| fi.name.name == f.name.name) {
+    match fields.iter().find(|fi| fi.name.name == name) {
         Some(given) => given.value.as_ref().ok_or_else(|| {
             DefaultReason::from(format!(
-                "record default's field `{}` cannot use shorthand (no bindings are in scope)",
-                f.name.name
+                "record default's field `{name}` cannot use shorthand (no bindings are in scope)"
             ))
         }),
-        None => f.init.as_ref().ok_or_else(|| {
-            DefaultReason::from(format!("record default is missing field `{}`", f.name.name))
+        None => declared.ok_or_else(|| {
+            DefaultReason::from(format!("record default is missing field `{name}`"))
         }),
     }
 }
@@ -391,12 +518,32 @@ pub fn lower_field_default_value(
     expected: &TypeRef,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
 ) -> Result<String, DefaultReason> {
+    value_in(
+        init,
+        expected,
+        types,
+        Cx {
+            params: &[],
+            depth: 0,
+        },
+    )
+}
+
+fn value_in(
+    init: &Expr,
+    expected: &TypeRef,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    cx: Cx<'_>,
+) -> Result<String, DefaultReason> {
     if let ExprKind::Paren(inner) = &init.kind {
-        return lower_field_default_value(inner, expected, types);
+        return value_in(inner, expected, types, cx);
     }
     match expected {
         TypeRef::Base(b, _) => lower_base_literal(*b, init),
         TypeRef::Named(id) => {
+            if cx.params.contains(&id.name) {
+                return Err(DefaultReason::UnresolvedType(id.name.clone()));
+            }
             let Some(decl) = types.get(&id.name) else {
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
             };
@@ -411,36 +558,32 @@ pub fn lower_field_default_value(
                         id.name
                     ))),
                 },
-                TypeBody::Sum(s) => {
-                    // The wire form is `{ kind: "V", … }`; in memory the
-                    // discriminant is `tag`, and the payload fields recurse in
-                    // their own in-memory form.
-                    let (variant, args) = sum_default_parts(&id.name, s, init)?;
-                    let mut parts = vec![format!("tag: \"{}\"", variant.name.name)];
-                    for (field, arg) in variant.payload.iter().zip(args.iter()) {
-                        let v = lower_field_default_value(arg, &field.type_ref, types)?;
-                        parts.push(format!("{}: {v}", field.name.name));
-                    }
-                    Ok(format!("{{ {} }}", parts.join(", ")))
+                TypeBody::Sum(s) => value_sum(&id.name, &body_variants(s), init, types, cx),
+                TypeBody::Record(r) => value_record(&body_fields(r), init, types, cx),
+            }
+        }
+        // #2690: see `wire_in`.
+        TypeRef::App { name, args, .. } => {
+            let cx = cx.deeper()?;
+            match types.get(&name.name).map(|d| &d.body) {
+                Some(TypeBody::Record(_)) => {
+                    let fields = inst_record_fields(&name.name, args, types)?;
+                    value_record(&fields, init, types, cx)
                 }
-                TypeBody::Record(r) => {
-                    let ExprKind::RecordConstruction { fields, .. } = &init.kind else {
-                        return Err(DefaultReason::from("expected a record literal".to_string()));
-                    };
-                    let mut parts = Vec::new();
-                    for f in &r.fields {
-                        let value = record_default_field(fields, f)?;
-                        let v = lower_field_default_value(value, &f.type_ref, types)?;
-                        parts.push(format!("{}: {v}", f.name.name));
-                    }
-                    Ok(format!("{{ {} }}", parts.join(", ")))
+                Some(TypeBody::Sum(_)) => {
+                    let variants = crate::wire::sum_inst_variants(&name.name, args, types)
+                        .ok_or_else(|| {
+                            DefaultReason::from("a generic sum's arity does not match".to_string())
+                        })?;
+                    value_sum(&name.name, &variants, init, types, cx)
                 }
+                _ => Err(DefaultReason::UnresolvedType(name.name.clone())),
             }
         }
         TypeRef::Option(inner, _) => match &init.kind {
             ExprKind::None => Ok("{ tag: \"None\" }".to_string()),
             ExprKind::Some(e) => {
-                let v = lower_field_default_value(e, inner, types)?;
+                let v = value_in(e, inner, types, cx)?;
                 Ok(format!("{{ tag: \"Some\", value: {v} }}"))
             }
             _ => Err(DefaultReason::from(
@@ -449,11 +592,11 @@ pub fn lower_field_default_value(
         },
         TypeRef::Result(ok, err, _) => match &init.kind {
             ExprKind::Ok(e) => {
-                let v = lower_field_default_value(e, ok, types)?;
+                let v = value_in(e, ok, types, cx)?;
                 Ok(format!("{{ tag: \"Ok\", value: {v} }}"))
             }
             ExprKind::Err(e) => {
-                let v = lower_field_default_value(e, err, types)?;
+                let v = value_in(e, err, types, cx)?;
                 Ok(format!("{{ tag: \"Err\", error: {v} }}"))
             }
             _ => Err(DefaultReason::from(
@@ -464,7 +607,7 @@ pub fn lower_field_default_value(
             ExprKind::ListLit(items) => {
                 let parts = items
                     .iter()
-                    .map(|e| lower_field_default_value(e, elem, types))
+                    .map(|e| value_in(e, elem, types, cx))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(format!("[{}]", parts.join(", ")))
             }
@@ -489,4 +632,42 @@ pub fn lower_field_default_value(
             "this field type cannot carry a default".to_string(),
         )),
     }
+}
+
+/// The in-memory twin of [`lower_sum_default`]: the wire form is
+/// `{ kind: "V", … }`; in memory the discriminant is `tag`, and the payload
+/// fields recurse in their own in-memory form.
+fn value_sum(
+    sum_name: &str,
+    variants: &InstVariants,
+    init: &Expr,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    cx: Cx<'_>,
+) -> Result<String, DefaultReason> {
+    let (variant, args) = sum_default_parts(sum_name, variants, init)?;
+    let mut parts = vec![format!("tag: \"{}\"", variant.0)];
+    for ((field, ty), arg) in variant.1.iter().zip(args.iter()) {
+        let v = value_in(arg, ty, types, cx)?;
+        parts.push(format!("{field}: {v}"));
+    }
+    Ok(format!("{{ {} }}", parts.join(", ")))
+}
+
+/// The in-memory twin of [`lower_record_default`].
+fn value_record(
+    fields_of: &InstFields<'_>,
+    init: &Expr,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    cx: Cx<'_>,
+) -> Result<String, DefaultReason> {
+    let ExprKind::RecordConstruction { fields, .. } = &init.kind else {
+        return Err(DefaultReason::from("expected a record literal".to_string()));
+    };
+    let mut parts = Vec::new();
+    for (name, ty, declared) in fields_of {
+        let value = record_default_field(fields, name, *declared)?;
+        let v = value_in(value, ty, types, cx)?;
+        parts.push(format!("{name}: {v}"));
+    }
+    Ok(format!("{{ {} }}", parts.join(", ")))
 }

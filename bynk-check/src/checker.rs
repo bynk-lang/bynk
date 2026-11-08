@@ -1070,9 +1070,13 @@ fn check_record_field_defaults(
         if errors.len() > before {
             continue;
         }
-        if let Err(reason) =
-            crate::wire_default::lower_field_default_wire(init, &field.type_ref, &input.types)
-        {
+        let params: Vec<String> = t.type_params.iter().map(|p| p.name.name.clone()).collect();
+        if let Err(reason) = crate::wire_default::lower_field_default_wire_in(
+            init,
+            &field.type_ref,
+            &input.types,
+            &params,
+        ) {
             // A default that reaches a type parameter (`Option[T] = Some(1)`)
             // holds for one instantiation at most.
             if let crate::wire_default::DefaultReason::UnresolvedType(name) = &reason

@@ -756,6 +756,12 @@ Careful, timeout: None, tags: Map.empty() }`, and `Options { name: "x", retries:
 - **Generic records.** A default must hold for every instantiation: `items:
   List[T] = []` and `next: Option[T] = None` do, a field of type `T` can't have
   one.
+- **Fields that apply a generic.** The default is a value of the instantiated
+  type: `page: Paginated[String] = Paginated { items: ["first"] }`, or
+  `outcome: Outcome[Int] = Pending("queued")` for a generic sum. Inside a
+  generic record it may not write a value of the record's own parameter
+  (`warm: Paginated[T] = Paginated {}` holds for every `T`; `Paginated { items:
+  [1] }` doesn't).
 - **Variants don't take defaults** (`bynk.types.field_default_on_variant`). A
   variant is built like a call; hold optional values in a record instead.
 
