@@ -1,0 +1,5 @@
+commons demo.lonely
+
+fn same(a: Int, b: Int) -> Bool {
+  a == b
+}
