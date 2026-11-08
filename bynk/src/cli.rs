@@ -335,6 +335,14 @@ pub enum Command {
         /// reported as usual.
         #[arg(long)]
         fix: bool,
+        /// After a passing check, generate the Workers TypeScript into a
+        /// temporary directory and type-check it with `tsc` (#3068). A failure
+        /// is reported as `bynk.codegen.tsc_failed` at the Bynk source the
+        /// failing line came from: it is a compiler bug. Needs `tsc` (with
+        /// Node.js); slower than a plain check, so off by default. Project
+        /// directories only.
+        #[arg(long)]
+        emit: bool,
         #[command(flatten)]
         lock: LockArgs,
     },

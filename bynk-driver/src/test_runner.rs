@@ -23,7 +23,7 @@ use crate::test_json::{Case, Location, Suite, TestRun};
 /// Where `name` is installed on `PATH`, if it is. #1758: callers spawn this
 /// path, not the bare name, so a Windows npm shim (`tsc.cmd`) that detection
 /// finds is also the program that runs.
-fn resolve_tool(name: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_tool(name: &str) -> Option<PathBuf> {
     crate::probe::detect(&SystemToolbox, name, DetectOpts::default())
         .provenance
         .path()
@@ -33,7 +33,7 @@ fn resolve_tool(name: &str) -> Option<PathBuf> {
 /// #1758: a runner that was found but would not start. Recorded instead of
 /// silently skipped, so a run with no working runner reports the real cause
 /// rather than advising an install of something already installed.
-fn start_failure(path: &Path, e: &std::io::Error) -> String {
+pub(crate) fn start_failure(path: &Path, e: &std::io::Error) -> String {
     format!(
         "`{}` was found but could not be started: {e}",
         path.display()
@@ -829,53 +829,55 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         for p in prefix {
             cmd.arg(p);
         }
-        cmd.arg("-p").arg(&tsconfig);
-        let tsc_ok = if json {
-            match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
-                Ok(out) if out.status.success() => true,
-                Ok(out) => {
-                    // tsc writes its diagnostics to *stdout*; capturing only
-                    // stderr left the document's most useful field empty.
-                    let mut detail = String::from_utf8_lossy(&out.stdout).into_owned();
-                    let err_text = String::from_utf8_lossy(&out.stderr);
-                    if !err_text.trim().is_empty() {
-                        if !detail.is_empty() {
-                            detail.push('\n');
-                        }
-                        detail.push_str(&err_text);
+        // `--pretty false`: the plain `file(line,col): error TSn:` records
+        // `tsc_report` parses, whatever the terminal.
+        cmd.arg("-p").arg(&tsconfig).args(["--pretty", "false"]);
+        // Captured in both modes (#3068): a failure is reported as a Bynk
+        // diagnostic where the output parses, else as the raw text, as before.
+        let tsc_ok = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
+            Ok(o) if o.status.success() => true,
+            Ok(o) => {
+                // tsc writes its diagnostics to *stdout*.
+                let mut detail = String::from_utf8_lossy(&o.stdout).into_owned();
+                let err_text = String::from_utf8_lossy(&o.stderr);
+                if !err_text.trim().is_empty() {
+                    if !detail.is_empty() {
+                        detail.push('\n');
                     }
-                    crate::test_stream::print_run(
-                        stream,
-                        &TestRun::runtime_error(
+                    detail.push_str(&err_text);
+                }
+                let failure = crate::tsc_report::diagnose(
+                    &detail,
+                    &output_root,
+                    &out.snapshots,
+                    &out.display_root,
+                );
+                if json {
+                    let run = match &failure {
+                        Some(f) => {
+                            TestRun::codegen_error(crate::project_failure_short_lines(f), detail)
+                        }
+                        None => TestRun::runtime_error(
                             "tsc rejected the generated TypeScript",
                             Some(detail),
                         ),
-                    );
-                    return ExitCode::FAILURE;
-                }
-                Err(e) => {
-                    start_failures.push(start_failure(&path, &e));
-                    continue;
-                }
-            }
-        } else {
-            match cmd
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-            {
-                Ok(s) if s.success() => true,
-                Ok(_) => {
+                    };
+                    crate::test_stream::print_run(stream, &run);
+                } else {
+                    match &failure {
+                        Some(f) => crate::print_project_failure(f),
+                        None => eprint!("{detail}"),
+                    }
                     eprintln!(
                         "{program} test: tsc reported errors against {}",
                         tsconfig.display()
                     );
-                    return ExitCode::FAILURE;
                 }
-                Err(e) => {
-                    start_failures.push(start_failure(&path, &e));
-                    continue;
-                }
+                return ExitCode::FAILURE;
+            }
+            Err(e) => {
+                start_failures.push(start_failure(&path, &e));
+                continue;
             }
         };
         if tsc_ok {

@@ -520,13 +520,25 @@ fn append_ext(path: &Path, ext: &str) -> PathBuf {
 /// the segments on that line as `(source_index, source_line_0based)`. Generated
 /// and source columns are decoded to keep the VLQ deltas honest, then dropped —
 /// attribution is line-level on both hops.
-struct SourceMap {
-    sources: Vec<String>,
+pub(crate) struct SourceMap {
+    pub(crate) sources: Vec<String>,
     lines: Vec<Vec<(usize, u32)>>,
 }
 
 impl SourceMap {
-    fn parse(json: &str) -> Option<SourceMap> {
+    /// #3068: the source file name and 0-based source line of the nearest
+    /// mapped generated line at or before `gen_line` (0-based) — ADR 0103 D2's
+    /// "enclosing statement" rule read backwards, for a `tsc` error position.
+    pub(crate) fn resolve(&self, gen_line: usize) -> Option<(&str, u32)> {
+        let upto = gen_line.min(self.lines.len().checked_sub(1)?);
+        self.lines[..=upto]
+            .iter()
+            .rev()
+            .find_map(|segs| segs.first())
+            .and_then(|&(src, line)| Some((self.sources.get(src)?.as_str(), line)))
+    }
+
+    pub(crate) fn parse(json: &str) -> Option<SourceMap> {
         #[derive(Deserialize)]
         struct Raw {
             #[serde(default)]

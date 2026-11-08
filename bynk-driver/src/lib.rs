@@ -36,6 +36,7 @@ pub mod test_filter;
 pub mod test_json;
 pub mod test_runner;
 pub mod test_stream;
+pub mod tsc_report;
 
 pub use compile_cmd::{CliPlatform, CliTarget, CompileArgs, EmitFormat, run_compile};
 pub use output::{write_document, write_modules, write_modules_for_node, write_output};

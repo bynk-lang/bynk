@@ -1567,6 +1567,14 @@ bynk test .
 `tsc`, and runs it with Node — both must be on your path. `--no-run` emits the
 TypeScript without running it. Exit code is non-zero if any test fails.
 
+If `tsc` rejects the generated TypeScript, that is a compiler bug, not a problem
+with your tests. `bynk test` reports it as `bynk.codegen.tsc_failed` at the Bynk
+source line the failing generated line came from, with the `tsc` error and the
+generated line attached, so you can report it. Under `--format json` it is a
+`compile` error whose `diagnostics` hold those lines and whose `stderr` holds the
+raw `tsc` output. `bynk check --emit` runs the same `tsc` step without the
+tests.
+
 ### Debugging under Node (`--inspect`)
 
 `bynk test --inspect` launches the test runner under Node's inspector

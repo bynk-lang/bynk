@@ -411,6 +411,8 @@ mod system {
     mod test_json;
     #[path = "test_runner_resolution.rs"]
     mod test_runner_resolution;
+    #[path = "tsc_failure_diagnostic.rs"]
+    mod tsc_failure_diagnostic;
     #[path = "tsc_verify.rs"]
     mod tsc_verify;
     #[path = "typescript_client.rs"]

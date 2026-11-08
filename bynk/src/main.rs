@@ -152,12 +152,13 @@ fn run() -> ExitCode {
             input,
             format,
             fix,
+            emit,
             lock,
         } => {
             if !prepare(&input, lock.options()) {
                 return ExitCode::FAILURE;
             }
-            run_check(input, format, fix)
+            run_check(input, format, fix, emit)
         }
         Command::Openapi {
             input,
@@ -404,7 +405,7 @@ fn run() -> ExitCode {
             if !prepare(&root, bynk::fetch::FetchOptions::default()) {
                 return ExitCode::FAILURE;
             }
-            if run_check(root.clone(), CheckFormatArg::Short, false) != ExitCode::SUCCESS {
+            if run_check(root.clone(), CheckFormatArg::Short, false, false) != ExitCode::SUCCESS {
                 eprintln!("bynk: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
@@ -887,8 +888,8 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
 }
 
 /// `bynk check` (#487): type-check in-process via the linked pipeline.
-fn run_check(input: PathBuf, format: CheckFormatArg, fix: bool) -> ExitCode {
-    check::run(input, format, fix)
+fn run_check(input: PathBuf, format: CheckFormatArg, fix: bool, emit: bool) -> ExitCode {
+    check::run(input, format, fix, emit)
 }
 
 /// `bynk fmt` (#487): format in-process via `bynk-fmt`.
