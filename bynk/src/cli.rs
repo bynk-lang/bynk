@@ -26,7 +26,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
         "Project",
         &["new", "check", "fmt", "test", "compile", "openapi", "token"],
     ),
-    ("Run and deploy", &["dev", "deploy", "tail", "migrate"]),
+    ("Run and deploy", &["dev", "deploy", "revert", "tail", "migrate"]),
     (
         "Dependencies",
         &["add", "deps", "fetch", "update", "search", "approve"],
@@ -518,9 +518,9 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
-    /// Make a Worker's previous deployment live again, without a rebuild.
+    /// Make a Worker's previous deployment live again.
     ///
-    /// Drives Cloudflare's version rollback after checking what makes it
+    /// Needs no rebuild. Drives Cloudflare's version rollback after checking what makes it
     /// unsafe: D1 migrations the live version applied, agent state stamped
     /// with a newer schema version, contract skew against the other live
     /// Workers, a replaced resource id, a secret change. Every unknown is a
