@@ -778,6 +778,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.cloudflare.edge_cache_public_authenticated",
         "In a context with `EdgeCache`, a `@cache(scope: public)` route is served by an actor that authenticates; its response would be shared at the edge with every caller.",
     ),
+    d(
+        "bynk.codegen.tsc_failed",
+        "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
+    ),
     dg(
         "bynk.consumes.alias_conflict",
         "Two `consumes` aliases collide.",

@@ -37,6 +37,7 @@ pub mod test_filter;
 pub mod test_json;
 pub mod test_runner;
 pub mod test_stream;
+pub mod tsc_report;
 
 pub use compile_cmd::{
     BuildArgs, CliPlatform, CliTarget, CompileArgs, EmitFormat, run_build, run_compile,

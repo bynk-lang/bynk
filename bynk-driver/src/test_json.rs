@@ -331,6 +331,16 @@ impl TestRun {
         }
     }
 
+    /// #3068: `tsc` rejected generated TypeScript. The Bynk diagnostics are
+    /// `compile`-kind lines like any other; the raw `tsc` text rides in `stderr`.
+    pub fn codegen_error(diagnostics: Vec<String>, tsc_output: String) -> Self {
+        let mut run = Self::compile_error(diagnostics);
+        if let Some(e) = run.error.as_mut() {
+            e.stderr = Some(tsc_output).filter(|s| !s.trim().is_empty());
+        }
+        run
+    }
+
     /// #3069: the document for a run killed after `--mutate`'s per-mutant
     /// timeout. Its own kind, so no consumer reads a timeout from a message.
     pub fn timeout_error(message: impl Into<String>) -> Self {
