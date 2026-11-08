@@ -15,8 +15,9 @@ on:
   push:
     branches: [main]
     # Everything that feeds the emitted TypeScript (the front end as well as
-    # the emitter), the corpus, the test, and what sets its memory: nextest's
-    # scheduling of it, the lockfile and the toolchain.
+    # the emitter), the corpus, the test and what it builds with (its
+    # `require` module and the test crate's manifest), and what sets its
+    # memory: nextest's scheduling of it, the lockfile and the toolchain.
     paths:
       - "bynk-syntax/**"
       - "bynk-check/**"
@@ -30,6 +31,8 @@ on:
       - "bynk-testkit/**"
       - "bynk-tests/tests/fixtures/positive/**"
       - "bynk-tests/tests/system/tsc_verify.rs"
+      - "bynk-tests/tests/require/**"
+      - "bynk-tests/Cargo.toml"
       - ".config/nextest.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
