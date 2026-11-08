@@ -236,14 +236,6 @@ struct WorkerRecord {
     /// ledger still reads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     expects: Option<Expects>,
-    /// #1883, slice 1b: the static files this Worker serves, as of the push
-    /// that recorded it — each one's served path (`/_assets/board.<hash>.css`).
-    /// The content hash is in the path, so a changed, added or removed file
-    /// is a changed line in the committed lock's diff. Empty (and omitted)
-    /// for a Worker with none; additive and `default`ed, so an older lock
-    /// still reads.
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    assets: BTreeSet<String>,
     /// I4 (#1970): the contract each declared foreign caller may call this
     /// Worker at, as of the push that recorded it — actor → service → hash, the
     /// build's `bynk-contracts.json` `foreign` record. The foreign callers are
@@ -364,30 +356,11 @@ impl DeployLock {
                     deployed: true,
                     contracts,
                     expects: None,
-                    assets: BTreeSet::new(),
                     foreign: BTreeMap::new(),
                     shapes: BTreeMap::new(),
                     expects_shapes: BTreeMap::new(),
                 },
             );
-    }
-
-    /// #1883, slice 1b: record the served paths of the static files `worker`
-    /// shipped in this push ([`WorkerRecord::assets`]). Called right after
-    /// [`DeployLock::record_deployed`]; a Worker not yet recorded is ignored.
-    pub(crate) fn record_assets(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        assets: BTreeSet<String>,
-    ) {
-        if let Some(record) = self
-            .environments
-            .get_mut(environment)
-            .and_then(|env| env.workers.get_mut(worker))
-        {
-            record.assets = assets;
-        }
     }
 
     /// I4 (#1970): record the contract `worker`'s declared foreign callers may
@@ -1637,7 +1610,6 @@ pub(crate) mod tests {
                                 "shop.payment".into(),
                                 BTreeMap::from([("authorise".into(), "febd15c2757b72e1".into())]),
                             )])),
-                            assets: BTreeSet::new(),
                             foreign: BTreeMap::from([(
                                 "Legacy".into(),
                                 BTreeMap::from([("ping".into(), "4082ce9e2b74e919".into())]),
@@ -1705,32 +1677,17 @@ pub(crate) mod tests {
         assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
     }
 
-    /// #1883, slice 1b: a Worker's served asset paths round-trip, and a
-    /// Worker with none writes no `assets` line.
+    /// #3072: the lock does not list a Worker's static assets (their hashed
+    /// names change with every page edit and nothing reads them). A lock that
+    /// still carries an `assets` line reads, and the next write omits it.
     #[test]
-    fn a_workers_served_assets_round_trip_and_none_is_not_written() {
-        let mut lock = DeployLock {
-            version: 1,
-            ..Default::default()
-        };
-        lock.record_deployed("default", "board", Some(Default::default()));
-        lock.record_assets(
-            "default",
-            "board",
-            ["/_assets/board.1a2b.css".to_string()]
-                .into_iter()
-                .collect(),
-        );
-        lock.record_deployed("default", "api", Some(Default::default()));
-        lock.record_assets("default", "api", BTreeSet::new());
+    fn an_old_locks_assets_line_is_read_and_not_written_back() {
+        let old = "version = 1\n\n[environments.default.workers.board]\ndeployed = true\nassets = [\"/_assets/board.1a2b.css\"]\n";
+        let lock: DeployLock = toml::from_str(old).unwrap();
+        assert!(lock.is_deployed("default", "board"));
         let text = toml::to_string_pretty(&lock).unwrap();
-        assert!(text.contains("\"/_assets/board.1a2b.css\""), "{text}");
-        assert_eq!(
-            text.matches("assets = ").count(),
-            1,
-            "only `board` has assets: {text}"
-        );
-        assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);
+        assert!(!text.contains("assets"), "{text}");
+        assert!(!text.contains("/_assets/"), "{text}");
     }
 
     /// I4 (#1970): a Worker's foreign callers round-trip, a later push

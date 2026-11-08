@@ -22,6 +22,7 @@ pub mod dev_run;
 pub mod discovery;
 pub mod doc_examples;
 pub mod fix;
+pub mod mutate;
 pub mod output;
 pub mod probe;
 pub mod project;

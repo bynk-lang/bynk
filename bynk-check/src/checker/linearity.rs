@@ -298,7 +298,7 @@ impl Lin<'_> {
             | ExprKind::EffectPure(_)
             | ExprKind::Expect(_)
             | ExprKind::Val { .. }
-            | ExprKind::ListLit(_)
+            | ExprKind::ListLit(..)
             | ExprKind::Observation(_)
             | ExprKind::Faults(_)
             | ExprKind::Trace { .. } => {

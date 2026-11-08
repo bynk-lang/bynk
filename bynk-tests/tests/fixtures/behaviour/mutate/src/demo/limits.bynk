@@ -1,0 +1,9 @@
+commons demo.limits
+
+fn within(a: Int, b: Int) -> Bool {
+  a < b
+}
+
+fn positive(n: Int) -> Bool {
+  n > 0
+}

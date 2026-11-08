@@ -1,0 +1,15 @@
+suite who as system {
+	env {
+		USER_SECRET = "s"
+	}
+
+	case "typed driver, with an identity" {
+		let r <- api.GET("/me", Window { days: 7 }) by User("alice")
+		expect r == Ok("alice 7")
+	}
+
+	case "raw driver, with an identity" {
+		let r <- api.GET("/me", Wire("?days=7")) by User("alice")
+		expect r is Handled(Ok(_))
+	}
+}

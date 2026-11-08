@@ -105,7 +105,8 @@ A request for an asset is answered by the platform; any other request reaches
 the Worker as before. A Bundle build (`bynk compile` without
 `--target workers`) ships no files, so it warns that each asset is not served
 (`bynk.asset.not_served`). `bynk dev` rebuilds when a file in `assets/` changes,
-and `bynk deploy` records each Worker's served files in `bynk.deploy.lock`.
+and `bynk deploy` ships them with the Worker. The committed `bynk.deploy.lock` does not
+list them, so a release that changes only pages leaves the lock unchanged.
 
 A suite can name its target's assets and fetch one with `api.GET(style)`,
 which answers with the file as the platform would; see

@@ -33,8 +33,10 @@
 //! request field" is compatible and "add a response variant" is breaking from a
 //! single definition.
 //!
-//! The classifier errs towards **breaking**. It cannot see a field's default,
-//! so an added field is compatible only when it is an `Option`. A wrong
+//! The classifier errs towards **breaking**. A field missing from the sender
+//! is compatible only when it is an `Option` or the receiver's field declares a
+//! default (#2689: the stored shape marks it; a shape recorded before the
+//! marker reads as having none). A wrong
 //! "compatible" lets a breaking deploy through; a wrong "breaking" only names a
 //! skew the gate already refuses.
 
@@ -100,6 +102,11 @@ pub struct Field {
     pub ty: Shape,
     /// The field's own inline refinement (#1969), as a sorted predicate set.
     pub preds: Vec<String>,
+    /// #2689: the field declares a default (`f: T = expr`), so a body without
+    /// its key decodes (ADR 0676 C). Part of the stored shape text, never of
+    /// the normal form or the hash: a default is not hashed. Text recorded
+    /// before the marker existed reads `false`, which errs towards breaking.
+    pub defaulted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -435,6 +442,7 @@ fn named_shape(
                         .as_ref()
                         .map(canon_pred_set)
                         .unwrap_or_default(),
+                    defaulted: f.init.is_some(),
                 })
                 .collect();
             fields.sort_by_cached_key(render_field);
@@ -456,6 +464,7 @@ fn named_shape(
                             name: p.name.name.clone(),
                             ty: shape_of(&p.type_ref, types, seen, subst),
                             preds: Vec::new(),
+                            defaulted: false,
                         })
                         .collect(),
                 })
@@ -646,6 +655,9 @@ fn strs(items: &[String]) -> impl Iterator<Item = Node> + '_ {
 fn field_node(f: &Field) -> Node {
     let mut fa = vec![Node::Str(f.name.clone()), shape_node(&f.ty)];
     fa.extend(strs(&f.preds));
+    if f.defaulted {
+        fa.push(Node::call("D", vec![]));
+    }
     Node::call("F", fa)
 }
 
@@ -660,10 +672,18 @@ fn node_field(n: &Node) -> Option<Field> {
         Node::Str(s) => Some(s.clone()),
         Node::Call(..) => None,
     };
+    // #2689: a trailing `D()` marks a defaulted field; the rest are predicates.
+    let (defaulted, preds) = match fa.last() {
+        Some(Node::Call(h, a)) if fa.len() > 2 && h == "D" && a.is_empty() => {
+            (true, &fa[2..fa.len() - 1])
+        }
+        _ => (false, &fa[2..]),
+    };
     Some(Field {
         name: string(&fa[0])?,
         ty: node_shape(&fa[1])?,
-        preds: fa[2..].iter().map(string).collect::<Option<_>>()?,
+        preds: preds.iter().map(string).collect::<Option<_>>()?,
+        defaulted,
     })
 }
 
@@ -1077,6 +1097,13 @@ impl Cx {
                         Some(sfield) => {
                             self.flows(&sfield.ty, &sfield.preds, &rfield.ty, &rfield.preds, &fpath)
                         }
+                        None if rfield.defaulted && !matches!(rfield.ty, Shape::Option(_)) => {
+                            self.note(
+                                &fpath,
+                                false,
+                                format!("the {receiver} fills the field `{}`, which the {sender} does not send, with its default", rfield.name),
+                            )
+                        }
                         None if matches!(rfield.ty, Shape::Option(_)) => self.note(
                             &fpath,
                             false,
@@ -1191,10 +1218,10 @@ fn payload_names(v: &Variant) -> Vec<&str> {
     n
 }
 
-/// Appended to a missing-field finding: the contract does not carry defaults, so
-/// the classifier cannot credit one.
-const DEFAULT_HINT: &str =
-    " (a field's default is not part of the contract, so only an `Option` may be absent)";
+/// Appended to a missing-field finding: a default is not hashed, but the
+/// stored shape marks which fields have one (#2689), so only an `Option` or a
+/// defaulted field may be absent.
+const DEFAULT_HINT: &str = " (only an `Option` or a field with a default may be absent)";
 
 /// A base type with its predicates, whether it is written as a base, an inline
 /// refinement on a base, or a named refined type. `None` for anything with
@@ -1376,6 +1403,86 @@ mod tests {
             &format!("{REQ}type Req = {{ id: Int, note: Option[String] }}\n"),
         );
         only(&c, Direction::Request, "request.note");
+    }
+
+    #[test]
+    fn request_defaulted_field_added_is_compatible() {
+        let c = compatible(
+            &format!("{REQ}type Req = {{ id: Int }}\n"),
+            &format!("{REQ}type Req = {{ id: Int, currency: String = \"EUR\" }}\n"),
+        );
+        only(&c, Direction::Request, "request.currency");
+    }
+
+    #[test]
+    fn a_default_does_not_hide_a_retype_or_a_new_required_field() {
+        breaking(
+            &format!("{REQ}type Req = {{ id: Int, c: String = \"a\" }}\n"),
+            &format!("{REQ}type Req = {{ id: Int, c: Int = 1 }}\n"),
+        );
+        breaking(
+            &format!("{REQ}type Req = {{ id: Int }}\n"),
+            &format!("{REQ}type Req = {{ id: Int, c: String = \"a\", d: Int }}\n"),
+        );
+    }
+
+    #[test]
+    fn response_defaulted_field_removed_is_compatible_when_the_caller_expects_a_default() {
+        compatible(
+            &format!("{RESP}type Resp = {{ ok: Bool, at: Int = 0 }}\n"),
+            &format!("{RESP}type Resp = {{ ok: Bool }}\n"),
+        );
+    }
+
+    #[test]
+    fn a_default_is_in_the_text_but_not_in_the_normal_form_or_the_hash() {
+        let with = shape(&format!(
+            "{REQ}type Req = {{ id: Int, c: String = \"a\" }}\n"
+        ));
+        let without = shape(&format!("{REQ}type Req = {{ id: Int, c: String }}\n"));
+        assert_eq!(with.normal_form(), without.normal_form());
+        assert_eq!(with.hash(), without.hash());
+        assert_ne!(with.to_text(), without.to_text());
+        assert_eq!(
+            ServiceShape::from_text(&with.to_text()).as_ref(),
+            Some(&with)
+        );
+        assert_eq!(
+            ServiceShape::from_text(&without.to_text()).as_ref(),
+            Some(&without)
+        );
+    }
+
+    /// Shape text as a build wrote it before the `D()` marker existed (#2689),
+    /// hard-coded: the response of a service whose `at` field the caller expects.
+    const LEGACY_EXPECTS_AT: &str = r#"Svc("probe",P("req",Rec("Req",F("id",B("Int")))),Ret(Rec("Resp",F("at",B("Int")),F("ok",B("Bool")))))"#;
+
+    #[test]
+    fn text_written_before_the_marker_reads_as_having_no_default() {
+        let legacy = ServiceShape::from_text(LEGACY_EXPECTS_AT).expect("legacy text parses");
+        let Shape::Record { fields, .. } = &legacy.ret else {
+            panic!("a record response");
+        };
+        assert!(fields.iter().all(|f| !f.defaulted));
+        // The current build writes the marker only where a default is declared.
+        let current = shape("type Req = { id: Int }\ntype Resp = { ok: Bool, at: Int = 0 }\n");
+        assert_eq!(
+            current.to_text(),
+            LEGACY_EXPECTS_AT.replace("B(\"Int\")),F(\"ok\"", "B(\"Int\"),D()),F(\"ok\"")
+        );
+    }
+
+    #[test]
+    fn a_legacy_expectation_of_a_removed_field_is_still_breaking() {
+        // The caller's recorded expectation predates the marker, so the field it
+        // reads cannot be credited with a default: the response direction stays
+        // breaking until the caller redeploys.
+        let caller = ServiceShape::from_text(LEGACY_EXPECTS_AT).unwrap();
+        let callee = shape("type Req = { id: Int }\ntype Resp = { ok: Bool }\n");
+        assert_eq!(check_call(&caller, &callee).verdict, Verdict::Breaking);
+        // The same expectation recorded by this build is compatible.
+        let fresh = shape("type Req = { id: Int }\ntype Resp = { ok: Bool, at: Int = 0 }\n");
+        assert_eq!(check_call(&fresh, &callee).verdict, Verdict::Compatible);
     }
 
     #[test]
@@ -1921,7 +2028,7 @@ mod tests {
             Shape::Record { fields, .. } => match v {
                 J::Obj(given) => fields.iter().all(|f| match get(given, &f.name) {
                     Some(x) => decodes(&f.ty, &f.preds, x),
-                    None => matches!(f.ty, Shape::Option(_)),
+                    None => matches!(f.ty, Shape::Option(_)) || f.defaulted,
                 }),
                 _ => false,
             },
@@ -2076,9 +2183,20 @@ mod tests {
                     name: n.into(),
                     ty,
                     preds: Vec::new(),
+                    defaulted: false,
                 })
                 .collect(),
         }
+    }
+    /// A record whose fields named in `defaulted` declare a default.
+    fn drecord(fields: Vec<(&str, Shape)>, defaulted: &[&str]) -> Shape {
+        let Shape::Record { name, mut fields } = record(fields) else {
+            unreachable!()
+        };
+        for f in &mut fields {
+            f.defaulted = defaulted.contains(&f.name.as_str());
+        }
+        Shape::Record { name, fields }
     }
     fn sum(variants: Vec<(&str, Vec<(&str, Shape)>)>) -> Shape {
         Shape::Sum {
@@ -2093,6 +2211,7 @@ mod tests {
                             name: f.into(),
                             ty,
                             preds: Vec::new(),
+                            defaulted: false,
                         })
                         .collect(),
                 })
@@ -2136,6 +2255,18 @@ mod tests {
             record(vec![("a", int()), ("b", int())]),
             record(vec![("a", int()), ("b", opt(string()))]),
             record(vec![("a", refined("Int", &["Positive"]))]),
+            drecord(vec![("a", int()), ("b", int())], &["b"]),
+            drecord(vec![("a", int()), ("b", string())], &["b"]),
+            drecord(
+                vec![("a", int()), ("b", refined("Int", &["Positive"]))],
+                &["b"],
+            ),
+            drecord(vec![("a", int()), ("b", opt(int()))], &["b"]),
+            drecord(vec![("a", int()), ("b", int())], &["a", "b"]),
+            record(vec![(
+                "a",
+                drecord(vec![("x", int()), ("y", int())], &["y"]),
+            )]),
             record(vec![("a", record(vec![("x", int())]))]),
             record(vec![("a", record(vec![("x", int()), ("y", opt(int()))]))]),
             sum(vec![("A", vec![]), ("B", vec![])]),

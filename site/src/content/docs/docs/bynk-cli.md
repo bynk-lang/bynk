@@ -700,7 +700,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT]]
 ```
 
 | Argument | Default | Meaning |
@@ -721,6 +721,12 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/book/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
+| `--mutate` | off | Check that the suites would notice a small change to the code: apply one typed mutation at a time to `src/`, run the suites that exercise the mutated unit, and report the mutants no suite failed on. See [Mutation testing](#mutation-testing). Incompatible with `--inspect`, `--no-run`, `--coverage`, `--against`, `--smoke`, `--update-snapshots`, `--case` and `--format ndjson`. |
+| `--only DECL` | — | With `--mutate`, mutate only `unit.decl` (`orders.refund`), or every declaration of `unit`. |
+| `--max-mutants N` | — | With `--mutate`, stop after `N` mutants, in source order. |
+| `--mutate-timeout SECONDS` | 3× the unmutated run, at least 10 | With `--mutate`, kill a mutant's run after this long; it counts as killed. |
+| `--mutate-all-suites` | off | With `--mutate`, run every suite against every mutant, not only the suites that reach the mutated unit. |
+| `--mutate-fail-under PERCENT` | — | With `--mutate`, exit non-zero when fewer than `PERCENT` of the mutants that ran were killed, or when no mutant reached a suite. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a `--case` or `--suite` value that selected
@@ -768,6 +774,57 @@ bynk test --suite commerce.money --case "accepts positive"   # that case, only i
 - At a [workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
   a value may live in one member only: each value is judged against every member's
   suites together, and a member that holds none of the selected tests runs nothing.
+
+### Mutation testing
+
+Passing suites show the code does what they ask, not that they would notice if it
+stopped. `bynk test --mutate` checks that: it changes the code in `src/` one small
+way at a time, runs the suites against each change, and reports the changes no
+suite failed on.
+
+```text
+bynk test --mutate                        # every mutant in src/
+bynk test --mutate --only orders.refund   # one declaration
+bynk test --mutate --format json          # the run's document, plus a `mutation` block
+```
+
+```text
+mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid (score 50%)
+  SURVIVED  src/demo/limits.bynk:4:5  demo.limits.within  `<` → `<=`
+  NO SUITE  src/demo/lonely.bynk:4:5  demo.lonely.same  `==` → `!=`
+```
+
+- **The mutations.** A comparison operator swapped for its neighbour (`<`↔`<=`,
+  `>`↔`>=`, `==`↔`!=`) and a boolean connective exchanged (`&&`↔`||`), in every
+  declaration of the project's non-suite files. Operators in comments and string
+  literals are left alone.
+- **Nothing is written.** A mutant exists only in memory and the output goes to a
+  scratch directory, so the working tree and `out/` are untouched. A mutant that
+  doesn't compile, or whose run fails before any case runs (it throws as the
+  module loads), is `invalid` and isn't scored.
+- **The unmutated project runs first and must pass.** Otherwise every mutant would
+  be "killed" by the failure that was already there. The run uses one seed
+  throughout (yours with `--seed`, else a fixed one), so a `property` test draws the
+  same inputs for every mutant.
+- **Which suites run.** The suites that target the mutated unit, a unit that
+  `uses` it, or that `use` it themselves. A mutant no suite reaches is `NO SUITE`:
+  reported, not run and not scored. `--mutate-all-suites` runs every suite against
+  every mutant instead.
+- **A survivor is a gap, not a bug.** Some survivors change nothing observable (an
+  *equivalent* mutant); the span and the exact change are there so you can judge.
+  Leave code out with [`[test.mutate] exclude`](/docs/manifest/#testmutate).
+- **Exit code.** `0` when mutants survive, so a report can run in CI without
+  failing it; non-zero if the unmutated project fails or won't build, and with
+  `--mutate-fail-under PERCENT`, when the score is below it or nothing was scored. The score is the share
+  of mutants that ran which were killed.
+- **Cost.** Every mutant is a compile, `tsc` and `node` run, so use `--only` and
+  `--max-mutants` to keep it bounded. At a workspace root `--mutate` is refused: run
+  it inside a member.
+
+With `--format json` the document is the unmutated run's, plus a `mutation` object:
+`total`, `killed`, `timeout`, `survived`, `no_suite`, `invalid`, `score` and
+`mutants[]`, each with `id`, `file`, `line`, `column`, `end_line`, `end_column`,
+`unit`, `decl`, `from`, `to`, `status` and `suites`.
 
 ### Snapshots
 

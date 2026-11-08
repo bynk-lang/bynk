@@ -190,11 +190,50 @@ pub struct TestArgs {
     /// [`crate::remote::DEV_COMMAND_ENV`].
     #[arg(skip)]
     pub dev_command: Option<PathBuf>,
+    /// Check that the suites would notice a small change to the code (#3069):
+    /// apply typed mutations to `src/` one at a time (a comparison operator
+    /// swapped, `&&` and `||` exchanged), run the suites that exercise the
+    /// changed unit against each, and report the mutants that survive with
+    /// their source spans. Nothing in the working tree is written. The
+    /// unmutated project must pass first. Cannot be combined with `--inspect`,
+    /// `--no-run`, `--coverage`, `--against`, `--smoke`, `--update-snapshots`,
+    /// `--case` or `--format ndjson`.
+    #[arg(long)]
+    pub mutate: bool,
+    /// With `--mutate`, mutate only the declaration `<unit.decl>` (for example
+    /// `orders.refund`), or every declaration of the unit `<unit>`.
+    #[arg(long, value_name = "DECL", requires = "mutate")]
+    pub only: Option<String>,
+    /// With `--mutate`, stop after this many mutants (in source order).
+    #[arg(long, value_name = "N", requires = "mutate")]
+    pub max_mutants: Option<usize>,
+    /// With `--mutate`, kill a mutant's run after this many seconds and count
+    /// it killed by timeout. Default: three times the unmutated run, at least
+    /// ten seconds.
+    #[arg(long, value_name = "SECONDS", requires = "mutate")]
+    pub mutate_timeout: Option<u64>,
+    /// With `--mutate`, run every suite against every mutant, not only the
+    /// suites that target the mutated unit or a unit that uses it.
+    #[arg(long, requires = "mutate")]
+    pub mutate_all_suites: bool,
+    /// With `--mutate`, exit non-zero when fewer than this percentage of the
+    /// mutants that ran were killed, or when no mutant reached a suite at all.
+    /// Without it surviving mutants are reported but do not fail the run.
+    #[arg(long, value_name = "PERCENT", requires = "mutate")]
+    pub mutate_fail_under: Option<u32>,
+    /// Not a flag. One source file's text, replacing what is on disk for this
+    /// build: the mutant `--mutate` is running. The path is the key the
+    /// project's source map holds the file under.
+    #[arg(skip)]
+    pub mutant_overlay: Option<(PathBuf, String)>,
+    /// Not a flag. Kill the test process, and fail the run, after this long.
+    #[arg(skip)]
+    pub run_timeout: Option<std::time::Duration>,
 }
 
 impl TestArgs {
     /// The arguments of `test <input> --no-run --format json`: discovery only.
-    fn discovery(input: PathBuf) -> Self {
+    pub(crate) fn discovery(input: PathBuf) -> Self {
         TestArgs {
             input,
             output: None,
@@ -215,6 +254,14 @@ impl TestArgs {
             update_snapshots: false,
             declared_statuses: None,
             dev_command: None,
+            mutate: false,
+            only: None,
+            max_mutants: None,
+            mutate_timeout: None,
+            mutate_all_suites: false,
+            mutate_fail_under: None,
+            mutant_overlay: None,
+            run_timeout: None,
         }
     }
 }
@@ -287,6 +334,14 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         update_snapshots,
         declared_statuses,
         dev_command,
+        mutate,
+        only,
+        max_mutants,
+        mutate_timeout,
+        mutate_all_suites,
+        mutate_fail_under,
+        mutant_overlay,
+        run_timeout,
     } = args;
     // `json` is "machine-readable": the document or the stream. `stream` says
     // which; everything that prints a document goes through `print_run`.
@@ -302,6 +357,47 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         };
         crate::test_stream::print_run(true, &TestRun::runtime_error(message, None));
         return ExitCode::FAILURE;
+    }
+    // #3069: `--mutate` re-runs the suites against mutants of `src/`; the runs
+    // it needs are each a plain in-process run, made below by this function.
+    if mutate {
+        let with = [
+            (inspect, "--inspect"),
+            (no_run, "--no-run"),
+            (coverage, "--coverage"),
+            (against.is_some(), "--against"),
+            (smoke, "--smoke"),
+            (update_snapshots, "--update-snapshots"),
+            (!case.is_empty(), "--case"),
+            (stream, "--format ndjson"),
+        ]
+        .into_iter()
+        .find_map(|(set, flag)| set.then_some(flag));
+        if let Some(flag) = with {
+            let message = format!(
+                "`--mutate` cannot be combined with `{flag}`: it re-runs the project's own suites in process, against mutants."
+            );
+            if json {
+                crate::test_stream::print_run(stream, &TestRun::runtime_error(message, None));
+            } else {
+                eprintln!("{program} test: {message}");
+            }
+            return ExitCode::FAILURE;
+        }
+        return crate::mutate::run(
+            program,
+            crate::mutate::MutateArgs {
+                input,
+                json,
+                seed,
+                suite,
+                only,
+                max_mutants,
+                timeout: mutate_timeout.map(std::time::Duration::from_secs),
+                all_suites: mutate_all_suites,
+                fail_under: mutate_fail_under,
+            },
+        );
     }
     // #2842: `--update-snapshots` records what an in-process run computed, so it
     // is refused where the run is not that, or is not a full run of the suites.
@@ -460,7 +556,15 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                     .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
                 Ok(o.snapshot_files(files))
             }) {
-            Ok(o) => o.contracts(true),
+            Ok(mut o) => {
+                // #3069: a mutant replaces one file's text, in memory only.
+                if let Some((path, text)) = mutant_overlay {
+                    o.sources
+                        .get_or_insert_with(Default::default)
+                        .insert(path, text);
+                }
+                o.contracts(true)
+            }
             Err(e) => {
                 if json {
                     crate::test_stream::print_run(stream, &TestRun::runtime_error(e, None));
@@ -916,8 +1020,12 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 &out.discovered,
                 &doc_aliases,
                 snapshot_run.as_ref(),
+                run_timeout,
             ) {
                 Ok(code) => code,
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    return report_timeout(program, json, stream, &e);
+                }
                 Err(e) => {
                     if json {
                         crate::test_stream::print_run(
@@ -980,8 +1088,14 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             &out.discovered,
             &doc_aliases,
             snapshot_run.as_ref(),
+            run_timeout,
         ) {
             Ok(code) => return code,
+            // A run that outlived its timeout is not a runner that failed to
+            // start: it must not be tried again with the next runner.
+            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                return report_timeout(program, json, stream, &e);
+            }
             Err(e) => start_failures.push(start_failure(&path, &e)),
         }
     }
@@ -1004,6 +1118,17 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
              Install one of:\n{}",
             install_advice(false)
         );
+    }
+    ExitCode::FAILURE
+}
+
+/// #3069: the test process outlived `run_timeout` and was killed. Reported as
+/// its own error kind, `"timeout"`, so a caller never reads it from a message.
+fn report_timeout(program: &str, json: bool, stream: bool, e: &std::io::Error) -> ExitCode {
+    if json {
+        crate::test_stream::print_run(stream, &TestRun::timeout_error(e.to_string()));
+    } else {
+        eprintln!("{program} test: the run {e}");
     }
     ExitCode::FAILURE
 }
@@ -1113,6 +1238,8 @@ fn finish_runner(
     aliases: &[(String, String)],
     // #2842: the project's snapshots, when the run reports them.
     snapshots: Option<&crate::snapshots::SnapshotRun>,
+    // #3069: kill the process after this long (a mutant that never ends).
+    timeout: Option<std::time::Duration>,
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
         cmd.env("BYNK_TEST_SEED", hex);
@@ -1181,7 +1308,7 @@ fn finish_runner(
     }
     if format == TestFormat::Json {
         cmd.env("BYNK_TEST_FORMAT", "ndjson");
-        let out = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
+        let out = output_within(cmd.stdout(Stdio::piped()).stderr(Stdio::piped()), timeout)?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
         let stdout = crate::doc_examples::apply_aliases(&stdout, aliases);
@@ -1213,7 +1340,7 @@ fn finish_runner(
             Some(run) => doc.with_remote(run.transport(), &skipped),
             None => doc.with_skips(&skipped),
         };
-        print!("{}", doc.render());
+        crate::test_stream::print_text(&doc.render());
         for warning in doc.warnings() {
             eprintln!("{}", warning.line(program));
         }
@@ -1250,6 +1377,93 @@ fn finish_runner(
             }
         }
         Ok(exit_from(status.success()))
+    }
+}
+
+/// Kill `child` and everything it started: its process group on Unix, its
+/// process tree through `taskkill /T` on Windows.
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // SAFETY: `killpg` takes plain integers; the child leads its own group
+        // (`process_group(0)` before spawn), so the group id is its pid.
+        unsafe {
+            libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = ProcCommand::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+}
+
+/// `cmd.output()`, except that a process still running after `timeout` is
+/// killed and the call fails with [`std::io::ErrorKind::TimedOut`] (#3069).
+/// `cmd`'s stdout and stderr must be piped.
+fn output_within(
+    cmd: &mut ProcCommand,
+    timeout: Option<std::time::Duration>,
+) -> std::io::Result<std::process::Output> {
+    use std::io::Read;
+    let Some(timeout) = timeout else {
+        return cmd.output();
+    };
+    // The runner may start children of its own (`tsx` and `npx` start `node`;
+    // `bynk dev` starts workers) that hold the output pipes open: put the run
+    // in its own process group so the kill below reaches them all.
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(cmd, 0);
+    let mut child = cmd.spawn()?;
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut buf);
+            }
+            buf
+        })
+    };
+    let out_reader = drain(
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let err_reader = drain(
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break Some(status);
+        }
+        if std::time::Instant::now() >= deadline {
+            kill_tree(&mut child);
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let stdout = out_reader.join().unwrap_or_default();
+    let stderr = err_reader.join().unwrap_or_default();
+    match status {
+        Some(status) => Ok(std::process::Output {
+            status,
+            stdout,
+            stderr,
+        }),
+        None => Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("timed out after {}s", timeout.as_secs()),
+        )),
     }
 }
 
@@ -1500,11 +1714,51 @@ fn run_inspect(
 
 #[cfg(test)]
 mod inspect_port_tests {
+
     use super::inspect_brk_arg;
 
     #[test]
     fn uses_the_default_port_when_free_and_a_free_port_otherwise() {
         assert_eq!(inspect_brk_arg(true), "--inspect-brk");
         assert_eq!(inspect_brk_arg(false), "--inspect-brk=127.0.0.1:0");
+    }
+}
+
+#[cfg(test)]
+mod output_within_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn output_within_kills_a_process_that_outlives_its_timeout() {
+        let mut cmd = ProcCommand::new("sleep");
+        cmd.arg("30").stdout(Stdio::piped()).stderr(Stdio::piped());
+        let started = std::time::Instant::now();
+        let err = output_within(&mut cmd, Some(std::time::Duration::from_millis(100)))
+            .expect_err("sleep outlives 100ms");
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
+
+        // A grandchild that holds the pipes open must not outlast the kill.
+        let mut tree = ProcCommand::new("sh");
+        tree.args(["-c", "sleep 30 & wait"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let started = std::time::Instant::now();
+        let err = output_within(&mut tree, Some(std::time::Duration::from_millis(200)))
+            .expect_err("the shell outlives 200ms");
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the grandchild was killed with its parent"
+        );
+
+        let mut quick = ProcCommand::new("echo");
+        quick
+            .arg("hi")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let out = output_within(&mut quick, Some(std::time::Duration::from_secs(30))).unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
     }
 }

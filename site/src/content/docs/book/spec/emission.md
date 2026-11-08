@@ -566,7 +566,12 @@ Field *presence*, field types (an inline field refinement included, as a
 predicate set), parameter names, parameter order, and the return type all MUST
 change it. An **opaque** type contributes its representation but
 **not** its predicate: a consumer cannot observe that predicate, so it is not
-part of the contract between them.
+part of the contract between them. A field's **default** (and whether it has one)
+is not part of the form either, so it MUST NOT change the hash. The stored
+structured form (the shape the compatibility classifier reads) does record
+whether a field has a default: a receiver's field with one MAY be absent from
+the sender's value, as an `Option` field may, because a body without the key
+decodes to the default ([§5.2b](/book/spec/static-semantics/#field-defaults)).
 
 Caller and callee canonicalise the callee's contract **in the callee's own
 namespace**, from the callee's own type table. A caller MUST NOT canonicalise a

@@ -53,6 +53,9 @@ allow = []                  # experimental standard-library items to use
 
 [test.targets.preview]      # no default: a deployment `bynk test --against` may use
 url.shop-orders = "https://shop-orders-preview.example.workers.dev"
+
+[test.mutate]
+exclude = []                # paths and `unit.decl` names `bynk test --mutate` leaves alone
 ```
 
 Delete any line you are happy to leave at its default — the file above is
@@ -569,6 +572,19 @@ production = true
 
 `dev` is reserved for the local `bynk dev` the runner starts itself, and isn't
 a target name.
+
+### `[test.mutate]`
+
+What [`bynk test --mutate`](/docs/bynk-cli/#mutation-testing) leaves unmutated.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `exclude` | array of strings | `[]` | Path globs (`src/generated/**`; `*` stays within a segment, `**` crosses them) and unit or declaration names (`orders`, `orders.legacy_refund`). A mutation site in a matching file or declaration is skipped. |
+
+```toml
+[test.mutate]
+exclude = ["src/generated/**", "orders.legacy_refund"]
+```
 
 ## Legacy mode
 

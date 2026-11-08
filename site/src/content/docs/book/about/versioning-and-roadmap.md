@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.514) rather than in large releases.
+steps (the book is written against v0.515) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -43,9 +43,9 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [#2203](https://github.com/bynk-lang/bynk/issues/2203)) is an end-of-line doc
   for a member, if the doc-above form proves too tall for short records; today a
   `---` after code is three `-` operators. Record field defaults
-  ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name three possible
-  follow-ups: a service contract hash that ignores an added defaulted field, and
-  defaults on a field whose type applies a user generic. The agent schema lock now
+  ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name a
+  follow-up: defaults on a field whose type applies a user generic. An added
+  defaulted field is a compatible service-contract change. The agent schema lock now
   counts a defaulted field
   ([#2676](https://github.com/bynk-lang/bynk/issues/2676)) or a sum variant
   ([#2691](https://github.com/bynk-lang/bynk/issues/2691)) added inside stored state as
