@@ -1,0 +1,14 @@
+context shop.stock
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+type Item = { id: String }
+
+const GoodSql: String = "SELECT 1"
+
+fn mk(q: String) -> SqlStatement {
+  SqlStatement { sql: q, params: [] }
+}

@@ -1,0 +1,12 @@
+suite shop.stock
+
+case "a constant is the SQL of run, first and select" {
+  let _ <- Stock.run(CreateSql, [])
+  let _ <- Stock.run(InsertSql, [])
+  let one <- Stock.first(CountAlias, [])
+  expect one is Ok(Some(_))
+  let rows <- Stock.select[Item](ItemsFrom, [])
+  expect rows == Ok([Item { id: "a" }])
+  let again <- Stock.firstAs[Item](ItemsFrom, [])
+  expect again == Ok(Some(Item { id: "a" }))
+}
