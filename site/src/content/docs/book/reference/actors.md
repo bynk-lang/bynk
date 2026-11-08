@@ -93,8 +93,9 @@ actor Workload {
 `issuer` and `jwks` are required, `audience` optional. Unset, the declaration
 applies, so production behaviour is exactly what the actor says; set but
 malformed, every request is refused (`401`) and the fault log says why — it never
-falls back to the declaration. It is how a test points the actor at a fake
-issuer, and how a staging deployment trusts a staging one. Like a `secret`, the
+falls back to the declaration. It is how a staging deployment trusts a staging issuer, and how a `system`
+suite's `env` moves the trust roots the test driver mints for (the driver is the
+issuer; see [testing an `Oidc` route](/book/reference/testing/#oidc-issuer)). Like a `secret`, the
 variable is the operator's configuration. `trustFrom` must be a string
 (`bynk.actor.oidc_trust_from_not_string`) naming a variable no actor uses as its
 `secret` (`bynk.actor.oidc_trust_from_is_secret`).

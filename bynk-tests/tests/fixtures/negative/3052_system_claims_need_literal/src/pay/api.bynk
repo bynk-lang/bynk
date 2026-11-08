@@ -1,0 +1,14 @@
+context pay.api
+
+type WorkloadId = String where NonEmpty
+
+actor Workload {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "pay", jwks = "https://issuer.example.com/jwks"),
+	identity = WorkloadId
+}
+
+service api from http {
+	on GET("/who") () -> Effect[HttpResult[String]] by w: Workload {
+		Ok(w.identity)
+	}
+}

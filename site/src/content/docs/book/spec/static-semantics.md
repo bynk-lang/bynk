@@ -2289,31 +2289,38 @@ round trip, through its `queue` entry point and yields `Ack` or `Retry(reason)`
 as the consumer acknowledged or retried it. The scheduled time is required when
 the handler declares it, as at the other tiers.
 
-An http address in a `system`-tier `case` MUST NOT reach a route whose actor
-(for an actor sum, the member the call-site principal names, or the primary
-member when it names none) has an `Oidc` scheme
-(`bynk.test.oidc_needs_in_process`): the `system` driver has no `Oidc` token
-issuer, so the call could only be refused at the seam. The driver presents the
-acting actor's credential: a signed token for a Bearer actor, a signature for a
-`Signature` actor (#2135), and on an actor sum the credential of the member the
-principal names (#2155).
+An http address in a `system`-tier `case` presents the acting actor's
+credential: a signed token for a Bearer actor, a signature for a `Signature`
+actor (#2135), and on an actor sum the credential of the member the principal
+names (#2155). For an `Oidc` actor (#3052) the driver is the issuer: it signs the
+token with a key pair generated for the test process, serves the matching JWKS in
+answer to the Worker's fetch of the actor's `jwks` URL (replaced by the
+`trustFrom` variable's roots when the case's `env` sets it), and takes the claims
+from the principal's literal `TokenClaims.of(…)` lines
+(`bynk.test.system_claims_need_literal`). The deployed Worker is not changed.
 
-`Nobody`, `Forged`, `Stale` and `Expired` are reserved call-site principals, not
-declarations, and take no identity (`bynk.test.actor_no_identity`). `by Nobody`
-MUST address a route with a Bearer or `Signature` actor, alone or as a sum
-member (`bynk.test.nobody_needs_secured_route`). `by Forged` MUST address a
-route with a `Signature` or Bearer actor, and `by Stale` one with a `Signature`
+`Nobody`, `Forged`, `Stale`, `Expired`, `WrongIssuer` and `WrongAudience` are
+reserved call-site principals, not declarations, and take no identity
+(`bynk.test.actor_no_identity`). `by Nobody` MUST address a route with a Bearer,
+`Oidc` or `Signature` actor, alone or as a sum member
+(`bynk.test.nobody_needs_secured_route`). `by Forged` MUST address a route with
+a `Signature`, Bearer or `Oidc` actor, and `by Stale` one with a `Signature`
 actor, alone or as a sum member (`bynk.test.forged_needs_signature_route`); on a
 sum they sign as its first `Signature` member (`by Forged` as its first Bearer
 member when it has no `Signature` member). `by Expired` MUST address a route
-with a Bearer actor, alone or as a sum member (`bynk.test.expired_needs_bearer_route`).
+with a Bearer actor, alone or as a sum member, or an `Oidc` actor
+(`bynk.test.expired_needs_bearer_route`). `by WrongIssuer` and `by WrongAudience`
+MUST address a route with an `Oidc` actor (`bynk.test.wrong_issuer_needs_oidc_route`,
+`bynk.test.wrong_audience_needs_oidc_route`); each sends a correctly signed,
+unexpired token whose `iss`, or `aud`, is not the actor's. On an `Oidc` route,
+`by Forged` sends a token signed by a key the served JWKS does not publish.
 It sends a correctly signed token with a valid `sub` and an `exp` one hour
 before the test clock; `by Forged` on a Bearer route sends a token with a valid
 `sub` and a future `exp`, signed with a secret derived from the real one. On an
 actor sum with an open member (`Visitor`, or an actor with no auth scheme),
-none of the four is admitted: the seam resolves a missing or bad credential as
+none of them is admitted: the seam resolves a missing or bad credential as
 that member and never answers `401`. `by Stale` needs that actor to declare
-`timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All four MUST
+`timestamp` and `tolerance` (`bynk.test.stale_needs_timestamp`). All of them MUST
 occur in a `system`-tier case (`bynk.test.credential_needs_system`,
 `bynk.test.forged_needs_system`), and each address yields an `HttpOutcome`.
 

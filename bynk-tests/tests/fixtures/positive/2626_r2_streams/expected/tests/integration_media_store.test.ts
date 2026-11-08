@@ -100,13 +100,13 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
 
-async function test_a_streamed_object_arrives_over_HTTP__read_back_as_Ok() {
+async function test_a_streamed_object_arrives_over_HTTP__read_back_as_Raw() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_echo_Param_text("frames", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/store.bynk:94:10", 2871, 2881, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/store.bynk:94:10", 2872, 2886, "expect r is Raw(_, _)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -122,7 +122,7 @@ async function test_a_missing_object_is_NotFound_over_HTTP() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_videos_Param_key("absent", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "NotFound"))) { throw __bynkExpectFailure("tests/store.bynk:99:10", 3000, 3013, "expect r is NotFound"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NotFound"))) { throw __bynkExpectFailure("tests/store.bynk:99:10", 3005, 3018, "expect r is NotFound"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -146,14 +146,14 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a streamed object arrives over HTTP, read back as Ok", "a missing object is NotFound over HTTP"];
+export const __bynkCases: readonly string[] = ["a streamed object arrives over HTTP, read back as Raw", "a missing object is NotFound over HTTP"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
   const want = (n: string): boolean => only === undefined || only === n;
-  if (want("a streamed object arrives over HTTP, read back as Ok")) {
+  if (want("a streamed object arrives over HTTP, read back as Raw")) {
     const started = __bynkCaseNow();
-    const r = { name: "a streamed object arrives over HTTP, read back as Ok", ...(await test_a_streamed_object_arrives_over_HTTP__read_back_as_Ok()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "a streamed object arrives over HTTP, read back as Raw", ...(await test_a_streamed_object_arrives_over_HTTP__read_back_as_Raw()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

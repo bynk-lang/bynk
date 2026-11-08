@@ -217,6 +217,18 @@ pub fn by_clause_is_bearer(by: &ByClause, actors: &HashMap<String, ActorDecl>) -
         == Some(Scheme::Bearer)
 }
 
+/// #3052: whether a `by` clause names a single local `Oidc` actor (an `Oidc`
+/// actor is never a sum member or a refinement base), so the `system` driver
+/// can mint a token for it and its seam refuses a bad one.
+pub fn by_clause_is_oidc(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    !by.is_sum()
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| a.auth.as_ref())
+            .and_then(|a| Scheme::from_name(a.name.as_str()))
+            == Some(Scheme::Oidc)
+}
+
 pub fn bearer_seam_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -519,11 +531,13 @@ pub fn route_has_bearer_seam(by: &ByClause, actors: &HashMap<String, ActorDecl>)
 
 /// #2155: whether a `by` clause's route has a credential seam the `system`
 /// driver can leave out (`by Nobody`): a Bearer actor (or a refinement of
-/// one), a `Signature` actor, or an actor sum with such a member and no open
+/// one), an `Oidc` actor (#3052), a `Signature` actor, or an actor sum with such a member and no open
 /// member ([`sum_has_open_member`]).
 pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
     if !by.is_sum() {
-        return by_clause_is_bearer(by, actors) || signature_seam_for_by(by, actors).is_some();
+        return by_clause_is_bearer(by, actors)
+            || by_clause_is_oidc(by, actors)
+            || signature_seam_for_by(by, actors).is_some();
     }
     if sum_has_open_member(by, actors) {
         return false;
