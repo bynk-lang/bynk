@@ -1,6 +1,6 @@
 ---
 level: minor
-changelog: A record field whose type applies a user generic record or sum may declare a default, `page: Paginated[String] = Paginated {}` or `outcome: Outcome[Int] = Pending("queued")`; inside a generic record it may write no value of the record's own type parameter
+changelog: A record field (not an event or old-state field) whose type applies a user generic record or sum may declare a default, `page: Paginated[String] = Paginated {}` or `outcome: Outcome[Int] = Pending("queued")`; inside a generic record it may write no value of the record's own type parameter
 ---
 
 ## ADR: field-default-generic-app
@@ -38,11 +38,18 @@ user generic out: both default renderers (`lower_field_default_wire` and
   construction (no `T`-typed value), so the per-instantiation codec splices it
   as for the admitted cases, and the generic decode path (`Json.decode[Cache[T]]`
   in a function over `T: Codable`) applies it; a behavioural fixture covers both.
-- **F. Cycles.** A recursive generic record is already refused in a record field
+- **F. Records only.** The widening is gated to record fields. An event field's
+  default and an old-state field's default (`migrate`) still refuse a type that
+  applies a user generic, anywhere in the default, through
+  `lower_event_field_default_wire`. Both share the renderer, but the event codec
+  reads its default with no diagnostic path of its own, so a default it could not
+  render would be dropped silently; admitting them needs fixtures for each and is
+  left for its own increment.
+- **G. Cycles.** A recursive generic record is already refused in a record field
   (`bynk.generics.recursive_generic_at_boundary`), so a self-referential default
   is unreachable through a generic; a depth limit in the renderer reports
-  instead of recursing, should that change.
-- **G. No new diagnostic code.** `bynk.types.bad_field_default` stays; its
+  "nests too deeply" instead of recursing, should that change.
+- **H. No new diagnostic code.** `bynk.types.bad_field_default` stays; its
   description no longer says a user generic has no default.
 
 **Consequences.** An options record can default a field to a generic record or

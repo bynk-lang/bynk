@@ -998,7 +998,7 @@ fn check_event_field_defaults(
             if errors.len() > before {
                 continue;
             }
-            if let Err(reason) = crate::wire_default::lower_field_default_wire(
+            if let Err(reason) = crate::wire_default::lower_event_field_default_wire(
                 init,
                 &field.type_ref,
                 subscriber_visible_types,
@@ -4208,7 +4208,7 @@ fn check_agent_decls(
                 if errors.len() > before {
                     continue;
                 }
-                if let Err(reason) = crate::wire_default::lower_field_default_wire(
+                if let Err(reason) = crate::wire_default::lower_event_field_default_wire(
                     init,
                     &field.type_ref,
                     &resolved_for_handler.types,

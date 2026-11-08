@@ -83,13 +83,16 @@ const MAX_DEFAULT_DEPTH: usize = 16;
 struct Cx<'a> {
     params: &'a [String],
     depth: usize,
+    /// Whether a field that applies a user generic may carry a default. A record
+    /// field may (#2690); an event field and an old-state field may not.
+    generics: bool,
 }
 
 impl<'a> Cx<'a> {
     fn deeper(self) -> Result<Self, DefaultReason> {
         if self.depth >= MAX_DEFAULT_DEPTH {
             return Err(DefaultReason::from(
-                "the default refers to its own type, so it never ends".to_string(),
+                "the default nests generic instantiations too deeply".to_string(),
             ));
         }
         Ok(Cx {
@@ -109,7 +112,37 @@ pub fn lower_field_default_wire_in(
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     params: &[String],
 ) -> Result<String, DefaultReason> {
-    wire_in(init, expected, types, Cx { params, depth: 0 })
+    wire_in(
+        init,
+        expected,
+        types,
+        Cx {
+            params,
+            depth: 0,
+            generics: true,
+        },
+    )
+}
+
+/// [`lower_field_default_wire`] for an event field or an old-state field, whose
+/// default may not apply a user generic anywhere in it (#2690 widened record
+/// fields only; the event codec and the migration read the default with no
+/// diagnostic path of their own).
+pub fn lower_event_field_default_wire(
+    init: &Expr,
+    expected: &TypeRef,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> Result<String, DefaultReason> {
+    wire_in(
+        init,
+        expected,
+        types,
+        Cx {
+            params: &[],
+            depth: 0,
+            generics: false,
+        },
+    )
 }
 
 fn wire_in(
@@ -161,6 +194,11 @@ fn wire_in(
         // declaration's own parameter stays unresolved, so only a value with no
         // content of that type qualifies.
         TypeRef::App { name, args, .. } => {
+            if !cx.generics {
+                return Err(DefaultReason::from(
+                    "only a record field's default may apply a generic record or sum".to_string(),
+                ));
+            }
             let cx = cx.deeper()?;
             match types.get(&name.name).map(|d| &d.body) {
                 Some(TypeBody::Record(_)) => {
@@ -525,6 +563,7 @@ pub fn lower_field_default_value(
         Cx {
             params: &[],
             depth: 0,
+            generics: true,
         },
     )
 }
@@ -564,6 +603,11 @@ fn value_in(
         }
         // #2690: see `wire_in`.
         TypeRef::App { name, args, .. } => {
+            if !cx.generics {
+                return Err(DefaultReason::from(
+                    "only a record field's default may apply a generic record or sum".to_string(),
+                ));
+            }
             let cx = cx.deeper()?;
             match types.get(&name.name).map(|d| &d.body) {
                 Some(TypeBody::Record(_)) => {
