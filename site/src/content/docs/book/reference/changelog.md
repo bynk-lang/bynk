@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.520**.
+written against **v0.521**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.521.0** | A `tsc` failure on generated code is reported as `bynk.codegen.tsc_failed` at the Bynk source line it came from, by `bynk test` and the new opt-in `bynk check --emit` |
 | **v0.520.0** | "`bynk test --require-tests` fails a project that declares no tests (`error.kind == \"no_tests\"` under `--format json`); without it the message is now `warning: no tests found in <dir>`, still exit 0" |
 | **v0.519.0** | A record field (not an event or old-state field) whose type applies a user generic record or sum may declare a default, `page: Paginated[String] = Paginated {}` or `outcome: Outcome[Int] = Pending("queued")`; inside a generic record it may write no value of the record's own type parameter |
 | **v0.518.1** | "`bynk build` builds a project with no flags, taking `out`, `target`, `platform` and `emit` from a new `[build]` table in `bynk.toml`; `bynk compile` is unchanged and ignores it (#3054)" |
