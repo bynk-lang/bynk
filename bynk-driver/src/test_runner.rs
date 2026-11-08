@@ -1759,4 +1759,105 @@ mod output_within_tests {
         let out = output_within(&mut quick, Some(std::time::Duration::from_secs(30))).unwrap();
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
     }
+
+    /// #3086: the Windows path of `kill_tree` (`taskkill /T /F`), unrun until a
+    /// Windows machine ran it. A runner whose grandchildren hold the output
+    /// pipes open must still come back `TimedOut` promptly and have its whole
+    /// tree killed. It carries its own outer deadline and prints what it saw, so
+    /// a failure is a diagnosis in the log rather than a hung job.
+    #[cfg(windows)]
+    #[test]
+    fn output_within_kills_a_windows_process_tree() {
+        use std::os::windows::process::CommandExt;
+        use std::time::{Duration, Instant};
+
+        // A count no other test or tool uses, so the survivors are ours alone.
+        const MARK: &str = "-n 37 127.0.0.1";
+
+        fn survivors() -> Result<String, String> {
+            let out = ProcCommand::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_Process -Filter \"Name='ping.exe'\" | \
+                     Where-Object { $_.CommandLine -like '*-n 37 127.0.0.1*' } | \
+                     ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }",
+                ])
+                .output()
+                .map_err(|e| format!("could not run powershell: {e}"))?;
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+        }
+        fn cleanup() {
+            let _ = ProcCommand::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_Process -Filter \"Name='ping.exe'\" | \
+                     Where-Object { $_.CommandLine -like '*-n 37 127.0.0.1*' } | \
+                     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+                ])
+                .output();
+        }
+
+        // `cmd` runs one ping detached (`start /b`) and waits on another: two
+        // grandchildren that both inherit the pipes `output_within` reads.
+        let mut cmd = ProcCommand::new("cmd");
+        cmd.raw_arg(format!("/c \"start /b ping {MARK} & ping {MARK}\""))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        // Its own deadline: if `output_within` hangs on the held pipes this
+        // test fails with output instead of stalling the merge queue.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            let _ = tx.send(output_within(&mut cmd, Some(Duration::from_millis(500))));
+        });
+        let result = match rx.recv_timeout(Duration::from_secs(60)) {
+            Ok(result) => result,
+            Err(_) => {
+                let seen = survivors();
+                cleanup();
+                panic!(
+                    "output_within did not return within 60s of a 500ms timeout: the \
+                     grandchildren still held the pipes after taskkill. ping processes \
+                     alive: {seen:?}. Switch kill_tree to a Job Object (kill on close)."
+                );
+            }
+        };
+        let elapsed = started.elapsed();
+        let err = match result {
+            Err(e) => e,
+            Ok(out) => {
+                cleanup();
+                panic!("expected a timeout, got status {:?}", out.status);
+            }
+        };
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut, "error: {err}");
+        assert!(
+            elapsed < Duration::from_secs(20),
+            "TimedOut took {elapsed:?}; the pings last about 37s, so the tree was not killed"
+        );
+
+        // The tree is gone: no ping of ours outlives the kill (a short settle
+        // for the OS to reap).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut seen;
+        loop {
+            seen = survivors();
+            if matches!(&seen, Ok(s) if s.is_empty()) || Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        match seen {
+            Ok(s) if s.is_empty() => {}
+            Ok(s) => {
+                cleanup();
+                panic!("taskkill left processes running after the timeout:\n{s}");
+            }
+            // No PowerShell to inspect with: the prompt return above is the check.
+            Err(e) => eprintln!("could not check for survivors ({e}); relying on the timing"),
+        }
+    }
 }
