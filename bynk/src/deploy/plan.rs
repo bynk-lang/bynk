@@ -1141,12 +1141,6 @@ pub fn run(
                         );
                     }
                 }
-                // #1883, slice 1b: and the static files it now serves.
-                lock.record_assets(
-                    &opts.environment,
-                    worker,
-                    served_assets(&workers_dir.join(worker)),
-                );
                 if let Err(e) = write_lock(&lock_path, &lock) {
                     eprint!(
                         "{}",
