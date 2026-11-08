@@ -518,6 +518,50 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
+    /// Make a Worker's previous deployment live again, without a rebuild.
+    ///
+    /// Drives Cloudflare's version rollback after checking what makes it
+    /// unsafe: D1 migrations the live version applied, agent state stamped
+    /// with a newer schema version, contract skew against the other live
+    /// Workers, a replaced resource id, a secret change. Every unknown is a
+    /// refusal, and a refusal changes nothing. Reads Cloudflare even with
+    /// `--dry-run`, so it needs `CLOUDFLARE_API_TOKEN` (with D1 read access)
+    /// and `CLOUDFLARE_ACCOUNT_ID`. Only versions deployed by a `bynk` that
+    /// records deploy facts can be reverted; for any other, redeploy the tag.
+    Revert {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Revert this context alone (dotted name or Worker directory).
+        /// Default: every Worker the ledger records for the environment.
+        #[arg(long, value_name = "NAME")]
+        context: Option<String>,
+        /// The environment to revert.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
+        /// Go back to this Cloudflare Worker version id instead of the
+        /// previous upload. The same checks apply.
+        #[arg(long, value_name = "VERSION")]
+        to: Option<String>,
+        /// Print each check's verdict and stop. Still reads Cloudflare.
+        #[arg(long, visible_alias = "plan")]
+        dry_run: bool,
+        /// Plan output format. `short` is line-oriented; `json` is for CI.
+        #[arg(long, value_enum, default_value = "short")]
+        format: DeployFormatArg,
+        /// Skip the confirmation. Required for non-interactive runs. Never
+        /// overrides a refusal.
+        #[arg(long)]
+        yes: bool,
+        /// Assert that the D1 migrations applied after the target was built
+        /// are additive, for this binding (`D1_ORDERS`). Repeatable.
+        #[arg(long = "accept-schema-ahead", value_name = "BINDING")]
+        accept_schema_ahead: Vec<String>,
+        /// Accept secret changes between the target and now (a `bynk migrate
+        /// sweep` makes two).
+        #[arg(long)]
+        accept_secret_changes: bool,
+    },
     /// Inspect and migrate agents' stored state.
     ///
     /// `status` reports where each agent class's stored state stands; `sweep`

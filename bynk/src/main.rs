@@ -260,6 +260,29 @@ fn run() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+        Command::Revert {
+            path,
+            context,
+            env,
+            to,
+            dry_run,
+            format,
+            yes,
+            accept_schema_ahead,
+            accept_secret_changes,
+        } => bynk::deploy::revert(
+            &path,
+            &bynk::deploy::RevertOptions {
+                environment: env,
+                context,
+                to,
+                dry_run,
+                json: matches!(format, bynk::cli::DeployFormatArg::Json),
+                yes,
+                accept_schema_ahead,
+                accept_secret_changes,
+            },
+        ),
         Command::Migrate { command } => match command {
             bynk::cli::MigrateCommand::Status { path, lock, format } => {
                 if !prepare(&path, lock.options()) {
