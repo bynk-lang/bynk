@@ -1090,15 +1090,20 @@ fn build_reads_the_build_table_and_flags_override_it() {
 /// #3054: a bad `[build]` is refused and nothing is built.
 #[test]
 fn build_refuses_a_bad_build_table() {
-    for (body, needle) in [
+    #[allow(unused_mut)]
+    let mut cases = vec![
         ("out = \"../x\"", "inside the project"),
         ("target = \"lambda\"", "must be one of"),
         ("outt = \"x\"", "no key named"),
         ("out = \"src\"", "overlaps the source root"),
         ("out = \"src/gen\"", "overlaps the source root"),
         ("out = \"tests\"", "overlaps the source root"),
-        ("out = \"link\"", "inside the project"),
-    ] {
+    ];
+    // The symlink is only created on unix (unprivileged Windows runners can't
+    // make one), so without it `link` is a plain directory and rightly builds.
+    #[cfg(unix)]
+    cases.push(("out = \"link\"", "inside the project"));
+    for (body, needle) in cases {
         let proj = scratch("build-bad");
         write(
             &proj.join("bynk.toml"),
