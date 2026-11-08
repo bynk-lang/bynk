@@ -21,6 +21,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Use more than one KV namespace](/book/guides/effects-and-capabilities/use-several-kv-namespaces/)
 - [Call a Worker outside the project](/book/guides/effects-and-capabilities/call-a-foreign-worker/)
 - [Query rows into a record without repeating the columns](/book/guides/effects-and-capabilities/query-rows-into-a-record/)
+- [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/)
 - [Cache responses at Cloudflare's edge](/book/guides/effects-and-capabilities/cache-at-the-edge/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
 

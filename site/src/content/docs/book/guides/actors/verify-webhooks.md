@@ -111,4 +111,5 @@ suite hooks as system {
 malformed body. See [the failure
 principals](/book/reference/testing/#failure-principals).
 
-**See also:** [Reference — Actors](/book/reference/actors/).
+**See also:** [Reference — Actors](/book/reference/actors/),
+[Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/).
