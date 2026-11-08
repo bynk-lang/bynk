@@ -14,8 +14,7 @@
 //! longer depends on `bynk-emit` at all — it reaches `bynk-check` and
 //! `bynk-project` directly). Behaviour is unchanged; the
 //! language server (`bynk-lsp`) depends on this crate directly instead of the
-//! whole `bynkc` compiler crate, and `bynkc` re-exports these items so its own
-//! tests and public API are unchanged.
+//! whole compiler.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

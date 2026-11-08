@@ -7,10 +7,9 @@
 //! `bynk.*` codes). Diagnostics, positions, and codes therefore cross every
 //! crate without an upward edge.
 //!
-//! Extracted from `bynkc` as slice 1 of the crate-decomposition track (ADRs
-//! 0099 layering, 0102 foundation boundary). Behaviour is unchanged from when
-//! these modules lived in `bynkc`; `bynkc` now re-exports them so its public
-//! API is preserved.
+//! Extracted from the old `bynkc` crate as slice 1 of the crate-decomposition
+//! track (ADRs 0099 layering, 0102 foundation boundary). Behaviour is unchanged
+//! from when these modules lived there.
 
 pub mod ast;
 pub mod decimal;

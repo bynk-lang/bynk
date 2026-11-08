@@ -42,7 +42,7 @@ struct Project {
 
 impl Project {
     /// A fresh copy of the fixture.
-    fn new(name: &str) -> Option<Self> {
+    fn new(name: &str) -> Self {
         let bynk = PathBuf::from(env!("CARGO_BIN_EXE_bynk"));
         let dir = std::env::temp_dir().join(format!("bynk-smoke-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -50,7 +50,7 @@ impl Project {
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/smoke"),
             &dir.join("proj"),
         );
-        Some(Project { dir, bynk })
+        Project { dir, bynk }
     }
 
     fn test(&self, args: &[&str]) -> Output {
@@ -170,9 +170,7 @@ fn an_undeclared_status_is_a_warning_on_stderr_in_the_human_format() {
         eprintln!("skipping: `node` is not available");
         return;
     }
-    let Some(p) = Project::new("warn-human") else {
-        return;
-    };
+    let p = Project::new("warn-human");
     let o = p.test(&["--smoke"]);
     let stderr = String::from_utf8_lossy(&o.stderr);
     let stdout = String::from_utf8_lossy(&o.stdout);
@@ -188,9 +186,7 @@ fn an_undeclared_status_is_a_warning_in_json_and_on_stderr() {
         eprintln!("skipping: `node` is not available");
         return;
     }
-    let Some(p) = Project::new("warn-json") else {
-        return;
-    };
+    let p = Project::new("warn-json");
     let o = p.test(&["--smoke", "--format", "json"]);
     assert_clash_warning(&document(&o));
     let stderr = String::from_utf8_lossy(&o.stderr);
@@ -203,9 +199,7 @@ fn an_undeclared_status_is_a_warning_on_the_case_event_in_ndjson() {
         eprintln!("skipping: `node` is not available");
         return;
     }
-    let Some(p) = Project::new("warn-ndjson") else {
-        return;
-    };
+    let p = Project::new("warn-ndjson");
     let o = p.test(&["--smoke", "--format", "ndjson"]);
     let stdout = String::from_utf8_lossy(&o.stdout);
     let events: Vec<serde_json::Value> = stdout
@@ -233,9 +227,7 @@ fn an_undeclared_status_is_a_warning_on_the_case_event_in_ndjson() {
 
 #[test]
 fn print_writes_the_synthesised_suite_and_names_the_skip() {
-    let Some(p) = Project::new("print") else {
-        return;
-    };
+    let p = Project::new("print");
     let o = p.test(&["--smoke", "--print"]);
     let stdout = String::from_utf8_lossy(&o.stdout);
     assert!(
@@ -282,9 +274,7 @@ fn a_smoke_run_in_process_calls_every_route_and_leaves_the_projects_suites_out()
         eprintln!("skipping: `node` is not available");
         return;
     }
-    let Some(p) = Project::new("in-process") else {
-        return;
-    };
+    let p = Project::new("in-process");
     let o = p.test(&["--smoke", "--format", "json"]);
     let doc = document(&o);
     assert!(!o.status.success(), "the 500 fails the run\n{doc:#}");
@@ -305,9 +295,7 @@ fn a_smoke_run_against_dev_calls_every_route_on_a_real_runtime() {
         }
         return;
     }
-    let Some(p) = Project::new("dev") else {
-        return;
-    };
+    let p = Project::new("dev");
     let o = p.test(&["--smoke", "--format", "json", "--against", "dev"]);
     let doc = document(&o);
     assert!(!o.status.success(), "the 500 fails the run\n{doc:#}");
@@ -317,9 +305,7 @@ fn a_smoke_run_against_dev_calls_every_route_on_a_real_runtime() {
 
 #[test]
 fn a_project_with_no_http_route_has_nothing_to_smoke() {
-    let Some(p) = Project::new("empty") else {
-        return;
-    };
+    let p = Project::new("empty");
     std::fs::write(
         p.dir.join("proj/src/shop/api.bynk"),
         "context shop.api\n\nfn double(x: Int) -> Int {\n  x * 2\n}\n",
@@ -337,9 +323,7 @@ fn a_project_with_no_http_route_has_nothing_to_smoke() {
 
 #[test]
 fn print_and_smoke_unsafe_need_smoke() {
-    let Some(p) = Project::new("flags") else {
-        return;
-    };
+    let p = Project::new("flags");
     for flag in ["--print", "--smoke-unsafe"] {
         let o = p.test(&[flag]);
         assert!(!o.status.success(), "{flag} without --smoke is refused");

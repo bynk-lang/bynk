@@ -10,9 +10,9 @@
 //! captured tables live in `bynk-check`, queries live above it (ADR 0102, and
 //! the crate-decomposition track's check↔IDE seam).
 //!
-//! Extracted from `bynkc` as slice 3 of the crate-decomposition track. Behaviour
-//! is unchanged; `bynkc` depends on this crate and re-exports its modules so its
-//! public API and the emitter/project layers above are untouched.
+//! Extracted from the old `bynkc` crate as slice 3 of the crate-decomposition
+//! track. Behaviour is unchanged; the emitter and project layers above depend on
+//! this crate directly.
 //!
 //! P4.1 (#1115) added this crate's first project-level orchestration:
 //! `project_model` (discovery→parse→group→resolve, shared with `bynk-emit`'s

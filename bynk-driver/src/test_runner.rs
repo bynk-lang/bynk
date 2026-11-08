@@ -2,8 +2,7 @@
 //! #40/#72/#20/#21 remainder): compile the project's test declarations, write
 //! them, and run them via `tsc → node` (falling back to `tsx`), folding the
 //! result into the pinned [`crate::test_json::TestRun`] document in
-//! `--format json` mode. Moved down from `bynkc` — both `bynkc` and `bynk`
-//! need one implementation instead of two.
+//! `--format json` mode. Moved down from the old `bynkc` crate.
 //!
 //! Runners are found with [`crate::probe::detect`] and
 //! [`crate::probe::DetectOpts::default()`] (no project-local search, no `npx`
