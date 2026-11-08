@@ -261,7 +261,11 @@ mod no_tests {
     fn run(extra: &[&str]) -> std::process::Output {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/positive/1191_cron_sort_dedup_across_services/src");
-        let scratch = std::env::temp_dir().join(format!("bynk-no-tests-{}", std::process::id()));
+        // One directory per call: the tests run as parallel threads of one process.
+        static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let scratch =
+            std::env::temp_dir().join(format!("bynk-no-tests-{}-{n}", std::process::id()));
         let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
             .args(["test"])
             .arg(&fixture)
