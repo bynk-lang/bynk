@@ -716,10 +716,15 @@ hash:
 | the service's name; a parameter's name, order or type; the return type | field order; variant order; predicate order or duplicates |
 | a field added, removed, renamed or retyped; a variant added, removed, renamed or re-shaped | an opaque type's predicates |
 | a refined type's or an inline field refinement's predicates | doc comments; `given`; `by c: Caller` |
-| renaming a named type | field defaults |
+| renaming a named type | a default, or whether a field has one |
 
 The normal form and the hash function are part of the wire version: a client
 built once embeds hashes, so they change only with a new wire version.
+
+A field added with a default still changes the hash, but it is a **compatible**
+change: an old caller's body lacks the key, which the callee decodes to the
+default, and an unknown key is ignored the other way. `bynk deploy` classifies it
+as such ([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)).
 
 ## Authentication
 

@@ -4347,11 +4347,13 @@ queue = "jobs"
                 name: "ok".into(),
                 ty: Shape::Base("Bool".into()),
                 preds: Vec::new(),
+                defaulted: false,
             }];
             fields.extend(extra.iter().map(|(n, t)| Field {
                 name: n.to_string(),
                 ty: t.clone(),
                 preds: Vec::new(),
+                defaulted: false,
             }));
             fields.sort_by_key(|f| f.name.clone());
             ServiceShape {

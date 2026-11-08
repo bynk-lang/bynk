@@ -303,3 +303,145 @@ fn a_callee_answers_the_older_contract_its_lock_records_and_no_other() {
     );
     let _ = fs::remove_dir_all(&tmp);
 }
+
+// ---- #2689: a request field added with a default ------------------------
+
+/// The callee as the live callers know it: the request has one field.
+const REQ_V1: &str = r#"context app.b
+
+type Order = { id: Int }
+
+service issue {
+  on call(o: Order) -> Effect[String] {
+    Effect.pure("ok")
+  }
+}
+"#;
+
+/// The callee as it is now: the request gains a defaulted field. A caller on
+/// V1 does not send it, and the callee reads the default.
+const REQ_V2: &str = r#"context app.b
+
+type Order = { id: Int, currency: String = "EUR" }
+
+service issue {
+  on call(o: Order) -> Effect[String] {
+    Effect.pure(o.currency)
+  }
+}
+"#;
+
+const REQ_DRIVER_TS: &str = r#"import worker from "./workers/app-b/index.js";
+import { EDGE_TO_PREFIX, signedHeaders } from "./__bynk_runtime/boundary.js";
+
+const CURRENT = "__CURRENT__";
+const OLDER = "__V1__";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) throw new Error("FAIL: " + msg);
+}
+
+const KEY = "edge-key";
+const env: any = { BYNK_CALL_FROM_APP__A: KEY };
+
+async function call(contract: string, payload: unknown): Promise<Request> {
+  const body = JSON.stringify(payload);
+  const signed = await signedHeaders(
+    { [EDGE_TO_PREFIX + "APP__B"]: KEY },
+    "app.a",
+    "app.b",
+    "/_bynk/call/issue",
+    contract,
+    "1",
+    body,
+    "test",
+  );
+  return new Request("http://internal/_bynk/call/issue", {
+    method: "POST",
+    headers: { "content-type": "application/json", "X-Bynk-Contract": contract, "X-Bynk-Caller": "app.a", ...signed },
+    body,
+  });
+}
+
+// A caller on the older contract sends no `currency`; the callee reads the default.
+let res = await worker.fetch(await call(OLDER, { id: 7 }), env);
+assert(res.status === 200, "the older contract, no key → 200, got " + res.status);
+assert((await res.json()) === "EUR", "the omitted field takes its default");
+
+// A caller on the current contract sends the key, and it is kept.
+res = await worker.fetch(await call(CURRENT, { id: 7, currency: "USD" }), env);
+assert(res.status === 200, "the current contract → 200, got " + res.status);
+assert((await res.json()) === "USD", "a present key decodes as sent");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_callee_reads_the_default_for_a_field_an_older_caller_does_not_send() {
+    let runner = match discover_tsc() {
+        Some(r) => r,
+        None => {
+            eprintln!("\n!!! ACCEPTED CONTRACTS VERIFICATION SKIPPED !!!\nno tsc runner.\n");
+            if std::env::var(REQUIRE_ENV).is_ok() {
+                panic!("{REQUIRE_ENV} is set but no tsc runner was found");
+            }
+            return;
+        }
+    };
+    if !tool_exists("node") {
+        eprintln!("\n!!! ACCEPTED CONTRACTS VERIFICATION SKIPPED !!!\n`node` not on PATH.\n");
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("{REQUIRE_ENV} is set but `node` was not found");
+        }
+        return;
+    }
+
+    let tmp = std::env::temp_dir().join(format!("bynk-default-contracts-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp);
+
+    let v1 = compile(&tmp, "v1", REQ_V1, None);
+    let (v1_hash, v1_shape) = provides(&v1);
+    let mut lock = bynk_project::contracts_lock::ContractsLock::new();
+    lock.accept("app.b", "issue", &v1_shape);
+    let v2 = compile(
+        &tmp,
+        "v2",
+        REQ_V2,
+        Some(bynk_project::contracts_lock::serialize(&lock)),
+    );
+    let (v2_hash, _) = provides(&v2);
+    assert_ne!(v1_hash, v2_hash, "adding a field still moves the hash");
+    // The classifier credits the default, so the lock entry is kept (#2689).
+    assert_eq!(
+        manifest(&v2)["accepts"]["issue"][0].as_str(),
+        Some(v1_hash.as_str()),
+        "the older contract is accepted"
+    );
+
+    let run_dir = tmp.join("run");
+    for (path, doc) in &v2.artefacts.docs {
+        let target = run_dir.join(path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, doc.text()).unwrap();
+    }
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
+    fs::write(
+        run_dir.join("driver.ts"),
+        REQ_DRIVER_TS
+            .replace("__CURRENT__", &v2_hash)
+            .replace("__V1__", &v1_hash),
+    )
+    .unwrap();
+    fs::write(run_dir.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
+    fs::write(run_dir.join("package.json"), "{ \"type\": \"module\" }").unwrap();
+
+    let (program, prefix) = &runner;
+    let (ok, msg) = run(program, prefix, &["-p", "tsconfig.json"], &run_dir);
+    assert!(ok, "tsc failed on the callee Worker:\n{msg}");
+    let (ok, msg) = run("node", &[], &["js/driver.js"], &run_dir);
+    assert!(
+        ok && msg.contains("ALL OK"),
+        "the default-contract driver did not pass:\n{msg}"
+    );
+    let _ = fs::remove_dir_all(&tmp);
+}
