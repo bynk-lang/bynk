@@ -253,6 +253,88 @@ fn discovery_lists_cases_without_running() {
     );
 }
 
+/// #3087: a project with no tests passes with a `warning:` by default, and
+/// fails under `--require-tests`, in rich, `--format json` and `--no-run` modes.
+mod no_tests {
+    use super::*;
+
+    fn run(extra: &[&str]) -> std::process::Output {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive/1191_cron_sort_dedup_across_services/src");
+        // One directory per call: the tests run as parallel threads of one process.
+        static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let scratch =
+            std::env::temp_dir().join(format!("bynk-no-tests-{}-{n}", std::process::id()));
+        let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+            .args(["test"])
+            .arg(&fixture)
+            .arg("--output")
+            .arg(&scratch)
+            .args(extra)
+            .output()
+            .expect("run bynk test");
+        let _ = std::fs::remove_dir_all(&scratch);
+        out
+    }
+
+    fn stderr(o: &std::process::Output) -> String {
+        String::from_utf8_lossy(&o.stderr).into_owned()
+    }
+
+    #[test]
+    fn default_warns_and_exits_zero() {
+        let o = run(&[]);
+        assert!(o.status.success(), "stderr:\n{}", stderr(&o));
+        assert!(
+            stderr(&o).contains("warning: no tests found in"),
+            "{}",
+            stderr(&o)
+        );
+    }
+
+    #[test]
+    fn require_tests_errors_and_exits_non_zero() {
+        let o = run(&["--require-tests"]);
+        assert!(!o.status.success());
+        assert!(
+            stderr(&o).contains("error: no tests found in"),
+            "{}",
+            stderr(&o)
+        );
+    }
+
+    #[test]
+    fn json_is_empty_by_default_and_no_tests_under_the_flag() {
+        let o = run(&["--format", "json"]);
+        assert!(o.status.success(), "stderr:\n{}", stderr(&o));
+        let doc: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON document");
+        assert!(doc.get("error").is_none());
+
+        let o = run(&["--format", "json", "--require-tests"]);
+        assert!(!o.status.success());
+        let doc: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON document");
+        assert_eq!(doc["error"]["kind"], "no_tests");
+    }
+
+    #[test]
+    fn no_run_discovery_enforces_it_too() {
+        let o = run(&["--no-run", "--format", "json"]);
+        assert!(o.status.success(), "stderr:\n{}", stderr(&o));
+        let o = run(&["--no-run", "--format", "json", "--require-tests"]);
+        assert!(!o.status.success());
+        let doc: serde_json::Value = serde_json::from_slice(&o.stdout).expect("JSON document");
+        assert_eq!(doc["error"]["kind"], "no_tests");
+        let o = run(&["--no-run", "--require-tests"]);
+        assert!(!o.status.success());
+        assert!(
+            stderr(&o).contains("error: no tests found in"),
+            "{}",
+            stderr(&o)
+        );
+    }
+}
+
 /// Discovery covers `as system` (wired) suites too: kind `"integration"` and the
 /// suite's target name (the `system · ` prefix the runner uses is internal).
 #[test]

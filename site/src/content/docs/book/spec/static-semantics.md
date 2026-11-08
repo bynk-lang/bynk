@@ -785,7 +785,13 @@ whose type has no wire form (a function, a held resource) has no default.
 field whose type is a bare type parameter has none, and neither does a default
 that reaches one (`Option[T] = Some(1)`); `Option[T] = None`, `List[T] = []`,
 `Map.empty()`, `Set.empty()` and a concrete field's default do. A field whose type
-applies a user generic record or sum (`Page[T]`, `Page[Int]`) has no default.
+applies a user generic record or sum (`Page[Int]`, `Page[T]`) has a default that
+is a closed-form value of the instantiated type (the declaration's fields read at
+the arguments). Inside a generic record the arguments may be its own parameters,
+and the default MUST then write no value of such a parameter: `Page[T] = Page {}`
+holds for every `T`, `Page { items: [1] }` doesn't. A default that nests generic
+instantiations too deeply is refused. Only a record field's default may apply a
+generic: an event field's and an old-state field's may not.
 
 **Where a default applies.** In exactly two places:
 - **A record literal** that leaves a defaulted field out takes the field's

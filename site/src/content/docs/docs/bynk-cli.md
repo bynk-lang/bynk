@@ -7,7 +7,7 @@ pipeline in-process** and orchestrates the Node toolchain. A fresh
 with nothing else installed. This page is the argument and exit-code reference
 for its subcommands.
 
-The everyday commands — [`bynk check`](#bynk-check), [`bynk compile`](#bynk-compile),
+The everyday commands — [`bynk check`](#bynk-check), [`bynk compile`](#bynk-compile), [`bynk build`](#bynk-build),
 [`bynk fmt`](#bynk-fmt), and [`bynk test`](#bynk-test) — are what the retired
 `bynkc` binary used to provide, with the same flags, output and exit codes.
 
@@ -33,6 +33,7 @@ bynk <command> [options]
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk build`](#bynk-build) | Build a project into its output directory with the settings in `bynk.toml`'s `[build]`; no flags needed. |
 | [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk openapi`](#bynk-openapi) | Write an OpenAPI 3.1 document for the project's `from http` services. |
 | [`bynk token`](#bynk-token) | Mint a credential for the project's own `Bearer` actor, to call a guarded route by hand. |
@@ -428,7 +429,7 @@ Type-check a `.bynk` file or project without writing output. Runs the compiler
 pipeline **in-process**.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--fix] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -437,6 +438,7 @@ bynk check [INPUT] [--format rich|short] [--fix] [--locked] [--offline]
 | `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
 
 | `--fix` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. See [Applying fixes](#applying-fixes). |
+| `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |
 
 **Exit code** — `0` when the input type-checks (warnings are surfaced but do not
 fail the build, per the [diagnostics rule](#exit-codes-and-diagnostics));
@@ -449,6 +451,27 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+### Type-checking the generated code
+
+A program that passes `bynk check` should always produce TypeScript that `tsc`
+accepts. When it does not, that is a bug in the compiler, and `bynk check --emit`
+finds it without running any tests: it generates the Workers output into a
+temporary directory (nothing is written to your project), runs `tsc --noEmit`
+over it, and reports a failure as `bynk.codegen.tsc_failed` at the Bynk source
+line the failing generated line came from, with the TypeScript error and the
+generated line attached. The exit code is non-zero.
+
+```sh
+bynk check --emit
+```
+
+It is off by default because it is far slower than a check and needs `tsc` (with
+Node.js) on your path; without `tsc` it fails with install guidance rather than
+passing silently. The editor's checks never run it. `bynk test` reports the same
+diagnostic when its own `tsc` step fails. Please
+[report](https://github.com/bynk-lang/bynk/issues) any `bynk.codegen.tsc_failed`
+with its output.
 
 ### Applying fixes
 
@@ -491,6 +514,35 @@ bynk check --fix src/shop.bynk
 
 The exit code is that of the check that follows: success only if no error
 remains.
+
+---
+
+## `bynk build`
+
+Build a project into its output directory, taking its settings from
+[`[build]`](/docs/manifest/#build) in `bynk.toml`. `bynk build` on its own
+equals `bynk compile . -o out` for a project with no `[build]` table.
+
+```text
+bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project directory. A single `.bynk` file is `bynk compile`'s. |
+| `--out`, `-o` | `[build] out`, else `out` | The output directory. |
+| `--target` | `[build] target`, else `bundle` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
+| `--platform` | `[build] platform`, else `cloudflare` | The surface binding. |
+| `--emit` | `[build] emit`, else `ts` | `ts` or `js`. |
+
+Each setting is the flag, else the `[build]` key, else the default. On success
+`build` prints one line, `bynk: built <target> -> <out>`; warnings print as
+`compile` prints them.
+
+`build` infers from the project; [`compile`](#bynk-compile) is told. `compile`
+never reads `[build]`, which keeps the editor's *Show Compiled Output* view from
+changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` don't read
+it either.
 
 ---
 
@@ -679,7 +731,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT]]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT]]
 ```
 
 | Argument | Default | Meaning |
@@ -687,6 +739,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `INPUT` | `.` | Project root directory. |
 | `-o, --output OUTPUT` | `<input>/out` | Where to write the compiled TypeScript test-runner modules. |
 | `--no-run` | off | Skip the runner. With `--format rich`, emit the generated test files; with `--format json`, emit a discovery document listing every suite and case without running them. |
+| `--require-tests` | off | Fail when the project declares no tests. Without it, `bynk test` prints `warning: no tests found in <dir>` on stderr and exits 0; with it that is an `error:` and exit 1 (`error.kind == "no_tests"` under `--format json`). Applies with `--no-run`. At a workspace root, each member must declare a test. |
 | `--format` | `rich` | `rich` is the grouped ✓ / ✗ human output; `json` is a single pinned JSON document of results, for tooling; `ndjson` is the same results as a stream of one JSON event per line, written as each suite finishes (see [Streaming results](#streaming-results)). `ndjson` is refused with `--coverage` and `--no-run`, and across a workspace. |
 | `--inspect` | off | Launch the runner under Node's inspector (`node --inspect-brk`) and print the inspector URL. Requires Node ≥ 22.18 (or ≥ 23.6 unflagged). Does not run `tsc`. |
 | `--seed HEX` | random | Root seed for generative `property` tests (e.g. `0x5f3a`). A failing property prints the seed it used; re-running with `--seed <hex>` reproduces the run byte-for-byte. |

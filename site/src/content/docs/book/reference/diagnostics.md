@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **771** codes in total.
+There are **772** codes in total.
 
 ## Agents
 
@@ -344,6 +344,7 @@ There are **771** codes in total.
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | `bynk.cell.self_reference` | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
+| `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
 | `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
 | `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
 | `bynk.d1.migrations_unused` | A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning). |  | Warning |
@@ -819,7 +820,7 @@ There are **771** codes in total.
 |---|---|---|---|
 | `bynk.types.argument_mismatch` | A call, method, capability, or constructor argument has the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.asset_at_boundary` | An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead. |  | — |
-| `bynk.types.bad_field_default` | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant of a type this context may construct (not a `uses`-sourced commons sum, which is `bynk.context.rebrand_construction`), `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter, or applies a user generic, has no default. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
+| `bynk.types.bad_field_default` | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant of a type this context may construct (not a `uses`-sourced commons sum, which is `bynk.context.rebrand_construction`), `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter has no default, and a default may not hold for one instantiation only: for a record field that applies a user generic (`Page[String]`, or `Page[T]` inside a generic record; an event or old-state field may not) it is a closed-form value at the instantiated type, writing nothing of the enclosing record's own type parameters. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
 | `bynk.types.call_arity` | A function value was applied with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.types.cannot_infer_option_type_param` | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
 | `bynk.types.cannot_infer_result_type_params` | The type parameters of a `Result` could not be inferred. |  | — |

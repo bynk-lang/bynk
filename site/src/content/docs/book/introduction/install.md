@@ -77,11 +77,12 @@ listed. See [Check your environment with `bynk
 doctor`](/docs/editor-and-tooling/doctor/) for the capability groups, exit
 codes, and `--format` outputs.
 
-`bynk` compiles, checks, formats and tests with four commands:
+`bynk` compiles, checks, formats and tests with these commands:
 
 | Command          | Purpose                                            |
 |------------------|----------------------------------------------------|
 | `bynk compile`  | Compile Bynk source to TypeScript.                 |
+| `bynk build`    | Build a project with the settings in `bynk.toml`.  |
 | `bynk check`    | Type-check without emitting.                        |
 | `bynk fmt`      | Format Bynk source.                                |
 | `bynk test`     | Compile and run `suite` blocks.                     |

@@ -1,0 +1,7 @@
+---
+#2690: a pass-through generic default may not write a value of the record's own type parameter.
+---
+context demo.page
+
+type Paginated[T] = { items: List[T] = [] }
+type Cache[T] = { warm: Paginated[T] = Paginated { items: [1] } }
