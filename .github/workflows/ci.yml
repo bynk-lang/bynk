@@ -1619,11 +1619,23 @@ jobs:
         if: runner.os != 'Windows'
         env:
           BYNK_INSTALL_DIR: ${{ runner.temp }}/b
+        # Seed the copies an older release left behind: the latest release
+        # ships neither bynkc nor bynkc-lsp, so an upgrade must remove both.
         run: |
+          mkdir -p "$BYNK_INSTALL_DIR"
+          printf '#!/bin/sh\n' > "$BYNK_INSTALL_DIR/bynkc"
+          printf '#!/bin/sh\n' > "$BYNK_INSTALL_DIR/bynkc-lsp"
+          chmod +x "$BYNK_INSTALL_DIR/bynkc" "$BYNK_INSTALL_DIR/bynkc-lsp"
           sh scripts/install.sh
           test -x "$BYNK_INSTALL_DIR/bynk"
           test -x "$BYNK_INSTALL_DIR/bynk-lsp"
           "$BYNK_INSTALL_DIR/bynk" --version
+          for stale in bynkc bynkc-lsp; do
+            if [ -e "$BYNK_INSTALL_DIR/$stale" ]; then
+              echo "::error::the installer left a stale $stale behind"
+              exit 1
+            fi
+          done
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
@@ -1631,8 +1643,15 @@ jobs:
           BYNK_INSTALL_DIR: ${{ runner.temp }}\b
           # Leave the runner's user PATH (registry) alone.
           BYNK_NO_MODIFY_PATH: "1"
+        # Seed the copies an older release left behind: the latest release
+        # ships neither bynkc nor bynkc-lsp, so an upgrade must remove both.
         run: |
+          New-Item -ItemType Directory -Force -Path $env:BYNK_INSTALL_DIR | Out-Null
+          foreach ($stale in 'bynkc.exe', 'bynkc-lsp.exe') { Set-Content -Path (Join-Path $env:BYNK_INSTALL_DIR $stale) -Value '' }
           ./scripts/install.ps1
+          foreach ($stale in 'bynkc.exe', 'bynkc-lsp.exe') {
+            if (Test-Path (Join-Path $env:BYNK_INSTALL_DIR $stale)) { throw "the installer left a stale $stale behind" }
+          }
           if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk.exe")) { throw "bynk.exe was not installed" }
           if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk-lsp.exe")) { throw "bynk-lsp.exe was not installed" }
           & "$env:BYNK_INSTALL_DIR\bynk.exe" --version
