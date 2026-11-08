@@ -195,3 +195,75 @@ fn clean_output_passes_and_a_crash_is_not_a_compiler_bug() {
         .is_none()
     );
 }
+
+/// Run `bynk <args>` in `cwd` with `PATH` as given (or inherited).
+fn bynk(cwd: &Path, args: &[&str], path: Option<&str>) -> (bool, String) {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"));
+    cmd.args(args).current_dir(cwd).env("NO_COLOR", "1");
+    if let Some(p) = path {
+        cmd.env("PATH", p);
+    }
+    let o = cmd.output().expect("bynk runs");
+    (
+        o.status.success(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
+        ),
+    )
+}
+
+fn project(tag: &str) -> PathBuf {
+    let dir = scratch(tag);
+    std::fs::write(dir.join("bynk.toml"), "[project]\nname = \"p\"\n").unwrap();
+    std::fs::write(dir.join("src/greeting.bynk"), SOURCE).unwrap();
+    dir
+}
+
+#[test]
+fn check_emit_passes_a_clean_project_and_writes_nothing() {
+    if tsc_runner().is_none() {
+        assert!(
+            !require::is_required("BYNK_REQUIRE_TSC"),
+            "BYNK_REQUIRE_TSC is set but `tsc` is not available"
+        );
+        return;
+    }
+    let dir = project("emit-clean");
+    let (ok, text) = bynk(&dir, &["check", "--emit", "."], None);
+    assert!(ok, "{text}");
+    let mut names: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        ["bynk.toml", "src"],
+        "check --emit writes nothing into the project"
+    );
+}
+
+#[test]
+fn check_emit_refuses_a_single_file() {
+    let dir = project("emit-file");
+    let (ok, text) = bynk(&dir, &["check", "--emit", "src/greeting.bynk"], None);
+    assert!(!ok);
+    assert!(text.contains("takes a project directory"), "{text}");
+}
+
+#[test]
+fn check_emit_without_tsc_says_so_and_fails() {
+    let dir = project("emit-no-tsc");
+    // An empty directory as the whole PATH: no `tsc`, no `npx`.
+    let empty = dir.join("empty-path");
+    std::fs::create_dir_all(&empty).unwrap();
+    let (ok, text) = bynk(&dir, &["check", "--emit", "."], empty.to_str());
+    assert!(
+        !ok,
+        "a check that could not type-check must not pass: {text}"
+    );
+    assert!(text.contains("needs `tsc`"), "{text}");
+    assert!(text.contains("npm install -g typescript@"), "{text}");
+}

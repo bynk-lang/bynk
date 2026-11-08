@@ -698,6 +698,20 @@ pub fn format_ranges(lines: &[u32]) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #3068: `resolve` reads ADR 0103's "enclosing statement" rule backwards: an
+    /// error on an unmapped generated line (a closing brace) takes the nearest
+    /// mapped line at or before it.
+    #[test]
+    fn resolve_takes_the_nearest_mapped_line_at_or_before() {
+        // Generated line 1 maps to source line 2; lines 0, 2 and 3 carry nothing.
+        let m = SourceMap::parse(r#"{"sources":["a.bynk"],"mappings":";AAEA;;;"}"#).unwrap();
+        assert_eq!(m.resolve(0), None);
+        assert_eq!(m.resolve(1), Some(("a.bynk", 2)));
+        assert_eq!(m.resolve(3), Some(("a.bynk", 2)));
+        // Past the end of the map is the last mapped line too.
+        assert_eq!(m.resolve(99), Some(("a.bynk", 2)));
+    }
+
     use super::*;
 
     #[test]

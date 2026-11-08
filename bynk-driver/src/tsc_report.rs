@@ -152,9 +152,18 @@ fn resolve(err: &TscError, emit_root: &Path, snapshots: &[(PathBuf, String)]) ->
         let Ok(map_text) = std::fs::read_to_string(format!("{}.map", ts.display())) else {
             continue;
         };
-        let map = SourceMap::parse(&map_text)?;
-        let (name, src_line) = map.resolve(err.line.checked_sub(1)?)?;
-        let (path, text) = find_snapshot(name, snapshots)?;
+        let Some(map) = SourceMap::parse(&map_text) else {
+            continue;
+        };
+        let Some(gen_line) = err.line.checked_sub(1) else {
+            continue;
+        };
+        let Some((name, src_line)) = map.resolve(gen_line) else {
+            continue;
+        };
+        let Some((path, text)) = find_snapshot(name, snapshots) else {
+            continue;
+        };
         let line = src_line as usize;
         let mut start = 0usize;
         let mut found = None;
@@ -167,7 +176,9 @@ fn resolve(err: &TscError, emit_root: &Path, snapshots: &[(PathBuf, String)]) ->
             }
             start += l.len();
         }
-        let (s, e) = found?;
+        let Some((s, e)) = found else {
+            continue;
+        };
         let generated = std::fs::read_to_string(&ts)
             .ok()
             .and_then(|g| g.lines().nth(err.line - 1).map(|l| l.trim().to_string()));
@@ -310,6 +321,33 @@ fn run_tsc(tsconfig: &Path) -> Ran {
     Ran::Unavailable(failures)
 }
 
+/// A fresh, empty directory only this process can use: created with `create_dir`
+/// (which fails if the path exists, so a leftover from a killed run or one a
+/// local user pre-created is never reused) under an unpredictable name, mode 0700
+/// on Unix. Retries on a collision.
+fn private_temp_dir() -> std::io::Result<PathBuf> {
+    use std::hash::{BuildHasher, Hasher};
+    let mut last = None;
+    for _ in 0..16 {
+        // `RandomState` is randomly keyed per instance: unpredictable without a
+        // new dependency.
+        let r = std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish();
+        let path =
+            std::env::temp_dir().join(format!("bynk-check-emit-{}-{r:016x}", std::process::id()));
+        let mut b = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+        match b.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("no free temporary directory name")))
+}
+
 /// `bynk check --emit` for one project (#3068): generate the Workers output into
 /// a temporary directory and type-check it, reporting a `tsc` failure as
 /// `bynk.codegen.tsc_failed`. Run after the ordinary check has passed. `true`
@@ -330,9 +368,13 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
             return false;
         }
     };
-    static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let tmp = std::env::temp_dir().join(format!("bynk-check-emit-{}-{n}", std::process::id()));
+    let tmp = match private_temp_dir() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("{prog}: could not create a temporary directory: {e}");
+            return false;
+        }
+    };
     let root = tmp.join("out");
     let result = (|| {
         for (path, doc) in &out.artefacts.docs {
