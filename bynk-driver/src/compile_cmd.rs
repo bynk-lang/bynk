@@ -112,31 +112,48 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
-    let overlay = match std::fs::read_to_string(input.join("bynk.toml")) {
-        Ok(text) => std::collections::HashMap::from([(input.join("bynk.toml"), text)]),
-        Err(_) => std::collections::HashMap::new(),
-    };
-    let config = match bynk_project::try_read_build_config_with(&input, &overlay) {
+    let config = match bynk_project::try_read_build_config(&input) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{prog}: {e}");
             return ExitCode::FAILURE;
         }
     };
-    // `build_config_from` has already checked each value against the set.
-    fn from_config(value: &Option<String>) -> Option<&str> {
-        value.as_deref()
+    // The manifest's strings were checked against the same sets in
+    // `bynk-project`; a name that no longer parses is a bug there, never a
+    // silent fall back to the default.
+    fn parse<T: ValueEnum>(key: &str, value: Option<&str>) -> Result<Option<T>, String> {
+        match value {
+            None => Ok(None),
+            Some(v) => T::from_str(v, true).map(Some).map_err(|_| {
+                format!("`[build]` `{key}` = \"{v}\" is not a value this `bynk` knows")
+            }),
+        }
     }
-    let target = target
-        .or_else(|| from_config(&config.target).and_then(|v| CliTarget::from_str(v, true).ok()))
-        .unwrap_or(CliTarget::Bundle);
-    let platform = platform
-        .or_else(|| from_config(&config.platform).and_then(|v| CliPlatform::from_str(v, true).ok()))
-        .unwrap_or_default();
-    let emit = emit
-        .or_else(|| from_config(&config.emit).and_then(|v| EmitFormat::from_str(v, true).ok()))
-        .unwrap_or_default();
+    let resolved = (|| -> Result<_, String> {
+        Ok((
+            target
+                .or(parse("target", config.target.as_deref())?)
+                .unwrap_or(CliTarget::Bundle),
+            platform
+                .or(parse("platform", config.platform.as_deref())?)
+                .unwrap_or_default(),
+            emit.or(parse("emit", config.emit.as_deref())?)
+                .unwrap_or_default(),
+        ))
+    })();
+    let (target, platform, emit) = match resolved {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{prog}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     let output = out.unwrap_or_else(|| input.join(config.out.as_deref().unwrap_or("out")));
+    if let Err(e) = check_output_dir(&input, &output) {
+        eprintln!("{prog}: {e}");
+        return ExitCode::FAILURE;
+    }
     let code = run_compile(
         prog,
         CompileArgs {
@@ -156,6 +173,88 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
         eprintln!("{prog}: built {target} -> {}", output.display());
     }
     code
+}
+
+/// `path` with symlinks resolved as far as it exists, the rest appended as
+/// written, so a not-yet-created output directory can still be placed.
+fn resolve(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut cur = path.to_path_buf();
+    loop {
+        if let Ok(real) = cur.canonicalize() {
+            return rest.iter().rev().fold(real, |acc, c| acc.join(c));
+        }
+        match (cur.file_name().map(ToOwned::to_owned), cur.parent()) {
+            (Some(name), Some(parent)) => {
+                rest.push(name);
+                cur = if parent.as_os_str().is_empty() {
+                    PathBuf::from(".")
+                } else {
+                    parent.to_path_buf()
+                };
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// Whether any `.bynk` file sits under `dir` (build-output caches skipped).
+fn holds_bynk_source(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|e| {
+        let path = e.path();
+        let name = e.file_name();
+        let name = name.to_string_lossy();
+        match e.file_type() {
+            Ok(t) if t.is_dir() => {
+                name != "node_modules" && !name.starts_with('.') && holds_bynk_source(&path)
+            }
+            Ok(t) if t.is_file() => path.extension().is_some_and(|x| x == "bynk"),
+            _ => false,
+        }
+    })
+}
+
+/// #3054 review: the writer prunes `.ts`/`.js`/`.json`/… files in the output
+/// directory that the build did not produce, so an output directory that is
+/// the project root, a source root, holds or sits inside one, escapes the
+/// project (also through a symlink), or already holds `.bynk` source would
+/// delete hand-written files on every build. Refuse those.
+fn check_output_dir(project: &Path, output: &Path) -> Result<(), String> {
+    let root = resolve(project);
+    // `output` is relative to the cwd (a flag) or already joined onto
+    // `project` (the manifest key); `canonicalize` resolves both from the cwd.
+    let out = resolve(output);
+    let shown = output.display();
+    if !out.starts_with(&root) || out == root {
+        return Err(format!(
+            "the output directory `{shown}` must be a directory inside the project, not the project root or a path outside it"
+        ));
+    }
+    let paths = bynk_project::try_read_project_paths(project)
+        .unwrap_or_else(|_| bynk_project::ProjectPaths::conventional(project));
+    for include in &paths.include {
+        let source = resolve(&project.join(include));
+        // A flat project's root is the source root; the output lives inside
+        // it by design (`out/` is skipped by discovery).
+        if source == root {
+            continue;
+        }
+        if out.starts_with(&source) || source.starts_with(&out) {
+            return Err(format!(
+                "the output directory `{shown}` overlaps the source root `{}`, and a build deletes files it did not write from its output directory; choose another `[build] out`",
+                include.display()
+            ));
+        }
+    }
+    if holds_bynk_source(&out) {
+        return Err(format!(
+            "the output directory `{shown}` holds `.bynk` sources, and a build deletes files it did not write from its output directory; choose another `[build] out`"
+        ));
+    }
+    Ok(())
 }
 
 /// Run `compile`. `prog` prefixes the messages (`"bynk"`).

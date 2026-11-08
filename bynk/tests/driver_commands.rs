@@ -1094,6 +1094,10 @@ fn build_refuses_a_bad_build_table() {
         ("out = \"../x\"", "inside the project"),
         ("target = \"lambda\"", "must be one of"),
         ("outt = \"x\"", "no key named"),
+        ("out = \"src\"", "overlaps the source root"),
+        ("out = \"src/gen\"", "overlaps the source root"),
+        ("out = \"tests\"", "overlaps the source root"),
+        ("out = \"link\"", "inside the project"),
     ] {
         let proj = scratch("build-bad");
         write(
@@ -1101,11 +1105,41 @@ fn build_refuses_a_bad_build_table() {
             &format!("[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\n{body}\n"),
         );
         write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+        write(&proj.join("src/keep.ts"), "// hand-written\n");
+        std::fs::create_dir_all(proj.join("tests")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(std::env::temp_dir(), proj.join("link")).unwrap();
         let (code, _, err) = run_bynk_in(&proj, &["build"]);
         assert_ne!(code, 0, "{body}");
+        assert!(proj.join("src/keep.ts").exists(), "{body}: nothing deleted");
         assert!(err.contains(needle), "{body}: {err}");
         assert!(!proj.join("out").exists());
     }
+}
+
+/// #3054 review: `target` and `platform` from `[build]` take effect, and a
+/// `bynk build <dir>` from elsewhere resolves `[build] out` against that project.
+#[test]
+fn build_applies_target_and_resolves_out_against_the_project() {
+    let proj = scratch("build-target");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\nout = \"dist\"\ntarget = \"workers\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let elsewhere = scratch("build-target-cwd");
+    let (code, _, err) = run_bynk_in(&elsewhere, &["build", proj.to_str().unwrap()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("built workers -> "), "{err}");
+    assert!(proj.join("dist").is_dir(), "out is under the project");
+    assert!(!elsewhere.join("dist").exists(), "not under the cwd");
+    assert!(
+        std::fs::read_dir(proj.join("dist"))
+            .unwrap()
+            .next()
+            .is_some(),
+        "something was written"
+    );
 }
 
 /// `bynk test` on a real project discovers

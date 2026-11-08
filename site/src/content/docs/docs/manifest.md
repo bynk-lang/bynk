@@ -477,7 +477,7 @@ overrides its key, and a key you leave out takes the default below.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `out` | string | `"out"` | The output directory, relative to the project root. It must stay inside the project: no absolute path, no `..`, not the root itself. |
+| `out` | string | `"out"` | The output directory, relative to the project root. It must stay inside the project (symlinks resolved), and `bynk build` refuses one that is the root, equals, contains or sits inside a `[paths]` source root, or already holds `.bynk` files, because a build deletes `.ts`, `.js`, `.json` and similar files in its output directory that it did not write. |
 | `target` | `"bundle"` or `"workers"` | `"bundle"` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
 | `platform` | `"cloudflare"`, `"node"` or `"browser"` | `"cloudflare"` | The surface binding (`browser` is `bundle` only). |
 | `emit` | `"ts"` or `"js"` | `"ts"` | `js` writes the same modules with types stripped. |

@@ -683,6 +683,16 @@ pub fn try_read_build_config_with(
     }
 }
 
+/// [`try_read_build_config_with`], reading `bynk.toml` from disk.
+pub fn try_read_build_config(project_root: &Path) -> Result<BuildConfig, ProjectPathsError> {
+    let toml_path = project_root.join("bynk.toml");
+    let overlay = match fs::read_to_string(&toml_path) {
+        Ok(text) => HashMap::from([(toml_path, text)]),
+        Err(_) => HashMap::new(),
+    };
+    try_read_build_config_with(project_root, &overlay)
+}
+
 /// The `[build]` table's typed content: each value a string, `target`,
 /// `platform` and `emit` from their fixed sets, `out` a relative path that
 /// stays inside the project. An unknown key is [`check_manifest_str`]'s.
