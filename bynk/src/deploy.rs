@@ -52,6 +52,7 @@ mod ledger;
 mod pins;
 mod plan;
 mod provisioning;
+mod revert;
 mod secrets;
 
 use config::*;
@@ -67,6 +68,7 @@ use secrets::*;
 pub use ledger::materialise_deploy_state;
 pub(crate) use plan::conflicting_env_passthrough;
 pub use plan::{DeployFormat, DeployOptions, run};
+pub use revert::{RevertOptions, revert};
 // State-migrations S4 (#2259): `bynk migrate sweep` names deployed Workers as
 // `deploy` does, and mints its run's key as an edge key is minted.
 pub(crate) use config::deployed_worker_name;
