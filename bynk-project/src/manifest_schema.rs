@@ -89,6 +89,30 @@ struct WorkersTable {
     workers_dev: Option<bool>,
 }
 
+/// Defaults for `bynk build`, which takes no flags. A flag overrides its key.
+/// `bynk compile` and `bynk dev`/`deploy`/`test` do not read this table.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct BuildTable {
+    /// The output directory, relative to the project root. Must stay inside
+    /// the project. Default: `"out"`.
+    #[schemars(extend("default" = "out"))]
+    out: Option<String>,
+    /// The build topology: `"bundle"` is one deployment unit, `"workers"` one
+    /// Cloudflare Worker per context. Default: `"bundle"`.
+    #[schemars(extend("enum" = ["bundle", "workers"], "default" = "bundle"))]
+    target: Option<String>,
+    /// The surface binding: `"cloudflare"`, `"node"` or `"browser"` (`bundle`
+    /// only). Default: `"cloudflare"`.
+    #[schemars(extend("enum" = ["cloudflare", "node", "browser"], "default" = "cloudflare"))]
+    platform: Option<String>,
+    /// The artefact language: `"ts"` (typed TypeScript) or `"js"` (types
+    /// stripped). Default: `"ts"`.
+    #[schemars(extend("enum" = ["ts", "js"], "default" = "ts"))]
+    emit: Option<String>,
+}
+
 /// Opts in to experimental standard-library items, which carry no
 /// compatibility promise and can't be used until they are listed here.
 #[derive(JsonSchema)]
@@ -268,6 +292,7 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "paths" => generator.subschema_for::<PathsTable>(),
         "lsp" => generator.subschema_for::<LspTable>(),
         "workers" => generator.subschema_for::<WorkersTable>(),
+        "build" => generator.subschema_for::<BuildTable>(),
         "unstable" => generator.subschema_for::<UnstableTable>(),
         "test" => generator.subschema_for::<TestTable>(),
         "package" => generator.subschema_for::<PackageTable>(),

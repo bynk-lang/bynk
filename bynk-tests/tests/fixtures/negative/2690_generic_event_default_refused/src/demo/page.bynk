@@ -1,0 +1,19 @@
+---
+#2690: an event field's default may not apply a user generic; only a record field's may.
+---
+context demo.page
+
+consumes bynk { Events }
+
+type Paginated[T] = { items: List[T] = [] }
+
+event Listed = {
+  id: String,
+  page: Paginated[String] = Paginated {},
+}
+
+service list {
+  on call(id: String) -> Effect[()] given Events {
+    Events.emit[Listed](Listed { id: id })
+  }
+}

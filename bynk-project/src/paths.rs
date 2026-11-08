@@ -147,6 +147,8 @@ pub enum ProjectPathsError {
         table: &'static str,
         key: &'static str,
     },
+    /// #3054: a `[build]` key whose value isn't one the key accepts.
+    BadBuild { key: &'static str, reason: String },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
     /// #2207 (`project_and_package`): both `[project]` and `[package]`, so the
@@ -209,6 +211,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
+    ("build", &["out", "target", "platform", "emit"]),
     ("unstable", &["allow"]),
     ("test", &["targets", "mutate"]),
     ("workspace", &["members", "exclude"]),
@@ -342,6 +345,9 @@ impl std::fmt::Display for ProjectPathsError {
                 f,
                 "`[{table}]` `{key}` must be `true` or `false`, like `{key} = false`"
             ),
+            ProjectPathsError::BadBuild { key, reason } => {
+                write!(f, "`[build]` `{key}` {reason}")
+            }
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
             }
@@ -514,6 +520,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
         }
         match table {
             "workers" => drop(workers_config_from(entries)?),
+            "build" => drop(build_config_from(entries)?),
             "unstable" => drop(unstable_config_from(entries)?),
             "test" => drop(test_targets_from(entries)?),
             "package" => drop(crate::manifest::package_config_from(entries)?),
@@ -639,6 +646,105 @@ pub fn try_read_workers_config(project_root: &Path) -> Result<WorkersConfig, Pro
         Err(_) => HashMap::new(),
     };
     try_read_workers_config_with(project_root, &overlay)
+}
+
+/// #3054: the project's `[build]` table, the defaults `bynk build` takes
+/// when a flag is not given. Each key is `None` when unset; `bynk build`
+/// applies the built-in default (`out`, `bundle`, `cloudflare`, `ts`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BuildConfig {
+    /// Output directory, relative to the project root.
+    pub out: Option<String>,
+    /// `bundle` or `workers`.
+    pub target: Option<String>,
+    /// `cloudflare`, `node` or `browser`.
+    pub platform: Option<String>,
+    /// `ts` or `js`.
+    pub emit: Option<String>,
+}
+
+/// Read `bynk.toml`'s `[build]` table, honouring `overlay` the way
+/// [`try_read_workers_config_with`] does. No manifest, or no `[build]`, is the
+/// empty [`BuildConfig`]; a bad value is [`ProjectPathsError::BadBuild`].
+pub fn try_read_build_config_with(
+    project_root: &Path,
+    overlay: &HashMap<PathBuf, String>,
+) -> Result<BuildConfig, ProjectPathsError> {
+    let toml_path = project_root.join("bynk.toml");
+    let Ok(content) = read_source(&toml_path, overlay) else {
+        return Ok(BuildConfig::default());
+    };
+    let doc = content
+        .parse::<toml::Table>()
+        .map_err(|_| ProjectPathsError::Malformed)?;
+    match doc.get("build").and_then(|v| v.as_table()) {
+        Some(t) => build_config_from(t),
+        None => Ok(BuildConfig::default()),
+    }
+}
+
+/// [`try_read_build_config_with`], reading `bynk.toml` from disk.
+pub fn try_read_build_config(project_root: &Path) -> Result<BuildConfig, ProjectPathsError> {
+    let toml_path = project_root.join("bynk.toml");
+    let overlay = match fs::read_to_string(&toml_path) {
+        Ok(text) => HashMap::from([(toml_path, text)]),
+        Err(_) => HashMap::new(),
+    };
+    try_read_build_config_with(project_root, &overlay)
+}
+
+/// The `[build]` table's typed content: each value a string, `target`,
+/// `platform` and `emit` from their fixed sets, `out` a relative path that
+/// stays inside the project. An unknown key is [`check_manifest_str`]'s.
+fn build_config_from(table: &toml::Table) -> Result<BuildConfig, ProjectPathsError> {
+    let get = |key: &'static str,
+               allowed: Option<&[&str]>|
+     -> Result<Option<String>, ProjectPathsError> {
+        let Some(v) = table.get(key) else {
+            return Ok(None);
+        };
+        let Some(s) = v.as_str() else {
+            return Err(ProjectPathsError::BadBuild {
+                key,
+                reason: "must be a string".to_string(),
+            });
+        };
+        if let Some(allowed) = allowed
+            && !allowed.contains(&s)
+        {
+            let list: Vec<String> = allowed.iter().map(|a| format!("\"{a}\"")).collect();
+            return Err(ProjectPathsError::BadBuild {
+                key,
+                reason: format!("must be one of {}, not \"{s}\"", list.join(", ")),
+            });
+        }
+        Ok(Some(s.to_string()))
+    };
+    let out = get("out", None)?;
+    if let Some(out) = &out {
+        let path = Path::new(out);
+        let escapes = path.is_absolute()
+            || path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir));
+        let empty = path
+            .components()
+            .all(|c| matches!(c, std::path::Component::CurDir));
+        if escapes || empty {
+            return Err(ProjectPathsError::BadBuild {
+                key: "out",
+                reason: format!(
+                    "must be a directory inside the project (relative, no `..`, not the root), not \"{out}\""
+                ),
+            });
+        }
+    }
+    Ok(BuildConfig {
+        out,
+        target: get("target", Some(&["bundle", "workers"]))?,
+        platform: get("platform", Some(&["cloudflare", "node", "browser"]))?,
+        emit: get("emit", Some(&["ts", "js"]))?,
+    })
 }
 
 /// #2138 (end-to-end testing track §3.8): a deployment `bynk test --against
