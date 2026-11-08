@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.514.3** | "`bynk fmt` keeps a comment between the elements of a list literal (#3067)" |
 | **v0.514.2** | "`bynk.deploy.lock` no longer lists each Worker's static assets by hashed name, so a release that changes only pages leaves the lock unchanged (an existing lock loses its `assets` lines on its next write)" |
 | **v0.514.1** | A `system` suite resolves an actor's `identity` type declared in a `commons` the context uses, so `by User("alice")` is accepted |
 | **v0.514.0** | An `Oidc` route is tested at the `system` tier. The driver is the issuer, and `by Forged`, `by Expired`, `by WrongIssuer` and `by WrongAudience` drive its seam |
