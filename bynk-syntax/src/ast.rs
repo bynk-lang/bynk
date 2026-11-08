@@ -25,6 +25,16 @@ pub struct Trivia {
     pub trailing: Option<String>,
 }
 
+/// #3067: the comments inside a list literal `[a, b, c]`. `items` runs parallel
+/// to the elements: the comments above each, and the one at the end of its line.
+/// `closing` holds those before the `]`. Boxed and absent (`None`) when the list
+/// carries no comment, which keeps `ExprKind` small.
+#[derive(Debug, Clone, Default)]
+pub struct ListTrivia {
+    pub items: Vec<Trivia>,
+    pub closing: Vec<Comment>,
+}
+
 /// One entry of comment trivia.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Comment {
@@ -1149,7 +1159,7 @@ impl CorsPolicy {
 
     fn str_list_of(expr: &Expr) -> Option<Vec<String>> {
         match &expr.kind {
-            ExprKind::ListLit(items) => items
+            ExprKind::ListLit(items, ..) => items
                 .iter()
                 .map(|e| match &e.kind {
                     ExprKind::StrLit(s) => Some(s.clone()),
@@ -3811,7 +3821,7 @@ pub enum ExprKind {
     Wire(Box<Expr>),
     /// `[a, b, c]` — list literal (v0.20b). An empty `[]` requires an
     /// expected type (`bynk.types.uninferable_element_type`).
-    ListLit(Vec<Expr>),
+    ListLit(Vec<Expr>, Option<Box<ListTrivia>>),
     /// An observation over a consumed capability's recorded calls (v0.117,
     /// testing track slice 5). The direct subject of an `expect` in a `case`
     /// body — `expect Cap.op called once with <pred>`, `expect Cap.op never
@@ -3886,7 +3896,7 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
                 }
             }
         }
-        ExprKind::Call { args, .. } | ExprKind::Val { args, .. } | ExprKind::ListLit(args) => {
+        ExprKind::Call { args, .. } | ExprKind::Val { args, .. } | ExprKind::ListLit(args, ..) => {
             out.extend(args.iter())
         }
         ExprKind::Wire(inner) => out.push(inner.as_ref()),
@@ -4813,7 +4823,7 @@ fn f(x: Int) -> Int {
                 args.iter().for_each(|a| out.push(("val.arg", a)))
             }
             ExprKind::Wire(x) => out.push(("wire.inner", x)),
-            ExprKind::ListLit(items) => items.iter().for_each(|i| out.push(("list.item", i))),
+            ExprKind::ListLit(items, ..) => items.iter().for_each(|i| out.push(("list.item", i))),
             ExprKind::Observation(obs) => {
                 let ObservationExpr {
                     cap: _,

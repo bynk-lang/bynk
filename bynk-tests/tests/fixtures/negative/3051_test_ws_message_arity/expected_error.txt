@@ -1,0 +1,2 @@
+bynk.test.service_call_arity `ChatGateway.message` takes the connection and one inbound frame, but 3 argument(s) were given
+# exact

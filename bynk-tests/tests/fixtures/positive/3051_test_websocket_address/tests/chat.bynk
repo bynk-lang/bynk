@@ -1,0 +1,40 @@
+// #3051: a case drives a `from websocket` service by address —
+// `svc.open(tc, route…) by <Actor>`, `svc.message(tc, frame)`, `svc.close(tc)` —
+// against a recording `TestConnection[F]()`, and reads what the server sent with
+// `tc.sent()`. `tc.connection()` mints the owned `Connection` an agent receives.
+suite chat {
+  case "a joiner is welcomed and then hears the broadcast" {
+    let alice = TestConnection[ServerFrame]()
+    let bob = TestConnection[ServerFrame]()
+    let room = RoomId.unsafe("r1")
+
+    let _ <- ChatGateway.open(alice, room) by Participant(UserId.unsafe("alice"))
+    let _ <- ChatGateway.open(bob, room) by Participant(UserId.unsafe("bob"))
+    expect alice.sent() == [ServerFrame { text: "welcome" }]
+
+    let _ <- ChatGateway.message(alice, ClientFrame { text: "hi" })
+    expect bob.sent() == [ServerFrame { text: "welcome" }, ServerFrame { text: "hi" }]
+    expect alice.closed() == false
+  }
+
+  case "a closed member hears nothing further" {
+    let alice = TestConnection[ServerFrame]()
+    let bob = TestConnection[ServerFrame]()
+    let room = RoomId.unsafe("r2")
+    let _ <- ChatGateway.open(alice, room) by Participant(UserId.unsafe("alice"))
+    let _ <- ChatGateway.open(bob, room) by Participant(UserId.unsafe("bob"))
+    let _ <- ChatGateway.close(bob)
+    let _ <- ChatGateway.message(alice, ClientFrame { text: "again" })
+    expect bob.sent().length() == 1
+    expect alice.sent().length() == 2
+  }
+
+  case "an agent can be handed a test connection directly" as integration {
+    let tc = TestConnection[ServerFrame]()
+    let room = RoomId.unsafe("r3")
+    let u = UserId.unsafe("carol")
+    let _ <- Room(room).join(u, tc.connection())
+    let _ <- Room(room).post(u, "hello")
+    expect tc.sent() == [ServerFrame { text: "hello" }]
+  }
+}

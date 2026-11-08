@@ -1,0 +1,2 @@
+bynk.test.ws_lifecycle_by `ChatGateway.message` takes no `by`: the connection's principal was given at `open`
+# exact

@@ -1,0 +1,7 @@
+// #3051: a `system` case cannot drive a WebSocket service by address.
+suite chat as system {
+  case "an upgrade at system" {
+    let tc = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(tc, Val[RoomId]) by Participant(Val[UserId])
+  }
+}

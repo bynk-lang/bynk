@@ -17,6 +17,10 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0753](0753-test-websocket-service-address.md) | **A case drives a WebSocket service by address against a recording TestConnection** (v0.517) — open/message/close addresses, a case-scoped TestConnection[F], and the principal given once at open | Accepted (v0.517) |
+| [0752](0752-test-mutate.md) | **`bynk test --mutate` reports the code changes the suites don't catch** (v0.516) — A flag on `bynk test`, mutants as in-memory source overlays, suites chosen by unit reach | Accepted (v0.516) |
+| [0751](0751-field-default-contract-compat.md) | **A field with a default is compatible in the service-contract classifier, and the hash is unchanged** (v0.515) — The hash keeps covering defaulted fields; the classifier, through a marker in the stored shape, credits a receiver's default for an absent field | Accepted (v0.515) |
+| [0750](0750-deploy-lock-omits-static-assets.md) | **bynk.deploy.lock does not record static assets** (v0.514.2) — The served asset paths are derived from the build and nothing reads them, so the lock stops listing them | Accepted (v0.514.2) |
 | [0749](0749-oidc-system-tier-test-issuer.md) | **The system driver is the issuer for an `Oidc` route** (v0.514) — A test-process ES256 issuer answers the Worker's JWKS fetch; four failure principals drive an `Oidc` seam | Accepted (v0.514) |
 | [0748](0748-schema-lock-variant-additive.md) | **A sum variant added inside stored agent state is additive** (v0.513) — The lock accepts a new variant, bumping the class version; removal and rename stay refused | Accepted (v0.513) |
 | [0747](0747-codeql-over-emitted-typescript.md) | **CodeQL scans the emitted Workers TypeScript nightly, with Bynk's own models and canaries** (v0.512.11) — QL models of the Worker request + Location header, proved by canaries; out of band, never a gate | Accepted (v0.512.11) |

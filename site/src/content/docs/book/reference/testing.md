@@ -29,6 +29,7 @@ the declared handler and checked for arity and argument types:
 | `from cron` | `svc.schedule("<expr>")` — matched to the handler with that schedule |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
+| `from websocket` | `svc.open(tc, route…)`, `svc.message(tc, frame)`, `svc.close(tc)` — [a connection's lifecycle](#websocket-address) |
 
 A route/schedule the service does not declare is `bynk.test.service_unknown_route`;
 `svc.call(...)` on a service with no `on call` handler is
@@ -114,6 +115,60 @@ The address works at `unit` and `integration`. A `system` case can't use it
 (`bynk.test.event_needs_in_process`). There, an event reaches a subscriber only
 through its publisher's fan-out, so a `system` case calls the handler that
 emits it.
+
+### Driving a WebSocket service — `svc.open(tc, …)` {#websocket-address}
+
+A case drives a `from websocket` service by the handlers it declares, against a
+`TestConnection[F]()` that records what the server sends. `F` is the service's
+`out` frame type.
+
+```bynk,fragment
+suite chat {
+  case "a joiner is welcomed and then hears the broadcast" {
+    let alice = TestConnection[ServerFrame]()
+    let bob = TestConnection[ServerFrame]()
+    let room = RoomId.unsafe("r1")
+
+    let _ <- ChatGateway.open(alice, room) by Participant(UserId.unsafe("alice"))
+    let _ <- ChatGateway.open(bob, room) by Participant(UserId.unsafe("bob"))
+    expect alice.sent() == [ServerFrame { text: "welcome" }]
+
+    let _ <- ChatGateway.message(alice, ClientFrame { text: "hi" })
+    expect bob.sent() == [ServerFrame { text: "welcome" }, ServerFrame { text: "hi" }]
+
+    let _ <- ChatGateway.close(bob)
+  }
+}
+```
+
+| address | what it does |
+|---|---|
+| `svc.open(tc, route…) by A(…)` | runs `on open` with `tc` as the `connection`, the handler's route values and the principal |
+| `svc.message(tc, frame)` | runs `on message` with one decoded `in` frame |
+| `svc.close(tc)` | runs `on close`: the client went away |
+
+- **The connection remembers `open`.** `message` and `close` take neither route
+  values nor `by`. The connection carries both from `open`, as the platform
+  recovers them from the socket, so a case cannot present values production
+  never sees. A `by` on either is `bynk.test.ws_lifecycle_by`. To act as another
+  principal, open a new `TestConnection`. A `message` or `close` on a connection
+  that was never opened fails the case.
+- **Reading the connection.** `tc.sent()` is the frames the server wrote, in
+  order (`List[F]`), and `tc.closed()` is `true` once the server closed it. The
+  client going away (`svc.close(tc)`) does not set `closed()`. Both are plain
+  reads, not effects. `message` takes a decoded frame of the service's `in`
+  type; there is no raw-text form.
+- **Handing a connection to an agent.** `tc.connection()` gives the owned
+  `Connection[F]` an agent's handler takes, so a case can drive the agent
+  without the service: `Room(r).join(u, tc.connection())`. A `TestConnection`
+  gives up one connection; asking again fails the case.
+- **Tiers.** The address works at `unit` and `integration`. A `system` case
+  can't use it (`bynk.test.ws_needs_in_process`): a deployed WebSocket is a real
+  upgrade through the Worker and a Durable Object, which a `system` case does
+  not drive.
+- `svc.message` is the WebSocket address on a `from websocket` service and the
+  queue address on a `from queue` service. `TestConnection` can be named only
+  in a `suite`.
 
 ### Fetching a static asset — `svc.GET(asset)` {#assets}
 

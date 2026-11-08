@@ -90,15 +90,20 @@ On the **bundle** target there is no Durable Object: a connection is a
 `TestConnection` — a capture-and-inspect channel that records every frame sent — so
 a WebSocket service is fully developable and testable with no Cloudflare runtime.
 A `TestConnection` exposes `.sent` (the array of frames sent to it) and `.closed`.
-A handler is driven by calling the service's emitted handler with the connection,
-the route params, and the actor identity:
+In a `suite`, a case builds one with `TestConnection[F]()` and drives the
+service by address:
 
-```ts
-const tc = new TestConnection<{ text: string }>();
-await ChatGateway.open(tc, roomId, { identity: alice });
-// tc.sent[0].text === "welcome"
-await ChatGateway.message(tc, roomId, { text: "hi" }, { identity: alice });
+```bynk,fragment
+let tc = TestConnection[ServerFrame]()
+let _ <- ChatGateway.open(tc, roomId) by Participant(alice)
+expect tc.sent() == [ServerFrame { text: "welcome" }]
+let _ <- ChatGateway.message(tc, ClientFrame { text: "hi" })
 ```
+
+`open` supplies the route params and the actor identity; `message` and `close`
+reuse them from the connection. See [Driving a WebSocket
+service](/book/reference/testing/#websocket-address) for the addresses and the
+tiers.
 
 This is what makes the §20 chat-room assertable: two participants join, a message
 fans out to both, one leaves, and the next message reaches only the other.
@@ -128,6 +133,8 @@ computed from the actor's identity is `bynk.ws.open_transfer_key`.
 | `bynk.held.leak` | a connection is left undisposed when its scope exits |
 | `bynk.held.use_after_consume` | a connection is used after `close`/transfer |
 | `bynk.held.branch_divergence` | `if`/`match` branches dispose inconsistently |
+| `bynk.test.ws_needs_in_process` | a `system` case drives a WebSocket service by address |
+| `bynk.test.ws_lifecycle_by` | a case's `message`/`close` address carries a `by` (the principal is given at `open`) |
 | `bynk.held.consume_on_borrow` | a consuming op on a borrowed connection (e.g. in a broadcast closure) |
 | `bynk.types.held_not_comparable` | a `Connection` compared with `==` |
 | `bynk.ws.open_transfer_shape` | the `on open` does not transfer the connection to exactly one routable agent |

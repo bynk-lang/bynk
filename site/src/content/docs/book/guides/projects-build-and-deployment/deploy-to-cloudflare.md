@@ -697,9 +697,10 @@ the whole project so both sides move together. See
 
 A multi-context deploy is **resumable, not transactional**. If the third context
 fails after two succeeded, the two that landed stay deployed and recorded — there
-is no rollback — and the run stops rather than pushing on into a topology that
+is no automatic rollback — and the run stops rather than pushing on into a topology that
 isn't what the plan described. Fix the problem and re-run `bynk deploy`: it
-re-pushes in the same order, reusing the KV namespaces it already created.
+re-pushes in the same order, reusing the KV namespaces it already created. To go
+back instead, see [Roll back a deployment](/book/guides/projects-build-and-deployment/roll-back-a-deployment/).
 
 A half-deployed project is a real state, not a corrupt one, and the next plan
 describes it honestly — contexts already live read `redeploy` rather than
@@ -871,7 +872,9 @@ The data is not moved. Copy it across before you prune the old namespace. This i
 never calls Cloudflare, so it works under `--dry-run` too.
 
 Pass `--prune` to delete what's reported — KV namespaces and queues only,
-never a Worker:
+never a Worker. It does not touch Worker versions or static assets: Cloudflare
+owns those, and an asset lives as long as a version that serves it. Anything that
+holds data (a D1 database, an R2 bucket) is only ever listed:
 
 ```sh
 bynk deploy --prune

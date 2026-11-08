@@ -148,7 +148,7 @@ the hashes agreed, or **breaking**, with the reasons:
 bynk: `shop-payment` no longer provides the contract its live callers were
       compiled against (bynk.deploy.contract_skew):
   `shop-orders` calls shop.payment.authorise — compiled against 317bdd3de84d2176, this build provides 9f2c41ab73e05d18
-      breaking response.refunded: the caller requires the field `refunded`, which the callee does not send (a field's default is not part of the contract, so only an `Option` may be absent)
+      breaking response.refunded: the caller requires the field `refunded`, which the callee does not send (only an `Option` or a field with a default may be absent)
       compatible response.receipt: the callee sends the field `receipt`, which the caller ignores
 ```
 
@@ -159,8 +159,9 @@ both the receiver must be able to decode everything the sender can produce:
 | Change | In a request | In a response |
 | ------ | ------------ | ------------- |
 | Optional field added | compatible | compatible |
+| Field with a default added | compatible | compatible |
 | Required field added | breaking | compatible |
-| Field removed | compatible | breaking, unless it was an `Option` |
+| Field removed | compatible | breaking, unless it was an `Option` or had a default |
 | Field made optional | compatible | breaking |
 | Field made required | breaking | compatible |
 | Field retyped | breaking | breaking |
@@ -170,8 +171,13 @@ both the receiver must be able to decode everything the sender can produce:
 | Sum variant removed | breaking | compatible |
 
 An unknown key is ignored and a missing `Option` is `None`, which is why most
-rows come out as they do. A field's default is not part of the contract, so a
-field added with a default still counts as required. A single parameter travels
+rows come out as they do. A field with a default
+is not required of the sender either: the receiver fills it in, so a field added
+with a default is compatible. The default's value is not part of the contract, and
+an old caller gets the callee's *current* default, so changing it changes what
+those callers get without any skew showing. Adding the field still moves the
+hash; the verdict is what lets the callee deploy first. A foreign caller's
+pinned hash is held exactly, so its client is regenerated all the same. A single parameter travels
 as a bare value, so renaming it is compatible; several parameters travel as an
 object keyed by name, and follow the field rules.
 

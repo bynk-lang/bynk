@@ -791,6 +791,9 @@ pub(super) fn emit_integration_module(
     if runtime_use.token_claims() {
         append_missing_bindings(&mut runtime_names, ", __tokenClaims");
     }
+    if runtime_use.test_connection() {
+        append_missing_bindings(&mut runtime_names, ", TestConnection");
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_names, emitter::EQ_RUNTIME_IMPORTS);
     }
