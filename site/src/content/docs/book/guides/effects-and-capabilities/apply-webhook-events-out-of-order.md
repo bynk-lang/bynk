@@ -18,20 +18,42 @@ review finding there before it was a rule.
 
 ## The tables
 
-```text
-pulls           repo, number, updated_at      -- the newest delivery recorded
-review_requests repo, number, reviewer, requested_at
-review_tombstones repo, number, reviewer, at  -- the latest removal of each
+```sql
+CREATE TABLE pulls (
+  repo TEXT NOT NULL, number INTEGER NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (repo, number)
+);
+CREATE TABLE review_requests (
+  repo TEXT NOT NULL, number INTEGER NOT NULL,
+  reviewer TEXT NOT NULL COLLATE NOCASE,
+  requested_at TEXT,
+  PRIMARY KEY (repo, number, reviewer)
+);
+CREATE TABLE review_tombstones (
+  repo TEXT NOT NULL, number INTEGER NOT NULL,
+  reviewer TEXT NOT NULL COLLATE NOCASE,
+  at TEXT NOT NULL,
+  PRIMARY KEY (repo, number, reviewer)
+);
 ```
 
+- **`pulls`** holds the newest *full-set* delivery recorded for each pull
+  request. Only a full set writes it (in the same `batch`, after the set's
+  statements); single requests and removals never touch it.
+- **`reviewer` is `COLLATE NOCASE` in the schema**, so a login compares the
+  same way everywhere: in the primary key, in the upserts, and in every
+  guard. Logins are case-insensitive, so `Alice` and `alice` are one reviewer.
+  Don't also write `COLLATE` in a query: one rule, in one place.
 - **`requested_at`** is the event time that set the row, the delivery's own
   `updated_at`, never the time it was received. A row recorded before the column
   existed has none (`NULL`), and any removal may delete it.
 - **A tombstone** records a removal at its own time. It is what lets a request
   that arrives *after* its removal know it was already withdrawn.
 
-Timestamps here are ISO 8601 text in one format, so SQLite compares them as
-strings and the comparison is chronological.
+Timestamps are ISO 8601 text in **one precision**, whole seconds as GitHub
+sends them (`2026-11-05T09:00:00Z`), so SQLite compares them as strings and the
+comparison is chronological. Don't mix precisions: `09:00:00.500Z` sorts
+*before* `09:00:00Z`, because `.` sorts before `Z`.
 
 ## The rules
 
@@ -39,7 +61,7 @@ strings and the comparison is chronological.
 |---|---|---|
 | a single request | the event's `updated_at` | Add it unless a tombstone is as new or newer, or the pull's row is strictly newer. If it is already there, keep the later `requested_at`. |
 | a single removal | the event's `updated_at` | Delete the row only if it was requested no later. Leave a tombstone at this time, keeping the latest. |
-| a full set | the event's `updated_at` | Replace the rows, then clear the tombstones it supersedes. |
+| a full set | the event's `updated_at` | Replace the rows it is newer than, then clear the tombstones it supersedes. A request or tombstone newer than the set survives it. |
 | retention | the clock | Prune tombstones older than a day. |
 
 ### A removal that arrives first still wins
@@ -64,7 +86,7 @@ fn removeRequest(repo: String, number: Int, reviewer: String, at: String) -> Lis
 		SqlStatement {
 			sql: """sql
 				DELETE FROM review_requests
-				WHERE repo = ?1 AND number = ?2 AND reviewer = ?3 COLLATE NOCASE
+				WHERE repo = ?1 AND number = ?2 AND reviewer = ?3
 				  AND (requested_at IS NULL OR requested_at <= ?4)
 				""",
 			params: [Text(repo), Integer(number), Text(reviewer), Text(at)],
@@ -151,6 +173,7 @@ fn replaceSet(repo: String, number: Int, updatedAt: String, reviewers: List[Stri
 			sql: """sql
 				DELETE FROM review_requests
 				WHERE repo = ?1 AND number = ?2
+				  AND (requested_at IS NULL OR requested_at <= ?3)
 				  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?3)
 				""",
 			params: [Text(repo), Integer(number), Text(updatedAt)],
@@ -181,9 +204,13 @@ fn replaceSet(repo: String, number: Int, updatedAt: String, reviewers: List[Stri
 ```
 
 Each statement carries the `updated_at` guard itself, so a stale set, delivered
-late, is a no-op rather than a rollback to older state. Record the pull's own
-row *after* the set, in the same `batch`, so the guards compare against the
-previous newest time.
+late, is a no-op rather than a rollback to older state. The delete also spares
+any request made *after* the set (`requested_at <= ?3`), as `removeRequest`
+does: a single request at 09:02 survives a late set stamped 09:01, because the
+set cannot know about it, and the pull guard alone would not protect it
+(single deliveries never move `pulls`). Record the pull's own row *after* the
+set, in the same `batch`, so the guards compare against the previous newest
+time.
 
 ### Retention
 
@@ -195,7 +222,7 @@ service retention from cron {
 	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), SqlError]] given Deliveries {
 		let cutoff = (Instant.fromEpochMillis(at) - 1.days).toIso()
 		let Ok(_) <- Deliveries.run(
-			"DELETE FROM review_tombstones WHERE at < ?1",
+			"DELETE FROM review_tombstones WHERE at < strftime('%Y-%m-%dT%H:%M:%SZ', ?1)",
 			[Text(cutoff)]
 		) else match {
 			Err(e) => Err(e),
@@ -204,6 +231,9 @@ service retention from cron {
 	}
 }
 ```
+
+`toIso()` writes milliseconds, so the statement truncates the cutoff to whole
+seconds with `strftime`, keeping every stored time in one precision.
 
 Pruning is safe only because of the pull-row guard: after the tombstone is gone,
 a replayed single request is still refused while a newer row exists.
@@ -215,6 +245,8 @@ fail. Write one case per rule, driving the deliveries in the *wrong* order:
 
 - a removal delivered before its request leaves the table empty;
 - a request made after a removal, and delivered first, stays;
+- a removal for `Alice` blocks a replayed request for `alice`;
+- a full set stamped before a single request does not delete that request;
 - a late, **older** removal does not move a newer tombstone back;
 - a full set clears the tombstones it supersedes, and keeps a newer one;
 - the redelivery case: a request older than the pull's row, replayed after its
@@ -225,12 +257,13 @@ fail. Write one case per rule, driving the deliveries in the *wrong* order:
 case "a removal that arrives before the request it undoes still wins" {
 	let _ <- api.POST("/hook", headers("pull_request", "rm-1"), removal("c-person", "2026-11-05T09:01:00Z")) by Webhook
 	let _ <- api.POST("/hook", headers("pull_request", "rq-1"), request("c-person", "2026-11-05T09:00:00Z")) by Webhook
-	let waiting <- Deliveries.first("SELECT group_concat(reviewer, ',') AS who FROM review_requests", [])
-	expect waiting == requested("")
+	let waiting <- Deliveries.first("SELECT count(*) AS n FROM review_requests", [])
+	expect waiting == count(0)
 }
 ```
 
-See [Testing](/book/guides/testing/) for driving a handler and reading the
+(`headers`, `removal`, `request` and `count` are your own helpers that build a
+delivery and the expected row.) See [Testing](/book/guides/testing/) for driving a handler and reading the
 database from a case. A mutation pass (break each guard, expect a failure) is
 the quickest check that the suite pins every rule.
 
