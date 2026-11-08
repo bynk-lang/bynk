@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk build` builds a project with no flags, taking `out`, `target`, `platform` and `emit` from a new `[build]` table in `bynk.toml`; `bynk compile` is unchanged and ignores it (#3054)"
----
+# 0755 — `bynk build` and the `[build]` table
 
-## ADR: bynk-build-verb
-title: `bynk build` and the `[build]` table
-summary: build infers from the project, compile is told; the first slice has no profiles
+- **Status:** Accepted (v0.518.1)
 
 **Context.** The crate-hygiene track left `bynk` owning the project model, but a project still had no way to say how it builds: `bynk compile` needs `-o` and takes topology, platform and artefact language from flags, and `[paths] out` was removed. Proposed in #3054.
 
