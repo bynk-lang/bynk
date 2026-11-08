@@ -398,6 +398,8 @@ pub(super) fn suite_fn_decls(
         test_suites::SuiteItems {
             fns: &[],
             fixtures: suite_fns.fixtures,
+            types: suite_fns.types,
+            consts: suite_fns.consts,
         },
     );
     let (expr_types, callees) = test_suites::check_suite_fns(
@@ -417,7 +419,38 @@ pub(super) fn suite_fn_decls(
     typed.expr_types.extend(expr_types);
     typed.callees.extend(callees);
     test_suites::add_suite_fns_to_typed(typed, suite_fns.fns);
+    // #3066: the suite's own types and constants, re-typed for their lowering
+    // and declared ahead of everything that can name them.
+    let (decl_types, decl_callees) = checker::check_suite_decls(
+        suite_fns.types,
+        suite_fns.consts,
+        &resolved,
+        tys,
+        &mut errs,
+        &mut RefSink::new(),
+        &mut LocalsSink::new(),
+    );
+    typed.expr_types.extend(decl_types);
+    typed.callees.extend(decl_callees);
+    for t in suite_fns.types {
+        typed.types.insert(t.name.name.clone(), Arc::new(t.clone()));
+        bound.insert(t.name.name.clone());
+    }
+    for c in suite_fns.consts {
+        typed.consts.insert(c.name.name.clone(), c.clone());
+        bound.insert(c.name.name.clone());
+    }
     let mut out = String::new();
+    if !suite_fns.types.is_empty() || !suite_fns.consts.is_empty() {
+        let decls = emitter::emit_suite_decls(
+            suite_fns.types,
+            suite_fns.consts,
+            typed,
+            &runtime_use.json_codec_qual(),
+            runtime_use,
+        );
+        out.push_str(&reindent_by(&decls, "    "));
+    }
     // #2841: each fixture is a local name for its file's module-level constant.
     for f in suite_fns.fixtures {
         bound.insert(f.name.name.clone());

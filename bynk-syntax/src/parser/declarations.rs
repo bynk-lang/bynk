@@ -634,6 +634,8 @@ impl<'a> Parser<'a> {
         let mut cases = Vec::new();
         let mut properties = Vec::new();
         let mut fns = Vec::new();
+        let mut suite_types = Vec::new();
+        let mut suite_consts = Vec::new();
         let mut fixtures = Vec::new();
         // Cover the header (`test <target>`) so the unit span stays valid even
         // when every item is dropped by error recovery. Only consulted in
@@ -687,7 +689,7 @@ impl<'a> Parser<'a> {
                         return Err(CompileError::new(
                             "bynk.parse.uses_after_decls",
                             t.span,
-                            "`uses` clauses must appear before any `stub`, `env`, `fixture`, `fn`, `case`, or `property` declarations in a fragment-form test",
+                            "`uses` clauses must appear before any `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations in a fragment-form test",
                         ));
                     }
                     match self.parse_uses_decl() {
@@ -779,6 +781,38 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                // #3066: a suite-local `type`.
+                Some(TokenKind::Type) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_type_decl() {
+                        Ok(mut t) => {
+                            t.documentation = doc;
+                            t.trivia.leading = leading;
+                            t.trivia.trailing = self.take_trailing_trivia();
+                            last_span = t.span;
+                            suite_types.push(t);
+                            seen_non_uses = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #3066: a suite-local `const`.
+                Some(TokenKind::Const) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_const_decl() {
+                        Ok(mut c) => {
+                            c.documentation = doc;
+                            c.trivia.leading = leading;
+                            c.trivia.trailing = self.take_trailing_trivia();
+                            last_span = c.span;
+                            suite_consts.push(c);
+                            seen_non_uses = true;
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
                 // #2834: a suite-local helper `fn`.
                 Some(TokenKind::Fn) => {
                     let next_span = self.peek().unwrap().span;
@@ -807,15 +841,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `fixture`, `fn`, `case`, or `property` declarations"
+                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations"
                     } else {
-                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fixture`, `fn`, `case`, or `property` declarations to end of file"
+                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `uses`, `stub`, `env`, `fixture`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
+                            "expected `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -849,6 +883,8 @@ impl<'a> Parser<'a> {
             cases,
             properties,
             fns,
+            types: suite_types,
+            consts: suite_consts,
             fixtures,
             tier,
             form: if brace {

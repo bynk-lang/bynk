@@ -1598,11 +1598,16 @@ fn record_field_names(
         if found {
             return;
         }
+        // #3066: a suite's own types are in scope in its cases.
+        let suite_types: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.types.iter().cloned().map(CommonsItem::Type).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_types,
         };
         for item in items {
             if let CommonsItem::Type(t) = item
@@ -1653,11 +1658,16 @@ pub fn sum_type_variants(
         if found {
             return;
         }
+        // #3066: a suite's own types are in scope in its cases.
+        let suite_types: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.types.iter().cloned().map(CommonsItem::Type).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_types,
         };
         for item in items {
             if let CommonsItem::Type(t) = item
@@ -1759,11 +1769,16 @@ fn payload_type_ref_variants(
 ) -> Vec<Completion> {
     let mut field_ty: Option<TypeRef> = None;
     for_each_unit(doc_text, files, |unit| {
+        // #3066: a suite's own types are in scope in its cases.
+        let suite_types: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.types.iter().cloned().map(CommonsItem::Type).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_types,
         };
         for item in items {
             if let CommonsItem::Type(t) = item
@@ -1875,11 +1890,16 @@ fn actor_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) ->
     }
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for_each_unit(doc_text, files, |unit| {
+        // #3066: a suite's own types are in scope in its cases.
+        let suite_types: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.types.iter().cloned().map(CommonsItem::Type).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_types,
         };
         for item in items {
             if let CommonsItem::Actor(a) = item
@@ -2069,11 +2089,16 @@ fn member_candidates_from(
         }
     }
     for_each_unit(doc_text, files, |unit| {
+        // #3066: a suite's own types are in scope in its cases.
+        let suite_types: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.types.iter().cloned().map(CommonsItem::Type).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_types,
         };
         for item in items {
             match item {
@@ -2543,6 +2568,23 @@ fn free_function_candidates(
                 );
             }
         }
+        // #3066: and its own constants (values at expression position).
+        for c in &suite.consts {
+            if seen.insert(c.name.name.clone()) {
+                out.push(
+                    Completion::item(
+                        c.name.name.clone(),
+                        CompletionKind::Constant,
+                        Some(format!(
+                            "const {}: {} — `this suite`",
+                            c.name.name,
+                            type_ref_str(&c.ty)
+                        )),
+                    )
+                    .with_doc(c.documentation.as_deref()),
+                );
+            }
+        }
         for f in &suite.fns {
             if let FnName::Free(id) = &f.name
                 && seen.insert(id.name.clone())
@@ -2629,11 +2671,16 @@ fn type_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> 
     // #2618: another unit's `private` types are not nameable here.
     let current = current_unit_name(doc_text);
     for_each_unit(doc_text, files, |unit| {
+        // #3066: a suite's own types are in scope in its cases.
+        let suite_types: Vec<CommonsItem> = match unit {
+            SourceUnit::Suite(s) => s.types.iter().cloned().map(CommonsItem::Type).collect(),
+            _ => Vec::new(),
+        };
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
             SourceUnit::Context(c) => &c.items,
             SourceUnit::Adapter(a) => &a.items,
-            _ => return,
+            SourceUnit::Suite(_) => &suite_types,
         };
         let own = current.as_deref() == Some(unit.name().joined().as_str());
         for item in items {

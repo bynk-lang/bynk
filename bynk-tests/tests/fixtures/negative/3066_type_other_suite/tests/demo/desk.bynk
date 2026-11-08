@@ -1,0 +1,7 @@
+suite demo.desk
+
+type Counted = { n: Int }
+
+case "own" {
+  expect Counted { n: 1 }.n == 1
+}

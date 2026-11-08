@@ -588,6 +588,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "type_decl"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "const_decl"
+        },
+        {
+          "type": "SYMBOL",
           "name": "fn_decl"
         },
         {

@@ -1,0 +1,7 @@
+suite demo.desk
+
+const Total: Int = 1 + 2
+
+case "not static" {
+  expect Total == 3
+}

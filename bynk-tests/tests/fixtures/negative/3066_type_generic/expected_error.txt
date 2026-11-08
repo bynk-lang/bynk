@@ -1,0 +1,1 @@
+bynk.suite.type_generic

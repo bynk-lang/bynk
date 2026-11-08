@@ -1,0 +1,10 @@
+context shop.stock
+
+// #3066: a test declares its own row type and constants.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+type Item = { id: String }

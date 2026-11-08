@@ -1,0 +1,9 @@
+suite demo.desk
+
+const Total: Int = 3
+
+fn Total() -> Int { 4 }
+
+case "x" {
+  expect 1 == 1
+}

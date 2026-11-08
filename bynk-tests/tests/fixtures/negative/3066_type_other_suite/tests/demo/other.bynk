@@ -1,0 +1,6 @@
+suite demo.desk
+
+case "other" {
+  let c: Counted = Counted { n: 2 }
+  expect c.n == 2
+}

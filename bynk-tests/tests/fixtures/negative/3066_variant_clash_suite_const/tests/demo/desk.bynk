@@ -1,0 +1,9 @@
+suite demo.desk
+
+type Kind = | Fruit | Veg
+
+const Fruit: Int = 1
+
+case "x" {
+  expect 1 == 1
+}

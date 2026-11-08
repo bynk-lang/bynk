@@ -1,0 +1,37 @@
+==========================
+a suite declares its own type and const (#3066)
+==========================
+
+suite shop.stock
+
+type Counted = { n: Int }
+
+const Repo: String = "x"
+
+case "c" {
+  expect 1 == 1
+}
+
+--------------------------
+
+(source_file
+  (suite_decl
+    target: (qualified_name
+      (identifier)
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (record_type
+        (record_field
+          name: (identifier)
+          type: (base_type))))
+    (const_decl
+      name: (identifier)
+      type: (base_type)
+      value: (string_literal))
+    (case
+      name: (string_literal)
+      (expect_expr
+        cond: (binary_expr
+          (number_literal)
+          (number_literal))))))

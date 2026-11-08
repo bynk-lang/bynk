@@ -1,0 +1,1 @@
+bynk.suite.duplicate_type

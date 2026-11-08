@@ -1,0 +1,7 @@
+suite demo.desk
+
+const lower: Int = 1
+
+case "case" {
+  expect lower == 1
+}
