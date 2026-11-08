@@ -130,6 +130,25 @@ long it took (see
 uses it, so a long project fills in case by case, and the Testing view shows each
 case's duration.
 
+## Would the tests notice? `--mutate`
+
+Coverage shows which lines ran, not whether a test would fail if they were wrong.
+`bynk test --mutate` changes the code one small way at a time (`a < b` becomes
+`a <= b`, `&&` becomes `||`), runs the suites that exercise it, and lists the
+changes that no suite caught:
+
+```text
+mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid (score 50%)
+  SURVIVED  src/demo/limits.bynk:4:5  demo.limits.within  `<` → `<=`
+```
+
+That survivor means nothing in the suites tries `within(5, 5)`: add a case at the
+boundary and the mutant is killed. Some survivors change nothing a test could see;
+exclude those in [`[test.mutate]`](/docs/manifest/#testmutate). Your files are never
+touched, and the unmutated suites must pass first. See
+[Mutation testing](/docs/bynk-cli/#mutation-testing) for the flags, the exit code and
+the JSON shape.
+
 ## Coverage: `--coverage`
 
 `--coverage` runs the suite as normal, then reports **statement/line coverage

@@ -261,6 +261,7 @@ dependencies = [
  "bynk-syntax",
  "bynk-ts",
  "clap",
+ "libc",
  "serde",
  "serde_json",
  "toml",
