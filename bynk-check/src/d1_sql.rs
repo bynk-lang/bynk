@@ -4,7 +4,7 @@
 //! [`D1Sql::build`] applies each database's migrations, in order, to a fresh
 //! in-memory SQLite (a bundled one, so every machine and CI agree), once per
 //! run. The checker records each literal statement as a
-//! [`D1SqlSite`](crate::checker::D1SqlSite) (a [`Callee::D1Sql`] entry
+//! [`D1SqlSite`](crate::checker::D1SqlSite) (a [`Callee::D1Sql`](crate::checker::Callee::D1Sql) entry
 //! under the SQL argument's id); [`D1Sql::check_unit`] then `prepare`s each one
 //! against its database. `prepare` executes nothing, so the check is cheap and
 //! has no side effects. Reported:
