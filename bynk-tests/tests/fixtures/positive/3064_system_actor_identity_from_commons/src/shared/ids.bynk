@@ -1,0 +1,3 @@
+commons shared.ids
+
+type UserId = String where NonEmpty
