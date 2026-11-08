@@ -1,0 +1,23 @@
+context login
+
+---
+CANARY (CWE-601). Deliberately vulnerable, like `redirect-query`, but the
+target comes from a JSON body and crosses a `Result` (`{ tag: "Ok", value }`)
+before the redirect, so this one also proves the `Result` flow summary.
+---
+type LoginDone = {
+  returnTo: String,
+}
+
+fn destination(raw: String) -> Result[String, String] {
+  if raw.length() == 0 { Err("empty") } else { Ok(raw) }
+}
+
+service api from http {
+  on POST("/login/done") (body: LoginDone) -> Effect[HttpResult[()]] by Visitor {
+    match destination(body.returnTo) {
+      Ok(to) => SeeOther(to)
+      Err(e) => BadRequest(e)
+    }
+  }
+}

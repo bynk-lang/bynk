@@ -1,0 +1,36 @@
+context probe
+
+consumes bynk { Fetch }
+
+---
+CANARY (CWE-918). Deliberately vulnerable, like `ssrf-body`, but the URL
+crosses the emitted `Option` codec (`{ tag: "Some", value }` + a switch-unwrap)
+before it reaches `Fetch.send`, so this one also proves the `Option`
+flow summary.
+---
+type ProbeRequest = {
+  url: Option[String],
+}
+
+service api from http {
+  on POST("/probe") (body: ProbeRequest) -> Effect[HttpResult[Int]] by Visitor given Fetch {
+    match body.url {
+      None => BadRequest("no url")
+      Some(u) => {
+        let req = Request {
+          method:        Get,
+          url:           u,
+          contentType:   None,
+          authorization: None,
+          headers:       Map.empty(),
+          body:          None,
+        }
+        let res <- Fetch.send(req)
+        match res {
+          Ok(r)  => Ok(r.status)
+          Err(_) => ServerError("probe failed")
+        }
+      }
+    }
+  }
+}

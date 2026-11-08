@@ -1,0 +1,6 @@
+# canary	query id that must flag it (results are matched by id AND by a location
+# inside the canary's own emitted tree, so a hit in a real example can't stand in)
+ssrf-body	bynk/emitted-request-forgery
+ssrf-option	bynk/emitted-request-forgery
+redirect-query	bynk/emitted-url-redirection
+redirect-result	bynk/emitted-url-redirection

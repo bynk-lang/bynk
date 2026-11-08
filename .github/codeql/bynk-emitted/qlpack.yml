@@ -1,0 +1,7 @@
+# Bynk's models of its own emitted Cloudflare Workers runtime, plus the two
+# stock security queries re-run with them in scope. See README.md (#255).
+name: bynk/emitted-queries
+version: 0.0.1
+library: false
+dependencies:
+  codeql/javascript-all: "*"
