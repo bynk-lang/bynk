@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.512.8** | Workers WebSocket `on message`/`on close` rebuild the agent handler's `given` and events deps, and `bynk check` rejects a lifecycle `by` of a different kind than `on open`'s (`bynk.ws.lifecycle_by_mismatch`) |
 | **v0.512.7** | The test `D1` refuses a statement whose bound-value count differs from what its SQL uses, with D1's `Wrong number of parameter bindings` error (#3003) |
 | **v0.512.6** | Workers WebSocket `on open` builds the transferred agent handler's `given` capabilities (#3042) and supports an actor-sum `by who: A | B`, forwarding which member verified (#3041) |
 | **v0.512.5** | Crate hygiene E4b - the `bynkc-lsp` copy of the language server is no longer shipped (archives, the loose `bynkc-lsp-<target>` assets), and `bynk doctor` no longer accepts it in place of `bynk-lsp`; editor configs that name `bynkc-lsp` must use `bynk-lsp` |

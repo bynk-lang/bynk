@@ -1,12 +1,6 @@
----
-level: patch
-probes: emit_diagnostics, diagnostic_coverage, ts_writes
-changelog: Workers WebSocket `on message`/`on close` rebuild the agent handler's `given` and events deps, and `bynk check` rejects a lifecycle `by` of a different kind than `on open`'s (`bynk.ws.lifecycle_by_mismatch`)
----
+# 0746 — A WebSocket `on message`/`on close` `by` names the same actors as `on open`
 
-## ADR: ws-lifecycle-by-matches-open
-title: A WebSocket `on message`/`on close` `by` names the same actors as `on open`
-summary: The connection's principal is verified once at `on open` and carried; lifecycle handlers must name the same single actor or sum members
+- **Status:** Accepted (v0.512.8)
 
 **Context.** On Workers the principal is verified at the edge during `on open` and carried in the socket attachment; `on message`/`on close` read it from there. A lifecycle handler whose `by` was a different kind (single actor vs. actor sum) emitted TypeScript that either failed `tsc` (unbound `who`) or silently lost the identity (#3046).
 
