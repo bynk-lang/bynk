@@ -31,6 +31,30 @@ export class TestConnection<F> implements Connection<F> {
   async close(): Promise<void> {
     this.closed = true;
   }
+
+  // #3051: what a case's `svc.open(tc, …)` records so a later `svc.message(tc, …)`
+  // / `svc.close(tc)` recover the route values and the principal from the
+  // connection, as the platform recovers them from the socket attachment.
+  route: unknown[] | undefined = undefined;
+  deps: unknown = undefined;
+  private minted = false;
+
+  /** The route values and `deps` from `open`; a case that skipped `open` fails. */
+  opened(): { route: unknown[]; deps: unknown } {
+    if (this.route === undefined) {
+      throw new Error("TestConnection: `message`/`close` before `open` — call the service's `open` first");
+    }
+    return { route: this.route, deps: this.deps };
+  }
+
+  /** The owned `Connection` an agent receives; one socket has one owner. */
+  mint(): Connection<F> {
+    if (this.minted) {
+      throw new Error("TestConnection: `connection()` was already taken — one socket has one owner");
+    }
+    this.minted = true;
+    return this;
+  }
 }
 
 // v0.104/v0.105 (real-time track slice 3b): the Cloudflare Workers realisation of
