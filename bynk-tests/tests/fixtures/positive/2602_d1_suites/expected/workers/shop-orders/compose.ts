@@ -26,6 +26,9 @@ export function compose(env: Env) {
     async move(source: string, target: string) {
       return handlers.move.call(source, target, deps);
     },
+    async overbound(id: string) {
+      return handlers.overbound.call(id, deps);
+    },
     async save(id: string, total: number, paid: boolean) {
       return handlers.save.call(id, total, paid, deps);
     },

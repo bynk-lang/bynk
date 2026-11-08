@@ -95,6 +95,26 @@ export default {
             const body = handlers.__serialise_Result_Int_SqlError(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
+          case "overbound": {
+            __route = "call overbound";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "8600c19f50b94dfd") {
+              globalThis.console.error("ContractMismatch shop.orders call overbound", { service: "overbound", expected: "8600c19f50b94dfd", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "overbound", expected: "8600c19f50b94dfd", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
+            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } });
+            const id = __r_id.value;
+            const result = await surface.overbound(id);
+            const body = handlers.__serialise_Result_SqlRun_SqlError(result);
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           case "save": {
             __route = "call save";
             const __contract = request.headers.get("X-Bynk-Contract");

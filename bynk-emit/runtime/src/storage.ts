@@ -534,6 +534,67 @@ interface SqliteDatabase {
 }
 
 /**
+ * What a statement's SQL takes: the count is SQLite's `sqlite3_bind_parameter_count`,
+ * which D1 compares to the number bound. A bare `?` is one past the highest
+ * index so far, `?N` is index N, and a named parameter (`:a`, `@a`, `$a`) is
+ * one past the highest unless the name was seen. Quoted text (`'…'`, `"…"`,
+ * `` `…` ``, `[…]`) and comments hold no parameters.
+ */
+function sqlParameters(sql: string): { count: number; numbered: string[]; bare: [number, number][] } {
+  let count = 0;
+  const numbered = new Set<string>();
+  const bare: [number, number][] = []; // each bare `?`: its offset and SQLite index
+  const names = new Set<string>();
+  const n = sql.length;
+  let i = 0;
+  const skipTo = (close: string, doubled: boolean): void => {
+    i++;
+    while (i < n) {
+      if (sql[i] === close) {
+        if (doubled && sql[i + 1] === close) i += 2;
+        else break;
+      } else i++;
+    }
+    i++;
+  };
+  while (i < n) {
+    const c = sql[i]!;
+    if (c === "'" || c === '"' || c === "`") skipTo(c, true);
+    else if (c === "[") skipTo("]", false);
+    else if (c === "-" && sql[i + 1] === "-") {
+      while (i < n && sql[i] !== "\n") i++;
+    } else if (c === "/" && sql[i + 1] === "*") {
+      const end = sql.indexOf("*/", i + 2);
+      i = end < 0 ? n : end + 2;
+    } else if (c === "?") {
+      const at = i++;
+      const start = i;
+      while (i < n && sql[i]! >= "0" && sql[i]! <= "9") i++;
+      if (i > start) {
+        numbered.add(`?${sql.slice(start, i)}`); // the raw spelling, `?01` included
+        count = Math.max(count, Number(sql.slice(start, i)));
+      } else {
+        count++;
+        bare.push([at, count]);
+      }
+    } else if (
+      // `$` continues an identifier (`a$b`); `:` and `@` always start a parameter, as in SQLite.
+      (c === ":" || c === "@" || (c === "$" && !(i > 0 && /[A-Za-z0-9_$]/.test(sql[i - 1]!))))) {
+      const start = i++;
+      while (i < n && /[A-Za-z0-9_$]/.test(sql[i]!)) i++;
+      if (i - start > 1) {
+        const name = sql.slice(start, i);
+        if (!names.has(name)) {
+          names.add(name);
+          count++;
+        }
+      }
+    } else i++;
+  }
+  return { count, numbered: [...numbered], bare };
+}
+
+/**
  * An in-memory D1 database for tests, bound as `env.D1_<NAME>` and fresh per
  * test case, as `makeIntegrationKv` is. It is real SQLite, through Node's
  * built-in `node:sqlite` (Node 22.13 or later), so statements run as they do
@@ -590,12 +651,28 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
     const values = params.map((v) => (typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v));
     // Node before 22.18 refuses positional values for numbered parameters
     // (`?1`), so those bind by name: `{ "?1": … }`, one key per number used.
-    const numbered = [...new Set(sql.match(/\?\d+/g) ?? [])];
+    // A mix with bare `?` is spelled out first (`?` becomes its index, as
+    // SQLite numbers it), since the oldest Node binds only by name.
+    let text = sql;
+    let scan = sqlParameters(sql);
+    if (scan.bare.length > 0 && scan.numbered.length > 0) {
+      for (const [at, index] of [...scan.bare].reverse()) text = `${text.slice(0, at)}?${index}${text.slice(at + 1)}`;
+      scan = sqlParameters(text);
+    }
+    const { count, numbered } = scan;
     const bound: unknown[] =
       numbered.length === 0
         ? values
         : [Object.fromEntries(numbered.map((name) => [name, values[Number(name.slice(1)) - 1] ?? null]))];
-    const prepared = () => attempt(() => db.prepare(sql));
+    // D1 refuses a count that differs from what the SQL uses, too many or too
+    // few (#3003); SQLite alone would ignore the extras and bind NULL for the rest.
+    // Every caller wraps `prepared()` in `attempt`, which words the failure.
+    const prepared = () => {
+      if (params.length !== count) {
+        throw new Error("Wrong number of parameter bindings for SQL query.");
+      }
+      return db.prepare(text);
+    };
     return {
       bind: (...values: unknown[]) => statement(sql, values),
       all: async () => ({ results: attempt(() => prepared().all(...bound)), meta: {} }),

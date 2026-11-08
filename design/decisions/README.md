@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0746](0746-ws-lifecycle-by-matches-open.md) | **A WebSocket `on message`/`on close` `by` names the same actors as `on open`** (v0.512.8) — The connection's principal is verified once at `on open` and carried; lifecycle handlers must name the same single actor or sum members | Accepted (v0.512.8) |
 | [0745](0745-json-encode-plain.md) | **`Json.encodePlain` writes the plain JSON form of `Option`** (v0.512) — A separate intrinsic, `Option` only, reusing the plain-route ambiguity rule, concrete types only | Accepted (v0.512) |
 | [0744](0744-header-question-answers-404-lint.md) | **A header read under `?` is linted, because `?` on an Option means 404** (v0.511) — Warn on RequestHeaders.get(…)? in HttpResult handlers, fix to let … else; type bare variants under ==/!= | Accepted (v0.511) |
 | [0743](0743-render-module-guard.md) | **Diagnostic rendering is a `bynk-driver` module, guarded by a test instead of the crate graph** (v0.510.35) — Amends ADR 0100 - the "no render to emit edge" guarantee moves from `bynk-render`'s dependency list to a source-level guard test | Accepted (v0.510.35) |

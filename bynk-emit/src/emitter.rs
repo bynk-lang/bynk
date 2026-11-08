@@ -4808,6 +4808,10 @@ pub(crate) enum BodyMode {
         handler: HandlerShared,
         /// v0.47: as [`BodyMode::ServiceHandler::deps_identity_binder`].
         deps_identity_binder: Option<String>,
+        /// As [`BodyMode::ServiceHandler::actor_sum_binder`]: a `from websocket`
+        /// `on open` whose `by` is an actor sum reads the resolved actor from
+        /// `deps.who`, which the edge forwarded and the DO's `fetch` rebuilt.
+        actor_sum_binder: Option<String>,
         /// v0.104 (real-time track slice 3b): when lowering a `from websocket`
         /// `on open` body **into its hosting Durable Object** (the agent the
         /// upgrade transfers the connection to), the name of that agent. A
@@ -5589,6 +5593,9 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn actor_sum_binder(&self) -> Option<&str> {
         match &self.mode {
             BodyMode::ServiceHandler {
+                actor_sum_binder, ..
+            }
+            | BodyMode::WsDoMethod {
                 actor_sum_binder, ..
             } => actor_sum_binder.as_deref(),
             _ => None,
