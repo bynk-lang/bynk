@@ -26,7 +26,10 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
         "Project",
         &["new", "check", "fmt", "test", "compile", "openapi", "token"],
     ),
-    ("Run and deploy", &["dev", "deploy", "revert", "tail", "migrate"]),
+    (
+        "Run and deploy",
+        &["dev", "deploy", "revert", "tail", "migrate"],
+    ),
     (
         "Dependencies",
         &["add", "deps", "fetch", "update", "search", "approve"],
