@@ -471,7 +471,7 @@ fn migrate_signed_headers(key: &str, path: &str, body: &str) -> Vec<(String, Str
         .as_secs()
         .to_string();
     let script = r#"const c = require("node:crypto");
-const [key, input, body] = process.argv.slice(2);
+const [key, input, body] = process.argv.slice(1);
 const digest = c.createHash("sha256").update(body, "utf8").digest("hex");
 process.stdout.write(c.createHmac("sha256", key).update(input + digest, "utf8").digest("hex"));"#;
     let input = wf::signing_input(
