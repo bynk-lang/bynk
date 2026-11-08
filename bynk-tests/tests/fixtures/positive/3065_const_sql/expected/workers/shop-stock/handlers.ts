@@ -6,7 +6,7 @@ import type { ValidationError, JsonError } from "../../__bynk_runtime/errors.js"
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { SqlReadError, SqlStatement } from "../../bynk/cloudflare.js";
-import { CreateSql } from "../../shop/queries.js";
+import { CreateSql, HiddenTail, Tail } from "../../shop/queries.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 import { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlReadError, __deserialise_SqlReadError } from "../../bynk/cloudflare.js";
@@ -27,11 +27,18 @@ export function CountSql(): string { return (__const_CountSql ??= { v: "SELECT c
 var __const_CountAlias: { v: string } | undefined;
 export function CountAlias(): string { return (__const_CountAlias ??= { v: CountSql() }).v; }
 
+var __const_Base: { v: string } | undefined;
+export function Base(): string { return (__const_Base ??= { v: "FROM nowhere" }).v; }
+
 var __const_ItemsFrom: { v: string } | undefined;
 export function ItemsFrom(): string { return (__const_ItemsFrom ??= { v: "\tFROM items\n\tORDER BY id" }).v; }
 
 export function statement(): SqlStatement {
   return { sql: InsertSql(), params: [] };
+}
+
+export function respelled(s: SqlStatement): SqlStatement {
+  return { ...s, sql: InsertSql() };
 }
 
 export type Stock = bynk_cloudflare.D1;
@@ -43,6 +50,18 @@ export const listing = {
     const __r0 = await deps.Stock.run(CreateSql(), []);
     const __r1 = await deps.Stock.run(InsertSql(), []);
     return (async () => { const __decode = (__s: string): Result<readonly Item[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\" FROM items\n\tORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
+  },
+};
+
+export const aliased = {
+  async call(deps: { Stock: Stock }): globalThis.Promise<Result<readonly Item[], SqlReadError>> {
+    return (async () => { const __decode = (__s: string): Result<readonly Item[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\" FROM items", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
+  },
+};
+
+export const hidden = {
+  async call(deps: { Stock: Stock }): globalThis.Promise<Result<readonly Item[], SqlReadError>> {
+    return (async () => { const __decode = (__s: string): Result<readonly Item[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\" FROM items ORDER BY id", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
   },
 };
 

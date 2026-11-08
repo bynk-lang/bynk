@@ -9,4 +9,10 @@ case "a constant is the SQL of run, first and select" {
   expect rows == Ok([Item { id: "a" }])
   let again <- Stock.firstAs[Item](ItemsFrom, [])
   expect again == Ok(Some(Item { id: "a" }))
+  let aliased <- Stock.select[Item](Tail, [])
+  expect aliased == Ok([Item { id: "a" }])
+  let hidden <- Stock.firstAs[Item](HiddenTail, [])
+  expect hidden == Ok(Some(Item { id: "a" }))
+  let stmt = respelled(statement())
+  expect stmt.sql == "INSERT INTO items (id) VALUES ('a')"
 }

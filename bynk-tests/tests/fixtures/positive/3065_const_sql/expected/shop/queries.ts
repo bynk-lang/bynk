@@ -7,3 +7,15 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 var __const_CreateSql: { v: string } | undefined;
 export function CreateSql(): string { return (__const_CreateSql ??= { v: "CREATE TABLE IF NOT EXISTS items (id TEXT)" }).v; }
+
+var __const_Base: { v: string } | undefined;
+export function Base(): string { return (__const_Base ??= { v: "FROM items" }).v; }
+
+var __const_Tail: { v: string } | undefined;
+export function Tail(): string { return (__const_Tail ??= { v: Base() }).v; }
+
+var __const_Hidden: { v: string } | undefined;
+export function Hidden(): string { return (__const_Hidden ??= { v: "FROM items ORDER BY id" }).v; }
+
+var __const_HiddenTail: { v: string } | undefined;
+export function HiddenTail(): string { return (__const_HiddenTail ??= { v: Hidden() }).v; }

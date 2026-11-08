@@ -14,6 +14,12 @@ export function compose(env: Env) {
   const Stock = new bynk_cloudflare__binding.WorkersD1(env, "D1_STOCK");
   const deps = { Stock };
   return {
+    async aliased() {
+      return handlers.aliased.call(deps);
+    },
+    async hidden() {
+      return handlers.hidden.call(deps);
+    },
     async listing() {
       return handlers.listing.call(deps);
     },

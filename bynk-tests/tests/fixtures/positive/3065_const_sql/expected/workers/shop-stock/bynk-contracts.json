@@ -1,10 +1,14 @@
 {
   "version": 1,
   "provides": {
+    "aliased": "301c83cb9be74502",
+    "hidden": "a44a02c97d71eda9",
     "listing": "ba0da0f88da474ef"
   },
   "expects": {},
   "provides_shapes": {
+    "aliased": "Svc(\"aliased\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))",
+    "hidden": "Svc(\"hidden\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))",
     "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))"
   }
 }

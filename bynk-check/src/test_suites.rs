@@ -4824,22 +4824,38 @@ impl SuiteView {
     ) {
         // `unit`'s own `private` constants are visible; a used commons' stay
         // in it.
-        let own = unit_tables.get(unit).into_iter().map(|t| (t, true));
+        let own = unit_tables.get(unit).into_iter().map(|t| (unit, t, true));
         let used = unit_uses
             .get(unit)
             .into_iter()
             .flatten()
-            .filter_map(|u| unit_tables.get(u))
-            .map(|t| (t, false));
-        for (table, is_own) in own.chain(used) {
+            .filter_map(|u| unit_tables.get(u).map(|t| (u.as_str(), t, false)));
+        for (owner, table, is_own) in own.chain(used) {
             for (name, decl) in table
                 .consts
                 .iter()
                 .filter(|(_, d)| is_own || d.private.is_none())
             {
-                self.consts
-                    .entry(name.clone())
-                    .or_insert_with(|| decl.clone());
+                self.consts.entry(name.clone()).or_insert_with(|| {
+                    let mut decl = decl.clone();
+                    // #3065: an imported alias names its target in the
+                    // declaring unit's scope (see `compose_unit_consts`).
+                    if !is_own
+                        && matches!(decl.init.kind, ExprKind::Ident(_))
+                        && let Some(text) = crate::consts::alias_literal(
+                            |u| {
+                                unit_tables
+                                    .get(u)
+                                    .map(|t| (t, unit_uses.get(u).map_or(&[][..], Vec::as_slice)))
+                            },
+                            owner,
+                            &decl,
+                        )
+                    {
+                        decl.init.kind = ExprKind::StrLit(text);
+                    }
+                    decl
+                });
             }
         }
     }

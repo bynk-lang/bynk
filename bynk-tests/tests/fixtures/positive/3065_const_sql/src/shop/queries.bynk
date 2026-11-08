@@ -1,3 +1,11 @@
 commons shop.queries
 
 const CreateSql: String = "CREATE TABLE IF NOT EXISTS items (id TEXT)"
+
+// An alias names its target in this unit's scope, not the user's: a context
+// with its own `Base` must not redirect `Tail`, and a `private` target is
+// still reachable through the alias.
+const Base: String = "FROM items"
+const Tail: String = Base
+private const Hidden: String = "FROM items ORDER BY id"
+const HiddenTail: String = Hidden
