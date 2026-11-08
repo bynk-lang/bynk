@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0754](0754-bynk-revert.md) | **bynk revert drives Cloudflare's rollback after checks only Bynk can make** (v0.518) — Per-version deploy facts travel on the Worker version; every unknown is a refusal | Accepted (v0.518) |
+| [0753](0753-test-websocket-service-address.md) | **A case drives a WebSocket service by address against a recording TestConnection** (v0.517) — open/message/close addresses, a case-scoped TestConnection[F], and the principal given once at open | Accepted (v0.517) |
 | [0752](0752-test-mutate.md) | **`bynk test --mutate` reports the code changes the suites don't catch** (v0.516) — A flag on `bynk test`, mutants as in-memory source overlays, suites chosen by unit reach | Accepted (v0.516) |
 | [0751](0751-field-default-contract-compat.md) | **A field with a default is compatible in the service-contract classifier, and the hash is unchanged** (v0.515) — The hash keeps covering defaulted fields; the classifier, through a marker in the stored shape, credits a receiver's default for an absent field | Accepted (v0.515) |
 | [0750](0750-deploy-lock-omits-static-assets.md) | **bynk.deploy.lock does not record static assets** (v0.514.2) — The served asset paths are derived from the build and nothing reads them, so the lock stops listing them | Accepted (v0.514.2) |
