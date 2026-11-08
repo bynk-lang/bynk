@@ -227,3 +227,58 @@ fn a_failing_baseline_refuses_to_mutate() {
         r.stderr
     );
 }
+
+fn copy_fixture(name: &str, manifest: Option<&str>) -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    for rel in [
+        "src/demo/limits.bynk",
+        "src/demo/lonely.bynk",
+        "src/tests/limits.test.bynk",
+    ] {
+        let to = dir.join(rel);
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::fs::copy(fixture().join(rel), to).unwrap();
+    }
+    if let Some(manifest) = manifest {
+        std::fs::write(dir.join("bynk.toml"), manifest).unwrap();
+    }
+    dir
+}
+
+#[test]
+fn test_mutate_exclude_leaves_matching_code_unmutated() {
+    if !can_run() {
+        return;
+    }
+    let dir = copy_fixture(
+        "mutate-exclude",
+        Some("[test.mutate]\nexclude = [\"src/demo/lonely.bynk\", \"demo.limits.positive\"]\n"),
+    );
+    let r = run_in(&dir, &["--mutate", "--format", "json"]);
+    assert!(r.success, "{}", r.stderr);
+    let doc: serde_json::Value = serde_json::from_str(&r.stdout).unwrap();
+    assert_eq!(
+        mutants(&doc),
+        vec![("within".into(), "<=".into(), "survived".into())],
+        "a path glob and a declaration name each drop their mutants"
+    );
+}
+
+#[test]
+fn a_run_that_outlives_the_timeout_is_a_timeout_not_invalid() {
+    if !can_run() {
+        return;
+    }
+    // A zero timeout kills every mutant's run at once, whatever it was doing.
+    let r = run_in(
+        &fixture(),
+        &["--mutate", "--mutate-timeout", "0", "--format", "json"],
+    );
+    assert!(r.success, "{}", r.stderr);
+    let doc: serde_json::Value = serde_json::from_str(&r.stdout).unwrap();
+    let statuses: Vec<String> = mutants(&doc).into_iter().map(|m| m.2).collect();
+    assert_eq!(statuses, vec!["timeout", "timeout", "no_suite"]);
+    assert_eq!(doc["mutation"]["timeout"], 2);
+    assert_eq!(doc["mutation"]["invalid"], 0);
+}

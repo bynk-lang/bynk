@@ -704,7 +704,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--format rich|json|ndjson] [--inspect]
 | `--max-mutants N` | — | With `--mutate`, stop after `N` mutants, in source order. |
 | `--mutate-timeout SECONDS` | 3× the unmutated run, at least 10 | With `--mutate`, kill a mutant's run after this long; it counts as killed. |
 | `--mutate-all-suites` | off | With `--mutate`, run every suite against every mutant, not only the suites that reach the mutated unit. |
-| `--mutate-fail-under PERCENT` | — | With `--mutate`, exit non-zero when fewer than `PERCENT` of the mutants that ran were killed. |
+| `--mutate-fail-under PERCENT` | — | With `--mutate`, exit non-zero when fewer than `PERCENT` of the mutants that ran were killed, or when no mutant reached a suite. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a `--case` or `--suite` value that selected
@@ -778,7 +778,8 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
   literals are left alone.
 - **Nothing is written.** A mutant exists only in memory and the output goes to a
   scratch directory, so the working tree and `out/` are untouched. A mutant that
-  doesn't compile is `invalid` and isn't scored.
+  doesn't compile, or whose run fails before any case runs (it throws as the
+  module loads), is `invalid` and isn't scored.
 - **The unmutated project runs first and must pass.** Otherwise every mutant would
   be "killed" by the failure that was already there. The run uses one seed
   throughout (yours with `--seed`, else a fixed one), so a `property` test draws the
@@ -792,7 +793,7 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
   Leave code out with [`[test.mutate] exclude`](/docs/manifest/#testmutate).
 - **Exit code.** `0` when mutants survive, so a report can run in CI without
   failing it; non-zero if the unmutated project fails or won't build, and with
-  `--mutate-fail-under PERCENT`, when the score is below it. The score is the share
+  `--mutate-fail-under PERCENT`, when the score is below it or nothing was scored. The score is the share
   of mutants that ran which were killed.
 - **Cost.** Every mutant is a compile, `tsc` and `node` run, so use `--only` and
   `--max-mutants` to keep it bounded. At a workspace root `--mutate` is refused: run

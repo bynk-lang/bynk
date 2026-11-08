@@ -259,7 +259,11 @@ fn glob_matches(pattern: &str, path: &str) -> bool {
                 if let Some(rest) = rest.strip_prefix(b"*") {
                     // `**`: any run of characters, `/` included.
                     let rest = rest.strip_prefix(b"/").unwrap_or(rest);
-                    (0..=s.len()).any(|i| go(rest, &s[i..]))
+                    // Only at a segment boundary: `src/**/x.bynk` is not
+                    // `src/ax.bynk`.
+                    (0..=s.len())
+                        .filter(|&i| i == 0 || i == s.len() || s[i - 1] == b'/')
+                        .any(|i| go(rest, &s[i..]))
                 } else {
                     let limit = s.iter().position(|&c| c == b'/').unwrap_or(s.len());
                     (0..=limit).any(|i| go(rest, &s[i..]))
@@ -306,8 +310,10 @@ impl Status {
 /// Classify the document one mutant's run printed.
 fn classify(doc: &Value) -> Status {
     if let Some(error) = doc.get("error") {
-        let message = error.get("message").and_then(Value::as_str).unwrap_or("");
-        return if message.contains("timed out after") {
+        // A run that crashes before any case runs (a mutant that throws as the
+        // module loads) is `invalid` with the rest: the suites were not what
+        // told it from the original.
+        return if error.get("kind").and_then(Value::as_str) == Some("timeout") {
             Status::Timeout
         } else {
             Status::Invalid
@@ -342,6 +348,54 @@ fn run_once(args: TestArgs) -> (bool, String, Option<Value>) {
     let (code, text) = crate::test_stream::capture(|| run_test("bynk", args));
     let doc = serde_json::from_str(&text).ok();
     (code == ExitCode::SUCCESS, text, doc)
+}
+
+/// What a failed unmutated run said, for a reader of the rich output.
+fn describe_failure(doc: Option<&Value>, raw: &str) -> String {
+    let Some(doc) = doc else {
+        return raw.trim_end().to_string();
+    };
+    let mut lines = Vec::new();
+    if let Some(error) = doc.get("error") {
+        if let Some(message) = error.get("message").and_then(Value::as_str) {
+            lines.push(message.to_string());
+        }
+        for key in ["diagnostics", "stderr"] {
+            match error.get(key) {
+                Some(Value::Array(items)) => {
+                    lines.extend(items.iter().filter_map(Value::as_str).map(str::to_string))
+                }
+                Some(Value::String(text)) => lines.push(text.trim_end().to_string()),
+                _ => {}
+            }
+        }
+    }
+    for suite in doc
+        .get("suites")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let name = suite.get("name").and_then(Value::as_str).unwrap_or("?");
+        for case in suite
+            .get("cases")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|c| c.get("outcome").and_then(Value::as_str) == Some("fail"))
+        {
+            let case_name = case.get("name").and_then(Value::as_str).unwrap_or("?");
+            lines.push(format!("✗ {name}: {case_name}"));
+            if let Some(message) = case.get("message").and_then(Value::as_str) {
+                lines.push(format!("    {}", message.replace('\n', "\n    ")));
+            }
+        }
+    }
+    if lines.is_empty() {
+        raw.trim_end().to_string()
+    } else {
+        lines.join("\n")
+    }
 }
 
 /// Run `bynk test --mutate`.
@@ -414,8 +468,12 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
     let started = Instant::now();
     let (ok, text, doc) = run_once(base_args(suite.clone()));
     let baseline_time = started.elapsed();
-    let Some(mut baseline) = doc.filter(|_| ok) else {
-        print!("{text}");
+    let Some(mut baseline) = doc.clone().filter(|_| ok) else {
+        if json {
+            print!("{text}");
+        } else {
+            eprintln!("{}", describe_failure(doc.as_ref(), &text));
+        }
         eprintln!(
             "{program} test: the unmutated project does not pass, so there is nothing to mutate — fix it first"
         );
@@ -472,7 +530,12 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
                 status.word().replace('_', " ")
             );
         }
-        results.push((site.clone(), status, selected));
+        let shown = if all_suites && status != Status::Invalid {
+            suite_names.clone()
+        } else {
+            selected
+        };
+        results.push((site.clone(), status, shown));
     }
 
     let count = |s: Status| results.iter().filter(|(_, st, _)| *st == s).count();
@@ -545,7 +608,13 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         }
     }
     match fail_under {
-        Some(min) if ran > 0 && score < min => {
+        Some(min) if ran == 0 => {
+            eprintln!(
+                "{program} test: no mutant reached a suite, so --mutate-fail-under {min} cannot be met"
+            );
+            ExitCode::FAILURE
+        }
+        Some(min) if score < min => {
             eprintln!("{program} test: mutation score {score}% is below --mutate-fail-under {min}");
             ExitCode::FAILURE
         }
@@ -630,6 +699,11 @@ mod tests {
     fn globs_and_names() {
         assert!(glob_matches("src/generated/**", "src/generated/a/b.bynk"));
         assert!(glob_matches("src/*.bynk", "src/a.bynk"));
+        assert!(glob_matches("src/**/x.bynk", "src/a/x.bynk"));
+        assert!(glob_matches("src/**/x.bynk", "src/x.bynk"));
+        assert!(!glob_matches("src/**/x.bynk", "src/ax.bynk"));
+        assert!(glob_matches("**/lonely.bynk", "src/lonely.bynk"));
+        assert!(!glob_matches("**/lonely.bynk", "src/notlonely.bynk"));
         assert!(!glob_matches("src/*.bynk", "src/a/b.bynk"));
         let model = build_model(Path::new("/proj"), &sources(&[("src/limits.bynk", LIMITS)]));
         let site = &model.sites[0];
@@ -651,9 +725,7 @@ mod tests {
             Status::Invalid
         );
         assert_eq!(
-            classify(
-                &json!({"error": {"kind": "runtime", "message": "could not run node: timed out after 10s"}})
-            ),
+            classify(&json!({"error": {"kind": "timeout", "message": "timed out after 10s"}})),
             Status::Timeout
         );
     }

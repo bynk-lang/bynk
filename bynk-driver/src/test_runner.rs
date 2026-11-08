@@ -217,8 +217,8 @@ pub struct TestArgs {
     #[arg(long, requires = "mutate")]
     pub mutate_all_suites: bool,
     /// With `--mutate`, exit non-zero when fewer than this percentage of the
-    /// mutants that ran were killed. Without it surviving mutants are reported
-    /// but do not fail the run.
+    /// mutants that ran were killed, or when no mutant reached a suite at all.
+    /// Without it surviving mutants are reported but do not fail the run.
     #[arg(long, value_name = "PERCENT", requires = "mutate")]
     pub mutate_fail_under: Option<u32>,
     /// Not a flag. One source file's text, replacing what is on disk for this
@@ -1021,6 +1021,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 run_timeout,
             ) {
                 Ok(code) => code,
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    return report_timeout(program, json, stream, &e);
+                }
                 Err(e) => {
                     if json {
                         crate::test_stream::print_run(
@@ -1086,6 +1089,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             run_timeout,
         ) {
             Ok(code) => return code,
+            // A run that outlived its timeout is not a runner that failed to
+            // start: it must not be tried again with the next runner.
+            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                return report_timeout(program, json, stream, &e);
+            }
             Err(e) => start_failures.push(start_failure(&path, &e)),
         }
     }
@@ -1108,6 +1116,17 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
              Install one of:\n{}",
             install_advice(false)
         );
+    }
+    ExitCode::FAILURE
+}
+
+/// #3069: the test process outlived `run_timeout` and was killed. Reported as
+/// its own error kind, `"timeout"`, so a caller never reads it from a message.
+fn report_timeout(program: &str, json: bool, stream: bool, e: &std::io::Error) -> ExitCode {
+    if json {
+        crate::test_stream::print_run(stream, &TestRun::timeout_error(e.to_string()));
+    } else {
+        eprintln!("{program} test: the run {e}");
     }
     ExitCode::FAILURE
 }
@@ -1359,6 +1378,28 @@ fn finish_runner(
     }
 }
 
+/// Kill `child` and everything it started: its process group on Unix, its
+/// process tree through `taskkill /T` on Windows.
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // SAFETY: `killpg` takes plain integers; the child leads its own group
+        // (`process_group(0)` before spawn), so the group id is its pid.
+        unsafe {
+            libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = ProcCommand::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+}
+
 /// `cmd.output()`, except that a process still running after `timeout` is
 /// killed and the call fails with [`std::io::ErrorKind::TimedOut`] (#3069).
 /// `cmd`'s stdout and stderr must be piped.
@@ -1370,6 +1411,11 @@ fn output_within(
     let Some(timeout) = timeout else {
         return cmd.output();
     };
+    // The runner may start children of its own (`tsx` and `npx` start `node`;
+    // `bynk dev` starts workers) that hold the output pipes open: put the run
+    // in its own process group so the kill below reaches them all.
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(cmd, 0);
     let mut child = cmd.spawn()?;
     let drain = |pipe: Option<Box<dyn Read + Send>>| {
         std::thread::spawn(move || {
@@ -1398,7 +1444,7 @@ fn output_within(
             break Some(status);
         }
         if std::time::Instant::now() >= deadline {
-            let _ = child.kill();
+            kill_tree(&mut child);
             let _ = child.wait();
             break None;
         }
@@ -1690,6 +1736,20 @@ mod output_within_tests {
             .expect_err("sleep outlives 100ms");
         assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
         assert!(started.elapsed() < std::time::Duration::from_secs(10));
+
+        // A grandchild that holds the pipes open must not outlast the kill.
+        let mut tree = ProcCommand::new("sh");
+        tree.args(["-c", "sleep 30 & wait"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let started = std::time::Instant::now();
+        let err = output_within(&mut tree, Some(std::time::Duration::from_millis(200)))
+            .expect_err("the shell outlives 200ms");
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the grandchild was killed with its parent"
+        );
 
         let mut quick = ProcCommand::new("echo");
         quick
