@@ -1025,6 +1025,7 @@ mod tests {
         // they must canonicalise — and therefore hash — identically. Hashing
         // source order would 409 two contexts that agree perfectly.
         let a = Refinement {
+            annotations: Vec::new(),
             predicates: vec![
                 RefinementPred {
                     kind: PredKind::NonEmpty,
@@ -1040,6 +1041,7 @@ mod tests {
             span: sp(),
         };
         let b = Refinement {
+            annotations: Vec::new(),
             predicates: vec![
                 RefinementPred {
                     kind: PredKind::MaxLength(10),
@@ -1064,6 +1066,7 @@ mod tests {
     #[test]
     fn a_different_predicate_set_changes_the_form() {
         let a = Refinement {
+            annotations: Vec::new(),
             predicates: vec![RefinementPred {
                 kind: PredKind::MaxLength(10),
                 arg_text: None,
@@ -1072,6 +1075,7 @@ mod tests {
             span: sp(),
         };
         let b = Refinement {
+            annotations: Vec::new(),
             predicates: vec![RefinementPred {
                 kind: PredKind::MaxLength(11),
                 arg_text: None,
@@ -1272,6 +1276,7 @@ mod tests {
     #[test]
     fn non_empty_and_min_length_one_together_dedup_to_one_entry() {
         let r = Refinement {
+            annotations: Vec::new(),
             predicates: vec![
                 RefinementPred {
                     kind: PredKind::NonEmpty,

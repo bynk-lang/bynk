@@ -1114,9 +1114,9 @@ case "a hold older than fifteen minutes has expired" {
 | `Int where NonNegative` | `0` |
 | `Int where InRange(a, b)` | `a` |
 | `String where MinLength(k)` / `Length(k)` | a string of length `k` |
-| `String where Matches(…)` | **error** — must pin (`bynk.val.needs_pin`) |
+| `String where Matches(…)` / `IsoDate` | its `@example` ([below](#val-example)); **error** without one — must pin (`bynk.val.needs_pin`) |
 | sum | the first variant (payloads recursively fabricated) |
-| record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` must pin) |
+| record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` takes its `@example`, or must pin) |
 | opaque | `.unsafe(<base zero>)` |
 
 `Val[T]` is test-only (`bynk.val.outside_test`). A pin must be a compile-time
@@ -1124,6 +1124,39 @@ literal (`bynk.val.pin_not_literal`), must satisfy the refinement
 (`bynk.val.literal_violates`), and is only accepted where the kind supports it
 (`bynk.val.pin_unsupported`). See
 [`bynk.val.*` errors](/book/troubleshooting/val-errors/).
+
+### `@example` — a value for a pattern {#val-example}
+
+`Val` cannot invent a string that matches an arbitrary regex, so a `Matches` (or
+`IsoDate`) refinement can carry an example that bare `Val` uses instead of
+asking for a pin. The annotation follows the refinement, on a type declaration or
+on a record field's inline `where`:
+
+```bynk,fragment
+type Code = String where Matches("[A-Z]{3}") @example("ABC")
+type Tag = { code: String where Matches("[a-z]+") @example("abc") }
+```
+
+`Val[Code]` is `"ABC"`, and `Val[Tag]` is a `Tag` whose `code` is `"abc"`, as does
+any record or sum that reaches them. The compiler checks the example at the
+declaration, against every predicate of the refinement (so
+`Matches("[a-z]+") && MaxLength(3)` refuses `"abcd"`), whether or not a test
+uses it:
+
+| Code | Raised when |
+|---|---|
+| `bynk.types.example_violates` | the example does not satisfy the refinement |
+| `bynk.types.example_not_literal` | the argument is not exactly one literal of the base type |
+| `bynk.types.example_unneeded` | the refinement is one `Val` already generates (only `Matches` and `IsoDate` take an example) |
+| `bynk.types.duplicate_example` | a refinement carries more than one `@example` |
+| `bynk.types.unknown_annotation` | the annotation after a refinement is not `@example` |
+
+An example is a test witness only: it changes neither what the type accepts, nor
+its wire format, contract hash or emitted code. A pinned `Val[T](lit)` overrides
+it. A `for all` over such a type is **still** refused (`bynk.val.needs_pin`),
+because a property over one value would run the same case every time; use
+`Val`. `bynk test --smoke` uses examples, so a route with a patterned path
+parameter or body field has its *answers* case run.
 
 ## `property` / `for all` — generative tests
 
@@ -1153,7 +1186,7 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | `Int where NonNegative` | `0` and small non-negatives |
 | `Int where InRange(a, b)` | `a`, `b`, and interior values |
 | `String where MinLength(k)` / `Length(k)` | strings at and above length `k` |
-| `String where Matches(…)` | **must pin** (`bynk.val.needs_pin`) — no generator |
+| `String where Matches(…)` | **must pin** (`bynk.val.needs_pin`) — no generator; an `@example` serves `Val`, not `for all` |
 | sum | each variant |
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |

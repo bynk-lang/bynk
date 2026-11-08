@@ -2254,7 +2254,20 @@ its private types included (§5.1c).
 receive pins that are compile-time literals of the right arity satisfying the
 type (`bynk.val.pin_not_literal`, `bynk.val.arity`, `bynk.val.literal_violates`);
 a type that cannot be fabricated MUST be pinned (`bynk.val.needs_pin`,
-`bynk.val.pin_unsupported`, `bynk.val.unsupported_kind`).
+`bynk.val.pin_unsupported`, `bynk.val.unsupported_kind`), unless every
+refinement that would need a pin (`Matches`, `IsoDate`) carries an `@example`
+(#2686).
+
+A type declaration's or record field's refinement MAY be followed by one
+`@example(<literal>)` annotation. Its argument MUST be a single literal of the
+base type (`bynk.types.example_not_literal`) that satisfies every predicate of
+the refinement (`bynk.types.example_violates`); the refinement MUST be one that
+needs a pin (`bynk.types.example_unneeded`); at most one is allowed
+(`bynk.types.duplicate_example`); no other annotation name is accepted there
+(`bynk.types.unknown_annotation`). A bare `Val[T]` of the type, or of a record or
+sum reaching it, is the example. The example is not a predicate: it is absent
+from the type's contract, wire format and emitted code, and `for all` does not
+draw from it.
 
 {{#grammar-semantics val_expr}}
 

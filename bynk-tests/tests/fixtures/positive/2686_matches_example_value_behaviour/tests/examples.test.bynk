@@ -1,0 +1,24 @@
+// #2686: bare `Val` of a patterned type, field or nesting uses its example.
+suite examples {
+  case "a patterned type is its example" {
+    expect Val[Code] == "ABC"
+    expect Code.of("ABC") is Ok(_)
+    expect Val[Day] == "2026-01-31"
+  }
+
+  case "a patterned field is its example" {
+    let t = Val[Tag]
+    expect t.code == "abc"
+    expect t.n == 0
+  }
+
+  case "a record reaching examples needs no pin" {
+    let w = Val[Wrapper]
+    expect w.tag.code == "abc"
+    expect w.day == "2026-01-31"
+  }
+
+  case "a pin still overrides the example" {
+    expect Val[Code]("XYZ") == "XYZ"
+  }
+}

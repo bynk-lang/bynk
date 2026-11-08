@@ -1,0 +1,8 @@
+commons examples
+
+// #2686: an `@example` is the value `Val` uses for a refinement it cannot
+// generate, so a patterned type or field needs no pin.
+type Code = String where Matches("[A-Z]{3}") @example("ABC")
+type Day = String where IsoDate @example("2026-01-31")
+type Tag = { code: String where Matches("[a-z]+") @example("abc"), n: Int }
+type Wrapper = { tag: Tag, day: Day }

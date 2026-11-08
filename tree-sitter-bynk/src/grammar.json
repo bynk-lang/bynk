@@ -1398,6 +1398,17 @@
               "type": "BLANK"
             }
           ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "FIELD",
+            "name": "annotation",
+            "content": {
+              "type": "SYMBOL",
+              "name": "store_annotation"
+            }
+          }
         }
       ]
     },
@@ -1439,6 +1450,17 @@
                 "type": "BLANK"
               }
             ]
+          },
+          {
+            "type": "REPEAT",
+            "content": {
+              "type": "FIELD",
+              "name": "annotation",
+              "content": {
+                "type": "SYMBOL",
+                "name": "store_annotation"
+              }
+            }
           }
         ]
       }
@@ -1548,6 +1570,17 @@
               "type": "BLANK"
             }
           ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "FIELD",
+            "name": "annotation",
+            "content": {
+              "type": "SYMBOL",
+              "name": "store_annotation"
+            }
+          }
         },
         {
           "type": "CHOICE",

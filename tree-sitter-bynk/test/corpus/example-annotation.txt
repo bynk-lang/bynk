@@ -1,0 +1,50 @@
+==========================
+@example after a type's and a field's refinement (#2686)
+==========================
+
+commons app.codes
+
+type Code = String where Matches("[A-Z]{3}") @example("ABC")
+type Tag = { code: String where Matches("[a-z]+") @example("abc") }
+type Next = String where NonEmpty
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_call
+            name: (predicate_name)
+            (string_literal)))
+        annotation: (store_annotation
+          name: (identifier)
+          (annotation_arg
+            value: (string_literal)))))
+    (type_decl
+      name: (identifier)
+      body: (record_type
+        (record_field
+          name: (identifier)
+          type: (base_type)
+          refinement: (refinement
+            (pred_call
+              name: (predicate_name)
+              (string_literal)))
+          annotation: (store_annotation
+            name: (identifier)
+            (annotation_arg
+              value: (string_literal))))))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_atom
+            (predicate_name)))))))

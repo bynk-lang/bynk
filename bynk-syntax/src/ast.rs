@@ -2772,6 +2772,11 @@ pub struct DecimalBound {
 #[derive(Debug, Clone)]
 pub struct Refinement {
     pub predicates: Vec<RefinementPred>,
+    /// #2686: `@…` annotations after a type declaration's or record field's
+    /// refinement. Only `@example(<literal>)` is meaningful (the checker
+    /// matches the name); empty everywhere else. Not part of the predicates,
+    /// so contracts and emitted code never see it.
+    pub annotations: Vec<Annotation>,
     pub span: Span,
 }
 

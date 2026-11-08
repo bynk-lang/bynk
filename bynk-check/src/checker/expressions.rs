@@ -453,7 +453,7 @@ pub(crate) fn check_val(
             let refinement = type_decl_refinement(&decl);
             match args {
                 [] => {
-                    if refinement.is_some_and(refinement_needs_pin) {
+                    if refinement.is_some_and(refinement_needs_pin_without_example) {
                         ctx.errors.push(
                             CompileError::new(
                                 "bynk.val.needs_pin",
@@ -577,9 +577,9 @@ fn can_mock_bare(
                 return false;
             };
             match &decl.body {
-                TypeBody::Refined { refinement, .. } => {
-                    !refinement.as_ref().is_some_and(refinement_needs_pin)
-                }
+                TypeBody::Refined { refinement, .. } => !refinement
+                    .as_ref()
+                    .is_some_and(refinement_needs_pin_without_example),
                 TypeBody::Opaque { .. } => true,
                 TypeBody::Sum(s) => s.variants.first().is_some_and(|v| {
                     v.payload.iter().all(|f| {
@@ -590,7 +590,9 @@ fn can_mock_bare(
                 // #2658: an inline `where` on a field needs a pin exactly as
                 // a declared refined type's does.
                 TypeBody::Record(r) => r.fields.iter().all(|f| {
-                    !f.refinement.as_ref().is_some_and(refinement_needs_pin)
+                    !f.refinement
+                        .as_ref()
+                        .is_some_and(refinement_needs_pin_without_example)
                         && resolve_type_ref(&f.type_ref, types, tys)
                             .is_some_and(|t| can_mock_bare(t, types, depth - 1, tys))
                 }),

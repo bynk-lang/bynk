@@ -415,6 +415,8 @@ module.exports = grammar({
         "opaque",
         field("base", $._base_type),
         optional(seq("where", field("refinement", $.refinement))),
+        // #2686: `@example(…)` after the refinement.
+        repeat(field("annotation", $.store_annotation)),
       ),
 
     refined_type: ($) =>
@@ -423,6 +425,8 @@ module.exports = grammar({
         seq(
           field("base", $._base_type),
           optional(seq("where", field("refinement", $.refinement))),
+        // #2686: `@example(…)` after the refinement.
+        repeat(field("annotation", $.store_annotation)),
         ),
       ),
 
@@ -440,6 +444,8 @@ module.exports = grammar({
         ":",
         field("type", $._type_ref),
         optional(seq("where", field("refinement", $.refinement))),
+        // #2686: `@example(…)` after the refinement.
+        repeat(field("annotation", $.store_annotation)),
         // v0.11: an optional initial-value expression. Meaningful on agent
         // `store` fields; the checker restricts where it applies.
         optional(seq("=", field("init", $._expression))),

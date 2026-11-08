@@ -392,6 +392,8 @@ pub(crate) fn check_refinement(
         return;
     };
 
+    check_refinement_annotations(base, refinement, errors);
+
     for pred in &refinement.predicates {
         if !pred_applies_to(&pred.kind, base) {
             // v0.21: `InRange` bounds must match the numeric base type —
@@ -794,6 +796,102 @@ pub(crate) fn refinement_needs_pin(refinement: &Refinement) -> bool {
         .predicates
         .iter()
         .any(|p| matches!(p.kind, PredKind::Matches(_) | PredKind::IsoDate))
+}
+
+/// #2686: the `@example(<arg>)` annotation's argument on a refinement, if
+/// one is written (well-formed or not: [`check_refinement_annotations`]
+/// reports a malformed one, and `Val` must not pile a `needs_pin` on top).
+pub fn refinement_example(refinement: &Refinement) -> Option<&Expr> {
+    refinement
+        .annotations
+        .iter()
+        .find(|a| a.name.name == "example")
+        .and_then(|a| a.args.first())
+        .map(|a| &a.value)
+}
+
+/// #2686: whether bare `Val` still has no value for this refinement: it needs
+/// a pin (`Matches`, `IsoDate`) and carries no `@example`.
+pub(crate) fn refinement_needs_pin_without_example(refinement: &Refinement) -> bool {
+    refinement_needs_pin(refinement) && refinement_example(refinement).is_none()
+}
+
+/// #2686: validate the `@…` annotations after a type's or field's refinement.
+/// The only name is `example`; its one argument is a literal of the base type
+/// that satisfies every predicate (the check `Val[T](lit)` applies to a pin),
+/// and it is allowed only where `Val` has no value of its own.
+fn check_refinement_annotations(
+    base: BaseType,
+    refinement: &Refinement,
+    errors: &mut Vec<CompileError>,
+) {
+    let mut seen = false;
+    for ann in &refinement.annotations {
+        if ann.name.name != "example" {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.unknown_annotation",
+                    ann.name.span,
+                    format!("unknown annotation `@{}` after a refinement", ann.name.name),
+                )
+                .with_note("the only annotation here is `@example(<literal>)`"),
+            );
+            continue;
+        }
+        if seen {
+            errors.push(CompileError::new(
+                "bynk.types.duplicate_example",
+                ann.span,
+                "a refinement takes at most one `@example`",
+            ));
+            continue;
+        }
+        seen = true;
+        let arg = match ann.args.as_slice() {
+            [a] if a.label.is_none() => &a.value,
+            _ => {
+                errors.push(CompileError::new(
+                    "bynk.types.example_not_literal",
+                    ann.span,
+                    "`@example` takes exactly one literal value",
+                ));
+                continue;
+            }
+        };
+        let lit = match const_literal(arg) {
+            Some(l) if literal_matches_base(&l, base) => l,
+            _ => {
+                errors.push(CompileError::new(
+                    "bynk.types.example_not_literal",
+                    arg.span,
+                    format!("`@example` requires a literal `{}` value", base.name()),
+                ));
+                continue;
+            }
+        };
+        if !refinement_needs_pin(refinement) {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.example_unneeded",
+                    ann.span,
+                    "`@example` is only for a `Matches` or `IsoDate` refinement, which `Val` cannot generate",
+                )
+                .with_note("`Val` already fabricates a value for every other refinement"),
+            );
+            continue;
+        }
+        if let Some(failed) = first_failed_predicate(refinement, &lit) {
+            errors.push(CompileError::new(
+                "bynk.types.example_violates",
+                arg.span,
+                format!(
+                    "the example {} does not satisfy `{}`",
+                    lit.display(),
+                    failed.name()
+                ),
+            ));
+        }
+    }
 }
 
 /// The TypeScript zero-value expression for `type_ref` (with an optional

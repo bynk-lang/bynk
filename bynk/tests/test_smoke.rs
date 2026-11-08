@@ -3,7 +3,8 @@
 //! process or against a local `bynk dev`.
 //!
 //! The project is `fixtures/smoke`: one route that answers a 500, one whose
-//! path parameter is a `Matches` type `Val` cannot fabricate, and a suite of
+//! path parameter is a `Matches` type `Val` cannot fabricate (and others whose
+//! `Matches` types carry an `@example`, #2686), and a suite of
 //! the project's own that must not run. The runs need `node` (and, against
 //! `dev`, `wrangler` or `npx`); without them a
 //! test is skipped, and a non-empty `BYNK_REQUIRE_WORKERD` makes the `dev`
@@ -111,14 +112,15 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
         pairs(&[
             ("smoke: GET /boom answers", "fail"),
             ("smoke: GET /clash answers", "pass"),
-            ("smoke: GET /code/:c answers", "skipped"),
+            ("smoke: GET /code/:c answers", "pass"),
             ("smoke: GET /hello/:name answers", "pass"),
             ("smoke: GET /ping answers", "pass"),
+            ("smoke: GET /slug/:s answers", "skipped"),
             ("smoke: POST /bulk answers", "skipped"),
             ("smoke: POST /bulk rejects a malformed body", "pass"),
             ("smoke: POST /note answers", "pass"),
             ("smoke: POST /note rejects a malformed body", "pass"),
-            ("smoke: POST /tag answers", "skipped"),
+            ("smoke: POST /tag answers", "pass"),
             ("smoke: POST /tag rejects a malformed body", "pass"),
             ("smoke: PUT /cart/:sku answers", "pass"),
             ("smoke: PUT /cart/:sku refuses no credential", "pass"),
@@ -126,9 +128,9 @@ fn assert_smoke_outcomes(doc: &serde_json::Value) {
         ]),
         "{doc:#}"
     );
-    assert_eq!(doc["passed"], 10, "{doc:#}");
+    assert_eq!(doc["passed"], 12, "{doc:#}");
     assert_eq!(doc["failed"], 1, "{doc:#}");
-    assert_eq!(doc["skipped"], 3, "{doc:#}");
+    assert_eq!(doc["skipped"], 2, "{doc:#}");
     assert_clash_warning(doc);
 }
 
@@ -177,7 +179,7 @@ fn an_undeclared_status_is_a_warning_on_stderr_in_the_human_format() {
     assert!(stderr.contains(CLASH_LINE), "{stderr}\n{stdout}");
     // A warning is not a failure: the case passes, and only the 500 fails.
     assert!(stdout.contains("✓ smoke: GET /clash answers"), "{stdout}");
-    assert!(stdout.contains("10 passed, 1 failed"), "{stdout}");
+    assert!(stdout.contains("12 passed, 1 failed"), "{stdout}");
 }
 
 #[test]
@@ -259,7 +261,7 @@ fn print_writes_the_synthesised_suite_and_names_the_skip() {
     );
     assert!(
         stdout.contains(
-            r#"// skipped `shop.api` case "smoke: GET /code/:c answers" [bynk.val.needs_pin]"#
+            r#"// skipped `shop.api` case "smoke: GET /slug/:s answers" [bynk.val.needs_pin]"#
         ),
         "{stdout}"
     );
@@ -281,7 +283,7 @@ fn a_smoke_run_in_process_calls_every_route_and_leaves_the_projects_suites_out()
     assert_smoke_outcomes(&doc);
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
-        stderr.contains("smoke: 11 cases from 9 routes, 3 skipped"),
+        stderr.contains("smoke: 13 cases from 10 routes, 2 skipped"),
         "{stderr}"
     );
 }

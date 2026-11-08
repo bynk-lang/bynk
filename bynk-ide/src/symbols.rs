@@ -1015,7 +1015,32 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans = Vec::new();
+    // #2686: `@example` after a type declaration's or record field's refinement.
+    fn push_refinement(spans: &mut Vec<Span>, r: &Option<bynk_syntax::ast::Refinement>) {
+        for ann in r.iter().flat_map(|r| &r.annotations) {
+            spans.push(Span {
+                file: ann.span.file,
+                start: ann.span.start,
+                end: ann.name.span.end,
+            });
+        }
+    }
     for item in items {
+        if let CommonsItem::Type(t) = item {
+            match &t.body {
+                bynk_syntax::ast::TypeBody::Refined { refinement, .. }
+                | bynk_syntax::ast::TypeBody::Opaque { refinement, .. } => {
+                    push_refinement(&mut spans, refinement)
+                }
+                bynk_syntax::ast::TypeBody::Record(r) => {
+                    for f in &r.fields {
+                        push_refinement(&mut spans, &f.refinement);
+                    }
+                }
+                bynk_syntax::ast::TypeBody::Sum(_) => {}
+            }
+            continue;
+        }
         let handlers: &[Handler] = match item {
             CommonsItem::Service(s) => &s.handlers,
             CommonsItem::Agent(a) => &a.handlers,

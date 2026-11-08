@@ -8618,6 +8618,16 @@
     "type": "opaque_type",
     "named": true,
     "fields": {
+      "annotation": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "store_annotation",
+            "named": true
+          }
+        ]
+      },
       "base": {
         "multiple": false,
         "required": true,
@@ -9448,6 +9458,16 @@
     "type": "record_field",
     "named": true,
     "fields": {
+      "annotation": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "store_annotation",
+            "named": true
+          }
+        ]
+      },
       "init": {
         "multiple": false,
         "required": false,
@@ -9927,6 +9947,16 @@
     "type": "refined_type",
     "named": true,
     "fields": {
+      "annotation": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "store_annotation",
+            "named": true
+          }
+        ]
+      },
       "base": {
         "multiple": false,
         "required": true,
