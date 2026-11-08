@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.512**.
+written against **v0.513**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.513.0** | A sum variant added inside an agent's stored state is an additive change in bynk.schema.lock |
 | **v0.512.11** | A nightly CodeQL scan now covers the TypeScript the compiler emits for Cloudflare Workers, with models of the Worker request and the redirect `Location` header, and deliberately vulnerable canary projects that fail the scan if those models stop firing |
 | **v0.512.10** | Crate hygiene follow-up - comments that still described `bynkc` as re-exporting the extracted crates now describe the crates as they are, and the `bynk test --smoke` tests no longer carry a dead skip path |
 | **v0.512.9** | The emitted-TypeScript type-check test now runs `tsc` over the fixtures in chunks of 200 instead of one pass, so it no longer runs out of memory on the macOS release runner |

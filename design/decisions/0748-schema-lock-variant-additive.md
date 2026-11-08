@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A sum variant added inside an agent's stored state is an additive change in bynk.schema.lock
----
+# 0748 — A sum variant added inside stored agent state is additive
 
-## ADR: schema-lock-variant-additive
-title: A sum variant added inside stored agent state is additive
-summary: The lock accepts a new variant, bumping the class version; removal and rename stay refused
+- **Status:** Accepted (v0.513)
 
 **Context.** ADR 0682 made a record field added with a default additive but, in its Decision F, kept a new sum variant non-additive. Adding `| Paused` to a sum held in `store last: Cell[Option[Event]]` therefore failed with `bynk.agent.non_additive_state_change` (`last?|Paused variant added`), although every stored value decodes: a value written before the variant existed cannot name it. The only way past was a `migrate` step that changed nothing. Proposed and agreed in #2691.
 
