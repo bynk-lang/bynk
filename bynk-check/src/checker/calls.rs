@@ -5301,7 +5301,7 @@ pub(crate) fn extra_headers_authorization_errors(arg: &Expr) -> Vec<CompileError
     else {
         return errors;
     };
-    let (EK::Ident(r), "of", Some(EK::ListLit(lines))) = (
+    let (EK::Ident(r), "of", Some(EK::ListLit(lines, ..))) = (
         &receiver.kind,
         method.name.as_str(),
         args.first().map(|a| &a.kind),
@@ -6065,7 +6065,7 @@ fn collect_crossing_positions<'e>(
         (ExprKind::Paren(inner), _) => walk(inner, pos, found),
         // Typed from the hint: the parameter's own type at this position.
         (ExprKind::None, Ty::Option(_)) => {}
-        (ExprKind::ListLit(items), Ty::List(_)) if items.is_empty() => {}
+        (ExprKind::ListLit(items, ..), Ty::List(_)) if items.is_empty() => {}
         // #2043: `List.empty()` / `Map.empty()`, likewise.
         (
             ExprKind::MethodCall {
@@ -6090,7 +6090,7 @@ fn collect_crossing_positions<'e>(
         (ExprKind::Some(inner), Ty::Option(t)) => walk(inner, *t, found),
         (ExprKind::Ok(inner), Ty::Result(t, _)) => walk(inner, *t, found),
         (ExprKind::Err(inner), Ty::Result(_, t)) => walk(inner, *t, found),
-        (ExprKind::ListLit(items), Ty::List(t)) => {
+        (ExprKind::ListLit(items, ..), Ty::List(t)) => {
             for item in items {
                 walk(item, *t, found);
             }

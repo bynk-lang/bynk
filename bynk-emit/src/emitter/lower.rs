@@ -1510,7 +1510,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         ExprKind::BoolLit(b) => b.to_string(),
         // v0.20b: a list literal lowers to a TS array literal; `readonly` is
         // a type-level property and the checker owns the element typing.
-        ExprKind::ListLit(elems) => {
+        ExprKind::ListLit(elems, ..) => {
             let lowered: Vec<String> = elems.iter().map(|el| pre.lower(el, cx)).collect();
             format!("[{}]", lowered.join(", "))
         }

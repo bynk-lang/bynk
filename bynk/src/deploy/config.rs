@@ -613,36 +613,6 @@ const CONTRACTS_MANIFEST_VERSION: u32 = 1;
 /// compiler predating this file has none either. An *unreadable* or
 /// *unparseable* one is an error — it sits beside the config we just read, so a
 /// failure there means the tree is damaged rather than merely old.
-/// #1883: the served paths of the static files a compiled Worker ships —
-/// every file under its assets directory, as the URL path it is served at
-/// (`/_assets/board.<hash>.css`, and since slice 2 fixed paths such as
-/// `/favicon.ico`), except the platform's own `_headers` — for the deploy
-/// lock. No directory is an empty set (a Worker with no assets). A hashed name
-/// already carries its content hash, so no manifest is needed.
-pub(crate) fn served_assets(worker_dir: &Path) -> BTreeSet<String> {
-    fn walk(dir: &Path, url: &str, out: &mut BTreeSet<String>) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let Ok(ty) = entry.file_type() else { continue };
-            if ty.is_dir() {
-                walk(&entry.path(), &format!("{url}{name}/"), out);
-            } else if ty.is_file() && !(url == "/" && name == "_headers") {
-                out.insert(format!("{url}{name}"));
-            }
-        }
-    }
-    let mut out = BTreeSet::new();
-    walk(
-        &worker_dir.join(bynk_driver::project::WORKER_ASSETS_DIR),
-        "/",
-        &mut out,
-    );
-    out
-}
-
 pub(crate) fn read_contracts_manifest(worker_dir: &Path) -> Result<ContractsManifest, String> {
     let path = worker_dir.join(bynk_emit::emitter::contracts::CONTRACTS_MANIFEST);
     if !path.exists() {
@@ -1977,36 +1947,6 @@ state = "deleted"
         assert!(read_secrets_manifest(&dir).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
-    }
-}
-
-#[cfg(test)]
-mod served_assets_tests {
-    use super::*;
-
-    /// #1883, slice 1b: what a compiled Worker ships, read back for the lock.
-    #[test]
-    fn served_assets_lists_the_workers_hashed_files() {
-        let dir = std::env::temp_dir().join(format!("bynk-served-assets-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        assert!(served_assets(&dir).is_empty(), "no directory, no assets");
-        std::fs::create_dir_all(dir.join("assets/_assets")).unwrap();
-        std::fs::write(dir.join("assets/_assets/board.1a2b.css"), "a{}").unwrap();
-        std::fs::write(dir.join("assets/_headers"), "x").unwrap();
-        // #1883, slice 2: a fixed path, at the root or nested.
-        std::fs::write(dir.join("assets/favicon.ico"), "i").unwrap();
-        std::fs::create_dir_all(dir.join("assets/.well-known")).unwrap();
-        std::fs::write(dir.join("assets/.well-known/security.txt"), "s").unwrap();
-        let served = served_assets(&dir);
-        let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(
-            served.into_iter().collect::<Vec<_>>(),
-            vec![
-                "/.well-known/security.txt".to_string(),
-                "/_assets/board.1a2b.css".to_string(),
-                "/favicon.ico".to_string(),
-            ]
-        );
     }
 }
 
