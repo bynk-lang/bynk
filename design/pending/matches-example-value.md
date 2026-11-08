@@ -39,6 +39,12 @@ parameter or body field lost its *answers* case. Proposed in #2686.
 - **F. Where it is read.** Bare `Val` only (also through a record or sum), and a
   pin overrides it. Not the contract, OpenAPI or the emitted program.
 
+- **G. Tooling (ADR 0156).** Hover: on `@example` it shows the example and the
+  refinement it satisfies. Completion: `@` (now a trigger character) after a
+  `Matches(…)`/`IsoDate` refinement offers `example`, and only there. Semantic
+  tokens: `@example` is a `decorator`, as handler annotations are. Signature
+  help: unchanged, because `@example(...)` is an annotation, not a call.
+
 **Consequences.** `bynk test --smoke` runs *answers* for a route whose `Matches`
 types carry examples. A stale example (the pattern was tightened) is a compile
 error at its declaration. The example is branded without a runtime check, so a

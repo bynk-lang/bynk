@@ -799,7 +799,7 @@ pub(crate) fn refinement_needs_pin(refinement: &Refinement) -> bool {
 }
 
 /// #2686: the `@example(<arg>)` annotation's argument on a refinement, if
-/// one is written (well-formed or not: [`check_refinement_annotations`]
+/// one is written (well-formed or not: `check_refinement_annotations`
 /// reports a malformed one, and `Val` must not pile a `needs_pin` on top).
 pub fn refinement_example(refinement: &Refinement) -> Option<&Expr> {
     refinement

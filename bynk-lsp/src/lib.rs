@@ -5063,6 +5063,8 @@ fn server_capabilities() -> ServerCapabilities {
                 ".".to_string(),
                 // #2458: doc-link completion; gated to doc ranges in the handler.
                 "[".to_string(),
+                // #2686: `@example` after a refinement.
+                "@".to_string(),
             ]),
             // Slice 5: resolve fills in hover-quality `documentation` lazily, on
             // the focused item only, so the initial list stays cheap.
