@@ -177,9 +177,9 @@ fn write_outputs(out: &bynk_driver::project::ProjectOutput, root: &Path) -> std:
     Ok(())
 }
 
-/// The heap ceiling for the single-pass `tsc`, in MiB.
+/// The heap ceiling for each `tsc` run, in MiB.
 ///
-/// The single pass type-checks every staged fixture (507 at the time of
+/// The single pass (now chunked, see [`TSC_CHUNK_FIXTURES`]) type-checked every staged fixture (507 at the time of
 /// writing) in one process, and its working set grows with the corpus. On
 /// 15 October 2026 it crossed Node's default old-space limit (~2 GiB) on the
 /// `macos-latest` runner: `FATAL ERROR: Ineffective mark-compacts near heap
@@ -191,8 +191,8 @@ fn write_outputs(out: &bynk_driver::project::ProjectOutput, root: &Path) -> std:
 /// On 7 November 2026, at 787 staged fixtures, 4 GiB was exceeded on the
 /// Linux `Node floor` job (Node 22.13), ejecting merge-queue groups. Linux
 /// and Windows runners have 16 GB, so they get 8 GiB; macOS keeps 4 GiB
-/// until its runner has room. The real fix for corpus growth is to shard the
-/// single pass, not to keep raising this.
+/// until its runner has room. Sharding the pass ([`TSC_CHUNK_FIXTURES`]) is
+/// what now bounds it; this ceiling is headroom per chunk.
 const TSC_MAX_OLD_SPACE_MIB: u32 = if cfg!(target_os = "macos") {
     4096
 } else {
@@ -211,6 +211,29 @@ fn tsc_node_options() -> String {
             .trim()
             .to_string()
     }
+}
+
+/// How many staged fixtures one `tsc` type-checks.
+///
+/// A single `tsc` over the whole corpus paid its startup once, but its heap
+/// grows with the corpus: at 797 fixtures it passed the 4 GiB
+/// [`TSC_MAX_OLD_SPACE_MIB`] on the 7 GB `macos-latest` runner (`JavaScript
+/// heap out of memory`, then a nextest timeout), failing the v0.512.7 release.
+/// PR CI and post-merge CI don't run macOS, so the release was the first to
+/// see it. Chunks keep each process's working set bounded however large the
+/// corpus grows, at the price of one extra `tsc` startup per chunk.
+const TSC_CHUNK_FIXTURES: usize = 200;
+
+/// A `tsconfig.json` for one chunk: it extends the root config (so the
+/// compiler options are exactly the emitted ones) and narrows `include` to the
+/// chunk's fixture subdirs.
+fn chunk_tsconfig(chunk: &[String]) -> String {
+    let include = chunk
+        .iter()
+        .map(|name| format!("\"{name}/**/*.ts\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{{ \"extends\": \"./tsconfig.json\", \"include\": [{include}] }}\n")
 }
 
 fn run_tsc_in(runner: &TscRunner, project_dir: &Path) -> (bool, String) {
@@ -284,12 +307,13 @@ fn stage_single_file(dir: &Path, fixture_root: &Path) -> Result<bool, String> {
 /// TypeScript, project-form and (#1767) single-file alike. Fixtures that
 /// compile but don't type-check are failures here.
 ///
-/// **One `tsc` for all fixtures.** Spawning `tsc` per fixture paid its multi-
+/// **One `tsc` per chunk of fixtures.** Spawning `tsc` per fixture paid its multi-
 /// second startup (process launch + `lib.*.d.ts` load + program construction)
 /// ~165 times over — the dominant cost, while the actual type-check of each
 /// small fixture is cheap. Instead we stage every fixture into its own subdir
-/// under one temp root and type-check the whole tree in a single `tsc`
-/// invocation, so that startup is paid once. The fixtures stay isolated: every
+/// under one temp root and type-check it in a few `tsc` invocations of
+/// [`TSC_CHUNK_FIXTURES`] fixtures each, so that startup is paid a handful of
+/// times, not once per fixture. The fixtures stay isolated: every
 /// import in the emitted output is relative (`./`, `../`) so nothing resolves
 /// across subdir boundaries, and the emitted modules declare no `declare
 /// global` / ambient / triple-slash surface that would collide in one program.
@@ -370,22 +394,31 @@ fn emitted_typescript_passes_tsc_strict() {
         staged.push(name);
     }
 
-    // A root `tsconfig.json` whose `include: ["**/*.ts"]` (from
-    // `emit_tsconfig`) sweeps every staged fixture subdir, so one `tsc`
-    // checks them all. The per-fixture `tsconfig.json` files in each subdir
-    // are inert here — `tsc -p` consults only the root config.
+    // A root `tsconfig.json` (from `emit_tsconfig`) that each chunk's config
+    // extends, narrowing `include` to its own fixture subdirs. The
+    // per-fixture `tsconfig.json` files in each subdir are inert here —
+    // `tsc -p` consults only the config it is given.
     fs::write(
         root.join("tsconfig.json"),
         bynk_emit::emitter::emit_tsconfig(),
     )
     .expect("write root tsconfig");
 
-    let (ok, output) = run_tsc_in(&runner, &root);
-    if !ok {
+    // Type-check the staged tree in chunks of [`TSC_CHUNK_FIXTURES`], one
+    // `tsc` per chunk, run one after another so only one is resident at a time.
+    let mut ok = true;
+    for (index, chunk) in staged.chunks(TSC_CHUNK_FIXTURES).enumerate() {
+        let config = root.join(format!("tsconfig.chunk-{index}.json"));
+        fs::write(&config, chunk_tsconfig(chunk)).expect("write chunk tsconfig");
+        let (chunk_ok, output) = run_tsc_with_config(&runner, &config);
+        if chunk_ok {
+            continue;
+        }
+        ok = false;
         // Attribute each error to the fixture whose subdir name appears in the
         // diagnostic path, so a failure still points at the offending fixture
         // rather than a wall of paths.
-        let mut blamed: Vec<&String> = staged
+        let mut blamed: Vec<&String> = chunk
             .iter()
             .filter(|name| {
                 output.contains(&format!("{name}/")) || output.contains(&format!("{name}\\"))
@@ -405,9 +438,10 @@ fn emitted_typescript_passes_tsc_strict() {
             )
         };
         failures.push(format!(
-            "\n=== single-pass tsc --strict --noEmit reported errors ===\n{blame_line}\n{output}",
+            "\n=== tsc --strict --noEmit reported errors (chunk {index}) ===\n{blame_line}\n{output}",
         ));
-    } else {
+    }
+    if ok {
         // Best-effort cleanup; leave on failure for inspection.
         let _ = fs::remove_dir_all(&root);
     }
