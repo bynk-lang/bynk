@@ -66,6 +66,32 @@ pub fn assemble_index(
                     symbol_modifiers(&ns, None),
                 );
             }
+            // #3066: a suite's own types and constants are definitions of the
+            // suite's namespace too.
+            for t in &suite.types {
+                builder.add_def(
+                    &ns,
+                    SymbolKind::Type,
+                    &t.name.name,
+                    SiteRef {
+                        path: path.clone(),
+                        span: t.name.span,
+                    },
+                    symbol_modifiers(&ns, Some(t)),
+                );
+            }
+            for c in &suite.consts {
+                builder.add_leaf_def(
+                    &ns,
+                    SymbolKind::Const,
+                    &c.name.name,
+                    SiteRef {
+                        path: path.clone(),
+                        span: c.name.span,
+                    },
+                    symbol_modifiers(&ns, None),
+                );
+            }
             for f in &suite.fns {
                 if let FnName::Free(id) = &f.name {
                     builder.add_def(

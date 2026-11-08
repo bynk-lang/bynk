@@ -212,7 +212,19 @@ pub fn lower_service_handler_signature_ir(
 /// so accepting one here would make `resolve_type_ref_in` returning `None` a
 /// reachable, not just a buggy, outcome.
 pub fn lower_type_shape_ir(decl: &Arc<TypeDecl>, program: &CheckedProgram) -> TypeShape {
-    let program = program.program();
+    lower_type_shape_in(decl, program.program())
+}
+
+/// #3066: [`lower_type_shape_ir`] for a suite's own type, whose `TypedCommons`
+/// is the suite's view (the unit's, plus the suite's declarations) rather than a
+/// certified unit. The suite's declarations were checked by
+/// `test_suites::check_suite_decls` before emission is reached, which is the
+/// guarantee `certify` gives a unit.
+pub fn lower_suite_type_shape_ir(decl: &Arc<TypeDecl>, program: &TypedCommons) -> TypeShape {
+    lower_type_shape_in(decl, program)
+}
+
+fn lower_type_shape_in(decl: &Arc<TypeDecl>, program: &TypedCommons) -> TypeShape {
     let type_vars: HashSet<String> = decl
         .type_params
         .iter()

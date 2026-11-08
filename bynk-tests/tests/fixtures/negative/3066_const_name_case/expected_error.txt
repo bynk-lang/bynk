@@ -1,0 +1,1 @@
+bynk.resolve.const_name_case

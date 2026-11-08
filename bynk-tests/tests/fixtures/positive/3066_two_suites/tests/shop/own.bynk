@@ -1,0 +1,10 @@
+suite shop.stock
+
+// Each suite declares its own `Row`, with its own shape.
+type Row = { n: Int }
+
+case "unit row" {
+  let _ <- Stock.run("CREATE TABLE t (id TEXT)", [])
+  let rows <- Stock.select[Row]("FROM (SELECT count(*) AS n FROM t)", [])
+  expect rows == Ok([Row { n: 0 }])
+}

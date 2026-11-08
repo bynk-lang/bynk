@@ -450,6 +450,12 @@ pub struct SuiteDecl {
     /// #2834: suite-local helper `fn`s — pure, private to this suite, called
     /// from its `case` and `property` bodies and emitted only into test output.
     pub fns: Vec<FnDecl>,
+    /// #3066: suite-local `type` declarations — private to this suite, usable by
+    /// its cases, properties and helpers, emitted only into test output.
+    pub types: Vec<TypeDecl>,
+    /// #3066: suite-local `const` declarations — static values private to this
+    /// suite, with the same initialiser rules as a unit's constants.
+    pub consts: Vec<ConstDecl>,
     /// v0.118: the suite-level tier default (`suite … as integration`). `None`
     /// means the `unit` default; a `case`'s own tier overrides it. A `property`
     /// ignores a suite tier (tiers are a `case`-only affordance).

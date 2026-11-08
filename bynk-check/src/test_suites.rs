@@ -880,7 +880,19 @@ pub fn phase_integration_bodies(
                 SuiteItems {
                     fns: &[],
                     fixtures: &d.fixtures,
+                    types: &[],
+                    consts: &[],
                 },
+            );
+            check_suite_decls(
+                &d.types,
+                &d.consts,
+                &mut helper_view,
+                participants.first().and_then(|p| unit_tables.get(p)),
+                &mut body_errs,
+                refs,
+                &mut LocalsSink::new(),
+                tys,
             );
             check_suite_fns(
                 &d.fns,
@@ -1132,23 +1144,33 @@ pub fn integration_resolved(
 pub struct SuiteItems<'a> {
     pub fns: &'a [FnDecl],
     pub fixtures: &'a [FixtureDecl],
+    /// #3066: the suite's own `type` and `const` declarations.
+    pub types: &'a [TypeDecl],
+    pub consts: &'a [ConstDecl],
 }
 
 impl<'a> SuiteItems<'a> {
     pub const NONE: SuiteItems<'static> = SuiteItems {
         fns: &[],
         fixtures: &[],
+        types: &[],
+        consts: &[],
     };
 
     pub fn of(suite: &'a SuiteDecl) -> Self {
         SuiteItems {
             fns: &suite.fns,
             fixtures: &suite.fixtures,
+            types: &suite.types,
+            consts: &suite.consts,
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.fns.is_empty() && self.fixtures.is_empty()
+        self.fns.is_empty()
+            && self.fixtures.is_empty()
+            && self.types.is_empty()
+            && self.consts.is_empty()
     }
 }
 
@@ -1170,6 +1192,20 @@ fn fixture_as_embed(f: &FixtureDecl) -> EmbedDecl {
 /// helpers are the suite's alone: the unit's own table, and with it everything
 /// the deployable emits, never sees them.
 pub fn add_suite_fns(resolved: &mut ResolvedCommons, items: SuiteItems<'_>) {
+    // #3066: the suite's own types and constants join its view the same way.
+    for t in items.types {
+        resolved
+            .types
+            .entry(t.name.name.clone())
+            .or_insert_with(|| Arc::new(t.clone()));
+        resolved.local_type_names.insert(t.name.name.clone());
+    }
+    for c in items.consts {
+        resolved
+            .consts
+            .entry(c.name.name.clone())
+            .or_insert_with(|| c.clone());
+    }
     for f in items.fixtures {
         resolved
             .embeds
@@ -1237,6 +1273,160 @@ fn bound_value_names(resolved: &ResolvedCommons, target: Option<&UnitTable>) -> 
     names
 }
 
+/// #3066: the `type` and `const` declarations of a suite, checked against the
+/// case scope `resolved` (the view *before* they join it). A name already bound
+/// in that scope (a target or used-commons declaration, a sum variant), or
+/// repeated within the suite, is refused rather than shadowed; the rest join
+/// `resolved` and are checked as a unit's own are. Returns the initialisers'
+/// `expr_types` and `Callee` classification for the emit path, which re-checks
+/// with throwaway sinks.
+#[allow(clippy::too_many_arguments)]
+pub fn check_suite_decls(
+    types: &[TypeDecl],
+    consts: &[ConstDecl],
+    resolved: &mut ResolvedCommons,
+    target: Option<&UnitTable>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    locals: &mut LocalsSink,
+    tys: &Arc<Types>,
+) -> (
+    HashMap<ExprId, checker::TypedExpr>,
+    HashMap<ExprId, checker::Callee>,
+) {
+    if types.is_empty() && consts.is_empty() {
+        return Default::default();
+    }
+    let mut taken = bound_value_names(resolved, target);
+    for t in resolved.types.values() {
+        if let TypeBody::Sum(s) = &t.body {
+            taken.extend(s.variants.iter().map(|v| v.name.name.clone()));
+        }
+    }
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut ok_types: Vec<TypeDecl> = Vec::new();
+    let mut ok_consts: Vec<ConstDecl> = Vec::new();
+    let mut verdict = |name: &Ident,
+                       kind: &str,
+                       dup: &'static str,
+                       clash: &'static str,
+                       errors: &mut Vec<CompileError>|
+     -> bool {
+        if !seen.insert(name.name.clone()) {
+            errors.push(CompileError::new(
+                dup,
+                name.span,
+                format!("this suite declares `{}` twice", name.name),
+            ));
+            return false;
+        }
+        if taken.contains(&name.name) || name.name.starts_with("__") {
+            errors.push(
+                CompileError::new(
+                    clash,
+                    name.span,
+                    format!(
+                        "the suite {kind} `{}` has the name of a declaration already in scope in its cases",
+                        name.name
+                    ),
+                )
+                .with_note("rename it; a suite `type` or `const` does not shadow the target's or an imported name"),
+            );
+            return false;
+        }
+        true
+    };
+    for t in types {
+        if !t.type_params.is_empty() {
+            errors.push(
+                CompileError::new(
+                    "bynk.suite.type_generic",
+                    t.name.span,
+                    format!("the suite type `{}` is generic", t.name.name),
+                )
+                .with_note("a suite type is a plain, non-generic shape; declare a generic type in the target or a `commons`"),
+            );
+            continue;
+        }
+        if verdict(
+            &t.name,
+            "type",
+            "bynk.suite.duplicate_type",
+            "bynk.suite.type_name_clash",
+            errors,
+        ) {
+            ok_types.push(t.clone());
+        }
+    }
+    for c in consts {
+        if verdict(
+            &c.name,
+            "const",
+            "bynk.suite.duplicate_const",
+            "bynk.suite.const_name_clash",
+            errors,
+        ) {
+            ok_consts.push(c.clone());
+        }
+    }
+    // The variants of the suite's own sum types are values in its cases too: they
+    // may not clash with anything in scope, with each other, or with a suite
+    // `type` or `const`.
+    let item_names: HashSet<&str> = ok_types
+        .iter()
+        .map(|t| t.name.name.as_str())
+        .chain(ok_consts.iter().map(|c| c.name.name.as_str()))
+        .collect();
+    let mut variant_seen: HashSet<&str> = HashSet::new();
+    for t in &ok_types {
+        let TypeBody::Sum(sum) = &t.body else {
+            continue;
+        };
+        for v in &sum.variants {
+            let name = v.name.name.as_str();
+            if taken.contains(name) || item_names.contains(name) || !variant_seen.insert(name) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.suite.type_name_clash",
+                        v.name.span,
+                        format!(
+                            "the variant `{name}` of the suite type `{}` has the name of another value in scope in the suite's cases",
+                            t.name.name
+                        ),
+                    )
+                    .with_note("rename the variant; a bare variant name would read as either value"),
+                );
+            }
+        }
+    }
+    add_suite_fns(
+        resolved,
+        SuiteItems {
+            fns: &[],
+            fixtures: &[],
+            types: &ok_types,
+            consts: &ok_consts,
+        },
+    );
+    // Name resolution over the declarations alone (a field of an unknown type,
+    // a constant naming an unknown name), as a unit's own are resolved. Checking
+    // goes no further on a failure: the checker assumes names resolve.
+    let probe_items: Vec<CommonsItem> = ok_types
+        .iter()
+        .cloned()
+        .map(CommonsItem::Type)
+        .chain(ok_consts.iter().cloned().map(CommonsItem::Const))
+        .collect();
+    let saved = std::mem::replace(&mut resolved.commons.items, probe_items);
+    let resolution = resolver::resolve_file_record(resolved, refs);
+    resolved.commons.items = saved;
+    if let Err(errs) = resolution {
+        errors.extend(errs);
+        return Default::default();
+    }
+    checker::check_suite_decls(&ok_types, &ok_consts, resolved, tys, errors, refs, locals)
+}
+
 /// #2834: check a suite's helper `fn`s. Each must be a free, pure function
 /// whose name no value in the case scope already uses and no sibling repeats;
 /// the helpers are then added to `resolved` (the suite's view) and their
@@ -1267,6 +1457,8 @@ pub fn check_suite_fns(
         SuiteItems {
             fns: suite_fns,
             fixtures: &[],
+            types: &[],
+            consts: &[],
         },
     );
     let resolved = &*resolved;
@@ -1439,6 +1631,8 @@ fn check_test_bodies(
                             SuiteItems {
                                 fns: &rp.clause_fns[clause_idx],
                                 fixtures: &rp.clause_fixtures[clause_idx],
+                                types: &[],
+                                consts: &[],
                             },
                         );
                         view
@@ -1616,7 +1810,19 @@ fn check_test_bodies(
                 SuiteItems {
                     fns: &[],
                     fixtures: &test_decl.fixtures,
+                    types: &[],
+                    consts: &[],
                 },
+            );
+            check_suite_decls(
+                &test_decl.types,
+                &test_decl.consts,
+                &mut helper_view,
+                unit_tables.get(target_name),
+                &mut errors,
+                refs,
+                locals,
+                tys,
             );
             check_suite_fns(
                 &test_decl.fns,

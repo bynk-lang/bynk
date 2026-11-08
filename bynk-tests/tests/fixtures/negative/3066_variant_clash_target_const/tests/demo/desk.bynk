@@ -1,0 +1,7 @@
+suite demo.desk
+
+type Shade = | Limit | Blue
+
+case "x" {
+  expect 1 == 1
+}

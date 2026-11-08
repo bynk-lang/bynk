@@ -1,0 +1,11 @@
+suite shop.stock
+
+  type   Counted = { n: Int }
+const   Repo : String = "bynk-lang/bynk"
+type Kind = | Fruit | Veg
+
+fn   first_id() -> String { Repo }
+
+case "reads" {
+  expect 1 == 1
+}

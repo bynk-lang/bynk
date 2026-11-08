@@ -70,6 +70,13 @@ fn test_symbol(pm: &PositionMap, t: &SuiteDecl) -> DocumentSymbol {
             Vec::new(),
         ));
     }
+    // #3066: a suite's own types and constants.
+    for ty in &t.types {
+        children.push(item_symbol(pm, &CommonsItem::Type(ty.clone())));
+    }
+    for c in &t.consts {
+        children.push(item_symbol(pm, &CommonsItem::Const(c.clone())));
+    }
     for f in &t.fns {
         children.push(fn_symbol(pm, f));
     }

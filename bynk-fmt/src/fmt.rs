@@ -954,6 +954,8 @@ impl<'a> Formatter<'a> {
                         &t.envs,
                         &t.stubs,
                         &t.fixtures,
+                        &t.types,
+                        &t.consts,
                         &t.fns,
                         &t.cases,
                         &t.properties,
@@ -972,6 +974,8 @@ impl<'a> Formatter<'a> {
                     &t.envs,
                     &t.stubs,
                     &t.fixtures,
+                    &t.types,
+                    &t.consts,
                     &t.fns,
                     &t.cases,
                     &t.properties,
@@ -988,6 +992,8 @@ impl<'a> Formatter<'a> {
         envs: &[EnvClause],
         stubs: &[StubClause],
         fixtures: &[FixtureDecl],
+        types: &[TypeDecl],
+        consts: &[ConstDecl],
         fns: &[FnDecl],
         cases: &[Case],
         properties: &[PropertyDecl],
@@ -1021,6 +1027,8 @@ impl<'a> Formatter<'a> {
         // back into source order rather than printing them by kind.
         enum Member<'a> {
             Fixture(&'a FixtureDecl),
+            Type(&'a TypeDecl),
+            Const(&'a ConstDecl),
             Fn(&'a FnDecl),
             Case(&'a Case),
             Property(&'a PropertyDecl),
@@ -1028,6 +1036,8 @@ impl<'a> Formatter<'a> {
         let mut members: Vec<(usize, Member)> = fixtures
             .iter()
             .map(|f| (f.span.start, Member::Fixture(f)))
+            .chain(types.iter().map(|t| (t.span.start, Member::Type(t))))
+            .chain(consts.iter().map(|c| (c.span.start, Member::Const(c))))
             .chain(fns.iter().map(|f| (f.span.start, Member::Fn(f))))
             .chain(cases.iter().map(|c| (c.name_span.start, Member::Case(c))))
             .chain(
@@ -1043,6 +1053,8 @@ impl<'a> Formatter<'a> {
             }
             match member {
                 Member::Fixture(f) => self.format_fixture_decl(f),
+                Member::Type(t) => self.format_type_decl(t),
+                Member::Const(c) => self.format_const_decl(c),
                 Member::Fn(f) => self.format_fn_decl(f),
                 Member::Case(c) => self.format_case(c),
                 Member::Property(p) => self.format_property(p),

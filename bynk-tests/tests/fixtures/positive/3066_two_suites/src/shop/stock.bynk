@@ -1,0 +1,6 @@
+context shop.stock
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1

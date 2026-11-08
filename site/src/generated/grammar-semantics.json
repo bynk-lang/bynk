@@ -424,6 +424,14 @@
     {
       "code": "bynk.resolve.duplicate_const",
       "summary": "Two constants share a name."
+    },
+    {
+      "code": "bynk.suite.const_name_clash",
+      "summary": "A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases."
+    },
+    {
+      "code": "bynk.suite.duplicate_const",
+      "summary": "A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s."
     }
   ],
   "consumes_decl": [
@@ -1698,6 +1706,18 @@
     {
       "code": "bynk.resolve.reserved_host_name",
       "summary": "A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals."
+    },
+    {
+      "code": "bynk.suite.duplicate_type",
+      "summary": "A suite declares two `type`s of the same name."
+    },
+    {
+      "code": "bynk.suite.type_generic",
+      "summary": "A suite declares a generic `type`; a suite type is a plain, non-generic shape."
+    },
+    {
+      "code": "bynk.suite.type_name_clash",
+      "summary": "A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item."
     },
     {
       "code": "bynk.types.derives_automatic",

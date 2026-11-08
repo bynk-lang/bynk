@@ -1,0 +1,8 @@
+suite demo.desk
+
+const Sz: Int = 1
+const Sz: Int = 2
+
+case "dup" {
+  expect 1 == 1
+}

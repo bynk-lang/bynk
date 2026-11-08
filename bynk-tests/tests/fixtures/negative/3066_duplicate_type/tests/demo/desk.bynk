@@ -1,0 +1,8 @@
+suite demo.desk
+
+type Counted = { n: Int }
+type Counted = { m: Int }
+
+case "dup" {
+  expect 1 == 1
+}

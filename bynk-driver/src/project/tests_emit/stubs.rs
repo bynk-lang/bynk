@@ -570,6 +570,8 @@ pub(super) fn lower_stub_value_block(
             test_suites::SuiteItems {
                 fns: &[],
                 fixtures: &fixtures,
+                types: &[],
+                consts: &[],
             },
         );
         // #2907: and its helpers, declared ahead of the value like the fixtures.
@@ -597,6 +599,8 @@ pub(super) fn lower_stub_value_block(
             test_suites::SuiteItems {
                 fns: items.fns,
                 fixtures: &[],
+                types: &[],
+                consts: &[],
             },
         );
         // Build-mode re-check for the lowering's expr types; the analyse exit has
@@ -642,6 +646,8 @@ pub(super) fn clause_items(
     test_suites::SuiteItems {
         fns: &rp.clause_fns[idx],
         fixtures: &rp.clause_fixtures[idx],
+        types: &[],
+        consts: &[],
     }
 }
 
