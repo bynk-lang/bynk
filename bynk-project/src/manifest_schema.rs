@@ -111,6 +111,8 @@ struct BuildTable {
     /// stripped). Default: `"ts"`.
     #[schemars(extend("enum" = ["ts", "js"], "default" = "ts"))]
     emit: Option<String>,
+}
+
 /// Switches for checks that read more than the source.
 #[derive(JsonSchema)]
 #[serde(deny_unknown_fields)]
