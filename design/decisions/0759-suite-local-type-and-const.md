@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A suite declares its own `type` and `const` items, private to the suite and never deployed
-probes: diagnostic_coverage, emit_diagnostics, ts_writes
----
+# 0759 — A suite declares its own private, test-only `type` and `const` items
 
-## ADR: suite-local-type-and-const
-title: A suite declares its own private, test-only `type` and `const` items
-summary: Suite-local types and constants, scoped like suite helper fns, with codecs emitted into the runner
+- **Status:** Accepted (v0.522)
 
 **Context.** A suite body admitted `uses`, `stub`, `env`, `fixture`, `fn`, `case` and `property`, but not `type` or `const` (#3066). A test that wanted to read a count back through `select[T]` had to add a test-only row type to production code, or compare raw JSON; fixture constants were repeated or wrapped in zero-argument `fn`s. ADR 0718 gave suites private helper `fn`s on the same argument: test-only items must not widen the deployable.
 
