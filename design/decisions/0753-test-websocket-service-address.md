@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
-changelog: A case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`) against a recording `TestConnection[F]()`
----
+# 0753 — A case drives a WebSocket service by address against a recording TestConnection
 
-## ADR: test-websocket-service-address
-title: A case drives a WebSocket service by address against a recording TestConnection
-summary: open/message/close addresses, a case-scoped TestConnection[F], and the principal given once at open
+- **Status:** Accepted (v0.517)
 
 **Context.** A case addressed a service by its natural surface (`svc.call`, an
 HTTP verb, `svc.schedule`, `svc.message(m)`, `svc.event(e)`), but a `from
