@@ -35,22 +35,31 @@ export class TestConnection<F> implements Connection<F> {
   // #3051: what a case's `svc.open(tc, …)` records so a later `svc.message(tc, …)`
   // / `svc.close(tc)` recover the route values and the principal from the
   // connection, as the platform recovers them from the socket attachment.
-  route: unknown[] | undefined = undefined;
-  deps: unknown = undefined;
+  private routeValues: unknown[] | undefined = undefined;
+  private depsValue: unknown = undefined;
   private minted = false;
+
+  /** Record `open`'s route values and `deps`; one socket is opened once, and not once it was handed out. */
+  remember(route: unknown[], deps: unknown): void {
+    if (this.routeValues !== undefined || this.minted) {
+      throw new Error("TestConnection: this connection was already opened or handed to an agent — build a new TestConnection");
+    }
+    this.routeValues = route;
+    this.depsValue = deps;
+  }
 
   /** The route values and `deps` from `open`; a case that skipped `open` fails. */
   opened(): { route: unknown[]; deps: unknown } {
-    if (this.route === undefined) {
+    if (this.routeValues === undefined) {
       throw new Error("TestConnection: `message`/`close` before `open` — call the service's `open` first");
     }
-    return { route: this.route, deps: this.deps };
+    return { route: this.routeValues, deps: this.depsValue };
   }
 
   /** The owned `Connection` an agent receives; one socket has one owner. */
   mint(): Connection<F> {
-    if (this.minted) {
-      throw new Error("TestConnection: `connection()` was already taken — one socket has one owner");
+    if (this.minted || this.routeValues !== undefined) {
+      throw new Error("TestConnection: this connection was already handed out or opened — one socket has one owner");
     }
     this.minted = true;
     return this;

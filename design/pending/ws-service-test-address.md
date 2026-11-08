@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage
+probes: emit_diagnostics, ts_writes, diagnostic_coverage
 changelog: A case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`) against a recording `TestConnection[F]()`
 ---
 

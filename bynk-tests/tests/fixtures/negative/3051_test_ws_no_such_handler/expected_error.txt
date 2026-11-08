@@ -1,0 +1,2 @@
+bynk.test.service_unknown_route `ChatGateway` declares no `on close` handler
+# exact

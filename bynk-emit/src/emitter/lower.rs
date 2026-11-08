@@ -3528,12 +3528,23 @@ fn lower_method_call(
                     .map(|a| pre.lower(a, cx))
                     .unwrap_or_else(|| "undefined".to_string());
                 let svc = &id.name;
+                // Typed from the handler's own signature (`Parameters<typeof …>`), so
+                // `tsc` checks the arity, the frame position and the `deps` shape
+                // against the emitted handler; only the route values, which the
+                // `TestConnection` holds as `unknown`, are cast, as production's
+                // dispatch casts `__att.args[i]`.
+                let sig = |m: &str| format!("Parameters<typeof {svc}.{m}>");
                 let call = match which {
                     "open" => {
                         let route: Vec<String> =
                             args[1..].iter().map(|a| pre.lower(a, cx)).collect();
+                        let mut parts = vec!["__c".to_string()];
+                        parts.extend(route.iter().cloned());
+                        parts.push(deps_expr.clone());
                         format!(
-                            "((c: any, r: unknown[], d: unknown) => {{ c.route = r; c.deps = d; return ({svc}.open as any)(c, ...r, d); }})({tc}, [{}], {deps_expr})",
+                            "(async () => {{ const __c = {tc}; const __a: {} = [{}]; __c.remember([{}], __a[__a.length - 1]); return {svc}.open(...__a); }})()",
+                            sig("open"),
+                            parts.join(", "),
                             route.join(", ")
                         )
                     }
@@ -3546,26 +3557,34 @@ fn lower_method_call(
                             .get(1)
                             .map(|a| pre.lower(a, cx))
                             .unwrap_or_else(|| "undefined".to_string());
+                        let p = sig("message");
                         let mut k = 0usize;
-                        let list: Vec<String> = (0..n)
-                            .map(|i| {
-                                if i == frame_idx {
-                                    "f".to_string()
-                                } else {
-                                    k += 1;
-                                    format!("o.route[{}]", k - 1)
-                                }
-                            })
-                            .collect();
+                        let mut parts = vec!["__c".to_string()];
+                        for i in 0..n {
+                            if i == frame_idx {
+                                parts.push(frame.clone());
+                            } else {
+                                parts.push(format!("__o.route[{k}] as {p}[{}]", i + 1));
+                                k += 1;
+                            }
+                        }
+                        parts.push(format!("__o.deps as {p}[{}]", n + 1));
                         format!(
-                            "((c: any, f: unknown) => {{ const o = c.opened(); return ({svc}.message as any)(c, {}, o.deps); }})({tc}, {frame})",
-                            list.join(", ")
+                            "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.message(...__a); }})()",
+                            parts.join(", ")
                         )
                     }
                     _ => {
                         let n = nums.first().copied().unwrap_or(0);
+                        let p = sig("close");
+                        let mut parts = vec!["__c".to_string()];
+                        for i in 0..n {
+                            parts.push(format!("__o.route[{i}] as {p}[{}]", i + 1));
+                        }
+                        parts.push(format!("__o.deps as {p}[{}]", n + 1));
                         format!(
-                            "((c: any) => {{ const o = c.opened(); return ({svc}.close as any)(c, ...o.route.slice(0, {n}), o.deps); }})({tc})"
+                            "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.close(...__a); }})()",
+                            parts.join(", ")
                         )
                     }
                 };

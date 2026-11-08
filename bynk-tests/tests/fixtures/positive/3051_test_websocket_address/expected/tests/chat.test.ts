@@ -52,10 +52,10 @@ async function test_a_joiner_is_welcomed_and_then_hears_the_broadcast() {
     const alice = new TestConnection<ServerFrame>();
     const bob = new TestConnection<ServerFrame>();
     const room = RoomId.unsafe("r1");
-    const __r0 = await ((c: any, r: unknown[], d: unknown) => { c.route = r; c.deps = d; return (ChatGateway.open as any)(c, ...r, d); })(alice, [room], { ...deps, identity: (UserId.unsafe("alice") as any) });
-    const __r1 = await ((c: any, r: unknown[], d: unknown) => { c.route = r; c.deps = d; return (ChatGateway.open as any)(c, ...r, d); })(bob, [room], { ...deps, identity: (UserId.unsafe("bob") as any) });
+    const __r0 = await (async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1]); return ChatGateway.open(...__a); })();
+    const __r1 = await (async () => { const __c = bob; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("bob") as any) }]; __c.remember([room], __a[__a.length - 1]); return ChatGateway.open(...__a); })();
     if (!(__bynkEq([...(alice).sent], [{ text: "welcome" }]))) { throw __bynkExpectFailure("tests/chat.bynk:13:12", 687, 736, "expect alice.sent() == [ServerFrame { text: \"welcome\" }]\n  expected: alice.sent() == [ServerFrame { text: \"welcome\" }]\n  actual:   " + __bynkShow(([...(alice).sent])) + " == " + __bynkShow(([{ text: "welcome" }]))); }
-    const __r2 = await ((c: any, f: unknown) => { const o = c.opened(); return (ChatGateway.message as any)(c, o.route[0], f, o.deps); })(alice, { text: "hi" });
+    const __r2 = await (async () => { const __c = alice; const __o = __c.opened(); const __a: Parameters<typeof ChatGateway.message> = [__c, __o.route[0] as Parameters<typeof ChatGateway.message>[1], { text: "hi" }, __o.deps as Parameters<typeof ChatGateway.message>[3]]; return ChatGateway.message(...__a); })();
     if (!(__bynkEq([...(bob).sent], [{ text: "welcome" }, { text: "hi" }]))) { throw __bynkExpectFailure("tests/chat.bynk:16:12", 817, 892, "expect bob.sent() == [ServerFrame { text: \"welcome\" }, ServerFrame { text: \"hi\" }]\n  expected: bob.sent() == [ServerFrame { text: \"welcome\" }, ServerFrame { text: \"hi\" }]\n  actual:   " + __bynkShow(([...(bob).sent])) + " == " + __bynkShow(([{ text: "welcome" }, { text: "hi" }]))); }
     if (!((alice).closed === false)) { throw __bynkExpectFailure("tests/chat.bynk:17:12", 904, 927, "expect alice.closed() == false\n  expected: alice.closed() == false\n  actual:   " + __bynkShow(((alice).closed)) + " == " + __bynkShow((false))); }
     return { pass: true };
@@ -80,10 +80,10 @@ async function test_a_closed_member_hears_nothing_further() {
     const alice = new TestConnection<ServerFrame>();
     const bob = new TestConnection<ServerFrame>();
     const room = RoomId.unsafe("r2");
-    const __r0 = await ((c: any, r: unknown[], d: unknown) => { c.route = r; c.deps = d; return (ChatGateway.open as any)(c, ...r, d); })(alice, [room], { ...deps, identity: (UserId.unsafe("alice") as any) });
-    const __r1 = await ((c: any, r: unknown[], d: unknown) => { c.route = r; c.deps = d; return (ChatGateway.open as any)(c, ...r, d); })(bob, [room], { ...deps, identity: (UserId.unsafe("bob") as any) });
-    const __r2 = await ((c: any) => { const o = c.opened(); return (ChatGateway.close as any)(c, ...o.route.slice(0, 1), o.deps); })(bob);
-    const __r3 = await ((c: any, f: unknown) => { const o = c.opened(); return (ChatGateway.message as any)(c, o.route[0], f, o.deps); })(alice, { text: "again" });
+    const __r0 = await (async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1]); return ChatGateway.open(...__a); })();
+    const __r1 = await (async () => { const __c = bob; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("bob") as any) }]; __c.remember([room], __a[__a.length - 1]); return ChatGateway.open(...__a); })();
+    const __r2 = await (async () => { const __c = bob; const __o = __c.opened(); const __a: Parameters<typeof ChatGateway.close> = [__c, __o.route[0] as Parameters<typeof ChatGateway.close>[1], __o.deps as Parameters<typeof ChatGateway.close>[2]]; return ChatGateway.close(...__a); })();
+    const __r3 = await (async () => { const __c = alice; const __o = __c.opened(); const __a: Parameters<typeof ChatGateway.message> = [__c, __o.route[0] as Parameters<typeof ChatGateway.message>[1], { text: "again" }, __o.deps as Parameters<typeof ChatGateway.message>[3]]; return ChatGateway.message(...__a); })();
     if (!(([...(bob).sent]).length === 1)) { throw __bynkExpectFailure("tests/chat.bynk:28:12", 1385, 1409, "expect bob.sent().length() == 1\n  expected: bob.sent().length() == 1\n  actual:   " + __bynkShow((([...(bob).sent]).length)) + " == " + __bynkShow((1))); }
     if (!(([...(alice).sent]).length === 2)) { throw __bynkExpectFailure("tests/chat.bynk:29:12", 1421, 1447, "expect alice.sent().length() == 2\n  expected: alice.sent().length() == 2\n  actual:   " + __bynkShow((([...(alice).sent]).length)) + " == " + __bynkShow((2))); }
     return { pass: true };

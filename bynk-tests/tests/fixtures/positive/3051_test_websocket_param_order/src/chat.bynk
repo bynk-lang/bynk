@@ -1,0 +1,49 @@
+context chat
+
+type RoomId = opaque String
+type UserId = opaque String
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+// `on message` declares its frame first, and `on close` takes fewer route
+// values than `on open`: the shapes the address's positional rebuild must get
+// right.
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+  on open (roomId: RoomId, topic: String) -> Effect[()] by user: Participant {
+    let _ <- connection.send(ServerFrame { text: "welcome to \(topic)" })
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+
+  on message (frame: ClientFrame, roomId: RoomId, topic: String) -> Effect[()] by user: Participant {
+    let _ <- Room(roomId).post(user.identity, "\(topic): \(frame.text)")
+    ()
+  }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(roomId).leave(user.identity)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+
+  on call post(sender: UserId, text: String) -> Effect[()] {
+    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    ()
+  }
+}
