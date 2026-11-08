@@ -1869,7 +1869,7 @@ fn predicate_name_candidates() -> Vec<Completion> {
 fn actor_candidates(doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> Vec<Completion> {
     let mut out: Vec<Completion> = Vec::new();
     // #2135: in a suite, a call-site `by` may also name a reserved principal
-    // (`Nobody`, `Forged`, `Stale`, `Expired`), which drives the seam to a `401`.
+    // (`Nobody`, `Forged`, `Stale`, `Expired`, `WrongIssuer`, `WrongAudience`), which drives the seam to a `401`.
     // A lexical test, so it holds mid-edit, when the suite does not parse.
     let in_suite = lexer::tokenize(doc_text).ok().is_some_and(|toks| {
         toks.iter()
@@ -4549,7 +4549,14 @@ fn Box.size(self) -> Int { 1 }
                 .into_iter()
                 .map(|c| c.label)
                 .collect();
-        for name in ["Nobody", "Forged", "Stale", "Expired"] {
+        for name in [
+            "Nobody",
+            "Forged",
+            "Stale",
+            "Expired",
+            "WrongIssuer",
+            "WrongAudience",
+        ] {
             assert!(labels.iter().any(|l| l == name), "{name}: {labels:?}");
         }
         let context = "context pay.hooks\n\nservice api from http {\n  on GET(\"/a\") () -> Effect[HttpResult[String]] by ";

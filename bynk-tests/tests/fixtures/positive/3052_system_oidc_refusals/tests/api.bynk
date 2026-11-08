@@ -1,0 +1,101 @@
+suite ci.api as system {
+	// #3052: the driver is the issuer. It mints a valid token with the chosen
+	// claims, and the tokens the real seam must refuse. The mutation test in
+	// `bynk-tests/tests/system/behaviour_fixtures.rs` turns each check off in
+	// the emitted verifier and expects exactly the matching cases to fail.
+
+	case "a valid token with chosen claims is admitted" {
+		let r <- api.GET("/who") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+		expect r is Ok("wid acme/money")
+	}
+
+	case "a valid token with no claims is admitted" {
+		let r <- api.GET("/who") by Workload("wid")
+		expect r is Ok("wid -")
+	}
+
+	case "a non-ASCII subject round-trips" {
+		let r <- api.GET("/who") by Workload("ünï")
+		expect r is Ok("ünï -")
+	}
+
+	case "a missing token is refused" {
+		let r <- api.GET("/who") by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged token is refused" {
+		let r <- api.GET("/who") by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired token is refused" {
+		let r <- api.GET("/who") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a token for another issuer is refused" {
+		let r <- api.GET("/who") by WrongIssuer
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a token for another audience is refused" {
+		let r <- api.GET("/who") by WrongAudience
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a valid raw request is admitted" {
+		let r <- api.POST("/release", Wire("\"v1\"")) by Workload("wid")
+		expect r is Handled(Ok("released v1"))
+	}
+
+	case "a forged raw request is refused" {
+		let r <- api.POST("/release", Wire("\"v1\"")) by Forged
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired raw request is refused" {
+		let r <- api.POST("/release", Wire("\"v1\"")) by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "the trustFrom variable moves the trust roots" {
+		env { PINNED_OIDC_TRUST = "{\"issuer\":\"https://staging.example.com\",\"jwks\":\"https://staging.example.com/jwks\",\"audience\":\"staging-registry\"}" }
+		let ok <- api.GET("/pinned") by Pinned("pid")
+		let forged <- api.GET("/pinned") by Forged
+		let wrong <- api.GET("/pinned") by WrongAudience
+		expect ok is Ok("pinned pid")
+		expect forged is Rejected(Unauthorized)
+		expect wrong is Rejected(Unauthorized)
+	}
+
+	case "a trustFrom without an audience keeps the declared one" {
+		env { PINNED_OIDC_TRUST = "{\"issuer\":\"https://staging.example.com\",\"jwks\":\"https://staging.example.com/jwks2\"}" }
+		let ok <- api.GET("/pinned") by Pinned("pid")
+		let wrong <- api.GET("/pinned") by WrongAudience
+		expect ok is Ok("pinned pid")
+		expect wrong is Rejected(Unauthorized)
+	}
+
+	// The expectation is inverted: the seam refused, so `Handled(_)` fails.
+	// It shows the outcome is observed from the real response.
+	case "a forged token is not handled" {
+		let r <- api.GET("/who") by Forged
+		expect r is Handled(_)
+	}
+
+	case "an expired token is not handled" {
+		let r <- api.GET("/who") by Expired
+		expect r is Handled(_)
+	}
+
+	case "a token for another issuer is not handled" {
+		let r <- api.GET("/who") by WrongIssuer
+		expect r is Handled(_)
+	}
+
+	case "a token for another audience is not handled" {
+		let r <- api.GET("/who") by WrongAudience
+		expect r is Handled(_)
+	}
+}
