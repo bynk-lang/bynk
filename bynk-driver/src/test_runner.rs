@@ -1785,6 +1785,13 @@ mod output_within_tests {
                 ])
                 .output()
                 .map_err(|e| format!("could not run powershell: {e}"))?;
+            if !out.status.success() {
+                return Err(format!(
+                    "powershell failed ({}): {}",
+                    out.status,
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+            }
             Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
         }
         fn cleanup() {
