@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A nightly CodeQL scan now covers the TypeScript the compiler emits for Cloudflare Workers, with models of the Worker request and the redirect `Location` header, and deliberately vulnerable canary projects that fail the scan if those models stop firing
----
+# 0747 — CodeQL scans the emitted Workers TypeScript nightly, with Bynk's own models and canaries
 
-## ADR: codeql-over-emitted-typescript
-title: CodeQL scans the emitted Workers TypeScript nightly, with Bynk's own models and canaries
-summary: QL models of the Worker request + Location header, proved by canaries; out of band, never a gate
+- **Status:** Accepted (v0.512.11)
 
 **Context.** A flaw in a codegen template lives only in the emitted TypeScript.
 CodeQL scans the repo's own sources (`codeql.yml`), not the output, so nothing
