@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk.deploy.lock` no longer lists each Worker's static assets by hashed name, so a release that changes only pages leaves the lock unchanged (an existing lock loses its `assets` lines on its next write)"
----
+# 0750 — bynk.deploy.lock does not record static assets
 
-## ADR: deploy-lock-omits-static-assets
-title: bynk.deploy.lock does not record static assets
-summary: The served asset paths are derived from the build and nothing reads them, so the lock stops listing them
+- **Status:** Accepted (v0.514.2)
 
 **Context.** ADR 0456 had `bynk deploy` record each Worker's served asset paths in `bynk.deploy.lock`, so that a changed file would be a changed line. The list was write-only: no plan, orphan diff, skew gate, `migrate` or `dev` code read it. Because the paths carry a content hash, every page edit rewrote the lock, and a release run from a tag, which cannot open a pull request, left `main`'s lock stale (#3072). Cloudflare, not the lock, decides what an older Worker version still serves, and no wrangler verb deletes assets, so the list could not support pruning either.
 
