@@ -302,7 +302,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::BoolLit(b) => b.to_string(),
         ExprKind::UnitLit => "()".to_string(),
         ExprKind::Ident(id) => id.name.clone(),
-        ExprKind::ListLit(elems) => format!(
+        ExprKind::ListLit(elems, ..) => format!(
             "[{}]",
             elems
                 .iter()

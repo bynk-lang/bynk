@@ -4373,7 +4373,7 @@ fn validate_cors_policy(
             "a `cors { }` policy must declare `origins` — the allowed origins, or `[\"*\"]`",
         )),
         Some(expr) => match &expr.kind {
-            ExprKind::ListLit(items) if !items.is_empty() => {
+            ExprKind::ListLit(items, ..) if !items.is_empty() => {
                 for item in items {
                     if !matches!(item.kind, ExprKind::StrLit(_)) {
                         errors.push(CompileError::new(
@@ -4394,7 +4394,7 @@ fn validate_cors_policy(
 
     // `headers`, when present, is a list of string literals.
     if let Some(expr) = policy.field("headers") {
-        let ok = matches!(&expr.kind, ExprKind::ListLit(items)
+        let ok = matches!(&expr.kind, ExprKind::ListLit(items, ..)
             if items.iter().all(|i| matches!(i.kind, ExprKind::StrLit(_))));
         if !ok {
             errors.push(CompileError::new(
