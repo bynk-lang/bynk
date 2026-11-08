@@ -2605,6 +2605,7 @@ impl<'a> Formatter<'a> {
         if b.statements.is_empty()
             && b.tail_leading_comments.is_empty()
             && !any_stmt_trivia
+            && !holds_list_comments(&b.tail)
             && self.fits(&format!("{{ {tail_oneline} }}"), reserve)
         {
             self.push("{ ");
@@ -2922,7 +2923,7 @@ impl<'a> Formatter<'a> {
                 let tail = format!(" {} {}", op.name(), expr_with_prec(rhs, prec + 1));
                 // The right-hand side shares the operator's line whenever it is
                 // itself unbroken, so charge it to the left-hand side's budget.
-                let lhs_reserve = if tail.contains('\n') {
+                let lhs_reserve = if tail.contains('\n') || holds_list_comments(rhs) {
                     0
                 } else {
                     tail.chars().count() + reserve
@@ -3050,6 +3051,7 @@ impl<'a> Formatter<'a> {
     fn format_arg_list(&mut self, args: &[Expr], reserve: usize) -> bool {
         if let Some((last, leading)) = args.split_last()
             && (leading.is_empty() || is_block_like(last))
+            && !leading.iter().any(holds_list_comments)
             && self.try_layout(reserve, |f| {
                 for arg in leading {
                     f.push(&expr_with_prec(arg, 0));
@@ -3182,7 +3184,9 @@ impl<'a> Formatter<'a> {
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                if args.is_empty() || self.fits(&flat, reserve) {
+                if args.is_empty()
+                    || (!args.iter().any(holds_list_comments) && self.fits(&flat, reserve))
+                {
                     self.push(&flat);
                     return false;
                 }

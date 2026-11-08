@@ -812,3 +812,46 @@ fn keeps_an_end_of_line_comment_on_the_last_list_element_without_a_trailing_comm
         "not idempotent"
     );
 }
+
+/// #3067: a commented list is kept wherever a flat-form shortcut could swallow
+/// it: a block's tail, a binary operator's operand, a call's leading argument,
+/// and a method-chain argument.
+#[test]
+fn keeps_a_commented_list_on_every_flattening_path() {
+    for (name, source, expected) in [
+        (
+            "block tail",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => { [\n    1,\n    -- c\n    2,\n  ] })\n}\n",
+            "\txs.map((x) => {\n\t\t[\n\t\t\t1,\n\t\t\t// c\n\t\t\t2,\n\t\t]\n\t})",
+        ),
+        (
+            "binop rhs",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs + [\n    1,\n    -- c\n    2,\n  ]\n}\n",
+            "\txs + [\n\t\t1,\n\t\t// c\n\t\t2,\n",
+        ),
+        (
+            "binop lhs",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  [\n    1,\n    -- c\n    2,\n  ] + xs\n}\n",
+            "\t[\n\t\t1,\n\t\t// c\n\t\t2,\n\t] + xs",
+        ),
+        (
+            "leading argument",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  g([\n    1,\n    -- c\n    2,\n  ], 3)\n}\n",
+            "\t\t[\n\t\t\t1,\n\t\t\t// c\n\t\t\t2,\n\t\t],\n\t\t3\n\t)",
+        ),
+        (
+            "chain argument",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => x).concat([\n    1,\n    -- c\n    2,\n  ]).first()\n}\n",
+            "\txs.map((x) => x).concat([\n\t\t1,\n\t\t// c\n\t\t2,\n\t]).first()",
+        ),
+    ] {
+        let out = format_source(source, &FormatOptions::default())
+            .unwrap_or_else(|e| panic!("{name}: refused: {}", e.errors[0].message));
+        assert!(
+            out.contains(expected),
+            "{name}: `{expected}` not in place:\n{out}"
+        );
+        let again = format_source(&out, &FormatOptions::default()).expect("reformats");
+        assert_eq!(out, again, "{name}: not idempotent");
+    }
+}
