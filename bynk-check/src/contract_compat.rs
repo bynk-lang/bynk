@@ -1451,12 +1451,38 @@ mod tests {
             ServiceShape::from_text(&without.to_text()).as_ref(),
             Some(&without)
         );
-        // Text recorded before the marker existed reads as having no default.
-        assert!(shape_has_no_default(&without));
     }
 
-    fn shape_has_no_default(s: &ServiceShape) -> bool {
-        !s.to_text().contains("D()")
+    /// Shape text as a build wrote it before the `D()` marker existed (#2689),
+    /// hard-coded: the response of a service whose `at` field the caller expects.
+    const LEGACY_EXPECTS_AT: &str = r#"Svc("probe",P("req",Rec("Req",F("id",B("Int")))),Ret(Rec("Resp",F("at",B("Int")),F("ok",B("Bool")))))"#;
+
+    #[test]
+    fn text_written_before_the_marker_reads_as_having_no_default() {
+        let legacy = ServiceShape::from_text(LEGACY_EXPECTS_AT).expect("legacy text parses");
+        let Shape::Record { fields, .. } = &legacy.ret else {
+            panic!("a record response");
+        };
+        assert!(fields.iter().all(|f| !f.defaulted));
+        // The current build writes the marker only where a default is declared.
+        let current = shape("type Req = { id: Int }\ntype Resp = { ok: Bool, at: Int = 0 }\n");
+        assert_eq!(
+            current.to_text(),
+            LEGACY_EXPECTS_AT.replace("B(\"Int\")),F(\"ok\"", "B(\"Int\"),D()),F(\"ok\"")
+        );
+    }
+
+    #[test]
+    fn a_legacy_expectation_of_a_removed_field_is_still_breaking() {
+        // The caller's recorded expectation predates the marker, so the field it
+        // reads cannot be credited with a default: the response direction stays
+        // breaking until the caller redeploys.
+        let caller = ServiceShape::from_text(LEGACY_EXPECTS_AT).unwrap();
+        let callee = shape("type Req = { id: Int }\ntype Resp = { ok: Bool }\n");
+        assert_eq!(check_call(&caller, &callee).verdict, Verdict::Breaking);
+        // The same expectation recorded by this build is compatible.
+        let fresh = shape("type Req = { id: Int }\ntype Resp = { ok: Bool, at: Int = 0 }\n");
+        assert_eq!(check_call(&fresh, &callee).verdict, Verdict::Compatible);
     }
 
     #[test]

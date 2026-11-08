@@ -1415,7 +1415,12 @@ pub(crate) fn shapes_to_accept(
             s.expected.clone(),
             shape.to_text(),
         );
-        if !out.contains(&entry) {
+        // One entry per contract hash: the `D()` marker is not hashed, so two
+        // shape texts can differ only in it (#2689).
+        if !out
+            .iter()
+            .any(|e| e.0 == entry.0 && e.1 == entry.1 && e.2 == entry.2)
+        {
             out.push(entry);
         }
     }

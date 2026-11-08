@@ -1,6 +1,6 @@
 ---
 level: minor
-changelog: A field added to a service's request or response type with a default is a compatible contract change, so a callee deploys ahead of its callers; the contract hash still covers the field, and the stored shape records which fields have a default
+changelog: A field added to a service's request or response type with a default is a compatible contract change, so a callee deploys ahead of its callers; the contract hash still covers the field, and the stored shape records which fields have a default (shape text with a default is unreadable by earlier versions, so upgrade every deployer together)
 ---
 
 ## ADR: field-default-contract-compat
@@ -48,7 +48,7 @@ Proposed in #2689.
   same question of stored state. A response variant added stays breaking on the
   wire; the two rules do not conflict.
 
-**Consequences.** `bynk deploy --context X --accept-compatible-skew` ships a
+**Consequences.** Shape text carrying the `D()` marker is unreadable by an earlier `bynk`, which then fails closed: it drops a `bynk.contracts.lock` entry as unreadable (so the callee stops accepting that older hash) and cannot classify the skew. Upgrade every deployer together before recording a defaulted-field shape. `bynk deploy --context X --accept-compatible-skew` ships a
 callee that added a defaulted field ahead of its callers. The classifier's
 property test and a behavioural test (an old-hash, old-body call reaching the
 new callee and reading the default) pin it. No language surface changes, so
