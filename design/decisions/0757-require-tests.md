@@ -1,11 +1,6 @@
----
-level: minor
-changelog: "`bynk test --require-tests` fails a project that declares no tests (`error.kind == \"no_tests\"` under `--format json`); without it the message is now `warning: no tests found in <dir>`, still exit 0"
----
+# 0757 — bynk test --require-tests makes "no tests" an opt-in failure
 
-## ADR: require-tests
-title: bynk test --require-tests makes "no tests" an opt-in failure
-summary: The default stays a warning with exit 0; the flag turns it into an error, in rich, JSON and --no-run modes
+- **Status:** Accepted (v0.520)
 
 **Context.** `bynk test` on a project with no tests printed `no test declarations found` and exited 0, so CI passed a project that never wrote a test (#3051, proposed in #3087).
 
