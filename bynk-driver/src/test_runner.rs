@@ -75,6 +75,11 @@ pub struct TestArgs {
     /// a pure compile, no `tsc`/Node.
     #[arg(long)]
     pub no_run: bool,
+    /// Fail (exit non-zero) when the project declares no tests, instead of the
+    /// default warning with exit 0. Applies with `--no-run` too, so a
+    /// discovery-only CI step can enforce it.
+    #[arg(long)]
+    pub require_tests: bool,
     /// Output format. `rich` (default) is the grouped ✓ / ✗ human output;
     /// `json` is a single pinned JSON document of results, for tooling;
     /// `ndjson` is the same results as one JSON event per line, written as
@@ -238,6 +243,7 @@ impl TestArgs {
             input,
             output: None,
             no_run: true,
+            require_tests: false,
             format: TestFormat::Json,
             inspect: false,
             seed: None,
@@ -318,6 +324,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         input,
         output,
         no_run,
+        require_tests,
         format,
         inspect,
         seed,
@@ -716,7 +723,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // already carries integration suites from the compile above). A compile
     // failure took the `compile`-error path above, exactly as a run would.
     if no_run && json {
-        crate::test_stream::print_run(stream, &TestRun::discovered(discovery_suites(&out)));
+        let suites = discovery_suites(&out);
+        if suites.is_empty() && require_tests {
+            return report_no_tests(program, &input, true, stream, true);
+        }
+        crate::test_stream::print_run(stream, &TestRun::discovered(suites));
         return ExitCode::SUCCESS;
     }
     // #2842: the project's snapshots for this run. A remote or smoke run builds
@@ -839,15 +850,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     if !wrote_any_test {
-        if json {
-            crate::test_stream::print_run(stream, &empty_run());
-        } else {
-            eprintln!(
-                "{program} test: no test declarations found in `{}`",
-                input.display()
-            );
-        }
-        return ExitCode::SUCCESS;
+        return report_no_tests(program, &input, require_tests, stream, json);
     }
 
     let main_ts = output_root.join("tests").join("main.ts");
@@ -1118,6 +1121,41 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         );
     }
     ExitCode::FAILURE
+}
+
+/// #3087: the project declares no tests. By default a warning and exit 0 (a
+/// library or a fresh project runs `bynk test` before it has tests); under
+/// `--require-tests` an error, `error.kind == "no_tests"` in JSON, and exit 1.
+fn report_no_tests(
+    program: &str,
+    input: &Path,
+    require_tests: bool,
+    stream: bool,
+    json: bool,
+) -> ExitCode {
+    if json {
+        let run = if require_tests {
+            TestRun::no_tests_error(format!("no tests found in {}", input.display()))
+        } else {
+            empty_run()
+        };
+        crate::test_stream::print_run(stream, &run);
+    } else if require_tests {
+        eprintln!(
+            "{program} test: error: no tests found in {}",
+            input.display()
+        );
+    } else {
+        eprintln!(
+            "{program} test: warning: no tests found in {}",
+            input.display()
+        );
+    }
+    if require_tests {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 /// #3069: the test process outlived `run_timeout` and was killed. Reported as

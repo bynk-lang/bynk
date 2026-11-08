@@ -16,6 +16,9 @@
 //!   "compile"` carrying the `bynk` diagnostic lines;
 //! - **runtime** — the runner started then died before `run-end`: the observed
 //!   `suites` prefix *and* `error.kind == "runtime"` with the captured stderr.
+//!
+//! Two more `error.kind`s are additive: `"timeout"` (a `--mutate` run killed at
+//! its deadline) and `"no_tests"` (`--require-tests` on a project with none).
 
 use serde::Serialize;
 
@@ -334,6 +337,15 @@ impl TestRun {
         let mut run = Self::runtime_error(message, None);
         if let Some(error) = run.error.as_mut() {
             error.kind = "timeout".to_string();
+        }
+        run
+    }
+
+    /// #3087: the document for `--require-tests` on a project with no tests.
+    pub fn no_tests_error(message: impl Into<String>) -> Self {
+        let mut run = Self::runtime_error(message, None);
+        if let Some(error) = run.error.as_mut() {
+            error.kind = "no_tests".to_string();
         }
         run
     }
