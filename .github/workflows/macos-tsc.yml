@@ -1,0 +1,75 @@
+name: macOS tsc corpus check
+
+# The corpus-wide `tsc --strict` pass (system::tsc_verify) runs on Linux in the
+# merge queue, and off Linux the queue runs the `ci-os` profile, which leaves it
+# out as OS-independent. Its output is, but its MEMORY is not: the macOS runner
+# has 7 GB, and the release gate (release.yml) runs the full suite there. That
+# is how the v0.512.7 release failed twice on a heap exhaustion no earlier
+# stage saw (#3048 chunked the pass). The nightly would see it, but scheduled
+# runs are sparse in practice.
+#
+# So run just that test on macOS after each merge that can change it. It is
+# post-merge, off the queue's critical path, and a failure here shows on `main`
+# before someone tags a release on it.
+on:
+  push:
+    branches: [main]
+    # Everything that feeds the emitted TypeScript (the front end as well as
+    # the emitter), the corpus, the test, and what sets its memory: nextest's
+    # scheduling of it, the lockfile and the toolchain.
+    paths:
+      - "bynk-syntax/**"
+      - "bynk-check/**"
+      - "bynk-model/**"
+      - "bynk-emit/**"
+      - "bynk-ts/**"
+      - "bynk-strip/**"
+      - "bynk-std/**"
+      - "bynk-driver/**"
+      - "bynk-project/**"
+      - "bynk-testkit/**"
+      - "bynk-tests/tests/fixtures/positive/**"
+      - "bynk-tests/tests/system/tsc_verify.rs"
+      - ".config/nextest.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/macos-tsc.yml"
+  workflow_dispatch:
+
+# Only the newest commit on main matters: it holds every earlier one.
+concurrency:
+  group: macos-tsc
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tsc-verify:
+    name: tsc corpus check (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+        with:
+          tool: nextest@0.9
+      # The same Node and TypeScript as the release gate's test job. What this
+      # predicts is the failure it was added for: `tsc` exhausting its own V8
+      # heap ceiling (TSC_MAX_OLD_SPACE_MIB, per process), which does not depend
+      # on what else runs. It runs alone here, while the release runs it in the
+      # `macos-node-heavy` group beside the light tests (.config/nextest.toml),
+      # so a machine-wide memory squeeze could still show only at release.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
+      - name: Install TypeScript
+        run: npm install -g typescript@5
+      - name: Type-check every positive fixture's emitted TypeScript
+        run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(=system::tsc_verify::emitted_typescript_passes_tsc_strict)'
+        env:
+          BYNK_REQUIRE_TSC: "1"
