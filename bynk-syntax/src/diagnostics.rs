@@ -2809,7 +2809,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.suite.duplicate_const",
-        "A suite declares two `const`s of the same name.",
+        "A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s.",
         &["const_decl"],
     ),
     dg(
@@ -2824,7 +2824,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.suite.duplicate_type",
-        "A suite declares two `type`s, or a `type` and a `const`, of the same name.",
+        "A suite declares two `type`s of the same name.",
         &["type_decl"],
     ),
     dg(
@@ -2859,7 +2859,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.suite.type_name_clash",
-        "A suite `type` has the name of a declaration or sum variant already in scope in the suite's cases.",
+        "A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item.",
         &["type_decl"],
     ),
     dg(

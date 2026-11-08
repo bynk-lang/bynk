@@ -688,6 +688,7 @@ pub(super) fn emit_integration_module(
     let suite_type_names: std::collections::HashSet<String> = cases
         .iter()
         .flat_map(|c| c.suite_fns.types.iter().map(|t| t.name.name.clone()))
+        .filter(|n| !view.types.contains_key(n))
         .collect();
     let json_codec_roots: Vec<bynk_syntax::ast::TypeRef> = runtime_use
         .take_json_codec_roots()

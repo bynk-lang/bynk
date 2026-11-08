@@ -1,0 +1,2 @@
+# #3066
+passed=2 failed=0

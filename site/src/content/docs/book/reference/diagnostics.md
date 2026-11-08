@@ -792,17 +792,17 @@ There are **768** codes in total.
 |---|---|---|---|
 | `bynk.suite.const_name_clash` | A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_case_name` | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.duplicate_fn` | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.suite.duplicate_type` | A suite declares two `type`s, or a `type` and a `const`, of the same name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| `bynk.suite.duplicate_type` | A suite declares two `type`s of the same name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.env_binding_clash` | A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.env_not_literal` | An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.fn_effectful` | A suite helper `fn` returns an `Effect`; suite helpers are pure. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.fn_method` | A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.fn_name_clash` | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.type_generic` | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.suite.type_name_clash` | A suite `type` has the name of a declaration or sum variant already in scope in the suite's cases. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| `bynk.suite.type_name_clash` | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.unknown_target` | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 
 ## Transitions (step invariants)

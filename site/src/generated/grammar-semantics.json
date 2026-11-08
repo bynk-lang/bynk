@@ -423,7 +423,7 @@
     },
     {
       "code": "bynk.suite.duplicate_const",
-      "summary": "A suite declares two `const`s of the same name."
+      "summary": "A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s."
     }
   ],
   "consumes_decl": [
@@ -1677,7 +1677,7 @@
     },
     {
       "code": "bynk.suite.duplicate_type",
-      "summary": "A suite declares two `type`s, or a `type` and a `const`, of the same name."
+      "summary": "A suite declares two `type`s of the same name."
     },
     {
       "code": "bynk.suite.type_generic",
@@ -1685,7 +1685,7 @@
     },
     {
       "code": "bynk.suite.type_name_clash",
-      "summary": "A suite `type` has the name of a declaration or sum variant already in scope in the suite's cases."
+      "summary": "A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item."
     },
     {
       "code": "bynk.types.derives_automatic",

@@ -794,10 +794,23 @@ pub(super) fn emit_test_module(
     // it filters.
     // #3066: a root naming a suite's own type is served by that suite's runner
     // (its codecs are declared inside it), not by this module-level closure.
+    // A name the module-level view also knows (a target or `uses` type that
+    // another suite of this module reaches under that name) stays here: the
+    // suite that declares its own copy shadows it locally, and the others
+    // need this one.
+    let synthetic = synthetic_typed_commons_for_target(
+        target_name,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        hidden,
+        tys,
+    );
     let suite_type_names: HashSet<String> = indices
         .iter()
         .filter_map(|&i| parsed[i].test())
         .flat_map(|d| d.types.iter().map(|t| t.name.name.clone()))
+        .filter(|n| !synthetic.types.contains_key(n))
         .collect();
     let json_codec_roots: Vec<TypeRef> = runtime_use
         .take_json_codec_roots()
@@ -806,14 +819,6 @@ pub(super) fn emit_test_module(
         .filter(|r| !bynk_emit::emitter::serialisation::root_names_any(r, &suite_type_names))
         .collect();
     if !json_codec_roots.is_empty() {
-        let synthetic = synthetic_typed_commons_for_target(
-            target_name,
-            unit_tables,
-            unit_uses,
-            unit_consumes,
-            hidden,
-            tys,
-        );
         let (codec_names, codec_insts) = bynk_emit::emitter::serialisation::collect_codec_closure(
             &json_codec_roots,
             &synthetic.types,

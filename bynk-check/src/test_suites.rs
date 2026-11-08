@@ -1363,6 +1363,36 @@ pub fn check_suite_decls(
             ok_consts.push(c.clone());
         }
     }
+    // The variants of the suite's own sum types are values in its cases too: they
+    // may not clash with anything in scope, with each other, or with a suite
+    // `type` or `const`.
+    let item_names: HashSet<&str> = ok_types
+        .iter()
+        .map(|t| t.name.name.as_str())
+        .chain(ok_consts.iter().map(|c| c.name.name.as_str()))
+        .collect();
+    let mut variant_seen: HashSet<&str> = HashSet::new();
+    for t in &ok_types {
+        let TypeBody::Sum(sum) = &t.body else {
+            continue;
+        };
+        for v in &sum.variants {
+            let name = v.name.name.as_str();
+            if taken.contains(name) || item_names.contains(name) || !variant_seen.insert(name) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.suite.type_name_clash",
+                        v.name.span,
+                        format!(
+                            "the variant `{name}` of the suite type `{}` has the name of another value in scope in the suite's cases",
+                            t.name.name
+                        ),
+                    )
+                    .with_note("rename the variant; a bare variant name would read as either value"),
+                );
+            }
+        }
+    }
     add_suite_fns(
         resolved,
         SuiteItems {
