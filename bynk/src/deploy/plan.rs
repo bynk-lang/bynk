@@ -1141,12 +1141,6 @@ pub fn run(
                         );
                     }
                 }
-                // #1883, slice 1b: and the static files it now serves.
-                lock.record_assets(
-                    &opts.environment,
-                    worker,
-                    served_assets(&workers_dir.join(worker)),
-                );
                 if let Err(e) = write_lock(&lock_path, &lock) {
                     eprint!(
                         "{}",
@@ -1415,7 +1409,12 @@ pub(crate) fn shapes_to_accept(
             s.expected.clone(),
             shape.to_text(),
         );
-        if !out.contains(&entry) {
+        // One entry per contract hash: the `D()` marker is not hashed, so two
+        // shape texts can differ only in it (#2689).
+        if !out
+            .iter()
+            .any(|e| e.0 == entry.0 && e.1 == entry.1 && e.2 == entry.2)
+        {
             out.push(entry);
         }
     }
@@ -4347,11 +4346,13 @@ queue = "jobs"
                 name: "ok".into(),
                 ty: Shape::Base("Bool".into()),
                 preds: Vec::new(),
+                defaulted: false,
             }];
             fields.extend(extra.iter().map(|(n, t)| Field {
                 name: n.to_string(),
                 ty: t.clone(),
                 preds: Vec::new(),
+                defaulted: false,
             }));
             fields.sort_by_key(|f| f.name.clone());
             ServiceShape {

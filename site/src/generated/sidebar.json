@@ -238,6 +238,10 @@
             "link": "/book/guides/effects-and-capabilities/query-rows-into-a-record/"
           },
           {
+            "label": "Apply webhook events that arrive late, twice or out of order",
+            "link": "/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/"
+          },
+          {
             "label": "Rate-limit a route",
             "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
           },

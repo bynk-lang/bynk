@@ -3013,8 +3013,9 @@ served without running the Worker), `not_found_handling = "none"` (any other
 request reaches the Worker) and `html_handling = "none"` (an asset is served
 only at its exact path). A Worker with no assets gets none of these. The Bundle target ships no
 files, so a deployable Bundle build (one without tests) warns about each
-asset whose `.url` it emits (`bynk.asset.not_served`). `bynk deploy` records each Worker's served paths
-in `bynk.deploy.lock`.
+asset whose `.url` it emits (`bynk.asset.not_served`). `bynk deploy` does not record the served paths in
+`bynk.deploy.lock`: they are a function of the build, so the lock changes only
+when a resource or a contract does.
 
 **Single files.** A single file has no project root and no Worker, so building
 one that declares an asset is `bynk.asset.needs_project`. Checking it is

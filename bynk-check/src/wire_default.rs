@@ -126,7 +126,7 @@ pub fn lower_field_default_wire(
             )),
         },
         TypeRef::List(elem, _) => match &init.kind {
-            ExprKind::ListLit(items) => {
+            ExprKind::ListLit(items, ..) => {
                 let parts = items
                     .iter()
                     .map(|e| lower_field_default_wire(e, elem, types))
@@ -461,7 +461,7 @@ pub fn lower_field_default_value(
             )),
         },
         TypeRef::List(elem, _) => match &init.kind {
-            ExprKind::ListLit(items) => {
+            ExprKind::ListLit(items, ..) => {
                 let parts = items
                     .iter()
                     .map(|e| lower_field_default_value(e, elem, types))

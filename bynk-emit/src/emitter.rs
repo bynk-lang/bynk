@@ -3085,7 +3085,7 @@ fn collect_refs_in_expr(
                 collect_refs_in_expr(a, local_to_file, commons, ctx, out);
             }
         }
-        ExprKind::ListLit(elems) => {
+        ExprKind::ListLit(elems, ..) => {
             for el in elems {
                 collect_refs_in_expr(el, local_to_file, commons, ctx, out);
             }

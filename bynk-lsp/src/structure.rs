@@ -148,7 +148,7 @@ fn walk_expr(e: &Expr, out: &mut Vec<(Span, bool)>) {
             | ExprKind::Match { .. }
             | ExprKind::RecordConstruction { .. }
             | ExprKind::RecordSpread { .. }
-            | ExprKind::ListLit(_)
+            | ExprKind::ListLit(..)
             | ExprKind::Lambda(_)
     );
     out.push((e.span, foldable));

@@ -158,12 +158,16 @@ fn split_trivia(tokens: &[Token], source: &str) -> (Vec<Token>, TriviaTable) {
             // A `--|` doc line (#1888) ends past its newline the same way.
             // Nor does an opening `{`: no parser collects trivia right after
             // one, so its comment leads whatever follows instead, the first
-            // item or the `}` of an empty body (#1788).
+            // item or the `}` of an empty body (#1788). The same goes for a
+            // `[`: a list literal's first element or its `]` (#3067).
             if pending_leading.is_empty()
                 && filtered.last().is_some_and(|t| {
                     !matches!(
                         t.kind,
-                        TokenKind::DocBlock | TokenKind::DocLine | TokenKind::LBrace
+                        TokenKind::DocBlock
+                            | TokenKind::DocLine
+                            | TokenKind::LBrace
+                            | TokenKind::LBracket
                     )
                 })
                 && let Some(prev_end) = last_content_end

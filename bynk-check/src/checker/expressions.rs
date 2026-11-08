@@ -1822,7 +1822,7 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
         ExprKind::FieldAccess { receiver, .. } => body_performs_effects(receiver, ctx),
         ExprKind::Is { value, .. } => body_performs_effects(value, ctx),
         ExprKind::Val { args, .. } => args.iter().any(|a| body_performs_effects(a, ctx)),
-        ExprKind::ListLit(elems) => elems.iter().any(|e| body_performs_effects(e, ctx)),
+        ExprKind::ListLit(elems, ..) => elems.iter().any(|e| body_performs_effects(e, ctx)),
         // v0.117: observations and `trace` read the recorded call log — the
         // recording rides the *real* capability calls elsewhere in the body; the
         // observation expression itself performs no effect.
@@ -2194,7 +2194,7 @@ pub(crate) fn needs_expected_type(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::None | ExprKind::Ok(_) | ExprKind::Err(_) => true,
         ExprKind::Some(inner) => needs_expected_type(inner),
-        ExprKind::ListLit(items) => items.first().is_none_or(needs_expected_type),
+        ExprKind::ListLit(items, ..) => items.first().is_none_or(needs_expected_type),
         ExprKind::Paren(inner) => needs_expected_type(inner),
         // #2839 (Decision C): a bare `HttpResult`/`QueueResult` variant
         // (`NotFound`, `BadRequest("…")`, `HttpResult.NotFound`, `Ack`) types
