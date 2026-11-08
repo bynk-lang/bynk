@@ -426,10 +426,11 @@ export async function responseToHttpResult<T>(
   }
   const tag = known ?? "ServerError";
   switch (tag) {
-    // A 201 may be a `RawCreated` (#2403, L6), and a 200 a `Raw` or a
-    // `RawStreamed` (K-streams, #2623), whose body need not be JSON: it still
-    // reads as `Created` or `Ok`, with the body's text as the value when it
-    // does not parse. A 200 or 202 that says it is JSON must parse, so a
+    // A 201 may be a `RawCreated` (#2403, L6): it still reads as `Created`,
+    // with the body's text as the value when it does not parse. A 200 with a
+    // content type that is neither JSON nor an event stream reads as `Raw`
+    // (#3050, below); only a 200 with no content type falls through to `Ok`
+    // with the body's text. A 200 or 202 that says it is JSON must parse, so a
     // handler whose JSON breaks still fails its case.
     case "Ok":
     case "Accepted":
