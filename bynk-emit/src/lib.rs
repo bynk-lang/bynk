@@ -170,10 +170,10 @@ fn check_single_file(
 /// and for running Bynk's emitted TypeScript.
 ///
 /// Single source of truth for the Node floor: the emitted code targets it, the
-/// `bynk` driver's `doctor` command compares a detected `node` against it, rather than
-/// restating the number. Lives in
-/// `bynk-emit` (which emits the TS that runs on Node) so both binaries share one
-/// definition (slice 7; was a `bynkc` const before the driver dropped that dep).
+/// `bynk` driver's `doctor` command compares a detected `node` against it, so
+/// the number is stated once. Lives in `bynk-emit` (which emits the TS that runs
+/// on Node) so the driver and the emitter share one definition (slice 7; was a
+/// `bynkc` const before the driver dropped that dep).
 ///
 /// #1674: 22, the oldest Node major still in support (18 reached end-of-life in
 /// April 2025, 20 in April 2026), and the one `bynk test --inspect` needs. So
