@@ -1,0 +1,6 @@
+suite who
+
+case "a user sees their own id" {
+	let r <- api.GET("/me", Window { days: 7 }) by User("alice")
+	expect r == Ok("alice 7")
+}

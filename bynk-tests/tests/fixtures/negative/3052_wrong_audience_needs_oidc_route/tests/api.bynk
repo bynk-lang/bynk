@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "a token for another audience to a public route" {
+		let r <- api.GET("/health") by WrongAudience
+		expect r is Rejected(Unauthorized)
+	}
+}

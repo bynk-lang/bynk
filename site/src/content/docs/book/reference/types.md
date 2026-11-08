@@ -767,7 +767,10 @@ Careful, timeout: None, tags: Map.empty() }`, and `Options { name: "x", retries:
 
 Adding a field *with* a default doesn't break existing literals, which is why
 the first-party options records (`FetchOptions`, `QueueSend`, `KvGet`, `KvPut`,
-`R2Put`) give every field one. Changing a default changes every literal and
+`R2Put`) give every field one. A field added with a default to a type a service takes or returns is a compatible
+contract change: the callee ships first, and an older caller gets the default
+([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)).
+Changing a default changes every literal and
 every decode that relies on it, so treat it as a behaviour change. See
 [Add an option without breaking callers](/book/guides/program-structure/add-an-option/).
 

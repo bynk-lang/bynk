@@ -62,6 +62,7 @@
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
     - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
+    - [Apply webhook events that arrive late, twice or out of order](guides/effects-and-capabilities/apply-webhook-events-out-of-order.md)
     - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
     - [Cache responses at Cloudflare's edge](guides/effects-and-capabilities/cache-at-the-edge.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)

@@ -4726,7 +4726,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         // v0.20b: a list literal. Elements check against the expected
         // element type when one is supplied (so refined literals admit,
         // v0.9.4); an empty `[]` has no inferable element type without one.
-        ExprKind::ListLit(elems) => {
+        ExprKind::ListLit(elems, ..) => {
             let expected_elem = expected.and_then(|t| peel_to_list(t, tys));
             if elems.is_empty() {
                 match expected_elem {
@@ -5355,7 +5355,7 @@ fn check_unbound_effects(e: &Expr, allowed: bool, ctx: &mut Ctx) {
         ExprKind::Some(x) | ExprKind::Ok(x) | ExprKind::Err(x) => {
             check_unbound_effects(x, false, ctx);
         }
-        ExprKind::ListLit(args) => {
+        ExprKind::ListLit(args, ..) => {
             for a in args {
                 check_unbound_effects(a, false, ctx);
             }

@@ -3084,7 +3084,7 @@ fn collect_refs_in_expr(
                 collect_refs_in_expr(a, local_to_file, commons, ctx, out);
             }
         }
-        ExprKind::ListLit(elems) => {
+        ExprKind::ListLit(elems, ..) => {
             for el in elems {
                 collect_refs_in_expr(el, local_to_file, commons, ctx, out);
             }
@@ -4927,6 +4927,10 @@ pub struct SystemHttpClaims {
     /// primary member — the actor a call with no principal acts as. Its
     /// signing drivers take the acting actor's name.
     pub sum_routes: HashMap<(String, String, String), String>,
+    /// #3052: the `Oidc`-secured routes. Their valid-token drivers take the
+    /// claims to mint into the token, from the call-site principal's
+    /// `TokenClaims.of` lines (else none).
+    pub oidc_routes: HashSet<(String, String, String)>,
 }
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -5022,6 +5026,10 @@ pub(crate) struct LowerCtx<'a> {
     /// #2380 (L5): the call-site principal's claims (already lowered), for an
     /// `Oidc` handler's `deps.claims`.
     pub call_site_claims: Option<String>,
+    /// #3052: the lowered `"name: value"` lines of the call-site principal's
+    /// literal `TokenClaims.of(lines)`, which a `system` call mints an `Oidc`
+    /// token's claims from.
+    pub call_site_claim_lines: Option<String>,
     /// I3 (#1971): the call-site principal's actor name, beside
     /// [`Self::call_site_identity`], for a `call` sum's `deps.who`.
     pub call_site_actor: Option<String>,
@@ -5160,6 +5168,7 @@ impl<'a> LowerCtx<'a> {
             local_agent_vars: HashMap::new(),
             call_site_identity: None,
             call_site_claims: None,
+            call_site_claim_lines: None,
             call_site_actor: None,
             call_site_no_credential: false,
             call_site_bad_signature: None,
@@ -5772,6 +5781,12 @@ impl<'a> LowerCtx<'a> {
         match &self.mode {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
+            } if system_http_claims.oidc_routes.contains(route) => Some(format!(
+                "__bynkOidcClaims({})",
+                self.call_site_claim_lines.as_deref().unwrap_or("[]")
+            )),
+            BodyMode::IntegrationCase {
+                system_http_claims, ..
             } if system_http_claims.routes.contains(route) => Some(
                 self.call_site_actor
                     .as_ref()
@@ -5781,6 +5796,16 @@ impl<'a> LowerCtx<'a> {
             ),
             _ => None,
         }
+    }
+
+    /// #3052: whether this body is a `system` case on a target with an
+    /// `Oidc` route, whose calls mint their claims from `TokenClaims.of` lines.
+    pub(crate) fn is_system_oidc_body(&self) -> bool {
+        matches!(
+            &self.mode,
+            BodyMode::IntegrationCase { system_http_claims, .. }
+                if !system_http_claims.oidc_routes.is_empty()
+        )
     }
 
     /// #2155: the acting actor's name, as a string literal, for a signing

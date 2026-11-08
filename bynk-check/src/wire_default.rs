@@ -239,7 +239,7 @@ fn wire_in(
             )),
         },
         TypeRef::List(elem, _) => match &init.kind {
-            ExprKind::ListLit(items) => {
+            ExprKind::ListLit(items, ..) => {
                 let parts = items
                     .iter()
                     .map(|e| wire_in(e, elem, types, cx))
@@ -648,7 +648,7 @@ fn value_in(
             )),
         },
         TypeRef::List(elem, _) => match &init.kind {
-            ExprKind::ListLit(items) => {
+            ExprKind::ListLit(items, ..) => {
                 let parts = items
                     .iter()
                     .map(|e| value_in(e, elem, types, cx))

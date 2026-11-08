@@ -1,0 +1,13 @@
+context app.web
+
+service web from http {
+	--- Serve a page.
+	on GET("/") () -> Effect[HttpResult[()]] by Visitor {
+		Raw(Bytes.fromUtf8("<p>hi</p>"), "text/html")
+	}
+
+	--- Serve a page with a charset parameter.
+	on GET("/utf8") () -> Effect[HttpResult[()]] by Visitor {
+		Raw(Bytes.fromUtf8("<p>hi</p>"), "text/html; charset=utf-8")
+	}
+}

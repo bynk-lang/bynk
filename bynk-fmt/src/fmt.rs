@@ -2605,6 +2605,7 @@ impl<'a> Formatter<'a> {
         if b.statements.is_empty()
             && b.tail_leading_comments.is_empty()
             && !any_stmt_trivia
+            && !holds_list_comments(&b.tail)
             && self.fits(&format!("{{ {tail_oneline} }}"), reserve)
         {
             self.push("{ ");
@@ -2807,7 +2808,8 @@ impl<'a> Formatter<'a> {
             ExprKind::RecordSpread { overrides, .. } => !overrides.is_empty(),
             _ => false,
         };
-        if !braced_record && self.fits(&flat, reserve) {
+        // #3067: a list with a comment in it cannot be flattened.
+        if !braced_record && !holds_list_comments(e) && self.fits(&flat, reserve) {
             self.push(&flat);
             return;
         }
@@ -2869,17 +2871,29 @@ impl<'a> Formatter<'a> {
                 self.format_chain(e, reserve);
             }
             // `[a, b, c]` — one element per line.
-            ExprKind::ListLit(elems) if !elems.is_empty() => {
+            // #3067: comments above an element, at the end of its line, and
+            // before the `]` stay where they were.
+            ExprKind::ListLit(elems, trivia) if !elems.is_empty() || trivia.is_some() => {
                 self.push("[");
                 self.newline();
                 self.indented(|f| {
                     for (i, elem) in elems.iter().enumerate() {
                         let last = i + 1 == elems.len();
+                        let item = trivia.as_ref().and_then(|t| t.items.get(i));
+                        if let Some(item) = item {
+                            f.emit_leading_comments(&item.leading);
+                        }
+                        // A trailing comment rides the line after the `,`, so
+                        // the element only reserves room for the comma.
                         f.format_expr_at(elem, 0, if last { 0 } else { 1 });
                         if !last || f.opts.trailing_comma {
                             f.push(",");
                         }
-                        f.newline();
+                        let eol = item.and_then(|t| t.trailing.as_deref());
+                        f.emit_trailing_comment_or_newline(eol);
+                    }
+                    if let Some(t) = trivia {
+                        f.emit_trailing_comments(&t.closing);
                     }
                 });
                 self.push("]");
@@ -2909,7 +2923,7 @@ impl<'a> Formatter<'a> {
                 let tail = format!(" {} {}", op.name(), expr_with_prec(rhs, prec + 1));
                 // The right-hand side shares the operator's line whenever it is
                 // itself unbroken, so charge it to the left-hand side's budget.
-                let lhs_reserve = if tail.contains('\n') {
+                let lhs_reserve = if tail.contains('\n') || holds_list_comments(rhs) {
                     0
                 } else {
                     tail.chars().count() + reserve
@@ -3037,6 +3051,7 @@ impl<'a> Formatter<'a> {
     fn format_arg_list(&mut self, args: &[Expr], reserve: usize) -> bool {
         if let Some((last, leading)) = args.split_last()
             && (leading.is_empty() || is_block_like(last))
+            && !leading.iter().any(holds_list_comments)
             && self.try_layout(reserve, |f| {
                 for arg in leading {
                     f.push(&expr_with_prec(arg, 0));
@@ -3169,7 +3184,9 @@ impl<'a> Formatter<'a> {
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                if args.is_empty() || self.fits(&flat, reserve) {
+                if args.is_empty()
+                    || (!args.iter().any(holds_list_comments) && self.fits(&flat, reserve))
+                {
                     self.push(&flat);
                     return false;
                 }
@@ -3505,6 +3522,15 @@ fn bounds_text(bounds: &[Ident]) -> String {
         .map(|b| b.name.as_str())
         .collect::<Vec<_>>()
         .join(" + ")
+}
+
+/// #3067: whether `e` is, or holds, a list literal with a comment in it, which
+/// forces every enclosing expression off its flat form.
+fn holds_list_comments(e: &Expr) -> bool {
+    matches!(&e.kind, ExprKind::ListLit(_, Some(_)))
+        || bynk_syntax::ast::expr_children(e)
+            .into_iter()
+            .any(holds_list_comments)
 }
 
 #[cfg(test)]

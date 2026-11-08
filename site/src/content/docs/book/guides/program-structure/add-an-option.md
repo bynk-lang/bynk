@@ -73,6 +73,9 @@ there is no neutral choice and every caller must decide.
 - **An option may be a generic record.** `page: Paginated[String] = Paginated {}`
   is a default like any other; see
   [Field defaults](/book/reference/types/#field-defaults).
+- **Deploying it.** On a service's request or response type, a new field with a
+  default is a compatible change: deploy the callee first
+  ([Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)).
 
 **See also:** [Field defaults](/book/reference/types/#field-defaults),
 [Spec §5.2b](/book/spec/static-semantics/#field-defaults).

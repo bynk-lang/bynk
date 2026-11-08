@@ -1,5 +1,5 @@
 [project]
-name = "2150-system-oidc-route"
+name = "system-actor-identity-from-commons"
 version = "0.1.0"
 
 [paths]

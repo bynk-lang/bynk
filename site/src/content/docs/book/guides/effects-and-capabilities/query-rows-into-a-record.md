@@ -81,4 +81,5 @@ fn describe(rows: Result[List[Activity], SqlReadError]) -> String {
 }
 ```
 
-**See also:** [Reference, SQL databases: `D1`](/book/reference/bynk-capabilities/#sql-databases-d1).
+**See also:** [Reference, SQL databases: `D1`](/book/reference/bynk-capabilities/#sql-databases-d1),
+[Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/).

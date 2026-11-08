@@ -1172,10 +1172,19 @@ impl<'a> Parser<'a> {
             TokenKind::LBracket => {
                 let open = self.bump().unwrap();
                 let mut elems = Vec::new();
+                // #3067: comments above an element, and at the end of its line
+                // (after its `,`), ride along; `None` when the list has none.
+                let mut item_trivia = Vec::new();
                 if self.peek_kind() != Some(TokenKind::RBracket) {
                     loop {
+                        let leading = self.take_leading_trivia();
                         elems.push(self.parse_expr()?);
-                        if self.eat(TokenKind::Comma).is_none() {
+                        let comma = self.eat(TokenKind::Comma);
+                        item_trivia.push(Trivia {
+                            leading,
+                            trailing: self.take_trailing_trivia(),
+                        });
+                        if comma.is_none() {
                             break;
                         }
                         // Trailing comma before the closing bracket.
@@ -1184,10 +1193,23 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
+                let closing = self.take_leading_trivia();
                 let close = self.expect(TokenKind::RBracket, "to close the list literal")?;
+                let trivia = (closing.len()
+                    + item_trivia
+                        .iter()
+                        .filter(|t| !t.leading.is_empty() || t.trailing.is_some())
+                        .count()
+                    > 0)
+                .then(|| {
+                    Box::new(ListTrivia {
+                        items: item_trivia,
+                        closing,
+                    })
+                });
                 Ok(Expr {
                     id: self.alloc_expr_id(),
-                    kind: ExprKind::ListLit(elems),
+                    kind: ExprKind::ListLit(elems, trivia),
                     span: open.span.merge(close.span),
                 })
             }
