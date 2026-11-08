@@ -1,0 +1,2 @@
+bynk.types.bad_field_default
+only a record field

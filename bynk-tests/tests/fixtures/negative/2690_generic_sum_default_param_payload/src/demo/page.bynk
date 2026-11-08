@@ -1,0 +1,7 @@
+---
+#2690: a generic sum default whose payload is the record's parameter holds for one instantiation at most.
+---
+context demo.page
+
+type Outcome[T] = | Done(value: T) | Pending(reason: String)
+type Job[T] = { result: Outcome[T] = Done(1) }

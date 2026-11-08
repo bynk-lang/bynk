@@ -45,7 +45,8 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   `---` after code is three `-` operators. Record field defaults
   ([#2607](https://github.com/bynk-lang/bynk/issues/2607)) name a
   follow-up: defaults on a field whose type applies a user generic. An added
-  defaulted field is a compatible service-contract change. The agent schema lock now
+  defaulted field is a compatible service-contract change. A field whose type
+  applies a user generic may now carry a default. The agent schema lock now
   counts a defaulted field
   ([#2676](https://github.com/bynk-lang/bynk/issues/2676)) or a sum variant
   ([#2691](https://github.com/bynk-lang/bynk/issues/2691)) added inside stored state as

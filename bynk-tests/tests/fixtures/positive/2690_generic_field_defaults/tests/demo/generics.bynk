@@ -1,0 +1,54 @@
+---
+#2690: generic field defaults, proved at runtime.
+---
+suite demo.generics
+
+case "a literal that leaves a concrete generic field out takes its default" {
+  let s = search("q")
+  expect s.page.items == ["first"]
+  expect s.page.next == None
+  expect s.outcome == pending("queued")
+}
+
+case "a written field keeps its value" {
+  let s = Search { query: "q", page: Paginated { items: ["x"] }, outcome: Done(1) }
+  expect s.page.items == ["x"]
+  expect s.outcome == Done(1)
+}
+
+case "a body without the key decodes to the concrete default" {
+  let s = decodedSearch("{\"query\":\"j\"}")
+  expect s.query == "j"
+  expect s.page.items == ["first"]
+  expect s.outcome == pending("queued")
+}
+
+case "a present key decodes as sent" {
+  let s = decodedSearch("{\"query\":\"j\",\"page\":{\"items\":[]}}")
+  expect s.page.items.length() == 0
+}
+
+case "a pass-through default holds at an instantiation" {
+  let c = cache("k")
+  expect c.warm.items.length() == 0
+  expect c.warm.next == None
+  expect isPending(c.last, "cold")
+}
+
+case "a pass-through default is applied when decoding" {
+  let c = decodedCache("{\"key\":\"j\"}")
+  expect c.key == "j"
+  expect c.warm.items.length() == 0
+  expect isPending(c.last, "cold")
+}
+
+case "the generic decode path applies the pass-through default" {
+  match decodedCacheOf[String]("{\"key\":\"g\"}") {
+    Some(c) => {
+      expect c.key == "g"
+      expect c.warm.items.length() == 0
+      expect isPending(c.last, "cold")
+    }
+    None => { expect false }
+  }
+}
