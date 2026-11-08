@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A field added to a service's request or response type with a default is a compatible contract change, so a callee deploys ahead of its callers; the contract hash still covers the field, and the stored shape records which fields have a default (shape text with a default is unreadable by earlier versions, so upgrade every deployer together)
----
+# 0751 — A field with a default is compatible in the service-contract classifier, and the hash is unchanged
 
-## ADR: field-default-contract-compat
-title: A field with a default is compatible in the service-contract classifier, and the hash is unchanged
-summary: The hash keeps covering defaulted fields; the classifier, through a marker in the stored shape, credits a receiver's default for an absent field
+- **Status:** Accepted (v0.515)
 
 **Context.** ADR 0676 E left a follow-on: adding a field with a default still
 changes a service's contract hash, so a callee that adds one needed every caller

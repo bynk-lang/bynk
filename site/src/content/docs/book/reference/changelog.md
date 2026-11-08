@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.514**.
+written against **v0.515**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.515.0** | A field added to a service's request or response type with a default is a compatible contract change, so a callee deploys ahead of its callers; the contract hash still covers the field, and the stored shape records which fields have a default (shape text with a default is unreadable by earlier versions, so upgrade every deployer together) |
 | **v0.514.3** | "`bynk fmt` keeps a comment between the elements of a list literal (#3067)" |
 | **v0.514.2** | "`bynk.deploy.lock` no longer lists each Worker's static assets by hashed name, so a release that changes only pages leaves the lock unchanged (an existing lock loses its `assets` lines on its next write)" |
 | **v0.514.1** | A `system` suite resolves an actor's `identity` type declared in a `commons` the context uses, so `by User("alice")` is accepted |
