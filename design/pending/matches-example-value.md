@@ -36,6 +36,11 @@ parameter or body field lost its *answers* case. Proposed in #2686.
 - **E. `for all` and `History` are unchanged.** An example is one value, so a
   property over it would run one case under a count of many, which misreports
   coverage. They still raise `bynk.val.needs_pin`.
+- **B2. Named-type fields.** An `@example` on a field whose type is a named type
+  is refused (`bynk.types.example_on_named_field`): the example belongs on the
+  type. A field that narrows a named type needing a pin with extra inline
+  predicates still needs a pin, because the type's example was checked only
+  against the type's own predicates.
 - **F. Where it is read.** Bare `Val` only (also through a record or sum), and a
   pin overrides it. Not the contract, OpenAPI or the emitted program.
 

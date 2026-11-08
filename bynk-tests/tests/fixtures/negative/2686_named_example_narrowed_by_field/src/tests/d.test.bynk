@@ -1,0 +1,6 @@
+suite demo.d {
+  case "a narrowed named example is not used" {
+    let r = Val[R]
+    expect r == r
+  }
+}

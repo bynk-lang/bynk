@@ -184,12 +184,12 @@ reason 1.x keeps moving; they are not a reason to delay 1.0.
   breaking increment and one state migration — as *evidence the promise actually
   holds*. That is a **validation** bar layered on top of this **definition** bar:
   this record says what 1.0 *is*; §7(5) says how you'd know it's real. §7(5)
-  stays open on the tracking issue.
+  is tracked on [#3055](https://github.com/bynk-lang/bynk/issues/3055).
 
 ## Out of scope here
 
 This record settles the 1.0 definition; the other §7(4) bullets (monthly
 milestone cadence, README/about drift guards) are settled in
 [`bynk-release-discipline.md`](bynk-release-discipline.md). The rest of §7 — the
-honest comparison page (§7(3)) and the two-production-deployment validation bar
-(§7(5)) — remains open on [#540](https://github.com/accuser/bynk/issues/540).
+honest comparison page (§7(3)), since written, and the two-production-deployment
+validation bar (§7(5)), now tracked on [#3055](https://github.com/bynk-lang/bynk/issues/3055).

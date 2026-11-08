@@ -846,6 +846,7 @@ fn lower_effect_let_value(
     // address-call lowering to fold into that call's deps.
     let saved_identity = cx.call_site_identity.take();
     let saved_claims = cx.call_site_claims.take();
+    let saved_claim_lines = cx.call_site_claim_lines.take();
     let saved_actor = cx.call_site_actor.take();
     let saved_no_credential = cx.call_site_no_credential;
     cx.call_site_no_credential = false;
@@ -863,13 +864,38 @@ fn lower_effect_let_value(
             cx.call_site_bad_signature = Some(variant);
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
-            cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
+            // #3052: a `system` call mints its `Oidc` token's claims from the
+            // lines of a literal `TokenClaims.of(lines)` (the checker admits
+            // no other form there, `bynk.test.system_claims_need_literal`),
+            // and never builds the in-process `TokenClaims` value, so the
+            // lines are lowered once and in place of it.
+            let literal_lines = match principal.claims.as_deref().map(|c| &c.kind) {
+                Some(ExprKind::MethodCall {
+                    receiver,
+                    method,
+                    args,
+                    ..
+                }) if cx.is_system_oidc_body()
+                    && method.name == "of"
+                    && args.len() == 1
+                    && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "TokenClaims") =>
+                {
+                    Some(&args[0])
+                }
+                _ => None,
+            };
+            if let Some(lines) = literal_lines {
+                cx.call_site_claim_lines = Some(pre.lower(lines, cx));
+            } else {
+                cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
+            }
             cx.call_site_actor = Some(principal.actor.name.clone());
         }
     }
     let value = pre.lower(&l.value, cx);
     cx.call_site_identity = saved_identity;
     cx.call_site_claims = saved_claims;
+    cx.call_site_claim_lines = saved_claim_lines;
     cx.call_site_actor = saved_actor;
     cx.call_site_no_credential = saved_no_credential;
     cx.call_site_bad_signature = saved_bad_signature;
@@ -1769,6 +1795,9 @@ fn bad_signature_driver(actor: &str) -> Option<&'static str> {
         "Forged" => Some("forged"),
         "Stale" => Some("stale"),
         "Expired" => Some("expired"),
+        // #3052: an `Oidc` route's token for another issuer or audience.
+        "WrongIssuer" => Some("wrongissuer"),
+        "WrongAudience" => Some("wrongaudience"),
         _ => None,
     }
 }

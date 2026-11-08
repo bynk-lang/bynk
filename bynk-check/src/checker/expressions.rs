@@ -590,9 +590,22 @@ fn can_mock_bare(
                 // #2658: an inline `where` on a field needs a pin exactly as
                 // a declared refined type's does.
                 TypeBody::Record(r) => r.fields.iter().all(|f| {
-                    !f.refinement
-                        .as_ref()
-                        .is_some_and(refinement_needs_pin_without_example)
+                    // #2686: a named type's example is checked against its own
+                    // predicates only, so one reached through a field with
+                    // extra inline predicates may violate them: pin instead.
+                    let named_example_narrowed = f.refinement.is_some()
+                        && match &f.type_ref {
+                            TypeRef::Named(id) => types
+                                .get(&id.name)
+                                .and_then(|d| type_decl_refinement(d))
+                                .is_some_and(refinement_needs_pin),
+                            _ => false,
+                        };
+                    !named_example_narrowed
+                        && !f
+                            .refinement
+                            .as_ref()
+                            .is_some_and(refinement_needs_pin_without_example)
                         && resolve_type_ref(&f.type_ref, types, tys)
                             .is_some_and(|t| can_mock_bare(t, types, depth - 1, tys))
                 }),

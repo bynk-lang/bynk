@@ -623,7 +623,7 @@ test("responseToHttpResult: a 201 reads as Created, whether or not its body is J
 });
 
 // K-streams (#2623): a `Raw` or `RawStreamed` 200 need not be JSON either.
-test("responseToHttpResult: a 200 reads as Ok, whether or not its body is JSON", async () => {
+test("responseToHttpResult: a JSON 200 reads as Ok, a non-JSON one as Raw (#3050)", async () => {
   const asString = (j: JsonValue) =>
     typeof j === "string" ? ({ tag: "Ok", value: j } as const) : ({ tag: "Err", error: {} } as never);
   const json = await responseToHttpResult(
@@ -640,7 +640,17 @@ test("responseToHttpResult: a 200 reads as Ok, whether or not its body is JSON",
     ),
     id,
   );
-  assert.deepEqual(await responseToHttpResult(streamed, asString), { tag: "Ok", value: "hello, world" });
+  assert.deepEqual(await responseToHttpResult(streamed, asString), {
+    tag: "Raw",
+    body: new TextEncoder().encode("hello, world"),
+    contentType: "text/plain",
+  });
+  // The content type comes back verbatim, parameters and all.
+  const page = await responseToHttpResult(
+    httpResultToResponse(HttpResult.Raw(new TextEncoder().encode("<p>"), "text/html; charset=utf-8"), id),
+    asString,
+  );
+  assert.equal((page as { contentType: string }).contentType, "text/html; charset=utf-8");
   // A 200 that says it is JSON but doesn't parse still fails.
   await assert.rejects(
     responseToHttpResult(

@@ -500,6 +500,138 @@ fn a_lax_bearer_verifier_fails_the_forged_and_expired_cases() {
     assert!(passed(&lax_exp, "an expired token is not handled"));
 }
 
+/// #3052: an `Oidc` route's `by Forged`, `by Expired`, `by WrongIssuer` and
+/// `by WrongAudience` must be able to fail. Each check of the emitted `Oidc`
+/// verifier is turned off in turn, and exactly the cases that rely on it must
+/// turn red.
+#[test]
+fn a_lax_oidc_verifier_fails_the_refusal_cases() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: the `tsc` shim is a POSIX shell script");
+        return;
+    }
+    if !(tool_exists("tsc") && tool_exists("node")) {
+        if require::is_required(REQUIRE_ENV) {
+            panic!("tsc and node are required, but {REQUIRE_ENV} is set and one is missing");
+        }
+        eprintln!("\n!!! MUTATION TEST SKIPPED !!!\nit needs `tsc` and `node` on PATH.\n");
+        return;
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3052_system_oidc_refusals");
+    let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("behaviour-fixtures");
+    let passed = |cases: &[(String, bool)], name: &str| {
+        cases
+            .iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("no case `{name}` ran"))
+            .1
+    };
+    // (the check turned off, the case that relies on it, the inverted claim
+    // that then holds, the cases that must stay green)
+    let checks: [(&str, &str, &str, &str, [&str; 3]); 4] = [
+        (
+            "sig",
+            r#"return Err("bad signature")"#,
+            "a forged token is refused",
+            "a forged token is not handled",
+            [
+                "an expired token is refused",
+                "a token for another issuer is refused",
+                "a token for another audience is refused",
+            ],
+        ),
+        (
+            "exp",
+            r#"return Err("token expired")"#,
+            "an expired token is refused",
+            "an expired token is not handled",
+            [
+                "a forged token is refused",
+                "a token for another issuer is refused",
+                "a token for another audience is refused",
+            ],
+        ),
+        (
+            "iss",
+            r#"return Err("issuer mismatch")"#,
+            "a token for another issuer is refused",
+            "a token for another issuer is not handled",
+            [
+                "a forged token is refused",
+                "an expired token is refused",
+                "a token for another audience is refused",
+            ],
+        ),
+        (
+            "aud",
+            r#"return Err("audience mismatch")"#,
+            "a token for another audience is refused",
+            "a token for another audience is not handled",
+            [
+                "a forged token is refused",
+                "an expired token is refused",
+                "a token for another issuer is refused",
+            ],
+        ),
+    ];
+    for (tag, needle, refused, inverted, stays_green) in checks {
+        let lax = run_mutated(&fixture, &scratch, &format!("oidc-{tag}"), needle);
+        assert!(!passed(&lax, refused), "{tag}: `{refused}` should fail");
+        assert!(passed(&lax, "a missing token is refused"), "{tag}");
+        assert!(passed(&lax, inverted), "{tag}: `{inverted}` should hold");
+        for case in stays_green {
+            assert!(passed(&lax, case), "{tag}: `{case}` should stay green");
+        }
+    }
+}
+
+/// #3052: nothing in the production Worker accepts the test issuer. The test
+/// issuer (its key pair, its `kid`, its `fetch` wrapper) lives only in the
+/// generated test module, so none of it is in a fixture's emitted Workers.
+#[test]
+fn the_emitted_worker_holds_no_test_issuer() {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).expect("read dir").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3052_system_oidc_refusals/expected");
+    let mut files = Vec::new();
+    walk(&fixture.join("workers"), &mut files);
+    assert!(
+        !files.is_empty(),
+        "no emitted Worker files under {fixture:?}"
+    );
+    for file in files {
+        let text = fs::read_to_string(&file).unwrap_or_default();
+        for needle in [
+            "bynk-test-issuer",
+            "generateKey",
+            "__bynkOidc",
+            "__bynkTestOidc",
+        ] {
+            assert!(
+                !text.contains(needle),
+                "{} holds test-issuer code (`{needle}`)",
+                file.display()
+            );
+        }
+    }
+    let tests = fs::read_to_string(fixture.join("tests/integration_ci_api.test.ts"))
+        .expect("the test module is blessed");
+    assert!(
+        tests.contains("__bynkOidcToken"),
+        "the test module mints tokens"
+    );
+}
+
 #[cfg(test)]
 mod marker {
     use super::*;

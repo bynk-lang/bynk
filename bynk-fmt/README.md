@@ -54,7 +54,7 @@ annotation printers to render types and signatures for hover.
 
 ```toml
 [dependencies]
-bynk-fmt = "0.512"
+bynk-fmt = "0.514"
 ```
 
 ```rust

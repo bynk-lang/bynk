@@ -33,6 +33,24 @@ pub(crate) fn check_type_decl(
                     // Inline refinements on fields must apply to the field's base type.
                     if let Some(b) = field_base_type(&f.type_ref, types) {
                         check_refinement(b, f.type_ref.span(), Some(ref_r), errors);
+                        // #2686: an example is the field's own value only where
+                        // the field is a base type; a named type's example is
+                        // the type's, checked at its declaration.
+                        if matches!(f.type_ref, TypeRef::Named(_)) {
+                            for ann in &ref_r.annotations {
+                                errors.push(
+                                    CompileError::new(
+                                        "bynk.types.example_on_named_field",
+                                        ann.span,
+                                        format!(
+                                            "`@{}` on field `{}` of a named type has no effect",
+                                            ann.name.name, f.name.name
+                                        ),
+                                    )
+                                    .with_note("put the `@example` on the named type's declaration instead"),
+                                );
+                            }
+                        }
                     } else {
                         errors.push(CompileError::new(
                             "bynk.types.field_refinement_not_base",

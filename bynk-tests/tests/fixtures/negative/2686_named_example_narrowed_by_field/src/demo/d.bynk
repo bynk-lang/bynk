@@ -1,0 +1,5 @@
+commons demo.d
+
+type Code = String where Matches("[A-Z]{3}") @example("ABC")
+// The field narrows Code with MaxLength(2), which "ABC" violates: pin instead.
+type R = { c: Code where MaxLength(2) }
