@@ -471,7 +471,7 @@ fn migrate_signed_headers(key: &str, path: &str, body: &str) -> Vec<(String, Str
         .as_secs()
         .to_string();
     let script = r#"const c = require("node:crypto");
-const [key, input, body] = process.argv.slice(1);
+const [key, input, body] = process.argv.slice(2);
 const digest = c.createHash("sha256").update(body, "utf8").digest("hex");
 process.stdout.write(c.createHmac("sha256", key).update(input + digest, "utf8").digest("hex"));"#;
     let input = wf::signing_input(
@@ -1100,7 +1100,7 @@ service api from http {
 /// received, a JSON array of arrays in client order. Every await is bounded, so
 /// a misrouted upgrade fails fast with a message rather than hanging.
 const WS_CLIENTS_JS: &str = r#"
-const [port, expectedArg, ...queries] = process.argv.slice(1);
+const [port, expectedArg, ...queries] = process.argv.slice(2);
 const expected = Number(expectedArg);
 const within = (p, ms, what) => Promise.race([
   p,
@@ -1148,21 +1148,28 @@ fn broadcast_reaches_clients(
         .next()
         .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
         .expect("the served url carries a port");
-    let out = base_command("node")
-        .args([
-            "-e",
-            WS_CLIENTS_JS,
-            &port.to_string(),
-            &expected.to_string(),
-        ])
+    // A script file run by `node` itself: `base_command` would route through
+    // `cmd /C` on Windows, which ends a `-e` argument at its first newline and
+    // runs nothing (exit 0, empty stdout). `node` is an executable, not an npm
+    // `.cmd` shim, so it needs no such routing.
+    let script = served.tmp.join("ws-clients.js");
+    fs::write(&script, WS_CLIENTS_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(expected.to_string())
         .args(queries)
         .output()
         .expect("node runs");
-    assert!(
-        out.status.success(),
-        "the clients must receive the broadcast:\nstdout: {}\nstderr: {}",
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the clients must receive the broadcast:\n{report}"
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     let frame = r#""{\"text\":\"hello\"}""#;
@@ -1178,7 +1185,7 @@ fn broadcast_reaches_clients(
     assert_eq!(
         stdout.trim(),
         format!("[{}]", want.join(",")),
-        "the clients on the broadcast's key receive the one frame; the others none"
+        "the clients on the broadcast's key receive the one frame; the others none\n{report}"
     );
 }
 
