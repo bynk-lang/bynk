@@ -68,8 +68,9 @@ pub(crate) struct Located {
     /// The newest deployment of any trigger: the version whose facts describe
     /// what is live (a secret change keeps the code and the variables).
     pub(crate) live_version: String,
-    /// The newest non-secret deployment's id, re-read before the rollback.
-    pub(crate) live_code_deployment: String,
+    /// That deployment's id: re-read before the rollback, so a deploy *or* a
+    /// secret change made after the plan stops the revert.
+    pub(crate) live_deployment: String,
     pub(crate) live_code_created: String,
     /// The version the revert goes back to.
     pub(crate) target_version: String,
@@ -77,70 +78,69 @@ pub(crate) struct Located {
     pub(crate) secret_changes: usize,
 }
 
+const GRADUAL: &str = "a gradual deployment is in progress (traffic is split between versions); finish or cancel it first";
+
 /// Find the live and target versions in `deployments` (newest first).
 ///
-/// The target is the upload *before the live code version*, not the
-/// deployment before the live deployment: after a revert the list reads
-/// `rollback→v1, upload→v2, upload→v1, …`, and the entry beside the live one
-/// is the bad release. A rollback deployment adds no code, and a secret change
-/// mints a version with the same code, so neither counts as a step back.
+/// The target is the deployment immediately before the *upload of the live
+/// code version*: what was live, secrets included, just before the release
+/// being left. Going back to an older *upload* instead would restore the
+/// secret values from before any rotation in between. Other deployments are
+/// read as follows. A rollback deployment re-activates a version and adds no
+/// code, so the live code version is found by its own upload, and a second
+/// revert goes back past that upload rather than to the release just left.
+/// A secret change mints a version with the same code, so it never counts as
+/// the live code, but it can be a target (it is what was live).
 pub(crate) fn locate(deployments: &[Deployment], to: Option<&str>) -> Result<Located, String> {
     let newest = deployments
         .first()
         .ok_or("Cloudflare lists no deployment for it")?;
-    let live_version = newest
-        .sole_version()
-        .ok_or("a gradual deployment is in progress (traffic is split between versions); finish or cancel it first")?
-        .to_string();
+    let live_version = newest.sole_version().ok_or(GRADUAL)?.to_string();
     let live_code = deployments
         .iter()
         .find(|d| !d.is_secret())
         .ok_or("every listed deployment is a secret change; the code's history is out of view")?;
-    let live_code_version = live_code
-        .sole_version()
-        .ok_or("a gradual deployment is in progress (traffic is split between versions); finish or cancel it first")?
-        .to_string();
-    // The uploads, newest first, each version once.
-    let mut uploads: Vec<(&str, usize)> = Vec::new();
-    for (i, d) in deployments.iter().enumerate() {
-        if d.is_secret() || d.is_rollback() {
-            continue;
-        }
-        if let Some(v) = d.sole_version()
-            && !uploads.iter().any(|(seen, _)| *seen == v)
-        {
-            uploads.push((v, i));
-        }
-    }
-    let target = match to {
+    let live_code_version = live_code.sole_version().ok_or(GRADUAL)?.to_string();
+    let target_index = match to {
         Some(id) => {
-            if id == live_code_version {
+            if id == live_code_version || id == live_version {
                 return Err(format!("version `{id}` is the one already live"));
             }
-            *uploads
+            deployments
                 .iter()
-                .find(|(v, _)| *v == id)
-                .ok_or_else(|| format!("version `{id}` is not among the Worker's listed uploads"))?
+                .position(|d| d.sole_version() == Some(id))
+                .ok_or_else(|| {
+                    format!("version `{id}` is not among the Worker's listed deployments")
+                })?
         }
         None => {
-            let live_at = uploads
+            let upload = deployments
                 .iter()
-                .position(|(v, _)| *v == live_code_version)
-                .ok_or("the live version is not among the listed uploads, so its predecessor cannot be told")?;
-            *uploads
-                .get(live_at + 1)
-                .ok_or("there is no earlier version in the Worker's listed history")?
+                .position(|d| {
+                    !d.is_secret()
+                        && !d.is_rollback()
+                        && d.sole_version() == Some(live_code_version.as_str())
+                })
+                .ok_or("the live version's own upload is out of the listed history, so what preceded it cannot be told")?;
+            if upload + 1 >= deployments.len() {
+                return Err("there is no earlier deployment in the Worker's listed history".into());
+            }
+            upload + 1
         }
     };
-    let secret_changes = deployments[..target.1]
+    let target = deployments[target_index].sole_version().ok_or(GRADUAL)?;
+    if target == live_code_version || target == live_version {
+        return Err(format!("version `{target}` is the one already live"));
+    }
+    let secret_changes = deployments[..target_index]
         .iter()
         .filter(|d| d.is_secret())
         .count();
     Ok(Located {
         live_version,
-        live_code_deployment: live_code.id.clone(),
+        live_deployment: newest.id.clone(),
         live_code_created: live_code.created_on.clone(),
-        target_version: target.0.to_string(),
+        target_version: target.to_string(),
         secret_changes,
     })
 }
@@ -485,8 +485,7 @@ pub(crate) fn revert_order(workers: &BTreeMap<String, &Facts>) -> Vec<String> {
         let next = remaining
             .iter()
             .find(|w| {
-                // `w` is ready when no other remaining Worker is called by... no:
-                // callers first means nothing remaining calls `w`.
+                // Callers first: `w` is next when nothing remaining calls it.
                 !remaining.iter().any(|other| {
                     other != *w
                         && workers[other]
@@ -572,6 +571,9 @@ pub(crate) struct RevertPlan {
     /// In the order they would be reverted.
     pub(crate) workers: Vec<WorkerPlan>,
     pub(crate) ok: bool,
+    /// What to know before confirming: today, that a whole-project revert
+    /// steps every Worker back, whatever the last release touched.
+    pub(crate) notes: Vec<String>,
 }
 
 impl RevertPlan {
@@ -596,6 +598,9 @@ impl RevertPlan {
                     "  bynk.deploy.lock: unchanged\n"
                 });
             }
+        }
+        for note in &self.notes {
+            out.push_str(&format!("note: {note}\n"));
         }
         out.push_str(if self.ok {
             "Every check passed.\n"
@@ -630,16 +635,33 @@ pub(crate) fn plan(
     let mut early: BTreeMap<String, Vec<Finding>> = BTreeMap::new();
     for worker in workers {
         let script = deployed_worker_name(environment, worker);
-        let deployments = api.deployments(&script)?;
-        let loc =
-            locate(&deployments, opts.to.as_deref()).map_err(|e| format!("`{script}`: {e}"))?;
-        let read = |version: &str| -> Result<Option<Facts>, String> {
-            Ok(api
-                .version_facts(&script, version)?
-                .and_then(|t| Facts::decode(&t)))
+        // Anything that cannot be read or placed for one Worker is that
+        // Worker's refusal, not the run's error.
+        let outcome = (|| -> Result<(Located, Option<Facts>, Option<Facts>), String> {
+            let deployments = api
+                .deployments(&script)
+                .map_err(|e| format!("could not read the deployments: {e}"))?;
+            let loc = locate(&deployments, opts.to.as_deref())?;
+            let read = |version: &str| -> Result<Option<Facts>, String> {
+                Ok(api
+                    .version_facts(&script, version)
+                    .map_err(|e| format!("could not read version `{version}`: {e}"))?
+                    .and_then(|t| Facts::decode(&t)))
+            };
+            let live = read(&loc.live_version)?;
+            let target = read(&loc.target_version)?;
+            Ok((loc, live, target))
+        })();
+        let (loc, live, target) = match outcome {
+            Ok(found) => found,
+            Err(why) => {
+                early.insert(
+                    worker.clone(),
+                    vec![Finding::refused("history", worker.as_str(), why)],
+                );
+                continue;
+            }
         };
-        let live = read(&loc.live_version)?;
-        let target = read(&loc.target_version)?;
         match (live, target) {
             (Some(l), Some(t)) => {
                 live_facts.insert(worker.clone(), l);
@@ -676,10 +698,10 @@ pub(crate) fn plan(
     let accepted: BTreeSet<String> = opts.accept_schema_ahead.iter().cloned().collect();
     let mut plans: BTreeMap<String, WorkerPlan> = BTreeMap::new();
     for worker in workers {
-        let loc = &located[worker];
+        let loc = located.get(worker);
         let script = deployed_worker_name(environment, worker);
-        let (checks, lock_changes) = match (live_facts.get(worker), target_facts.get(worker)) {
-            (Some(live), Some(target)) => {
+        let (checks, lock_changes) = match (loc, live_facts.get(worker), target_facts.get(worker)) {
+            (Some(loc), Some(live), Some(target)) => {
                 let mut applied = BTreeMap::new();
                 for binding in databases_to_read(live, target) {
                     let result = match live.ids.get(&binding).or_else(|| target.ids.get(&binding)) {
@@ -688,22 +710,17 @@ pub(crate) fn plan(
                     };
                     applied.insert(binding, result);
                 }
-                let settled = std::time::SystemTime::from(
-                    time::OffsetDateTime::parse(
-                        &loc.live_code_created,
-                        &time::format_description::well_known::Rfc3339,
-                    )
-                    .map_err(|e| {
-                        format!(
-                            "unreadable deployment time `{}`: {e}",
-                            loc.live_code_created
-                        )
-                    })?,
-                );
-                let inside_margin = now
-                    .duration_since(settled)
-                    .map(|age| age < SETTLING_MARGIN)
-                    .unwrap_or(true);
+                // An unreadable time cannot show the live code is old enough
+                // for an empty listing to count, so it reads as just deployed.
+                let inside_margin = time::OffsetDateTime::parse(
+                    &loc.live_code_created,
+                    &time::format_description::well_known::Rfc3339,
+                )
+                .ok()
+                .map(std::time::SystemTime::from)
+                .and_then(|settled| now.duration_since(settled).ok())
+                .map(|age| age < SETTLING_MARGIN)
+                .unwrap_or(true);
                 let mut stored = BTreeMap::new();
                 for class in classes_to_probe(live, target) {
                     let agent = class.rsplit_once('.').map_or(class.as_str(), |(_, a)| a);
@@ -743,8 +760,8 @@ pub(crate) fn plan(
             WorkerPlan {
                 worker: worker.clone(),
                 script,
-                live_version: loc.live_version.clone(),
-                target_version: loc.target_version.clone(),
+                live_version: loc.map(|l| l.live_version.clone()).unwrap_or_default(),
+                target_version: loc.map(|l| l.target_version.clone()).unwrap_or_default(),
                 checks,
                 ok,
                 lock_changes,
@@ -770,6 +787,11 @@ pub(crate) fn plan(
         plan: RevertPlan {
             version: 1,
             environment: environment.to_string(),
+            notes: if workers.len() > 1 && opts.context.is_none() {
+                vec!["Every Worker goes back to its own previous deployment, whatever the last release touched. If the last release changed one context, revert just that one with `--context`.".to_string()]
+            } else {
+                Vec::new()
+            },
             workers: ordered,
             ok,
         },
@@ -809,11 +831,10 @@ pub(crate) fn execute(
                 w.script
             ))
         })?;
-        let still = current
-            .iter()
-            .find(|d| !d.is_secret())
-            .map(|d| d.id.as_str());
-        if still != Some(loc.live_code_deployment.as_str()) {
+        // The newest deployment of any trigger, not only the newest code
+        // deployment: a secret change made since the plan (a concurrent sweep,
+        // say) would otherwise be undone by the rollback without a word.
+        if current.first().map(|d| d.id.as_str()) != Some(loc.live_deployment.as_str()) {
             return Err(Stopped::Moved(w.script.clone()));
         }
         api.rollback(&w.script, &w.target_version)
@@ -891,10 +912,19 @@ impl Account for LiveAccount<'_> {
     }
 
     fn applied_migrations(&self, database_id: &str) -> Result<Vec<String>, String> {
-        let body = self.rest.post(
-            &format!("/d1/database/{database_id}/query"),
-            &serde_json::json!({ "sql": "SELECT name FROM d1_migrations ORDER BY id" }),
-        )?;
+        let body = self
+            .rest
+            .post(
+                &format!("/d1/database/{database_id}/query"),
+                &serde_json::json!({ "sql": "SELECT name FROM d1_migrations ORDER BY id" }),
+            )
+            .map_err(|e| {
+                if e.contains("no such table") {
+                    "the database has no `d1_migrations` table: no migration has been applied to it yet, or it records them under another name; Bynk reads the default table, so this is refused rather than assumed empty".to_string()
+                } else {
+                    e
+                }
+            })?;
         Ok(body["result"][0]["results"]
             .as_array()
             .map(|rows| {
@@ -953,6 +983,9 @@ pub fn revert(root: &Path, opts: &RevertOptions) -> ExitCode {
 }
 
 fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
+    if opts.to.is_some() && opts.context.is_none() {
+        return Err("`--to` names one Worker's version, so it needs `--context`".to_string());
+    }
     let lock_path = root.join(LOCK_FILE);
     let mut lock = read_lock(&lock_path)?;
     let mut workers = lock.deployed_workers(&opts.environment);
@@ -1105,7 +1138,7 @@ mod tests {
     }
 
     #[test]
-    fn the_target_is_the_upload_before_the_live_one() {
+    fn the_target_is_what_was_live_just_before_the_live_upload() {
         let h = [
             dep("d3", "upload", "v3"),
             dep("d2", "upload", "v2"),
@@ -1120,7 +1153,21 @@ mod tests {
     }
 
     #[test]
-    fn a_second_revert_goes_further_back_not_forward_to_the_bad_release() {
+    fn a_secret_rotation_between_the_uploads_is_kept_not_rolled_back() {
+        // Newest first: upload v3, secret v2s, upload v2. What was live before the
+        // bad v3 is v2s (v2's code with the rotated secret), not v2.
+        let h = [
+            dep("d3", "upload", "v3"),
+            dep("d2s", "secret", "v2s"),
+            dep("d2", "upload", "v2"),
+        ];
+        let l = locate(&h, None).unwrap();
+        assert_eq!(l.target_version, "v2s");
+        assert_eq!(l.secret_changes, 0, "no secret changed after the target");
+    }
+
+    #[test]
+    fn a_second_revert_goes_back_past_the_live_upload_not_to_the_bad_release() {
         // After reverting v3 -> v2 the list reads rollback->v2, upload v3, v2, v1.
         let h = [
             dep("d4", "rollback", "v2"),
@@ -1134,7 +1181,19 @@ mod tests {
     }
 
     #[test]
-    fn secret_deployments_are_not_steps_back_and_are_counted() {
+    fn an_earlier_rollback_before_the_live_upload_is_what_was_live() {
+        // upload v1, upload v2 (bad), rollback->v1, upload v3: before v3 was v1.
+        let h = [
+            dep("d4", "upload", "v3"),
+            dep("d3", "rollback", "v1"),
+            dep("d2", "upload", "v2"),
+            dep("d1", "upload", "v1"),
+        ];
+        assert_eq!(locate(&h, None).unwrap().target_version, "v1");
+    }
+
+    #[test]
+    fn secret_changes_after_the_live_upload_are_counted_and_not_the_live_code() {
         let h = [
             dep("d4", "secret", "v3s2"),
             dep("d3", "secret", "v3s1"),
@@ -1146,7 +1205,7 @@ mod tests {
             l.live_version, "v3s2",
             "the newest version's facts describe what is live"
         );
-        assert_eq!(l.live_code_deployment, "d2");
+        assert_eq!(l.live_deployment, "d4");
         assert_eq!(l.target_version, "v2");
         assert_eq!(l.secret_changes, 2);
     }
@@ -1163,13 +1222,13 @@ mod tests {
         assert!(
             locate(&[dep("d1", "upload", "v1")], None)
                 .unwrap_err()
-                .contains("no earlier version")
+                .contains("no earlier deployment")
         );
         assert!(locate(&[], None).is_err());
     }
 
     #[test]
-    fn to_names_a_listed_upload_and_not_the_live_one() {
+    fn to_names_a_listed_version_and_not_the_live_one() {
         let h = [
             dep("d3", "upload", "v3"),
             dep("d2", "upload", "v2"),
@@ -1692,8 +1751,97 @@ mod tests {
       "lock_changes": true
     }
   ],
-  "ok": true
+  "ok": true,
+  "notes": []
 }"#
         );
+    }
+
+    #[test]
+    fn a_secret_change_made_after_the_plan_stops_the_revert_too() {
+        let live = facts(|_| {});
+        let api = account(&live, Some(&live));
+        let mut lock = lock_with_shop();
+        let planned = plan_at(&api, &lock, long_ago());
+        assert!(planned.plan.ok);
+        // A concurrent `bynk migrate sweep` (or any secret put) lands.
+        api.deployments
+            .borrow_mut()
+            .get_mut("shop")
+            .unwrap()
+            .insert(0, dep("dS", "secret", "v2s"));
+        let dir = std::env::temp_dir().join(format!("bynk-revert-secret-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut done = Vec::new();
+        let stopped = execute(
+            &api,
+            &planned,
+            &mut lock,
+            &dir.join("bynk.deploy.lock"),
+            "default",
+            &mut done,
+        )
+        .unwrap_err();
+        assert_eq!(stopped, Stopped::Moved("shop".into()));
+        assert!(api.rolled.borrow().is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_worker_that_cannot_be_placed_is_a_refusal_not_an_error_for_the_run() {
+        // `pay` was first added in the bad release: nothing precedes it.
+        let live = facts(|_| {});
+        let api = account(&live, Some(&live));
+        api.deployments
+            .borrow_mut()
+            .insert("pay".into(), vec![dep("p1", "upload", "pv1")]);
+        let mut lock = lock_with_shop();
+        lock.record_deployed("default", "pay", Some(BTreeMap::new()));
+        let planned = plan(
+            &api,
+            &lock,
+            &BTreeMap::new(),
+            &["pay".to_string(), "shop".to_string()],
+            &opts(),
+            long_ago(),
+        )
+        .unwrap();
+        assert!(!planned.plan.ok);
+        let pay = planned
+            .plan
+            .workers
+            .iter()
+            .find(|w| w.worker == "pay")
+            .unwrap();
+        assert!(
+            pay.checks
+                .iter()
+                .any(|f| f.check == "history" && f.detail.contains("no earlier deployment"))
+        );
+        let shop = planned
+            .plan
+            .workers
+            .iter()
+            .find(|w| w.worker == "shop")
+            .unwrap();
+        assert!(shop.ok, "the other Worker is still judged on its own");
+        assert!(planned.plan.notes[0].contains("--context"));
+    }
+
+    #[test]
+    fn to_needs_a_context() {
+        let dir = std::env::temp_dir().join(format!("bynk-revert-to-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = revert_run(
+            &dir,
+            &RevertOptions {
+                environment: "default".into(),
+                to: Some("v1".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("--context"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

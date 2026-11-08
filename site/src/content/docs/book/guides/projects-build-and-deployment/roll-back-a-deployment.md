@@ -26,16 +26,23 @@ bynk revert --dry-run          # every check, nothing changed
 bynk revert                    # confirm, then roll back
 ```
 
-With no `--to`, the target is the upload before the live one. Reverting twice goes
-back two uploads: it never flips to the release you just left. A secret change or
-an earlier rollback is not a step back. Contexts revert callers first.
+With no `--to`, the target is what was live just before the release you are
+leaving: the deployment immediately before the live code's own upload, secrets
+included. A secret you rotated before that release is therefore kept. Reverting
+twice goes back past that upload, never to the release you just left. Contexts
+revert callers first.
+
+A plain `bynk revert` reverts **every** Worker the lock records for the environment,
+each to its own previous deployment, whatever the last release touched. If the last
+release changed one context, revert just that one with `--context`; the plan says
+so when it applies. `--to <version>` names one Worker's version and needs `--context`.
 
 A dry run reads Cloudflare, so it needs `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID`; the token needs read access to D1 as well as Workers.
 
 ## What it refuses
 
-Each refusal names its reason, and any check that cannot be answered is a refusal.
+Each refusal names its reason, and any check that cannot be answered is a refusal. A deploy or secret change made after the plan also stops the revert before it rolls anything back.
 
 | Check | Refused when | What to do |
 |---|---|---|
@@ -45,7 +52,8 @@ Each refusal names its reason, and any check that cannot be answered is a refusa
 | `classes` | a Durable Object class was added, removed or renamed between the two versions | Cloudflare cannot roll back across a class migration. |
 | `contracts` | the target's contracts no longer match another live Worker, judged as if every selected Worker were reverted together | Revert the whole project, or redeploy forward. See [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/). |
 | `ids` | the target binds a KV namespace, database or limiter the lock no longer records | A namespace was re-provisioned since. Redeploy forward. |
-| `secrets` | a secret changed since the target | A rollback may restore a secret that peers no longer accept. After a `bynk migrate sweep`, whose two changes are harmless, pass `--accept-secret-changes`. |
+| `secrets` | a secret changed after the target was live | A rollback may restore the *old* value of a secret that was rotated since, which peers no longer accept. After a `bynk migrate sweep`, whose two changes touch only its own temporary key, pass `--accept-secret-changes`. |
+| `history` | the Worker's history cannot be placed (a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress) | Refused for that Worker only; the plan still judges the others. |
 
 `--yes` only skips the confirmation. It never overrides a refusal.
 

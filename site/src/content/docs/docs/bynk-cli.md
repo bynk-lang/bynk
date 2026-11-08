@@ -1147,12 +1147,12 @@ bynk revert [PATH] [--context NAME] [--env NAME] [--to VERSION] [--dry-run]
 |---|---|---|
 | `--context NAME` | every recorded Worker | Revert this context alone (dotted name or Worker directory). |
 | `--env NAME` | `default` | The environment to revert. |
-| `--to VERSION` | the previous upload | A Cloudflare Worker version id to go back to. A git tag is not accepted: it names source, which means a rebuild. |
+| `--to VERSION` | what was live before the live release | A Cloudflare Worker version id to go back to; needs `--context`, since a version id belongs to one Worker. A git tag is not accepted: it names source, which means a rebuild. |
 | `--dry-run`, `--plan` | off | Print each check's verdict and stop. Unlike `deploy --dry-run` it reads Cloudflare, so it needs credentials. |
 | `--format short\|json` | `short` | Plan format. `json` is for CI. |
 | `--yes` | off | Skip the confirmation. Never overrides a refusal. |
 | `--accept-schema-ahead BINDING` | none | Assert that the D1 migrations applied after the target was built are additive, for this binding. Repeatable. |
-| `--accept-secret-changes` | off | Accept secret changes since the target (a `bynk migrate sweep` makes two). |
+| `--accept-secret-changes` | off | Accept secret changes made after the target was live. This restores the old values of any rotated secret; a `bynk migrate sweep` makes two harmless changes. |
 
 It needs `CLOUDFLARE_API_TOKEN` (with Workers Scripts and D1 read access) and
 `CLOUDFLARE_ACCOUNT_ID`. A version can be reverted only if the `bynk` that

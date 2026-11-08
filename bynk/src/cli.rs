@@ -543,8 +543,9 @@ pub enum Command {
         #[arg(long, default_value = "default", value_name = "NAME")]
         env: String,
         /// Go back to this Cloudflare Worker version id instead of the
-        /// previous upload. The same checks apply.
-        #[arg(long, value_name = "VERSION")]
+        /// deployment before the live release. Needs `--context`, since
+        /// a version id belongs to one Worker. The same checks apply.
+        #[arg(long, value_name = "VERSION", requires = "context")]
         to: Option<String>,
         /// Print each check's verdict and stop. Still reads Cloudflare.
         #[arg(long, visible_alias = "plan")]
