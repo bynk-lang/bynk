@@ -1668,6 +1668,14 @@ bynk test .
 `tsc`, and runs it with Node — both must be on your path. `--no-run` emits the
 TypeScript without running it. Exit code is non-zero if any test fails.
 
+A project that declares no tests is not a failure by default: `bynk test` prints
+`warning: no tests found in <dir>` on stderr and exits 0, so a library or a
+freshly scaffolded project can run it before it has tests. Pass
+`--require-tests` to make that an `error:` with exit code 1, so CI does not pass
+a project that never wrote a test. It applies with `--no-run` too, so a
+discovery-only step can enforce it. At a workspace root, every member must
+declare at least one test.
+
 ### Debugging under Node (`--inspect`)
 
 `bynk test --inspect` launches the test runner under Node's inspector
@@ -1698,7 +1706,9 @@ instead of the human ✓ / ✗ output — one `suites` array of `{ name, kind, c
 each case `{ name, outcome, message?, location? }` with `outcome` one of `"pass"`
 or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
 (the diagnostic lines); a runner that crashes mid-stream yields
-`error.kind == "runtime"` with the observed prefix and captured stderr.
+`error.kind == "runtime"` with the observed prefix and captured stderr. A project
+with no tests yields an empty `suites` array, or, under `--require-tests`,
+`error.kind == "no_tests"` and a non-zero exit.
 
 A project that takes [snapshots](#snapshots) gains a last field, `snapshots`: `{ "written", "updated", "obsolete" }`, the counts of snapshots the run wrote, updated and found obsolete (deleted, under `--update-snapshots`).
 
