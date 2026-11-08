@@ -261,6 +261,15 @@ agent Profile {
 A `Profile` stored before `size` existed loads with `size == 12`. The same holds
 for a record that is a `Map`'s value, a `List`'s element or a `Log`'s entry.
 
+A **new sum variant** anywhere inside a stored value is additive too, whatever its
+payload: no value stored before it can name it. The change appears as, for example,
+`last?|Paused variant added`, and it bumps the version. This is a rule about stored
+data only; an exhaustive `match` over the sum still has to cover the new variant.
+After a record holding the new variant is written, roll forward rather than back:
+the older build faults the record as `NewerSchema`. This is the storage rule only. A
+variant added to a type a service sends or receives is still a contract change,
+because a caller built earlier cannot decode it.
+
 Anything else changes what is on disk, and the build refuses it with
 `bynk.agent.non_additive_state_change`, naming the position:
 `one (one.dark added without a default)`, `prefs.theme removed`,

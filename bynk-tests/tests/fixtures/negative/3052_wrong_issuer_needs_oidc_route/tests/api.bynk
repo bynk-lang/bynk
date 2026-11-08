@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "a token for another issuer to a public route" {
+		let r <- api.GET("/health") by WrongIssuer
+		expect r is Rejected(Unauthorized)
+	}
+}

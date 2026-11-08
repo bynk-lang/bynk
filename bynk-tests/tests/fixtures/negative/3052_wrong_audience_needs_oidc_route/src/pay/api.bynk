@@ -1,15 +1,8 @@
-context id.profile
+context pay.api
 
 type UserId = String where NonEmpty
 
-actor User {
-	auth = Oidc(
-		issuer = "https://issuer.example.com",
-		audience = "my-api",
-		jwks = "https://issuer.example.com/.well-known/jwks.json"
-	),
-	identity = UserId
-}
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
 	on GET("/me") () -> Effect[HttpResult[String]] by u: User {
