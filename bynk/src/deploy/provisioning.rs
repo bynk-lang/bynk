@@ -1371,6 +1371,24 @@ pub(crate) fn set_secret(
     Err(wrangler_said(&output))
 }
 
+/// #3073: each agent class's current schema version, from the project's
+/// `bynk.schema.lock` (what the build just compiled against). Empty when the
+/// project has no lock or it cannot be read: the facts then record no agents,
+/// and a revert treats the version as having none to compare.
+fn schema_agent_versions(project_root: &Path) -> BTreeMap<String, i64> {
+    let Ok(existing) = bynk_driver::schema_lock::read(project_root) else {
+        return BTreeMap::new();
+    };
+    let Ok(registry) = bynk_project::schema_registry::parse(existing.as_deref(), project_root)
+    else {
+        return BTreeMap::new();
+    };
+    registry
+        .agents()
+        .map(|(class, entry)| (class.clone(), entry.version))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2888,22 +2906,4 @@ mod tests {
         ))));
         assert!(secrets_file_supported(&wrangler(None)), "npx: newest 4.x");
     }
-}
-
-/// #3073: each agent class's current schema version, from the project's
-/// `bynk.schema.lock` (what the build just compiled against). Empty when the
-/// project has no lock or it cannot be read: the facts then record no agents,
-/// and a revert treats the version as having none to compare.
-fn schema_agent_versions(project_root: &Path) -> BTreeMap<String, i64> {
-    let Ok(existing) = bynk_driver::schema_lock::read(project_root) else {
-        return BTreeMap::new();
-    };
-    let Ok(registry) = bynk_project::schema_registry::parse(existing.as_deref(), project_root)
-    else {
-        return BTreeMap::new();
-    };
-    registry
-        .agents()
-        .map(|(class, entry)| (class.clone(), entry.version))
-        .collect()
 }

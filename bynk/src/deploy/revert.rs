@@ -606,6 +606,14 @@ impl RevertPlan {
     }
 }
 
+/// A plan with what executing it needs: each Worker's position in its
+/// history and the target's facts.
+pub(crate) struct Planned {
+    pub(crate) plan: RevertPlan,
+    pub(crate) located: BTreeMap<String, Located>,
+    pub(crate) targets: BTreeMap<String, Facts>,
+}
+
 /// Build the plan: locate, read facts, gather what the checks need, evaluate.
 pub(crate) fn plan(
     api: &dyn Account,
@@ -614,14 +622,7 @@ pub(crate) fn plan(
     workers: &[String],
     opts: &RevertOptions,
     now: std::time::SystemTime,
-) -> Result<
-    (
-        RevertPlan,
-        BTreeMap<String, Located>,
-        BTreeMap<String, Facts>,
-    ),
-    String,
-> {
+) -> Result<Planned, String> {
     let environment = opts.environment.as_str();
     let mut located = BTreeMap::new();
     let mut live_facts = BTreeMap::new();
@@ -765,16 +766,16 @@ pub(crate) fn plan(
     // Workers with no facts have no place in the call graph: list them last.
     ordered.extend(plans.into_values());
     let ok = ordered.iter().all(|w| w.ok);
-    Ok((
-        RevertPlan {
+    Ok(Planned {
+        plan: RevertPlan {
             version: 1,
             environment: environment.to_string(),
             workers: ordered,
             ok,
         },
         located,
-        target_facts,
-    ))
+        targets: target_facts,
+    })
 }
 
 /// Why an execution stopped.
@@ -793,14 +794,13 @@ pub(crate) enum Stopped {
 /// refuses if it is no longer the one the plan was made against.
 pub(crate) fn execute(
     api: &dyn Account,
-    plan: &RevertPlan,
-    located: &BTreeMap<String, Located>,
-    targets: &BTreeMap<String, Facts>,
+    planned: &Planned,
     lock: &mut DeployLock,
     lock_path: &Path,
     environment: &str,
     done: &mut Vec<String>,
 ) -> Result<(), Stopped> {
+    let (plan, located, targets) = (&planned.plan, &planned.located, &planned.targets);
     for w in &plan.workers {
         let loc = &located[&w.worker];
         let current = api.deployments(&w.script).map_err(|e| {
@@ -997,7 +997,7 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
         provenance: &probe.provenance,
         root,
     };
-    let (plan, located, targets) = plan(
+    let planned = plan(
         &account,
         &lock,
         &floors,
@@ -1008,12 +1008,12 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
     if opts.json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&plan).map_err(|e| e.to_string())?
+            serde_json::to_string_pretty(&planned.plan).map_err(|e| e.to_string())?
         );
     } else {
-        print!("{}", plan.render_short());
+        print!("{}", planned.plan.render_short());
     }
-    if !plan.ok {
+    if !planned.plan.ok {
         return Ok(ExitCode::FAILURE);
     }
     if opts.dry_run {
@@ -1026,9 +1026,7 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
     let mut done = Vec::new();
     match execute(
         &account,
-        &plan,
-        &located,
-        &targets,
+        &planned,
         &mut lock,
         &lock_path,
         &opts.environment,
@@ -1520,7 +1518,7 @@ mod tests {
         });
         let api = account(&live, Some(&target));
         let mut lock = lock_with_shop();
-        let (plan, located, targets) = plan(
+        let planned = plan(
             &api,
             &lock,
             &BTreeMap::new(),
@@ -1529,16 +1527,14 @@ mod tests {
             long_ago(),
         )
         .unwrap();
+        let plan = &planned.plan;
         assert!(plan.ok, "{}", plan.render_short());
         assert!(plan.workers[0].lock_changes, "the contract record differs");
         let dir = std::env::temp_dir().join(format!("bynk-revert-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bynk.deploy.lock");
         let mut done = Vec::new();
-        execute(
-            &api, &plan, &located, &targets, &mut lock, &path, "default", &mut done,
-        )
-        .unwrap();
+        execute(&api, &planned, &mut lock, &path, "default", &mut done).unwrap();
         assert_eq!(
             *api.rolled.borrow(),
             [("shop".to_string(), "v1".to_string())]
@@ -1557,7 +1553,7 @@ mod tests {
         let live = facts(|_| {});
         let api = account(&live, None);
         let lock = lock_with_shop();
-        let (plan, ..) = plan(
+        let Planned { plan, .. } = plan(
             &api,
             &lock,
             &BTreeMap::new(),
@@ -1577,7 +1573,7 @@ mod tests {
         // And a live version without facts is refused alike.
         let mut none = account(&live, Some(&live));
         none.facts.remove(&("shop".to_string(), "v2".to_string()));
-        let (plan, ..) = self::plan(
+        let Planned { plan, .. } = self::plan(
             &none,
             &lock,
             &BTreeMap::new(),
@@ -1597,7 +1593,7 @@ mod tests {
         let lock = lock_with_shop();
         let just_after =
             std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_767_225_600 + 60); // 2026-01-01T00:01:00Z
-        let (plan, ..) = plan(
+        let Planned { plan, .. } = plan(
             &api,
             &lock,
             &BTreeMap::new(),
@@ -1613,19 +1609,11 @@ mod tests {
                 .iter()
                 .any(|f| f.check == "agent" && f.detail.contains("not known"))
         );
-        let (plan, ..) = plan_at(&api, &lock, long_ago());
+        let Planned { plan, .. } = plan_at(&api, &lock, long_ago());
         assert!(plan.ok, "settled and empty: {}", plan.render_short());
     }
 
-    fn plan_at(
-        api: &Fake,
-        lock: &DeployLock,
-        now: std::time::SystemTime,
-    ) -> (
-        RevertPlan,
-        BTreeMap<String, Located>,
-        BTreeMap<String, Facts>,
-    ) {
+    fn plan_at(api: &Fake, lock: &DeployLock, now: std::time::SystemTime) -> Planned {
         plan(
             api,
             lock,
@@ -1642,17 +1630,15 @@ mod tests {
         let live = facts(|_| {});
         let mut api = account(&live, Some(&live));
         let mut lock = lock_with_shop();
-        let (plan, located, targets) = plan_at(&api, &lock, long_ago());
-        assert!(plan.ok);
+        let planned = plan_at(&api, &lock, long_ago());
+        assert!(planned.plan.ok);
         api.move_after_reads = Some(*api.reads.borrow());
         let dir = std::env::temp_dir().join(format!("bynk-revert-moved-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut done = Vec::new();
         let stopped = execute(
             &api,
-            &plan,
-            &located,
-            &targets,
+            &planned,
             &mut lock,
             &dir.join("bynk.deploy.lock"),
             "default",
@@ -1669,7 +1655,7 @@ mod tests {
         let live = facts(|_| {});
         let api = account(&live, Some(&live));
         let lock = lock_with_shop();
-        let (plan, ..) = plan_at(&api, &lock, long_ago());
+        let Planned { plan, .. } = plan_at(&api, &lock, long_ago());
         let json = serde_json::to_string_pretty(&plan).unwrap();
         assert_eq!(
             json,
