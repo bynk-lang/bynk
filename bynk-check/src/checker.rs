@@ -41,6 +41,7 @@ pub use bynk_syntax::ast::ExprId;
 mod calls;
 pub mod codable;
 mod d1;
+pub use d1::D1SqlSite;
 pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
@@ -639,6 +640,10 @@ pub enum Callee {
         sql: String,
         first: bool,
     },
+    /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
+    /// the *SQL argument's* id (not the call's, which keeps its own entry), so
+    /// the project phase can prepare it against the binding's migrations.
+    D1Sql(d1::D1SqlSite),
     /// A cross-context capability operation call (`B.Cap.op(...)` /
     /// `Alias.Cap.op(...)`).
     CrossCap {

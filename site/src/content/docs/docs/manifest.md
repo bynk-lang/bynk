@@ -10,7 +10,7 @@ defaults, and a manifest that lists only `[project]` behaves identically to one
 that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
 (`bynk-fmt`), which both the CLI and the language server read it through;
 `[lsp]` by the language server; `[build]` by `bynk build`; `[workers]` by the compiler, for a Workers
-build; `[test]` by the test runner, for a run against a deployment.
+build; `[check]` by the compiler, for checks that read more than the source; `[test]` by the test runner, for a run against a deployment.
 
 A project is an **application** (`[project]`) or a shareable **package**
 (`[package]`), never both. A directory whose `bynk.toml` holds `[workspace]`
@@ -53,6 +53,9 @@ emit = "ts"                 # "ts" or "js"
 [workers]
 compatibility_flags = []    # extra Cloudflare flags, after the default
 workers_dev = true          # false takes each Worker off workers.dev; left out unless set
+
+[check]
+d1_sql = true               # false stops literal D1 SQL being prepared against the migrations' schema
 
 [unstable]
 allow = []                  # experimental standard-library items to use
@@ -246,7 +249,7 @@ when there is no workspace, is refused (`bynk.dependency.path_outside_root`).
 This project's own `path` entries are honoured wherever they point.
 
 From a dependency's `bynk.toml`, only `[package]`, `[paths]` and
-`[dependencies]` are read. Its `[unstable]`, `[workers]`, `[test]` and `[fmt]`
+`[dependencies]` are read. Its `[unstable]`, `[workers]`, `[check]`, `[test]` and `[fmt]`
 are its own, and this project's settings govern the whole build.
 
 A fetched (git) package's own path dependencies, and its local `file://` git

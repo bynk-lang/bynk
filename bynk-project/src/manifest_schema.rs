@@ -111,6 +111,18 @@ struct BuildTable {
     /// stripped). Default: `"ts"`.
     #[schemars(extend("enum" = ["ts", "js"], "default" = "ts"))]
     emit: Option<String>,
+/// Switches for checks that read more than the source.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct CheckTable {
+    /// Whether each literal `D1` statement is prepared against the schema the
+    /// binding's migrations build, so a syntax error, an unknown table or
+    /// column, or a wrong parameter count is reported by `bynk check`. Turn it
+    /// off for a project whose SQL depends on tables created some other way,
+    /// such as DDL run at request time. Default: `true`.
+    #[schemars(extend("default" = true))]
+    d1_sql: Option<bool>,
 }
 
 /// Opts in to experimental standard-library items, which carry no
@@ -293,6 +305,7 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "lsp" => generator.subschema_for::<LspTable>(),
         "workers" => generator.subschema_for::<WorkersTable>(),
         "build" => generator.subschema_for::<BuildTable>(),
+        "check" => generator.subschema_for::<CheckTable>(),
         "unstable" => generator.subschema_for::<UnstableTable>(),
         "test" => generator.subschema_for::<TestTable>(),
         "package" => generator.subschema_for::<PackageTable>(),

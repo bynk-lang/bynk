@@ -212,6 +212,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("build", &["out", "target", "platform", "emit"]),
+    ("check", &["d1_sql"]),
     ("unstable", &["allow"]),
     ("test", &["targets", "mutate"]),
     ("workspace", &["members", "exclude"]),
@@ -1031,6 +1032,38 @@ fn unstable_config_from(table: &toml::Table) -> Result<UnstableConfig, ProjectPa
         Some(_) => return Err(not_a_list()),
     };
     Ok(UnstableConfig { allow })
+}
+
+/// The project's `[check]` table (#3070): switches for checks that need more
+/// than the source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckConfig {
+    /// Whether each literal `D1` statement is prepared against the schema its
+    /// binding's migrations build. Default `true`.
+    pub d1_sql: bool,
+}
+
+impl Default for CheckConfig {
+    fn default() -> Self {
+        Self { d1_sql: true }
+    }
+}
+
+/// The `[check]` table as both the build and the editor see it, read the way
+/// [`read_unstable_config`] reads `[unstable]`: the overlay's `bynk.toml` when
+/// it holds one, else the one on disk. A missing or malformed manifest, or a
+/// non-boolean value, reads as the default.
+pub fn read_check_config(project_root: &Path, overlay: &HashMap<PathBuf, String>) -> CheckConfig {
+    let manifest = project_root.join("bynk.toml");
+    let content = match overlay.get(&manifest) {
+        Some(text) => Some(text.clone()),
+        None => fs::read_to_string(&manifest).ok(),
+    };
+    let d1_sql = content
+        .and_then(|c| c.parse::<toml::Table>().ok())
+        .and_then(|doc| doc.get("check")?.as_table()?.get("d1_sql")?.as_bool())
+        .unwrap_or(true);
+    CheckConfig { d1_sql }
 }
 
 /// The path a unit's name maps to, relative to a source or output root:
