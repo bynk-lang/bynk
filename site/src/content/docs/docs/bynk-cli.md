@@ -7,7 +7,7 @@ pipeline in-process** and orchestrates the Node toolchain. A fresh
 with nothing else installed. This page is the argument and exit-code reference
 for its subcommands.
 
-The everyday commands — [`bynk check`](#bynk-check), [`bynk compile`](#bynk-compile),
+The everyday commands — [`bynk check`](#bynk-check), [`bynk compile`](#bynk-compile), [`bynk build`](#bynk-build),
 [`bynk fmt`](#bynk-fmt), and [`bynk test`](#bynk-test) — are what the retired
 `bynkc` binary used to provide, with the same flags, output and exit codes.
 
@@ -33,6 +33,7 @@ bynk <command> [options]
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
 | [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk build`](#bynk-build) | Build a project into its output directory with the settings in `bynk.toml`'s `[build]`; no flags needed. |
 | [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk openapi`](#bynk-openapi) | Write an OpenAPI 3.1 document for the project's `from http` services. |
 | [`bynk token`](#bynk-token) | Mint a credential for the project's own `Bearer` actor, to call a guarded route by hand. |
@@ -491,6 +492,35 @@ bynk check --fix src/shop.bynk
 
 The exit code is that of the check that follows: success only if no error
 remains.
+
+---
+
+## `bynk build`
+
+Build a project into its output directory, taking its settings from
+[`[build]`](/docs/manifest/#build) in `bynk.toml`. `bynk build` on its own
+equals `bynk compile . -o out` for a project with no `[build]` table.
+
+```text
+bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--locked] [--offline]
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `INPUT` | `.` | A project directory. A single `.bynk` file is `bynk compile`'s. |
+| `--out`, `-o` | `[build] out`, else `out` | The output directory. |
+| `--target` | `[build] target`, else `bundle` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
+| `--platform` | `[build] platform`, else `cloudflare` | The surface binding. |
+| `--emit` | `[build] emit`, else `ts` | `ts` or `js`. |
+
+Each setting is the flag, else the `[build]` key, else the default. On success
+`build` prints one line, `bynk: built <target> -> <out>`; warnings print as
+`compile` prints them.
+
+`build` infers from the project; [`compile`](#bynk-compile) is told. `compile`
+never reads `[build]`, which keeps the editor's *Show Compiled Output* view from
+changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` don't read
+it either.
 
 ---
 

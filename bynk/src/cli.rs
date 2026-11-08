@@ -24,7 +24,9 @@ pub struct Cli {
 pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     (
         "Project",
-        &["new", "check", "fmt", "test", "compile", "openapi", "token"],
+        &[
+            "new", "check", "fmt", "test", "build", "compile", "openapi", "token",
+        ],
     ),
     (
         "Run and deploy",
@@ -341,8 +343,34 @@ pub enum Command {
         #[command(flatten)]
         lock: LockArgs,
     },
-    /// Compile a project to TypeScript.
+    /// Build a project from its `[build]` settings.
     ///
+    /// Needs no flags: `out`, `target`, `platform` and `emit` come from the
+    /// `[build]` table, else the defaults (`out`, `bundle`, `cloudflare`,
+    /// `ts`), and a flag overrides its key. `build` infers from the project;
+    /// `bynk compile` is told, and never reads `[build]`.
+    Build {
+        /// Project directory. Defaults to the current directory.
+        #[arg(default_value = ".")]
+        input: PathBuf,
+        /// Output directory. Overrides `[build] out`.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Build target. Overrides `[build] target`.
+        #[arg(long, value_enum)]
+        target: Option<bynk_driver::CliTarget>,
+        /// Deploy platform. Overrides `[build] platform`.
+        #[arg(long, value_enum)]
+        platform: Option<bynk_driver::CliPlatform>,
+        /// Artefact language. Overrides `[build] emit`.
+        #[arg(long, value_enum)]
+        emit: Option<bynk_driver::EmitFormat>,
+        #[command(flatten)]
+        lock: LockArgs,
+    },
+    /// Compile a project to TypeScript, settings as flags.
+    ///
+    /// Use `bynk build` for a project that takes its settings from `bynk.toml`.
     /// Runs in-process (#2471, #2998).
     ///
     /// The compiler is linked in. With `--sources-stdin` it compiles unsaved editor buffers:
