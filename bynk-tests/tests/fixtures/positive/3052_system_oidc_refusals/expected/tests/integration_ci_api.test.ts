@@ -5,7 +5,6 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
-import { __tokenClaims } from "../__bynk_runtime/auth.js";
 import * as __ns_ci_api from "../workers/ci-api/handlers.js";
 import worker___ns_ci_api from "../workers/ci-api/index.js";
 
@@ -96,7 +95,9 @@ interface __BynkOidcIssuer {
 }
 function __bynkOidcB64(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 function __bynkOidcText(s: string): string { return __bynkOidcB64(new TextEncoder().encode(s)); }
-// A claim list is `"name: value"` lines, as `TokenClaims.of` reads them.
+// A claim list is `"name: value"` lines, read as `TokenClaims.of` reads them in
+// process: every value is a trimmed string (`"n: 1"` is the string `"1"`), so
+// the `system` and `integration` tiers see the same claims.
 function __bynkOidcClaims(lines: readonly string[]): globalThis.Record<string, unknown> {
   const claims: globalThis.Record<string, unknown> = {};
   for (const line of lines) {
@@ -536,6 +537,25 @@ async function test_the_trustFrom_variable_moves_the_trust_roots() {
   }
 }
 
+async function test_a_trustFrom_without_an_audience_keeps_the_declared_one() {
+  try {
+    __bynkEnv = { PINNED_OIDC_TRUST: "{\"issuer\":\"https://staging.example.com\",\"jwks\":\"https://staging.example.com/jwks2\"}" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkOidcClaims([]));
+    const wrong = await __sysdrive_wrongaudience_api_http_GET_pinned(undefined, "");
+    if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "pinned pid"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2582, 2604, "expect ok is Ok(\"pinned pid\")"); }
+    if (!(((__c: boolean) => __c)(wrong.tag === "Rejected" && wrong.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:77:10", 2614, 2645, "expect wrong is Rejected(Unauthorized)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 async function test_a_forged_token_is_not_handled() {
   try {
     __bynkEnv = {};
@@ -543,7 +563,7 @@ async function test_a_forged_token_is_not_handled() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_forged_api_http_GET_who(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2506, 2521, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:84:10", 2871, 2886, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -560,7 +580,7 @@ async function test_an_expired_token_is_not_handled() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_expired_api_http_GET_who(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:81:10", 2615, 2630, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:89:10", 2980, 2995, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -577,7 +597,7 @@ async function test_a_token_for_another_issuer_is_not_handled() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_wrongissuer_api_http_GET_who(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:86:10", 2738, 2753, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 3103, 3118, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -594,7 +614,7 @@ async function test_a_token_for_another_audience_is_not_handled() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_wrongaudience_api_http_GET_who(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:91:10", 2865, 2880, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("tests/api.bynk:99:10", 3230, 3245, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -618,7 +638,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a valid token with chosen claims is admitted", "a valid token with no claims is admitted", "a non-ASCII subject round-trips", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a token for another issuer is refused", "a token for another audience is refused", "a valid raw request is admitted", "a forged raw request is refused", "an expired raw request is refused", "the trustFrom variable moves the trust roots", "a forged token is not handled", "an expired token is not handled", "a token for another issuer is not handled", "a token for another audience is not handled"];
+export const __bynkCases: readonly string[] = ["a valid token with chosen claims is admitted", "a valid token with no claims is admitted", "a non-ASCII subject round-trips", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a token for another issuer is refused", "a token for another audience is refused", "a valid raw request is admitted", "a forged raw request is refused", "an expired raw request is refused", "the trustFrom variable moves the trust roots", "a trustFrom without an audience keeps the declared one", "a forged token is not handled", "an expired token is not handled", "a token for another issuer is not handled", "a token for another audience is not handled"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -692,6 +712,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("the trustFrom variable moves the trust roots")) {
     const started = __bynkCaseNow();
     const r = { name: "the trustFrom variable moves the trust roots", ...(await test_the_trustFrom_variable_moves_the_trust_roots()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a trustFrom without an audience keeps the declared one")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a trustFrom without an audience keeps the declared one", ...(await test_a_trustFrom_without_an_audience_keeps_the_declared_one()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

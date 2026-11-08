@@ -69,6 +69,14 @@ suite ci.api as system {
 		expect wrong is Rejected(Unauthorized)
 	}
 
+	case "a trustFrom without an audience keeps the declared one" {
+		env { PINNED_OIDC_TRUST = "{\"issuer\":\"https://staging.example.com\",\"jwks\":\"https://staging.example.com/jwks2\"}" }
+		let ok <- api.GET("/pinned") by Pinned("pid")
+		let wrong <- api.GET("/pinned") by WrongAudience
+		expect ok is Ok("pinned pid")
+		expect wrong is Rejected(Unauthorized)
+	}
+
 	// The expectation is inverted: the seam refused, so `Handled(_)` fails.
 	// It shows the outcome is observed from the real response.
 	case "a forged token is not handled" {

@@ -1,6 +1,6 @@
 # run by bynk-tests/tests/system/behaviour_fixtures.rs; see that file for the format.
 # #3052: the last four cases claim the seam admitted a bad token; it did not.
-passed=12 failed=4
+passed=13 failed=4
 fail a forged token is not handled
 fail an expired token is not handled
 fail a token for another issuer is not handled

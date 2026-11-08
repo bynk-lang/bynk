@@ -864,16 +864,31 @@ fn lower_effect_let_value(
             cx.call_site_bad_signature = Some(variant);
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower(id, cx));
-            cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
             // #3052: a `system` call mints its `Oidc` token's claims from the
             // lines of a literal `TokenClaims.of(lines)` (the checker admits
-            // no other form there).
-            cx.call_site_claim_lines = principal.claims.as_ref().and_then(|c| match &c.kind {
-                ExprKind::MethodCall { args, .. } if args.len() == 1 => {
-                    Some(pre.lower(&args[0], cx))
+            // no other form there, `bynk.test.system_claims_need_literal`),
+            // and never builds the in-process `TokenClaims` value, so the
+            // lines are lowered once and in place of it.
+            let literal_lines = match principal.claims.as_deref().map(|c| &c.kind) {
+                Some(ExprKind::MethodCall {
+                    receiver,
+                    method,
+                    args,
+                    ..
+                }) if cx.is_system_oidc_body()
+                    && method.name == "of"
+                    && args.len() == 1
+                    && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == "TokenClaims") =>
+                {
+                    Some(&args[0])
                 }
                 _ => None,
-            });
+            };
+            if let Some(lines) = literal_lines {
+                cx.call_site_claim_lines = Some(pre.lower(lines, cx));
+            } else {
+                cx.call_site_claims = principal.claims.as_ref().map(|c| pre.lower(c, cx));
+            }
             cx.call_site_actor = Some(principal.actor.name.clone());
         }
     }

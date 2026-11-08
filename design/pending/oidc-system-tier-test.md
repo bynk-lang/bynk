@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: An `Oidc` route is tested at the `system` tier. The driver is the issuer, and `by Forged`, `by Expired`, `by WrongIssuer` and `by WrongAudience` drive its seam
-probes: diagnostic_coverage
+probes: diagnostic_coverage, emit_diagnostics, ts_writes
 ---
 
 ## ADR: oidc-system-tier-test-issuer

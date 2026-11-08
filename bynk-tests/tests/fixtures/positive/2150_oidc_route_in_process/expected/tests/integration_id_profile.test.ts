@@ -91,7 +91,9 @@ interface __BynkOidcIssuer {
 }
 function __bynkOidcB64(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 function __bynkOidcText(s: string): string { return __bynkOidcB64(new TextEncoder().encode(s)); }
-// A claim list is `"name: value"` lines, as `TokenClaims.of` reads them.
+// A claim list is `"name: value"` lines, read as `TokenClaims.of` reads them in
+// process: every value is a trimmed string (`"n: 1"` is the string `"1"`), so
+// the `system` and `integration` tiers see the same claims.
 function __bynkOidcClaims(lines: readonly string[]): globalThis.Record<string, unknown> {
   const claims: globalThis.Record<string, unknown> = {};
   for (const line of lines) {

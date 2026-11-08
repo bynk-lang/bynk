@@ -5798,6 +5798,16 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #3052: whether this body is a `system` case on a target with an
+    /// `Oidc` route, whose calls mint their claims from `TokenClaims.of` lines.
+    pub(crate) fn is_system_oidc_body(&self) -> bool {
+        matches!(
+            &self.mode,
+            BodyMode::IntegrationCase { system_http_claims, .. }
+                if !system_http_claims.oidc_routes.is_empty()
+        )
+    }
+
     /// #2155: the acting actor's name, as a string literal, for a signing
     /// driver of an actor-sum route — the call-site principal, else the
     /// sum's primary member. `None` for any other route.
