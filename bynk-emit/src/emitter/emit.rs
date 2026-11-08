@@ -8318,6 +8318,24 @@ fn emit_ws_do_method(
             bynk_ts::TsType::named(actor_sum_ts_union(members)),
         );
     }
+    // #3045: the body hands its `deps` on to an agent handler that emits (or emits
+    // itself), so `deps` must carry `__eventsDispatch` as an HTTP handler's does.
+    // The entry points above spread `__eventsDeps` into it from the DO's `env`.
+    if cx.is_first_party_events()
+        && (bynk_model::block_uses_emit(&h.body, &commons.callees)
+            || cx
+                .agent_given_caps_used()
+                .is_some_and(|m| m.contains_key("Events")))
+    {
+        append_deps_field(
+            &mut deps_members,
+            "__eventsDispatch",
+            bynk_ts::TsType::named(format!(
+                "(events: globalThis.Array<{}>) => globalThis.Promise<void>",
+                crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
+            )),
+        );
+    }
     params.push(bynk_ts::TsParam {
         name: "deps".to_string(),
         ty: Some(bynk_ts::TsType::Object(deps_members)),

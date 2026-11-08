@@ -1,6 +1,6 @@
 ---
 level: patch
-probes: emit_diagnostics, diagnostic_coverage
+probes: emit_diagnostics, diagnostic_coverage, ts_writes
 changelog: Workers WebSocket `on message`/`on close` rebuild the agent handler's `given` and events deps, and `bynk check` rejects a lifecycle `by` of a different kind than `on open`'s (`bynk.ws.lifecycle_by_mismatch`)
 ---
 
