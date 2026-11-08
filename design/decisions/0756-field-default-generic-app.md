@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A record field (not an event or old-state field) whose type applies a user generic record or sum may declare a default, `page: Paginated[String] = Paginated {}` or `outcome: Outcome[Int] = Pending("queued")`; inside a generic record it may write no value of the record's own type parameter
----
+# 0756 — Field defaults on a field whose type applies a user generic
 
-## ADR: field-default-generic-app
-title: Field defaults on a field whose type applies a user generic
-summary: The default renderers read a generic's fields at the instantiation, so a concrete instantiation, a pass-through parameter and a generic sum take a closed-form default
+- **Status:** Accepted (v0.519)
 
 **Context.** ADR 0676 Decision I admitted defaults that hold for every
 instantiation (`Option[T] = None`, `List[T] = []`) but left a field typed by a

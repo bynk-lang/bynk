@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.518**.
+written against **v0.519**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.519.0** | A record field (not an event or old-state field) whose type applies a user generic record or sum may declare a default, `page: Paginated[String] = Paginated {}` or `outcome: Outcome[Int] = Pending("queued")`; inside a generic record it may write no value of the record's own type parameter |
 | **v0.518.1** | "`bynk build` builds a project with no flags, taking `out`, `target`, `platform` and `emit` from a new `[build]` table in `bynk.toml`; `bynk compile` is unchanged and ignores it (#3054)" |
 | **v0.518.0** | "`bynk revert` makes a Worker's previous deployment live again without a rebuild, after checking D1 migrations, agent schema versions, contracts, ids and secrets; each deploy records `BYNK_DEPLOY_FACTS` on the version it pushes" |
 | **v0.517.0** | A case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`) against a recording `TestConnection[F]()` |
