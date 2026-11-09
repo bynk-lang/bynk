@@ -503,8 +503,9 @@ reserved.
 
 ## `[profile.<name>]`
 
-Two named profiles, `dev` and `release`, that `bynk build --profile <name>`
-chooses between (`release` when the flag is omitted). The only setting a profile
+Two named profiles, `dev` and `release`. `bynk build --profile <name>` chooses
+between them (`release` when the flag is omitted); `bynk test` always builds
+`dev`, and `bynk deploy` always builds `release`. The only setting a profile
 carries today is whether the build keeps the function-contract call-site guard.
 
 | Key | Type | Default | Notes |
@@ -514,9 +515,20 @@ carries today is whether the build keeps the function-contract call-site guard.
 A setting resolves as the command-line flag, else `[profile.<name>]`, else
 `[build]`, else the built-in default; `contracts` has no flag and no `[build]`
 key, so it is the profile's table, else the profile's default. The `release`
-default is the deployable and equals what `bynk compile` writes. Only `bynk
-build` reads these tables: `bynk test` and `bynk dev` keep building with
-contracts on, and `bynk compile`, `deploy` and `tail` with them off.
+default is the deployable and equals what `bynk compile` writes.
+
+| Command | Profile | Reads |
+|---|---|---|
+| `bynk build` | `--profile`, else `release` | `[profile.<name>]` |
+| `bynk test`, and `bynk test --against dev` | `dev` | `[profile.dev]` |
+| `bynk deploy` | `release` | refuses `[profile.release] contracts = true` |
+| `bynk compile`, `bynk tail` | none | neither table |
+
+So `[profile.dev] contracts = false` turns the guard off for a test run. A
+deployment never carries contract checks, so `bynk deploy` stops with an error
+naming `[profile.release]` when it sets `contracts = true`; that setting still
+applies to `bynk build --profile release`. The `bynk dev` server builds without
+contracts and does not read the profiles.
 
 ## `[workers]`
 

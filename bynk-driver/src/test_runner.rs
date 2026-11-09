@@ -557,6 +557,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         let o = match crate::try_project_options(&input)
             .map_err(|e| e.to_string())
             .and_then(|o| Ok(o.schema_registry(crate::schema_lock::read_only(&input)?)))
+            // #3107: the `dev` profile, so `[profile.dev] contracts = false`
+            // turns the guard off for a test run; on by default.
+            .and_then(
+                |o| Ok(o.contracts(crate::project_contracts(&input, crate::CliProfile::Dev)?)),
+            )
             // #2842: the stored snapshots, inlined into the test modules.
             .and_then(|o| {
                 let files = bynk_project::snapshots::read_snapshot_files(&input)
@@ -570,7 +575,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                         .get_or_insert_with(Default::default)
                         .insert(path, text);
                 }
-                o.contracts(true)
+                o
             }
             Err(e) => {
                 if json {

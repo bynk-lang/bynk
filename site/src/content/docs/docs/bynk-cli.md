@@ -562,7 +562,8 @@ Each setting is the flag, else the `[build]` key, else the default. On success
 `build` infers from the project; [`compile`](#bynk-compile) is told. `compile`
 never reads `[build]`, which keeps the editor's *Show Compiled Output* view from
 changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` don't read
-it, or `[profile.*]`, either. See [build progress](#build-progress) for the
+it. `bynk test` reads `[profile.dev]` and `bynk deploy` checks `[profile.release]`
+(see [`[profile.<name>]`](/docs/manifest/#profilename)). See [build progress](#build-progress) for the
 per-context lines `build` prints on a terminal.
 
 ---
