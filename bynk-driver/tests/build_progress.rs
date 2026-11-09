@@ -119,13 +119,10 @@ fn a_context_with_errors_starts_but_does_not_finish() {
         .expect("readable")
         .progress(Some(sink));
     assert!(project::compile_project(&opts).is_err());
-    assert!(
-        !events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|e| matches!(e, ProgressEvent::Finished(_))),
-        "a failed context reports no Finished"
+    assert_eq!(
+        *events.lock().unwrap(),
+        vec![ProgressEvent::Started("shop.billing".to_string())],
+        "a failed context reports Started and no Finished"
     );
 }
 

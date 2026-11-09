@@ -14,7 +14,7 @@ use crate::report::Format;
 #[derive(Parser, Debug)]
 #[command(name = "bynk", version, about = "The Bynk driver", long_about = None)]
 pub struct Cli {
-    /// Don't print per-context build progress.
+    /// Don't print per-context progress from `build`, `dev` and `deploy`.
     #[arg(short, long, global = true)]
     pub quiet: bool,
     #[command(subcommand)]
