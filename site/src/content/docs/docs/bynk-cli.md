@@ -851,7 +851,11 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
 - **The mutations.** A comparison operator swapped for its neighbour (`<`↔`<=`,
   `>`↔`>=`, `==`↔`!=`) and a boolean connective exchanged (`&&`↔`||`), in every
   declaration of the project's non-suite files. Operators in comments and string
-  literals are left alone.
+  literals are left alone. An `if` condition, and a `match` arm's `if` guard, is
+  replaced by `true` and by `false` (a mutant is skipped when the condition
+  already is that literal), and a binary `+` becomes `-` and `-` becomes `+`
+  (negation is left alone). A mutant that changes the types, such as `+` on
+  strings, doesn't compile and is `invalid`.
 - **Nothing is written.** A mutant exists only in memory and the output goes to a
   scratch directory, so the working tree and `out/` are untouched. A mutant that
   doesn't compile, or whose run fails before any case runs (it throws as the

@@ -1,0 +1,12 @@
+suite demo.guards {
+  // Only the branch the `if` takes is tried, so forcing it `true` goes unnoticed.
+  case "bump takes its branch" {
+    expect bump(10) == 11
+  }
+
+  // Both outcomes of the guard are tried, so dropping or negating it is noticed.
+  case "small is guarded" {
+    expect small(Some(3)) == 1
+    expect small(Some(4)) == 0
+  }
+}
