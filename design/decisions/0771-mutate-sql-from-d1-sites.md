@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk test --mutate` makes SQL mutants only from the SQL the checker ties to a D1 call (including a `const` bound to one, in any case), and now reads `\\n` escapes and `CASE … END` correctly"
----
+# 0771 — `--mutate` takes SQL mutants from D1 call sites, not a keyword guess
 
-## ADR: mutate-sql-from-d1-sites
-title: `--mutate` takes SQL mutants from D1 call sites, not a keyword guess
-summary: The checker's D1 sites pick the SQL literals; the scan runs on decoded text
+- **Status:** Accepted (v0.525.18)
 
 **Context.** ADR 0768 chose SQL literals by a keyword heuristic because linking
 to D1 calls looked costly. It mutated prose that matched, missed lower-case SQL,

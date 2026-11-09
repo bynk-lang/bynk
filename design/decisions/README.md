@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0771](0771-mutate-sql-from-d1-sites.md) | **`--mutate` takes SQL mutants from D1 call sites, not a keyword guess** (v0.525.18) — The checker's D1 sites pick the SQL literals; the scan runs on decoded text | Accepted (v0.525.18) |
 | [0770](0770-inter-do-env-strip.md) | **An inter-DO call strips `env` from the forwarded deps** (v0.525.14) — The callee rebuilds `env` from its own binding, so the caller's is never serialised | Accepted (v0.525.14) |
 | [0769](0769-suite-type-stub-and-generic-codecs.md) | **Suite types and constants in stub values; local codecs for any generic shape** (v0.525.10) — How #3111 lifts the two known limits of suite-local `type`/`const` (ADR 0759) | Accepted (v0.525.10) |
 | [0768](0768-mutate-sql-literals.md) | **`--mutate` SQL literal mutants** (v0.525.7) — How slice 3 of `bynk test --mutate` finds and validates SQL mutants | Accepted (v0.525.7) |
