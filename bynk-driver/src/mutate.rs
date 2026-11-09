@@ -96,7 +96,7 @@ impl Site {
     }
 
     fn id(&self) -> String {
-        format!("{}:{}:{}", self.path, self.line, self.column)
+        format!("{}:{}:{}:{}", self.path, self.line, self.column, self.to)
     }
 }
 
@@ -191,7 +191,13 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
             } else if matches!(token.kind, TokenKind::Plus | TokenKind::Minus) {
                 // Only a binary `+`/`-`: after an operand, not after an
                 // operator, `(` or keyword (where `-` is negation).
-                let after_operand = i > 0
+                // A newline between them starts a new line (`-1 => …` after
+                // an arm), where `-` is negation.
+                let same_line = i > 0
+                    && text
+                        .get(sig[i - 1].span.end..start)
+                        .is_some_and(|gap| !gap.contains('\n'));
+                let after_operand = same_line
                     && matches!(
                         sig[i - 1].kind,
                         TokenKind::Ident
@@ -239,7 +245,12 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
                 };
                 for to in ["true", "false"] {
                     if cond.trim() != to {
-                        found.push((cs, ce, cond.to_string(), to.to_string()));
+                        found.push((
+                            cs,
+                            ce,
+                            cond.split_whitespace().collect::<Vec<_>>().join(" "),
+                            to.to_string(),
+                        ));
                     }
                 }
             }
@@ -748,6 +759,27 @@ mod tests {
         assert_eq!(
             apply(text, cond).lines().nth(3).unwrap(),
             "  if true { a + b } else { -b - 1 }"
+        );
+    }
+
+    #[test]
+    fn wrapped_conditions_display_on_one_line_and_ids_are_unique() {
+        let text = "commons c\n\nfn f(a: Int, b: Int) -> Int {\n  if a > 0 &&\n    b > 0 { a } else { b }\n}\n\nfn g(a: Int) -> Int {\n  match a {\n    0 => a\n    -1 => 2\n    _ => 3\n  }\n}\n";
+        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]));
+        let cond: Vec<&Site> = model
+            .sites
+            .iter()
+            .filter(|s| s.to == "true" || s.to == "false")
+            .collect();
+        assert_eq!(cond.len(), 2);
+        assert!(cond.iter().all(|s| s.from == "a > 0 && b > 0"));
+        let mutant = apply(text, cond[0]);
+        assert!(mutant.contains("if true { a }") && !mutant.contains("&&"));
+        let ids: BTreeSet<String> = model.sites.iter().map(Site::id).collect();
+        assert_eq!(ids.len(), model.sites.len(), "ids are unique");
+        assert!(
+            !model.sites.iter().any(|s| s.decl == "g" && s.from == "-"),
+            "a `-` that starts a line is negation"
         );
     }
 
