@@ -1,4 +1,4 @@
 ---
 level: patch
-changelog: "`bynk check` prepares the literal D1 statements in `case` and `property` bodies against the suite target's migrations"
+changelog: "`bynk check` prepares the literal D1 statements in the `case` and `property` bodies of unit suites against the suite target's migrations"
 ---
