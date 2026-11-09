@@ -104,6 +104,9 @@ pub(crate) fn process_tests(
     snapshot_files: Option<&BTreeMap<String, String>>,
     // P4b (#2608): each `D1` database's migrations, run on every test database.
     d1_migrations: &D1Migrations,
+    // #3108: the schemas those migrations build, which a case's literal D1
+    // statements are prepared against (`None` under `[check] d1_sql = false`).
+    d1_sql: Option<&bynk_check::d1_sql::D1Sql>,
     // #1975: each user adapter's binding module, as an extensionless path
     // from the output root, for a test that builds the binding for real.
     binding_modules: &HashMap<String, String>,
@@ -133,6 +136,7 @@ pub(crate) fn process_tests(
         refs,
         &mut bynk_check::locals::LocalsSink::new(),
         tys,
+        d1_sql,
     );
 
     let mut sorted_targets: Vec<&String> = ready.keys().collect();

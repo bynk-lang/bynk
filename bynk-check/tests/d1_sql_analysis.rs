@@ -85,3 +85,30 @@ fn a_shadowed_let_list_is_not_counted() {
                     let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND id = ?2\", args)\n";
     assert!(categories("let-shadow", "", shadowed).is_empty());
 }
+
+/// #3108: a literal D1 statement in a test body is prepared on the editor path
+/// too (the suite's target is `demo`, whose binding names the database).
+#[test]
+fn a_statement_in_a_test_body_is_prepared() {
+    let root = std::env::temp_dir().join(format!("bynk-check-d1-sql-suite-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let unit = source("");
+    let suite = "suite demo\n\ncase \"reads a missing column\" {\n  \
+                 let _ <- Orders.all(\"SELECT id FROM orders WHERE stauts = ?1\", [Text(\"a\")])\n}\n";
+    let mut overlay = HashMap::new();
+    for (rel, text) in [
+        ("demo.bynk", unit.as_str()),
+        ("demo_test.bynk", suite),
+        ("migrations/demo-orders/0001_create.sql", MIGRATION),
+    ] {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, text).unwrap();
+        overlay.insert(p, text.to_string());
+    }
+    let analysed =
+        analysis::analyse_project(&Roots::Single(root.clone()), &overlay, &SchemaLock::Off);
+    let cats: Vec<_> = analysed.errors.iter().map(|e| e.error.category).collect();
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(cats.contains(&"bynk.d1.sql_invalid"), "{cats:?}");
+}

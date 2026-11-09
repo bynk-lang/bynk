@@ -1,0 +1,13 @@
+context shop.stock
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+service put {
+	on call(id: String) -> Effect[Bool] given Stock {
+		let r <- Stock.run("INSERT INTO items (id, qty) VALUES (?1, 1)", [Text(id)])
+		r is Ok(_)
+	}
+}

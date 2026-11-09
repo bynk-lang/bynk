@@ -1,0 +1,15 @@
+suite shop.stock
+
+// #3108: a literal D1 statement in a test body is prepared against the
+// migrations' schema, as in a production body.
+case "a case reads a column the table lacks" {
+	let _ <- Stock.all("SELECT id FROM items WHERE stauts = ?1", [Text("a")])
+	let _ <- Stock.run("DELETE FROM items WHERE id = ?1", [Text("a"), Text("b")])
+}
+
+property "a property does too" {
+	for all n: Int {
+		let _ <- Stock.all("SELECT nope FROM items", [])
+		expect n == n
+	}
+}
