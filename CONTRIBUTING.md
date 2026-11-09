@@ -45,8 +45,8 @@ Build and layout are described in the [README](README.md#developing). Before you
 push, run the CI gates locally:
 
 ```sh
-cargo xtask ci          # formatting, clippy, and the test suite
-cargo xtask ci --fast   # just formatting and clippy
+cargo xtask ci          # formatting, clippy, strict rustdoc, and the test suite
+cargo xtask ci --fast   # formatting, clippy and strict rustdoc; no tests
 ```
 
 An opt-in `pre-push` hook runs the fast form; enable it once per clone:

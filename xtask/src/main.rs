@@ -14,7 +14,7 @@
 //!   writes the release asset.
 //! - `tier-probe` (C4b, #2940) fails when a test is in no test tier, or in two.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
-//!   `--fast` stops after the two that need no compile-and-link.
+//!   `--fast` stops before the test suite (fmt, clippy, rustdoc).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -441,11 +441,11 @@ fn greenfield_status(apply: bool) -> ExitCode {
 /// This exists to move a whole class of round trip off CI. The PR gate's
 /// critical path is the `Test suite (windows-latest)` leg at ~7 minutes, so a
 /// `cargo fmt` slip — detectable in 17 seconds — costs a push, a seven-minute
-/// wait, and a second push. The two `--fast` gates below need no
-/// compile-and-link and are what the `pre-push` hook in `.githooks/` runs.
+/// wait, and a second push. The `--fast` gates below (fmt, clippy, docs) run no
+/// tests and are what the `pre-push` hook in `.githooks/` runs.
 ///
-/// The commands mirror `.github/workflows/ci.yml`'s `fmt`, `clippy` and `test`
-/// jobs. They are deliberately NOT asserted equal to the workflow by a drift
+/// The commands mirror `.github/workflows/ci.yml`'s `fmt`, `clippy`, `api-docs` and
+/// `test` jobs. They are deliberately NOT asserted equal to the workflow by a drift
 /// guard: this is a convenience that front-runs CI, and CI remains the
 /// authority. If the two drift, CI still fails and the gate still holds — the
 /// only cost is a round trip this command would have saved.
@@ -466,9 +466,13 @@ fn ci(fast: bool) -> ExitCode {
     }
     let steps = ci_steps(fast, nextest);
 
-    for (name, args) in &steps {
+    for (name, args, env) in &steps {
         println!("xtask ci: {name} — cargo {}", args.join(" "));
-        let status = Command::new(cargo()).args(args).current_dir(&root).status();
+        let status = Command::new(cargo())
+            .args(args)
+            .envs(env.iter().copied())
+            .current_dir(&root)
+            .status();
         match status {
             Ok(s) if s.success() => {}
             Ok(s) => {
@@ -492,7 +496,14 @@ fn ci(fast: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// The gates `ci` runs, cheapest first, as `(name, cargo argv)`.
+/// One `ci` gate: `(name, cargo argv, extra env for that child only)`.
+type Step = (
+    &'static str,
+    Vec<&'static str>,
+    Vec<(&'static str, &'static str)>,
+);
+
+/// The gates `ci` runs, cheapest first, as `(name, cargo argv, env)`.
 ///
 /// Split out from [`ci`] so the *selection* is assertable without spawning a
 /// single cargo. That matters most for the `--fast` list: it is what the
@@ -502,9 +513,9 @@ fn ci(fast: bool) -> ExitCode {
 /// `nextest` says whether `cargo nextest` is available; the caller probes for
 /// it (and reports the fallback) rather than this function, to keep it pure.
 /// It is ignored when `fast` is set, since no test step is emitted then.
-fn ci_steps(fast: bool, nextest: bool) -> Vec<(&'static str, Vec<&'static str>)> {
-    let mut steps: Vec<(&str, Vec<&str>)> = vec![
-        ("formatting", vec!["fmt", "--all", "--check"]),
+fn ci_steps(fast: bool, nextest: bool) -> Vec<Step> {
+    let mut steps: Vec<Step> = vec![
+        ("formatting", vec!["fmt", "--all", "--check"], vec![]),
         (
             "clippy",
             vec![
@@ -515,6 +526,14 @@ fn ci_steps(fast: bool, nextest: bool) -> Vec<(&'static str, Vec<&'static str>)>
                 "-D",
                 "warnings",
             ],
+            vec![],
+        ),
+        // CI's `API docs (cargo doc)` job: `-D warnings` makes a broken
+        // intra-doc link fail. Set on this child only, never process-wide.
+        (
+            "docs",
+            vec!["doc", "--no-deps", "--workspace"],
+            vec![("RUSTDOCFLAGS", "-D warnings")],
         ),
     ];
 
@@ -523,9 +542,13 @@ fn ci_steps(fast: bool, nextest: bool) -> Vec<(&'static str, Vec<&'static str>)>
         // test binaries), but fall back rather than fail: a contributor who has
         // not installed it should still get a working `cargo xtask ci`.
         steps.push(if nextest {
-            ("tests", vec!["nextest", "run", "--workspace", "--locked"])
+            (
+                "tests",
+                vec!["nextest", "run", "--workspace", "--locked"],
+                vec![],
+            )
         } else {
-            ("tests", vec!["test", "--workspace", "--locked"])
+            ("tests", vec!["test", "--workspace", "--locked"], vec![])
         });
     }
 
@@ -554,21 +577,38 @@ fn usage() {
 
 #[cfg(test)]
 mod tests {
-    use super::ci_steps;
+    use super::{Step, ci_steps};
 
-    fn names(steps: &[(&str, Vec<&str>)]) -> Vec<String> {
-        steps.iter().map(|(n, _)| (*n).to_string()).collect()
+    fn names(steps: &[Step]) -> Vec<String> {
+        steps.iter().map(|(n, _, _)| (*n).to_string()).collect()
     }
 
     /// The list the `pre-push` hook execs. If clippy ever falls out of it the
     /// hook still exits 0 and still looks like it ran, and the lint failure
     /// resurfaces only on CI — the round trip the hook exists to prevent.
     #[test]
-    fn fast_is_exactly_the_two_compile_free_gates() {
+    fn fast_is_exactly_the_compile_free_gates() {
         let steps = ci_steps(true, false);
-        assert_eq!(names(&steps), ["formatting", "clippy"]);
+        assert_eq!(names(&steps), ["formatting", "clippy", "docs"]);
         assert_eq!(steps[0].1[0], "fmt");
         assert_eq!(steps[1].1[0], "clippy");
+        assert_eq!(steps[2].1[0], "doc");
+    }
+
+    /// Matches CI's `API docs (cargo doc)` job, in both `--fast` and the full
+    /// run, with `-D warnings` scoped to that one child and no other step.
+    #[test]
+    fn docs_step_matches_ci_and_scopes_its_env() {
+        for (fast, nextest) in [(true, false), (false, true), (false, false)] {
+            let steps = ci_steps(fast, nextest);
+            let docs: Vec<_> = steps.iter().filter(|s| s.0 == "docs").collect();
+            assert_eq!(docs.len(), 1, "fast={fast} nextest={nextest}");
+            assert_eq!(docs[0].1, ["doc", "--no-deps", "--workspace"]);
+            assert_eq!(docs[0].2, [("RUSTDOCFLAGS", "-D warnings")]);
+            for s in steps.iter().filter(|s| s.0 != "docs") {
+                assert!(s.2.is_empty(), "{} must not set env", s.0);
+            }
+        }
     }
 
     /// `--fast` must not run the suite whether or not nextest is installed —
@@ -587,7 +627,7 @@ mod tests {
     #[test]
     fn full_run_appends_the_suite_after_the_lints() {
         let steps = ci_steps(false, true);
-        assert_eq!(names(&steps), ["formatting", "clippy", "tests"]);
+        assert_eq!(names(&steps), ["formatting", "clippy", "docs", "tests"]);
     }
 
     /// Both arms run the whole workspace and both pass `--locked`, so a local
@@ -596,7 +636,7 @@ mod tests {
     fn both_test_arms_are_workspace_wide_and_locked() {
         for nextest in [true, false] {
             let steps = ci_steps(false, nextest);
-            let (_, args) = steps.last().expect("a test step");
+            let (_, args, _) = steps.last().expect("a test step");
             assert!(args.contains(&"--workspace"), "{args:?} is not --workspace");
             assert!(args.contains(&"--locked"), "{args:?} is not --locked");
         }
@@ -622,7 +662,7 @@ mod tests {
     #[test]
     fn the_local_run_does_not_borrow_cis_nextest_profile() {
         let steps = ci_steps(false, true);
-        let (_, args) = steps.last().unwrap();
+        let (_, args, _) = steps.last().unwrap();
         assert!(
             !args.contains(&"--profile"),
             "local run must use nextest's default profile, got {args:?}"

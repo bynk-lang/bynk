@@ -23,7 +23,8 @@ run as `cargo xtask <command>`.
   same diff CI runs (`greenfield_status_table_is_current`). `--apply` writes the
   committed table.
 - `ci` — runs the same gates CI runs, locally, in CI's own cheapest-first
-  order; `--fast` stops after the two gates that need no compile-and-link.
+  order; `--fast` runs formatting, clippy and the strict `cargo doc` (broken
+  intra-doc links) but skips the test suite.
 
 ## Use
 
