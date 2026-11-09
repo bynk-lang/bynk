@@ -282,3 +282,33 @@ fn a_run_that_outlives_the_timeout_is_a_timeout_not_invalid() {
     assert_eq!(doc["mutation"]["timeout"], 2);
     assert_eq!(doc["mutation"]["invalid"], 0);
 }
+
+#[test]
+fn guard_and_arithmetic_mutants_are_reported_and_a_one_sided_suite_leaves_a_survivor() {
+    if !can_run() {
+        return;
+    }
+    let project = fixture().with_file_name("mutate_guards");
+    let r = run_in(&project, &["--mutate", "--format", "json"]);
+    assert!(r.success, "{}", r.stderr);
+    let doc: serde_json::Value = serde_json::from_str(&r.stdout)
+        .unwrap_or_else(|e| panic!("a JSON document: {e}\n{}\n{}", r.stdout, r.stderr));
+    let status = |decl: &str, from: &str, to: &str| -> String {
+        doc["mutation"]["mutants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["decl"] == decl && m["from"] == from && m["to"] == to)
+            .unwrap_or_else(|| panic!("no mutant {decl} {from} -> {to}: {}", r.stdout))["status"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    // The suite only tries `n == 10`, where the `if` is already true.
+    assert_eq!(status("bump", "n == 10", "true"), "survived");
+    assert_eq!(status("bump", "n == 10", "false"), "killed");
+    assert_eq!(status("bump", "+", "-"), "killed");
+    // Both sides of the arm's guard are tried.
+    assert_eq!(status("small", "n == 3", "true"), "killed");
+    assert_eq!(status("small", "n == 3", "false"), "killed");
+}

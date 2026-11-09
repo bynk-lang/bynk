@@ -86,8 +86,8 @@ pub struct Site {
     /// The unit (`orders`) and declaration (`refund`) the site is in.
     pub unit: String,
     pub decl: String,
-    pub from: &'static str,
-    pub to: &'static str,
+    pub from: String,
+    pub to: String,
 }
 
 impl Site {
@@ -96,7 +96,7 @@ impl Site {
     }
 
     fn id(&self) -> String {
-        format!("{}:{}:{}", self.path, self.line, self.column)
+        format!("{}:{}:{}:{}", self.path, self.line, self.column, self.to)
     }
 }
 
@@ -177,14 +177,85 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
         let Some(items) = items else { continue };
         let path = display(root, key);
         let positions = LineIndex::new(text);
-        for token in &tokens {
-            let Some((from, to)) = replacement(&token.kind) else {
-                continue;
-            };
+        let sig: Vec<&bynk_syntax::lexer::Token> = tokens
+            .iter()
+            .filter(|t| t.kind != TokenKind::Comment)
+            .collect();
+        let mut found: Vec<(usize, usize, String, String)> = Vec::new();
+        for (i, token) in sig.iter().enumerate() {
             let (start, end) = (token.span.start, token.span.end);
-            if text.get(start..end) != Some(from) {
-                continue;
+            if let Some((from, to)) = replacement(&token.kind) {
+                if text.get(start..end) == Some(from) {
+                    found.push((start, end, from.to_string(), to.to_string()));
+                }
+            } else if matches!(token.kind, TokenKind::Plus | TokenKind::Minus) {
+                // Only a binary `+`/`-`: after an operand, not after an
+                // operator, `(` or keyword (where `-` is negation).
+                // A newline between them starts a new line (`-1 => …` after
+                // an arm), where `-` is negation.
+                let same_line = i > 0
+                    && text
+                        .get(sig[i - 1].span.end..start)
+                        .is_some_and(|gap| !gap.contains('\n'));
+                let after_operand = same_line
+                    && matches!(
+                        sig[i - 1].kind,
+                        TokenKind::Ident
+                            | TokenKind::IntLit
+                            | TokenKind::FloatLit
+                            | TokenKind::DecimalLit
+                            | TokenKind::Duration
+                            | TokenKind::RParen
+                            | TokenKind::RBracket
+                    );
+                let (from, to) = if token.kind == TokenKind::Plus {
+                    ("+", "-")
+                } else {
+                    ("-", "+")
+                };
+                if after_operand && text.get(start..end) == Some(from) {
+                    found.push((start, end, from.to_string(), to.to_string()));
+                }
+            } else if token.kind == TokenKind::If {
+                // An `if` condition (or a match arm's `if` guard) runs from
+                // after the keyword to the `{` that opens the branch or the
+                // `=>` that ends the guard, at bracket depth zero. A
+                // condition that spans a `{` mis-cuts here and becomes an
+                // `invalid` mutant, which is dropped.
+                let mut depth = 0usize;
+                let mut close = None;
+                for (j, t) in sig.iter().enumerate().skip(i + 1) {
+                    match t.kind {
+                        TokenKind::LParen | TokenKind::LBracket => depth += 1,
+                        TokenKind::RParen | TokenKind::RBracket => depth = depth.saturating_sub(1),
+                        TokenKind::LBrace | TokenKind::FatArrow if depth == 0 => {
+                            close = Some(j);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                let Some(j) = close else { continue };
+                if j == i + 1 {
+                    continue;
+                }
+                let (cs, ce) = (sig[i + 1].span.start, sig[j - 1].span.end);
+                let Some(cond) = text.get(cs..ce) else {
+                    continue;
+                };
+                for to in ["true", "false"] {
+                    if cond.trim() != to {
+                        found.push((
+                            cs,
+                            ce,
+                            cond.split_whitespace().collect::<Vec<_>>().join(" "),
+                            to.to_string(),
+                        ));
+                    }
+                }
             }
+        }
+        for (start, end, from, to) in found {
             let Some(item) = items
                 .iter()
                 .find(|i| i.span().start <= start && end <= i.span().end)
@@ -245,7 +316,7 @@ impl<'a> LineIndex<'a> {
 pub fn apply(text: &str, site: &Site) -> String {
     let mut out = String::with_capacity(text.len() + 1);
     out.push_str(&text[..site.start]);
-    out.push_str(site.to);
+    out.push_str(&site.to);
     out.push_str(&text[site.end..]);
     out
 }
@@ -642,7 +713,15 @@ mod tests {
         let found: Vec<(String, &str, &str, usize, usize)> = model
             .sites
             .iter()
-            .map(|s| (s.qualified(), s.from, s.to, s.line, s.column))
+            .map(|s| {
+                (
+                    s.qualified(),
+                    s.from.as_str(),
+                    s.to.as_str(),
+                    s.line,
+                    s.column,
+                )
+            })
             .collect();
         assert_eq!(
             found,
@@ -653,6 +732,55 @@ mod tests {
             ]
         );
         assert_eq!(model.sites[0].path, "src/limits.bynk");
+    }
+
+    #[test]
+    fn finds_if_conditions_match_guards_and_binary_arithmetic() {
+        let text = "commons c\n\nfn f(a: Int, b: Int) -> Int {\n  if a > 0 { a + b } else { -b - 1 }\n}\n\nfn g(o: Option[Int]) -> Int {\n  match o {\n    Some(n) if n > 1 => n\n    _ => 0\n  }\n}\n";
+        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]));
+        let found: Vec<(&str, &str, &str)> = model
+            .sites
+            .iter()
+            .map(|s| (s.decl.as_str(), s.from.as_str(), s.to.as_str()))
+            .collect();
+        for want in [
+            ("f", "a > 0", "true"),
+            ("f", "a > 0", "false"),
+            ("f", "+", "-"),
+            ("f", "-", "+"),
+            ("g", "n > 1", "true"),
+            ("g", "n > 1", "false"),
+        ] {
+            assert!(found.contains(&want), "missing {want:?} in {found:?}");
+        }
+        // The negation `-b` is not a site: exactly one `-`→`+`.
+        assert_eq!(found.iter().filter(|f| f.1 == "-").count(), 1);
+        let cond = model.sites.iter().find(|s| s.to == "true").unwrap();
+        assert_eq!(
+            apply(text, cond).lines().nth(3).unwrap(),
+            "  if true { a + b } else { -b - 1 }"
+        );
+    }
+
+    #[test]
+    fn wrapped_conditions_display_on_one_line_and_ids_are_unique() {
+        let text = "commons c\n\nfn f(a: Int, b: Int) -> Int {\n  if a > 0 &&\n    b > 0 { a } else { b }\n}\n\nfn g(a: Int) -> Int {\n  match a {\n    0 => a\n    -1 => 2\n    _ => 3\n  }\n}\n";
+        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]));
+        let cond: Vec<&Site> = model
+            .sites
+            .iter()
+            .filter(|s| s.to == "true" || s.to == "false")
+            .collect();
+        assert_eq!(cond.len(), 2);
+        assert!(cond.iter().all(|s| s.from == "a > 0 && b > 0"));
+        let mutant = apply(text, cond[0]);
+        assert!(mutant.contains("if true { a }") && !mutant.contains("&&"));
+        let ids: BTreeSet<String> = model.sites.iter().map(Site::id).collect();
+        assert_eq!(ids.len(), model.sites.len(), "ids are unique");
+        assert!(
+            !model.sites.iter().any(|s| s.decl == "g" && s.from == "-"),
+            "a `-` that starts a line is negation"
+        );
     }
 
     #[test]
