@@ -564,7 +564,9 @@ pub fn analyse_project_with_policy(
                     &crate::d1_migrations::declared_databases(&kinds, &unit_tables),
                     &mut scratch,
                 );
-                crate::d1_sql::D1Sql::build(&migrations, &mut errors)
+                // Its `migration_invalid` warning is keyed to a path the editor has
+                // no document for, so it stays in the scratch sink too.
+                crate::d1_sql::D1Sql::build(&migrations, &mut scratch)
             })
     } else {
         None
