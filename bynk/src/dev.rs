@@ -471,7 +471,13 @@ pub fn run(
     // — the shared rooting rule over the full `[paths]` layout. `dev`
     // previously re-rooted on the first `include` entry only, silently
     // dropping further includes and the whole `exclude` list.
-    if !compile_once(project_root, &build_dir, true) {
+    // #3100: the first build reports each context; a watch rebuild stays quiet.
+    if !crate::workers::compile_once_reporting(
+        project_root,
+        &build_dir,
+        true,
+        bynk_driver::progress::terminal_sink(),
+    ) {
         return ExitCode::FAILURE;
     }
 

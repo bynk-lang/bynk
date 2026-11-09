@@ -486,7 +486,12 @@ pub fn run(
         eprintln!("bynk: could not prepare build directory: {e}");
         return ExitCode::FAILURE;
     }
-    if !workers::compile_once(project_root, &build_dir, true) {
+    if !workers::compile_once_reporting(
+        project_root,
+        &build_dir,
+        true,
+        bynk_driver::progress::terminal_sink(),
+    ) {
         return ExitCode::FAILURE;
     }
     // Slice 2: every context, ordered — not the one context slice 0 demanded.

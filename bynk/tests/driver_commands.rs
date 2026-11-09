@@ -1166,6 +1166,28 @@ fn build_refuses_a_bad_profile_table() {
     );
 }
 
+/// #3100: per-context progress prints only on a terminal, so a captured run
+/// (as here) is exactly the one-line summary, and `--quiet` is accepted.
+#[test]
+fn build_progress_is_not_printed_when_output_is_captured() {
+    let proj = scratch("build-progress");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    for args in [
+        &["build"][..],
+        &["--quiet", "build"][..],
+        &["build", "-q"][..],
+    ] {
+        let (code, _, err) = run_bynk_in(&proj, args);
+        assert_eq!(code, 0, "{err}");
+        assert!(!err.contains("Compiling"), "{args:?}: {err}");
+        assert!(err.contains("built bundle -> "), "{args:?}: {err}");
+    }
+}
+
 /// #3054: a bad `[build]` is refused and nothing is built.
 #[test]
 fn build_refuses_a_bad_build_table() {

@@ -14,6 +14,9 @@ use crate::report::Format;
 #[derive(Parser, Debug)]
 #[command(name = "bynk", version, about = "The Bynk driver", long_about = None)]
 pub struct Cli {
+    /// Don't print per-context progress from `build`, `dev` and `deploy`.
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -1304,8 +1307,10 @@ mod tests {
     #[test]
     fn help_renders_groups_between_usage_and_options() {
         let help = command().render_help().to_string();
-        let usage = help.find("Usage: bynk <COMMAND>").expect("usage line");
-        let options = help.find("Options:\n  -h, --help").expect("options");
+        let usage = help
+            .find("Usage: bynk [OPTIONS] <COMMAND>")
+            .expect("usage line");
+        let options = help.find("Options:\n  -q, --quiet").expect("options");
         let mut at = usage;
         for (heading, names) in COMMAND_GROUPS {
             let found = help[at..].find(&format!("\n{heading}:\n"));

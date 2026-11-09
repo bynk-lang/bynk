@@ -28,6 +28,16 @@ use crate::probe::Provenance;
 /// `bynk-tests/tests/e2e.rs`'s in-place fixtures have — an unconditional write
 /// would leave a real `bynk.schema.lock` in the tree on every test run.
 pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool) -> bool {
+    compile_once_reporting(project_root, build_dir, schema_registry, None)
+}
+
+/// [`compile_once`], reporting each context to `progress` as it compiles (#3100).
+pub fn compile_once_reporting(
+    project_root: &Path,
+    build_dir: &Path,
+    schema_registry: bool,
+    progress: Option<bynk_driver::project::ProgressSink>,
+) -> bool {
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read its
     // current content here (verified-absent `None` for a fresh project) and
     // hand it in; write the reconciled content back after a clean compile.
@@ -50,6 +60,7 @@ pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool
         Ok(o) => o
             .target(BuildTarget::Workers)
             .schema_registry(schema_lock)
+            .progress(progress)
             .tests(false),
         Err(e) => {
             eprintln!("bynk: {e}");
