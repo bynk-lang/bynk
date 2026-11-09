@@ -546,6 +546,7 @@ pub(super) fn lower_stub_value_block(
         .filter(|f| !params.iter().any(|p| p.name.name == f.name.name))
         .cloned()
         .collect();
+    let roots_mark = runtime_use.json_codec_roots_len();
     let owning_unit = target_name.to_string();
     let mut typed = synthetic_typed_commons_for_target(
         &owning_unit,
@@ -557,6 +558,7 @@ pub(super) fn lower_stub_value_block(
     );
     let block = test_suites::value_block(e);
     let mut helpers: Vec<String> = Vec::new();
+    let mut suite_decls = String::new();
     if let Some((resolved, _)) = test_suites::build_privileged_resolved(
         &owning_unit,
         unit_tables,
@@ -570,8 +572,8 @@ pub(super) fn lower_stub_value_block(
             test_suites::SuiteItems {
                 fns: &[],
                 fixtures: &fixtures,
-                types: &[],
-                consts: &[],
+                types: items.types,
+                consts: items.consts,
             },
         );
         // #2907: and its helpers, declared ahead of the value like the fixtures.
@@ -593,6 +595,34 @@ pub(super) fn lower_stub_value_block(
                 let stmts = emitter::emit_suite_fn(f, &typed, runtime_use);
                 helpers.extend(stmts.iter().map(|st| bynk_ts::print_stmt(st, 0)));
             }
+        }
+        // #3111: the suite's own types and constants, declared ahead of the
+        // helpers and the value like a case runner's (#3066).
+        if !items.types.is_empty() || !items.consts.is_empty() {
+            let (decl_types, decl_callees) = checker::check_suite_decls(
+                items.types,
+                items.consts,
+                &resolved,
+                tys,
+                &mut errs,
+                &mut RefSink::new(),
+                &mut LocalsSink::new(),
+            );
+            typed.expr_types.extend(decl_types);
+            typed.callees.extend(decl_callees);
+            for t in items.types {
+                typed.types.insert(t.name.name.clone(), Arc::new(t.clone()));
+            }
+            for c in items.consts {
+                typed.consts.insert(c.name.name.clone(), c.clone());
+            }
+            suite_decls = emitter::emit_suite_decls(
+                items.types,
+                items.consts,
+                &typed,
+                &runtime_use.json_codec_qual(),
+                runtime_use,
+            );
         }
         test_suites::add_suite_fns(
             &mut resolved,
@@ -625,6 +655,8 @@ pub(super) fn lower_stub_value_block(
     // map is discarded — it stays unmapped (a deliberate scope cut).
     let body =
         emitter::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0;
+    // #3111: the codecs the value reached for beyond the always-present ones.
+    let late_codecs = suite_late_codecs(items, &typed, runtime_use, roots_mark);
     let aliases: String = fixtures
         .iter()
         .map(|f| {
@@ -635,7 +667,10 @@ pub(super) fn lower_stub_value_block(
             )
         })
         .collect();
-    format!("{aliases}{}{body}", helpers.concat())
+    format!(
+        "{suite_decls}{late_codecs}{aliases}{}{body}",
+        helpers.concat()
+    )
 }
 
 /// #2850/#2907: what a stub clause's values may name of its suite.
@@ -646,8 +681,8 @@ pub(super) fn clause_items(
     test_suites::SuiteItems {
         fns: &rp.clause_fns[idx],
         fixtures: &rp.clause_fixtures[idx],
-        types: &[],
-        consts: &[],
+        types: &rp.clause_types[idx],
+        consts: &rp.clause_consts[idx],
     }
 }
 

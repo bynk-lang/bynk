@@ -112,6 +112,7 @@ pub(super) fn emit_test_property_function(
         hidden,
         tys,
     );
+    let roots_mark = runtime_use.json_codec_roots_len();
     // #2834: the suite's helpers, declared ahead of the `where` filter and body.
     if !suite_fns.is_empty()
         && let Some((mut helper_view, _)) = test_suites::build_privileged_resolved(
@@ -273,6 +274,12 @@ pub(super) fn emit_test_property_function(
         rel_path,
         runtime_use,
     );
+    out.push_str(&suite_late_codecs(
+        suite_fns,
+        &typed,
+        runtime_use,
+        roots_mark,
+    ));
     // P7.2: deferred, same reason as `__where`'s own `__vals` above.
     out.push_str("    const __body = async (__vals: any[]) => {\n");
     out.push_str(&format!("      {destructure}\n"));
@@ -340,6 +347,7 @@ pub(super) fn emit_test_history_property_function(
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
 ) -> TsStmt {
+    let roots_mark = runtime_use.json_codec_roots_len();
     let mut out = String::new();
     let mut harness_bound = emit_test_scope_setup(
         &mut out,
@@ -524,6 +532,12 @@ pub(super) fn emit_test_history_property_function(
         rel_path,
         runtime_use,
     );
+    out.push_str(&suite_late_codecs(
+        suite_fns,
+        &typed,
+        runtime_use,
+        roots_mark,
+    ));
     // P7.2: matches `__bynkDriveHistory_*`'s own real signature — see
     // `emit.rs`'s own driver-signature narrowing and the matching `__drive`
     // call site below (`{target_ns}.__bynkDriveHistory_{agent_name}`).

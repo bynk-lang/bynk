@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {},
+  "expects": {
+    "ledger": {
+      "tally": "e97d8f1272553b84"
+    }
+  },
+  "expects_shapes": {
+    "ledger": {
+      "tally": "Svc(\"tally\",P(\"text\",B(\"String\")),Ret(B(\"Int\")))"
+    }
+  }
+}

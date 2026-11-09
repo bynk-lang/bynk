@@ -125,7 +125,7 @@ export class Room {
       const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
-      await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__eventsDeps });
+      await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__eventsDeps, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {
@@ -151,7 +151,7 @@ export class Room {
     try { __json = globalThis.JSON.parse(__raw) as __JsonValue; } catch { ws.close(1003, "malformed frame"); return; }
     const __dec = __deserialise_Frame(__json, "frame");
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
-    await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { identity: __att.identity as UserId, ...__eventsDeps });
+    await this.__wsMessage_chat(connection, __att.args[0] as RoomKey, __dec.value, { identity: __att.identity as UserId, ...__eventsDeps, ...{ env: env as never } });
   }
 
 }

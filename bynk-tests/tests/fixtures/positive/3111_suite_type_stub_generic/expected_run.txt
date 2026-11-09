@@ -1,0 +1,2 @@
+# #3111: run by behaviour_fixtures.rs.
+passed=7 failed=0

@@ -6602,7 +6602,17 @@ pub(crate) fn emit_agent(
         && a.handlers
             .iter()
             .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees));
-    let needs_env_ctor = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
+    // #3109: likewise the `from websocket` bodies this agent's Durable Object
+    // hosts (`on open` / `on message` / `on close`): they run here, so any
+    // Service Binding or DO namespace they reach comes from this object's `env`.
+    let ws_hosts_reach_env = ctx.target == BuildTarget::Workers
+        && ws_open_hosts_for(&a.name.name, commons, &ctx.local_agents, &ctx.actors)
+            .iter()
+            .any(|h| h.reaches_env(commons));
+    // The `/_bynk/agent/` RPC branch rebuilds on its own condition; the ws
+    // hosts only widen the constructor (and the ws entry points).
+    let rpc_rebuilds_env = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
+    let needs_env_ctor = rpc_rebuilds_env || ws_hosts_reach_env;
     if needs_env_ctor {
         writeln!(out, "  private __env: unknown;").unwrap();
         writeln!(
@@ -7420,6 +7430,7 @@ pub(crate) fn emit_agent(
         host.rebuild = WsDepsRebuild {
             given: given_deps_expr.clone(),
             uses_emit: agent_uses_emit,
+            reaches_env: host.reaches_env(commons),
         };
     }
     for host in &ws_open_hosts {
@@ -7591,7 +7602,7 @@ pub(crate) fn emit_agent(
             "...__decodeAgentArgs({}, methodName, args)",
             agent_wire_name(&a.name.name)
         ));
-        let result_expr = if needs_env_ctor {
+        let result_expr = if rpc_rebuilds_env {
             // #527: the wire deps are JSON — any capability provider in them
             // is a dead plain object (its methods did not survive
             // serialisation). Rebuild this agent's `given` deps in-process,
@@ -8122,6 +8133,15 @@ impl WsOpenHost<'_> {
     fn has_inbound(&self) -> bool {
         self.message.is_some() || self.close.is_some()
     }
+
+    /// #3109: whether any of the service's hosted lifecycle bodies reaches the
+    /// Worker `env` (a consumed context's service or a local agent).
+    fn reaches_env(&self, commons: &TypedCommons) -> bool {
+        std::iter::once(self.handler)
+            .chain(self.message)
+            .chain(self.close)
+            .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees))
+    }
 }
 
 /// The TS type of a resolved actor sum (`deps.who`): each member's tagged
@@ -8527,11 +8547,13 @@ fn given_deps_const_stmt(expr: &str) -> bynk_ts::TsStmt {
 struct WsDepsRebuild {
     given: Option<String>,
     uses_emit: bool,
+    /// #3109: a body reaches `deps.env` (Service Bindings, DO namespaces).
+    reaches_env: bool,
 }
 
 impl WsDepsRebuild {
     fn is_empty(&self) -> bool {
-        self.given.is_none() && !self.uses_emit
+        self.given.is_none() && !self.uses_emit && !self.reaches_env
     }
 
     fn stmts(&self) -> Vec<bynk_ts::TsStmt> {
@@ -8555,6 +8577,12 @@ impl WsDepsRebuild {
         }
         if self.uses_emit {
             v.push("...__eventsDeps");
+        }
+        if self.reaches_env {
+            // A spread, not a shorthand `env`: exempt from excess-property
+            // checks for a lifecycle body whose own deps type omits `env`. The
+            // `never` cast satisfies the body's precise binding-shape type.
+            v.push("...{ env: env as never }");
         }
         v
     }
@@ -9875,14 +9903,7 @@ pub fn emit_suite_decls(
     if !types.is_empty() {
         // The type itself plus the wrappers a test reads one through: a
         // `select[T]` is a `List[T]`, a `firstAs[T]` an `Option[T]`.
-        let mut roots: Vec<TypeRef> = Vec::new();
-        for t in types.iter().filter(|t| t.type_params.is_empty()) {
-            let named = TypeRef::Named(t.name.clone());
-            let span = t.name.span;
-            roots.push(TypeRef::List(Box::new(named.clone()), span));
-            roots.push(TypeRef::Option(Box::new(named.clone()), span));
-            roots.push(named);
-        }
+        let roots = suite_base_codec_roots(types);
         let (names, insts) = super::serialisation::collect_codec_closure(&roots, &typed.types);
         runtime_use.note_json_codec();
         runtime_use.note_boundary_codec();
@@ -9908,6 +9929,88 @@ pub fn emit_suite_decls(
     for c in consts {
         stmts.extend(emit_const_in(c, ModuleCtx::new(typed, &empty, runtime_use)));
     }
+    stmts
+        .iter()
+        .map(|s| bynk_ts::print_stmt(s, 0))
+        .collect::<String>()
+        .lines()
+        .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
+        .collect()
+}
+
+/// The roots a suite's local codecs always cover: each non-generic type plus the
+/// `List`/`Option` wrappers a test reads one through (a `select[T]` is a
+/// `List[T]`, a `firstAs[T]` an `Option[T]`).
+fn suite_base_codec_roots(types: &[TypeDecl]) -> Vec<TypeRef> {
+    let mut roots: Vec<TypeRef> = Vec::new();
+    for t in types.iter().filter(|t| t.type_params.is_empty()) {
+        let named = TypeRef::Named(t.name.clone());
+        let span = t.name.span;
+        roots.push(TypeRef::List(Box::new(named.clone()), span));
+        roots.push(TypeRef::Option(Box::new(named.clone()), span));
+        roots.push(named);
+    }
+    roots
+}
+
+/// #3111: the codecs a runner's body reached for beyond the always-present
+/// ones ([`emit_suite_decls`]): a suite type under another generic (`Result`,
+/// a user generic, nested containers) at a `Json` boundary. `reached` is what
+/// the runner's lowering noted; only roots that name a suite type are served
+/// here (the module-level closure serves the rest). Returns printed function
+/// declarations, unindented, to be spliced ahead of the body; empty when the
+/// body reached nothing new.
+pub fn emit_suite_late_codecs(
+    types: &[TypeDecl],
+    typed: &TypedCommons,
+    qual: &std::collections::HashMap<String, String>,
+    runtime_use: &RuntimeUse,
+    reached: &[TyId],
+) -> String {
+    if types.is_empty() || reached.is_empty() {
+        return String::new();
+    }
+    let names: std::collections::HashSet<String> =
+        types.iter().map(|t| t.name.name.clone()).collect();
+    let extra: Vec<TypeRef> = reached
+        .iter()
+        .filter_map(|t| super::ty_to_type_ref(*t, typed.tys()))
+        .filter(|r| super::serialisation::root_names_any(r, &names))
+        .collect();
+    if extra.is_empty() {
+        return String::new();
+    }
+    let (base_names, base_insts) =
+        super::serialisation::collect_codec_closure(&suite_base_codec_roots(types), &typed.types);
+    let (all_names, all_insts) = super::serialisation::collect_codec_closure(&extra, &typed.types);
+    let new_names: Vec<String> = all_names
+        .into_iter()
+        .filter(|n| !base_names.contains(n))
+        .collect();
+    let base_inst_names: std::collections::HashSet<String> =
+        base_insts.iter().map(|i| i.ts_name()).collect();
+    let new_insts: Vec<_> = all_insts
+        .into_iter()
+        .filter(|i| !base_inst_names.contains(&i.ts_name()))
+        .collect();
+    let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
+    stmts.extend(super::serialisation::decls_as_stmts_block(
+        super::serialisation::emit_helpers_for_owner_qualified(
+            &new_names,
+            &typed.types,
+            "",
+            qual,
+            runtime_use,
+        ),
+    ));
+    stmts.extend(super::serialisation::decls_as_stmts(
+        super::serialisation::emit_generic_helpers_qualified(
+            &new_insts,
+            &typed.types,
+            qual,
+            runtime_use,
+        ),
+    ));
     stmts
         .iter()
         .map(|s| bynk_ts::print_stmt(s, 0))

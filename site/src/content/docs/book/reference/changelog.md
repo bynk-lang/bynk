@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.10** | "A suite's stub values can name its own `type` and `const`, and a suite type works under `Result` and other generics at a JSON boundary" |
+| **v0.525.9** | Workers WebSocket `on open`/`on message`/`on close` bodies that call a consumed context's service or construct an agent now get the Durable Object's own `env`, so the call reaches the real Service Binding or DO namespace instead of an in-memory fallback |
+| **v0.525.8** | "`bynk check` prepares the `SqlStatement`s written inline in a D1 `batch` against the migrations' schema" |
 | **v0.525.7** | "`bynk test --mutate` also mutates SQL literals: comparisons, `max`/`min`, and one `AND` conjunct of a `WHERE`" |
 | **v0.525.6** | "`bynk check` counts a D1 call's parameters when the list is a `let` bound to a list literal; the `[check] d1_sql = false` opt-out and the editor path are tested" |
 | **v0.525.5** | "`bynk test --mutate` also mutates `if` conditions, `match` arm guards and binary `+`/`-`" |
