@@ -263,6 +263,8 @@ pub(crate) fn process_integration_tests(
     asset_files: &TestAssetFiles,
     // P4b (#2608): each `D1` database's migrations, run on every test database.
     d1_migrations: &D1Migrations,
+    // #3135: the schemas those migrations build, for the cases' literal D1 statements.
+    d1_sql: Option<&bynk_check::d1_sql::D1Sql>,
     // #1959: each context's Worker bindings, bound on each participant's
     // `env`. `None` when earlier errors stop the build anyway.
     context_bindings: Option<&BTreeMap<String, Vec<WorkerBinding>>>,
@@ -288,6 +290,7 @@ pub(crate) fn process_integration_tests(
         errors,
         refs,
         tys,
+        d1_sql,
     );
 
     let mut sorted: Vec<&String> = ready.keys().collect();
