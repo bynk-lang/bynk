@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.5** | "`bynk test --mutate` also mutates `if` conditions, `match` arm guards and binary `+`/`-`" |
 | **v0.525.4** | "`bynk fmt` keeps a comment between call arguments and between record-literal fields (#3110)" |
 | **v0.525.3** | "`bynk test` reads `[profile.dev] contracts`, and `bynk deploy` refuses `[profile.release] contracts = true`; one shared rule resolves a verb's profile (#3107)" |
 | **v0.525.2** | CI runs in stages matched to a PR's state — fast checks on drafts, the full three-OS gate once a PR is ready for review, and a thin integration check in the merge queue |

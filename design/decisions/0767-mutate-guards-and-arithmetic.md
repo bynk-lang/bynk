@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk test --mutate` also mutates `if` conditions, `match` arm guards and binary `+`/`-`"
----
+# 0767 — `--mutate` guard, branch and arithmetic mutants
 
-## ADR: mutate-guards-and-arithmetic
-title: `--mutate` guard, branch and arithmetic mutants
-summary: Which sites slice 2 of `bynk test --mutate` mutates, and what "guard" means
+- **Status:** Accepted (v0.525.5)
 
 **Context.** Slice 1 of #3069 mutated comparison operators and `&&`/`||`. The
 proposal's slice 2 adds guard and branch mutants and `+`↔`-`.
