@@ -160,8 +160,7 @@ export class Room {
       const methodName = url.pathname.slice("/_bynk/agent/".length);
       const { args, deps, key } = (await request.json()) as { args: unknown[]; deps: unknown; key: unknown };
       this.__key = __decodeAgentKey(__RoomKey, key) as RoomId;
-      const env = this.__env as unknown as globalThis.Record<string, unknown>;
-      const result = await (this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName](...__decodeAgentArgs(__RoomWire, methodName, args), { ...((deps ?? {}) as globalThis.Record<string, unknown>) });
+      const result = await (this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName](...__decodeAgentArgs(__RoomWire, methodName, args), deps);
       return new globalThis.Response(globalThis.JSON.stringify(__encodeAgentResult(__RoomWire, methodName, result)), { headers: { "content-type": "application/json" } });
     }
     return new globalThis.Response("Not Found", { status: 404 });

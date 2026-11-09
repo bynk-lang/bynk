@@ -1,0 +1,32 @@
+context room
+
+consumes ledger as Ledger
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3109: `on message` calls another context's service. That goes through a
+// Service Binding on `env`, so the Durable Object hosting the socket must
+// rebuild `env` from its own, not leave it off the body's deps.
+service chat from websocket(in: Frame, out: Frame) {
+	on open(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).join("\(u.identity)", connection)
+	}
+
+	on message(room: RoomKey, frame: Frame) -> Effect[()] by u: User {
+		let _ <- Ledger.tally(frame.text)
+	}
+}
+
+agent Room {
+	key id: RoomKey
+
+	store conns: Map[String, Connection[Frame]]
+
+	on call join(name: String, conn: Connection[Frame]) -> Effect[()] {
+		let _ <- conns.put(name, conn)
+	}
+}

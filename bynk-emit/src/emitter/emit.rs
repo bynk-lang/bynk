@@ -6609,8 +6609,10 @@ pub(crate) fn emit_agent(
         && ws_open_hosts_for(&a.name.name, commons, &ctx.local_agents, &ctx.actors)
             .iter()
             .any(|h| h.reaches_env(commons));
-    let needs_env_ctor =
-        given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env || ws_hosts_reach_env;
+    // The `/_bynk/agent/` RPC branch rebuilds on its own condition; the ws
+    // hosts only widen the constructor (and the ws entry points).
+    let rpc_rebuilds_env = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
+    let needs_env_ctor = rpc_rebuilds_env || ws_hosts_reach_env;
     if needs_env_ctor {
         writeln!(out, "  private __env: unknown;").unwrap();
         writeln!(
@@ -7600,7 +7602,7 @@ pub(crate) fn emit_agent(
             "...__decodeAgentArgs({}, methodName, args)",
             agent_wire_name(&a.name.name)
         ));
-        let result_expr = if needs_env_ctor {
+        let result_expr = if rpc_rebuilds_env {
             // #527: the wire deps are JSON — any capability provider in them
             // is a dead plain object (its methods did not survive
             // serialisation). Rebuild this agent's `given` deps in-process,
