@@ -579,6 +579,7 @@ pub(super) fn emit_integration_module(
             &mut throwaway_refs,
             tys,
         );
+        let roots_mark = runtime_use.json_codec_roots_len();
         // #2834: the suite's helpers, declared ahead of the body.
         let helper_src = suite_fn_decls(
             input.suite_fns,
@@ -619,6 +620,12 @@ pub(super) fn emit_integration_module(
             &runtime_use,
             remote.is_some(),
         );
+        case_out.push_str(&suite_late_codecs(
+            input.suite_fns,
+            &typed,
+            &runtime_use,
+            roots_mark,
+        ));
         for (p, names) in &participant_types {
             let named: Vec<String> = names
                 .iter()

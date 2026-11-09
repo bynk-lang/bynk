@@ -379,6 +379,29 @@ pub(super) fn async_test_runner_fn(
 /// *without* the helpers (they are added here, as the check pass adds them); the
 /// helpers' types are merged into `typed`, and their names into `bound` so a
 /// case `let` that reuses one is renamed. A helper's body carries no source map.
+/// #3111: the local codecs the runner's lowered body reached for beyond the
+/// always-present ones — a suite type under `Result` or another generic at a
+/// `Json` boundary — as function declarations to splice ahead of the body.
+/// `mark` is `RuntimeUse::json_codec_roots_len` taken before the runner lowered.
+pub(super) fn suite_late_codecs(
+    suite_fns: test_suites::SuiteItems<'_>,
+    typed: &checker::TypedCommons,
+    runtime_use: &RuntimeUse,
+    mark: usize,
+) -> String {
+    if suite_fns.types.is_empty() {
+        return String::new();
+    }
+    let late = emitter::emit_suite_late_codecs(
+        suite_fns.types,
+        typed,
+        &runtime_use.json_codec_qual(),
+        runtime_use,
+        &runtime_use.json_codec_roots_since(mark),
+    );
+    reindent_by(&late, "    ")
+}
+
 pub(super) fn suite_fn_decls(
     suite_fns: test_suites::SuiteItems<'_>,
     mut resolved: ResolvedCommons,
@@ -583,6 +606,7 @@ pub(super) fn emit_test_case_function(
                 .collect::<Vec<_>>()
         );
     }
+    let roots_mark = runtime_use.json_codec_roots_len();
     // #2834: the suite's helpers, declared ahead of the body.
     if !suite_fns.is_empty()
         && let Some((helper_view, _)) = test_suites::build_privileged_resolved(
@@ -632,6 +656,12 @@ pub(super) fn emit_test_case_function(
     // sub-builder into the case builder, line-anchored at the splice. The caller
     // (emit_test_module) merges this case builder into the module map under the
     // case's source file.
+    out.push_str(&suite_late_codecs(
+        suite_fns,
+        &typed,
+        runtime_use,
+        roots_mark,
+    ));
     let body_base = out.len();
     for line in body_src.lines() {
         out.push_str("    ");

@@ -122,6 +122,10 @@ pub struct ResolvedStub {
     /// #2907: parallel to `clauses` — the helper `fn`s of the suite declaring
     /// each clause, which its values and argument patterns may call.
     pub clause_fns: Vec<Vec<FnDecl>>,
+    /// #3111: parallel to `clauses` — the `type`s and `const`s of the suite
+    /// declaring each clause, which its values may name.
+    pub clause_types: Vec<Vec<TypeDecl>>,
+    pub clause_consts: Vec<Vec<ConstDecl>>,
     /// The test file declaring the first clause — the recording context for
     /// edges in its value expressions (v0.25).
     ///
@@ -326,6 +330,8 @@ fn resolve_stubs(
         PathBuf,
         Vec<FixtureDecl>,
         Vec<FnDecl>,
+        Vec<TypeDecl>,
+        Vec<ConstDecl>,
     );
     let mut collected: Vec<Collected> = Vec::new();
     for &i in indices {
@@ -338,6 +344,8 @@ fn resolve_stubs(
                     parsed[i].identity_path(),
                     t.fixtures.clone(),
                     t.fns.clone(),
+                    t.types.clone(),
+                    t.consts.clone(),
                 ));
             }
         }
@@ -362,6 +370,8 @@ fn resolve_stubs(
                 parsed[i].identity_path(),
                 t.fixtures.clone(),
                 t.fns.clone(),
+                t.types.clone(),
+                t.consts.clone(),
             ));
         }
     }
@@ -382,7 +392,7 @@ fn resolve_stubs(
     };
 
     let mut out: HashMap<String, ResolvedStub> = HashMap::new();
-    for (pc, scope, identity_path, fixtures, fns) in collected {
+    for (pc, scope, identity_path, fixtures, fns, types, consts) in collected {
         let cap_name = pc.capability.name.clone();
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
@@ -456,12 +466,16 @@ fn resolve_stubs(
             clause_scopes: Vec::new(),
             clause_fixtures: Vec::new(),
             clause_fns: Vec::new(),
+            clause_types: Vec::new(),
+            clause_consts: Vec::new(),
             identity_path: identity_path.clone(),
         });
         entry.clauses.push(pc);
         entry.clause_scopes.push(scope);
         entry.clause_fixtures.push(fixtures);
         entry.clause_fns.push(fns);
+        entry.clause_types.push(types);
+        entry.clause_consts.push(consts);
     }
     out
 }
@@ -1615,6 +1629,8 @@ fn check_test_bodies(
                 // in scope in its clauses' values.
                 let clause_view = if rp.clause_fixtures[clause_idx].is_empty()
                     && rp.clause_fns[clause_idx].is_empty()
+                    && rp.clause_types[clause_idx].is_empty()
+                    && rp.clause_consts[clause_idx].is_empty()
                 {
                     None
                 } else {
@@ -1631,8 +1647,8 @@ fn check_test_bodies(
                             SuiteItems {
                                 fns: &rp.clause_fns[clause_idx],
                                 fixtures: &rp.clause_fixtures[clause_idx],
-                                types: &[],
-                                consts: &[],
+                                types: &rp.clause_types[clause_idx],
+                                consts: &rp.clause_consts[clause_idx],
                             },
                         );
                         view
