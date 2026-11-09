@@ -1,0 +1,19 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int, note: String }
+type Wrong = { id: String, price: Int }
+
+// #3070: literal SQL is prepared against the schema the migrations build.
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    let _ <- Orders.all("SELECT id, total FROM orders WHERE id = ?1", [Text(id)])
+    let _ <- Orders.select[Order]("FROM orders WHERE id = ?1", [Text(id)])
+    let _ <- Orders.all("SELECT id FROM orders WHERE id = ?2", [Text(id)])
+    let _ <- Orders.all("SELECT id FROM orders", [Text(id)])
+    true
+  }
+}

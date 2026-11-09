@@ -1852,6 +1852,9 @@ fn check_unit_files(
     embed_text: &BTreeMap<String, String>,
     mode: Mode,
     policy: &Arc<bynk_check::stability::StabilityPolicy>,
+    // #3070: the schemas the D1 migrations build, which literal D1 SQL is
+    // prepared against.
+    d1_sql: &Option<Arc<bynk_check::d1_sql::D1Sql>>,
     errors: &mut ErrorSink,
     refs: &mut RefSink,
     hints: &mut HintSink,
@@ -1892,7 +1895,7 @@ fn check_unit_files(
         split_worker,
     );
     let first_emitted = compiled.len();
-    let check_ctx = prepare_unit_check_ctx(
+    let mut check_ctx = prepare_unit_check_ctx(
         name,
         kind,
         broken,
@@ -1902,6 +1905,7 @@ fn check_unit_files(
         reached_types,
         policy,
     );
+    check_ctx.d1_sql = d1_sql.clone();
 
     // #2719: check every file of the unit before emitting any. Whether a
     // function takes the hidden execution-context parameter depends on the
@@ -2534,6 +2538,14 @@ fn run_checks(
         &bynk_check::d1_migrations::declared_databases(&kinds, &unit_tables),
         &mut errors,
     );
+    // #3070: each database's migrations applied to an in-memory SQLite, which
+    //        every literal D1 statement is prepared against as its unit is
+    //        checked below. `[check] d1_sql = false` turns it off.
+    let d1_sql = if bynk_project::read_check_config(project_root, overlay).d1_sql {
+        bynk_check::d1_sql::D1Sql::build(&d1_migrations, &mut errors)
+    } else {
+        None
+    };
     // #1883, slice 2: fixed asset paths against each Worker's routes.
     bynk_check::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
     // A deployable Bundle build (no tests: `bynk compile` without
@@ -2874,6 +2886,7 @@ fn run_checks(
             &embed_text,
             mode,
             &policy,
+            &d1_sql,
             &mut errors,
             &mut refs,
             &mut hints,

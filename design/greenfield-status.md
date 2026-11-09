@@ -13,7 +13,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `options_sources` | yes | present |
 | `hoist_sinks` | yes | 0 |
 | `span_keyed_maps` | yes | 6 |
-| `emit_diagnostics` | yes | bynk-emit=3/3, bynk-driver=11/16, bynk-check=637/692 (true/naive) |
+| `emit_diagnostics` | yes | bynk-emit=3/3, bynk-driver=11/16, bynk-check=641/696 (true/naive) |
 | `ide_emit_edge` | yes | absent |
 | `ast_importers` | yes | 8 |
 | `emit_abi_shapes` | yes | 41 (bynk-cloudflare.ts:negotiateLocale, bynk-cloudflare.ts:byteStreamBody, bynk-cloudflare.ts:claimStream, bynk-node.ts:byteStreamBody, bynk-node.ts:claimStream, cloudflare.binding.ts:Analytics, cloudflare.binding.ts:D1, cloudflare.binding.ts:DataPoint, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:KvEntry, cloudflare.binding.ts:KvExpiration, cloudflare.binding.ts:KvGet, cloudflare.binding.ts:KvKey, cloudflare.binding.ts:KvList, cloudflare.binding.ts:KvListing, cloudflare.binding.ts:KvPut, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Body, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Part, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:R2Upload, cloudflare.binding.ts:R2UploadOptions, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:SqlError, cloudflare.binding.ts:SqlRun, cloudflare.binding.ts:SqlStatement, cloudflare.binding.ts:SqlValue, cloudflare.binding.ts:claimStream, cloudflare.binding.ts:AnalyticsDataset, cloudflare.binding.ts:D1Database, cloudflare.binding.ts:D1PreparedStatement, cloudflare.binding.ts:D1Result, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2MultipartUpload, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter) |
@@ -23,7 +23,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `verbatim_sites` | yes | 13 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
-| `diagnostic_coverage` | yes | unasserted=8 (asserted 769/777) |
+| `diagnostic_coverage` | yes | unasserted=9 (asserted 772/781) |
 | `model_readers_beyond_emit` | yes | 7 (bynk-model::EntryHandler, bynk-model::EntryParam, bynk-model::EntryShape, bynk-model::IrHandlerKind, bynk-model::IrHttpMethod, bynk-model::entry_handlers, bynk-model::lower_handler_kind_ir) |
 | `unused_deps` | yes | 0 |
 | `wildcard_arms` | no (trend) | 356 |

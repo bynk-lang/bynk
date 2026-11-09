@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0763](0763-d1-sql-schema-check.md) | **A D1 call's literal SQL is checked against the schema its migrations build** (v0.525) — Prepare each statement on a bundled in-memory SQLite, with the migrations applied, at check time | Accepted (v0.525) |
+| [0762](0762-const-string-as-sql.md) | **A String constant bound to a literal counts as a literal for the SQL rules** (v0.524) — Relaxes bynk.types.sql_not_literal for compile-time constants only | Accepted (v0.524) |
 | [0761](0761-bynk-build-profiles.md) | **Named build profiles for `bynk build`** (v0.523.1) — two fixed profiles, `contracts` the only knob, only `bynk build` reads them | Accepted (v0.523.1) |
 | [0760](0760-matches-example-value.md) | **An `@example` annotation gives Val a value for a Matches or IsoDate refinement** (v0.523) — Where the example goes, how it is checked, and why `for all` ignores it | Accepted (v0.523) |
 | [0759](0759-suite-local-type-and-const.md) | **A suite declares its own private, test-only `type` and `const` items** (v0.522) — Suite-local types and constants, scoped like suite helper fns, with codecs emitted into the runner | Accepted (v0.522) |

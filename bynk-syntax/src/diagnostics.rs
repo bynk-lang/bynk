@@ -916,6 +916,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A cron handler does not return `Effect[Result[(), E]]`.",
         &["cron_handler"],
     ),
+    warn(d(
+        "bynk.d1.migration_invalid",
+        "A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning).",
+    )),
     d(
         "bynk.d1.migration_name",
         "A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database.",
@@ -928,6 +932,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.d1.migrations_unused",
         "A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning).",
     )),
+    d(
+        "bynk.d1.select_field_missing",
+        "A `select[T]` / `firstAs[T]` row type has a field with no column of that name in the statement, so the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build.",
+    ),
+    d(
+        "bynk.d1.sql_invalid",
+        "A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column.",
+    ),
+    d(
+        "bynk.d1.sql_param_count",
+        "A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds.",
+    ),
     d(
         "bynk.dependency.path_outside_root",
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
@@ -3623,7 +3639,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.sql_not_literal",
-        "A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c).",
+        "A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c).",
         &["method_call", "record_construction", "record_spread"],
     ),
     dg(

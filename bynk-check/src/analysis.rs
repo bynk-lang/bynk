@@ -551,6 +551,26 @@ pub fn analyse_project_with_policy(
     let available_fixtures = bynk_project::assets::list_fixture_files(roots.project_root()).ok();
     crate::fixtures::phase_fixture_files(&parsed, available_fixtures.as_ref(), &mut errors);
     crate::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
+    // #3070: the D1 migrations' schemas, which literal D1 SQL is prepared
+    // against below, as `bynk check` does. A throwaway sink: the migrations'
+    // own file diagnostics are not (yet) an editor surface.
+    let d1_sql = if bynk_project::read_check_config(roots.project_root(), overlay).d1_sql {
+        bynk_project::assets::AssetFolder::migrations_on_disk(roots.project_root())
+            .ok()
+            .and_then(|folder| {
+                let mut scratch = ErrorSink::new();
+                let migrations = crate::d1_migrations::phase_d1_migrations(
+                    Some(&folder),
+                    &crate::d1_migrations::declared_databases(&kinds, &unit_tables),
+                    &mut scratch,
+                );
+                // Its `migration_invalid` warning is keyed to a path the editor has
+                // no document for, so it stays in the scratch sink too.
+                crate::d1_sql::D1Sql::build(&migrations, &mut scratch)
+            })
+    } else {
+        None
+    };
 
     // -- 6a'. message-bundles slice 1 (#859): messages-block legality,
     //         @reference cardinality, within-block duplicate codes, and the
@@ -737,7 +757,7 @@ pub fn analyse_project_with_policy(
 
         let local_names: HashSet<String> = local_table.types.keys().cloned().collect();
         let local_methods_for_type = collect_unit_methods(indices, &parsed);
-        let ctx = prepare_unit_check_ctx(
+        let mut ctx = prepare_unit_check_ctx(
             name,
             kind,
             &broken,
@@ -747,6 +767,7 @@ pub fn analyse_project_with_policy(
             &reached_types,
             &policy,
         );
+        ctx.d1_sql = d1_sql.clone();
 
         let mut checked: Vec<crate::checker::TypedCommons> = Vec::new();
         for &i in indices {

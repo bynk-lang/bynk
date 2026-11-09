@@ -1,0 +1,4 @@
+bynk.d1.sql_invalid the SQL of `Orders.all` doesn't prepare: no such column: totl
+bynk.d1.sql_invalid the SQL of `Orders.first` doesn't prepare: near "order": syntax error
+bynk.d1.sql_invalid the SQL of `Orders.run` doesn't prepare: near "WHERE": syntax error
+# exact

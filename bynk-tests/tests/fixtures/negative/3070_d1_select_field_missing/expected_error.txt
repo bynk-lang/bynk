@@ -1,0 +1,2 @@
+bynk.d1.select_field_missing `Wrong` has a field `price`, but the query has no column `price`
+# exact

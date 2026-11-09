@@ -1,0 +1,49 @@
+context shop.stock
+
+// #3065: a `String` constant bound to a literal is a literal for the SQL rules.
+
+uses shop.queries
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+type Item = { id: String }
+
+const InsertSql: String = "INSERT INTO items (id) VALUES ('a')"
+const CountSql: String = "SELECT count(*) AS n FROM items"
+const CountAlias: String = CountSql
+// Shadows the commons' `Base`; `Tail` (declared there) must still read its own.
+const Base: String = "FROM nowhere"
+const ItemsFrom: String = """
+	FROM items
+	ORDER BY id
+"""
+
+service listing {
+  on call() -> Effect[Result[List[Item], SqlReadError]] given Stock {
+    let _ <- Stock.run(CreateSql, [])
+    let _ <- Stock.run(InsertSql, [])
+    Stock.select[Item](ItemsFrom, [])
+  }
+}
+
+service aliased {
+  on call() -> Effect[Result[List[Item], SqlReadError]] given Stock {
+    Stock.select[Item](Tail, [])
+  }
+}
+
+service hidden {
+  on call() -> Effect[Result[List[Item], SqlReadError]] given Stock {
+    Stock.select[Item](HiddenTail, [])
+  }
+}
+
+fn statement() -> SqlStatement {
+  SqlStatement { sql: InsertSql, params: [] }
+}
+
+fn respelled(s: SqlStatement) -> SqlStatement {
+  SqlStatement { ...s, sql: InsertSql }
+}

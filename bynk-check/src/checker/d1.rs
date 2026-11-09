@@ -28,15 +28,77 @@ pub(crate) fn is_sql_statement_type(name: &str, types: &HashMap<String, Arc<Type
         })
 }
 
+/// #3070: one literal SQL statement of a derived `D1` instance, as the project
+/// phase prepares it against the migrations' schema.
+#[derive(Debug, Clone)]
+pub struct D1SqlSite {
+    /// The capability the call is on (`Orders`), whose instance names the database.
+    pub cap: String,
+    /// The method (`all`, `first`, `run`, `select`, `firstAs`).
+    pub op: String,
+    /// The statement as SQLite sees it; for `select`/`firstAs` the composed
+    /// `SELECT <columns> <tail>`.
+    pub text: String,
+    /// The literal's span: where every diagnostic is reported.
+    pub span: Span,
+    /// For `select`/`firstAs`: the row type and its field names (the columns the
+    /// compiler wrote), so a missing one is reported against the type.
+    pub row: Option<(String, Vec<String>)>,
+    /// The number of values passed, when the list is a list literal.
+    pub passed: Option<usize>,
+}
+
+/// The length of a list-literal argument; `None` when the list is a name, a
+/// call or anything whose length is not fixed by the text.
+fn literal_list_len(e: Option<&Expr>) -> Option<usize> {
+    match &e?.kind {
+        ExprKind::ListLit(items, ..) => Some(items.len()),
+        _ => None,
+    }
+}
+
+/// #3065: the text of a SQL argument that is fixed at compile time: a string
+/// literal, or a bare reference to a `String` constant whose value, following
+/// constant-to-constant references, is a plain string literal. A constant's
+/// initialiser is a closed static set (`consts::static_error`: no operators,
+/// calls or interpolation), so such a name can carry no run-time input, and the
+/// checker judges the very text the call sends. `None` for anything else: a
+/// parameter, a `let` binding (locals shadow a constant of the same name), a
+/// field, a call, or a constant not declared exactly `String`.
+pub(crate) fn sql_literal_text(e: &Expr, ctx: &Ctx) -> Option<String> {
+    match &e.kind {
+        ExprKind::StrLit(s) => Some(s.clone()),
+        ExprKind::Ident(id) if ctx.lookup(id.name.as_str()).is_none() => {
+            let mut name = id.name.as_str();
+            // A chain longer than the constants in scope is a cycle, already
+            // `bynk.resolve.const_cycle`; the bound keeps this total.
+            for _ in 0..=ctx.input.consts.len() {
+                let c = ctx.input.consts.get(name)?;
+                if !matches!(c.ty, TypeRef::Base(BaseType::String, _)) {
+                    return None;
+                }
+                match &c.init.kind {
+                    ExprKind::StrLit(s) => return Some(s.clone()),
+                    ExprKind::Ident(next) => name = next.name.as_str(),
+                    _ => return None,
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 fn sql_not_literal(span: Span, what: &str) -> CompileError {
     CompileError::new(
         "bynk.types.sql_not_literal",
         span,
-        format!("{what} must be a string literal"),
+        format!("{what} must be a string literal or a `String` constant bound to one"),
     )
     .with_note(
         "pass values as `?1`, `?2`, … parameters in `params`, which are bound, never \
-         spliced into the text; SQL built at run time could be injected",
+         spliced into the text; SQL built at run time could be injected. A `const` \
+         `String` bound to a literal is accepted, since its value is fixed at compile time",
     )
 }
 
@@ -57,13 +119,25 @@ pub(crate) fn check_sql_argument(
     {
         return;
     }
-    if let Some(sql) = args.first()
-        && !matches!(sql.kind, ExprKind::StrLit(_))
-    {
-        ctx.errors.push(sql_not_literal(
-            sql.span,
-            &format!("the SQL of `{cap}.{method}`"),
-        ));
+    if let Some(sql) = args.first() {
+        if let Some(text) = sql_literal_text(sql, ctx) {
+            ctx.callees.insert(
+                sql.id,
+                Callee::D1Sql(D1SqlSite {
+                    cap: cap.to_string(),
+                    op: method.to_string(),
+                    text,
+                    span: sql.span,
+                    row: None,
+                    passed: literal_list_len(args.get(1)),
+                }),
+            );
+        } else {
+            ctx.errors.push(sql_not_literal(
+                sql.span,
+                &format!("the SQL of `{cap}.{method}`"),
+            ));
+        }
     }
 }
 
@@ -83,7 +157,7 @@ pub(crate) fn check_statement_fields(ty: TyId, fields: &[FieldInit], ctx: &mut C
         let literal = f
             .value
             .as_ref()
-            .is_some_and(|v| matches!(v.kind, ExprKind::StrLit(_)));
+            .is_some_and(|v| sql_literal_text(v, ctx).is_some());
         if !literal {
             let span = f.value.as_ref().map_or(f.name.span, |v| v.span);
             ctx.errors
@@ -264,8 +338,15 @@ pub(crate) fn check_typed_read(
         ok = false;
     }
     let mut sql = None;
-    match &args[0].kind {
-        ExprKind::StrLit(tail) => {
+    let tail_text = sql_literal_text(&args[0], ctx);
+    match tail_text.as_ref() {
+        Some(tail) => {
+            // A constant tail is read at compile time (the composed SQL is
+            // recorded below); still type the name so hover and references
+            // see it.
+            if matches!(args[0].kind, ExprKind::Ident(_)) {
+                let _ = type_of(&args[0], None, ctx);
+            }
             if begins_with_select(tail) {
                 ctx.errors.push(
                     CompileError::new(
@@ -298,7 +379,7 @@ pub(crate) fn check_typed_read(
                 sql = Some(format!("SELECT {cols} {}", tail.trim_start()));
             }
         }
-        _ => {
+        None => {
             ctx.errors.push(sql_not_literal(
                 args[0].span,
                 &format!("the SQL of `{cap}.{}`", method.name),
@@ -324,6 +405,24 @@ pub(crate) fn check_typed_read(
     }
     let first = method.name == "firstAs";
     let sql = sql.filter(|_| ok)?;
+    if let Ty::Named { name: row, .. } = &*tys.get(t)
+        && let Some(TypeBody::Record(record)) = ctx.input.types.get(row).map(|d| &d.body)
+    {
+        ctx.callees.insert(
+            args[0].id,
+            Callee::D1Sql(D1SqlSite {
+                cap: cap.to_string(),
+                op: method.name.clone(),
+                text: sql.clone(),
+                span: args[0].span,
+                row: Some((
+                    row.clone(),
+                    record.fields.iter().map(|f| f.name.name.clone()).collect(),
+                )),
+                passed: literal_list_len(args.get(1)),
+            }),
+        );
+    }
     ctx.callees.insert(
         expr_id,
         Callee::D1Select {

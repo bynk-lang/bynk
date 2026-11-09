@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **777** codes in total.
+There are **781** codes in total.
 
 ## Agents
 
@@ -345,9 +345,13 @@ There are **777** codes in total.
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | `bynk.cell.self_reference` | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
 | `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
+| `bynk.d1.migration_invalid` | A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning). |  | Warning |
 | `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
 | `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
 | `bynk.d1.migrations_unused` | A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning). |  | Warning |
+| `bynk.d1.select_field_missing` | A `select[T]` / `firstAs[T]` row type has a field with no column of that name in the statement, so the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build. |  | — |
+| `bynk.d1.sql_invalid` | A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column. |  | — |
+| `bynk.d1.sql_param_count` | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
 | `bynk.dependency.path_outside_root` | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
@@ -920,7 +924,7 @@ There are **777** codes in total.
 | `bynk.types.select_tail_has_select` | A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sequence_needs_result` | `sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.some_value_mismatch` | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
-| `bynk.types.sql_not_literal` | A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is not a string literal, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call), [`record_construction`](/book/reference/grammar/#rule-record_construction), [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| `bynk.types.sql_not_literal` | A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call), [`record_construction`](/book/reference/grammar/#rule-record_construction), [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | `bynk.types.sql_row_shape` | `Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sql_statement_at_boundary` | A `bynk.cloudflare` `SqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c). |  | — |
 | `bynk.types.stream_at_boundary` | A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields). |  | — |

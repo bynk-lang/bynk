@@ -44,7 +44,8 @@ column (`count(*) AS total`) stays with `all` and `Json.decodeSql`.
 The `sql` after the opening `"""` is a language tag: editors highlight the
 statement as SQL, and the value is the same as without it.
 
-The tail is still a string literal, so the injection guarantee holds: data
+The tail is still a string literal, or a `String` `const` bound to one (declare
+a tail once and use it at every call), so the injection guarantee holds: data
 reaches the statement only as a bound `?1`, `?2`, … parameter. It must not begin
 with `SELECT` (`bynk.types.select_tail_has_select`), and a variable or an
 interpolated string is `bynk.types.sql_not_literal`. `T` must be a row, as for

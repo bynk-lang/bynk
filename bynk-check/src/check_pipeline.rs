@@ -110,6 +110,10 @@ pub struct UnitCheckCtx {
     /// `bynk.visibility.private_item` rather than as an unknown name
     /// (`resolver::rewrite_private_references`).
     pub private_imports: HashMap<String, resolver::PrivateImport>,
+    /// #3070: the schemas the project's D1 migrations build, which each
+    /// literal D1 statement is prepared against. `None` when the project has no
+    /// migrations or the check is off.
+    pub d1_sql: Option<Arc<crate::d1_sql::D1Sql>>,
 }
 
 /// Build the per-unit prelude [`check_file_core`] shares across every file
@@ -182,6 +186,7 @@ pub fn prepare_unit_check_ctx(
                 )
             })
             .unwrap_or_default(),
+        d1_sql: None,
     }
 }
 
@@ -646,6 +651,18 @@ pub fn check_file_core(
     if !shadow_errs.is_empty() {
         errors.extend_for(Some(&pf.identity_path()), shadow_errs);
         failed = true;
+    }
+
+    // #3070: each literal D1 statement of this context, prepared against the
+    // schema its binding's migrations build.
+    if kind == UnitKind::Context
+        && let (Some(d1_sql), Some(table)) = (&ctx.d1_sql, unit_table_owned.as_ref())
+    {
+        let sql_errs = ours(d1_sql.check_unit(name, table, &typed.callees));
+        if !sql_errs.is_empty() {
+            errors.extend_for(Some(&pf.identity_path()), sql_errs);
+            failed = true;
+        }
     }
 
     // #1663: every stage has now checked past the earlier errors; the file

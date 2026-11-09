@@ -16,7 +16,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use bynk_syntax::ast::{
-    CommonsItem, ConstDecl, Expr, ExprKind, FnName, Ident, TypeBody, TypeDecl, UnaryOp,
+    BaseType, CommonsItem, ConstDecl, Expr, ExprKind, FnName, Ident, TypeBody, TypeDecl, TypeRef,
+    UnaryOp,
 };
 use bynk_syntax::error::CompileError;
 
@@ -503,8 +504,57 @@ pub fn compose_unit_consts(
         unit_info.get(u).map(|i| &i.table)
     })
     .into_iter()
-    .map(|(n, c)| (n, c.decl.clone()))
+    .map(|(n, c)| {
+        let mut decl = c.decl.clone();
+        // #3065: an imported `String` alias (`const Tail: String = Base`) names
+        // its target in the *declaring* unit's scope, not this one's, where a
+        // local `Base` may differ or the real one be `private`. Fold it to the
+        // literal it denotes there, so a checker reading the view's initialiser
+        // (the SQL a database call sends) sees the declarer's text.
+        if let Some(owner) = c.owner
+            && matches!(decl.init.kind, ExprKind::Ident(_))
+            && let Some(text) = alias_literal(
+                |u| unit_info.get(u).map(|i| (&i.table, i.uses.as_slice())),
+                owner,
+                &decl,
+            )
+        {
+            decl.init.kind = ExprKind::StrLit(text);
+        }
+        (n, decl)
+    })
     .collect()
+}
+
+/// #3065: the string literal a `String` constant alias denotes, following each
+/// hop in the scope of the unit declaring the constant it was written in.
+pub fn alias_literal<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    owner: &str,
+    start: &ConstDecl,
+) -> Option<String> {
+    let mut at = owner;
+    let mut current = start;
+    // A chain this long is a cycle, reported as `bynk.resolve.const_cycle`.
+    for _ in 0..64 {
+        if !matches!(current.ty, TypeRef::Base(BaseType::String, _)) {
+            return None;
+        }
+        match &current.init.kind {
+            ExprKind::StrLit(s) => return Some(s.clone()),
+            ExprKind::Ident(next) => {
+                let (table, uses) = unit(at)?;
+                let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+                let found = vis.get(next.name.as_str())?;
+                if let Some(o) = found.owner {
+                    at = o;
+                }
+                current = found.decl;
+            }
+            _ => return None,
+        }
+    }
+    None
 }
 
 /// A constant visible in a unit ([`visible_consts`]), with where it is declared.
