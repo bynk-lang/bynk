@@ -263,7 +263,7 @@ fn run() -> ExitCode {
             if !prepare(&args.input, lock.options()) {
                 return ExitCode::FAILURE;
             }
-            run_test(args)
+            run_test(*args)
         }
         Command::Fetch { path, lock, format } => {
             if matches!(format, bynk::cli::DeployFormatArg::Json) {

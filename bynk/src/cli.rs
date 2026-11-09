@@ -531,7 +531,7 @@ pub enum Command {
     /// Runs in-process. Requires `tsc` (with Node.js) or `tsx` on PATH.
     Test {
         #[command(flatten)]
-        args: bynk_driver::test_runner::TestArgs,
+        args: Box<bynk_driver::test_runner::TestArgs>,
         #[command(flatten)]
         lock: LockArgs,
     },

@@ -753,7 +753,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT]]
+bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
 ```
 
 | Argument | Default | Meaning |
@@ -781,6 +781,8 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|n
 | `--mutate-timeout SECONDS` | 3× the unmutated run, at least 10 | With `--mutate`, kill a mutant's run after this long; it counts as killed. |
 | `--mutate-all-suites` | off | With `--mutate`, run every suite against every mutant, not only the suites that reach the mutated unit. |
 | `--mutate-fail-under PERCENT` | — | With `--mutate`, exit non-zero when fewer than `PERCENT` of the mutants that ran were killed, or when no mutant reached a suite. |
+| `--changed GIT_REF` | — | With `--mutate`, mutate only declarations in `.bynk` files that differ from `GIT_REF` (what `git diff GIT_REF` names, plus files git doesn't track yet). An unknown ref is an error. |
+| `--mutate-jobs N` | 1 | With `--mutate`, run `N` mutants at once (1–256), each in its own scratch output directory. The report doesn't depend on it. |
 
 **Exit code** — follows the runner's own process status: `0` when every case
 passed, non-zero on a failing case, a `--case` or `--suite` value that selected
@@ -881,13 +883,22 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
   `--mutate-fail-under PERCENT`, when the score is below it or nothing was scored. The score is the share
   of mutants that ran which were killed.
 - **Cost.** Every mutant is a compile, `tsc` and `node` run, so use `--only` and
-  `--max-mutants` to keep it bounded. At a workspace root `--mutate` is refused: run
+  `--max-mutants` to keep it bounded, `--changed GIT_REF` to mutate only what a
+  change touched, and `--mutate-jobs N` to run mutants in parallel. The report is
+  the same whatever `N` is: the same mutants, in the same order, with the same ids,
+  and each mutant's timeout applies to its own run. The default timeout is derived
+  from the unmutated run, so on a loaded machine with many jobs raise it with
+  `--mutate-timeout`. A mutant is reached by a suite by its target and `uses` only:
+  per-mutant coverage narrowing isn't offered, since coverage is a whole-run
+  report, not per suite or case. At a workspace root `--mutate` is refused: run
   it inside a member.
 
 With `--format json` the document is the unmutated run's, plus a `mutation` object:
 `total`, `killed`, `timeout`, `survived`, `no_suite`, `invalid`, `score` and
 `mutants[]`, each with `id`, `file`, `line`, `column`, `end_line`, `end_column`,
-`unit`, `decl`, `from`, `to`, `status` and `suites`.
+`unit`, `decl`, `from`, `to`, `status` and `suites`. With `--changed`, the object
+also holds `changed`: `{ "ref": …, "files": [...] }`, the files the run was
+limited to.
 
 ### Snapshots
 

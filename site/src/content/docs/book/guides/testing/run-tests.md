@@ -147,7 +147,12 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
 That survivor means nothing in the suites tries `within(5, 5)`: add a case at the
 boundary and the mutant is killed. Some survivors change nothing a test could see;
 exclude those in [`[test.mutate]`](/docs/manifest/#testmutate). Your files are never
-touched, and the unmutated suites must pass first. See
+touched, and the unmutated suites must pass first.
+
+On a large project, keep a CI run proportional to the diff and spread it over the
+machine's cores: `bynk test --mutate --changed origin/main --mutate-jobs 4` mutates
+only the declarations in files that differ from `origin/main`, four at a time. The
+report is the same whatever the job count. See
 [Mutation testing](/docs/bynk-cli/#mutation-testing) for the flags, the exit code and
 the JSON shape.
 

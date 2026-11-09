@@ -226,6 +226,22 @@ pub struct TestArgs {
     /// Without it surviving mutants are reported but do not fail the run.
     #[arg(long, value_name = "PERCENT", requires = "mutate")]
     pub mutate_fail_under: Option<u32>,
+    /// With `--mutate`, mutate only the declarations in files that differ from
+    /// `<GIT_REF>` (#3134): the files `git diff <GIT_REF>` names, plus files git
+    /// does not track yet. The same mutants are reported as without the flag,
+    /// minus those in unchanged files.
+    #[arg(long, value_name = "GIT_REF", requires = "mutate")]
+    pub changed: Option<String>,
+    /// With `--mutate`, run this many mutants at once, each in its own scratch
+    /// output directory (#3134). The report does not depend on it: the same
+    /// mutants, in the same order, with the same ids. Default 1.
+    #[arg(
+        long,
+        value_name = "N",
+        requires = "mutate",
+        value_parser = clap::value_parser!(u64).range(1..=256)
+    )]
+    pub mutate_jobs: Option<u64>,
     /// Not a flag. One source file's text, replacing what is on disk for this
     /// build: the mutant `--mutate` is running. The path is the key the
     /// project's source map holds the file under.
@@ -266,6 +282,8 @@ impl TestArgs {
             mutate_timeout: None,
             mutate_all_suites: false,
             mutate_fail_under: None,
+            changed: None,
+            mutate_jobs: None,
             mutant_overlay: None,
             run_timeout: None,
         }
@@ -347,6 +365,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         mutate_timeout,
         mutate_all_suites,
         mutate_fail_under,
+        changed,
+        mutate_jobs,
         mutant_overlay,
         run_timeout,
     } = args;
@@ -403,6 +423,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 timeout: mutate_timeout.map(std::time::Duration::from_secs),
                 all_suites: mutate_all_suites,
                 fail_under: mutate_fail_under,
+                changed,
+                jobs: mutate_jobs.map_or(1, |n| n as usize),
             },
         );
     }
