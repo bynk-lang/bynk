@@ -184,7 +184,7 @@ fn decode_with_map(lit: &str) -> Option<(String, Vec<(usize, usize)>)> {
 
 /// The mutations inside one string literal's source text (quotes included),
 /// as `(start, end, from, to)` offsets into it. The caller has established
-/// that the literal is SQL (the checker ties it to a D1 call: [`D1Sites`]); the
+/// that the literal is SQL (the checker ties it to a D1 call: see `build_model`); the
 /// scan runs on the literal's *decoded* text, so an escape such as `\n` is the
 /// newline it stands for, and is mapped back to the source span it came from.
 /// Three kinds: a comparison `<`↔`<=`, `>`↔`>=`; `max(`↔`min(`; and, in a
