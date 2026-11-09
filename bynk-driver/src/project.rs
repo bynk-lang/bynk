@@ -589,6 +589,26 @@ pub struct ProjectCheck {
     /// readable version and valid `migrate` steps, keyed `<unit>.<Agent>`.
     /// Empty without a lock, or when the check stopped before reconciling.
     pub agent_versions: HashMap<String, bynk_check::schema_registry::AgentVersions>,
+    /// #3142: the SQL arguments the checker tied to a D1 call (`all`, `first`,
+    /// `run`, `select`, `firstAs`, or an inline `batch` statement). Read by
+    /// `bynk test --mutate` to pick SQL mutants. Empty when the check stopped
+    /// before the units ran.
+    pub d1_sql_sites: Vec<D1SqlRef>,
+}
+
+/// #3142: one D1 call's SQL argument, as the checker recorded it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct D1SqlRef {
+    /// The unit the call is in.
+    pub unit: String,
+    /// The absolute path of the file holding the argument.
+    pub path: PathBuf,
+    /// The argument's byte span: the string literal itself, or, when `konst` is
+    /// set, the reference to the constant.
+    pub start: usize,
+    pub end: usize,
+    /// The name of the `String` constant the argument refers to, if it is one.
+    pub konst: Option<String>,
 }
 
 impl ProjectCheck {
@@ -652,16 +672,52 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         tys,
         None,
     );
-    let (errors, snapshots, agent_versions) = match run {
+    let (errors, snapshots, agent_versions, d1_sql_sites) = match run {
         RunChecks::Bailed {
             errors, snapshots, ..
-        } => (errors, snapshots, HashMap::new()),
+        } => (errors, snapshots, HashMap::new(), Vec::new()),
         RunChecks::Checked {
             errors,
             snapshots,
             agent_versions,
+            unit_callees,
+            parsed,
             ..
-        } => (errors, snapshots, agent_versions),
+        } => {
+            // #3142: a site's span carries the durable `FileId` its file's
+            // absolute path interns to.
+            let paths: HashMap<_, _> = parsed
+                .iter()
+                .filter_map(|pf| {
+                    let abs = pf.abs_path()?;
+                    Some((bynk_project::parse_cache::file_id_for(&abs), abs))
+                })
+                .collect();
+            let mut lits: Vec<D1SqlRef> = unit_callees
+                .iter()
+                .flat_map(|(unit, m)| m.values().map(move |c| (unit, c)))
+                .filter_map(|(unit, c)| {
+                    let (site, konst) = match c {
+                        bynk_check::checker::Callee::D1Sql(site) => (site, None),
+                        bynk_check::checker::Callee::Const(name, Some(site)) => {
+                            (&**site, Some(name.clone()))
+                        }
+                        _ => return None,
+                    };
+                    let path = paths.get(&site.span.file)?;
+                    Some(D1SqlRef {
+                        unit: unit.clone(),
+                        path: path.clone(),
+                        start: site.span.start,
+                        end: site.span.end,
+                        konst,
+                    })
+                })
+                .collect();
+            lits.sort();
+            lits.dedup();
+            (errors, snapshots, agent_versions, lits)
+        }
     };
     ProjectCheck {
         // #1890: the manifest's duplicate-flag warnings, as a build reports.
@@ -673,6 +729,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         snapshots,
         display_root: options.roots.project_root().to_path_buf(),
         agent_versions,
+        d1_sql_sites,
     }
 }
 
@@ -1967,6 +2024,20 @@ fn check_unit_files(
     };
     let plan_failed = !plan_errors.is_empty();
     errors.extend_attributed_by_span(parsed, plan_errors);
+    if mode == Mode::Analyse {
+        // #3142: an analysis keeps just the D1 SQL sites, for `bynk test
+        // --mutate`; emission below is build-only.
+        for (_, typed, _) in &checked {
+            unit_callees.extend(typed.callees.iter().filter_map(|(id, c)| {
+                let keep = match c {
+                    bynk_check::checker::Callee::D1Sql(_) => true,
+                    bynk_check::checker::Callee::Const(_, site) => site.is_some(),
+                    _ => false,
+                };
+                keep.then(|| (*id, c.clone()))
+            }));
+        }
+    }
     if plan_failed || mode == Mode::Analyse {
         return;
     }
@@ -1993,6 +2064,9 @@ fn check_unit_files(
                 bynk_check::checker::Callee::Capability { cap, op, .. } => {
                     cap == "Events" && op == "emit"
                 }
+                // #3142: the D1 SQL sites, for `bynk test --mutate`.
+                bynk_check::checker::Callee::D1Sql(_) => true,
+                bynk_check::checker::Callee::Const(_, site) => site.is_some(),
                 _ => false,
             };
             keep.then(|| (*id, c.clone()))

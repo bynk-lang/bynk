@@ -858,11 +858,13 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
   already is that literal), and a binary `+` becomes `-` and `-` becomes `+`
   (negation is left alone). A mutant that changes the types, such as `+` on
   strings, doesn't compile and is `invalid`.
-  Inside a SQL string literal (one whose first word is `SELECT`, `INSERT`,
-  `UPDATE`, `DELETE`, `REPLACE`, `WITH`, `FROM` or `WHERE`), `<`↔`<=` and
-  `>`↔`>=`, `max(`↔`min(`, and dropping one `AND` conjunct of a `WHERE` with two
-  or more (a `WHERE` containing an `OR` is left alone, and `BETWEEN … AND …` is
-  one conjunct). A SQL mutant the checker's SQL check refuses is `invalid`.
+  Inside the SQL of a `D1` call (the argument of `all`, `first`, `run`,
+  `select` or `firstAs`, an inline `batch` statement, or a `String` `const`
+  bound to one, whatever its case), `<`↔`<=` and `>`↔`>=`, `max(`↔`min(`, and
+  dropping one `AND` conjunct of a `WHERE` with two or more (a `WHERE`
+  containing an `OR` is left alone, `BETWEEN … AND …` is one conjunct, and so
+  is a `CASE … END`). Any other string, however much it looks like SQL, is left
+  alone. A SQL mutant the checker's SQL check refuses is `invalid`.
 - **Nothing is written.** A mutant exists only in memory and the output goes to a
   scratch directory, so the working tree and `out/` are untouched. A mutant that
   doesn't compile, or whose run fails before any case runs (it throws as the
