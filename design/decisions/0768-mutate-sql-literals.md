@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk test --mutate` also mutates SQL literals: comparisons, `max`/`min`, and one `AND` conjunct of a `WHERE`"
----
+# 0768 — `--mutate` SQL literal mutants
 
-## ADR: mutate-sql-literals
-title: `--mutate` SQL literal mutants
-summary: How slice 3 of `bynk test --mutate` finds and validates SQL mutants
+- **Status:** Accepted (v0.525.7)
 
 **Context.** Proposal decision C2 deferred SQL mutants until the SQL literal's
 structure was exposed by the front end, and noted the checker no longer guards

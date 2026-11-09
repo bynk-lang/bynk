@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0768](0768-mutate-sql-literals.md) | **`--mutate` SQL literal mutants** (v0.525.7) — How slice 3 of `bynk test --mutate` finds and validates SQL mutants | Accepted (v0.525.7) |
 | [0767](0767-mutate-guards-and-arithmetic.md) | **`--mutate` guard, branch and arithmetic mutants** (v0.525.5) — Which sites slice 2 of `bynk test --mutate` mutates, and what "guard" means | Accepted (v0.525.5) |
 | [0766](0766-profiles-test-deploy.md) | **`test` and `deploy` consult `[profile.*]`** (v0.525.3) — test is always the dev profile, deploy always release and refuses release contracts; the bynk dev server is unchanged | Accepted (v0.525.3) |
 | [0765](0765-ci-staged-gates.md) | **CI gates by stage — the full check runs when a PR is ready, and the merge queue checks integration only** (v0.525.2) — Draft PRs get fast feedback, ready PRs get the full three-OS gate during review, and the queue re-checks only what can break when PRs combine | Accepted (v0.525.2) |
