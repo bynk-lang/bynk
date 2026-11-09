@@ -3938,6 +3938,9 @@ pub(crate) fn check_match(
         let errors_before = ctx.errors.len();
         check_pattern(&arm.pattern, disc_ty, ctx);
         let pattern_ok = ctx.errors.len() == errors_before;
+        if pattern_ok {
+            super::d1::link_match_arm(discriminant, &arm.pattern, ctx);
+        }
         // #2010: a `let … else` pattern's names are the author's `let`
         // bindings, in scope for the rest of the block: they get the inlay
         // hints and locals entries a `let` gets (a `match` arm's do not).

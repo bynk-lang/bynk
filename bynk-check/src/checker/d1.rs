@@ -54,6 +54,145 @@ pub struct D1SqlSite {
     pub literal: Option<(String, isize)>,
 }
 
+/// #3139: which value a name holds, on the way from a literal D1 read to the
+/// `Json.decodeSql` that decodes its rows.
+#[derive(Debug, Clone)]
+pub struct RowLink {
+    /// The statement whose rows these are.
+    pub site: D1SqlSite,
+    /// `false`: the read's whole `Result` (`let r <- Cap.all(…)`); `true`: the
+    /// text inside its `Ok` (`Ok(x)`, or `Ok(Some(x))` for `first`).
+    pub payload: bool,
+}
+
+/// #3139: a `Json.decodeSql[T](x)` linked to the statement `x`'s rows came from.
+#[derive(Debug, Clone)]
+pub struct D1DecodeSite {
+    pub site: D1SqlSite,
+    /// The row record decoded.
+    pub row: String,
+    /// The row's required fields: those not of an `Option` type.
+    pub required: Vec<String>,
+    /// The `decodeSql` call, where a missing column is reported.
+    pub span: Span,
+}
+
+/// The statement a recorded SQL argument names: a literal's own site, or the
+/// one a `const` carries.
+fn site_of(callee: Option<&Callee>) -> Option<&D1SqlSite> {
+    match callee? {
+        Callee::D1Sql(site) => Some(site),
+        Callee::Const(_, Some(site)) => Some(site),
+        _ => None,
+    }
+}
+
+/// #3139: after `let r <- Cap.all(<literal>, …)` (or `first`) binds `r`, link it
+/// to the statement. The `let … else` form binds a hidden name the same way.
+pub(crate) fn link_effect_let(l: &LetStmt, ctx: &mut Ctx) {
+    let ExprKind::MethodCall { method, args, .. } = &l.value.kind else {
+        return;
+    };
+    if !matches!(method.name.as_str(), "all" | "first") {
+        return;
+    }
+    let Some(sql) = args.first() else { return };
+    let Some(site) = site_of(ctx.callees.get(&sql.id)) else {
+        return;
+    };
+    if site.op != method.name {
+        return;
+    }
+    let site = site.clone();
+    let depth = ctx.scopes.len() - 1;
+    ctx.row_links.insert(
+        (depth, l.name.name.clone()),
+        RowLink {
+            site,
+            payload: false,
+        },
+    );
+}
+
+/// #3139: in `match r { Ok(x) => … }` (`Ok(Some(x))` for a `first`), where `r`
+/// holds a D1 read's `Result`, link the binder `x` to the same statement. Called
+/// in the arm's own scope, after the pattern bound its names.
+pub(crate) fn link_match_arm(discriminant: &Expr, pattern: &Pattern, ctx: &mut Ctx) {
+    let ExprKind::Ident(id) = &discriminant.kind else {
+        return;
+    };
+    let Some(link) = ctx.row_link(&id.name).filter(|l| !l.payload).cloned() else {
+        return;
+    };
+    // The payload pattern of `Ok(…)`, then through `Some(…)` for a `first`.
+    fn payload<'p>(p: &'p Pattern, variant: &str) -> Option<&'p Pattern> {
+        match p {
+            Pattern::Variant {
+                variant: v,
+                bindings,
+                type_name: None,
+                ..
+            } if v.name == variant && bindings.len() == 1 => Some(bindings[0].pattern()),
+            _ => None,
+        }
+    }
+    let Some(mut inner) = payload(pattern, "Ok") else {
+        return;
+    };
+    if link.site.op == "first" {
+        let Some(some) = payload(inner, "Some") else {
+            return;
+        };
+        inner = some;
+    }
+    let Pattern::Binding(x) = inner else { return };
+    let depth = ctx.scopes.len() - 1;
+    ctx.row_links.insert(
+        (depth, x.name.clone()),
+        RowLink {
+            site: link.site,
+            payload: true,
+        },
+    );
+}
+
+/// #3139: `Json.decodeSql[t](arg)` where `arg` is the text of a literal D1 read:
+/// record the pairing for the project phase. `t` has passed `check_row_shape`.
+pub(crate) fn record_decode(arg: &Expr, call_span: Span, t: TyId, ctx: &mut Ctx) {
+    let ExprKind::Ident(id) = &arg.kind else {
+        return;
+    };
+    let Some(link) = ctx.row_link(&id.name).filter(|l| l.payload).cloned() else {
+        return;
+    };
+    let row = match &*ctx.tys.get(t) {
+        Ty::List(r) => *r,
+        _ => t,
+    };
+    let Ty::Named { name, .. } = &*ctx.tys.get(row) else {
+        return;
+    };
+    let name = name.clone();
+    let Some(TypeBody::Record(record)) = ctx.input.types.get(&name).map(|d| &d.body) else {
+        return;
+    };
+    let required = record
+        .fields
+        .iter()
+        .filter(|f| !matches!(f.type_ref, TypeRef::Option(..)))
+        .map(|f| f.name.name.clone())
+        .collect();
+    ctx.callees.insert(
+        arg.id,
+        Callee::D1Decode(D1DecodeSite {
+            site: link.site,
+            row: name,
+            required,
+            span: call_span,
+        }),
+    );
+}
+
 /// The length of a list-literal argument; `None` when the list is a name, a
 /// call or anything whose length is not fixed by the text.
 fn literal_list_len(e: Option<&Expr>, ctx: &Ctx) -> Option<usize> {

@@ -1,0 +1,14 @@
+---
+level: patch
+changelog: "`bynk check` checks `Json.decodeSql[T]` of a literal D1 `all` / `first` read against the statement's result columns: a required field of `T` with no column is `bynk.d1.select_field_missing`"
+---
+
+## ADR: d1-decodesql-column-check
+title: Json.decodeSql's fields are checked against the statement's columns
+summary: How a decode is linked to the D1 statement whose rows it decodes, and what is reported
+
+**Context.** `all` / `first` with `Json.decodeSql[T]` is how rows are read where the typed `select[T]` / `firstAs[T]` can't (joins, expressions, aliases). Nothing tied the decode to its statement, so a misspelt alias decoded to a run-time `JsonError`. #3070 left it out for want of a rule to find the link (#3139).
+
+**Decision.** A decode is linked to a statement when its argument is a name followed back, syntactically and within one body, to a literal read: `let rows <- Cap.all(<literal or const>, …)` (or `first`) links `rows`; `match rows { Ok(text) => … }` (`Ok(Some(text))` for `first`), which a `let Ok(text) <- … else` desugars to, links `text`; `Json.decodeSql[T](text)` (or `[List[T]]`) is then checked. Any rebinding or shadowing of `rows` or `text` drops the link, as for the `let`-bound list lengths (#3125). A copy, a helper `fn`, a field, a mapped value or a non-literal statement is not followed and not checked (silent, never guessed). The statement is prepared against the binding's migrations and its result column names read from the prepared statement; each required field of `T` — one whose type is not `Option` — with no column of that exact name is `bynk.d1.select_field_missing`, at the `decodeSql` call. An `Option` field with no column is not reported, matching the codec, which decodes an absent key to `None`; an extra column is not reported either. The existing code is reused with its definition widened ("a record read from a literal D1 statement has a field with no column of that name") rather than adding a code. `[check] d1_sql = false` covers it, and a binding with no migrations has no schema to read columns from, so is not checked.
+
+**Consequences.** The check is deliberately partial: the unfollowed forms stay silent, so there are no false positives from guessed links. The link state lives next to the `let`-bound list lengths and follows the same scoping rule. The diagnostics page's definition of `select_field_missing` is re-blessed. Following a name through more forms (a helper `fn`, `orElse`, `?`) would be a later, separate rule.

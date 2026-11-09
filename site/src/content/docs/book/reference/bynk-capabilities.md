@@ -876,7 +876,14 @@ against it. Nothing runs. At the literal it reports:
   next one), the rule D1 refuses a mismatch by. It is checked when the list is a
   list literal, or a name `let`-bound to one in scope;
 - `bynk.d1.select_field_missing`: a `select[T]` / `firstAs[T]` row type has a
-  field with no column of that name.
+  field with no column of that name; and the same for `Json.decodeSql[T]` (or
+  `[List[T]]`) of the rows of a literal `all` / `first`, for each required field of
+  `T` (an `Option` field with no column is absent, which decodes to `None`, so it
+  isn't reported, nor is an extra column). The decode is linked to the statement
+  when its text is followed, by name, from `let rows <- Cap.all(…)` through
+  `match rows { Ok(text) => … }` (`Ok(Some(text))` for `first`) or the matching
+  `let Ok(text) <- … else`; a copy, a helper `fn`, a field or a rebinding of the name
+  is not followed, and is not checked.
 
 A migration that doesn't apply is the warning `bynk.d1.migration_invalid`, and
 that database's statements are then not checked. A database with no migrations

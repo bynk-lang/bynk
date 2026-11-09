@@ -934,7 +934,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     d(
         "bynk.d1.select_field_missing",
-        "A `select[T]` / `firstAs[T]` row type has a field with no column of that name in the statement, so the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build.",
+        "A record read from a literal D1 statement has a field with no column of that name. For a `select[T]` / `firstAs[T]` row type, the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build; for a `Json.decodeSql[T]` of the rows of a literal `all` / `first`, a required (non-`Option`) field of `T` has no result column.",
     ),
     d(
         "bynk.d1.sql_invalid",
