@@ -136,7 +136,7 @@ case's duration.
 
 Coverage shows which lines ran, not whether a test would fail if they were wrong.
 `bynk test --mutate` changes the code one small way at a time (`a < b` becomes
-`a <= b`, `&&` becomes `||`, an `if` condition becomes `true`, `+` becomes `-`), runs the suites that exercise it, and lists the
+`a <= b`, `&&` becomes `||`, an `if` condition becomes `true`, `+` becomes `-`, one `AND` conjunct dropped from a SQL `WHERE`), runs the suites that exercise it, and lists the
 changes that no suite caught:
 
 ```text

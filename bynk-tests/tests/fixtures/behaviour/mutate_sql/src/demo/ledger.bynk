@@ -1,0 +1,41 @@
+context demo.ledger
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Db = D1
+
+type Count = { c: Int }
+
+service setup {
+  on call() -> Effect[Bool] given Db {
+    let made <- Db.run("CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY, n INTEGER NOT NULL, live INTEGER NOT NULL)", [])
+    match made {
+      Ok(_) => true
+      Err(_) => false
+    }
+  }
+}
+
+service put {
+  on call(id: String, n: Int, live: Int) -> Effect[Bool] given Db {
+    let made <- Db.run("INSERT INTO t (id, n, live) VALUES (?1, ?2, ?3)", [Text(id), Integer(n), Integer(live)])
+    match made {
+      Ok(_) => true
+      Err(_) => false
+    }
+  }
+}
+
+service above {
+  on call(min: Int) -> Effect[Int] given Db {
+    let row <- Db.first("SELECT count(*) AS c FROM t WHERE n > ?1 AND live = 1", [Integer(min)])
+    match row {
+      Ok(Some(text)) => match Json.decode[Count](text) {
+        Ok(count) => count.c
+        Err(_) => -1
+      }
+      _ => -1
+    }
+  }
+}

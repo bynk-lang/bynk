@@ -1,0 +1,13 @@
+suite demo.ledger {
+  // Only values away from the boundary are asked for, so `>` → `>=` goes unnoticed.
+  case "above counts the live rows over a bound" {
+    let _ <- setup.call()
+    let _ <- put.call("a", 5, 1)
+    let _ <- put.call("b", 9, 1)
+    let _ <- put.call("c", 9, 0)
+    let two <- above.call(1)
+    expect two == 2
+    let one <- above.call(7)
+    expect one == 1
+  }
+}

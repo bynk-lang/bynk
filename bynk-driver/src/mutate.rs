@@ -70,6 +70,195 @@ fn replacement(kind: &TokenKind) -> Option<(&'static str, &'static str)> {
     })
 }
 
+/// What one lexical piece of a SQL string is, for [`sql_mutations`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SqlTok {
+    Word,
+    Open,
+    Close,
+    Cmp,
+}
+
+/// The mutations inside one string literal's source text (quotes included),
+/// as `(start, end, from, to)` offsets into it. A string is treated as SQL when
+/// its first word is a statement or clause keyword (`SELECT`, `FROM`, `WHERE`,
+/// …); SQL is literal-only, so these strings are the SQL that runs. Three kinds:
+/// a comparison `<`↔`<=`, `>`↔`>=`; `max(`↔`min(`; and, in a `WHERE` of two or
+/// more `AND` conjuncts, dropping one conjunct (`to` is empty). The result is
+/// only text: a mutant the checker's SQL check refuses is `invalid`.
+pub fn sql_mutations(lit: &str) -> Vec<(usize, usize, String, String)> {
+    let body = lit.trim_start_matches(['"', ' ', '\t', '\r', '\n']);
+    let first: String = body
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_ascii_uppercase();
+    if !matches!(
+        first.as_str(),
+        "SELECT" | "INSERT" | "UPDATE" | "DELETE" | "REPLACE" | "WITH" | "FROM" | "WHERE"
+    ) {
+        return Vec::new();
+    }
+    let bytes = lit.as_bytes();
+    let mut toks: Vec<(SqlTok, usize, usize)> = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match c {
+            b'\'' => {
+                // A SQL string: skip to its close (`''` escapes a quote).
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\'' {
+                        if bytes.get(i + 1) == Some(&b'\'') {
+                            i += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    i += 1;
+                }
+                i += 1;
+            }
+            b'-' if bytes.get(i + 1) == Some(&b'-') => {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'(' => {
+                toks.push((SqlTok::Open, i, i + 1));
+                i += 1;
+            }
+            b')' => {
+                toks.push((SqlTok::Close, i, i + 1));
+                i += 1;
+            }
+            b'<' | b'>' => {
+                let prev = if i > 0 { bytes[i - 1] } else { b' ' };
+                let next = bytes.get(i + 1).copied().unwrap_or(b' ');
+                if next == b'=' {
+                    toks.push((SqlTok::Cmp, i, i + 2));
+                    i += 2;
+                } else if next == b'>'
+                    || next == b'<'
+                    || prev == b'-'
+                    || prev == b'<'
+                    || prev == b'>'
+                {
+                    // `<>`, `<<`, `>>`, `->`: not an ordering comparison.
+                    i += 1;
+                } else {
+                    toks.push((SqlTok::Cmp, i, i + 1));
+                    i += 1;
+                }
+            }
+            c if c.is_ascii_alphanumeric() || c == b'_' => {
+                let s = i;
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                toks.push((SqlTok::Word, s, i));
+            }
+            _ => i += 1,
+        }
+    }
+    let word = |t: &(SqlTok, usize, usize)| lit[t.1..t.2].to_ascii_uppercase();
+    let mut out = Vec::new();
+    for (k, t) in toks.iter().enumerate() {
+        match t.0 {
+            SqlTok::Cmp => {
+                let op = &lit[t.1..t.2];
+                let to = match op {
+                    "<" => "<=",
+                    "<=" => "<",
+                    ">" => ">=",
+                    _ => ">",
+                };
+                out.push((t.1, t.2, op.to_string(), to.to_string()));
+            }
+            SqlTok::Word => {
+                let w = word(t);
+                if (w == "MAX" || w == "MIN")
+                    && toks.get(k + 1).is_some_and(|n| n.0 == SqlTok::Open)
+                {
+                    let from = &lit[t.1..t.2];
+                    let upper = from.chars().all(|c| c.is_ascii_uppercase());
+                    let to = match (w == "MAX", upper) {
+                        (true, true) => "MIN",
+                        (true, false) => "min",
+                        (false, true) => "MAX",
+                        (false, false) => "max",
+                    };
+                    out.push((t.1, t.2, from.to_string(), to.to_string()));
+                }
+            }
+            _ => {}
+        }
+    }
+    // WHERE clauses: split the conjuncts at depth zero and drop one at a time.
+    for (k, t) in toks.iter().enumerate() {
+        if t.0 != SqlTok::Word || word(t) != "WHERE" {
+            continue;
+        }
+        let mut depth = 0usize;
+        let mut ands: Vec<(usize, usize)> = Vec::new();
+        let mut end = lit
+            .trim_end_matches(['"', ' ', '\t', '\r', '\n', ';'])
+            .len();
+        let mut has_or = false;
+        let mut between = false;
+        for n in &toks[k + 1..] {
+            match n.0 {
+                SqlTok::Open => depth += 1,
+                SqlTok::Close => {
+                    if depth == 0 {
+                        end = lit[..n.1].trim_end().len();
+                        break;
+                    }
+                    depth -= 1;
+                }
+                SqlTok::Word if depth == 0 => match word(n).as_str() {
+                    "ORDER" | "GROUP" | "LIMIT" | "HAVING" | "RETURNING" | "UNION" => {
+                        end = lit[..n.1].trim_end().len();
+                        break;
+                    }
+                    "OR" => has_or = true,
+                    "BETWEEN" => between = true,
+                    "AND" if between => between = false,
+                    "AND" => ands.push((n.1, n.2)),
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        if has_or || ands.is_empty() {
+            continue;
+        }
+        let start = t.2 + lit[t.2..].len() - lit[t.2..].trim_start().len();
+        // Conjunct i runs from its start to the next AND (or the clause end).
+        let mut starts = vec![start];
+        let mut stops = Vec::new();
+        for &(a, b) in &ands {
+            stops.push(lit[..a].trim_end().len());
+            starts.push(b + lit[b..].len() - lit[b..].trim_start().len());
+        }
+        stops.push(end);
+        for i in 0..starts.len() {
+            let (a, b) = if i == 0 {
+                (starts[0], starts[1])
+            } else {
+                (ands[i - 1].0, stops[i])
+            };
+            if b <= a {
+                continue;
+            }
+            let from = lit[a..b].split_whitespace().collect::<Vec<_>>().join(" ");
+            out.push((a, b, from, String::new()));
+        }
+    }
+    out
+}
+
 /// One place a mutation applies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Site {
@@ -215,6 +404,12 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
                 };
                 if after_operand && text.get(start..end) == Some(from) {
                     found.push((start, end, from.to_string(), to.to_string()));
+                }
+            } else if token.kind == TokenKind::StrLit {
+                if let Some(lit) = text.get(start..end) {
+                    for (a, b, from, to) in sql_mutations(lit) {
+                        found.push((start + a, start + b, from, to));
+                    }
                 }
             } else if token.kind == TokenKind::If {
                 // An `if` condition (or a match arm's `if` guard) runs from
@@ -781,6 +976,40 @@ mod tests {
             !model.sites.iter().any(|s| s.decl == "g" && s.from == "-"),
             "a `-` that starts a line is negation"
         );
+    }
+
+    #[test]
+    fn sql_literals_yield_comparison_aggregate_and_conjunct_mutants() {
+        let lit = r#""SELECT max(n) FROM t WHERE a > ?1 AND NOT EXISTS (SELECT 1 FROM u WHERE u.id = t.id AND u.k >= 2) AND b BETWEEN 1 AND 5 ORDER BY n""#;
+        let found: Vec<(String, String)> = sql_mutations(lit)
+            .into_iter()
+            .map(|(_, _, f, t)| (f, t))
+            .collect();
+        for want in [
+            ("max", "min"),
+            (">", ">="),
+            (">=", ">"),
+            ("a > ?1 AND", ""),
+            (
+                "AND NOT EXISTS (SELECT 1 FROM u WHERE u.id = t.id AND u.k >= 2)",
+                "",
+            ),
+            ("AND b BETWEEN 1 AND 5", ""),
+            ("u.id = t.id AND", ""),
+            ("AND u.k >= 2", ""),
+        ] {
+            assert!(
+                found.iter().any(|(f, t)| (f.as_str(), t.as_str()) == want),
+                "missing {want:?} in {found:?}"
+            );
+        }
+        // `BETWEEN … AND …` is one conjunct, never split.
+        assert!(!found.iter().any(|(f, _)| f == "AND 5"));
+        // Prose is not SQL.
+        assert!(sql_mutations("\"a < b where x\"").is_empty());
+        // An `OR` in the clause leaves it alone; `<>` is not an ordering.
+        let or = sql_mutations("\"SELECT 1 WHERE a <> 1 AND b = 2 OR c = 3\"");
+        assert!(or.is_empty(), "{or:?}");
     }
 
     #[test]
