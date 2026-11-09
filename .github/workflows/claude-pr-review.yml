@@ -23,10 +23,12 @@
 #     rule). The input also gives maintainers a manual re-review button in the
 #     Actions tab, which the run-once discipline above otherwise lacks.
 #
-# NOTE on fork PRs: `pull_request` from a fork gets a read-only token, so review
-# comments will NOT post on external contributions. If you need that, switch to
-# `pull_request_target` and check out the *base* ref to stay safe from untrusted
-# code — see anthropics/claude-code-action security docs before doing so.
+# NOTE on fork PRs: they are never reviewed. The `ready_for_review` path skips
+# them (a fork's run gets no secrets anyway), and the dispatch path refuses
+# them before checking anything out, so outside code never reaches an agent
+# holding CLAUDE_CODE_OAUTH_TOKEN. Reviewing forks would need
+# `pull_request_target` with a *base*-ref checkout; read the
+# anthropics/claude-code-action security docs before trying it.
 #
 # Requires the Claude GitHub App installed on the repo and a
 # `CLAUDE_CODE_OAUTH_TOKEN` secret — a Claude Pro/Max subscription token from
@@ -95,6 +97,12 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ inputs.pr_number }}
         run: |
+          # pr_number is free text, and it also names the checkout ref and the
+          # prompt's PR, so pin it to a number before trusting the lookup.
+          if ! [[ "$PR" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pr_number must be a PR number, got '$PR'."
+            exit 1
+          fi
           head_repo="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.repo.full_name // ""')"
           if [ "$head_repo" != "$REPO" ]; then
             echo "::error::PR #$PR comes from '${head_repo:-a deleted fork}', not $REPO; fork PRs are not reviewed."
