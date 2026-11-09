@@ -346,3 +346,24 @@ test("sweepAgentInstances: wakes each id, reports per id, and states current", a
   const bad = await sweepAgentInstances(binding, "{\"ids\": [1]}", 2);
   assert.equal(bad.status, 400);
 });
+
+test("#3132 workers proxy: the caller's env never rides the inter-DO request body", async () => {
+  const SECRET = "sk-live-hunter2-3132";
+  let rawBody = "";
+  const stub = {
+    async fetch(_input: string, init?: { body?: string }): Promise<Response> {
+      rawBody = init?.body ?? "";
+      return new Response(JSON.stringify(null), { headers: { "content-type": "application/json" } });
+    },
+  };
+  const ns: DurableObjectNamespace = { idFromName: (n: string) => n, get: () => stub as never };
+  const proxy = makeWorkersAgent<{ ping(a: number, deps: unknown): Promise<unknown> }>(ns, "k");
+  const env = { API_TOKEN: SECRET, VAR: "plain", COUNTER: { fake: "binding" } };
+  await proxy.ping(1, { env, who: "alice" });
+  const body = JSON.parse(rawBody) as { args: unknown[]; deps: Record<string, unknown> };
+  assert.equal("env" in body.deps, false, "env key is stripped");
+  assert.equal(body.deps.who, "alice", "other deps survive");
+  assert.deepEqual(body.args, [1]);
+  assert.equal(rawBody.includes(SECRET), false, "no secret value on the wire");
+  assert.equal(rawBody.includes("plain"), false, "no var value on the wire");
+});
