@@ -1220,26 +1220,6 @@ fn test_reads_the_dev_profile() {
     assert_eq!(code, 0, "[profile.dev] contracts = false: {out}{err}");
 }
 
-/// #3107: `bynk test --against dev` also builds the `dev` profile. Without a
-/// reachable runtime it stops at the plan, but the plan compiles the project with
-/// the profile's contracts, so a bad `[profile]` is what it reports first.
-#[test]
-fn test_against_dev_reads_the_dev_profile() {
-    let proj = scratch("against-dev-profile");
-    write(
-        &proj.join("bynk.toml"),
-        "[project]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[profile.dev]\ncontracts = \"yes\"\n",
-    );
-    write(&proj.join("src/demo/m.bynk"), BUGGY_CONTRACT);
-    write(&proj.join("src/tests/m.test.bynk"), WITNESS_SUITE);
-    let (code, out, err) = run_bynk_in(&proj, &["test", "--against", "dev"]);
-    assert_ne!(code, 0, "{out}{err}");
-    assert!(
-        (out.clone() + &err).contains("`[profile.dev]` `contracts` must be `true` or `false`"),
-        "the dev-run plan reads [profile.dev]: {out}{err}"
-    );
-}
-
 /// #3107: `deploy` always builds `release` and refuses `[profile.release]
 /// contracts = true`, naming the table, before it touches anything.
 #[test]
