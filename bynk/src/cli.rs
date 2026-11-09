@@ -373,6 +373,10 @@ pub enum Command {
         /// Artefact language. Overrides `[build] emit`.
         #[arg(long, value_enum)]
         emit: Option<bynk_driver::EmitFormat>,
+        /// Build profile: `release` (the default, no contract checks) or `dev`
+        /// (contract checks on). `[profile.<name>]` overrides its defaults.
+        #[arg(long, value_enum)]
+        profile: Option<bynk_driver::CliProfile>,
         #[command(flatten)]
         lock: LockArgs,
     },

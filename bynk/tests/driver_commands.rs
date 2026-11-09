@@ -1087,6 +1087,85 @@ fn build_reads_the_build_table_and_flags_override_it() {
     assert!(proj.join("ref/calc.ts").exists(), "compile ignores [build]");
 }
 
+const CONTRACT_COMMONS: &str = "commons calc {\n  fn pct(n: Int) -> Int\n    requires in_range: n >= 0 && n <= 100\n  { n }\n}\n";
+
+/// #3054 slice 2: `--profile` and `[profile.<name>]` choose whether the build
+/// carries the contract guard. `release` (the default) is `compile`'s bytes.
+#[test]
+fn build_profiles_choose_the_contract_guard() {
+    let proj = scratch("build-profile");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CONTRACT_COMMONS);
+    let ts = |dir: &str| std::fs::read_to_string(proj.join(dir).join("calc.ts")).unwrap();
+    let (code, _, err) = run_bynk_in(&proj, &["compile", ".", "-o", "ref"]);
+    assert_eq!(code, 0, "{err}");
+    let (code, _, err) = run_bynk_in(&proj, &["build"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(ts("out"), ts("ref"), "release is compile's bytes");
+    assert!(err.contains("built bundle -> "), "{err}");
+    let (code, _, err) = run_bynk_in(&proj, &["build", "--profile", "dev", "--out", "dev"]);
+    assert_eq!(code, 0, "{err}");
+    assert_ne!(ts("dev"), ts("ref"), "dev carries the guard");
+    assert!(err.contains("dev profile, contracts on"), "{err}");
+    // A table overrides the profile's default; the flag still picks the profile.
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[profile.dev]\ncontracts = false\n\n[profile.release]\ncontracts = true\n",
+    );
+    let (code, _, err) = run_bynk_in(&proj, &["build", "--profile", "dev", "--out", "dev2"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(ts("dev2"), ts("ref"), "[profile.dev] contracts = false");
+    let (code, _, err) = run_bynk_in(&proj, &["build", "--out", "rel2"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(ts("rel2"), ts("dev"), "[profile.release] contracts = true");
+    // `compile` and `bynk test` ignore the table.
+    let (code, _, err) = run_bynk_in(&proj, &["compile", ".", "-o", "ref2"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(ts("ref2"), ts("ref"), "compile never reads [profile]");
+}
+
+/// #3054 slice 2: a bad `[profile]` is refused before anything is built.
+#[test]
+fn build_refuses_a_bad_profile_table() {
+    for (body, needle) in [
+        ("[profile.prod]\ncontracts = true", "no key named `prod`"),
+        (
+            "[profile.dev]\ncontract = true",
+            "has no key named `contract`",
+        ),
+        (
+            "[profile.dev]\ncontracts = \"yes\"",
+            "must be `true` or `false`",
+        ),
+    ] {
+        let proj = scratch("build-bad-profile");
+        write(
+            &proj.join("bynk.toml"),
+            &format!("[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n{body}\n"),
+        );
+        write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+        let (code, _, err) = run_bynk_in(&proj, &["build"]);
+        assert_ne!(code, 0, "{body}");
+        assert!(err.contains(needle), "{body}: {err}");
+        assert!(!proj.join("out").exists(), "{body}: nothing built");
+    }
+    let proj = scratch("build-bad-profile-flag");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (code, _, err) = run_bynk_in(&proj, &["build", "--profile", "prod"]);
+    assert_ne!(code, 0);
+    assert!(
+        err.contains("release"),
+        "the flag names the profiles: {err}"
+    );
+}
+
 /// #3054: a bad `[build]` is refused and nothing is built.
 #[test]
 fn build_refuses_a_bad_build_table() {

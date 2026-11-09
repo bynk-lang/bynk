@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.523.1** | "`bynk build --profile dev|release` and `[profile.dev]`/`[profile.release]` tables in `bynk.toml` choose whether a build carries the function-contract call-site guard; the default stays `release`, the bytes `bynk compile` writes (#3054)" |
 | **v0.523.0** | "`@example(\"…\")` after a `Matches`/`IsoDate` refinement gives `Val[T]` a value, so `bynk test --smoke` runs patterned routes" |
 | **v0.522.0** | A suite declares its own `type` and `const` items, private to the suite and never deployed |
 | **v0.521.0** | A `tsc` failure on generated code is reported as `bynk.codegen.tsc_failed` at the Bynk source line it came from, by `bynk test` and the new opt-in `bynk check --emit` |

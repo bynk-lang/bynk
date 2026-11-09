@@ -62,8 +62,8 @@ pub use packages::{
     display_unit_name, resolve_graph, split_canonical,
 };
 pub use paths::{
-    BuildConfig, CheckConfig, MANIFEST_MAP_TABLES, MANIFEST_TABLES, ProjectPaths,
-    ProjectPathsError, TestTarget, UnstableConfig, WorkersConfig, check_manifest,
+    BuildConfig, CheckConfig, MANIFEST_MAP_TABLES, MANIFEST_TABLES, PROFILE_NAMES, ProfileConfig,
+    ProjectPaths, ProjectPathsError, TestTarget, UnstableConfig, WorkersConfig, check_manifest,
     check_manifest_str, commons_dir_for, duplicate_compatibility_flag_warning,
     is_multi_file_layout, is_unpinned_range, normalize_rel, read_check_config,
     read_unstable_config, renamed_unit_name, render_package_json, try_read_build_config,
