@@ -1,0 +1,33 @@
+name: Install tree-sitter-bynk's npm deps (authenticated CLI download)
+description: >-
+  `npm ci` in tree-sitter-bynk/, with the tree-sitter CLI binary (and, for
+  `wasm: true`, the wasi-sdk and binaryen `tree-sitter build --wasm` uses)
+  downloaded through the GitHub API with the job's token rather than
+  anonymously by tree-sitter-cli's postinstall.
+
+# See scripts/ci/tree-sitter-deps.sh. tree-sitter-cli's install.js fetches its
+# binary from the anonymous github.com/.../releases/download route with no way
+# to pass a token; on 2026-11-09 that route answered 504s and failed the
+# grammar and browser-artefact jobs.
+
+inputs:
+  wasm:
+    description: >-
+      Also fetch the wasi-sdk and binaryen the CLI pins and export
+      TREE_SITTER_WASI_SDK_PATH / TREE_SITTER_BINARYEN_PATH for later steps.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: npm ci (tree-sitter-bynk), CLI fetched with the job's token
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        WASM: ${{ inputs.wasm }}
+      run: |
+        if [ "$WASM" = "true" ]; then
+          bash scripts/ci/tree-sitter-deps.sh --wasm
+        else
+          bash scripts/ci/tree-sitter-deps.sh
+        fi

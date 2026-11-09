@@ -1,0 +1,28 @@
+name: Install a prebuilt Rust dev tool (authenticated download)
+description: >-
+  Installs a tool such as nextest or wasm-bindgen-cli from its GitHub release
+  into ~/.cargo/bin, downloading through the API with the job's token and
+  checking the asset's sha256 digest. Replaces taiki-e/install-action, whose
+  asset downloads are anonymous.
+
+# The anonymous github.com/<repo>/releases/download route answers 504s when
+# GitHub sheds unauthenticated load (runners share egress IPs); on 2026-11-09
+# that failed nextest installs across CI. scripts/ci/gh-release-fetch.sh has
+# the details; scripts/ci/install-tool.sh maps each tool to its assets.
+
+inputs:
+  tool:
+    description: >-
+      One tool, `name[@version]`: an exact version, a line (`nextest@0.9` is
+      the newest 0.9.x), or none (the newest release).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install ${{ inputs.tool }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TOOL: ${{ inputs.tool }}
+      run: bash scripts/ci/install-tool.sh "$TOOL"

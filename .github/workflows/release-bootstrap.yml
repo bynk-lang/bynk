@@ -84,7 +84,7 @@ jobs:
           exit "$fail"
       # #1676: the same harness and profile as ci.yml's and release.yml's test
       # legs (.config/nextest.toml's `ci` profile), pinned the same way.
-      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2
+      - uses: ./.github/actions/install-tool
         if: ${{ inputs.run_tests }}
         with:
           tool: nextest@0.9
@@ -160,8 +160,9 @@ jobs:
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-      - name: Install deps
-        run: npm ci
+      # npm ci, with the CLI binary fetched with the job's token rather than
+      # anonymously by tree-sitter-cli's postinstall (see the action).
+      - uses: ./.github/actions/tree-sitter-deps
       - name: Regenerate parser from grammar.js
         run: npx tree-sitter generate
       - name: Publish (token; skip if already published)
