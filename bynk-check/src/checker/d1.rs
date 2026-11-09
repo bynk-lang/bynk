@@ -493,7 +493,7 @@ pub(crate) fn check_typed_read(
                     record.fields.iter().map(|f| f.name.name.clone()).collect(),
                 )),
                 passed: literal_list_len(args.get(1), ctx),
-                literal: select_literal.clone(),
+                literal: select_literal,
             }),
         );
     }

@@ -87,14 +87,18 @@ fn a_shadowed_let_list_is_not_counted() {
 }
 
 /// #3108: a literal D1 statement in a test body is prepared on the editor path
-/// too (the suite's target is `demo`, whose binding names the database).
+/// too (the suite's target is `demo`, whose binding names the database), and its
+/// error points at the refused token in the suite's source.
 #[test]
 fn a_statement_in_a_test_body_is_prepared() {
     let root = std::env::temp_dir().join(format!("bynk-check-d1-sql-suite-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let unit = source("");
     let suite = "suite demo\n\ncase \"reads a missing column\" {\n  \
-                 let _ <- Orders.all(\"SELECT id FROM orders WHERE stauts = ?1\", [Text(\"a\")])\n}\n";
+                 let _ <- Orders.all(\"SELECT id FROM orders WHERE stauts = ?1\", [Text(\"a\")])\n}\n\n\
+                 property \"a property reads one too\" {\n  for all n: Int {\n    \
+                 let _ <- Orders.all(\"SELECT id FROM orders WHERE stauts = ?1\", [Text(\"a\")])\n    \
+                 expect n == n\n  }\n}\n";
     let mut overlay = HashMap::new();
     for (rel, text) in [
         ("demo.bynk", unit.as_str()),
@@ -108,9 +112,15 @@ fn a_statement_in_a_test_body_is_prepared() {
     }
     let analysed =
         analysis::analyse_project(&Roots::Single(root.clone()), &overlay, &SchemaLock::Off);
-    let cats: Vec<_> = analysed.errors.iter().map(|e| e.error.category).collect();
     let _ = std::fs::remove_dir_all(&root);
-    assert!(cats.contains(&"bynk.d1.sql_invalid"), "{cats:?}");
+    let spans: Vec<_> = analysed
+        .errors
+        .iter()
+        .filter(|e| e.error.category == "bynk.d1.sql_invalid")
+        .map(|e| &suite[e.error.span.start..e.error.span.end])
+        .collect();
+    // One in the case body, one in the property body, each on the token.
+    assert_eq!(spans, ["stauts", "stauts"]);
 }
 
 /// #3108: the error points at the token SQLite refused, inside the literal.

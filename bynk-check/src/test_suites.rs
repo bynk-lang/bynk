@@ -1870,7 +1870,14 @@ fn check_test_bodies(
                 locals,
                 tys,
             );
-            check_d1_sql_sites(d1_sql, target_name, unit_tables, &case_callees, &mut errors);
+            check_d1_sql_sites(
+                d1_sql,
+                target_name,
+                unit_tables,
+                &case_callees,
+                parsed[i].source(),
+                &mut errors,
+            );
             let tier = case_effective_tier(case, test_decl);
             check_extra_headers_tier(case, tier, &case_callees, &mut errors);
             check_extra_headers_let(case, &case_callees, &mut errors);
@@ -1907,6 +1914,7 @@ fn check_test_bodies(
                 locals,
                 tys,
                 d1_sql,
+                parsed[i].source(),
             );
             crossing.check_property(target_name, prop, &mut errors);
             check_advance_in_property(prop, &mut errors);
@@ -3714,10 +3722,12 @@ fn check_d1_sql_sites(
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     callees: &HashMap<ExprId, checker::Callee>,
+    // The suite file's source, so an error can point inside the SQL literal.
+    source: &str,
     errors: &mut Vec<CompileError>,
 ) {
     if let (Some(d1_sql), Some(table)) = (d1_sql, unit_tables.get(target_name)) {
-        errors.extend(d1_sql.check_unit(target_name, table, callees, None));
+        errors.extend(d1_sql.check_unit(target_name, table, callees, Some(source)));
     }
 }
 
@@ -4579,6 +4589,7 @@ fn check_property_body(
     locals: &mut LocalsSink,
     tys: &Arc<Types>,
     d1_sql: Option<&crate::d1_sql::D1Sql>,
+    source: &str,
 ) {
     let Some((mut resolved, _)) = build_privileged_resolved(
         target_name,
@@ -4763,7 +4774,7 @@ fn check_property_body(
         },
     );
 
-    check_d1_sql_sites(d1_sql, target_name, unit_tables, &callees, errors);
+    check_d1_sql_sites(d1_sql, target_name, unit_tables, &callees, source, errors);
 
     // Conservative restates-refinement flag: a single-binding property whose
     // body is exactly `expect <pred>` restating the bound var's refinement.
