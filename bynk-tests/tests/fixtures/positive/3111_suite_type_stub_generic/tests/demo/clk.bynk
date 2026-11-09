@@ -6,8 +6,19 @@ const Prefix: String = "t-"
 
 type Pair = { a: Int }
 
+// A helper that reaches a suite type under `Result` at a JSON boundary.
+fn encoded() -> String {
+	let r: Result[Pair, String] = Ok(Pair { a: 5 })
+	Json.encode(r)
+}
+
 stub Clock.now() returns Pair { a: Seven }.a
 stub Clock.label(Prefix) returns Name
+stub Clock.label("j-") returns encoded()
+stub Clock.label("d-") returns match Json.decode[Result[Pair, String]](encoded()) {
+	Ok(_) => "decoded"
+	Err(_) => "bad"
+}
 
 case "a stub value names a suite type and constant" {
 	let r <- ping.call()
@@ -15,7 +26,7 @@ case "a stub value names a suite type and constant" {
 }
 
 case "a stub argument pattern and value name suite constants" {
-	let r <- tag.call()
+	let r <- tag.call("t-")
 	expect r == "n"
 }
 
@@ -41,4 +52,11 @@ case "a suite type round-trips through Result at the integration tier" as integr
 	expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)
 	let v <- ping.call()
 	expect v == 7
+}
+
+case "a stub value reaches a suite type under Result through a helper and directly" {
+	let a <- tag.call("j-")
+	expect a == encoded()
+	let b <- tag.call("d-")
+	expect b == "decoded"
 }

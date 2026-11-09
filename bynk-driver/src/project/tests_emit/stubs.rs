@@ -546,6 +546,7 @@ pub(super) fn lower_stub_value_block(
         .filter(|f| !params.iter().any(|p| p.name.name == f.name.name))
         .cloned()
         .collect();
+    let roots_mark = runtime_use.json_codec_roots_len();
     let owning_unit = target_name.to_string();
     let mut typed = synthetic_typed_commons_for_target(
         &owning_unit,
@@ -654,6 +655,8 @@ pub(super) fn lower_stub_value_block(
     // map is discarded — it stays unmapped (a deliberate scope cut).
     let body =
         emitter::lower_block_to_async_body(&block, ret_type, &mut typed, &cross, runtime_use).0;
+    // #3111: the codecs the value reached for beyond the always-present ones.
+    let late_codecs = suite_late_codecs(items, &typed, runtime_use, roots_mark);
     let aliases: String = fixtures
         .iter()
         .map(|f| {
@@ -664,7 +667,10 @@ pub(super) fn lower_stub_value_block(
             )
         })
         .collect();
-    format!("{suite_decls}{aliases}{}{body}", helpers.concat())
+    format!(
+        "{suite_decls}{late_codecs}{aliases}{}{body}",
+        helpers.concat()
+    )
 }
 
 /// #2850/#2907: what a stub clause's values may name of its suite.

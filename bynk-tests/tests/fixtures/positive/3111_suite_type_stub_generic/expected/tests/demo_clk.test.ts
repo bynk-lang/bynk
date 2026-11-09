@@ -259,6 +259,33 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
       return Prefix();
     })();
     if (__bynkEq(prefix, __pv_1_0)) {
@@ -347,7 +374,503 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
       return Name();
+    }
+    const __pv_2_0 = await (async () => {
+      interface Pair {
+        readonly a: number;
+      }
+      const Pair = {
+      };
+      function __serialise_Pair(value: Pair): __JsonValue {
+        return {
+          a: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.a),
+        };
+      }
+      function __deserialise_Pair(json: __JsonValue, path: string = "$"): Result<Pair, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (typeof obj["a"] !== "number") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
+        }
+        if (!globalThis.Number.isSafeInteger(obj["a"])) {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        }
+        const __a = obj["a"];
+        return Ok({ a: __a } as Pair);
+      }
+      
+      function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
+        return value.map((v) => __serialise_Pair(v));
+      }
+      function __deserialise_List_Pair(json: __JsonValue, path: string = "$"): Result<readonly Pair[], __BoundaryError> {
+        if (!globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+        }
+        const out: Pair[] = [];
+        for (let i = 0; i < json.length; i++) {
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
+        }
+        return Ok(out);
+      }
+      function __serialise_Option_Pair(value: Option<Pair>): __JsonValue {
+        if (value.tag === "Some") return { kind: "Some", value: __serialise_Pair(value.value) };
+        return { kind: "None" };
+      }
+      function __option_value_Pair(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+        const __r_v = __deserialise_Pair(raw, at);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
+        return Ok(__v);
+      }
+      function __deserialise_Option_Pair(json: __JsonValue, path: string = "$"): Result<Option<Pair>, __BoundaryError> {
+        if (json === undefined || json === null) {
+          return Ok(None as Option<Pair>);
+        }
+        if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+          const obj = json as { [k: string]: __JsonValue };
+          const __keys = globalThis.Object.keys(obj);
+          if (obj["kind"] === "None" && __keys.length === 1) {
+            return Ok(None as Option<Pair>);
+          }
+          if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+            const __t = __option_value_Pair(obj["value"], `${path}.value`);
+            if (__t.tag === "Err") {
+              return __t;
+            }
+            return Ok(Some(__t.value as Pair) as Option<Pair>);
+          }
+        }
+        const __b = __option_value_Pair(json, path);
+        if (__b.tag === "Ok") {
+          return Ok(Some(__b.value as Pair) as Option<Pair>);
+        }
+        if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+          return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+        }
+        return __b;
+      }
+      var __const_Seven: { v: number } | undefined;
+      function Seven(): number { return (__const_Seven ??= { v: 7 }).v; }
+      var __const_Name: { v: string } | undefined;
+      function Name(): string { return (__const_Name ??= { v: "n" }).v; }
+      var __const_Prefix: { v: string } | undefined;
+      function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
+      return "j-";
+    })();
+    if (__bynkEq(prefix, __pv_2_0)) {
+      interface Pair {
+        readonly a: number;
+      }
+      const Pair = {
+      };
+      function __serialise_Pair(value: Pair): __JsonValue {
+        return {
+          a: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.a),
+        };
+      }
+      function __deserialise_Pair(json: __JsonValue, path: string = "$"): Result<Pair, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (typeof obj["a"] !== "number") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
+        }
+        if (!globalThis.Number.isSafeInteger(obj["a"])) {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        }
+        const __a = obj["a"];
+        return Ok({ a: __a } as Pair);
+      }
+      
+      function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
+        return value.map((v) => __serialise_Pair(v));
+      }
+      function __deserialise_List_Pair(json: __JsonValue, path: string = "$"): Result<readonly Pair[], __BoundaryError> {
+        if (!globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+        }
+        const out: Pair[] = [];
+        for (let i = 0; i < json.length; i++) {
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
+        }
+        return Ok(out);
+      }
+      function __serialise_Option_Pair(value: Option<Pair>): __JsonValue {
+        if (value.tag === "Some") return { kind: "Some", value: __serialise_Pair(value.value) };
+        return { kind: "None" };
+      }
+      function __option_value_Pair(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+        const __r_v = __deserialise_Pair(raw, at);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
+        return Ok(__v);
+      }
+      function __deserialise_Option_Pair(json: __JsonValue, path: string = "$"): Result<Option<Pair>, __BoundaryError> {
+        if (json === undefined || json === null) {
+          return Ok(None as Option<Pair>);
+        }
+        if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+          const obj = json as { [k: string]: __JsonValue };
+          const __keys = globalThis.Object.keys(obj);
+          if (obj["kind"] === "None" && __keys.length === 1) {
+            return Ok(None as Option<Pair>);
+          }
+          if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+            const __t = __option_value_Pair(obj["value"], `${path}.value`);
+            if (__t.tag === "Err") {
+              return __t;
+            }
+            return Ok(Some(__t.value as Pair) as Option<Pair>);
+          }
+        }
+        const __b = __option_value_Pair(json, path);
+        if (__b.tag === "Ok") {
+          return Ok(Some(__b.value as Pair) as Option<Pair>);
+        }
+        if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+          return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+        }
+        return __b;
+      }
+      var __const_Seven: { v: number } | undefined;
+      function Seven(): number { return (__const_Seven ??= { v: 7 }).v; }
+      var __const_Name: { v: string } | undefined;
+      function Name(): string { return (__const_Name ??= { v: "n" }).v; }
+      var __const_Prefix: { v: string } | undefined;
+      function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
+      return encoded();
+    }
+    const __pv_3_0 = await (async () => {
+      interface Pair {
+        readonly a: number;
+      }
+      const Pair = {
+      };
+      function __serialise_Pair(value: Pair): __JsonValue {
+        return {
+          a: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.a),
+        };
+      }
+      function __deserialise_Pair(json: __JsonValue, path: string = "$"): Result<Pair, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (typeof obj["a"] !== "number") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
+        }
+        if (!globalThis.Number.isSafeInteger(obj["a"])) {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        }
+        const __a = obj["a"];
+        return Ok({ a: __a } as Pair);
+      }
+      
+      function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
+        return value.map((v) => __serialise_Pair(v));
+      }
+      function __deserialise_List_Pair(json: __JsonValue, path: string = "$"): Result<readonly Pair[], __BoundaryError> {
+        if (!globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+        }
+        const out: Pair[] = [];
+        for (let i = 0; i < json.length; i++) {
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
+        }
+        return Ok(out);
+      }
+      function __serialise_Option_Pair(value: Option<Pair>): __JsonValue {
+        if (value.tag === "Some") return { kind: "Some", value: __serialise_Pair(value.value) };
+        return { kind: "None" };
+      }
+      function __option_value_Pair(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+        const __r_v = __deserialise_Pair(raw, at);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
+        return Ok(__v);
+      }
+      function __deserialise_Option_Pair(json: __JsonValue, path: string = "$"): Result<Option<Pair>, __BoundaryError> {
+        if (json === undefined || json === null) {
+          return Ok(None as Option<Pair>);
+        }
+        if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+          const obj = json as { [k: string]: __JsonValue };
+          const __keys = globalThis.Object.keys(obj);
+          if (obj["kind"] === "None" && __keys.length === 1) {
+            return Ok(None as Option<Pair>);
+          }
+          if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+            const __t = __option_value_Pair(obj["value"], `${path}.value`);
+            if (__t.tag === "Err") {
+              return __t;
+            }
+            return Ok(Some(__t.value as Pair) as Option<Pair>);
+          }
+        }
+        const __b = __option_value_Pair(json, path);
+        if (__b.tag === "Ok") {
+          return Ok(Some(__b.value as Pair) as Option<Pair>);
+        }
+        if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+          return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+        }
+        return __b;
+      }
+      var __const_Seven: { v: number } | undefined;
+      function Seven(): number { return (__const_Seven ??= { v: 7 }).v; }
+      var __const_Name: { v: string } | undefined;
+      function Name(): string { return (__const_Name ??= { v: "n" }).v; }
+      var __const_Prefix: { v: string } | undefined;
+      function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
+      return "d-";
+    })();
+    if (__bynkEq(prefix, __pv_3_0)) {
+      interface Pair {
+        readonly a: number;
+      }
+      const Pair = {
+      };
+      function __serialise_Pair(value: Pair): __JsonValue {
+        return {
+          a: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.a),
+        };
+      }
+      function __deserialise_Pair(json: __JsonValue, path: string = "$"): Result<Pair, __BoundaryError> {
+        if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+        }
+        const obj = json as { [k: string]: __JsonValue };
+        if (typeof obj["a"] !== "number") {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
+        }
+        if (!globalThis.Number.isSafeInteger(obj["a"])) {
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        }
+        const __a = obj["a"];
+        return Ok({ a: __a } as Pair);
+      }
+      
+      function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
+        return value.map((v) => __serialise_Pair(v));
+      }
+      function __deserialise_List_Pair(json: __JsonValue, path: string = "$"): Result<readonly Pair[], __BoundaryError> {
+        if (!globalThis.Array.isArray(json)) {
+          return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+        }
+        const out: Pair[] = [];
+        for (let i = 0; i < json.length; i++) {
+        const item = json[i];
+        const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+        if (__r_el.tag === "Err") return __r_el;
+        const __el = __r_el.value;
+        out.push(__el as Pair);
+        }
+        return Ok(out);
+      }
+      function __serialise_Option_Pair(value: Option<Pair>): __JsonValue {
+        if (value.tag === "Some") return { kind: "Some", value: __serialise_Pair(value.value) };
+        return { kind: "None" };
+      }
+      function __option_value_Pair(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+        const __r_v = __deserialise_Pair(raw, at);
+        if (__r_v.tag === "Err") return __r_v;
+        const __v = __r_v.value;
+        return Ok(__v);
+      }
+      function __deserialise_Option_Pair(json: __JsonValue, path: string = "$"): Result<Option<Pair>, __BoundaryError> {
+        if (json === undefined || json === null) {
+          return Ok(None as Option<Pair>);
+        }
+        if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+          const obj = json as { [k: string]: __JsonValue };
+          const __keys = globalThis.Object.keys(obj);
+          if (obj["kind"] === "None" && __keys.length === 1) {
+            return Ok(None as Option<Pair>);
+          }
+          if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+            const __t = __option_value_Pair(obj["value"], `${path}.value`);
+            if (__t.tag === "Err") {
+              return __t;
+            }
+            return Ok(Some(__t.value as Pair) as Option<Pair>);
+          }
+        }
+        const __b = __option_value_Pair(json, path);
+        if (__b.tag === "Ok") {
+          return Ok(Some(__b.value as Pair) as Option<Pair>);
+        }
+        if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+          return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+        }
+        return __b;
+      }
+      var __const_Seven: { v: number } | undefined;
+      function Seven(): number { return (__const_Seven ??= { v: 7 }).v; }
+      var __const_Name: { v: string } | undefined;
+      function Name(): string { return (__const_Name ??= { v: "n" }).v; }
+      var __const_Prefix: { v: string } | undefined;
+      function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
+      const __r0 = ((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(encoded());
+      switch (__r0.tag) {
+        case "Ok": {
+          return "decoded";
+        }
+        case "Err": {
+          return "bad";
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
     }
     throw new globalThis.Error("bynk: no stub clause matched for Clock.label");
   }
@@ -438,6 +961,33 @@ class __Stub_Clock {
       function Name(): string { return (__const_Name ??= { v: "n" }).v; }
       var __const_Prefix: { v: string } | undefined;
       function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+          function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+            if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+            return { kind: "Err", error: value.error as __JsonValue };
+          }
+          function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+            if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+              return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+            }
+            const obj = json as { [k: string]: __JsonValue };
+            if (obj["kind"] === "Ok") {
+            const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+            if (__r_v.tag === "Err") return __r_v;
+            const __v = __r_v.value;
+              return Ok(Ok(__v) as Result<Pair, string>);
+            } else if (obj["kind"] === "Err") {
+            if (typeof obj["error"] !== "string") {
+              return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+            }
+            const __e = obj["error"];
+              return Ok(Err(__e) as Result<Pair, string>);
+            }
+            return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+          }
+      function encoded(): string {
+        const r: Result<Pair, string> = Ok({ a: 5 });
+        return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+      }
       return { a: Seven() }.a;
     }
     throw new globalThis.Error("bynk: no stub clause matched for Clock.now");
@@ -558,8 +1108,35 @@ async function test_a_stub_value_names_a_suite_type_and_constant() {
     function Name(): string { return (__const_Name ??= { v: "n" }).v; }
     var __const_Prefix: { v: string } | undefined;
     function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+    }
+    function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+      if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+      return { kind: "Err", error: value.error as __JsonValue };
+    }
+    function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+      if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+      }
+      const obj = json as { [k: string]: __JsonValue };
+      if (obj["kind"] === "Ok") {
+      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+      if (__r_v.tag === "Err") return __r_v;
+      const __v = __r_v.value;
+        return Ok(Ok(__v) as Result<Pair, string>);
+      } else if (obj["kind"] === "Err") {
+      if (typeof obj["error"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+      }
+      const __e = obj["error"];
+        return Ok(Err(__e) as Result<Pair, string>);
+      }
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+    }
     const r = await ping.call(deps);
-    if (!(r === 7)) { throw __bynkExpectFailure("tests/demo/clk.bynk:14:9", 283, 289, "expect r == 7\n  expected: r == 7\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((7))); }
+    if (!(r === 7)) { throw __bynkExpectFailure("tests/demo/clk.bynk:25:9", 613, 619, "expect r == 7\n  expected: r == 7\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((7))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -659,8 +1236,35 @@ async function test_a_stub_argument_pattern_and_value_name_suite_constants() {
     function Name(): string { return (__const_Name ??= { v: "n" }).v; }
     var __const_Prefix: { v: string } | undefined;
     function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-    const r = await tag.call(deps);
-    if (!(r === "n")) { throw __bynkExpectFailure("tests/demo/clk.bynk:19:9", 386, 394, "expect r == \"n\"\n  expected: r == \"n\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("n"))); }
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+    }
+    function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+      if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+      return { kind: "Err", error: value.error as __JsonValue };
+    }
+    function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+      if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+      }
+      const obj = json as { [k: string]: __JsonValue };
+      if (obj["kind"] === "Ok") {
+      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+      if (__r_v.tag === "Err") return __r_v;
+      const __v = __r_v.value;
+        return Ok(Ok(__v) as Result<Pair, string>);
+      } else if (obj["kind"] === "Err") {
+      if (typeof obj["error"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+      }
+      const __e = obj["error"];
+        return Ok(Err(__e) as Result<Pair, string>);
+      }
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+    }
+    const r = await tag.call("t-", deps);
+    if (!(r === "n")) { throw __bynkExpectFailure("tests/demo/clk.bynk:30:9", 720, 728, "expect r == \"n\"\n  expected: r == \"n\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("n"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -760,6 +1364,10 @@ async function test_a_suite_type_round_trips_through_Result() {
     function Name(): string { return (__const_Name ??= { v: "n" }).v; }
     var __const_Prefix: { v: string } | undefined;
     function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+    }
     function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
       if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
       return { kind: "Err", error: value.error as __JsonValue };
@@ -784,7 +1392,7 @@ async function test_a_suite_type_round_trips_through_Result() {
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
     }
     const r: Result<Pair, string> = Ok({ a: 1 });
-    if (!(__bynkEq(((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))), Ok(r)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:24:9", 504, 562, "expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))))) + " == " + __bynkShow((Ok(r)))); }
+    if (!(__bynkEq(((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))), Ok(r)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:35:9", 838, 896, "expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))))) + " == " + __bynkShow((Ok(r)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -884,22 +1492,9 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
     function Name(): string { return (__const_Name ??= { v: "n" }).v; }
     var __const_Prefix: { v: string } | undefined;
     function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
-    function __serialise_List_Result_Pair_String(value: readonly Result<Pair, string>[]): __JsonValue {
-      return value.map((v) => __serialise_Result_Pair_String(v));
-    }
-    function __deserialise_List_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<readonly Result<Pair, string>[], __BoundaryError> {
-      if (!globalThis.Array.isArray(json)) {
-        return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
-      }
-      const out: Result<Pair, string>[] = [];
-      for (let i = 0; i < json.length; i++) {
-      const item = json[i];
-      const __r_el = __deserialise_Result_Pair_String(item, `${path}[${i}]`);
-      if (__r_el.tag === "Err") return __r_el;
-      const __el = __r_el.value;
-      out.push(__el as Result<Pair, string>);
-      }
-      return Ok(out);
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
     }
     function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
       if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
@@ -924,8 +1519,25 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
       }
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
     }
+    function __serialise_List_Result_Pair_String(value: readonly Result<Pair, string>[]): __JsonValue {
+      return value.map((v) => __serialise_Result_Pair_String(v));
+    }
+    function __deserialise_List_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<readonly Result<Pair, string>[], __BoundaryError> {
+      if (!globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+      }
+      const out: Result<Pair, string>[] = [];
+      for (let i = 0; i < json.length; i++) {
+      const item = json[i];
+      const __r_el = __deserialise_Result_Pair_String(item, `${path}[${i}]`);
+      if (__r_el.tag === "Err") return __r_el;
+      const __el = __r_el.value;
+      out.push(__el as Result<Pair, string>);
+      }
+      return Ok(out);
+    }
     const rs: readonly Result<Pair, string>[] = [Ok({ a: 2 }), Err("no")];
-    if (!(__bynkEq(((__s: string): Result<readonly Result<Pair, string>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_List_Result_Pair_String(rs))), Ok(rs)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:29:9", 702, 768, "expect Json.decode[List[Result[Pair, String]]](Json.encode(rs)) == Ok(rs)\n  expected: Json.decode[List[Result[Pair, String]]](Json.encode(rs)) == Ok(rs)\n  actual:   " + __bynkShow((((__s: string): Result<readonly Result<Pair, string>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_List_Result_Pair_String(rs))))) + " == " + __bynkShow((Ok(rs)))); }
+    if (!(__bynkEq(((__s: string): Result<readonly Result<Pair, string>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_List_Result_Pair_String(rs))), Ok(rs)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:40:9", 1036, 1102, "expect Json.decode[List[Result[Pair, String]]](Json.encode(rs)) == Ok(rs)\n  expected: Json.decode[List[Result[Pair, String]]](Json.encode(rs)) == Ok(rs)\n  actual:   " + __bynkShow((((__s: string): Result<readonly Result<Pair, string>[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_List_Result_Pair_String(rs))))) + " == " + __bynkShow((Ok(rs)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1025,6 +1637,10 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
     function Name(): string { return (__const_Name ??= { v: "n" }).v; }
     var __const_Prefix: { v: string } | undefined;
     function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+    }
     function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
       if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
       return { kind: "Err", error: value.error as __JsonValue };
@@ -1049,9 +1665,139 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
       return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
     }
     const r: Result<Pair, string> = Ok({ a: 3 });
-    if (!(__bynkEq(((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))), Ok(r)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:41:9", 1120, 1178, "expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))))) + " == " + __bynkShow((Ok(r)))); }
+    if (!(__bynkEq(((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))), Ok(r)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:52:9", 1454, 1512, "expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, string>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_String(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))))) + " == " + __bynkShow((Ok(r)))); }
     const v = await ping.call(deps);
-    if (!(v === 7)) { throw __bynkExpectFailure("tests/demo/clk.bynk:43:9", 1209, 1215, "expect v == 7\n  expected: v == 7\n  actual:   " + __bynkShow((v)) + " == " + __bynkShow((7))); }
+    if (!(v === 7)) { throw __bynkExpectFailure("tests/demo/clk.bynk:54:9", 1543, 1549, "expect v == 7\n  expected: v == 7\n  actual:   " + __bynkShow((v)) + " == " + __bynkShow((7))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_stub_value_reaches_a_suite_type_under_Result_through_a_helper_and_directly() {
+  try {
+    const deps = __makeTestDeps();
+    const { ping, tag } = __ns_demo_clk;
+    interface Pair {
+      readonly a: number;
+    }
+    const Pair = {
+    };
+    function __serialise_Pair(value: Pair): __JsonValue {
+      return {
+        a: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.a),
+      };
+    }
+    function __deserialise_Pair(json: __JsonValue, path: string = "$"): Result<Pair, __BoundaryError> {
+      if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+      }
+      const obj = json as { [k: string]: __JsonValue };
+      if (typeof obj["a"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["a"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+      }
+      const __a = obj["a"];
+      return Ok({ a: __a } as Pair);
+    }
+    
+    function __serialise_List_Pair(value: readonly Pair[]): __JsonValue {
+      return value.map((v) => __serialise_Pair(v));
+    }
+    function __deserialise_List_Pair(json: __JsonValue, path: string = "$"): Result<readonly Pair[], __BoundaryError> {
+      if (!globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+      }
+      const out: Pair[] = [];
+      for (let i = 0; i < json.length; i++) {
+      const item = json[i];
+      const __r_el = __deserialise_Pair(item, `${path}[${i}]`);
+      if (__r_el.tag === "Err") return __r_el;
+      const __el = __r_el.value;
+      out.push(__el as Pair);
+      }
+      return Ok(out);
+    }
+    function __serialise_Option_Pair(value: Option<Pair>): __JsonValue {
+      if (value.tag === "Some") return { kind: "Some", value: __serialise_Pair(value.value) };
+      return { kind: "None" };
+    }
+    function __option_value_Pair(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+      const __r_v = __deserialise_Pair(raw, at);
+      if (__r_v.tag === "Err") return __r_v;
+      const __v = __r_v.value;
+      return Ok(__v);
+    }
+    function __deserialise_Option_Pair(json: __JsonValue, path: string = "$"): Result<Option<Pair>, __BoundaryError> {
+      if (json === undefined || json === null) {
+        return Ok(None as Option<Pair>);
+      }
+      if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+        const obj = json as { [k: string]: __JsonValue };
+        const __keys = globalThis.Object.keys(obj);
+        if (obj["kind"] === "None" && __keys.length === 1) {
+          return Ok(None as Option<Pair>);
+        }
+        if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+          const __t = __option_value_Pair(obj["value"], `${path}.value`);
+          if (__t.tag === "Err") {
+            return __t;
+          }
+          return Ok(Some(__t.value as Pair) as Option<Pair>);
+        }
+      }
+      const __b = __option_value_Pair(json, path);
+      if (__b.tag === "Ok") {
+        return Ok(Some(__b.value as Pair) as Option<Pair>);
+      }
+      if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+        return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+      }
+      return __b;
+    }
+    var __const_Seven: { v: number } | undefined;
+    function Seven(): number { return (__const_Seven ??= { v: 7 }).v; }
+    var __const_Name: { v: string } | undefined;
+    function Name(): string { return (__const_Name ??= { v: "n" }).v; }
+    var __const_Prefix: { v: string } | undefined;
+    function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+    }
+    function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+      if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+      return { kind: "Err", error: value.error as __JsonValue };
+    }
+    function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+      if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+      }
+      const obj = json as { [k: string]: __JsonValue };
+      if (obj["kind"] === "Ok") {
+      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+      if (__r_v.tag === "Err") return __r_v;
+      const __v = __r_v.value;
+        return Ok(Ok(__v) as Result<Pair, string>);
+      } else if (obj["kind"] === "Err") {
+      if (typeof obj["error"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+      }
+      const __e = obj["error"];
+        return Ok(Err(__e) as Result<Pair, string>);
+      }
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+    }
+    const a = await tag.call("j-", deps);
+    if (!(a === encoded())) { throw __bynkExpectFailure("tests/demo/clk.bynk:59:9", 1672, 1686, "expect a == encoded()\n  expected: a == encoded()\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((encoded()))); }
+    const b = await tag.call("d-", deps);
+    if (!(b === "decoded")) { throw __bynkExpectFailure("tests/demo/clk.bynk:61:9", 1720, 1734, "expect b == \"decoded\"\n  expected: b == \"decoded\"\n  actual:   " + __bynkShow((b)) + " == " + __bynkShow(("decoded"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1152,7 +1898,34 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
     function Name(): string { return (__const_Name ??= { v: "n" }).v; }
     var __const_Prefix: { v: string } | undefined;
     function Prefix(): string { return (__const_Prefix ??= { v: "t-" }).v; }
+    function encoded(): string {
+      const r: Result<Pair, string> = Ok({ a: 5 });
+      return globalThis.JSON.stringify(__serialise_Result_Pair_String(r));
+    }
     const __where = null;
+    function __serialise_Result_Pair_String(value: Result<Pair, string>): __JsonValue {
+      if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
+      return { kind: "Err", error: value.error as __JsonValue };
+    }
+    function __deserialise_Result_Pair_String(json: __JsonValue, path: string = "$"): Result<Result<Pair, string>, __BoundaryError> {
+      if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+        return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+      }
+      const obj = json as { [k: string]: __JsonValue };
+      if (obj["kind"] === "Ok") {
+      const __r_v = __deserialise_Pair(obj["value"], `${path}.value`);
+      if (__r_v.tag === "Err") return __r_v;
+      const __v = __r_v.value;
+        return Ok(Ok(__v) as Result<Pair, string>);
+      } else if (obj["kind"] === "Err") {
+      if (typeof obj["error"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "string", actual: typeof obj["error"] });
+      }
+      const __e = obj["error"];
+        return Ok(Err(__e) as Result<Pair, string>);
+      }
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+    }
     function __serialise_Result_Pair_Int(value: Result<Pair, number>): __JsonValue {
       if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
       return { kind: "Err", error: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.error) };
@@ -1182,7 +1955,7 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
     const __body = async (__vals: any[]) => {
       const n = globalThis.Number(__vals[0]);
       const r: Result<Pair, number> = Ok({ a: n });
-      if (!(__bynkEq(((__s: string): Result<Result<Pair, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_Int(r))), Ok(r)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:35:10", 913, 968, "expect Json.decode[Result[Pair, Int]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, Int]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_Int(r))))) + " == " + __bynkShow((Ok(r)))); }
+      if (!(__bynkEq(((__s: string): Result<Result<Pair, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_Int(r))), Ok(r)))) { throw __bynkExpectFailure("tests/demo/clk.bynk:46:10", 1247, 1302, "expect Json.decode[Result[Pair, Int]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, Int]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Result_Pair_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Result_Pair_Int(r))))) + " == " + __bynkShow((Ok(r)))); }
     };
     return await __bynkRunProperty({ seed: __bynkMix(__bynkSeed, 0), cases: 100, gens: __gens, where: __where, body: __body, name: "a suite type round-trips through Result in a property", location: "tests/demo/clk.bynk", file: "tests/demo/clk.bynk" });
 }
@@ -1201,7 +1974,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a stub value names a suite type and constant", "a stub argument pattern and value name suite constants", "a suite type round-trips through Result", "a suite type round-trips through a nested generic", "a suite type round-trips through Result at the integration tier", "a suite type round-trips through Result in a property"];
+export const __bynkCases: readonly string[] = ["a stub value names a suite type and constant", "a stub argument pattern and value name suite constants", "a suite type round-trips through Result", "a suite type round-trips through a nested generic", "a suite type round-trips through Result at the integration tier", "a stub value reaches a suite type under Result through a helper and directly", "a suite type round-trips through Result in a property"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -1233,6 +2006,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a suite type round-trips through Result at the integration tier")) {
     const started = __bynkCaseNow();
     const r = { name: "a suite type round-trips through Result at the integration tier", ...(await test_a_suite_type_round_trips_through_Result_at_the_integration_tier()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub value reaches a suite type under Result through a helper and directly")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub value reaches a suite type under Result through a helper and directly", ...(await test_a_stub_value_reaches_a_suite_type_under_Result_through_a_helper_and_directly()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

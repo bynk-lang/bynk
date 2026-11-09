@@ -30,8 +30,8 @@ export const ping = {
 };
 
 export const tag = {
-  async call(deps: { Clock: Clock }): globalThis.Promise<string> {
-    const l = await deps.Clock.label("t-");
+  async call(prefix: string, deps: { Clock: Clock }): globalThis.Promise<string> {
+    const l = await deps.Clock.label(prefix);
     return l;
   },
 };
@@ -45,8 +45,8 @@ export function __makeSurface(deps: __DemoClkDeps) {
     async ping(): globalThis.Promise<number> {
       return ping.call(deps);
     },
-    async tag(): globalThis.Promise<string> {
-      return tag.call(deps);
+    async tag(prefix: string): globalThis.Promise<string> {
+      return tag.call(prefix, deps);
     },
   };
 }

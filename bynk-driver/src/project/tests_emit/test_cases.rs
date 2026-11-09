@@ -372,13 +372,6 @@ pub(super) fn async_test_runner_fn(
     )
 }
 
-/// #2834: the suite's helper `fn`s as local function declarations, for a runner
-/// to splice in ahead of its body. Each runner declares its own suite's helpers,
-/// after the scope setup, so a helper sees the same unqualified target names a
-/// case does and stays private to its suite. `resolved` is the suite's view
-/// *without* the helpers (they are added here, as the check pass adds them); the
-/// helpers' types are merged into `typed`, and their names into `bound` so a
-/// case `let` that reuses one is renamed. A helper's body carries no source map.
 /// #3111: the local codecs the runner's lowered body reached for beyond the
 /// always-present ones — a suite type under `Result` or another generic at a
 /// `Json` boundary — as function declarations to splice ahead of the body.
@@ -402,6 +395,13 @@ pub(super) fn suite_late_codecs(
     reindent_by(&late, "    ")
 }
 
+/// #2834: the suite's helper `fn`s as local function declarations, for a runner
+/// to splice in ahead of its body. Each runner declares its own suite's helpers,
+/// after the scope setup, so a helper sees the same unqualified target names a
+/// case does and stays private to its suite. `resolved` is the suite's view
+/// *without* the helpers (they are added here, as the check pass adds them); the
+/// helpers' types are merged into `typed`, and their names into `bound` so a
+/// case `let` that reuses one is renamed. A helper's body carries no source map.
 pub(super) fn suite_fn_decls(
     suite_fns: test_suites::SuiteItems<'_>,
     mut resolved: ResolvedCommons,
