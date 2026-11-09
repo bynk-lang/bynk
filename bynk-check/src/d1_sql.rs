@@ -55,6 +55,7 @@ mod stub {
             _: &str,
             _: &UnitTable,
             _: &HashMap<ExprId, Callee>,
+            _: Option<&str>,
         ) -> Vec<CompileError> {
             Vec::new()
         }
@@ -155,6 +156,9 @@ mod native {
             unit: &str,
             table: &UnitTable,
             callees: &HashMap<ExprId, Callee>,
+            // The source of the file the sites are in, to point an error inside
+            // the SQL literal; `None` reports at the whole argument.
+            source: Option<&str>,
         ) -> Vec<CompileError> {
             // A deterministic order: by position in the source.
             let mut sites: BTreeMap<(usize, usize), &D1SqlSite> = BTreeMap::new();
@@ -178,7 +182,7 @@ mod native {
                     continue;
                 };
                 let Ok(conn) = conn.lock() else { continue };
-                if let Some(err) = check_site(&conn, site, &database) {
+                if let Some(err) = check_site(&conn, site, &database, source) {
                     out.push(err);
                 }
             }
@@ -195,14 +199,33 @@ mod native {
         Some(name.trim_matches('"'))
     }
 
-    fn check_site(conn: &Connection, site: &D1SqlSite, database: &str) -> Option<CompileError> {
+    /// #3108: the span of the token SQLite refused, inside the SQL literal, or
+    /// `None` (the whole argument is reported) when the offset is unknown, lies
+    /// in the compiler's generated `select` prefix, or can't be mapped back
+    /// into the source with certainty.
+    fn error_span(source: &str, site: &D1SqlSite, offset: i32) -> Option<Span> {
+        let offset = usize::try_from(offset).ok()?;
+        let (decoded, origin) = match &site.literal {
+            Some((lit, origin)) => (lit.as_str(), *origin),
+            None => (site.text.as_str(), 0),
+        };
+        let at = usize::try_from(offset as isize - origin).ok()?;
+        super::literal_subspan(source, site.span, decoded, at)
+    }
+
+    fn check_site(
+        conn: &Connection,
+        site: &D1SqlSite,
+        database: &str,
+        source: Option<&str>,
+    ) -> Option<CompileError> {
         let what = format!("`{}.{}`", site.cap, site.op);
         let stmt = match conn.prepare(&site.text) {
             Ok(stmt) => stmt,
             Err(e) => {
-                let msg = match &e {
-                    rusqlite::Error::SqlInputError { msg, .. } => msg.clone(),
-                    other => other.to_string(),
+                let (msg, offset) = match &e {
+                    rusqlite::Error::SqlInputError { msg, offset, .. } => (msg.clone(), *offset),
+                    other => (other.to_string(), -1),
                 };
                 if let Some((row, fields)) = &site.row
                     && let Some(col) = missing_column(&msg)
@@ -219,10 +242,13 @@ mod native {
                         )),
                     );
                 }
+                let span = source
+                    .and_then(|src| error_span(src, site, offset))
+                    .unwrap_or(site.span);
                 return Some(
                     CompileError::new(
                         "bynk.d1.sql_invalid",
-                        site.span,
+                        span,
                         format!("the SQL of {what} doesn't prepare: {msg}"),
                     )
                     .with_note(format!(
@@ -247,6 +273,113 @@ mod native {
             )
         })
     }
+}
+
+/// The source span of the token starting at byte `at` of a string literal's
+/// decoded value `decoded`, for the literal token `lit` in `source`.
+///
+/// The decoded bytes are aligned with the lexeme's: an escape (`\\n`, `\\"`, `\\u{…}`)
+/// stands for one decoded character, and bytes the decoder drops (a multi-line
+/// literal's indent) are skipped. The alignment is *verified*: the lexeme text
+/// at the mapped range must equal the decoded token, so a form the alignment
+/// gets wrong (or can't handle: raw-looking oddities, a `const`'s use site,
+/// which isn't a literal) gives `None`, never a wrong span.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn literal_subspan(
+    source: &str,
+    lit: bynk_syntax::span::Span,
+    decoded: &str,
+    at: usize,
+) -> Option<bynk_syntax::span::Span> {
+    use bynk_syntax::span::Span;
+    let lexeme = source.get(lit.start..lit.end)?;
+    let bytes = lexeme.as_bytes();
+    // Where the value's text begins: past the opening quote (and a raw literal's
+    // `r` and hashes), or, for a multi-line literal, past the opener's line.
+    let raw = bytes.first() == Some(&b'r');
+    let quote = lexeme.find('"')?;
+    if bytes[..quote].iter().any(|b| !matches!(b, b'r' | b'#')) {
+        return None;
+    }
+    let mut i = if lexeme[quote..].starts_with("\"\"\"") {
+        quote + lexeme[quote..].find('\n')? + 1
+    } else {
+        quote + 1
+    };
+    // The token: a quoted name, or a run of word characters, or one character.
+    let tok_end = {
+        let rest = decoded.get(at..)?;
+        let mut chars = rest.char_indices();
+        let (_, first) = chars.next()?;
+        let len = if first == '"' {
+            rest[1..].find('"').map_or(1, |n| n + 2)
+        } else if first.is_alphanumeric() || first == '_' {
+            rest.char_indices()
+                .find(|(_, c)| !(c.is_alphanumeric() || *c == '_'))
+                .map_or(rest.len(), |(n, _)| n)
+        } else {
+            first.len_utf8()
+        };
+        at + len
+    };
+    let token = decoded.get(at..tok_end)?;
+    let mut start = None;
+    let mut end = 0;
+    for (idx, c) in decoded.char_indices() {
+        if idx >= tok_end {
+            break;
+        }
+        // Advance to the lexeme byte that spells `c`.
+        let found = loop {
+            let rest = lexeme.get(i..)?;
+            let mut it = rest.chars();
+            let head = it.next()?;
+            if head == '\\' && !raw {
+                let (decoded_char, len) = unescape(rest)?;
+                if decoded_char == c {
+                    break (i, len);
+                }
+                i += len;
+            } else if head == c {
+                break (i, head.len_utf8());
+            } else {
+                i += head.len_utf8();
+            }
+        };
+        if idx == at {
+            start = Some(found.0);
+        }
+        end = found.0 + found.1;
+        i = end;
+    }
+    let (start, end) = (start?, end);
+    (lexeme.get(start..end)? == token)
+        .then(|| Span::new_in(lit.file, lit.start + start, lit.start + end))
+}
+
+/// The character an escape at the head of `s` (which starts with `\`) denotes,
+/// and the escape's length in bytes.
+#[cfg(not(target_arch = "wasm32"))]
+fn unescape(s: &str) -> Option<(char, usize)> {
+    let b = s.as_bytes();
+    Some(match *b.get(1)? {
+        b'n' => ('\n', 2),
+        b't' => ('\t', 2),
+        b'r' => ('\r', 2),
+        b'0' => ('\0', 2),
+        b'\\' => ('\\', 2),
+        b'"' => ('"', 2),
+        b'\'' => ('\'', 2),
+        b'u' => {
+            let close = s.find('}')?;
+            let hex = s.get(3..close)?;
+            (
+                char::from_u32(u32::from_str_radix(hex, 16).ok()?)?,
+                close + 1,
+            )
+        }
+        _ => return None,
+    })
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -347,5 +480,44 @@ mod tests {
         let conn = built.schemas["demo-orders"].lock().unwrap();
         assert!(conn.prepare("SELECT \"nope\" FROM t").is_err());
         assert!(conn.prepare("SELECT \"id\" FROM t").is_ok());
+    }
+
+    /// #3108: the token at a decoded offset, found again in the literal's source.
+    fn sub(source: &str, decoded: &str, needle: &str) -> Option<String> {
+        let lit_start = source.find(['"', 'r']).unwrap();
+        let lit_end = source.rfind(['"', '#']).unwrap() + 1;
+        let at = decoded.find(needle).unwrap();
+        let lit = bynk_syntax::span::Span::new(lit_start, lit_end);
+        literal_subspan(source, lit, decoded, at).map(|s| source[s.start..s.end].to_string())
+    }
+
+    #[test]
+    fn a_token_is_found_in_a_plain_literal_with_escapes() {
+        let src = r#"f("SELECT a,\n b FROM \"t\" WHERE stauts = ?1")"#;
+        let decoded = "SELECT a,\n b FROM \"t\" WHERE stauts = ?1";
+        assert_eq!(sub(src, decoded, "stauts").as_deref(), Some("stauts"));
+        assert_eq!(sub(src, decoded, "b FROM").as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn a_token_is_found_in_a_multi_line_literal_past_its_indent_and_tag() {
+        let src = "f(\"\"\"sql\n\t\tselect id\n\t\tFROM orders\n\t\tWHERE stauts = ?1\n\t\t\"\"\")";
+        let decoded = "select id\nFROM orders\nWHERE stauts = ?1";
+        assert_eq!(sub(src, decoded, "stauts").as_deref(), Some("stauts"));
+        assert_eq!(sub(src, decoded, "select").as_deref(), Some("select"));
+    }
+
+    #[test]
+    fn a_raw_literal_maps_through_unescaped() {
+        let src = r##"f(r#"SELECT \n FROM t WHERE stauts = 1"#)"##;
+        let decoded = r"SELECT \n FROM t WHERE stauts = 1";
+        assert_eq!(sub(src, decoded, "stauts").as_deref(), Some("stauts"));
+    }
+
+    #[test]
+    fn a_mapping_that_cannot_be_verified_falls_back() {
+        // Not a literal at all (a `const`'s use site): no quote to start from.
+        let lit = bynk_syntax::span::Span::new(2, 8);
+        assert_eq!(literal_subspan("f(CONSTX)", lit, "SELECT x", 0), None);
     }
 }

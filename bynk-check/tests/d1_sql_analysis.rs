@@ -112,3 +112,66 @@ fn a_statement_in_a_test_body_is_prepared() {
     let _ = std::fs::remove_dir_all(&root);
     assert!(cats.contains(&"bynk.d1.sql_invalid"), "{cats:?}");
 }
+
+/// #3108: the error points at the token SQLite refused, inside the literal.
+#[test]
+fn the_error_points_inside_the_sql_literal() {
+    let root = std::env::temp_dir().join(format!("bynk-check-d1-sql-span-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let unit = source(BAD_COLUMN);
+    let mut overlay = HashMap::new();
+    for (rel, text) in [
+        ("demo.bynk", unit.as_str()),
+        ("migrations/demo-orders/0001_create.sql", MIGRATION),
+    ] {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, text).unwrap();
+        overlay.insert(p, text.to_string());
+    }
+    let analysed =
+        analysis::analyse_project(&Roots::Single(root.clone()), &overlay, &SchemaLock::Off);
+    let _ = std::fs::remove_dir_all(&root);
+    let err = analysed
+        .errors
+        .iter()
+        .find(|e| e.error.category == "bynk.d1.sql_invalid")
+        .expect("reported");
+    let span = err.error.span;
+    assert_eq!(&unit[span.start..span.end], "stauts");
+}
+
+/// #3108: for `select[T]` the error offset is shifted past the compiler's
+/// `SELECT <columns>` prefix, so it still lands on the author's token.
+#[test]
+fn a_select_tail_error_points_into_the_tail() {
+    let root = std::env::temp_dir().join(format!("bynk-check-d1-sql-sel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let unit = source(
+        "    let _ <- Orders.select[Row](\"  FROM orders WHERE stauts = ?1\", [Text(id)])\n",
+    )
+    .replace(
+        "service probe",
+        "type Row = { id: String, total: Int }\n\nservice probe",
+    );
+    let mut overlay = HashMap::new();
+    for (rel, text) in [
+        ("demo.bynk", unit.as_str()),
+        ("migrations/demo-orders/0001_create.sql", MIGRATION),
+    ] {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, text).unwrap();
+        overlay.insert(p, text.to_string());
+    }
+    let analysed =
+        analysis::analyse_project(&Roots::Single(root.clone()), &overlay, &SchemaLock::Off);
+    let _ = std::fs::remove_dir_all(&root);
+    let err = analysed
+        .errors
+        .iter()
+        .find(|e| e.error.category == "bynk.d1.sql_invalid")
+        .expect("reported");
+    let span = err.error.span;
+    assert_eq!(&unit[span.start..span.end], "stauts");
+}

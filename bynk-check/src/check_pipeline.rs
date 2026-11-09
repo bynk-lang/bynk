@@ -658,7 +658,7 @@ pub fn check_file_core(
     if kind == UnitKind::Context
         && let (Some(d1_sql), Some(table)) = (&ctx.d1_sql, unit_table_owned.as_ref())
     {
-        let sql_errs = ours(d1_sql.check_unit(name, table, &typed.callees));
+        let sql_errs = ours(d1_sql.check_unit(name, table, &typed.callees, Some(pf.source())));
         if !sql_errs.is_empty() {
             errors.extend_for(Some(&pf.identity_path()), sql_errs);
             failed = true;

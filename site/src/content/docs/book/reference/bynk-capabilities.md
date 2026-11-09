@@ -868,7 +868,9 @@ in `~`, and copies only what it checked:
 empty in-memory SQLite and `prepare` each literal statement of that database
 against it. Nothing runs. At the literal it reports:
 
-- `bynk.d1.sql_invalid`: a syntax error, or an unknown table or column;
+- `bynk.d1.sql_invalid`: a syntax error, or an unknown table or column. The error points
+  at the token SQLite refused inside an inline literal (the whole argument for a `const`
+  or when the place can't be told);
 - `bynk.d1.sql_param_count`: the SQL uses a different number of parameters than
   the list passes. The count is SQLite's own (the highest `?N`, a bare `?` the
   next one), the rule D1 refuses a mismatch by. It is checked when the list is a
