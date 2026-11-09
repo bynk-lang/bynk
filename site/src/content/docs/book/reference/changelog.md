@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.11** | "`bynk check` prepares a D1 call's `const` SQL against the migrations' schema (the constant's entry had replaced the statement's site, so it was accepted unchecked)" |
 | **v0.525.10** | "A suite's stub values can name its own `type` and `const`, and a suite type works under `Result` and other generics at a JSON boundary" |
 | **v0.525.9** | Workers WebSocket `on open`/`on message`/`on close` bodies that call a consumed context's service or construct an agent now get the Durable Object's own `env`, so the call reaches the real Service Binding or DO namespace instead of an in-memory fallback |
 | **v0.525.8** | "`bynk check` prepares the `SqlStatement`s written inline in a D1 `batch` against the migrations' schema" |
