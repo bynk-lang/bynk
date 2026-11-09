@@ -168,7 +168,11 @@ enum Planned {
 fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
     let options = crate::try_project_options(&args.input)
         .map_err(|e| Planned::Message(e.to_string()))?
-        .contracts(true)
+        // #3107: the `dev` profile (`[profile.dev] contracts`; on by default).
+        .contracts(
+            crate::project_contracts(&args.input, crate::CliProfile::Dev)
+                .map_err(Planned::Message)?,
+        )
         .remote_tests(Some(RemoteTests {
             skip_unsupported: args.skip_unsupported,
             dev: true,

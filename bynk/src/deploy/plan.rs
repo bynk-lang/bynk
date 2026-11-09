@@ -463,6 +463,12 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    // #3107: a deployment never carries contract checks.
+    if let Err(e) = bynk_driver::refuse_release_contracts(project_root) {
+        eprintln!("bynk: {e}");
+        return ExitCode::FAILURE;
+    }
+
     let preflight_opts = DoctorOptions {
         only: Some(Capability::Deploy),
         strict: false,
