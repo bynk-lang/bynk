@@ -1792,6 +1792,192 @@ fn stored_state_is_stamped_and_checked_against_its_schema_version() {
     );
 }
 
+// #3113 (follow-up to #2691/#3057): a sum variant added inside stored state is
+// an additive schema change, so a rollback relies on the `__v` marker alone. The
+// newer build writes a value of the added variant; the older build, loading the
+// same storage, must fault `NewerSchema` rather than mis-decode it or crash in a
+// `match`. Both builds are real compiles, the newer reconciled against the
+// older's lock, sharing one fake storage.
+fn rollback_source(extra_variant: &str, extra_handler: &str) -> String {
+    format!(
+        "context shop\n\
+\n\
+type Shape = | Circle(r: Int) | Square(side: Int){extra_variant}\n\
+\n\
+agent Holder {{\n\
+\x20 key id: String\n\
+\x20 store shape: Cell[Option[Shape]]\n\
+\n\
+\x20 on call putCircle(r: Int) -> Effect[()] {{\n\
+\x20   shape := Some(Circle(r))\n\
+\x20   Effect.pure(())\n\
+\x20 }}\n\
+{extra_handler}\
+\x20 on call describe() -> Effect[Int] {{\n\
+\x20   let s = shape\n\
+\x20   match s {{\n\
+\x20     Some(Circle(r)) => Effect.pure(r)\n\
+\x20     Some(Square(side)) => Effect.pure(side)\n\
+{extra_arm}\
+\x20     None => Effect.pure(0)\n\
+\x20   }}\n\
+\x20 }}\n\
+}}\n",
+        extra_arm = if extra_variant.is_empty() {
+            ""
+        } else {
+            "\x20     Some(Triangle(base)) => Effect.pure(base)\n"
+        },
+    )
+}
+
+const ROLLBACK_DRIVER_TS: &str = r#"
+import { Holder as Newer } from "./newer/shop.js";
+import { Holder as Older } from "./older/shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const m = new Map<string, unknown>();
+const state = {
+  storage: {
+    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+  },
+};
+const stored = () => m.get("state") as Record<string, unknown>;
+
+async function faultKind(run: () => Promise<unknown>): Promise<string> {
+  try {
+    await run();
+  } catch (e) {
+    const rv = (e as { rehydrationViolation?: { detail?: { kind?: string } } }).rehydrationViolation;
+    return rv?.detail?.kind ?? `other: ${String(e)}`;
+  }
+  return "none";
+}
+
+console.error = () => {};
+
+// 1. The newer build writes a value of the added variant, stamped with its version.
+const newer = new Newer(state as never);
+await newer.putTriangle(7, {});
+const written = JSON.stringify(stored());
+assert(stored().__v === 2, `the newer build stamps __v = 2, got ${String(stored().__v)}`);
+assert((await newer.describe({})) === 7, "the newer build reads its own Triangle back");
+
+// 2. Rolled back, the older build faults NewerSchema on that record: no
+//    mis-decode of the unknown variant, no crash in its `match`.
+const older = new Older(state as never);
+assert((await faultKind(() => older.describe({}))) === "NewerSchema", "the older build faults NewerSchema on read");
+assert((await faultKind(() => older.putCircle(1, {}))) === "NewerSchema", "and on write");
+assert(JSON.stringify(stored()) === written, "the newer record is left untouched");
+
+// 3. The older build still serves a record it wrote itself.
+const own = new Map<string, unknown>();
+const ownState = {
+  storage: {
+    async get(key: string): Promise<unknown> { return structuredClone(own.get(key)); },
+    async put(key: string, value: unknown): Promise<void> { own.set(key, structuredClone(value)); },
+  },
+};
+const o2 = new Older(ownState as never);
+await o2.putCircle(4, {});
+assert((await o2.describe({})) === 4, "the older build reads its own record");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn rolling_back_past_an_added_sum_variant_faults_newer_schema() {
+    let runner = match discover_tsc() {
+        Some(r) => r,
+        None => {
+            eprintln!("\n!!! STORE-BEHAVIOUR VERIFICATION SKIPPED !!!\nno `tsc`/`npx` on PATH.\n");
+            if std::env::var(REQUIRE_ENV).is_ok() {
+                panic!("{REQUIRE_ENV} is set but no tsc runner was found");
+            }
+            return;
+        }
+    };
+    if !tool_exists("node") {
+        eprintln!("\n!!! STORE-BEHAVIOUR VERIFICATION SKIPPED !!!\n`node` is not on PATH.\n");
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("{REQUIRE_ENV} is set but `node` was not found");
+        }
+        return;
+    }
+
+    let older_src = rollback_source("", "");
+    let newer_src = rollback_source(
+        " | Triangle(base: Int)",
+        "\x20 on call putTriangle(base: Int) -> Effect[()] {\n\
+\x20   shape := Some(Triangle(base))\n\
+\x20   Effect.pure(())\n\
+\x20 }\n",
+    );
+    let tmp = std::env::temp_dir().join(format!(
+        "bynk-store-behaviour-{}-rollback_variant",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&tmp);
+
+    // Compile one build into `<tmp>/<dir>`, reconciled against `existing`;
+    // returns the lock it produced.
+    let compile = |dir: &str, source: &str, existing: Option<String>| -> String {
+        let src = tmp.join(dir).join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("shop.bynk"), source).unwrap();
+        let out = bynk_driver::project::compile_project(
+            &bynk_testkit::compile_options_single(src.clone())
+                .target(bynk_driver::project::BuildTarget::Bundle)
+                .schema_registry(bynk_driver::project::SchemaLock::On { existing }),
+        )
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
+        .expect("the rollback build must compile");
+        for (path, doc) in &out.artefacts.docs {
+            if path.to_string_lossy() == "tsconfig.json" {
+                continue;
+            }
+            let target_path = tmp.join(dir).join(path);
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(&target_path, doc.text()).unwrap();
+        }
+        out.schema_lock.expect("a locked build returns its lock")
+    };
+    // The older code ships first and records version 1; the newer code adds the
+    // variant (version 2, additive). The rollback redeploys the older build
+    // as it was (it cannot be recompiled against the newer lock: the variant
+    // would read as removed), so `older/` is that original build.
+    let lock_v1 = compile("older", &older_src, None);
+    let lock_v2 = compile("newer", &newer_src, Some(lock_v1));
+    // Not the file's own `version = 2` format header: the agent's entry.
+    assert!(
+        lock_v2.contains("[agents.\"shop.Holder\"]\nversion = 2"),
+        "{lock_v2}"
+    );
+    assert!(lock_v2.contains("additive = true"), "{lock_v2}");
+
+    fs::write(tmp.join("driver.ts"), ROLLBACK_DRIVER_TS).unwrap();
+    fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
+    fs::write(tmp.join("package.json"), "{ \"type\": \"module\" }").unwrap();
+
+    let (program, prefix) = &runner;
+    let (ok, out_text) = run(program, prefix, &["-p", "tsconfig.json"], &tmp);
+    assert!(ok, "tsc failed on the rollback driver:\n{out_text}");
+    let (ok, out_text) = run("node", &[], &["js/driver.js"], &tmp);
+    let _ = fs::remove_dir_all(&tmp);
+    assert!(
+        ok && out_text.contains("ALL OK"),
+        "rollback driver did not pass:\n{out_text}"
+    );
+}
+
 // Decision A: a build with no schema lock emits no version logic, and carries
 // a stored marker through untouched rather than faulting on it or restamping it.
 const UNVERSIONED_DRIVER_TS: &str = r#"
