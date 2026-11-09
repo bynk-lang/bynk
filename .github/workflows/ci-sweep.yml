@@ -94,7 +94,7 @@ jobs:
 
           # Report once per SHA on a single tracking issue.
           title="CI runs missing"
-          number=$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+          number=$(gh issue list --state open --author app/github-actions --search "in:title \"$title\"" --json number,title \
             --jq "[.[] | select(.title == \"$title\")][0].number // empty")
           known=""
           [ -z "$number" ] || known=$(gh issue view "$number" --json body,comments --jq '.body, (.comments[].body)')
