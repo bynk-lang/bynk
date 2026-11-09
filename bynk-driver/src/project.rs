@@ -2064,9 +2064,6 @@ fn check_unit_files(
                 bynk_check::checker::Callee::Capability { cap, op, .. } => {
                     cap == "Events" && op == "emit"
                 }
-                // #3142: the D1 SQL sites, for `bynk test --mutate`.
-                bynk_check::checker::Callee::D1Sql(_) => true,
-                bynk_check::checker::Callee::Const(_, site) => site.is_some(),
                 _ => false,
             };
             keep.then(|| (*id, c.clone()))

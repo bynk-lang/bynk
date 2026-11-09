@@ -1332,6 +1332,28 @@ mod tests {
     }
 
     #[test]
+    fn a_multi_line_literal_maps_back_through_its_indentation() {
+        let lit = "\"\"\"\n    SELECT 1 FROM t\n    WHERE a > 1\n      AND b = 2\n    \"\"\"";
+        let ms = sql_mutations(lit);
+        let m = ms
+            .iter()
+            .find(|m| m.2 == "AND b = 2")
+            .unwrap_or_else(|| panic!("{ms:?}"));
+        let mut mutant = lit.to_string();
+        mutant.replace_range(m.0..m.1, &m.3);
+        assert!(
+            mutant.contains("WHERE a > 1") && !mutant.contains("b = 2"),
+            "{mutant}"
+        );
+        assert!(
+            mutant.starts_with("\"\"\"") && mutant.ends_with("\"\"\""),
+            "{mutant}"
+        );
+        let g = ms.iter().find(|m| m.2 == ">").unwrap();
+        assert_eq!(&lit[g.0..g.1], ">");
+    }
+
+    #[test]
     fn a_case_expression_in_a_where_is_one_conjunct() {
         let lit =
             "\"SELECT 1 FROM t WHERE CASE WHEN a > 1 AND b > 2 THEN 1 ELSE 0 END = 1 AND c = 3\"";
