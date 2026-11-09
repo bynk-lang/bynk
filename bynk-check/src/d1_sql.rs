@@ -159,9 +159,13 @@ mod native {
             // A deterministic order: by position in the source.
             let mut sites: BTreeMap<(usize, usize), &D1SqlSite> = BTreeMap::new();
             for callee in callees.values() {
-                if let Callee::D1Sql(site) = callee {
-                    sites.insert((site.span.start, site.span.end), site);
-                }
+                // A `const` SQL argument's entry is `Const`, which keeps the site.
+                let site: &D1SqlSite = match callee {
+                    Callee::D1Sql(site) => site,
+                    Callee::Const(_, Some(site)) => site,
+                    _ => continue,
+                };
+                sites.insert((site.span.start, site.span.end), site);
             }
             let worker = bynk_project::worker_dir_name(unit);
             let mut out = Vec::new();

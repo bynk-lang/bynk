@@ -6241,7 +6241,7 @@ impl<'a> LowerCtx<'a> {
     /// name to one (`Callee::Const`) rather than to a local of the same name.
     pub(crate) fn const_ref<'e>(&self, e: &'e Expr) -> Option<&'e str> {
         match (&e.kind, self.commons().callee(e.id)) {
-            (ExprKind::Ident(id), Some(bynk_check::checker::Callee::Const(_))) => {
+            (ExprKind::Ident(id), Some(bynk_check::checker::Callee::Const(..))) => {
                 Some(id.name.as_str())
             }
             _ => None,

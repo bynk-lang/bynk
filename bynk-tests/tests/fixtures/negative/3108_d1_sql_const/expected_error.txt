@@ -1,0 +1,4 @@
+# exact
+bynk.d1.sql_invalid the SQL of `Orders.all` doesn't prepare: no such column: stauts
+bynk.d1.sql_param_count the SQL of `Orders.all` takes 1 parameter, but the list passes 2
+bynk.d1.sql_invalid the SQL of `Orders.batch` doesn't prepare: no such column: stauts

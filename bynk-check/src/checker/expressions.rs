@@ -209,7 +209,14 @@ pub(crate) fn check_ident(
     if let Some(c) = ctx.input.consts.get(&id.name) {
         ctx.refs.record(id.span, SymbolKind::Const, &id.name);
         // The lowering emits it as a call to the constant's function.
-        ctx.callees.insert(expr_id, Callee::Const(id.name.clone()));
+        // #3108: a D1 call's SQL argument was recorded first (`check_sql_argument`);
+        // keep that site rather than let this entry replace it.
+        let d1_site = match ctx.callees.get(&expr_id) {
+            Some(Callee::D1Sql(site)) => Some(Box::new(site.clone())),
+            _ => None,
+        };
+        ctx.callees
+            .insert(expr_id, Callee::Const(id.name.clone(), d1_site));
         let ty = resolve_type_ref(&c.ty, &ctx.input.types, tys);
         // A unit's table holds every type its constants' annotations reach
         // (`project_model::used_const_seeds`), and an annotation that does
