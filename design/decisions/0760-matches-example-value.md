@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "`@example(\"…\")` after a `Matches`/`IsoDate` refinement gives `Val[T]` a value, so `bynk test --smoke` runs patterned routes"
----
+# 0760 — An `@example` annotation gives Val a value for a Matches or IsoDate refinement
 
-## ADR: matches-example-value
-title: An `@example` annotation gives Val a value for a Matches or IsoDate refinement
-summary: Where the example goes, how it is checked, and why `for all` ignores it
+- **Status:** Accepted (v0.523)
 
 **Context.** `Val` cannot invent a string for an arbitrary regex, so bare
 `Val[T]` of a `Matches` (or `IsoDate`) type, or of a record with such a field,

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.522**.
+written against **v0.523**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.523.0** | "`@example(\"…\")` after a `Matches`/`IsoDate` refinement gives `Val[T]` a value, so `bynk test --smoke` runs patterned routes" |
 | **v0.522.0** | A suite declares its own `type` and `const` items, private to the suite and never deployed |
 | **v0.521.0** | A `tsc` failure on generated code is reported as `bynk.codegen.tsc_failed` at the Bynk source line it came from, by `bynk test` and the new opt-in `bynk check --emit` |
 | **v0.520.0** | "`bynk test --require-tests` fails a project that declares no tests (`error.kind == \"no_tests\"` under `--format json`); without it the message is now `warning: no tests found in <dir>`, still exit 0" |
