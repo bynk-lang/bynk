@@ -713,6 +713,24 @@ pub fn try_read_build_config_with(
     Ok(config)
 }
 
+/// Read `bynk.toml`'s `[profile]` table alone (#3107), so `bynk test` and
+/// `bynk deploy` consult the profiles without reading `[build]`. No manifest,
+/// or no `[profile]`, is empty; a bad profile is [`ProjectPathsError::BadProfile`].
+pub fn try_read_profiles(
+    project_root: &Path,
+) -> Result<BTreeMap<String, ProfileConfig>, ProjectPathsError> {
+    let Ok(content) = fs::read_to_string(project_root.join("bynk.toml")) else {
+        return Ok(BTreeMap::new());
+    };
+    let doc = content
+        .parse::<toml::Table>()
+        .map_err(|_| ProjectPathsError::Malformed)?;
+    match doc.get("profile").and_then(|v| v.as_table()) {
+        Some(t) => profiles_from(t),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
 /// The `[profile]` table's typed content: only the names in [`PROFILE_NAMES`],
 /// each a table whose only key is a boolean `contracts`.
 fn profiles_from(

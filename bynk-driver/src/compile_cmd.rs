@@ -41,9 +41,11 @@ impl CliProfile {
 /// rule every verb that builds shares: `[profile.<name>] contracts`, else the
 /// profile's default (`dev` on, `release` off). `bynk build` also takes a
 /// profile from its flag; `test` is always `dev`, `deploy` always `release`.
-pub fn profile_contracts(config: &bynk_project::BuildConfig, profile: CliProfile) -> bool {
-    config
-        .profiles
+pub fn profile_contracts(
+    profiles: &std::collections::BTreeMap<String, bynk_project::ProfileConfig>,
+    profile: CliProfile,
+) -> bool {
+    profiles
         .get(profile.name())
         .and_then(|p| p.contracts)
         .unwrap_or_else(|| profile.contracts_by_default())
@@ -51,8 +53,9 @@ pub fn profile_contracts(config: &bynk_project::BuildConfig, profile: CliProfile
 
 /// [`profile_contracts`] for the project at `root`, reading its `bynk.toml`.
 pub fn project_contracts(root: &Path, profile: CliProfile) -> Result<bool, String> {
-    let config = bynk_project::try_read_build_config(root).map_err(|e| e.to_string())?;
-    Ok(profile_contracts(&config, profile))
+    // Only `[profile]`: `test` and `deploy` do not read `[build]`.
+    let profiles = bynk_project::try_read_profiles(root).map_err(|e| e.to_string())?;
+    Ok(profile_contracts(&profiles, profile))
 }
 
 /// #3107: `deploy` always builds `release`, and a deployment never carries
@@ -214,7 +217,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
     // has no flag and no `[build]` key, so it is the profile's table, else the
     // profile's default.
     let profile = profile.unwrap_or(CliProfile::Release);
-    let contracts = profile_contracts(&config, profile);
+    let contracts = profile_contracts(&config.profiles, profile);
     let output = out.unwrap_or_else(|| input.join(config.out.as_deref().unwrap_or("out")));
     if let Err(e) = check_output_dir(&input, &output) {
         eprintln!("{prog}: {e}");
@@ -555,14 +558,15 @@ fn overlay_from_stdin(
 #[cfg(test)]
 mod profile_tests {
     use super::*;
-    use bynk_project::{BuildConfig, ProfileConfig};
+    use bynk_project::ProfileConfig;
 
-    fn with(dev: Option<bool>, release: Option<bool>) -> BuildConfig {
-        let mut c = BuildConfig::default();
+    type Profiles = std::collections::BTreeMap<String, ProfileConfig>;
+
+    fn with(dev: Option<bool>, release: Option<bool>) -> Profiles {
+        let mut c = Profiles::new();
         for (name, v) in [("dev", dev), ("release", release)] {
             if v.is_some() {
-                c.profiles
-                    .insert(name.to_string(), ProfileConfig { contracts: v });
+                c.insert(name.to_string(), ProfileConfig { contracts: v });
             }
         }
         c

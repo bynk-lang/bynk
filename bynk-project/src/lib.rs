@@ -67,7 +67,7 @@ pub use paths::{
     check_manifest_str, commons_dir_for, duplicate_compatibility_flag_warning,
     is_multi_file_layout, is_unpinned_range, normalize_rel, read_check_config,
     read_unstable_config, renamed_unit_name, render_package_json, try_read_build_config,
-    try_read_build_config_with, try_read_mutate_exclude, try_read_project_paths,
+    try_read_build_config_with, try_read_mutate_exclude, try_read_profiles, try_read_project_paths,
     try_read_project_paths_with, try_read_test_targets, try_read_unstable_config,
     try_read_unstable_config_with, try_read_workers_config, try_read_workers_config_with,
     ts_output_path, unit_path_matches, worker_dir_name, worker_file_source_path,
