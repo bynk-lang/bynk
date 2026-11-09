@@ -3717,7 +3717,7 @@ fn check_d1_sql_sites(
     errors: &mut Vec<CompileError>,
 ) {
     if let (Some(d1_sql), Some(table)) = (d1_sql, unit_tables.get(target_name)) {
-        errors.extend(d1_sql.check_unit(target_name, table, callees));
+        errors.extend(d1_sql.check_unit(target_name, table, callees, None));
     }
 }
 

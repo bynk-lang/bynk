@@ -46,6 +46,12 @@ pub struct D1SqlSite {
     pub row: Option<(String, Vec<String>)>,
     /// The number of values passed, when the list is a list literal.
     pub passed: Option<usize>,
+    /// #3108: for `select`/`firstAs`, the literal's own decoded text and where it
+    /// begins in [`text`](Self::text) (a signed offset: the compiler's
+    /// `SELECT <columns> ` prefix, less the leading whitespace trimmed from the
+    /// literal), so an error offset in `text` maps back into the literal. `None`
+    /// when `text` is the literal itself.
+    pub literal: Option<(String, isize)>,
 }
 
 /// The length of a list-literal argument; `None` when the list is a name, a
@@ -138,6 +144,7 @@ pub(crate) fn check_sql_argument(
                     span: sql.span,
                     row: None,
                     passed: literal_list_len(args.get(1), ctx),
+                    literal: None,
                 }),
             );
         } else {
@@ -192,6 +199,7 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 span: sql.span,
                 row: None,
                 passed,
+                literal: None,
             }),
         );
     }
@@ -460,6 +468,15 @@ pub(crate) fn check_typed_read(
         ));
     }
     let first = method.name == "firstAs";
+    // #3108: where the literal begins in the composed text, for sub-literal spans.
+    let select_literal = match (&sql, &tail_text) {
+        (Some(composed), Some(tail)) => {
+            let trimmed = tail.len() - tail.trim_start().len();
+            let prefix = composed.len() - (tail.len() - trimmed);
+            Some((tail.clone(), prefix as isize - trimmed as isize))
+        }
+        _ => None,
+    };
     let sql = sql.filter(|_| ok)?;
     if let Ty::Named { name: row, .. } = &*tys.get(t)
         && let Some(TypeBody::Record(record)) = ctx.input.types.get(row).map(|d| &d.body)
@@ -476,6 +493,7 @@ pub(crate) fn check_typed_read(
                     record.fields.iter().map(|f| f.name.name.clone()).collect(),
                 )),
                 passed: literal_list_len(args.get(1), ctx),
+                literal: select_literal.clone(),
             }),
         );
     }
