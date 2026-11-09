@@ -1,6 +1,7 @@
 #!/bin/sh
-# Pre-push: run the CI gates that need no compile-and-link, so a formatting or
-# lint slip is caught in seconds rather than costing a full CI round trip.
+# Pre-push: run the CI gates that stop short of the test suite (fmt, clippy and
+# strict rustdoc), so a formatting, lint or broken-doc-link slip is caught in
+# seconds rather than costing a full CI round trip.
 #
 # Enable it (opt-in, per clone — git never picks this directory up on its own):
 #
@@ -18,11 +19,17 @@
 #
 # What "fast" actually costs. `cargo clippy --workspace --all-targets` skips
 # codegen and linking, NOT compilation: it still builds the whole dependency
-# graph and every dev-dependency as metadata. Measured on this workspace:
+# graph and every dev-dependency as metadata. `cargo doc --no-deps --workspace`
+# (run with `-D warnings`, as CI's API docs job does) rebuilds only the workspace
+# crates' docs. Measured on this workspace (one run each, so indicative):
 #
-#     warm cache                              ~3s
-#     after every crate fingerprint changed   ~69s
-#     fresh clone (nothing built yet)         minutes
+#     warm cache                                    ~6s
+#     all workspace sources touched                 ~70s  (clippy ~18s + rustdoc ~50s)
+#     fresh clone (nothing built yet)               minutes
+#
+# "Touched" invalidates the workspace crates only; a lockfile or toolchain bump
+# also rebuilds the dependency graph for clippy, so it costs more than the middle
+# row. Rustdoc is the larger share of the invalidated case.
 #
 # So this is a few seconds in the steady state and a real wait the first time,
 # or after anything that invalidates the workspace — a lockfile or toolchain

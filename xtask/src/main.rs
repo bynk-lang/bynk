@@ -529,7 +529,8 @@ fn ci_steps(fast: bool, nextest: bool) -> Vec<Step> {
             vec![],
         ),
         // CI's `API docs (cargo doc)` job: `-D warnings` makes a broken
-        // intra-doc link fail. Set on this child only, never process-wide.
+        // intra-doc link fail. Set on this child only, never process-wide, and
+        // it deliberately REPLACES any RUSTDOCFLAGS the caller exported, to match CI.
         (
             "docs",
             vec!["doc", "--no-deps", "--workspace"],
@@ -587,7 +588,7 @@ mod tests {
     /// hook still exits 0 and still looks like it ran, and the lint failure
     /// resurfaces only on CI — the round trip the hook exists to prevent.
     #[test]
-    fn fast_is_exactly_the_compile_free_gates() {
+    fn fast_is_exactly_the_non_test_gates() {
         let steps = ci_steps(true, false);
         assert_eq!(names(&steps), ["formatting", "clippy", "docs"]);
         assert_eq!(steps[0].1[0], "fmt");
