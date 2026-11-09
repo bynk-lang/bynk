@@ -1,0 +1,29 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+const MISSPELT: String = "SELECT id FROM orders WHERE stauts = ?1"
+
+// #3108: a context-level `fn … given Orders` holds D1 calls too, and each
+// form is checked: a literal, a `const`, a parameter count and a `batch`.
+fn lookup(id: String) -> Effect[Bool] given Orders {
+  let _ <- Orders.all("SELECT id FROM orders WHERE stauts = ?1", [Text(id)])
+  let _ <- Orders.all(MISSPELT, [Text(id)])
+  let _ <- Orders.all("SELECT id FROM orders WHERE id = ?1", [Text(id), Text(id)])
+  let _ <- Orders.batch([SqlStatement { sql: "SELECT id FROM orders WHERE stauts = ?1", params: [Text(id)] }])
+  true
+}
+
+// No handler calls this one: it is checked where it is declared.
+fn orphan(id: String) -> Effect[Bool] given Orders {
+  let _ <- Orders.all("SELECT id FROM orders WHERE stauts = ?1", [Text(id)])
+  true
+}
+
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    lookup(id)
+  }
+}
