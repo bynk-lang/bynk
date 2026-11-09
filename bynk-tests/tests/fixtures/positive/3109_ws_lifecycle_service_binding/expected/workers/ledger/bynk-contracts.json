@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "tally": "e97d8f1272553b84"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "tally": "Svc(\"tally\",P(\"text\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

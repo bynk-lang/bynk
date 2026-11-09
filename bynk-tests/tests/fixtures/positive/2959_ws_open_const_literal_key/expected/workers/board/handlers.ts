@@ -38,8 +38,10 @@ function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
 export class Board {
   state: __DurableObjectState;
   __key!: string;
-  constructor(state: __DurableObjectState) {
+  private __env: unknown;
+  constructor(state: __DurableObjectState, env?: unknown) {
     this.state = state;
+    this.__env = env;
   }
 
   private async loadState(): globalThis.Promise<BoardState> {
@@ -79,7 +81,8 @@ export class Board {
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; key: unknown };
       this.__key = __decodeAgentKey(__BoardKey, __payload.key) as string;
       const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server);
-      await this.__wsOpen_live(connection, __payload.args[0] as string, {});
+      const env = this.__env as unknown as globalThis.Record<string, unknown>;
+      await this.__wsOpen_live(connection, __payload.args[0] as string, { ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {

@@ -1,0 +1,7 @@
+context ledger
+
+service tally {
+	on call(text: String) -> Effect[Int] {
+		text.length()
+	}
+}
