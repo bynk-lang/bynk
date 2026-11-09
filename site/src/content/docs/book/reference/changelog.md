@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.3** | "`bynk test` reads `[profile.dev] contracts`, and `bynk deploy` refuses `[profile.release] contracts = true`; one shared rule resolves a verb's profile (#3107)" |
 | **v0.525.2** | CI runs in stages matched to a PR's state — fast checks on drafts, the full three-OS gate once a PR is ready for review, and a thin integration check in the merge queue |
 | **v0.525.1** | "`bynk build`, `bynk dev` and `bynk deploy` print a `Compiling`/`Finished` line per context on a terminal; `--quiet` turns them off and a pipe is unchanged (#3100)" |
 | **v0.525.0** | "`bynk check` prepares each literal `D1` statement against the schema its migrations build, reporting a syntax error, an unknown table or column, a wrong `?N` count and a `select[T]` field with no column (`bynk.d1.sql_invalid`, `bynk.d1.sql_param_count`, `bynk.d1.select_field_missing`, and the warning `bynk.d1.migration_invalid`); `[check] d1_sql = false` turns it off" |

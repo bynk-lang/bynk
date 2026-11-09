@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk test` reads `[profile.dev] contracts`, and `bynk deploy` refuses `[profile.release] contracts = true`; one shared rule resolves a verb's profile (#3107)"
----
+# 0766 — `test` and `deploy` consult `[profile.*]`
 
-## ADR: profiles-test-deploy
-title: `test` and `deploy` consult `[profile.*]`
-summary: test is always the dev profile, deploy always release and refuses release contracts; the bynk dev server is unchanged
+- **Status:** Accepted (v0.525.3)
 
 **Context.** #3095 added `[profile.dev|release] contracts` but only `bynk build` read it. #3054 Decision D wanted a project able to turn contracts off for `bynk test`, and a deployment never to carry them; #3107 accepted that.
 
