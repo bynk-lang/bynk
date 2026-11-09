@@ -134,36 +134,77 @@ enum SqlTok {
     Cmp,
 }
 
-/// The mutations inside one string literal's source text (quotes included),
-/// as `(start, end, from, to)` offsets into it. A string is treated as SQL when
-/// its first word is a statement or clause keyword (`SELECT`, `FROM`, `WHERE`,
-/// …); SQL is literal-only, so these strings are the SQL that runs. Three kinds:
-/// a comparison `<`↔`<=`, `>`↔`>=`; `max(`↔`min(`; and, in a `WHERE` of two or
-/// more `AND` conjuncts, dropping one conjunct (`to` is empty). The result is
-/// only text: a mutant the checker's SQL check refuses is `invalid`.
-pub fn sql_mutations(lit: &str) -> Vec<(usize, usize, String, String)> {
-    // A raw literal (`r#"…"#`) keeps its prefix and hashes in `lit`.
-    let body = lit
-        .strip_prefix('r')
-        .unwrap_or(lit)
-        .trim_start_matches(['#', '"', ' ', '\t', '\r', '\n']);
-    let first: String = body
-        .chars()
-        .take_while(|c| c.is_ascii_alphabetic())
-        .collect();
-    // Upper-case keywords only, and a second structural one: prose such as
-    // "Delete <b>x</b>" or "Update failed: n > 3" is not SQL, and a mutant
-    // there would compile and survive, a false signal.
-    let is_statement = matches!(
-        first.as_str(),
-        "SELECT" | "INSERT" | "UPDATE" | "DELETE" | "REPLACE" | "WITH" | "FROM" | "WHERE"
-    );
-    let structural = lit
-        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-        .any(|w| matches!(w, "FROM" | "INTO" | "SET" | "WHERE" | "VALUES"));
-    if !is_statement || !structural {
-        return Vec::new();
+/// For each byte of a string literal's decoded value, the source bytes it came
+/// from. `None` when the literal can't be aligned with its source, in which case
+/// it is left alone.
+fn decode_with_map(lit: &str) -> Option<(String, Vec<(usize, usize)>)> {
+    let decoded =
+        bynk_syntax::lexer::decode_string_literal(lit, bynk_syntax::span::Span::new(0, lit.len()))
+            .ok()?;
+    let raw = lit.starts_with('r');
+    let hashes = lit[usize::from(raw)..]
+        .bytes()
+        .take_while(|&b| b == b'#')
+        .count();
+    let (open, close) = if raw {
+        (1 + hashes + 1, 1 + hashes)
+    } else if lit.starts_with("\"\"\"") {
+        (3, 3)
+    } else {
+        (1, 1)
+    };
+    let end = lit.len().checked_sub(close)?;
+    let mut map = Vec::with_capacity(decoded.len());
+    let mut chars = decoded.chars().peekable();
+    let mut i = open;
+    while i < end {
+        let sc = lit[i..].chars().next()?;
+        if !raw && sc == '\\' {
+            // An escape decodes to exactly one char.
+            let len = if lit[i + 1..].starts_with('u') {
+                lit[i..].find('}')? + 1
+            } else {
+                1 + lit[i + 1..].chars().next()?.len_utf8()
+            };
+            let dc = chars.next()?;
+            map.extend(std::iter::repeat_n((i, i + len), dc.len_utf8()));
+            i += len;
+            continue;
+        }
+        // A source char the value lacks (a multi-line literal's indentation)
+        // is skipped.
+        if chars.peek() == Some(&sc) {
+            chars.next();
+            map.extend(std::iter::repeat_n((i, i + sc.len_utf8()), sc.len_utf8()));
+        }
+        i += sc.len_utf8();
     }
+    (chars.next().is_none() && map.len() == decoded.len()).then_some((decoded, map))
+}
+
+/// The mutations inside one string literal's source text (quotes included),
+/// as `(start, end, from, to)` offsets into it. The caller has established
+/// that the literal is SQL (the checker ties it to a D1 call: see `build_model`); the
+/// scan runs on the literal's *decoded* text, so an escape such as `\n` is the
+/// newline it stands for, and is mapped back to the source span it came from.
+/// Three kinds: a comparison `<`↔`<=`, `>`↔`>=`; `max(`↔`min(`; and, in a
+/// `WHERE` of two or more `AND` conjuncts, dropping one conjunct (`to` is
+/// empty). A `CASE … END` is one unit, never split. The result is only text: a
+/// mutant the checker's SQL check refuses is `invalid`.
+pub fn sql_mutations(src: &str) -> Vec<(usize, usize, String, String)> {
+    let Some((decoded, map)) = decode_with_map(src) else {
+        return Vec::new();
+    };
+    let lit: &str = &decoded;
+    let out = scan_sql(lit);
+    out.into_iter()
+        .filter(|(a, b, ..)| a < b && *b <= map.len())
+        .map(|(a, b, from, to)| (map[a].0, map[b - 1].1, from, to))
+        .collect()
+}
+
+/// The mutations in SQL text, as offsets into it.
+fn scan_sql(lit: &str) -> Vec<(usize, usize, String, String)> {
     let bytes = lit.as_bytes();
     let mut toks: Vec<(SqlTok, usize, usize)> = Vec::new();
     let mut i = 0;
@@ -267,11 +308,10 @@ pub fn sql_mutations(lit: &str) -> Vec<(usize, usize, String, String)> {
         }
         let mut depth = 0usize;
         let mut ands: Vec<(usize, usize)> = Vec::new();
-        let mut end = lit
-            .trim_end_matches(['"', '#', ' ', '\t', '\r', '\n', ';'])
-            .len();
+        let mut end = lit.trim_end_matches([' ', '\t', '\r', '\n', ';']).len();
         let mut has_or = false;
         let mut between = false;
+        let mut case_depth = 0usize;
         for n in &toks[k + 1..] {
             match n.0 {
                 SqlTok::Open => depth += 1,
@@ -283,6 +323,10 @@ pub fn sql_mutations(lit: &str) -> Vec<(usize, usize, String, String)> {
                     depth -= 1;
                 }
                 SqlTok::Word if depth == 0 => match word(n).as_str() {
+                    // A `CASE … END` is one unit: its `AND`s and `OR`s are its own.
+                    "CASE" => case_depth += 1,
+                    "END" => case_depth = case_depth.saturating_sub(1),
+                    _ if case_depth > 0 => {}
                     "ORDER" | "GROUP" | "LIMIT" | "HAVING" | "RETURNING" | "UNION" => {
                         end = lit[..n.1].trim_end().len();
                         break;
@@ -397,13 +441,29 @@ impl Model {
 /// Lex and parse every file in `sources`, collecting the unit graph and the
 /// mutation sites of the non-suite files. A file that does not parse
 /// contributes nothing (the baseline run fails first on it).
-pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
+pub fn build_model(
+    root: &Path,
+    sources: &HashMap<PathBuf, String>,
+    d1: &[crate::project::D1SqlRef],
+) -> Model {
     let mut keys: Vec<&PathBuf> = sources
         .keys()
         .filter(|k| k.extension().is_some_and(|e| e == "bynk"))
         .collect();
     keys.sort();
     let mut model = Model::default();
+    // Pass one: parse every file and collect the unit graph and each unit's
+    // constants, so a D1 call's `const` argument can be found in any file.
+    // (unit, name, file, the literal's span or the name it is bound to)
+    type ConstInit = (String, String, PathBuf, Result<(usize, usize), String>);
+    struct Parsed {
+        key: PathBuf,
+        tokens: Vec<bynk_syntax::lexer::Token>,
+        unit: SourceUnit,
+        name: String,
+    }
+    let mut parsed: Vec<Parsed> = Vec::new();
+    let mut consts: Vec<ConstInit> = Vec::new();
     for (index, key) in keys.into_iter().enumerate() {
         let text = &sources[key];
         let file = FileId(index as u32);
@@ -414,8 +474,8 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
             continue;
         };
         let (name, uses, items) = match &unit {
-            SourceUnit::Commons(c) => (c.name.joined(), &c.uses, Some(&c.items)),
-            SourceUnit::Context(c) => (c.name.joined(), &c.uses, Some(&c.items)),
+            SourceUnit::Commons(c) => (c.name.joined(), &c.uses, &c.items),
+            SourceUnit::Context(c) => (c.name.joined(), &c.uses, &c.items),
             SourceUnit::Suite(s) => {
                 let used = s.uses.iter().map(|u| u.target.joined()).collect();
                 model.suites.push((s.target.joined(), used));
@@ -428,7 +488,76 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
             .entry(name.clone())
             .or_default()
             .extend(uses.iter().map(|u| u.target.joined()));
-        let Some(items) = items else { continue };
+        for item in items {
+            if let bynk_syntax::ast::CommonsItem::Const(c) = item {
+                let init = match &c.init.kind {
+                    bynk_syntax::ast::ExprKind::StrLit(_) => {
+                        Ok((c.init.span.start, c.init.span.end))
+                    }
+                    bynk_syntax::ast::ExprKind::Ident(id) => Err(id.name.clone()),
+                    _ => continue,
+                };
+                consts.push((name.clone(), c.name.name.clone(), key.clone(), init));
+            }
+        }
+        parsed.push(Parsed {
+            key: key.clone(),
+            tokens,
+            unit,
+            name,
+        });
+    }
+    // The D1 arguments: literals directly, and the constants they name, which
+    // resolve in the calling unit or a unit it `uses`; a constant bound to
+    // another constant extends the set the same way.
+    let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let direct: BTreeSet<(PathBuf, usize, usize)> = d1
+        .iter()
+        .filter(|r| r.konst.is_none())
+        .map(|r| (canon(&r.path), r.start, r.end))
+        .collect();
+    let mut wanted: BTreeSet<(String, String)> = d1
+        .iter()
+        .filter_map(|r| Some((r.unit.clone(), r.konst.clone()?)))
+        .collect();
+    let mut sql_consts: BTreeSet<(PathBuf, usize, usize)> = BTreeSet::new();
+    loop {
+        let before = (wanted.len(), sql_consts.len());
+        for (unit, name, file, init) in &consts {
+            let reached = wanted.iter().any(|(u, n)| {
+                n == name && (u == unit || model.uses.get(u).is_some_and(|us| us.contains(unit)))
+            });
+            if !reached {
+                continue;
+            }
+            match init {
+                Ok((a, b)) => {
+                    sql_consts.insert((file.clone(), *a, *b));
+                }
+                Err(next) => {
+                    wanted.insert((unit.clone(), next.clone()));
+                }
+            }
+        }
+        if (wanted.len(), sql_consts.len()) == before {
+            break;
+        }
+    }
+    for Parsed {
+        key,
+        tokens,
+        unit,
+        name,
+    } in parsed
+    {
+        let text = &sources[&key];
+        let key = &key;
+        let items = match &unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            _ => continue,
+        };
+        let canon_key = canon(key);
         let path = display(root, key);
         let positions = LineIndex::new(text);
         let sig: Vec<&bynk_syntax::lexer::Token> = tokens
@@ -471,7 +600,9 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
                     found.push((start, end, from.to_string(), to.to_string()));
                 }
             } else if token.kind == TokenKind::StrLit {
-                if let Some(lit) = text.get(start..end) {
+                let is_sql = direct.contains(&(canon_key.clone(), start, end))
+                    || sql_consts.contains(&(key.clone(), start, end));
+                if let Some(lit) = text.get(start..end).filter(|_| is_sql) {
                     for (a, b, from, to) in sql_mutations(lit) {
                         found.push((start + a, start + b, from, to));
                     }
@@ -757,15 +888,20 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             ),
         );
     }
-    let sources = match crate::try_project_options(&input) {
-        Ok(options) => options.sources.unwrap_or_default(),
+    let (sources, d1) = match crate::try_project_options(&input) {
+        Ok(options) => {
+            // #3142: which string literals are SQL is the checker's call: the
+            // arguments of D1 calls, not a guess from the text.
+            let d1 = crate::project::check_project(&options).d1_sql_sites;
+            (options.sources.unwrap_or_default(), d1)
+        }
         Err(e) => return fail(program, json, e.to_string()),
     };
     let exclude = match crate::project::try_read_mutate_exclude(&input) {
         Ok(list) => list,
         Err(e) => return fail(program, json, e),
     };
-    let mut model = build_model(&input, &sources);
+    let mut model = build_model(&input, &sources, &d1);
     model.sites.retain(|s| !exclude.iter().any(|e| names(e, s)));
     if let Some(only) = &only {
         model.sites.retain(|s| names(only, s));
@@ -1036,7 +1172,11 @@ mod tests {
 
     #[test]
     fn finds_comparison_and_connective_sites_with_spans() {
-        let model = build_model(Path::new("/proj"), &sources(&[("src/limits.bynk", LIMITS)]));
+        let model = build_model(
+            Path::new("/proj"),
+            &sources(&[("src/limits.bynk", LIMITS)]),
+            &[],
+        );
         let found: Vec<(String, &str, &str, usize, usize)> = model
             .sites
             .iter()
@@ -1064,7 +1204,7 @@ mod tests {
     #[test]
     fn finds_if_conditions_match_guards_and_binary_arithmetic() {
         let text = "commons c\n\nfn f(a: Int, b: Int) -> Int {\n  if a > 0 { a + b } else { -b - 1 }\n}\n\nfn g(o: Option[Int]) -> Int {\n  match o {\n    Some(n) if n > 1 => n\n    _ => 0\n  }\n}\n";
-        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]));
+        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]), &[]);
         let found: Vec<(&str, &str, &str)> = model
             .sites
             .iter()
@@ -1092,7 +1232,7 @@ mod tests {
     #[test]
     fn wrapped_conditions_display_on_one_line_and_ids_are_unique() {
         let text = "commons c\n\nfn f(a: Int, b: Int) -> Int {\n  if a > 0 &&\n    b > 0 { a } else { b }\n}\n\nfn g(a: Int) -> Int {\n  match a {\n    0 => a\n    -1 => 2\n    _ => 3\n  }\n}\n";
-        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]));
+        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]), &[]);
         let cond: Vec<&Site> = model
             .sites
             .iter()
@@ -1110,13 +1250,17 @@ mod tests {
         );
     }
 
+    fn froms(lit: &str) -> Vec<(String, String)> {
+        sql_mutations(lit)
+            .into_iter()
+            .map(|(_, _, f, t)| (f, t))
+            .collect()
+    }
+
     #[test]
     fn sql_literals_yield_comparison_aggregate_and_conjunct_mutants() {
         let lit = r#""SELECT max(n) FROM t WHERE a > ?1 AND NOT EXISTS (SELECT 1 FROM u WHERE u.id = t.id AND u.k >= 2) AND b BETWEEN 1 AND 5 ORDER BY n""#;
-        let found: Vec<(String, String)> = sql_mutations(lit)
-            .into_iter()
-            .map(|(_, _, f, t)| (f, t))
-            .collect();
+        let found = froms(lit);
         for want in [
             ("max", "min"),
             (">", ">="),
@@ -1137,11 +1281,6 @@ mod tests {
         }
         // `BETWEEN … AND …` is one conjunct, never split.
         assert!(!found.iter().any(|(f, _)| f == "AND 5"));
-        // Prose is not SQL.
-        assert!(sql_mutations("\"a < b where x\"").is_empty());
-        assert!(sql_mutations("\"Delete <b>x</b>\"").is_empty());
-        assert!(sql_mutations("\"DELETE <b>x</b>\"").is_empty());
-        assert!(sql_mutations("\"Update failed: n > 3\"").is_empty());
         // A raw literal is SQL too, and its closing `"#` is not part of a conjunct.
         let raw = sql_mutations("r#\"SELECT 1 FROM t WHERE a > 1 AND b = 2\"#");
         assert!(raw.iter().any(|m| m.2 == ">" && m.3 == ">="), "{raw:?}");
@@ -1152,11 +1291,186 @@ mod tests {
         // An `OR` in the clause leaves it alone; `<>` is not an ordering.
         let or = sql_mutations("\"SELECT 1 WHERE a <> 1 AND b = 2 OR c = 3\"");
         assert!(or.is_empty(), "{or:?}");
+        // Lower-case SQL is scanned like any other.
+        let lower = froms("\"select 1 from t where a > 1 and b = 2\"");
+        assert!(
+            lower.contains(&("a > 1 and".into(), String::new())),
+            "{lower:?}"
+        );
+    }
+
+    #[test]
+    fn an_escaped_newline_is_whitespace_and_ends_a_comment() {
+        // `\n` is a newline, not the start of the word `nWHERE`.
+        let lit = r#""SELECT 1 FROM t\nWHERE a > 1 AND b = 2""#;
+        let found = froms(lit);
+        assert!(
+            found.contains(&("a > 1 AND".into(), String::new())),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&("AND b = 2".into(), String::new())),
+            "{found:?}"
+        );
+        // A `--` comment ends at the escaped newline, so the `WHERE` after it counts.
+        let lit = r#""SELECT 1 FROM t -- all rows\nWHERE a > 1 AND b = 2""#;
+        let found = froms(lit);
+        assert!(found.contains(&(">".into(), ">=".into())), "{found:?}");
+        assert!(
+            found.contains(&("a > 1 AND".into(), String::new())),
+            "{found:?}"
+        );
+        // The offsets are the source's: dropping a conjunct across an escape
+        // leaves a literal that still reads as one.
+        let m = sql_mutations(lit)
+            .into_iter()
+            .find(|m| m.2 == "AND b = 2")
+            .unwrap();
+        let mut mutant = lit.to_string();
+        mutant.replace_range(m.0..m.1, &m.3);
+        assert_eq!(mutant, r#""SELECT 1 FROM t -- all rows\nWHERE a > 1 ""#);
+    }
+
+    #[test]
+    fn a_multi_line_literal_maps_back_through_its_indentation() {
+        let lit = "\"\"\"\n    SELECT 1 FROM t\n    WHERE a > 1\n      AND b = 2\n    \"\"\"";
+        let ms = sql_mutations(lit);
+        let m = ms
+            .iter()
+            .find(|m| m.2 == "AND b = 2")
+            .unwrap_or_else(|| panic!("{ms:?}"));
+        let mut mutant = lit.to_string();
+        mutant.replace_range(m.0..m.1, &m.3);
+        assert!(
+            mutant.contains("WHERE a > 1") && !mutant.contains("b = 2"),
+            "{mutant}"
+        );
+        assert!(
+            mutant.starts_with("\"\"\"") && mutant.ends_with("\"\"\""),
+            "{mutant}"
+        );
+        let g = ms.iter().find(|m| m.2 == ">").unwrap();
+        assert_eq!(&lit[g.0..g.1], ">");
+    }
+
+    #[test]
+    fn a_case_expression_in_a_where_is_one_conjunct() {
+        let lit =
+            "\"SELECT 1 FROM t WHERE CASE WHEN a > 1 AND b > 2 THEN 1 ELSE 0 END = 1 AND c = 3\"";
+        let found = froms(lit);
+        // Two conjuncts: the whole `CASE … END = 1` and `c = 3`.
+        assert!(
+            found.contains(&(
+                "CASE WHEN a > 1 AND b > 2 THEN 1 ELSE 0 END = 1 AND".into(),
+                String::new()
+            )),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&("AND c = 3".into(), String::new())),
+            "{found:?}"
+        );
+        assert!(
+            !found.iter().any(|(f, _)| f.starts_with("AND b")),
+            "{found:?}"
+        );
+        assert!(
+            !found.iter().any(|(f, _)| f == "CASE WHEN a > 1 AND"),
+            "{found:?}"
+        );
+        // An `OR` inside the `CASE` does not stop the clause being split.
+        let lit = "\"SELECT 1 FROM t WHERE CASE WHEN a OR b THEN 1 END = 1 AND c = 3\"";
+        assert!(
+            froms(lit)
+                .iter()
+                .any(|(f, t)| f == "AND c = 3" && t.is_empty())
+        );
+    }
+
+    /// A project with a `D1` binding: the checker's D1 sites, then the model.
+    fn d1_model(unit: &str) -> Model {
+        let root = std::env::temp_dir().join(format!(
+            "bynk-mutate-d1-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        let write = |rel: &str, text: &str| {
+            let p = root.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        write("bynk.toml", "");
+        write("demo.bynk", unit);
+        write(
+            "migrations/demo-orders/0001_create.sql",
+            "CREATE TABLE orders (id TEXT PRIMARY KEY, total INTEGER NOT NULL);",
+        );
+        let options = crate::try_project_options(&root).expect("options");
+        let check = crate::project::check_project(&options);
+        assert!(
+            !check.has_errors(),
+            "{:?}",
+            check
+                .errors
+                .iter()
+                .map(|e| e.error.message.clone())
+                .collect::<Vec<_>>()
+        );
+        let model = build_model(
+            &root,
+            &options.sources.unwrap_or_default(),
+            &check.d1_sql_sites,
+        );
+        let _ = std::fs::remove_dir_all(&root);
+        model
+    }
+
+    const D1_UNIT: &str = "context demo\n\nconsumes bynk.cloudflare { D1 }\n\ncapability Orders = D1\n\n\
+        const BIG: String = \"select id from orders where total > 1 and id = ?1\"\n\
+        const ALIAS: String = BIG\n\
+        const PROSE: String = \"DELETE <b>x</b> FROM here WHERE a > 1 AND b < 2\"\n\n\
+        service probe {\n  on call(id: String) -> Effect[String] given Orders {\n    \
+        let _ <- Orders.all(ALIAS, [Text(id)])\n    \
+        let _ <- Orders.first(\"SELECT id FROM orders WHERE total >= 2\\n  AND id = ?1\", [Text(id)])\n    \
+        let _ <- Orders.run(\"update orders set total = total + 1 where id = ?1\", [Text(id)])\n    \
+        let note = \"Update failed: n > 3\"\n    \
+        let _ = \"SELECT id FROM orders WHERE total > 5 AND id = ?1\"\n    \
+        PROSE\n  }\n}\n";
+
+    #[test]
+    fn only_literals_the_checker_ties_to_a_d1_call_get_sql_mutants() {
+        let model = d1_model(D1_UNIT);
+        let mut ours: Vec<(&str, &str)> = model
+            .sites
+            .iter()
+            .map(|s| (s.from.as_str(), s.to.as_str()))
+            .collect();
+        ours.sort();
+        // Exactly: the const bound to a call through an alias (lower-case SQL),
+        // and the literal argument with a `\n` before its `AND`. Nothing from
+        // prose, from a SQL-looking literal no D1 call takes, or from a const
+        // none does; `update … set total = total + 1` has no site.
+        let mut want = vec![
+            (">", ">="),
+            ("total > 1 and", ""),
+            ("and id = ?1", ""),
+            (">=", ">"),
+            ("total >= 2 AND", ""),
+            ("AND id = ?1", ""),
+        ];
+        want.sort();
+        assert_eq!(ours, want);
     }
 
     #[test]
     fn apply_replaces_exactly_the_operator() {
-        let model = build_model(Path::new("/proj"), &sources(&[("src/limits.bynk", LIMITS)]));
+        let model = build_model(
+            Path::new("/proj"),
+            &sources(&[("src/limits.bynk", LIMITS)]),
+            &[],
+        );
         let mutant = apply(LIMITS, &model.sites[0]);
         assert_eq!(mutant, LIMITS.replacen("a < b", "a <= b", 1));
     }
@@ -1164,7 +1478,7 @@ mod tests {
     #[test]
     fn operators_in_comments_and_strings_are_not_sites() {
         let text = "commons c\n\n// a < b\nfn f() -> String {\n  \"a == b\"\n}\n";
-        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]));
+        let model = build_model(Path::new("/proj"), &sources(&[("src/c.bynk", text)]), &[]);
         assert!(model.sites.is_empty(), "{:?}", model.sites);
     }
 
@@ -1182,6 +1496,7 @@ mod tests {
                 ("src/c.bynk", c),
                 ("tests/b.bynk", s),
             ]),
+            &[],
         );
         assert_eq!(
             model.suites_reaching("a"),
@@ -1204,7 +1519,11 @@ mod tests {
         assert!(glob_matches("**/lonely.bynk", "src/lonely.bynk"));
         assert!(!glob_matches("**/lonely.bynk", "src/notlonely.bynk"));
         assert!(!glob_matches("src/*.bynk", "src/a/b.bynk"));
-        let model = build_model(Path::new("/proj"), &sources(&[("src/limits.bynk", LIMITS)]));
+        let model = build_model(
+            Path::new("/proj"),
+            &sources(&[("src/limits.bynk", LIMITS)]),
+            &[],
+        );
         let site = &model.sites[0];
         assert!(names("limits", site));
         assert!(names("limits.within", site));
