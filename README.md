@@ -147,8 +147,8 @@ test leg at roughly seven minutes, so a formatting slip caught here saves a full
 round trip:
 
 ```sh
-cargo xtask ci          # formatting, clippy, and the test suite
-cargo xtask ci --fast   # just the two gates that need no compile-and-link
+cargo xtask ci          # formatting, clippy, strict rustdoc, and the test suite
+cargo xtask ci --fast   # everything except the test suite
 ```
 
 `--fast` is what the opt-in `pre-push` hook runs. Enable it once per clone:
