@@ -100,11 +100,12 @@ read -r id digest < <(json asset "$asset" <<<"$release") || true
 mkdir -p "$out"
 echo "downloading $repo $tag $asset (authenticated)"
 # No anonymous fallback: CI downloads go only through the authenticated API.
-# If the token's rate limit is spent (403/429), fail loudly rather than
-# quietly retrying on the route this script exists to avoid.
+# If the token's rate limit is spent (403/429) or the API keeps failing after
+# curl's retries, fail loudly rather than quietly retrying on the route this
+# script exists to avoid.
 api -H "Accept: application/octet-stream" -o "$out/$asset" \
   "https://api.github.com/repos/$repo/releases/assets/$id" ||
-  die "could not download $repo $tag $asset through the API (rate limit spent, or the asset is gone)"
+  die "could not download $repo $tag $asset through the API (rate limit, server error, or missing asset)"
 
 if command -v sha256sum >/dev/null 2>&1; then
   got=$(sha256sum "$out/$asset" | cut -d' ' -f1)
