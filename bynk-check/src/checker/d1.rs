@@ -117,8 +117,14 @@ pub(crate) fn check_sql_argument(
     let Some((unit, base)) = derived_from else {
         return;
     };
-    if unit != crate::firstparty::CLOUDFLARE_UNIT || base != "D1" || !SQL_TEXT_OPS.contains(&method)
-    {
+    if unit != crate::firstparty::CLOUDFLARE_UNIT || base != "D1" {
+        return;
+    }
+    if method == "batch" {
+        record_batch_sites(cap, args.first(), ctx);
+        return;
+    }
+    if !SQL_TEXT_OPS.contains(&method) {
         return;
     }
     if let Some(sql) = args.first() {
@@ -140,6 +146,54 @@ pub(crate) fn check_sql_argument(
                 &format!("the SQL of `{cap}.{method}`"),
             ));
         }
+    }
+}
+
+/// #3108: `batch([SqlStatement { sql: "…", params: […] }, …])`. Each statement
+/// written inline in the list literal is a site on the batch's own binding
+/// (a statement built elsewhere isn't tied to one, so it stays unchecked). A
+/// non-literal `sql` is already `bynk.types.sql_not_literal`, from
+/// [`check_statement_fields`].
+fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
+    let Some(Expr {
+        kind: ExprKind::ListLit(items, ..),
+        ..
+    }) = list
+    else {
+        return;
+    };
+    for item in items {
+        let ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } = &item.kind
+        else {
+            continue;
+        };
+        if type_name.name != SQL_STATEMENT {
+            continue;
+        }
+        let field = |name: &str| {
+            fields
+                .iter()
+                .find(|f| f.name.name == name)
+                .and_then(|f| f.value.as_ref())
+        };
+        let Some(sql) = field("sql") else { continue };
+        let Some(text) = sql_literal_text(sql, ctx) else {
+            continue;
+        };
+        let passed = literal_list_len(field("params"), ctx);
+        ctx.callees.insert(
+            sql.id,
+            Callee::D1Sql(D1SqlSite {
+                cap: cap.to_string(),
+                op: "batch".to_string(),
+                text,
+                span: sql.span,
+                row: None,
+                passed,
+            }),
+        );
     }
 }
 
