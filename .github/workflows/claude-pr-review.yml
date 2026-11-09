@@ -23,10 +23,12 @@
 #     rule). The input also gives maintainers a manual re-review button in the
 #     Actions tab, which the run-once discipline above otherwise lacks.
 #
-# NOTE on fork PRs: `pull_request` from a fork gets a read-only token, so review
-# comments will NOT post on external contributions. If you need that, switch to
-# `pull_request_target` and check out the *base* ref to stay safe from untrusted
-# code — see anthropics/claude-code-action security docs before doing so.
+# NOTE on fork PRs: they are never reviewed. The `ready_for_review` path skips
+# them (a fork's run gets no secrets anyway), and the dispatch path refuses
+# them before checking anything out, so outside code never reaches an agent
+# holding CLAUDE_CODE_OAUTH_TOKEN. Reviewing forks would need
+# `pull_request_target` with a *base*-ref checkout; read the
+# anthropics/claude-code-action security docs before trying it.
 #
 # Requires the Claude GitHub App installed on the repo and a
 # `CLAUDE_CODE_OAUTH_TOKEN` secret — a Claude Pro/Max subscription token from
@@ -72,13 +74,41 @@ jobs:
     # already applied them (draft state, Dependabot, keep-draft) before
     # dispatching, and a human dispatching from the Actions tab is making a
     # deliberate call — including, legitimately, on a still-draft PR.
+    #
+    # Fork PRs are never reviewed. A fork's `ready_for_review` run gets no
+    # secrets, so it could only fail; skip it instead. The dispatch path has
+    # no PR in the event, so the first step below checks the head repo.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.draft == false &&
-       github.event.pull_request.user.login != 'dependabot[bot]')
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # A dispatch on a fork PR would check out code nobody in the org wrote
+      # and hand it to an agent holding CLAUDE_CODE_OAUTH_TOKEN and a
+      # pull-requests: write token, so refuse it before the checkout. (A
+      # deleted fork reports a null head repo, which is refused too.)
+      - name: Refuse fork pull requests
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ inputs.pr_number }}
+        run: |
+          # pr_number is free text, and it also names the checkout ref and the
+          # prompt's PR, so pin it to a number before trusting the lookup.
+          if ! [[ "$PR" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pr_number must be a PR number, got '$PR'."
+            exit 1
+          fi
+          head_repo="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.repo.full_name // ""')"
+          if [ "$head_repo" != "$REPO" ]; then
+            echo "::error::PR #$PR comes from '${head_repo:-a deleted fork}', not $REPO; fork PRs are not reviewed."
+            exit 1
+          fi
+
       # On dispatch there is no PR context, so name the PR's merge ref
       # explicitly — the same merge commit a `pull_request` checkout gets by
       # default. (If the PR has conflicts the merge ref doesn't exist and this
