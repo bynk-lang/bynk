@@ -106,6 +106,21 @@ pub use bynk_project::{
 };
 pub use diagnostics::{ContextBoundaryInfo, ContextSequenceInfo, ProjectAnalysis, ProjectFailure};
 
+/// #3100: one step of a build, reported as it happens. Only a `context` is
+/// reported: commons and test units compile as part of the build, not as steps.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProgressEvent {
+    /// A context's check and emission began.
+    Started(String),
+    /// A context checked and emitted cleanly. A context with errors reports
+    /// no `Finished`: its diagnostics follow.
+    Finished(String),
+}
+
+/// Where a build reports [`ProgressEvent`]s. Called in compilation order
+/// (dependencies first), on the building thread.
+pub type ProgressSink = Arc<dyn Fn(&ProgressEvent) + Send + Sync>;
+
 /// Options for [`compile_project`]. Construct with [`CompileOptions::single`] or
 /// [`CompileOptions::split`], then chain `.target(…)` / `.platform(…)` /
 /// `.import_ext(…)` to override the bundle/default-platform/`.js` defaults.
@@ -227,6 +242,10 @@ pub struct CompileOptions {
     /// file, so the harness reads nothing at test time. `None` (and an empty map)
     /// means no snapshot is recorded, so every `matches snapshot` claim is missing.
     pub snapshot_files: Option<BTreeMap<String, String>>,
+    /// #3100: where [`compile_project`] reports each context as it compiles.
+    /// `None` (the default, and every library, test and LSP caller) reports
+    /// nothing, so a build behaves exactly as it did before.
+    pub progress: Option<ProgressSink>,
     /// #2138 (end-to-end testing track §3.5, §3.7): `Some` when `bynk test
     /// --against` runs the `system` suites against a real runtime. The build
     /// then emits only the `system` suites, routes their drivers to the
@@ -283,6 +302,7 @@ impl CompileOptions {
             fixture_files: None,
             migration_files: None,
             snapshot_files: None,
+            progress: None,
             remote_tests: None,
         }
     }
@@ -311,8 +331,15 @@ impl CompileOptions {
             fixture_files: None,
             migration_files: None,
             snapshot_files: None,
+            progress: None,
             remote_tests: None,
         }
+    }
+
+    /// #3100: report each context as it compiles ([`CompileOptions::progress`]).
+    pub fn progress(mut self, sink: Option<ProgressSink>) -> Self {
+        self.progress = sink;
+        self
     }
 
     /// #2138: a remote test build ([`CompileOptions::remote_tests`]).
@@ -523,6 +550,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.snapshot_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
+        options.progress.as_ref(),
     );
     // #1078: `bynk-emit` no longer writes `bynk.schema.lock` itself — the
     // reconciled content comes back on `ProjectOutput::schema_lock`
@@ -622,6 +650,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.snapshot_files.as_ref(),
         matches!(options.roots, Roots::Split { .. }),
         tys,
+        None,
     );
     let (errors, snapshots, agent_versions) = match run {
         RunChecks::Bailed {
@@ -695,6 +724,7 @@ pub fn compile_in_memory(
         None,
         false,
         tys,
+        None,
     );
     finish_build(run, ImportExt::Js, Path::new(""), &[], None, None)
 }
@@ -771,6 +801,7 @@ pub fn compile_files_in_memory_locked(
         None,
         false,
         tys,
+        None,
     );
     finish_build(run, ImportExt::Js, Path::new(""), &[], None, contracts_lock)
 }
@@ -848,6 +879,7 @@ pub fn analyse_in_memory_with_types(
         None,
         false,
         tys,
+        None,
     );
     match run {
         RunChecks::Bailed {
@@ -959,6 +991,7 @@ pub fn analyse_in_memory_project(
         None,
         false,
         tys,
+        None,
     );
     match run {
         RunChecks::Bailed {
@@ -2216,6 +2249,8 @@ fn run_checks(
     // has any; an in-memory build never does.
     packages: bool,
     tys: &Arc<Types>,
+    // #3100: report each context as it compiles (`CompileOptions::progress`).
+    progress: Option<&ProgressSink>,
 ) -> RunChecks {
     let mut errors = ErrorSink::new();
     // S3 (#1963): the project's `[unstable]` opt-in, read as the editor reads it
@@ -2736,6 +2771,11 @@ fn run_checks(
         let kind = info.kind;
         let indices = info.files.as_slice();
         let local_table = &info.table;
+        // #3100: a build reports each context as it compiles.
+        let report = progress.filter(|_| mode == Mode::Build && kind == UnitKind::Context);
+        if let Some(sink) = report {
+            sink(&ProgressEvent::Started(name.clone()));
+        }
         // v0.24: skip resolve/check only when THIS group's composition
         // failed. In build mode the sink is empty here (the structural gate
         // bailed), so the delta equals the old global is_empty check; in
@@ -2862,6 +2902,11 @@ fn run_checks(
                 .or_default(),
             &mut exec_plan,
         );
+        if let Some(sink) = report
+            && errors.len() == group_error_baseline
+        {
+            sink(&ProgressEvent::Finished(name.clone()));
+        }
     }
 
     // #2719: every unit is checked, so the needs-context set is final. Stamp it
@@ -4987,6 +5032,7 @@ mod tests {
             None,
             false,
             &Arc::new(Types::new()),
+            None,
         );
         let snapshots = match run {
             RunChecks::Bailed { snapshots, .. } => snapshots,
@@ -5268,6 +5314,7 @@ mod tests {
             None,
             false,
             &Arc::new(Types::new()),
+            None,
         );
         match run {
             RunChecks::Bailed { errors, .. } => errors.into_all(),

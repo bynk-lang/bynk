@@ -1166,6 +1166,76 @@ fn build_refuses_a_bad_profile_table() {
     );
 }
 
+/// #3100: per-context progress prints only on a terminal, so a captured run
+/// (as here) is exactly the one-line summary, and `--quiet` is accepted.
+#[test]
+fn build_progress_is_not_printed_when_output_is_captured() {
+    let proj = scratch("build-progress");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    for args in [
+        &["build"][..],
+        &["--quiet", "build"][..],
+        &["build", "-q"][..],
+    ] {
+        let (code, _, err) = run_bynk_in(&proj, args);
+        assert_eq!(code, 0, "{err}");
+        assert!(!err.contains("Compiling"), "{args:?}: {err}");
+        assert!(err.contains("built bundle -> "), "{args:?}: {err}");
+    }
+}
+
+const BUGGY_CONTRACT: &str = "commons demo.m\n\nfn dec(x: Int) -> Int\n  requires nonneg: x >= 0\n  ensures stays_nonneg: result >= 0\n{\n  x - 1\n}\n";
+const WITNESS_SUITE: &str =
+    "suite demo.m {\n  case \"dec of one is zero\" {\n    expect dec(1) == 0\n  }\n}\n";
+
+/// #3107: `bynk test` runs the `dev` profile, so `[profile.dev] contracts =
+/// false` turns the guard off (the buggy contract is no longer attacked); the
+/// default is unchanged. `[profile.release]` does not affect it.
+#[test]
+fn test_reads_the_dev_profile() {
+    let proj = scratch("test-profile");
+    let manifest =
+        |extra: &str| format!("[project]\nname = \"demo\"\nversion = \"0.1.0\"\n{extra}");
+    write(&proj.join("bynk.toml"), &manifest(""));
+    write(&proj.join("src/demo/m.bynk"), BUGGY_CONTRACT);
+    write(&proj.join("src/tests/m.test.bynk"), WITNESS_SUITE);
+    let (code, out, err) = run_bynk_in(&proj, &["test"]);
+    assert_ne!(code, 0, "contracts are on by default: {out}{err}");
+    assert!(out.contains("contract violated"), "{out}{err}");
+    write(
+        &proj.join("bynk.toml"),
+        &manifest("\n[profile.release]\ncontracts = false\n"),
+    );
+    let (code, out, err) = run_bynk_in(&proj, &["test"]);
+    assert_ne!(code, 0, "[profile.release] does not touch test: {out}{err}");
+    write(
+        &proj.join("bynk.toml"),
+        &manifest("\n[profile.dev]\ncontracts = false\n"),
+    );
+    let (code, out, err) = run_bynk_in(&proj, &["test"]);
+    assert_eq!(code, 0, "[profile.dev] contracts = false: {out}{err}");
+}
+
+/// #3107: `deploy` always builds `release` and refuses `[profile.release]
+/// contracts = true`, naming the table, before it touches anything.
+#[test]
+fn deploy_refuses_release_contracts() {
+    let proj = scratch("deploy-profile");
+    write(
+        &proj.join("bynk.toml"),
+        "[project]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[profile.release]\ncontracts = true\n",
+    );
+    write(&proj.join("src/calc.bynk"), CLEAN_COMMONS);
+    let (code, _, err) = run_bynk_in(&proj, &["deploy"]);
+    assert_ne!(code, 0);
+    assert!(err.contains("[profile.release] contracts = true"), "{err}");
+    assert!(!proj.join(".bynk").exists(), "nothing was prepared: {err}");
+}
+
 /// #3054: a bad `[build]` is refused and nothing is built.
 #[test]
 fn build_refuses_a_bad_build_table() {

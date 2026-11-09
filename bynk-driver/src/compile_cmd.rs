@@ -37,6 +37,34 @@ impl CliProfile {
     }
 }
 
+/// #3107: whether a build under `profile` carries the contract guard, the one
+/// rule every verb that builds shares: `[profile.<name>] contracts`, else the
+/// profile's default (`dev` on, `release` off). `bynk build` also takes a
+/// profile from its flag; `test` is always `dev`, `deploy` always `release`.
+pub fn profile_contracts(config: &bynk_project::BuildConfig, profile: CliProfile) -> bool {
+    config
+        .profiles
+        .get(profile.name())
+        .and_then(|p| p.contracts)
+        .unwrap_or_else(|| profile.contracts_by_default())
+}
+
+/// [`profile_contracts`] for the project at `root`, reading its `bynk.toml`.
+pub fn project_contracts(root: &Path, profile: CliProfile) -> Result<bool, String> {
+    let config = bynk_project::try_read_build_config(root).map_err(|e| e.to_string())?;
+    Ok(profile_contracts(&config, profile))
+}
+
+/// #3107: `deploy` always builds `release`, and a deployment never carries
+/// contract checks (DECISION J of v0.115), so `[profile.release] contracts =
+/// true` is refused for it, naming the table.
+pub fn refuse_release_contracts(root: &Path) -> Result<(), String> {
+    if project_contracts(root, CliProfile::Release)? {
+        return Err("`[profile.release] contracts = true` in `bynk.toml` would put contract checks in what is deployed, and a deployment never carries them — set it to `false` or remove it (it still applies to `bynk build`)".to_string());
+    }
+    Ok(())
+}
+
 /// `--target`: the build topology.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CliTarget {
@@ -186,17 +214,13 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
     // has no flag and no `[build]` key, so it is the profile's table, else the
     // profile's default.
     let profile = profile.unwrap_or(CliProfile::Release);
-    let contracts = config
-        .profiles
-        .get(profile.name())
-        .and_then(|p| p.contracts)
-        .unwrap_or_else(|| profile.contracts_by_default());
+    let contracts = profile_contracts(&config, profile);
     let output = out.unwrap_or_else(|| input.join(config.out.as_deref().unwrap_or("out")));
     if let Err(e) = check_output_dir(&input, &output) {
         eprintln!("{prog}: {e}");
         return ExitCode::FAILURE;
     }
-    let code = run_compile(
+    let code = run_compile_reporting(
         prog,
         CompileArgs {
             input,
@@ -207,6 +231,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
             sources_stdin: false,
             contracts,
         },
+        crate::progress::terminal_sink(),
     );
     if code == ExitCode::SUCCESS {
         let target = match target {
@@ -310,6 +335,15 @@ fn check_output_dir(project: &Path, output: &Path) -> Result<(), String> {
 
 /// Run `compile`. `prog` prefixes the messages (`"bynk"`).
 pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
+    run_compile_reporting(prog, args, None)
+}
+
+/// [`run_compile`], reporting each context to `progress` as it compiles (#3100).
+fn run_compile_reporting(
+    prog: &str,
+    args: CompileArgs,
+    progress: Option<crate::project::ProgressSink>,
+) -> ExitCode {
     let CompileArgs {
         input,
         output,
@@ -334,6 +368,7 @@ pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
                 emit,
                 sources_stdin,
                 contracts,
+                progress,
             },
         )
     } else {
@@ -348,6 +383,7 @@ struct DirSettings {
     emit: EmitFormat,
     sources_stdin: bool,
     contracts: bool,
+    progress: Option<crate::project::ProgressSink>,
 }
 
 fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -> ExitCode {
@@ -357,6 +393,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
         emit,
         sources_stdin,
         contracts,
+        progress,
     } = settings;
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read
     // its current content here (verified-absent `None` for a fresh
@@ -386,6 +423,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             .platform(platform.into())
             .schema_registry(schema_lock)
             .contracts(contracts)
+            .progress(progress)
             .tests(false),
         Err(e) => {
             eprintln!("{prog}: {e}");
@@ -512,4 +550,38 @@ fn overlay_from_stdin(
     Ok(crate::source_overlay::apply_overlay(
         options, root, overlay,
     )?)
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+    use bynk_project::{BuildConfig, ProfileConfig};
+
+    fn with(dev: Option<bool>, release: Option<bool>) -> BuildConfig {
+        let mut c = BuildConfig::default();
+        for (name, v) in [("dev", dev), ("release", release)] {
+            if v.is_some() {
+                c.profiles
+                    .insert(name.to_string(), ProfileConfig { contracts: v });
+            }
+        }
+        c
+    }
+
+    #[test]
+    fn a_profile_defaults_then_its_table_overrides() {
+        let none = with(None, None);
+        assert!(profile_contracts(&none, CliProfile::Dev));
+        assert!(!profile_contracts(&none, CliProfile::Release));
+        let set = with(Some(false), Some(true));
+        assert!(!profile_contracts(&set, CliProfile::Dev));
+        assert!(profile_contracts(&set, CliProfile::Release));
+    }
+
+    #[test]
+    fn one_profiles_table_does_not_touch_the_other() {
+        let only_dev = with(Some(false), None);
+        assert!(!profile_contracts(&only_dev, CliProfile::Dev));
+        assert!(!profile_contracts(&only_dev, CliProfile::Release));
+    }
 }

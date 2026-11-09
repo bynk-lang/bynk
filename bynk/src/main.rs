@@ -42,6 +42,7 @@ fn main() -> ExitCode {
 fn run() -> ExitCode {
     let cli =
         Cli::from_arg_matches(&bynk::cli::command().get_matches()).unwrap_or_else(|e| e.exit());
+    bynk_driver::progress::set_quiet(cli.quiet);
     match cli.command {
         Command::Doctor {
             input,

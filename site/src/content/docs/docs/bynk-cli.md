@@ -11,6 +11,25 @@ The everyday commands — [`bynk check`](#bynk-check), [`bynk compile`](#bynk-co
 [`bynk fmt`](#bynk-fmt), and [`bynk test`](#bynk-test) — are what the retired
 `bynkc` binary used to provide, with the same flags, output and exit codes.
 
+## Build progress
+
+`bynk build`, `bynk dev` and `bynk deploy` print a line as each context compiles,
+dependencies first, when stderr is a terminal:
+
+```text
+ Compiling shop.billing
+  Finished shop.billing
+ Compiling shop.orders
+  Finished shop.orders
+```
+
+A context with errors prints `Compiling` and no `Finished`; its diagnostics
+follow. `--quiet` (`-q`, accepted before or after the command) turns the lines
+off. They are never printed when stderr is a pipe or a file, so a script or CI
+log sees the same output as before. `bynk dev` reports its first build only: a
+rebuild while watching stays quiet. `bynk check` and `bynk compile` print no
+progress.
+
 ## Exit codes and diagnostics
 
 A diagnostic's **severity** decides whether it fails a build. An **`Error`**
@@ -543,7 +562,9 @@ Each setting is the flag, else the `[build]` key, else the default. On success
 `build` infers from the project; [`compile`](#bynk-compile) is told. `compile`
 never reads `[build]`, which keeps the editor's *Show Compiled Output* view from
 changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` don't read
-it, or `[profile.*]`, either.
+it. `bynk test` reads `[profile.dev]` and `bynk deploy` checks `[profile.release]`
+(see [`[profile.<name>]`](/docs/manifest/#profilename)). See [build progress](#build-progress) for the
+per-context lines `build` prints on a terminal.
 
 ---
 

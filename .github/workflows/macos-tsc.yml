@@ -1,7 +1,7 @@
 name: macOS tsc corpus check
 
-# The corpus-wide `tsc --strict` pass (system::tsc_verify) runs on Linux in the
-# merge queue, and off Linux the queue runs the `ci-os` profile, which leaves it
+# The corpus-wide `tsc --strict` pass (system::tsc_verify) runs on Linux on a
+# ready PR, and off Linux the ready PR runs the `ci-os` profile, which leaves it
 # out as OS-independent. Its output is, but its MEMORY is not: the macOS runner
 # has 7 GB, and the release gate (release.yml) runs the full suite there. That
 # is how the v0.512.7 release failed twice on a heap exhaustion no earlier
@@ -9,14 +9,15 @@ name: macOS tsc corpus check
 # runs are sparse in practice.
 #
 # So run just that test on macOS after each merge that can change it. It is
-# post-merge, off the queue's critical path, and a failure here shows on `main`
+# post-merge, off every PR's critical path, and a failure here shows on `main`
 # before someone tags a release on it.
 on:
   push:
     branches: [main]
     # Everything that feeds the emitted TypeScript (the front end as well as
-    # the emitter), the corpus, the test, and what sets its memory: nextest's
-    # scheduling of it, the lockfile and the toolchain.
+    # the emitter), the corpus, the test and what it builds with (its
+    # `require` module and the test crate's manifest), and what sets its
+    # memory: nextest's scheduling of it, the lockfile and the toolchain.
     paths:
       - "bynk-syntax/**"
       - "bynk-check/**"
@@ -30,6 +31,8 @@ on:
       - "bynk-testkit/**"
       - "bynk-tests/tests/fixtures/positive/**"
       - "bynk-tests/tests/system/tsc_verify.rs"
+      - "bynk-tests/tests/require/**"
+      - "bynk-tests/Cargo.toml"
       - ".config/nextest.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
