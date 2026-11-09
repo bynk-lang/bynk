@@ -880,7 +880,9 @@ against it. Nothing runs. At the literal it reports:
 
 A migration that doesn't apply is the warning `bynk.d1.migration_invalid`, and
 that database's statements are then not checked. A database with no migrations
-directory isn't checked either. The statements of a `batch` are checked when each is
+directory has no schema, so `sql_invalid` and `select_field_missing` don't apply to it; its
+parameter counts are still checked, since they depend only on the SQL text and the list
+(`:name` and `@name` parameters count once each, as in the test tier). The statements of a `batch` are checked when each is
 written inline in the list (`batch([SqlStatement { sql: "…", params: […] }, …])`); one built
 elsewhere isn't tied to a database. Statements in a context-level `fn … given Orders` are checked like a handler's. Statements in the `case` and `property`
 bodies of a suite (`unit` and `integration` tier) are checked against the suite target's

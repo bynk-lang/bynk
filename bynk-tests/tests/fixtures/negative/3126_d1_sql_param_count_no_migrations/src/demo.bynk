@@ -1,0 +1,24 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+const COUNTED: String = "SELECT id FROM orders WHERE id = ?1"
+
+// #3126: this binding has no `migrations/demo-orders/` directory, so there is
+// no schema: the misspelt table and column are not reported (nothing to check
+// them against), but a wrong parameter count is, since the SQL text and the
+// list fix it.
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    let _ <- Orders.all("SELECT nope FROM missing WHERE id = ?1", [Text(id)])
+    let _ <- Orders.all("SELECT id FROM orders WHERE id = ?1 AND x = ?2", [Text(id)])
+    let _ <- Orders.all("SELECT id FROM orders WHERE id = ?1", [Text(id), Text(id)])
+    let _ <- Orders.all("SELECT id FROM orders WHERE a = :x AND b = :x AND c = ?", [Text(id)])
+    let _ <- Orders.all(COUNTED, [Text(id), Text(id)])
+    let _ <- Orders.batch([SqlStatement { sql: "SELECT 1 WHERE ?1 = ?2", params: [Text(id)] }])
+    let _ <- Orders.all("SELECT '?1', \"?2\" -- ?3", [])
+    true
+  }
+}
