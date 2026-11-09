@@ -78,10 +78,10 @@ fn a_let_bound_list_is_counted() {
 
 #[test]
 fn a_shadowed_let_list_is_not_counted() {
-    // The inner `args` is a parameter-free unknown length (a call), so the
-    // outer literal's length must not leak onto it.
+    // The inner `args` has no length the text fixes (a call), so the outer
+    // literal's length (1) must not carry over: the SQL takes two parameters.
     let shadowed = "    let args = [Text(id)]\n    \
-                    let args = [Text(id), Text(id), Text(id)]\n    \
-                    let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND id = ?2 AND id = ?3\", args)\n";
+                    let args = args.map((v) => v)\n    \
+                    let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND id = ?2\", args)\n";
     assert!(categories("let-shadow", "", shadowed).is_empty());
 }

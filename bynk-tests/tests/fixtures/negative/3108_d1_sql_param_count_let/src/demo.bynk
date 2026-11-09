@@ -4,8 +4,6 @@ consumes bynk.cloudflare { D1 }
 
 capability Orders = D1
 
-type Order = { id: String, total: Int, note: String }
-type Wrong = { id: String, price: Int }
 
 // #3108: a parameter list bound with `let` is counted like a list literal.
 service probe {
