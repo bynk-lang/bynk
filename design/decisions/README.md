@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0760](0760-matches-example-value.md) | **An `@example` annotation gives Val a value for a Matches or IsoDate refinement** (v0.523) — Where the example goes, how it is checked, and why `for all` ignores it | Accepted (v0.523) |
 | [0759](0759-suite-local-type-and-const.md) | **A suite declares its own private, test-only `type` and `const` items** (v0.522) — Suite-local types and constants, scoped like suite helper fns, with codecs emitted into the runner | Accepted (v0.522) |
 | [0758](0758-tsc-failure-as-bynk-diagnostic.md) | **A tsc failure on generated TypeScript is a Bynk diagnostic at the source line it came from** (v0.521) — One code, line-level mapping through the .ts.map, opt-in check --emit | Accepted (v0.521) |
 | [0757](0757-require-tests.md) | **bynk test --require-tests makes "no tests" an opt-in failure** (v0.520) — The default stays a warning with exit 0; the flag turns it into an error, in rich, JSON and --no-run modes | Accepted (v0.520) |
