@@ -724,6 +724,10 @@ jobs:
       # and wipes target/ outright once it passes 40 GB: nothing else evicts old
       # dependency hashes or incremental dirs (`msrv`'s second rustc adds its
       # own), and a full disk fails jobs.
+      #
+      # The preflight step comes first, ahead of checkout: it checks the
+      # runner's tools while target/ is still intact (see its own note).
+      #
       # Runs before checkout, which wipes the workspace (and the warm target/)
       # when it finds no git. A runner missing a tool the jobs assume then fails
       # here in seconds, naming the runner, instead of as an opaque exit 127 in
