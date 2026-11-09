@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.22** | "The test D1's parameter scanner treats non-ASCII characters as part of a named parameter, as SQLite does, so `:café` and `:cafè` count as two parameters (#3157)" |
 | **v0.525.21** | "`bynk check` checks `Json.decodeSql[T]` of a literal D1 `all` / `first` read against the statement's result columns: a required field of `T` with no column is `bynk.d1.select_field_missing`" |
 | **v0.525.20** | "`bynk check` counts a D1 call's parameters even when its binding has no migrations directory (`bynk.d1.sql_param_count`); the other D1 SQL checks still need a schema, and `[check] d1_sql = false` turns both off" |
 | **v0.525.19** | "The D1 SQL check is pinned for context-level `fn … given` functions (literal, `const`, parameter count and `batch` are checked as in a handler)" |
