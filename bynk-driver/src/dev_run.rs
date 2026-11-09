@@ -162,13 +162,12 @@ enum Planned {
     Message(String),
 }
 
-/// Compile the project as a `--against dev` build once: refuse what a real
-/// runtime can't honour (as the group runs would), and read the distinct
-/// `env` maps of its `system` cases and the secrets its Workers declare.
-fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
-    let options = crate::try_project_options(&args.input)
+/// The options of the `--against dev` build: the Workers target, the remote-test
+/// plan, and the `dev` profile's contracts (#3107: `[profile.dev] contracts`,
+/// on by default).
+fn plan_options(args: &DevRunArgs) -> Result<crate::project::CompileOptions, Planned> {
+    Ok(crate::try_project_options(&args.input)
         .map_err(|e| Planned::Message(e.to_string()))?
-        // #3107: the `dev` profile (`[profile.dev] contracts`; on by default).
         .contracts(
             crate::project_contracts(&args.input, crate::CliProfile::Dev)
                 .map_err(Planned::Message)?,
@@ -178,7 +177,14 @@ fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
             dev: true,
             ..RemoteTests::default()
         }))
-        .target(BuildTarget::Workers);
+        .target(BuildTarget::Workers))
+}
+
+/// Compile the project as a `--against dev` build once: refuse what a real
+/// runtime can't honour (as the group runs would), and read the distinct
+/// `env` maps of its `system` cases and the secrets its Workers declare.
+fn plan(program: &str, args: &DevRunArgs) -> Result<Plan, Planned> {
+    let options = plan_options(args)?;
     // #2658: plan the smoke suites' run; this is where its skips are reported.
     let options = if args.smoke {
         crate::smoke::prepare(
@@ -551,6 +557,50 @@ impl Drop for Dev {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #3107: the `--against dev` build is the `dev` profile, so
+    /// `[profile.dev] contracts` decides its guard (on by default).
+    #[test]
+    fn the_plan_builds_the_dev_profile() {
+        let dir = std::env::temp_dir().join(format!(
+            "bynk_3107_plan_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("src/calc.bynk"),
+            "commons calc {\n  fn dbl(n: Int) -> Int { n + n }\n}\n",
+        )
+        .unwrap();
+        let args = DevRunArgs {
+            input: dir.clone(),
+            output: dir.join("out"),
+            json: false,
+            stream: false,
+            seed: None,
+            filter: crate::test_filter::TestFilter::default(),
+            skip_unsupported: false,
+            settle: None,
+            run_id: String::new(),
+            bynk: PathBuf::new(),
+            smoke: false,
+        };
+        let manifest =
+            |extra: &str| format!("[project]\nname = \"calc\"\nversion = \"0.1.0\"\n{extra}");
+        let contracts = |extra: &str| {
+            std::fs::write(dir.join("bynk.toml"), manifest(extra)).unwrap();
+            plan_options(&args).ok().expect("options").contracts
+        };
+        assert!(contracts(""), "on by default");
+        assert!(!contracts("\n[profile.dev]\ncontracts = false\n"));
+        assert!(
+            contracts("\n[profile.release]\ncontracts = false\n"),
+            "release does not touch it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// A merged `--against dev` document keeps each case's `tier`, which the
     /// groups' own documents carry.
