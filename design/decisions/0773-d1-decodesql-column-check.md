@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk check` checks `Json.decodeSql[T]` of a literal D1 `all` / `first` read against the statement's result columns: a required field of `T` with no column is `bynk.d1.select_field_missing`"
----
+# 0773 — Json.decodeSql's fields are checked against the statement's columns
 
-## ADR: d1-decodesql-column-check
-title: Json.decodeSql's fields are checked against the statement's columns
-summary: How a decode is linked to the D1 statement whose rows it decodes, and what is reported
+- **Status:** Accepted (v0.525.21)
 
 **Context.** `all` / `first` with `Json.decodeSql[T]` is how rows are read where the typed `select[T]` / `firstAs[T]` can't (joins, expressions, aliases). Nothing tied the decode to its statement, so a misspelt alias decoded to a run-time `JsonError`. #3070 left it out for want of a rule to find the link (#3139).
 

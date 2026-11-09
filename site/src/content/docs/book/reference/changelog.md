@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.21** | "`bynk check` checks `Json.decodeSql[T]` of a literal D1 `all` / `first` read against the statement's result columns: a required field of `T` with no column is `bynk.d1.select_field_missing`" |
 | **v0.525.20** | "`bynk check` counts a D1 call's parameters even when its binding has no migrations directory (`bynk.d1.sql_param_count`); the other D1 SQL checks still need a schema, and `[check] d1_sql = false` turns both off" |
 | **v0.525.19** | "The D1 SQL check is pinned for context-level `fn … given` functions (literal, `const`, parameter count and `batch` are checked as in a handler)" |
 | **v0.525.18** | "`bynk test --mutate` makes SQL mutants only from the SQL the checker ties to a D1 call (including a `const` bound to one, in any case), and now reads `\\n` escapes and `CASE … END` correctly" |
