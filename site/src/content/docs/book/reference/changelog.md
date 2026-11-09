@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.16** | "The D1 SQL schema check reuses a database's built schema until its migrations change, so the language server doesn't re-run every migration on each edit; test-body statements also point inside the literal" |
 | **v0.525.15** | "`bynk.d1.sql_invalid` points at the token SQLite refused inside the SQL literal, not the whole argument" |
 | **v0.525.14** | An agent call no longer forwards the caller's Workers `env` (secrets and vars) in the inter-Durable-Object request body |
 | **v0.525.13** | "`bynk test --mutate --changed <git-ref>` mutates only declarations in changed files, and `--mutate-jobs <n>` runs mutants in parallel scratch directories with the same report (slice 4 of #3069)" |
