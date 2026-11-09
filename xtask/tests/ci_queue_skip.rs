@@ -15,9 +15,15 @@ use std::path::PathBuf;
 const CLAUSE: &str = "!contains(fromJSON(needs.changes.outputs.queue_passed), '";
 
 /// Jobs gated on `changes` that deliberately carry no clause, and why.
-const EXEMPT: [(&str, &str); 6] = [
-    // A matrix job: its legs are dropped from `test_os` instead.
+const EXEMPT: [(&str, &str); 9] = [
+    // Matrix jobs: their legs are dropped from `test_os` instead.
     ("test", "legs dropped from test_os"),
+    ("test-os", "legs dropped from test_os"),
+    // Decides whether the ready set runs; it runs on every push, and skipping
+    // it would skip the ready set it gates.
+    ("ready-gate", "gate"),
+    // Runs on draft PRs only, never on a push.
+    ("promote", "draft PRs only"),
     // A matrix job whose `name:` interpolates the leg, so there is no single
     // name to look up; it runs only on installer-script edits and the schedule.
     ("installers-smoke", "matrix; rare trigger"),
@@ -322,4 +328,76 @@ fn the_self_hosted_labels_appear_only_in_the_runner_step() {
         "ci.yml must name the self-hosted labels only in `changes`' `runner` \
          step; other jobs take `needs.changes.outputs.linux_runner`: {uses:#?}"
     );
+}
+
+/// `test-os` (the Windows and macOS legs) reuses `test`'s steps, and the
+/// shared rust-cache step pins `shared-key: test`. Without it the key would
+/// carry the job id (`test-os`), RUST_CACHES' `test-Windows_NT` and
+/// `test-Darwin` entries would name caches nothing saves, and every push to
+/// `main` would read them as evicted and run everything.
+#[test]
+fn the_windows_and_macos_legs_share_the_test_cache_key() {
+    let jobs = jobs();
+    let job = |key: &str| {
+        jobs.iter()
+            .find(|j| j.key == key)
+            .unwrap_or_else(|| panic!("ci.yml has no `{key}` job"))
+    };
+    assert!(
+        job("test")
+            .lines
+            .iter()
+            .any(|l| l.trim() == "steps: &test_steps"),
+        "`test` must define the shared step list as `steps: &test_steps`"
+    );
+    assert!(
+        job("test-os")
+            .lines
+            .iter()
+            .any(|l| l.trim() == "steps: *test_steps"),
+        "`test-os` must reuse `test`'s steps (`steps: *test_steps`)"
+    );
+    let test = &job("test").lines;
+    let cache = test
+        .iter()
+        .position(|l| l.contains("uses: Swatinem/rust-cache@"))
+        .expect("`test` has a rust-cache step");
+    // The step's own lines: up to the next step (`      - `).
+    let mut step = test[cache + 1..]
+        .iter()
+        .take_while(|l| !l.starts_with("      - "));
+    assert!(
+        step.any(|l| l.trim() == "shared-key: test"),
+        "`test`'s rust-cache step must set `shared-key: test`"
+    );
+}
+
+/// The ready set (ADR "ci-staged-gates") runs only when `ready-gate` says so:
+/// on a ready PR, a draft `promote` marked ready, `main` and the nightly,
+/// never in the merge queue. A ready-set job that loses the check would run in
+/// the queue again, or on every draft push; one that loses `!cancelled()`
+/// would be skipped whenever anything upstream of the gate was path-skipped.
+#[test]
+fn every_ready_set_job_checks_the_gate() {
+    let jobs = jobs();
+    for key in ["test-os", "test-system", "test-ts7", "node-floor", "msrv"] {
+        let job = jobs
+            .iter()
+            .find(|j| j.key == key)
+            .unwrap_or_else(|| panic!("ci.yml has no `{key}` job"));
+        for clause in [
+            "!cancelled()",
+            "needs.ready-gate.result == 'success'",
+            "needs.ready-gate.outputs.run == 'true'",
+        ] {
+            assert!(
+                job.condition.contains(clause),
+                "ready-set job `{key}`'s `if:` lacks `{clause}`"
+            );
+        }
+        assert!(
+            !job.condition.contains("github.event_name"),
+            "ready-set job `{key}` gates on the event; the stage comes from `ready-gate`"
+        );
+    }
 }

@@ -59,7 +59,7 @@ where a failure is cheap, and no check runs in two stages without a reason.
 |---|---|---|---|
 | Draft | `pull_request` on a draft | `ci-fast`'s gates (fmt, clippy, API docs, the cheap path-gated jobs) and the Linux unit and integration tiers | Feedback while the PR is still changing |
 | Ready | `pull_request` on a ready PR, including the transition to ready | Everything the queue runs today: the draft set, the Windows and macOS legs (`ci-os`), the Linux system tier, TypeScript 7, the Node floor, and MSRV on a global change | The full check, run while the human review happens |
-| Merge queue | `merge_group` | Build, clippy and the Linux unit and integration tiers, path-filtered as now | That the PR still works on top of the entries ahead of it |
+| Merge queue | `merge_group` | The draft set, path-filtered as now | That the PR still works on top of the entries ahead of it |
 | `main` | `push` | Unchanged: every job the queue did not pass on this commit (`queue_passed`), plus cache saves | The backstop |
 | Nightly | `schedule` | Unchanged: everything, unfiltered, on all three OSes | Drift and the full `ci` profile |
 
@@ -92,9 +92,15 @@ The rules that make the stages hold together:
 - **A human marking a PR ready starts the full check** through the
   `ready_for_review` activity type. That is a normal event, so it covers fork
   PRs too, which `promote` never touches.
-- **`promote` waits for the draft stage, not just `ci-fast`.** A draft is
-  promoted once the Linux unit and integration tiers pass too. Promotion then
-  means "worth a full run and a review", not just "it lints".
+- **The ready set starts once the fast gates pass**, on every ready run, not
+  only after a promotion. One gate job (`ready-gate`) decides whether the
+  ready set runs, and it waits for `ci-fast` and `promote` (~1–2 min). A PR
+  that fails fmt or clippy then spends no Windows or macOS minutes. The gate
+  deliberately does not wait for the Linux test tiers: the system tier runs
+  alongside them, as it does today, because waiting would put a second full
+  compile on the critical path. `promote` keeps its current trigger
+  (`ci-fast`). On `main` and the nightly the ready set runs whatever the fast
+  gates did, so the backstop's record stays complete.
 - **There is no label to ask for the full check early.** To get it, mark the
   PR ready: that is what "ready" now means. A `ci:full` label was considered
   and rejected. It needs the `labeled` activity type, and that starts a run on
@@ -118,9 +124,19 @@ The rules that make the stages hold together:
   cascades they caused: 13 of the 34 failures. The 6 integration failures
   still eject from the queue, as they should, but each ejection costs minutes
   rather than a full three-OS run.
-- **A queue run drops from ~13 min to the length of its slowest Linux job.**
-  On run 42580968208 that was ~2 min of tests on the self-hosted runner. An
-  ejection now costs minutes, not a quarter of an hour.
+- **A queue run drops from ~13 min to the length of the draft set.** On run
+  42580968208 its slowest part was ~2 min of Linux tests on the self-hosted
+  runner. An ejection now costs minutes, not a quarter of an hour.
+- **A ready run is ~1–2 min longer** than if every job started at once,
+  because the ready set waits for the fast gates. In exchange, a PR that
+  fails them costs no Windows or macOS minutes.
+- **`main` runs the ready set after every merge.** The push run skips what
+  the queue passed on the same commit, and the queue no longer passes the
+  ready set. So each merge's push run is a full ~13 min three-OS run again,
+  where it had been mostly skipped. `deploy-site.yml` follows that run, and
+  `main`'s runs are serialised, so a burst of merges queues behind it. This is
+  the cost of moving the full check off the queue's critical path. It is paid
+  off the path of any PR.
 - **The ~13 min full check moves earlier but mostly stops costing wall
   clock.** It runs during review, not after approval. The author now waits on
   it before merging rather than after queueing, which is the same wait, paid
@@ -145,7 +161,12 @@ The rules that make the stages hold together:
   integration check covers this on Linux. Off Linux, the `main` backstop
   covers it, as above.
 - **`ci-fast` keeps its meaning** as the fast subset the Claude review opens
-  on. The draft stage is `ci-fast` plus the Linux test tiers.
+  on. It no longer includes `msrv`, which is now in the ready set that waits
+  for `ci-fast`. The draft stage is `ci-fast` plus the Linux test tiers.
+- **A draft shows a red `CI green`** until it is ready. That includes a
+  `keep-draft` draft and a fork's draft. The failure message says to mark the
+  PR ready. Since a draft cannot merge, nothing is blocked that was not
+  blocked already.
 - **Not covered here.** The queue's infrastructure failures need separate
   fixes, whatever the staging: self-hosted runner health (`r4` with no
   `git`), retries on 5xx release downloads, and the Node floor heap

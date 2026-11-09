@@ -1,46 +1,66 @@
 name: CI
 
-# Stages. Each event runs what is worth its cost at that point, and no more.
-# Path filters (`changes`) apply on top, in every stage but the nightly.
+# Stages. Each event runs what is worth its cost at that point, and no more
+# (ADR "ci-staged-gates"). Path filters (`changes`) apply on top, in every
+# stage but the nightly. `changes` names the stage (`stage` output).
 #
-#   pull_request   Fast feedback, Linux only: lint, clippy, API docs, the
-#                  Linux unit + integration tiers, and the cheap path-gated
-#                  jobs (wasm, site, grammar, runtime, drift, ...). `CI green`
-#                  reports from these, so a PR can be reviewed and queued in
-#                  minutes. Not here: Windows/macOS, the Linux system tier,
-#                  TS7, the Node floor, MSRV, coverage.
-#   merge_group    The real gate. Everything on a PR, plus the Linux system
-#                  tier, TS7, the Node floor, MSRV (on a global change) and the
-#                  Windows + macOS legs. Off Linux those legs run `ci-os`: the
-#                  whole suite minus the corpus-wide tsc/node passes, which are
-#                  OS-independent and already run on Linux here (see the
-#                  `test` job).
+#   draft          A draft PR's pushes: fast feedback, Linux only. lint,
+#                  clippy, API docs, the Linux unit + integration tiers and
+#                  the cheap path-gated jobs (wasm, site, grammar, runtime,
+#                  drift, ...). `CI green` FAILS at the end of a draft-only
+#                  run: the ready set has not run, and a passing `CI green`
+#                  on the head SHA would let the PR merge without it.
+#   ready          A ready PR (including the push that makes it ready, and a
+#                  draft that `promote` marks ready in this same run): the
+#                  draft set plus the ready set (`ready-gate`): the Windows +
+#                  macOS legs (`test-os`), the Linux system tier, TS7, the
+#                  Node floor and MSRV (on a global change). Off Linux the
+#                  legs run `ci-os`: the whole suite minus the corpus-wide
+#                  tsc/node passes, which are OS-independent and run on Linux
+#                  in the system tier. The ready set starts once the fast
+#                  gates pass (`ci-fast`), so a PR that fails fmt or clippy
+#                  spends no Windows or macOS minutes.
+#   merge_group    Integration only: the draft set, on top of the entries
+#                  ahead. Each entry already passed the ready set at its own
+#                  head; the queue checks what combining them can break, on
+#                  Linux, where that is cheapest. An ejection costs minutes.
 #   push (main)    The backstop: every job the queue did NOT pass on this
-#                  commit (see `queue_passed`), plus what only `main` does
-#                  (saving Rust caches; deploy-site.yml follows this run).
+#                  commit (see `queue_passed`), which now includes the ready
+#                  set, plus what only `main` does (saving Rust caches;
+#                  deploy-site.yml follows this run).
 #   schedule       Nightly, on `main`, unfiltered: every job, the full `ci`
 #                  profile on all three OSes, coverage, the Dev Container
 #                  feature and installer smokes. A failure opens (or comments
 #                  on) one tracking issue (`nightly-report`).
 #
-# Why the PR stage is Linux-only, given the `test_os` history below (Windows
-# joined the PR gate in July 2026 because Windows breakage kept reaching
-# `main`): the merge queue now sits between a PR and `main`, and it runs
-# Windows and macOS, so that class of defect is still stopped before `main`.
-# What moves is WHEN the author hears about it: in the queue, at the cost of an
-# ejection, instead of on every PR push. The PR stage was running ~20 jobs per
+# Why the ready set moved out of the queue (November 2026): with Windows,
+# macOS and the system tier first running in the queue, 34 of its 100 runs
+# over 7-9 November failed, and 22 of 50 PRs needed more than one attempt
+# (median 36 min to land, up to 174). Most were defects a PR could have shown
+# on its own, found at the most expensive point: each one an ejection, a
+# re-queue, and a re-run of every entry behind it. Running the ready set
+# during review finds them before the queue.
+#
+# Why the draft stage stays Linux-only: the PR stage was running ~20 jobs per
 # push, and with the queue building up to 5 entries at once the hosted pool
-# (concurrency-capped for a free public org) was saturated: p95 runner waits of
-# ~8 min in November 2026.
+# (concurrency-capped for a free public org) was saturated: p95 runner waits
+# of ~8 min in November 2026. A draft's pushes are the most frequent, and the
+# cheapest place to keep that pressure off.
 on:
   push:
     branches: [main]
+  # The activity types are listed so `ready_for_review` starts the ready set
+  # when a person marks a PR ready. `promote` marks a draft ready with the
+  # GITHUB_TOKEN, whose events start no runs, so a promoted draft gets its
+  # ready set in the run that promoted it (see `ready-gate`). `labeled` is
+  # deliberately absent: a run per label edit would cancel an in-progress
+  # ready run (same concurrency group) and report `CI green` without it.
   pull_request:
-  # Merge queue: whenever `test` runs here it runs the three-OS matrix (see
-  # the `test` job's dynamic matrix), so Windows and macOS run before a PR
-  # lands. The queue's run is on the critical path of every merge, so work with
-  # no gating value stays out of it: `coverage` skips it, and no job saves a
-  # Rust cache from it (see the rust-cache note below).
+    types: [opened, synchronize, reopened, ready_for_review]
+  # Merge queue: integration only (see the stage table). The queue's run is on
+  # the critical path of every merge, so work with no gating value stays out
+  # of it: the ready set and `coverage` skip it, and no job saves a Rust cache
+  # from it (see the rust-cache note below).
   #
   # `CI green` is the only required status check and this workflow reports it,
   # so a queue cannot wedge waiting on a check that never arrives. codeql.yml
@@ -124,9 +144,9 @@ jobs:
   # or extension-only entry no longer waits ~15 min on a test matrix that its
   # own diff cannot affect. The post-merge push run on `main` is the backstop
   # for what the queue skipped: it runs every job the queue did NOT pass on the
-  # same commit (see `queue_passed`). The queue does keep the three-OS matrix whenever `test` runs
-  # (see `test_os`); `msrv`, gated on `all` alone, now runs in the queue only
-  # on a global change, exactly as on a PR.
+  # same commit (see `queue_passed`). The queue runs Linux only; the ready
+  # set (`ready-gate`), including the Windows and macOS legs, never runs
+  # there, and so always runs on `main`.
   # ---------------------------------------------------------------------------
   changes:
     name: Detect changed paths
@@ -152,6 +172,10 @@ jobs:
       installers: ${{ steps.filter.outputs.installers }}
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       all: ${{ steps.all.outputs.value }}
+      # The CI stage of this run: draft | ready | queue | main | nightly (see
+      # the stage table at the top). A draft that `promote` marks ready keeps
+      # `draft` here; `ready-gate` reads the promotion.
+      stage: ${{ steps.stage.outputs.value }}
       # `runs-on` for the Linux jobs that may use the org's self-hosted runners
       # (see the `runner` step): a JSON label array or a JSON string.
       # `linux_runner` is the `test` job's Linux leg; `linux_runner_extra` is
@@ -164,15 +188,17 @@ jobs:
       # Each skippable job's `if:` checks its own `name:` against it; the `test`
       # legs are dropped from `test_os` instead.
       queue_passed: ${{ steps.queue.outputs.passed }}
-      # JSON array of OSes for the `test` matrix. PRs run Linux only (see the
-      # stage table at the top: Windows moved to the merge queue); every
-      # other event (push to main, merge_group, the nightly) runs all three,
-      # except a stamp commit whose parent already passed macOS (see the step).
-      # On a push, an OS whose leg the queue passed on this commit is dropped,
-      # so the array can be empty (`test` then skips).
+      # JSON array of OSes for the test legs this run may need. The merge
+      # queue runs Linux only; every other event (PRs, push to main, the
+      # nightly) lists all three, except a stamp commit whose parent already
+      # passed macOS (see the step). On a push, an OS whose leg the queue
+      # passed on this commit is dropped, so the array can be empty.
+      # `test_linux` and `test_other` split it: the `test` job runs the Linux
+      # leg (draft set), `test-os` the Windows and macOS legs (ready set, so on
+      # a draft only once `promote` marks it ready).
       #
-      # History, kept because it is why Windows still gates every merge (now in
-      # the queue rather than on each PR push). Windows was on the PR gate
+      # History, kept because it is why Windows still gates every merge (now on
+      # a ready PR rather than in the queue). Windows was on the PR gate
       # because the evidence said it had to be. This
       # leg was Linux-only on PRs until 2026-07-29, on the theory that cross-OS
       # breakage was rare enough to fix forward on `main`. It was not: the last
@@ -194,6 +220,8 @@ jobs:
       # GitHub does not bill standard runners on public repos, which is why
       # release.yml's arm64 leg was re-enabled at the same time.)
       test_os: ${{ steps.test-os.outputs.value }}
+      test_linux: ${{ steps.test-os.outputs.linux }}
+      test_other: ${{ steps.test-os.outputs.other }}
     steps:
       # Which runner the self-hosted-capable Linux jobs use. The self-hosted
       # runners are used only when the repo variable SELF_HOSTED_LINUX is
@@ -378,6 +406,22 @@ jobs:
               - 'scripts/check-installer-naming.sh'
               - 'bynk/Cargo.toml'
               - 'bynk-lsp/Cargo.toml'
+      # The stage table at the top, as one value. The draft flag is read from
+      # the event, so the run that `promote` flips keeps `draft`.
+      - id: stage
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          case "$EVENT" in
+            pull_request) [ "$DRAFT" = true ] && value=draft || value=ready ;;
+            merge_group) value=queue ;;
+            push) value=main ;;
+            schedule) value=nightly ;;
+            *) echo "::error::no CI stage for event '$EVENT'"; exit 1 ;;
+          esac
+          echo "Stage: $value"
+          echo "value=$value" >> "$GITHUB_OUTPUT"
       # Collapse "neither a PR nor the merge queue" (push/schedule) and "a global
       # file changed" into one boolean the downstream `if:`s can OR against.
       # Pinned to the `global` output so a lockfile/toolchain/workflow change
@@ -477,8 +521,8 @@ jobs:
             echo "This push changes a rust-cache key input - running everything so main saves fresh caches."
           fi
           echo "passed=$passed" >> "$GITHUB_OUTPUT"
-      # Decide the `test` job's OS matrix from the event: Linux only on PRs,
-      # all three OSes on everything else (push/main, merge_group, schedule) —
+      # Decide the test legs' OSes from the event: Linux only in the merge
+      # queue, all three OSes on everything else (PRs, push/main, schedule) —
       # except a stamp commit whose parent already passed macOS (the step checks
       # the macOS leg only, and off the nightly that leg runs `ci-os`).
       #
@@ -526,10 +570,14 @@ jobs:
             value="$(jq -c --argjson passed "$QUEUE_PASSED" \
               '[.[] | select(("Test suite (" + . + ")") as $n | [$passed[] | select(. == $n)] | length == 0)]' \
               <<< "$1")" || value="$1"
-            echo "value=$value" >> "$GITHUB_OUTPUT"
+            {
+              echo "value=$value"
+              echo "linux=$(jq -c '[.[] | select(. == "ubuntu-latest")]' <<< "$value")"
+              echo "other=$(jq -c '[.[] | select(. != "ubuntu-latest")]' <<< "$value")"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           }
-          if [ "$EVENT" = "pull_request" ]; then
+          if [ "$EVENT" = "merge_group" ]; then
             emit '["ubuntu-latest"]'
           fi
           if [ "$EVENT" != "push" ] || [[ "$HEAD_MESSAGE" != "chore(stamp):"* ]] \
@@ -728,41 +776,41 @@ jobs:
     # pass on Linux and only surface at release. `.gitattributes` forces LF on
     # checkout so the byte comparison is stable on Windows.
     #
-    # fail-fast is off on PRs and `main`, so one OS's failure doesn't abandon
-    # the others' results: an author fixing a PR wants every OS's failures from
-    # one run (on a PR that is the Linux leg alone). In the merge queue it is ON. There the only question is pass or
-    # fail, and the answer is on the critical path of every entry queued
-    # behind: a failed group is ejected only when `CI green` reports, and every
-    # group stacked on it is then rebuilt. With fail-fast off, a failure on the
-    # Linux leg (~10 min) still waited for the Windows leg (~15 min) before the
-    # queue heard about it (run 39901658983: Linux red at 04:51:48, `CI green`
-    # red at 04:58:19). Cancelling the sibling legs reports the failure as soon
-    # as the first leg fails.
+    # The legs are two jobs sharing one step list (`test_steps`): this one
+    # runs the Linux leg, in every stage; `test-os` runs the Windows and macOS
+    # legs, in the ready set only (see the stage table at the top). They
+    # cannot be one matrix, because a draft that `promote` marks ready gets
+    # its Windows and macOS legs only after the promotion, in the same run.
+    #
+    # fail-fast is off on both: an author fixing a PR wants every OS's
+    # failures from one run. (It was on in the merge queue, where the only
+    # question is pass or fail; the queue now runs the Linux leg alone.)
     #
     # The test corpus reads the Book (site/src/content/docs/book/**) — the
     # doc_examples compile gate and the reference-page assertions — so the `rust`
     # filter includes the Book content; a content change can legitimately flip a test.
     name: Test suite (${{ matrix.os }})
     needs: changes
-    # `test_os` is empty when the merge queue passed every leg on this commit
-    # (see the `queue` step), and an empty matrix is an error, not a skip.
+    # `test_linux` is empty when the merge queue passed the Linux leg on this
+    # commit (see the `queue` step), and an empty matrix is an error, not a skip.
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
-      && needs.changes.outputs.test_os != '[]'
-    # The Linux leg takes the shared self-hosted rule (`runner` on `changes`);
-    # the other legs run on their own OS. `matrix.os` stays `ubuntu-latest`
-    # either way: the workerd/TS7 conditions below and `changes`'
-    # `test_os`/`queue_passed` key off that string. `linux_runner` is a
-    # non-empty JSON value, so it is truthy even when it is "ubuntu-latest".
+      && needs.changes.outputs.test_linux != '[]'
+    # The Linux leg takes the shared self-hosted rule (`runner` on `changes`).
+    # `matrix.os` stays `ubuntu-latest` either way: the step conditions below
+    # and `changes`' `test_os`/`queue_passed` key off that string.
+    # `linux_runner` is a non-empty JSON value, so it is truthy even when it is
+    # "ubuntu-latest".
     runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON(needs.changes.outputs.linux_runner) || matrix.os }}
     timeout-minutes: 40
     strategy:
-      fail-fast: ${{ github.event_name == 'merge_group' }}
+      fail-fast: false
       matrix:
-        # Linux only on PRs, all three OSes on push/merge_group/schedule —
-        # see the `test_os` output on the `changes` job.
-        os: ${{ fromJSON(needs.changes.outputs.test_os) }}
-    steps:
+        # `["ubuntu-latest"]`, or `[]` when skipped — see `test_os` on
+        # `changes`. A matrix keeps the job's name `Test suite (ubuntu-latest)`,
+        # which `queue_passed` and `test-system`'s sibling watcher look up.
+        os: ${{ fromJSON(needs.changes.outputs.test_linux) }}
+    steps: &test_steps
       # The self-hosted checkout and clean steps (see `clippy`, where they are
       # defined).
       - *self_hosted_checkout
@@ -772,6 +820,10 @@ jobs:
         if: runner.environment != 'self-hosted'
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
+          # The key the legs had as one `test` matrix (`v0-rust-test-<OS>-`),
+          # kept now that `test-os` shares these steps, so its legs restore
+          # `main`'s caches and RUST_CACHES' `test-*` entries stay true.
+          shared-key: test
       # nextest runs one process pool across every test binary at once (the
       # fixture corpus is dozens of separate binaries `cargo test` would run
       # serially), cutting this leg's wall-clock. Prebuilt binary — no compile.
@@ -843,7 +895,7 @@ jobs:
         run: cargo nextest run --workspace --locked --profile ci-lower
         env:
           BYNK_REQUIRE_TSC: "1"
-      # Off Linux, the queue and `main` run `ci-os`: the `ci` profile minus
+      # Off Linux, a ready PR and `main` run `ci-os`: the `ci` profile minus
       # the corpus-wide tsc/node passes (tsc_verify, behaviour_fixtures,
       # examples, example_tests_behaviour). Those check emitted code with the
       # same Node and tsc on every OS, they already ran on Linux in this same
@@ -885,24 +937,57 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # The Windows and macOS legs of the test suite: the ready set's share of
+  # it (see `test` for why these are a separate job, and the stage table at
+  # the top for when the ready set runs). Same steps as `test`.
+  test-os:
+    name: Test suite (${{ matrix.os }})
+    needs: [changes, ready-gate]
+    # `!cancelled()` rather than the implicit `success()`, which is false
+    # whenever any upstream job was skipped, transitively, and path-filtered
+    # skips upstream of `ready-gate` are normal. `ready-gate`'s own result and
+    # output do the gating. `test_other` is empty when a stamp commit's
+    # parent already passed macOS and the queue passed Windows, or the queue
+    # passed both (neither happens while the queue runs Linux only, but the
+    # `queue` step still drops passed legs; see `test_os` on `changes`).
+    if: >-
+      !cancelled()
+      && needs.ready-gate.result == 'success'
+      && needs.ready-gate.outputs.run == 'true'
+      && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
+      && needs.changes.outputs.test_other != '[]'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.changes.outputs.test_other) }}
+    steps: *test_steps
+
   test-system:
     # C4c (#2940): the system tier (every test that starts `tsc`, `node`,
     # `workerd`, `wrangler` or the `bynk` binary; ~85% of the suite's run time)
     # in a job of its own, building for itself, in parallel with `test`'s unit and
-    # integration tiers. No `needs:` edge: that would serialise the two and put a
-    # full compile on the green path. Wall-clock is the max of the two jobs, not
-    # their sum. Linux only for now: Windows and macOS keep one job (Decision E).
+    # integration tiers. No `needs:` edge on `test`: that would serialise the
+    # two and put a full compile on the green path. Wall-clock is the max of
+    # the two jobs, not their sum. (It does need `ready-gate`, which waits only
+    # for the fast gates, ~1-2 min.) Linux only for now: Windows and macOS
+    # keep one job (Decision E).
     #
     # When `test` fails this job is pointless (the run is red regardless), but
     # GitHub cannot cancel one job, so the test step runs under a watcher that
     # stops nextest once `Test suite (ubuntu-latest)` has failed.
     name: System tests (Linux)
-    needs: changes
+    needs: [changes, ready-gate]
     # Only the Linux leg is split (see the `test` job's note), so this job is
-    # gated on the change filters alone: `test_os` names the legs of `test`.
+    # gated on the change filters and the ready set: `test_os` names the legs
+    # of `test` and `test-os`.
+    # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
     if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
-      && github.event_name != 'pull_request'
+      !cancelled()
+      && needs.ready-gate.result == 'success'
+      && needs.ready-gate.outputs.run == 'true'
+      && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'System tests (Linux)')
     # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
     # pilot: a pool of one runner would run these jobs back to back (measured on
@@ -965,12 +1050,16 @@ jobs:
     # reserves), and `bynk test` emits. The other behaviour suites, which also
     # type-check before running, stay on v5.
     name: Type-check under TypeScript 7
-    needs: changes
+    needs: [changes, ready-gate]
     # Only the Linux leg is split (see the `test` job's note), so this job is
-    # gated on the change filters alone: `test_os` names the legs of `test`.
+    # gated on the change filters and the ready set: `test_os` names the legs
+    # of `test` and `test-os`.
+    # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
     if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
-      && github.event_name != 'pull_request'
+      !cancelled()
+      && needs.ready-gate.result == 'success'
+      && needs.ready-gate.outputs.run == 'true'
+      && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Type-check under TypeScript 7')
     # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
     # pilot: a pool of one runner would run these jobs back to back (measured on
@@ -1016,10 +1105,13 @@ jobs:
     # Node run: the type-stripping and --inspect tests, and the @bynk/runtime
     # unit tests. Linux only; the rest of the suite is Node-version-neutral.
     name: Node floor (oldest supported Node)
-    needs: changes
+    needs: [changes, ready-gate]
+    # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
     if: >-
-      (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
-      && github.event_name != 'pull_request'
+      !cancelled()
+      && needs.ready-gate.result == 'success'
+      && needs.ready-gate.outputs.run == 'true'
+      && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 30
@@ -1078,7 +1170,7 @@ jobs:
     # this leg still earns its keep by building `--locked` against the *declared*
     # rust-version, so a future drop below what the code needs goes red here.
     name: MSRV (cargo check on declared rust-version)
-    needs: changes
+    needs: [changes, ready-gate]
     # Gated on `all` rather than the broad `rust` filter: this leg's job is to
     # verify the *declared* rust-version, which only moves via a manifest edit.
     # `all` is true exactly when a global file changed (Cargo.toml / Cargo.lock /
@@ -1086,9 +1178,12 @@ jobs:
     # bumped dependency (which touches Cargo.lock) still re-checks the MSRV,
     # while a plain `**/*.rs` PR no longer pays for a redundant full-workspace
     # build (the main 1.95 legs already compile that code on the same toolchain).
+    # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
     if: >-
-      (needs.changes.outputs.all == 'true')
-      && github.event_name != 'pull_request'
+      !cancelled()
+      && needs.ready-gate.result == 'success'
+      && needs.ready-gate.outputs.run == 'true'
+      && (needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
@@ -1707,7 +1802,8 @@ jobs:
       - lint
       - clippy
       - api-docs
-      - msrv
+      # Not `msrv`: it is in the ready set, which starts only after this job
+      # (`ready-gate` needs it), so needing it here would be a cycle.
       - wasm
       - registry-core-wasm
       - site
@@ -1780,14 +1876,22 @@ jobs:
   # explicitly after flipping the PR. Do not "simplify" this to rely on the
   # event.
   #
+  # Promotion also starts the ready set, in this run: `ready-gate` reads
+  # `promoted`. No new run starts (the GITHUB_TOKEN rule below), so without
+  # that the PR would be ready with only the draft set run, and `CI green`
+  # would stay red until its next push.
+  #
   # Not gating: a failed promotion must not block a merge, so `ci-green` does
-  # not need this job (see its EXEMPT list). Unlike auto-ready.yml, this job
-  # runs from the PR's own copy of the workflow, so a change to it can be
-  # exercised on its own PR.
+  # not need this job (see its EXEMPT list). A draft that is not promoted is
+  # still red on `CI green` (its ready set has not run), but a draft cannot
+  # merge anyway.
+  #
+  # Unlike auto-ready.yml, this job runs from the PR's own copy of the
+  # workflow, so a change to it can be exercised on its own PR.
   # ---------------------------------------------------------------------------
   promote:
     name: Mark green draft ready for review
-    needs: ci-fast
+    needs: [changes, ci-fast]
     # `!cancelled()` is load-bearing. An `if:` with no status function gets an
     # implicit `success()`, which is false when ANY upstream job was skipped,
     # transitively, not just `ci-fast`. A path-filtered skip (`drift`, say)
@@ -1797,7 +1901,7 @@ jobs:
     # gating; `!cancelled()` keeps a superseded run from promoting.
     if: >-
       !cancelled()
-      && github.event_name == 'pull_request'
+      && needs.changes.outputs.stage == 'draft'
       && needs.ci-fast.result == 'success'
       && github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.user.login != 'dependabot[bot]'
@@ -1807,10 +1911,16 @@ jobs:
       contents: write
       pull-requests: write
       actions: write
+    outputs:
+      # `true` when this job marked the draft ready, so `ready-gate` runs the
+      # ready set in this same run (the ready_for_review event this job
+      # causes starts no run of its own; see above).
+      promoted: ${{ steps.promote.outputs.promoted }}
     steps:
       # Every value from the event travels via env, never interpolated into
       # the script.
       - name: Promote the draft if it is still at the tested SHA
+        id: promote
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -1835,11 +1945,58 @@ jobs:
 
           echo "Fast gates are green at $HEAD_SHA - marking PR #$PR ready for review."
           gh pr ready "$PR" --repo "$REPO"
+          # Set as soon as the PR is ready, before the dispatch below, so a
+          # failed dispatch cannot leave a ready PR without its ready set.
+          echo "promoted=true" >> "$GITHUB_OUTPUT"
           # See the header: the GITHUB_TOKEN-caused ready_for_review event
           # cannot start the review workflow, so dispatch it explicitly.
           gh workflow run claude-pr-review.yml \
             --repo "$REPO" --ref "$DEFAULT_BRANCH" -f pr_number="$PR"
           echo "Dispatched claude-pr-review.yml for PR #$PR."
+
+  # ---------------------------------------------------------------------------
+  # Whether this run runs the ready set (see the stage table at the top): the
+  # Windows and macOS legs (`test-os`), the Linux system tier, TS7, the Node
+  # floor and MSRV. Each of those jobs needs this one and checks `run`.
+  #
+  #   draft    only if `promote` marked the PR ready in this run;
+  #   ready    once the fast gates passed, so a PR that fails fmt or clippy
+  #            spends no Windows or macOS minutes (the failure is red anyway);
+  #   queue    never: the queue checks integration, on Linux;
+  #   main     always, whatever the fast gates did: `main` is the backstop,
+  #   nightly  and its record must be complete.
+  #
+  # It waits for `ci-fast` (~1-2 min) and `promote`, not for `test`: the
+  # system tier runs alongside the Linux unit tier (see `test-system`), as
+  # before. `ci-green` reads `run` too, to fail a draft-only run.
+  # ---------------------------------------------------------------------------
+  ready-gate:
+    name: Ready-stage gate
+    needs: [changes, ci-fast, promote]
+    # Runs whatever the fast gates or `promote` did (it decides from their
+    # results), but not on a cancelled run, and not without `changes`.
+    if: "!cancelled() && needs.changes.result == 'success'"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide whether the ready set runs
+        id: decide
+        env:
+          STAGE: ${{ needs.changes.outputs.stage }}
+          FAST: ${{ needs.ci-fast.result }}
+          PROMOTED: ${{ needs.promote.outputs.promoted }}
+        run: |
+          case "$STAGE" in
+            main|nightly) run=true ;;
+            ready) [ "$FAST" = success ] && run=true || run=false ;;
+            draft) [ "$PROMOTED" = true ] && run=true || run=false ;;
+            queue) run=false ;;
+            *) echo "::error::unknown stage '$STAGE'"; exit 1 ;;
+          esac
+          echo "Stage $STAGE, fast gates $FAST, promoted '${PROMOTED}': ready set runs: $run"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
 
   ci-green:
     # Single required status check. Branch protection requires THIS job and
@@ -1855,6 +2012,8 @@ jobs:
       - clippy
       - api-docs
       - test
+      - test-os
+      - ready-gate
       - test-system
       - test-ts7
       - node-floor
@@ -1922,6 +2081,22 @@ jobs:
             fi
           done
           echo "All upstream jobs succeeded or were skipped."
+      # A draft-only run must not leave a passing `CI green` on the head SHA:
+      # required checks match on name and SHA, so the PR could then be
+      # approved and queued without the ready set, and the queue no longer
+      # runs it (see the stage table at the top). Failing, not skipping: a
+      # skipped required check counts as passing. Drafts cannot merge anyway.
+      # The ready set's run reports `CI green` again on the same SHA.
+      - name: Verify the ready set ran (not a draft-only run)
+        env:
+          STAGE: ${{ needs.changes.outputs.stage }}
+          READY_SET: ${{ needs.ready-gate.outputs.run }}
+        run: |
+          if [ "$STAGE" = draft ] && [ "$READY_SET" != true ]; then
+            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS, the Linux system tier, TS7, the Node floor); 'CI green' passes once it has."
+            exit 1
+          fi
+          echo "Stage $STAGE: the checks this stage requires have run."
 
   # ---------------------------------------------------------------------------
   # Nightly failure report. The nightly is the only stage that runs the full
