@@ -164,6 +164,9 @@ pub fn phase_test_bodies(
     refs: &mut RefSink,
     locals: &mut LocalsSink,
     tys: &Arc<Types>,
+    // #3108: the migrations' schemas, which a literal D1 statement in a case or
+    // property body is prepared against, as in a production body.
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
 ) -> HashMap<String, HashMap<String, ResolvedStub>> {
     let mut ready: HashMap<String, HashMap<String, ResolvedStub>> = HashMap::new();
 
@@ -266,6 +269,7 @@ pub fn phase_test_bodies(
             refs,
             locals,
             tys,
+            d1_sql,
         );
         // #2618: the suite sees its target's private declarations, but not
         // those of a commons the target or the suite uses: a reference to one
@@ -1594,6 +1598,7 @@ fn check_test_bodies(
     refs: &mut RefSink,
     locals: &mut LocalsSink,
     tys: &Arc<Types>,
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
 ) -> Vec<CompileError> {
     let mut errors = Vec::new();
 
@@ -1865,6 +1870,7 @@ fn check_test_bodies(
                 locals,
                 tys,
             );
+            check_d1_sql_sites(d1_sql, target_name, unit_tables, &case_callees, &mut errors);
             let tier = case_effective_tier(case, test_decl);
             check_extra_headers_tier(case, tier, &case_callees, &mut errors);
             check_extra_headers_let(case, &case_callees, &mut errors);
@@ -1900,6 +1906,7 @@ fn check_test_bodies(
                 refs,
                 locals,
                 tys,
+                d1_sql,
             );
             crossing.check_property(target_name, prop, &mut errors);
             check_advance_in_property(prop, &mut errors);
@@ -3700,6 +3707,20 @@ fn typecheck_case_body_recording(
     (expr_types, callees)
 }
 
+/// #3108: prepare the literal D1 statements a test body recorded against the
+/// schema of the target's migrations, as a production body's are.
+fn check_d1_sql_sites(
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    callees: &HashMap<ExprId, checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    if let (Some(d1_sql), Some(table)) = (d1_sql, unit_tables.get(target_name)) {
+        errors.extend(d1_sql.check_unit(target_name, table, callees));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_test_case_body(
     target_name: &str,
@@ -4557,6 +4578,7 @@ fn check_property_body(
     refs: &mut RefSink,
     locals: &mut LocalsSink,
     tys: &Arc<Types>,
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
 ) {
     let Some((mut resolved, _)) = build_privileged_resolved(
         target_name,
@@ -4740,6 +4762,8 @@ fn check_property_body(
             callees: &mut callees,
         },
     );
+
+    check_d1_sql_sites(d1_sql, target_name, unit_tables, &callees, errors);
 
     // Conservative restates-refinement flag: a single-binding property whose
     // body is exactly `expect <pred>` restating the bound var's refinement.

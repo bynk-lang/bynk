@@ -3006,6 +3006,7 @@ fn run_checks(
         &test_asset_files,
         snapshot_files,
         &d1_migrations,
+        d1_sql.as_deref(),
         &test_binding_modules,
         &schema_effective_versions.events,
         &unit_callees,

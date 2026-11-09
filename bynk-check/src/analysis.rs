@@ -839,6 +839,7 @@ pub fn analyse_project_with_policy(
         &mut refs,
         &mut locals,
         tys,
+        d1_sql.as_deref(),
     );
     errors.extend_attributed_by_span(&parsed, test_errors);
 
