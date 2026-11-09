@@ -26,3 +26,7 @@ examples/**/bynk.schema.lock
 .vscode/
 *.swp
 *.swo
+
+# The Dev Container feature's CI-only release cache
+# (scripts/ci/devcontainer-feature-prefetch.sh); never committed or published.
+features/src/bynk/ci-release-cache/
