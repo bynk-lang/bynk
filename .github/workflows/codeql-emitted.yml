@@ -55,7 +55,7 @@ jobs:
       # failed-run SARIF under the default `/language:javascript-typescript`
       # category (codeql.yml's) when the job fails, which is exactly when a
       # canary goes unflagged. The script builds and analyses the database.
-      - uses: github/codeql-action/setup-codeql@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+      - uses: github/codeql-action/setup-codeql@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         id: codeql
         with:
           languages: javascript-typescript
@@ -71,7 +71,7 @@ jobs:
         run: cat "$RUNNER_TEMP/codeql-emitted/summary.md" >>"$GITHUB_STEP_SUMMARY" 2>/dev/null || true
       # Skipped when a canary was not flagged (the script exits 1): the models
       # are blind then, and an empty upload would mark real alerts fixed.
-      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           # The category (`emitted-ts`) is embedded by the script.
           sarif_file: ${{ runner.temp }}/codeql-emitted/results-examples.sarif
