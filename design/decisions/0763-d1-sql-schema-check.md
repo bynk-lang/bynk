@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage
-changelog: "`bynk check` prepares each literal `D1` statement against the schema its migrations build, reporting a syntax error, an unknown table or column, a wrong `?N` count and a `select[T]` field with no column (`bynk.d1.sql_invalid`, `bynk.d1.sql_param_count`, `bynk.d1.select_field_missing`, and the warning `bynk.d1.migration_invalid`); `[check] d1_sql = false` turns it off"
----
+# 0763 — A D1 call's literal SQL is checked against the schema its migrations build
 
-## ADR: d1-sql-schema-check
-title: A D1 call's literal SQL is checked against the schema its migrations build
-summary: Prepare each statement on a bundled in-memory SQLite, with the migrations applied, at check time
+- **Status:** Accepted (v0.525)
 
 **Context.** A D1 call's SQL is a literal (ADR 0666 B) and the schema is the
 project's `migrations/` folder, yet a misspelt column, a missing table or a
