@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk build --profile dev|release` and `[profile.dev]`/`[profile.release]` tables in `bynk.toml` choose whether a build carries the function-contract call-site guard; the default stays `release`, the bytes `bynk compile` writes (#3054)"
----
+# 0761 — Named build profiles for `bynk build`
 
-## ADR: bynk-build-profiles
-title: Named build profiles for `bynk build`
-summary: two fixed profiles, `contracts` the only knob, only `bynk build` reads them
+- **Status:** Accepted (v0.523.1)
 
 **Context.** `bynk test` and `bynk dev` build with the function-contract call-site guard and `compile`, `deploy` and `tail` without it, so which a project gets is implied by the verb. #3054 settled naming the two as profiles; the first slice (the `bynk build` verb and `[build]`) deferred them because they are hard to reverse once documented.
 
