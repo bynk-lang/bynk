@@ -222,6 +222,26 @@ fn parses(s: &str) -> bool {
 /// `()` are dropped: a list a comment forces onto several lines gains a
 /// trailing comma, and a unit tail the formatter would omit is kept to carry a
 /// comment.
+/// A multi-line token with the indent its continuation lines share removed, so
+/// only a change to their relative indentation or content shows.
+fn dedent_continuations(text: &str) -> String {
+    let mut lines = text.split('\n');
+    let first = lines.next().unwrap_or_default();
+    let rest: Vec<&str> = lines.collect();
+    let common = rest
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    let mut out = first.to_string();
+    for l in rest {
+        out.push('\n');
+        out.push_str(l.get(common..).unwrap_or(l.trim_start()));
+    }
+    out
+}
+
 fn skeleton(s: &str) -> Vec<String> {
     let tokens = tokenize(s).expect("formatted output tokenizes");
     let mut out = Vec::new();
@@ -235,14 +255,7 @@ fn skeleton(s: &str) -> Vec<String> {
         // so a comment that pushes it one level deeper (#3110) moves its lines'
         // indentation, not its content.
         let text = &s[t.span.start..t.span.end];
-        out.push(if text.contains('\n') {
-            text.lines()
-                .map(str::trim_start)
-                .collect::<Vec<_>>()
-                .join("\n")
-        } else {
-            text.to_string()
-        });
+        out.push(dedent_continuations(text));
         prev_end = t.span.end;
     }
     out.retain(|t| t != ",");

@@ -982,3 +982,41 @@ fn keeps_comments_between_record_fields() {
         assert_eq!(out, again, "{name}: not idempotent");
     }
 }
+
+/// #3110: a `(` now passes a same-line comment on to what follows. Where the
+/// formatter cannot re-attach it (a parameter list, a parenthesised
+/// expression, a lambda's parameters) it still refuses rather than drop it.
+#[test]
+fn refuses_a_comment_after_a_paren_it_cannot_reattach() {
+    for (name, source) in [
+        (
+            "fn parameters",
+            "commons demo\n\nfn f( // c\n  a: Int\n) -> Int {\n  a\n}\n",
+        ),
+        (
+            "parenthesised expression",
+            "commons demo\n\nfn f(a: Int) -> Int {\n  ( // c\n    a\n  )\n}\n",
+        ),
+        (
+            "lambda parameters",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map(( // c\n    x\n  ) => x)\n}\n",
+        ),
+    ] {
+        expect_refusal(name, source);
+    }
+}
+
+/// #3110: a commented call inside a record spread's `...base` is refused, not
+/// dropped; inside a field's value it is kept.
+#[test]
+fn a_commented_call_in_a_record_spread_base_is_refused_and_in_a_field_value_kept() {
+    expect_refusal(
+        "spread base",
+        "commons demo\n\nfn f(t: T) -> T {\n  T {\n    ...g(\n      1, // c\n      2\n    ),\n    a: 1,\n  }\n}\n",
+    );
+    let out = format_idempotent(
+        "field value",
+        "commons demo\n\nfn f(t: T) -> T {\n  T {\n    a: g(\n      1, // c\n      2\n    ),\n  }\n}\n",
+    );
+    assert!(out.contains("\t\t\t1,  // c\n\t\t\t2\n"), "{out}");
+}
