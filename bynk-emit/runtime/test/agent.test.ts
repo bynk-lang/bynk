@@ -346,3 +346,49 @@ test("sweepAgentInstances: wakes each id, reports per id, and states current", a
   const bad = await sweepAgentInstances(binding, "{\"ids\": [1]}", 2);
   assert.equal(bad.status, 400);
 });
+
+test("#3132 workers proxy: the caller's env never rides the inter-DO request body", async () => {
+  const SECRET = "sk-live-hunter2-3132";
+  let rawBody = "";
+  const stub = {
+    async fetch(_input: string, init?: { body?: string }): Promise<Response> {
+      rawBody = init?.body ?? "";
+      return new Response(JSON.stringify(null), { headers: { "content-type": "application/json" } });
+    },
+  };
+  const ns: DurableObjectNamespace = { idFromName: (n: string) => n, get: () => stub as never };
+  const proxy = makeWorkersAgent<{ ping(a: number, deps: unknown): Promise<unknown> }>(ns, "k");
+  const env = { API_TOKEN: SECRET, VAR: "plain", COUNTER: { fake: "binding" } };
+  class Provider {
+    deps = { env, label: "p" };
+    method(): void {}
+  }
+  await proxy.ping(1, { env, who: "alice", cap: new Provider() });
+  const body = JSON.parse(rawBody) as { args: unknown[]; deps: Record<string, unknown> };
+  assert.equal("env" in body.deps, false, "env key is stripped");
+  assert.equal(body.deps.who, "alice", "other deps survive");
+  assert.equal(rawBody.includes("API_TOKEN"), false, "a provider's nested env is stripped too");
+  assert.deepEqual((body.deps.cap as { deps: unknown }).deps, { label: "p" });
+  assert.deepEqual(body.args, [1]);
+  assert.equal(rawBody.includes(SECRET), false, "no secret value on the wire");
+  assert.equal(rawBody.includes("plain"), false, "no var value on the wire");
+});
+
+test("#3132 workers proxy: the keyed-agent branch strips env too", async () => {
+  const SECRET = "sk-live-keyed-3132";
+  let rawBody = "";
+  const stub = {
+    async fetch(_input: string, init?: { body?: string }): Promise<Response> {
+      rawBody = init?.body ?? "";
+      return new Response(JSON.stringify(null), { headers: { "content-type": "application/json" } });
+    },
+  };
+  const ns: DurableObjectNamespace = { idFromName: (n: string) => n, get: () => stub as never };
+  const keyCodec: WireCodec = { enc: (v: unknown) => v as JsonValue, dec: (j: JsonValue) => Ok(j) } as never;
+  const proxy = makeWorkersAgent<{ ping(deps: unknown): Promise<unknown> }>(ns, "k", undefined, keyCodec);
+  await proxy.ping({ env: { API_TOKEN: SECRET }, who: "bob" });
+  const body = JSON.parse(rawBody) as { deps: Record<string, unknown>; key: unknown };
+  assert.equal(body.key, "k", "the key still rides along");
+  assert.equal("env" in body.deps, false);
+  assert.equal(rawBody.includes(SECRET), false);
+});

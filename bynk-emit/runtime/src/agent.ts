@@ -135,6 +135,20 @@ export function encodeAgentResult(wire: AgentWire, method: string, result: unkno
 // Workers-mode agent method call: route through the DO stub's `fetch` under
 // the `/_bynk/agent/<method>` wire protocol. `args` are already encoded, and
 // the result comes back as raw JSON for the caller to decode.
+// #3132: the caller's `deps` crosses the wire to a Durable Object that rebuilds
+// `env`, its `given` providers and its events fan-out from its own
+// `this.__env`. The forwarded `env` gives the callee nothing it lacks, and its
+// secrets and vars (plain strings) would ride the internal request body, where a
+// tail worker or request log can read them. A `given` provider built with the
+// Worker `env` also holds it as an own field (`this.deps = { env, ... }`), so the
+// strip covers `env` at any depth, not only the top. The runtime cannot tell a
+// provider from plain data, so one replacer drops every `env` key. Every agent
+// call (handler, service, ws lifecycle body) funnels through here.
+function stripRebuiltDeps(deps: unknown): unknown {
+  if (typeof deps !== "object" || deps === null) return deps;
+  return JSON.parse(JSON.stringify(deps, (k, v: unknown) => (k === "env" ? undefined : v)));
+}
+
 export async function callDurableObjectMethod(
   stub: DurableObjectStub,
   method: string,
@@ -142,11 +156,12 @@ export async function callDurableObjectMethod(
   deps: unknown,
   key?: JsonValue,
 ): Promise<JsonValue> {
+  const wireDeps = stripRebuiltDeps(deps);
   const response = await stub.fetch(`https://_bynk/_bynk/agent/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     // #1818: the key rides along only for an agent that reads it.
-    body: JSON.stringify(key === undefined ? { args, deps } : { args, deps, key }),
+    body: JSON.stringify(key === undefined ? { args, deps: wireDeps } : { args, deps: wireDeps, key }),
   });
   if (!response.ok) throw new Error(await response.text());
   return (await response.json()) as JsonValue;
