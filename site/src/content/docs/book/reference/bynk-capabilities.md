@@ -872,14 +872,14 @@ against it. Nothing runs. At the literal it reports:
 - `bynk.d1.sql_param_count`: the SQL uses a different number of parameters than
   the list passes. The count is SQLite's own (the highest `?N`, a bare `?` the
   next one), the rule D1 refuses a mismatch by. It is checked when the list is a
-  list literal;
+  list literal, or a name `let`-bound to one in scope;
 - `bynk.d1.select_field_missing`: a `select[T]` / `firstAs[T]` row type has a
   field with no column of that name.
 
 A migration that doesn't apply is the warning `bynk.d1.migration_invalid`, and
 that database's statements are then not checked. A database with no migrations
 directory isn't checked either. Not yet checked: `batch` statements, statements
-in test bodies, and a list that isn't a literal. A program that creates tables
+in test bodies, and a list that is neither a literal nor a `let` bound to one. A program that creates tables
 at request time, or runs DDL (such as a `CREATE TABLE` without `IF NOT EXISTS` for a
 table a migration already made) that SQLite refuses at prepare time, can turn the
 check off:

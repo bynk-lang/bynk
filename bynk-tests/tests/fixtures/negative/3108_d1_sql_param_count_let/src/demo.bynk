@@ -1,0 +1,19 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int, note: String }
+type Wrong = { id: String, price: Int }
+
+// #3108: a parameter list bound with `let` is counted like a list literal.
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    let one = [Text(id)]
+    let _ <- Orders.all("SELECT id FROM orders WHERE id = ?1", one)
+    let _ <- Orders.all("SELECT id FROM orders WHERE id = ?2", one)
+    let _ <- Orders.all("SELECT id FROM orders", one)
+    true
+  }
+}
