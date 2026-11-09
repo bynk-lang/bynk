@@ -144,7 +144,21 @@ mod native {
     /// connection is only ever prepared against (never written), so sharing one
     /// between analyses is safe. Bounded: past [`CACHE_LIMIT`] entries it starts
     /// over, so edited migrations' stale schemas don't pile up.
-    static SCHEMA_CACHE: Mutex<Option<HashMap<u64, Arc<Mutex<Connection>>>>> = Mutex::new(None);
+    static SCHEMA_CACHE: Mutex<Option<HashMap<u64, CachedSchema>>> = Mutex::new(None);
+
+    /// A cached schema with the migration contents it was built from, compared
+    /// on a hit so a hash collision can't reuse another database's schema.
+    struct CachedSchema {
+        contents: Vec<(String, String)>,
+        conn: Arc<Mutex<Connection>>,
+    }
+
+    fn migration_contents(files: &[crate::d1_migrations::MigrationFile]) -> Vec<(String, String)> {
+        files
+            .iter()
+            .map(|f| (f.name.clone(), f.sql.clone()))
+            .collect()
+    }
     const CACHE_LIMIT: usize = 64;
 
     fn migrations_key(database: &str, files: &[crate::d1_migrations::MigrationFile]) -> u64 {
@@ -169,10 +183,16 @@ mod native {
                     continue;
                 }
                 let key = migrations_key(database, files);
+                let contents = migration_contents(files);
+                // A poisoned lock (a panic elsewhere) is recovered, not treated as
+                // a miss forever: the cache holds only complete entries.
                 let cached = SCHEMA_CACHE
                     .lock()
-                    .ok()
-                    .and_then(|c| c.as_ref()?.get(&key).cloned());
+                    .unwrap_or_else(|e| e.into_inner())
+                    .as_ref()
+                    .and_then(|c| c.get(&key))
+                    .filter(|hit| hit.contents == contents)
+                    .map(|hit| hit.conn.clone());
                 if let Some(conn) = cached {
                     schemas.insert(database.clone(), conn);
                     continue;
@@ -181,12 +201,19 @@ mod native {
                     continue;
                 };
                 let conn = Arc::new(Mutex::new(conn));
-                if let Ok(mut cache) = SCHEMA_CACHE.lock() {
+                {
+                    let mut cache = SCHEMA_CACHE.lock().unwrap_or_else(|e| e.into_inner());
                     let cache = cache.get_or_insert_with(HashMap::new);
                     if cache.len() >= CACHE_LIMIT {
                         cache.clear();
                     }
-                    cache.insert(key, conn.clone());
+                    cache.insert(
+                        key,
+                        CachedSchema {
+                            contents,
+                            conn: conn.clone(),
+                        },
+                    );
                 }
                 schemas.insert(database.clone(), conn);
             }
@@ -224,7 +251,7 @@ mod native {
                 let Some(conn) = self.schemas.get(&database) else {
                     continue;
                 };
-                let Ok(conn) = conn.lock() else { continue };
+                let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(err) = check_site(&conn, site, &database, source) {
                     out.push(err);
                 }
