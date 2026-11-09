@@ -173,6 +173,18 @@ pub fn complete_in(
             })
             .collect();
     }
+    // 0b. #2686: `@<cursor>` after a `Matches(…)` / `IsoDate` refinement — the
+    //     `@example` annotation, the only one valid there.
+    if in_refinement_annotation_position(line_prefix) {
+        return vec![Completion::item(
+            "example",
+            CompletionKind::Keyword,
+            Some(
+                "@example(<literal>) — the value `Val` uses for this pattern; checked against it"
+                    .to_string(),
+            ),
+        )];
+    }
     // 1. Inside `consumes U { … <cursor>` — the capabilities U exports.
     if let Some(unit) = consumes_brace_unit(line_prefix) {
         // #2887: after `T as` the next word is the alias, a name of the user's
@@ -912,6 +924,23 @@ pub const JSON_OPTIONS_VALUES: &[(&str, &str)] = &[
         "plain JSON for non-Bynk clients: `Some(v)` is `v`, `None` is `null`",
     ),
 ];
+
+/// #2686: whether the cursor follows `@` (and any partial name) after a
+/// `where … Matches(…)` / `IsoDate` refinement on the line: a type declaration
+/// or a record field, where `@example` may go.
+pub fn in_refinement_annotation_position(line_prefix: &str) -> bool {
+    let Some(at) = line_prefix.rfind('@') else {
+        return false;
+    };
+    let partial = &line_prefix[at + 1..];
+    if !partial.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return false;
+    }
+    let before = &line_prefix[..at];
+    before.contains(" where ")
+        && (before.contains("Matches(") || before.contains("IsoDate"))
+        && !before.contains("@example")
+}
 
 /// v0.140 (ADR 0163): the `@cache` handler-annotation arguments, offered at an
 /// argument-name position inside `@cache( … )`. `maxAge` is required (the freshness
@@ -3266,6 +3295,24 @@ static EMPTY_CONSUMES: Vec<bynk_syntax::ast::ConsumesDecl> = Vec::new();
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn at_after_a_matches_refinement_offers_example() {
+        let line = r#"type Code = String where Matches("[A-Z]{3}") @"#;
+        assert!(in_refinement_annotation_position(line));
+        let got = complete(line, line, None);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].label, "example");
+        assert!(in_refinement_annotation_position(
+            r#"  code: String where IsoDate @ex"#
+        ));
+        assert!(!in_refinement_annotation_position(
+            r#"type Sku = String where NonEmpty @"#
+        ));
+        assert!(!in_refinement_annotation_position(
+            r#"type C = String where Matches("a") @example("a") @"#
+        ));
+    }
+
     use super::*;
     use bynk_check::firstparty::BYNK_LIST_SRC;
 

@@ -613,6 +613,55 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
     None
 }
 
+/// #2686: hover for an `@example` after a type declaration's or record field's
+/// refinement: the example and the refinement it has to satisfy. `None`
+/// elsewhere.
+pub fn describe_refinement_example_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    let render = |r: &bynk_syntax::ast::Refinement| -> Option<String> {
+        let ann = r
+            .annotations
+            .iter()
+            .find(|a| a.name.name == "example" && span_covers(a.span, offset))?;
+        let value = ann
+            .args
+            .first()
+            .map(|a| bynk_fmt::expr_to_string(&a.value))
+            .unwrap_or_default();
+        Some(format!(
+            "**`@example({value})`** — the value `Val` uses where it cannot generate one; checked against `{}`. Test-only: it changes neither the type nor its wire format.",
+            bynk_syntax::print::refinement_to_string(r)
+        ))
+    };
+    for item in items {
+        let CommonsItem::Type(t) = item else { continue };
+        match &t.body {
+            bynk_syntax::ast::TypeBody::Refined { refinement, .. }
+            | bynk_syntax::ast::TypeBody::Opaque { refinement, .. } => {
+                if let Some(h) = refinement.as_ref().and_then(render) {
+                    return Some(h);
+                }
+            }
+            bynk_syntax::ast::TypeBody::Record(rec) => {
+                for f in &rec.fields {
+                    if let Some(h) = f.refinement.as_ref().and_then(render) {
+                        return Some(h);
+                    }
+                }
+            }
+            bynk_syntax::ast::TypeBody::Sum(_) => {}
+        }
+    }
+    None
+}
+
 /// #2137 (ADR 0156): hover for the contextual `advance` keyword of an
 /// `advance Clock by <Duration>` statement. `None` anywhere else, so an
 /// ordinary identifier named `advance` keeps its own hover.
@@ -1031,7 +1080,32 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans = Vec::new();
+    // #2686: `@example` after a type declaration's or record field's refinement.
+    fn push_refinement(spans: &mut Vec<Span>, r: &Option<bynk_syntax::ast::Refinement>) {
+        for ann in r.iter().flat_map(|r| &r.annotations) {
+            spans.push(Span {
+                file: ann.span.file,
+                start: ann.span.start,
+                end: ann.name.span.end,
+            });
+        }
+    }
     for item in items {
+        if let CommonsItem::Type(t) = item {
+            match &t.body {
+                bynk_syntax::ast::TypeBody::Refined { refinement, .. }
+                | bynk_syntax::ast::TypeBody::Opaque { refinement, .. } => {
+                    push_refinement(&mut spans, refinement)
+                }
+                bynk_syntax::ast::TypeBody::Record(r) => {
+                    for f in &r.fields {
+                        push_refinement(&mut spans, &f.refinement);
+                    }
+                }
+                bynk_syntax::ast::TypeBody::Sum(_) => {}
+            }
+            continue;
+        }
         let handlers: &[Handler] = match item {
             CommonsItem::Service(s) => &s.handlers,
             CommonsItem::Agent(a) => &a.handlers,
@@ -3245,6 +3319,18 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hover_on_an_example_names_the_refinement() {
+        let src = "commons c\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")\n";
+        let at = src.find("example").unwrap();
+        let h = describe_refinement_example_at(src, at).expect("hover");
+        assert!(
+            h.contains("@example(\"ABC\")") && h.contains("Matches"),
+            "{h}"
+        );
+        assert!(describe_refinement_example_at(src, 3).is_none());
+    }
+
     /// #2683: hover on `within` names its signature and the abandoned-effect
     /// caveat, and only when the receiver is an `Effect`.
     #[test]

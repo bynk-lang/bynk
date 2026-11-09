@@ -133,8 +133,8 @@ impl<'a> Parser<'a> {
                 let mut refinement = None;
                 let mut end_span = base_span;
                 if self.eat(TokenKind::Where).is_some() {
-                    let r = self.parse_refinement()?;
-                    end_span = r.span;
+                    let mut r = self.parse_refinement()?;
+                    end_span = self.parse_refinement_annotations(&mut r)?;
                     refinement = Some(r);
                 }
                 (
@@ -151,8 +151,8 @@ impl<'a> Parser<'a> {
                 let mut refinement = None;
                 let mut end_span = base_span;
                 if self.eat(TokenKind::Where).is_some() {
-                    let r = self.parse_refinement()?;
-                    end_span = r.span;
+                    let mut r = self.parse_refinement()?;
+                    end_span = self.parse_refinement_annotations(&mut r)?;
                     refinement = Some(r);
                 }
                 (
@@ -262,8 +262,8 @@ impl<'a> Parser<'a> {
         let mut refinement = None;
         let mut end_span = type_ref.span();
         if self.eat(TokenKind::Where).is_some() {
-            let r = self.parse_refinement()?;
-            end_span = r.span;
+            let mut r = self.parse_refinement()?;
+            end_span = self.parse_refinement_annotations(&mut r)?;
             refinement = Some(r);
         }
         // v0.11: an optional `= <expr>` initial-value, used by agent state
@@ -614,7 +614,24 @@ impl<'a> Parser<'a> {
             span = span.merge(p.span);
             predicates.push(p);
         }
-        Ok(Refinement { predicates, span })
+        Ok(Refinement {
+            predicates,
+            annotations: Vec::new(),
+            span,
+        })
+    }
+
+    /// #2686: zero or more `@name(args)` annotations after a type declaration's
+    /// or record field's refinement (`@example("ABC")`). Returns the end of the
+    /// last one, if any. The checker matches the name against its registry.
+    fn parse_refinement_annotations(&mut self, r: &mut Refinement) -> Result<Span, CompileError> {
+        let mut end = r.span;
+        while self.peek_kind() == Some(TokenKind::At) {
+            let ann = self.parse_annotation()?;
+            end = ann.span;
+            r.annotations.push(ann);
+        }
+        Ok(end)
     }
 
     fn parse_refinement_pred(&mut self) -> Result<RefinementPred, CompileError> {

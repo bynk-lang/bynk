@@ -34,10 +34,10 @@ where_bound ::= identifier ":" identifier ("+" identifier)*
 visibility_modifier ::= "private"
 type_decl ::= visibility_modifier? "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
 type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
-opaque_type ::= "opaque" base_type ("where" refinement)?
-refined_type ::= base_type ("where" refinement)?
+opaque_type ::= "opaque" base_type ("where" refinement)? store_annotation*
+refined_type ::= base_type ("where" refinement)? store_annotation*
 record_type ::= "{" (record_field ("," record_field)*)? ","? "}"
-record_field ::= identifier ":" type_ref ("where" refinement)? ("=" expression)?
+record_field ::= identifier ":" type_ref ("where" refinement)? store_annotation* ("=" expression)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
 asset_decl ::= visibility_modifier? "asset" identifier "=" string_literal ("at" string_literal)?
 embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal

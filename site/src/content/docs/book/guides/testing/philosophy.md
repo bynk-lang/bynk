@@ -58,7 +58,7 @@ Some values cannot be generated or fabricated blindly — there is no sensible w
 invent a string matching an arbitrary regular expression — so a bare `Val` (or a
 `for all`) over a `Matches`-refined type is rejected
 ([`bynk.val.needs_pin`](/book/troubleshooting/val-errors/)) and you must supply
-one; an agent, which has no domain to draw from, cannot be generated at all. The
+one (a pin, or an `@example` on the type for `Val`); an agent, which has no domain to draw from, cannot be generated at all. The
 language would rather stop than guess.
 
 ## Contracts: the claim that is always on

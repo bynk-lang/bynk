@@ -52,8 +52,9 @@ mod linearity;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
-pub(crate) use refinements::refinement_needs_pin;
+pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
+pub(crate) use refinements::{refinement_needs_pin, refinement_needs_pin_without_example};
 
 /// #2869: the first predicate of a refined or opaque `String` type that `value`
 /// fails, in the order the emitted boundary checks them (`None` when it holds
@@ -6723,6 +6724,7 @@ mod pure_helper_pins {
     }
     fn refinement(preds: Vec<PredKind>) -> Refinement {
         Refinement {
+            annotations: Vec::new(),
             predicates: preds.into_iter().map(pred).collect(),
             span: sp(),
         }

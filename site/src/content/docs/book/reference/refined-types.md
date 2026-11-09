@@ -49,7 +49,9 @@ A predicate must apply to the base type (`bynk.types.predicate_base_mismatch`).
 An `InRange` with `lo > hi` is rejected (`bynk.types.inverted_range`), as is a set
 of predicates that admit no value (`bynk.types.empty_refinement`) or a negative
 length (`bynk.types.negative_length`). An invalid regex is
-`bynk.types.invalid_regex`. The emitted boundary check runs a `Matches` regex
+`bynk.types.invalid_regex`. A `Matches` or `IsoDate` refinement may be followed
+by `@example("…")`, a test witness for `Val` that the compiler checks against
+the refinement ([`@example`](/book/reference/testing/#val-example)). The emitted boundary check runs a `Matches` regex
 under the platform's backtracking `RegExp`, on untrusted input, so the compiler
 rejects a regex that can match the same text along many paths (a
 denial-of-service risk):

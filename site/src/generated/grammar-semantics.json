@@ -1452,8 +1452,28 @@
       "summary": "A `Matches` pattern, or a regex method's pattern, can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS)."
     },
     {
+      "code": "bynk.types.duplicate_example",
+      "summary": "A refinement carries more than one `@example`."
+    },
+    {
       "code": "bynk.types.empty_refinement",
       "summary": "A refinement admits no values (contradictory predicates)."
+    },
+    {
+      "code": "bynk.types.example_not_literal",
+      "summary": "An `@example` is not exactly one literal of the base type."
+    },
+    {
+      "code": "bynk.types.example_on_named_field",
+      "summary": "An `@example` on a field whose type is a named type (it belongs on the named type)."
+    },
+    {
+      "code": "bynk.types.example_unneeded",
+      "summary": "An `@example` on a refinement `Val` can already generate (only `Matches` and `IsoDate` take one)."
+    },
+    {
+      "code": "bynk.types.example_violates",
+      "summary": "An `@example` does not satisfy its refinement's predicates."
     },
     {
       "code": "bynk.types.invalid_regex",
@@ -1482,6 +1502,10 @@
     {
       "code": "bynk.types.predicate_base_mismatch",
       "summary": "A predicate does not apply to the type's base (e.g. a string predicate on an `Int`)."
+    },
+    {
+      "code": "bynk.types.unknown_annotation",
+      "summary": "An annotation after a refinement is not `@example`."
     }
   ],
   "rejected_handler": [

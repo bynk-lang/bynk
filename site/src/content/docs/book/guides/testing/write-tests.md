@@ -115,7 +115,15 @@ suite quantities {
 
 A `Matches`-refined string cannot be fabricated blindly — a bare `Val` of one is
 rejected ([`bynk.val.needs_pin`](/book/troubleshooting/val-errors/)); pin it
-instead. `Val[T]` is test-only.
+instead, or give the type an example once, where it is declared, so every `Val`
+of it (and the derived smoke) has a value:
+
+```bynk,fragment
+type Code = String where Matches("[A-Z]{3}") @example("ABC")
+```
+
+The compiler checks that the example matches the pattern
+([`@example`](/book/reference/testing/#val-example)). `Val[T]` is test-only.
 
 ## Snapshot a decoded value
 

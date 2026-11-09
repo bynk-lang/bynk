@@ -1,0 +1,2 @@
+# #2686: Val of a patterned type, field or nesting uses its @example, run.
+passed=4 failed=0

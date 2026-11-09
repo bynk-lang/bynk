@@ -1,0 +1,3 @@
+commons demo.d
+
+type Tag = { code: String where Matches("[a-z]+") @example("ABC") }
