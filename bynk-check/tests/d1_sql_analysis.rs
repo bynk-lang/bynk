@@ -15,6 +15,7 @@ fn source(statements: &str) -> String {
     format!(
         "context demo\n\nconsumes bynk.cloudflare {{ D1 }}\n\ncapability Orders = D1\n\n\
          type Order = {{ id: String, total: Int, note: Option[String] }}\n\n\
+         const HIDDEN: String = \"SELECT id, total AS amount FROM orders\"\n\n\
          service probe {{\n  on call(id: String) -> Effect[Bool] given Orders {{\n{statements}    true\n  }}\n}}\n"
     )
 }
@@ -382,6 +383,16 @@ fn a_decode_is_checked_against_the_statements_columns() {
         "{ let text = \"[]\"\n        Json.decodeSql[List[Order]](text) is Ok(_) }",
     );
     assert!(categories("dec-shadow", "", &shadowed).is_empty());
+    // A `const` statement is linked like a literal.
+    let by_const = "    let rows <- Orders.all(HIDDEN, [])\n    \
+                    let _ = match rows {\n      Ok(text) => Json.decodeSql[List[Order]](text) is Ok(_)\n      Err(_) => false\n    }\n";
+    assert_eq!(
+        categories("dec-const", "", by_const),
+        ["bynk.d1.select_field_missing"]
+    );
+    // Without migrations there are no columns to read, so a decode stays silent
+    // (the parameter count is all such a binding is checked for, #3126).
+    assert!(categories_with("dec-nomig", "", &bad, false).is_empty());
     // `first` and `Ok(Some(text))`.
     let first = "    let row <- Orders.first(\"SELECT id FROM orders\", [])\n    \
                  let _ = match row {\n      Ok(Some(text)) => Json.decodeSql[Order](text) is Ok(_)\n      _ => false\n    }\n";
