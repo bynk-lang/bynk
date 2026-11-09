@@ -8,6 +8,9 @@
 use super::*;
 use crate::error::Applicability;
 
+/// #3110: a record literal's `...base` (if any), its fields, and its comments.
+type RecordItems = (Option<Expr>, Vec<FieldInit>, Option<Box<ListTrivia>>);
+
 impl<'a> Parser<'a> {
     // -- expressions --
 
@@ -661,13 +664,7 @@ impl<'a> Parser<'a> {
                     {
                         // Method call: `receiver.method(args)`.
                         self.bump();
-                        let mut args = Vec::new();
-                        if self.peek_kind() != Some(TokenKind::RParen) {
-                            args.push(self.parse_expr()?);
-                            while self.eat(TokenKind::Comma).is_some() {
-                                args.push(self.parse_expr()?);
-                            }
-                        }
+                        let (args, trivia) = self.parse_arg_list_body()?;
                         let close = self
                             .expect(TokenKind::RParen, "to close the method-call argument list")?;
                         let span = e.span.merge(close.span);
@@ -678,6 +675,7 @@ impl<'a> Parser<'a> {
                                 method: member,
                                 type_args,
                                 args,
+                                trivia,
                             },
                             span,
                         };
@@ -737,22 +735,22 @@ impl<'a> Parser<'a> {
         let type_ref = self.parse_type_ref("as the type argument of `Val[T]`")?;
         let close_b = self.expect(TokenKind::RBracket, "to close `Val[T]`")?;
         let mut args = Vec::new();
+        let mut trivia = None;
         let mut end = close_b.span;
         if self.peek_kind() == Some(TokenKind::LParen) {
             self.bump();
-            if self.peek_kind() != Some(TokenKind::RParen) {
-                args.push(self.parse_expr()?);
-                while self.eat(TokenKind::Comma).is_some() {
-                    args.push(self.parse_expr()?);
-                }
-            }
+            (args, trivia) = self.parse_arg_list_body()?;
             end = self
                 .expect(TokenKind::RParen, "to close the `Val` arguments")?
                 .span;
         }
         Ok(Expr {
             id: self.alloc_expr_id(),
-            kind: ExprKind::Val { type_ref, args },
+            kind: ExprKind::Val {
+                type_ref,
+                args,
+                trivia,
+            },
             span: kw_span.merge(end),
         })
     }
@@ -1058,13 +1056,7 @@ impl<'a> Parser<'a> {
                         .with_note("a bare `name[T]` value form is reserved"));
                     }
                     self.bump();
-                    let mut args = Vec::new();
-                    if self.peek_kind() != Some(TokenKind::RParen) {
-                        args.push(self.parse_expr()?);
-                        while self.eat(TokenKind::Comma).is_some() {
-                            args.push(self.parse_expr()?);
-                        }
-                    }
+                    let (args, trivia) = self.parse_arg_list_body()?;
                     let close_paren =
                         self.expect(TokenKind::RParen, "to close the argument list")?;
                     return Ok(Expr {
@@ -1073,6 +1065,7 @@ impl<'a> Parser<'a> {
                             name: ident.clone(),
                             type_args,
                             args,
+                            trivia,
                         },
                         span: ident.span.merge(close_paren.span),
                     });
@@ -1088,13 +1081,7 @@ impl<'a> Parser<'a> {
                     && !self.next_token_on_new_line(ident.span)
                 {
                     self.bump();
-                    let mut args = Vec::new();
-                    if self.peek_kind() != Some(TokenKind::RParen) {
-                        args.push(self.parse_expr()?);
-                        while self.eat(TokenKind::Comma).is_some() {
-                            args.push(self.parse_expr()?);
-                        }
-                    }
+                    let (args, trivia) = self.parse_arg_list_body()?;
                     let close = self.expect(TokenKind::RParen, "to close the argument list")?;
                     Ok(Expr {
                         id: self.alloc_expr_id(),
@@ -1102,6 +1089,7 @@ impl<'a> Parser<'a> {
                             name: ident.clone(),
                             type_args: Vec::new(),
                             args,
+                            trivia,
                         },
                         span: ident.span.merge(close.span),
                     })
@@ -1268,46 +1256,107 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// #3110: the arguments of a call, up to (not including) its `)`. Comments
+    /// above an argument, and at the end of its line, ride along; the comments
+    /// before the `)` close the list. The trivia is `None` when there are none.
+    fn parse_arg_list_body(
+        &mut self,
+    ) -> Result<(Vec<Expr>, Option<Box<ListTrivia>>), CompileError> {
+        let mut args = Vec::new();
+        let mut items = Vec::new();
+        if self.peek_kind() != Some(TokenKind::RParen) {
+            loop {
+                let leading = self.take_leading_trivia();
+                args.push(self.parse_expr()?);
+                let comma = self.eat(TokenKind::Comma);
+                items.push(Trivia {
+                    leading,
+                    trailing: self.take_trailing_trivia(),
+                });
+                if comma.is_none() {
+                    break;
+                }
+            }
+        }
+        let closing = self.take_leading_trivia();
+        Ok((args, Self::list_trivia(items, closing)))
+    }
+
+    /// `None` when no item and no closing slot holds a comment.
+    fn list_trivia(items: Vec<Trivia>, closing: Vec<Comment>) -> Option<Box<ListTrivia>> {
+        (!closing.is_empty()
+            || items
+                .iter()
+                .any(|t| !t.leading.is_empty() || t.trailing.is_some()))
+        .then(|| Box::new(ListTrivia { items, closing }))
+    }
+
+    /// #3110: the items of a record literal after its `{` — an optional
+    /// `...base` spread, then `name: value` fields — up to (not including) the
+    /// `}`. Trivia runs parallel to the spread (if any) and then the fields.
+    fn parse_record_items(&mut self, spread: bool) -> Result<RecordItems, CompileError> {
+        let mut items = Vec::new();
+        let mut base = None;
+        let mut fields = Vec::new();
+        let mut first = true;
+        loop {
+            if self.peek_kind() == Some(TokenKind::RBrace) {
+                break;
+            }
+            let leading = self.take_leading_trivia();
+            if first && spread {
+                self.expect(TokenKind::DotDotDot, "after `{` in a record spread")?;
+                base = Some(self.parse_expr()?);
+            } else {
+                fields.push(self.parse_field_init()?);
+            }
+            first = false;
+            let comma = self.eat(TokenKind::Comma);
+            items.push(Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            });
+            if comma.is_none() {
+                break;
+            }
+        }
+        let closing = self.take_leading_trivia();
+        Ok((base, fields, Self::list_trivia(items, closing)))
+    }
+
     /// Parse `TypeName { field: value, ... }` or `TypeName { ...base, field: value }`
     /// once we've already consumed the type name and the next token is `{`.
     fn parse_record_construction(&mut self, type_name: Ident) -> Result<Expr, CompileError> {
         let open = self.expect(TokenKind::LBrace, "to open the record construction")?;
         // v0.5: spread form `TypeName { ...base, field: value, ... }`.
-        if self.peek_kind() == Some(TokenKind::DotDotDot) {
-            self.bump();
-            let base = self.parse_expr()?;
-            let mut overrides = Vec::new();
-            while self.eat(TokenKind::Comma).is_some() {
-                if self.peek_kind() == Some(TokenKind::RBrace) {
-                    break;
-                }
-                overrides.push(self.parse_field_init()?);
-            }
-            let close = self.expect(TokenKind::RBrace, "to close the record spread")?;
-            let span = type_name.span.merge(close.span);
-            return Ok(Expr {
-                id: self.alloc_expr_id(),
-                kind: ExprKind::RecordSpread {
-                    type_name: Some(type_name),
-                    base: Box::new(base),
-                    overrides,
-                },
-                span,
-            });
-        }
-        let mut fields = Vec::new();
-        while self.peek_kind() != Some(TokenKind::RBrace) {
-            fields.push(self.parse_field_init()?);
-            if self.eat(TokenKind::Comma).is_none() {
-                break;
-            }
-        }
-        let close = self.expect(TokenKind::RBrace, "to close the record construction")?;
+        let spread = self.peek_kind() == Some(TokenKind::DotDotDot);
+        let (base, fields, trivia) = self.parse_record_items(spread)?;
+        let close = self.expect(
+            TokenKind::RBrace,
+            if spread {
+                "to close the record spread"
+            } else {
+                "to close the record construction"
+            },
+        )?;
         let span = type_name.span.merge(close.span);
         let _ = open;
+        let kind = match base {
+            Some(base) => ExprKind::RecordSpread {
+                type_name: Some(type_name),
+                base: Box::new(base),
+                overrides: fields,
+                trivia,
+            },
+            None => ExprKind::RecordConstruction {
+                type_name,
+                fields,
+                trivia,
+            },
+        };
         Ok(Expr {
             id: self.alloc_expr_id(),
-            kind: ExprKind::RecordConstruction { type_name, fields },
+            kind,
             span,
         })
     }
@@ -1315,15 +1364,11 @@ impl<'a> Parser<'a> {
     /// Parse `{ ...base, field: value, ... }` — the bare record-spread form.
     fn parse_bare_record_spread(&mut self) -> Result<Expr, CompileError> {
         let open = self.expect(TokenKind::LBrace, "to open the record spread")?;
-        self.expect(TokenKind::DotDotDot, "after `{` in a record spread")?;
-        let base = self.parse_expr()?;
-        let mut overrides = Vec::new();
-        while self.eat(TokenKind::Comma).is_some() {
-            if self.peek_kind() == Some(TokenKind::RBrace) {
-                break;
-            }
-            overrides.push(self.parse_field_init()?);
+        if self.peek_kind() != Some(TokenKind::DotDotDot) {
+            self.expect(TokenKind::DotDotDot, "after `{` in a record spread")?;
         }
+        let (base, overrides, trivia) = self.parse_record_items(true)?;
+        let base = base.expect("a record spread parses its `...base` first");
         let close = self.expect(TokenKind::RBrace, "to close the record spread")?;
         let span = open.span.merge(close.span);
         Ok(Expr {
@@ -1332,6 +1377,7 @@ impl<'a> Parser<'a> {
                 type_name: None,
                 base: Box::new(base),
                 overrides,
+                trivia,
             },
             span,
         })

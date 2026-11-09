@@ -217,10 +217,31 @@ fn parses(s: &str) -> bool {
 }
 
 /// Token texts, with a marker (and count) wherever blank lines separate two
-/// tokens: the program and its vertical spacing, but not its line breaks. Commas and empty
+/// tokens: the program and its vertical spacing, but not its line breaks (nor the
+/// indentation inside a multi-line string). Commas and empty
 /// `()` are dropped: a list a comment forces onto several lines gains a
 /// trailing comma, and a unit tail the formatter would omit is kept to carry a
 /// comment.
+/// A multi-line token with the indent its continuation lines share removed, so
+/// only a change to their relative indentation or content shows.
+fn dedent_continuations(text: &str) -> String {
+    let mut lines = text.split('\n');
+    let first = lines.next().unwrap_or_default();
+    let rest: Vec<&str> = lines.collect();
+    let common = rest
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    let mut out = first.to_string();
+    for l in rest {
+        out.push('\n');
+        out.push_str(l.get(common..).unwrap_or(l.trim_start()));
+    }
+    out
+}
+
 fn skeleton(s: &str) -> Vec<String> {
     let tokens = tokenize(s).expect("formatted output tokenizes");
     let mut out = Vec::new();
@@ -230,7 +251,11 @@ fn skeleton(s: &str) -> Vec<String> {
         if newlines >= 2 {
             out.push(format!("<{} blank>", newlines - 1));
         }
-        out.push(s[t.span.start..t.span.end].to_string());
+        // A multi-line string literal is re-indented to the depth it sits at,
+        // so a comment that pushes it one level deeper (#3110) moves its lines'
+        // indentation, not its content.
+        let text = &s[t.span.start..t.span.end];
+        out.push(dedent_continuations(text));
         prev_end = t.span.end;
     }
     out.retain(|t| t != ",");

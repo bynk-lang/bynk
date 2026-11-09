@@ -168,6 +168,7 @@ fn split_trivia(tokens: &[Token], source: &str) -> (Vec<Token>, TriviaTable) {
                             | TokenKind::DocLine
                             | TokenKind::LBrace
                             | TokenKind::LBracket
+                            | TokenKind::LParen
                     )
                 })
                 && let Some(prev_end) = last_content_end

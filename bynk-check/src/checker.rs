@@ -4960,6 +4960,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             name,
             type_args,
             args,
+            ..
         } => {
             // v0.9: HttpResult variant call. Prefer HttpResult when the
             // surrounding type implies it; otherwise defer to fn/user-variant
@@ -5031,7 +5032,9 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         ExprKind::Some(inner) => check_some(inner, expr.span, expected, ctx),
         ExprKind::None => check_none(expr.span, expected, ctx),
         ExprKind::Question(inner) => check_question(inner, expr.span, ctx),
-        ExprKind::RecordConstruction { type_name, fields } => {
+        ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } => {
             let ty = check_record_construction(type_name, fields, expected, expr.span, ctx)?;
             // P4c (#2628): a `SqlStatement`'s `sql` is a literal.
             d1::check_statement_fields(ty, fields, ctx);
@@ -5132,6 +5135,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             method,
             type_args,
             args,
+            ..
         } => {
             // `<field>.<op>(…)` on a `store` field — effectful storage
             // operations, dispatched by receiver provenance (a bare ident
@@ -5337,6 +5341,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             type_name,
             base,
             overrides,
+            ..
         } => {
             let ty = check_record_spread(
                 type_name.as_ref(),
@@ -5350,7 +5355,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             Some(ty)
         }
         ExprKind::Expect(inner) => check_expect(inner, expr.span, ctx),
-        ExprKind::Val { type_ref, args } => check_val(type_ref, args, expr.span, ctx),
+        ExprKind::Val { type_ref, args, .. } => check_val(type_ref, args, expr.span, ctx),
         ExprKind::Observation(o) => check_observation(o, expr.span, ctx),
         ExprKind::Faults(f) => check_faults(f, expr.span, ctx),
         ExprKind::Trace { cap, op } => check_trace(cap, op, expr.span, ctx),

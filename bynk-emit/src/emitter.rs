@@ -3106,6 +3106,7 @@ fn collect_refs_in_expr(
             type_name,
             base,
             overrides,
+            ..
         } => {
             if let Some(tn) = type_name {
                 record_name_ref(&tn.name, local_to_file, ctx, out);
@@ -3177,7 +3178,9 @@ fn collect_refs_in_expr(
             collect_refs_in_block(then_block, local_to_file, commons, ctx, out);
             collect_refs_in_block(else_block, local_to_file, commons, ctx, out);
         }
-        ExprKind::RecordConstruction { type_name, fields } => {
+        ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } => {
             record_name_ref(&type_name.name, local_to_file, ctx, out);
             for f in fields {
                 if let Some(v) = &f.value {
@@ -3199,6 +3202,7 @@ fn collect_refs_in_expr(
             method: _,
             type_args,
             args,
+            ..
         } => {
             // #2795: a type named only in an explicit list (`b.probe[Item]()`,
             // `Box.empty[Item]()`) is kept in the emitted call, so it is imported.

@@ -314,6 +314,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             name,
             type_args,
             args,
+            ..
         } => {
             let targs = if type_args.is_empty() {
                 String::new()
@@ -397,7 +398,9 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::Some(v) => format!("Some({})", expr_with_prec(v, 0)),
         ExprKind::None => "None".to_string(),
         ExprKind::Question(v) => format!("{}?", expr_with_prec(v, 8)),
-        ExprKind::RecordConstruction { type_name, fields } => {
+        ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } => {
             let parts: Vec<String> = fields
                 .iter()
                 .map(|f| match &f.value {
@@ -419,6 +422,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             method,
             type_args,
             args,
+            ..
         } => {
             let targs = if type_args.is_empty() {
                 String::new()
@@ -473,6 +477,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             type_name,
             base,
             overrides,
+            ..
         } => {
             let mut parts = vec![format!("...{}", expr_with_prec(base, 0))];
             for f in overrides {
@@ -490,7 +495,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         }
         ExprKind::EffectPure(v) => format!("Effect.pure({})", expr_with_prec(v, 0)),
         ExprKind::Expect(v) => format!("expect {}", expr_with_prec(v, 0)),
-        ExprKind::Val { type_ref, args } => {
+        ExprKind::Val { type_ref, args, .. } => {
             let t = type_ref_to_string(type_ref);
             if args.is_empty() {
                 format!("Val[{t}]")

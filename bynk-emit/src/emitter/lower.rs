@@ -1627,9 +1627,9 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             cx.emitted_early_return = true;
             format!("{tmp}.value")
         }
-        ExprKind::RecordConstruction { type_name, fields } => {
-            pre.absorb(lower_record_construction(type_name, fields, cx))
-        }
+        ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } => pre.absorb(lower_record_construction(type_name, fields, cx)),
         ExprKind::FieldAccess { .. }
             if matches!(
                 cx.commons().callees.get(&e.id),
@@ -1648,6 +1648,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             method,
             type_args,
             args,
+            ..
         } => pre.absorb(lower_method_call(e, receiver, method, type_args, args, cx)),
         // #1750: a value-position `if`/`match`/block that holds a `?` becomes a
         // real statement, so the `?`'s `return` exits the function rather than
@@ -1704,6 +1705,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             type_name: _,
             base,
             overrides,
+            ..
         } => pre.absorb(lower_record_spread(base, overrides, cx)),
         ExprKind::Expect(inner) => {
             // v0.9.1: expect as an expression (v0.112, renamed from `assert`).
@@ -1720,7 +1722,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
                 "__bynkExpect(({value}), \"{location}\", {span_start}, {span_end}, \"expect {src}\")"
             )
         }
-        ExprKind::Val { type_ref, args } => pre.absorb(lower_val(type_ref, args, cx)),
+        ExprKind::Val { type_ref, args, .. } => pre.absorb(lower_val(type_ref, args, cx)),
         ExprKind::Observation(o) => lower_observation(o, cx),
         ExprKind::Faults(f) => lower_faults(f, cx),
         ExprKind::Trace { cap, op } => {

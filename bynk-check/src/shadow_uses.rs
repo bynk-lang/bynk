@@ -150,7 +150,9 @@ where
                     }
                 }
             }
-            ExprKind::RecordConstruction { type_name, fields } => {
+            ExprKind::RecordConstruction {
+                type_name, fields, ..
+            } => {
                 self.field_inits(&type_name.name, fields);
             }
             ExprKind::RecordSpread {

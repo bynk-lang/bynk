@@ -2622,7 +2622,7 @@ impl<'a> Formatter<'a> {
         if b.statements.is_empty()
             && b.tail_leading_comments.is_empty()
             && !any_stmt_trivia
-            && !holds_list_comments(&b.tail)
+            && !holds_comments(&b.tail)
             && self.fits(&format!("{{ {tail_oneline} }}"), reserve)
         {
             self.push("{ ");
@@ -2826,7 +2826,7 @@ impl<'a> Formatter<'a> {
             _ => false,
         };
         // #3067: a list with a comment in it cannot be flattened.
-        if !braced_record && !holds_list_comments(e) && self.fits(&flat, reserve) {
+        if !braced_record && !holds_comments(e) && self.fits(&flat, reserve) {
             self.push(&flat);
             return;
         }
@@ -2848,9 +2848,13 @@ impl<'a> Formatter<'a> {
     fn format_expr_broken(&mut self, e: &Expr, reserve: usize) {
         match &e.kind {
             // `T { field: value, … }` — one field per line.
-            ExprKind::RecordConstruction { type_name, fields } if !fields.is_empty() => {
+            ExprKind::RecordConstruction {
+                type_name,
+                fields,
+                trivia,
+            } if !fields.is_empty() || trivia.is_some() => {
                 self.push(&format!("{} {{", type_name.name));
-                self.format_field_inits(fields.iter(), None);
+                self.format_field_inits(fields.iter(), None, trivia.as_deref());
             }
             // `T { ...base, field: value, … }` — the spread first, then the
             // overrides, one per line.
@@ -2858,13 +2862,14 @@ impl<'a> Formatter<'a> {
                 type_name,
                 base,
                 overrides,
+                trivia,
             } => {
                 match type_name {
                     Some(tn) => self.push(&format!("{} {{", tn.name)),
                     None => self.push("{"),
                 }
                 let spread = format!("...{}", expr_with_prec(base, 0));
-                self.format_field_inits(overrides.iter(), Some(&spread));
+                self.format_field_inits(overrides.iter(), Some(&spread), trivia.as_deref());
             }
             // A call's arguments, one per line. Unlike a record body an
             // argument list does NOT accept a trailing comma (the grammar
@@ -2873,13 +2878,18 @@ impl<'a> Formatter<'a> {
                 name,
                 type_args,
                 args,
-            } if !args.is_empty() => {
+                trivia,
+            } if !args.is_empty() || trivia.is_some() => {
                 self.push(&format!("{}{}(", name.name, type_args_src(type_args)));
-                self.format_arg_list(args, reserve);
+                self.format_arg_list(args, trivia.as_deref(), reserve);
             }
-            ExprKind::Val { type_ref, args } if !args.is_empty() => {
+            ExprKind::Val {
+                type_ref,
+                args,
+                trivia,
+            } if !args.is_empty() || trivia.is_some() => {
                 self.push(&format!("Val[{}](", type_ref_to_string(type_ref)));
-                self.format_arg_list(args, reserve);
+                self.format_arg_list(args, trivia.as_deref(), reserve);
             }
             // A `.`-chain: `receiver.a().b()` — kept on one line where the
             // overflow is an argument's, broken before each call where it is
@@ -2940,7 +2950,7 @@ impl<'a> Formatter<'a> {
                 let tail = format!(" {} {}", op.name(), expr_with_prec(rhs, prec + 1));
                 // The right-hand side shares the operator's line whenever it is
                 // itself unbroken, so charge it to the left-hand side's budget.
-                let lhs_reserve = if tail.contains('\n') || holds_list_comments(rhs) {
+                let lhs_reserve = if tail.contains('\n') || holds_comments(rhs) {
                     0
                 } else {
                     tail.chars().count() + reserve
@@ -3019,23 +3029,37 @@ impl<'a> Formatter<'a> {
     /// per indented line, then the closing brace. `spread` is the leading
     /// `...base` entry, when there is one. The brace and any type name are the
     /// caller's to emit.
-    fn format_field_inits<'f, I>(&mut self, fields: I, spread: Option<&str>)
-    where
+    fn format_field_inits<'f, I>(
+        &mut self,
+        fields: I,
+        spread: Option<&str>,
+        trivia: Option<&ListTrivia>,
+    ) where
         I: ExactSizeIterator<Item = &'f FieldInit>,
     {
         let total = fields.len() + usize::from(spread.is_some());
         self.newline();
         self.indented(|f| {
             let mut emitted = 0usize;
+            // #3110: the trivia runs parallel to the spread, then the fields.
+            let slot = |f: &mut Self, emitted: usize| {
+                let item = trivia.and_then(|t| t.items.get(emitted));
+                if let Some(item) = item {
+                    f.emit_leading_comments(&item.leading);
+                }
+                item.and_then(|t| t.trailing.clone())
+            };
             if let Some(spread) = spread {
+                let eol = slot(f, emitted);
                 f.push(spread);
                 emitted += 1;
                 if emitted < total || f.opts.trailing_comma {
                     f.push(",");
                 }
-                f.newline();
+                f.emit_trailing_comment_or_newline(eol.as_deref());
             }
             for field in fields {
+                let eol = slot(f, emitted);
                 f.push(&field.name.name);
                 if let Some(v) = &field.value {
                     f.push(": ");
@@ -3045,7 +3069,10 @@ impl<'a> Formatter<'a> {
                 if emitted < total || f.opts.trailing_comma {
                     f.push(",");
                 }
-                f.newline();
+                f.emit_trailing_comment_or_newline(eol.as_deref());
+            }
+            if let Some(t) = trivia {
+                f.emit_trailing_comments(&t.closing);
             }
         });
         self.push("}");
@@ -3065,10 +3092,17 @@ impl<'a> Formatter<'a> {
     ///
     /// Never a trailing comma — the grammar rejects one in an argument list,
     /// and the wrapped output has to re-parse.
-    fn format_arg_list(&mut self, args: &[Expr], reserve: usize) -> bool {
-        if let Some((last, leading)) = args.split_last()
+    fn format_arg_list(
+        &mut self,
+        args: &[Expr],
+        trivia: Option<&ListTrivia>,
+        reserve: usize,
+    ) -> bool {
+        // #3110: an argument list with a comment in it goes one per line.
+        if trivia.is_none()
+            && let Some((last, leading)) = args.split_last()
             && (leading.is_empty() || is_block_like(last))
-            && !leading.iter().any(holds_list_comments)
+            && !leading.iter().any(holds_comments)
             && self.try_layout(reserve, |f| {
                 for arg in leading {
                     f.push(&expr_with_prec(arg, 0));
@@ -3084,11 +3118,20 @@ impl<'a> Formatter<'a> {
         self.indented(|f| {
             for (i, arg) in args.iter().enumerate() {
                 let last = i + 1 == args.len();
+                let item = trivia.and_then(|t| t.items.get(i));
+                if let Some(item) = item {
+                    f.emit_leading_comments(&item.leading);
+                }
+                // A trailing comment rides the line after the `,`, so the
+                // argument only reserves room for the comma.
                 f.format_expr_at(arg, 0, if last { 0 } else { 1 });
                 if !last {
                     f.push(",");
                 }
-                f.newline();
+                f.emit_trailing_comment_or_newline(item.and_then(|t| t.trailing.as_deref()));
+            }
+            if let Some(t) = trivia {
+                f.emit_trailing_comments(&t.closing);
             }
         });
         self.push(")");
@@ -3192,6 +3235,7 @@ impl<'a> Formatter<'a> {
                 method,
                 type_args,
                 args,
+                trivia,
             } => {
                 let head = format!(".{}{}", method, type_args_src(type_args));
                 let flat = format!(
@@ -3201,15 +3245,17 @@ impl<'a> Formatter<'a> {
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                if args.is_empty()
-                    || (!args.iter().any(holds_list_comments) && self.fits(&flat, reserve))
+                if (args.is_empty() && trivia.is_none())
+                    || (trivia.is_none()
+                        && !args.iter().any(holds_comments)
+                        && self.fits(&flat, reserve))
                 {
                     self.push(&flat);
                     return false;
                 }
                 self.push(&head);
                 self.push("(");
-                self.format_arg_list(args, reserve)
+                self.format_arg_list(args, *trivia, reserve)
             }
         }
     }
@@ -3254,6 +3300,7 @@ enum ChainLink<'e> {
         method: &'e str,
         type_args: &'e [TypeRef],
         args: &'e [Expr],
+        trivia: Option<&'e ListTrivia>,
     },
 }
 
@@ -3274,11 +3321,13 @@ fn flatten_chain(e: &Expr) -> (&Expr, Vec<ChainLink<'_>>) {
                 method,
                 type_args,
                 args,
+                trivia,
             } => {
                 links.push(ChainLink::Method {
                     method: method.name.as_str(),
                     type_args,
                     args,
+                    trivia: trivia.as_deref(),
                 });
                 cur = receiver;
             }
@@ -3541,13 +3590,36 @@ fn bounds_text(bounds: &[Ident]) -> String {
         .join(" + ")
 }
 
-/// #3067: whether `e` is, or holds, a list literal with a comment in it, which
-/// forces every enclosing expression off its flat form.
-fn holds_list_comments(e: &Expr) -> bool {
-    matches!(&e.kind, ExprKind::ListLit(_, Some(_)))
-        || bynk_syntax::ast::expr_children(e)
-            .into_iter()
-            .any(holds_list_comments)
+/// #3067, #3110: whether `e` is, or holds, a list literal, call or record
+/// literal with a comment in it, which forces every enclosing expression off
+/// its flat form.
+fn holds_comments(e: &Expr) -> bool {
+    matches!(
+        &e.kind,
+        ExprKind::ListLit(_, Some(_))
+            | ExprKind::Call {
+                trivia: Some(_),
+                ..
+            }
+            | ExprKind::MethodCall {
+                trivia: Some(_),
+                ..
+            }
+            | ExprKind::Val {
+                trivia: Some(_),
+                ..
+            }
+            | ExprKind::RecordConstruction {
+                trivia: Some(_),
+                ..
+            }
+            | ExprKind::RecordSpread {
+                trivia: Some(_),
+                ..
+            }
+    ) || bynk_syntax::ast::expr_children(e)
+        .into_iter()
+        .any(holds_comments)
 }
 
 #[cfg(test)]
