@@ -1956,7 +1956,12 @@ fn rolling_back_past_an_added_sum_variant_faults_newer_schema() {
     // would read as removed), so `older/` is that original build.
     let lock_v1 = compile("older", &older_src, None);
     let lock_v2 = compile("newer", &newer_src, Some(lock_v1));
-    assert!(lock_v2.contains("version = 2"), "{lock_v2}");
+    // Not the file's own `version = 2` format header: the agent's entry.
+    assert!(
+        lock_v2.contains("[agents.\"shop.Holder\"]\nversion = 2"),
+        "{lock_v2}"
+    );
+    assert!(lock_v2.contains("additive = true"), "{lock_v2}");
 
     fs::write(tmp.join("driver.ts"), ROLLBACK_DRIVER_TS).unwrap();
     fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
