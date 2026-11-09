@@ -20,7 +20,7 @@
 //!
 //! A database with no migrations directory has no schema, so `sql_invalid` and
 //! `select_field_missing` have nothing to check against; but the parameter
-//! count is a property of the SQL text, so [`parameter_count`] (a scanner that
+//! count is a property of the SQL text, so `parameter_count` (a scanner that
 //! mirrors SQLite's) still checks it (#3126). A database whose migrations
 //! failed is skipped entirely, as each statement would only echo that warning.
 //! Never stricter than the test tier is the aim, since that tier runs the same
