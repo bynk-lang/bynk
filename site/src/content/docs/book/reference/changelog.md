@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.523**.
+written against **v0.524**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.524.0** | A `String` constant bound to a literal is accepted as a database call's SQL |
 | **v0.523.1** | "`bynk build --profile dev|release` and `[profile.dev]`/`[profile.release]` tables in `bynk.toml` choose whether a build carries the function-contract call-site guard; the default stays `release`, the bytes `bynk compile` writes (#3054)" |
 | **v0.523.0** | "`@example(\"…\")` after a `Matches`/`IsoDate` refinement gives `Val[T]` a value, so `bynk test --smoke` runs patterned routes" |
 | **v0.522.0** | A suite declares its own `type` and `const` items, private to the suite and never deployed |

@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `String` constant bound to a literal is accepted as a database call's SQL
-probes: diagnostic_coverage, emit_diagnostics, ts_writes
----
+# 0762 — A String constant bound to a literal counts as a literal for the SQL rules
 
-## ADR: const-string-as-sql
-title: A String constant bound to a literal counts as a literal for the SQL rules
-summary: Relaxes bynk.types.sql_not_literal for compile-time constants only
+- **Status:** Accepted (v0.524)
 
 **Context.** ADR 0666 B made a `D1` call's SQL a string literal, ruling out run-time assembly and so injection. It also ruled out a `const` string, whose value is just as fixed, so a query used at several calls had to be pasted at each (#3065; bynk-lang/github-hooks#73 inlined one query up to eight times in a suite).
 
