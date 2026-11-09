@@ -28,6 +28,35 @@ pub(crate) fn is_sql_statement_type(name: &str, types: &HashMap<String, Arc<Type
         })
 }
 
+/// #3070: one literal SQL statement of a derived `D1` instance, as the project
+/// phase prepares it against the migrations' schema.
+#[derive(Debug, Clone)]
+pub struct D1SqlSite {
+    /// The capability the call is on (`Orders`), whose instance names the database.
+    pub cap: String,
+    /// The method (`all`, `first`, `run`, `select`, `firstAs`).
+    pub op: String,
+    /// The statement as SQLite sees it; for `select`/`firstAs` the composed
+    /// `SELECT <columns> <tail>`.
+    pub text: String,
+    /// The literal's span: where every diagnostic is reported.
+    pub span: Span,
+    /// For `select`/`firstAs`: the row type and its field names (the columns the
+    /// compiler wrote), so a missing one is reported against the type.
+    pub row: Option<(String, Vec<String>)>,
+    /// The number of values passed, when the list is a list literal.
+    pub passed: Option<usize>,
+}
+
+/// The length of a list-literal argument; `None` when the list is a name, a
+/// call or anything whose length is not fixed by the text.
+fn literal_list_len(e: Option<&Expr>) -> Option<usize> {
+    match &e?.kind {
+        ExprKind::ListLit(items, ..) => Some(items.len()),
+        _ => None,
+    }
+}
+
 /// #3065: the text of a SQL argument that is fixed at compile time: a string
 /// literal, or a bare reference to a `String` constant whose value, following
 /// constant-to-constant references, is a plain string literal. A constant's
@@ -90,13 +119,25 @@ pub(crate) fn check_sql_argument(
     {
         return;
     }
-    if let Some(sql) = args.first()
-        && sql_literal_text(sql, ctx).is_none()
-    {
-        ctx.errors.push(sql_not_literal(
-            sql.span,
-            &format!("the SQL of `{cap}.{method}`"),
-        ));
+    if let Some(sql) = args.first() {
+        if let Some(text) = sql_literal_text(sql, ctx) {
+            ctx.callees.insert(
+                sql.id,
+                Callee::D1Sql(D1SqlSite {
+                    cap: cap.to_string(),
+                    op: method.to_string(),
+                    text,
+                    span: sql.span,
+                    row: None,
+                    passed: literal_list_len(args.get(1)),
+                }),
+            );
+        } else {
+            ctx.errors.push(sql_not_literal(
+                sql.span,
+                &format!("the SQL of `{cap}.{method}`"),
+            ));
+        }
     }
 }
 
@@ -364,6 +405,24 @@ pub(crate) fn check_typed_read(
     }
     let first = method.name == "firstAs";
     let sql = sql.filter(|_| ok)?;
+    if let Ty::Named { name: row, .. } = &*tys.get(t)
+        && let Some(TypeBody::Record(record)) = ctx.input.types.get(row).map(|d| &d.body)
+    {
+        ctx.callees.insert(
+            args[0].id,
+            Callee::D1Sql(D1SqlSite {
+                cap: cap.to_string(),
+                op: method.name.clone(),
+                text: sql.clone(),
+                span: args[0].span,
+                row: Some((
+                    row.clone(),
+                    record.fields.iter().map(|f| f.name.name.clone()).collect(),
+                )),
+                passed: literal_list_len(args.get(1)),
+            }),
+        );
+    }
     ctx.callees.insert(
         expr_id,
         Callee::D1Select {

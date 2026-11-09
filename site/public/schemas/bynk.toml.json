@@ -49,6 +49,23 @@
         }
       }
     },
+    "check": {
+      "additionalProperties": false,
+      "description": "Switches for checks that read more than the source.",
+      "properties": {
+        "d1_sql": {
+          "default": true,
+          "description": "Whether each literal `D1` statement is prepared against the schema the\nbinding's migrations build, so a syntax error, an unknown table or\ncolumn, or a wrong parameter count is reported by `bynk check`. Turn it\noff for a project whose SQL depends on tables created some other way,\nsuch as DDL run at request time. Default: `true`.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#check"
+        }
+      }
+    },
     "dependencies": {
       "additionalProperties": {
         "additionalProperties": false,

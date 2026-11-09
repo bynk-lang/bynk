@@ -95,6 +95,10 @@ clap = { version = "4", features = ["derive"] }
 logos = "0.16"
 regex = "1"
 regress = "0.12"
+# #3070: `bynk check` prepares each literal D1 statement against an in-memory SQLite
+# built from the binding's migrations. Bundled so every release target (and CI)
+# runs the same SQLite; the C amalgamation is compiled by `cc`.
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 proptest = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
