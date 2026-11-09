@@ -878,7 +878,9 @@ against it. Nothing runs. At the literal it reports:
 
 A migration that doesn't apply is the warning `bynk.d1.migration_invalid`, and
 that database's statements are then not checked. A database with no migrations
-directory isn't checked either. Not yet checked: `batch` statements, statements
+directory isn't checked either. The statements of a `batch` are checked when each is
+written inline in the list (`batch([SqlStatement { sql: "…", params: […] }, …])`); one built
+elsewhere isn't tied to a database. Not yet checked: statements
 in test bodies, and a list that is neither a literal nor a `let` bound to one. A program that creates tables
 at request time, or runs DDL (such as a `CREATE TABLE` without `IF NOT EXISTS` for a
 table a migration already made) that SQLite refuses at prepare time, can turn the

@@ -1,0 +1,17 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+// #3108: each `SqlStatement` written inline in a `batch` list is checked.
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    let _ <- Orders.batch([
+      SqlStatement { sql: "UPDATE orders SET total = 1 WHERE id = ?1", params: [Text(id)] },
+      SqlStatement { sql: "UPDATE orders SET totl = 1 WHERE id = ?1", params: [Text(id)] },
+      SqlStatement { sql: "UPDATE orders SET total = 1 WHERE id = ?1", params: [Text(id), Text(id)] }
+    ])
+    true
+  }
+}
