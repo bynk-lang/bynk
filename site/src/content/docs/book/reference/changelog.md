@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.15** | "`bynk.d1.sql_invalid` points at the token SQLite refused inside the SQL literal, not the whole argument" |
 | **v0.525.14** | An agent call no longer forwards the caller's Workers `env` (secrets and vars) in the inter-Durable-Object request body |
 | **v0.525.13** | "`bynk test --mutate --changed <git-ref>` mutates only declarations in changed files, and `--mutate-jobs <n>` runs mutants in parallel scratch directories with the same report (slice 4 of #3069)" |
 | **v0.525.12** | "`bynk check` prepares the literal D1 statements in the `case` and `property` bodies of unit suites against the suite target's migrations" |
