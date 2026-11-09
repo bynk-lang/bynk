@@ -12329,6 +12329,10 @@
           "named": true
         },
         {
+          "type": "const_decl",
+          "named": true
+        },
+        {
           "type": "consumes_decl",
           "named": true
         },
@@ -12350,6 +12354,10 @@
         },
         {
           "type": "stub_clause",
+          "named": true
+        },
+        {
+          "type": "type_decl",
           "named": true
         },
         {

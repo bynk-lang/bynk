@@ -1,0 +1,7 @@
+suite demo.desk
+
+type Box[T] = { v: T }
+
+case "generic" {
+  expect 1 == 1
+}

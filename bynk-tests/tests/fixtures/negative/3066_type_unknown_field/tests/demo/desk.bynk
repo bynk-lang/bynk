@@ -1,0 +1,7 @@
+suite demo.desk
+
+type Holder = { x: Nope }
+
+case "unknown" {
+  expect 1 == 1
+}

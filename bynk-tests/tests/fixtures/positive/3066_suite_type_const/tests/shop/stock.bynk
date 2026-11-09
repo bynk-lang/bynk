@@ -1,0 +1,53 @@
+suite shop.stock
+
+type Counted = { n: Int }
+
+type Kind = | Fruit | Veg
+
+// A constant and a type naming a target type, and a suite type.
+const SeedItem: Item = Item { id: "x" }
+
+type Holder = { item: Item, n: Int }
+
+const Held: Holder = Holder { item: SeedItem, n: 1 }
+
+const Prefix: String = "fruit-"
+const Greeting: String = Prefix
+
+fn first_id() -> String {
+	Prefix
+}
+
+case "a suite type reads back through select" {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
+	let _ <- Stock.run("INSERT INTO items (id) VALUES ('a')", [])
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 1 }])
+}
+
+case "a suite type and constants are plain values" {
+	let c = Counted { n: 3 }
+	expect c.n == 3
+	expect Greeting == "fruit-"
+	expect first_id() == Prefix
+	expect Fruit != Veg
+	expect Json.decode[Counted](Json.encode(c)) == Ok(c)
+}
+
+property "a suite type works in a property" {
+	for all n: Int {
+		expect Counted { n: n }.n == n
+	}
+}
+
+case "a suite type and constants name target types" {
+  expect Held.item.id == "x"
+  expect Json.decode[Holder](Json.encode(Held)) == Ok(Held)
+}
+
+case "a suite type works at the integration tier" as integration {
+  let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
+  let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+  expect rows == Ok([Counted { n: 0 }])
+  expect Greeting == "fruit-"
+}

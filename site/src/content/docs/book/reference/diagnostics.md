@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **769** codes in total.
+There are **775** codes in total.
 
 ## Agents
 
@@ -344,6 +344,7 @@ There are **769** codes in total.
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | `bynk.cell.self_reference` | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
+| `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
 | `bynk.d1.migration_invalid` | A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning). |  | Warning |
 | `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
 | `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
@@ -796,14 +797,19 @@ There are **769** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| `bynk.suite.const_name_clash` | A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_case_name` | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
+| `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.duplicate_fn` | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| `bynk.suite.duplicate_type` | A suite declares two `type`s of the same name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.env_binding_clash` | A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.env_not_literal` | An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.fn_effectful` | A suite helper `fn` returns an `Effect`; suite helpers are pure. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.fn_method` | A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.fn_name_clash` | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| `bynk.suite.type_generic` | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| `bynk.suite.type_name_clash` | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.unknown_target` | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 
 ## Transitions (step invariants)

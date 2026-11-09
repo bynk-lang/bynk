@@ -15,9 +15,9 @@ use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
 use bynk_syntax::ast::{
-    AgentDecl, BaseType, CapabilityDecl, CommonsItem, Expr, ExprKind, FnDecl, FnName, Handler,
-    Ident, MessageEntry, MessagesDecl, Param, PredKind, ProviderDecl, RecordField, Refinement,
-    ServiceDecl, StoreField, TypeBody, TypeDecl, TypeParam, TypeRef,
+    AgentDecl, BaseType, CapabilityDecl, CommonsItem, ConstDecl, Expr, ExprKind, FnDecl, FnName,
+    Handler, Ident, MessageEntry, MessagesDecl, Param, PredKind, ProviderDecl, RecordField,
+    Refinement, ServiceDecl, StoreField, TypeBody, TypeDecl, TypeParam, TypeRef,
 };
 
 use bynk_model::{
@@ -54,11 +54,6 @@ pub(crate) fn emit_type(
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
 ) -> Vec<bynk_ts::TsStmt> {
-    let mut stmts = Vec::new();
-    let has_doc = t.documentation.is_some();
-    if let Some(doc) = t.documentation.as_deref() {
-        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
-    }
     // For contexts, the per-type brand string is qualified by the context's
     // name (so two contexts' locally-declared `Order` types have distinct
     // brands at the TS level).
@@ -67,6 +62,24 @@ pub(crate) fn emit_type(
         .as_deref()
         .map(|c| format!("{c}."))
         .unwrap_or_default();
+    emit_type_in(t, shape, commons, &brand_prefix, &ctx.runtime_use)
+}
+
+/// [`emit_type`] with the brand prefix and runtime-use accumulator supplied
+/// directly (#3066: a suite type is emitted into a test module, which has no
+/// `EmitProjectCtx` of its own).
+pub(crate) fn emit_type_in(
+    t: &TypeDecl,
+    shape: &TypeShape,
+    commons: &TypedCommons,
+    brand_prefix: &str,
+    runtime_use: &RuntimeUse,
+) -> Vec<bynk_ts::TsStmt> {
+    let mut stmts = Vec::new();
+    let has_doc = t.documentation.is_some();
+    if let Some(doc) = t.documentation.as_deref() {
+        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+    }
     let mut shape_stmts = match shape {
         // `Opaque` and `Refined` lower almost identically: a branded base type
         // alias plus an `of` constructor object. The one difference (ADR 0182)
@@ -87,15 +100,15 @@ pub(crate) fn emit_type(
                 is_opaque: *opaque,
             },
             commons,
-            &brand_prefix,
-            &ctx.runtime_use,
+            brand_prefix,
+            runtime_use,
         ),
-        TypeShape::Record { fields } => emit_record_type(t, fields, commons, &ctx.runtime_use),
+        TypeShape::Record { fields } => emit_record_type(t, fields, commons, runtime_use),
         // `embeds` is not read here — today's emitter has no reader for
         // `SumBody::embeds` anywhere (confirmed by grep; `embeds` is checker-
         // enforced construction-time only), so `TypeShape::Sum::embeds` stays
         // unread by this slice too, not a gap introduced by it.
-        TypeShape::Sum { variants, .. } => emit_sum_type(t, variants, commons, &ctx.runtime_use),
+        TypeShape::Sum { variants, .. } => emit_sum_type(t, variants, commons, runtime_use),
     };
     // #1486: a leading doc comment sits directly above the declaration it
     // documents, no blank between them — unlike `Comment`, `DocComment` is
@@ -1189,12 +1202,22 @@ pub(crate) fn emit_consts(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<b
         let CommonsItem::Const(c) = item else {
             continue;
         };
-        let mut pre = Pre::new();
         let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
         module.target = ctx.target;
         module.consumed_type_ns = consumed_type_ns(ctx);
         module.consumed_type_declared = ctx.consumed_type_aliases.clone();
         module.consumed_context_types = ctx.consumed_context_types();
+        stmts.extend(emit_const_in(c, module));
+    }
+    stmts
+}
+
+/// One constant's cached-function declaration (see [`emit_consts`]), lowered in
+/// the module context `module`.
+fn emit_const_in(c: &ConstDecl, module: ModuleCtx<'_>) -> Vec<bynk_ts::TsStmt> {
+    let mut stmts = Vec::new();
+    {
+        let mut pre = Pre::new();
         let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
         let init = pre.lower(&c.init, &mut icx);
         // The closed static set (`consts::static_error`) holds no `if`,
@@ -9820,4 +9843,76 @@ pub(crate) fn call_sum_ts_type(members: &[bynk_check::actors::CallSumMember]) ->
         .collect::<Vec<_>>()
         .join(" | ");
     bynk_ts::TsType::named(union)
+}
+
+/// #3066: a suite's own `type` and `const` declarations, as TypeScript for the
+/// body of one test runner: the types (an interface and its companion object, or
+/// a union), their JSON codecs (so `select[T]`, `Json.encode`/`decode` and the
+/// boundary paths find `__serialise_T` / `__deserialise_T` in scope), and the
+/// constants (cached-function declarations, like a unit's). They are declared
+/// local to the runner, so another suite declaring the same name cannot collide
+/// and nothing here reaches the deployable. `typed` is the suite's view with the
+/// suite's types and constants already merged in; `qual` qualifies a target
+/// type a suite type's codec mentions, as the module-level codecs do.
+///
+/// Returns the printed statements with the `export` modifiers dropped (a
+/// function-local declaration cannot carry one), unindented.
+pub fn emit_suite_decls(
+    types: &[TypeDecl],
+    consts: &[ConstDecl],
+    typed: &TypedCommons,
+    qual: &std::collections::HashMap<String, String>,
+    runtime_use: &RuntimeUse,
+) -> String {
+    let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
+    for t in types {
+        let Some(def) = typed.types.get(&t.name.name) else {
+            continue;
+        };
+        let shape = bynk_model::lower_suite_type_shape_ir(def, typed);
+        stmts.extend(emit_type_in(t, &shape, typed, "", runtime_use));
+    }
+    if !types.is_empty() {
+        // The type itself plus the wrappers a test reads one through: a
+        // `select[T]` is a `List[T]`, a `firstAs[T]` an `Option[T]`.
+        let mut roots: Vec<TypeRef> = Vec::new();
+        for t in types.iter().filter(|t| t.type_params.is_empty()) {
+            let named = TypeRef::Named(t.name.clone());
+            let span = t.name.span;
+            roots.push(TypeRef::List(Box::new(named.clone()), span));
+            roots.push(TypeRef::Option(Box::new(named.clone()), span));
+            roots.push(named);
+        }
+        let (names, insts) = super::serialisation::collect_codec_closure(&roots, &typed.types);
+        runtime_use.note_json_codec();
+        runtime_use.note_boundary_codec();
+        stmts.extend(super::serialisation::decls_as_stmts_block(
+            super::serialisation::emit_helpers_for_owner_qualified(
+                &names,
+                &typed.types,
+                "",
+                qual,
+                runtime_use,
+            ),
+        ));
+        stmts.extend(super::serialisation::decls_as_stmts(
+            super::serialisation::emit_generic_helpers_qualified(
+                &insts,
+                &typed.types,
+                qual,
+                runtime_use,
+            ),
+        ));
+    }
+    let empty = bynk_check::resolver::CrossContextInfo::default();
+    for c in consts {
+        stmts.extend(emit_const_in(c, ModuleCtx::new(typed, &empty, runtime_use)));
+    }
+    stmts
+        .iter()
+        .map(|s| bynk_ts::print_stmt(s, 0))
+        .collect::<String>()
+        .lines()
+        .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
+        .collect()
 }

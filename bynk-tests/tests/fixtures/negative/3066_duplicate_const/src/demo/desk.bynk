@@ -1,0 +1,11 @@
+context demo.desk
+
+type Item = { id: String }
+
+const Limit: Int = 5
+
+type Color = | Red | Green
+
+service local {
+  on call(n: Int) -> Effect[Int] { n + 1 }
+}

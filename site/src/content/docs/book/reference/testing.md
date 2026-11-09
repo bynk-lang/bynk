@@ -1027,6 +1027,47 @@ case "an issue event is recorded" {
   name are `bynk.suite.duplicate_fn`.
 - **Not exported.** There is no way to share helpers across suites.
 
+## Types and constants in a suite {#suite-types-consts}
+
+A suite may also declare its own **`type`** and **`const`** items, for the
+shapes and values only its tests care about: a row type to read a count back
+through `select[T]`, a repository name or a limit shared by several cases.
+
+```bynk,fragment
+suite shop.stock
+
+type Counted = { n: Int }
+
+const Repo: String = "bynk-lang/bynk"
+
+case "a count reads back as a typed row" {
+  let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
+  let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+  expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+- **Private to the suite, like a helper.** The items are visible to the suite's
+  cases, properties and helper `fn`s, and to each other in any order. Another
+  suite, even one targeting the same unit, cannot see them and may declare the
+  same name. A suite split across files is one suite per file.
+- **Test-only.** They are emitted into the test output alone, with their JSON
+  codecs, so `select[T]`, `firstAs[T]`, `Json.encode` and `Json.decode` work on a
+  suite type. The deployable is the same with or without them.
+- **Checked as a unit's own are.** A type is any non-generic declaration the
+  language has (a record, a sum, a refined or opaque type); a generic one is
+  `bynk.suite.type_generic`, and methods stay `bynk.suite.fn_method`. A constant
+  has an upper-camel name and a static initialiser, and cannot refer to itself
+  (`bynk.resolve.const_name_case`, `bynk.resolve.bad_const_initialiser`,
+  `bynk.resolve.const_cycle`).
+- **No shadowing.** A name already in a case's scope (a declaration of the
+  target or of a commons it `uses`, or a sum variant) is
+  `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`. A name repeated
+  in the suite is `bynk.suite.duplicate_type` or `bynk.suite.duplicate_const`.
+- **Not yet in a suite-scoped `stub` value.** The value of a `stub … returns` is
+  emitted outside the runner, so it cannot name a suite type or constant. Build
+  the value in a case, or use a helper `fn`.
+
 ## Test input from a file — `fixture` {#fixtures}
 
 A suite reads a project file's text into a `String` constant with a `fixture`
@@ -1668,6 +1709,22 @@ bynk test .
 `tsc`, and runs it with Node — both must be on your path. `--no-run` emits the
 TypeScript without running it. Exit code is non-zero if any test fails.
 
+If `tsc` rejects the generated TypeScript, that is a compiler bug, not a problem
+with your tests. `bynk test` reports it as `bynk.codegen.tsc_failed` at the Bynk
+source line the failing generated line came from, with the `tsc` error and the
+generated line attached, so you can report it. Under `--format json` it is a
+`compile` error whose `diagnostics` hold those lines and whose `stderr` holds the
+raw `tsc` output. `bynk check --emit` runs the same `tsc` step without the
+tests.
+
+A project that declares no tests is not a failure by default: `bynk test` prints
+`warning: no tests found in <dir>` on stderr and exits 0, so a library or a
+freshly scaffolded project can run it before it has tests. Pass
+`--require-tests` to make that an `error:` with exit code 1, so CI does not pass
+a project that never wrote a test. It applies with `--no-run` too, so a
+discovery-only step can enforce it. At a workspace root, every member must
+declare at least one test.
+
 ### Debugging under Node (`--inspect`)
 
 `bynk test --inspect` launches the test runner under Node's inspector
@@ -1698,7 +1755,9 @@ instead of the human ✓ / ✗ output — one `suites` array of `{ name, kind, c
 each case `{ name, outcome, message?, location? }` with `outcome` one of `"pass"`
 or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
 (the diagnostic lines); a runner that crashes mid-stream yields
-`error.kind == "runtime"` with the observed prefix and captured stderr.
+`error.kind == "runtime"` with the observed prefix and captured stderr. A project
+with no tests yields an empty `suites` array, or, under `--require-tests`,
+`error.kind == "no_tests"` and a non-zero exit.
 
 A project that takes [snapshots](#snapshots) gains a last field, `snapshots`: `{ "written", "updated", "obsolete" }`, the counts of snapshots the run wrote, updated and found obsolete (deleted, under `--update-snapshots`).
 

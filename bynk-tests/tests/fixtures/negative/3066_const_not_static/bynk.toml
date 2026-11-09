@@ -1,0 +1,6 @@
+[project]
+name = "suite-3066-const-not-static"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

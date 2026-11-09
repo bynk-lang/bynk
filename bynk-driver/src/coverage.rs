@@ -520,13 +520,25 @@ fn append_ext(path: &Path, ext: &str) -> PathBuf {
 /// the segments on that line as `(source_index, source_line_0based)`. Generated
 /// and source columns are decoded to keep the VLQ deltas honest, then dropped —
 /// attribution is line-level on both hops.
-struct SourceMap {
-    sources: Vec<String>,
+pub(crate) struct SourceMap {
+    pub(crate) sources: Vec<String>,
     lines: Vec<Vec<(usize, u32)>>,
 }
 
 impl SourceMap {
-    fn parse(json: &str) -> Option<SourceMap> {
+    /// #3068: the source file name and 0-based source line of the nearest
+    /// mapped generated line at or before `gen_line` (0-based) — ADR 0103 D2's
+    /// "enclosing statement" rule read backwards, for a `tsc` error position.
+    pub(crate) fn resolve(&self, gen_line: usize) -> Option<(&str, u32)> {
+        let upto = gen_line.min(self.lines.len().checked_sub(1)?);
+        self.lines[..=upto]
+            .iter()
+            .rev()
+            .find_map(|segs| segs.first())
+            .and_then(|&(src, line)| Some((self.sources.get(src)?.as_str(), line)))
+    }
+
+    pub(crate) fn parse(json: &str) -> Option<SourceMap> {
         #[derive(Deserialize)]
         struct Raw {
             #[serde(default)]
@@ -686,6 +698,20 @@ pub fn format_ranges(lines: &[u32]) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #3068: `resolve` reads ADR 0103's "enclosing statement" rule backwards: an
+    /// error on an unmapped generated line (a closing brace) takes the nearest
+    /// mapped line at or before it.
+    #[test]
+    fn resolve_takes_the_nearest_mapped_line_at_or_before() {
+        // Generated line 1 maps to source line 2; lines 0, 2 and 3 carry nothing.
+        let m = SourceMap::parse(r#"{"sources":["a.bynk"],"mappings":";AAEA;;;"}"#).unwrap();
+        assert_eq!(m.resolve(0), None);
+        assert_eq!(m.resolve(1), Some(("a.bynk", 2)));
+        assert_eq!(m.resolve(3), Some(("a.bynk", 2)));
+        // Past the end of the map is the last mapped line too.
+        assert_eq!(m.resolve(99), Some(("a.bynk", 2)));
+    }
+
     use super::*;
 
     #[test]

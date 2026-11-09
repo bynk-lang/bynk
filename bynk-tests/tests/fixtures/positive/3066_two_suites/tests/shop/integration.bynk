@@ -1,0 +1,10 @@
+suite shop.stock as integration
+
+type Row = { id: String, label: String }
+
+case "integration row" {
+  let _ <- Stock.run("CREATE TABLE t (id TEXT, label TEXT)", [])
+  let _ <- Stock.run("INSERT INTO t (id, label) VALUES ('a', 'b')", [])
+  let rows <- Stock.select[Row]("FROM t", [])
+  expect rows == Ok([Row { id: "a", label: "b" }])
+}

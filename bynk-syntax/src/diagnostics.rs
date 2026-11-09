@@ -778,6 +778,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.cloudflare.edge_cache_public_authenticated",
         "In a context with `EdgeCache`, a `@cache(scope: public)` route is served by an actor that authenticates; its response would be shared at the edge with every caller.",
     ),
+    d(
+        "bynk.codegen.tsc_failed",
+        "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
+    ),
     dg(
         "bynk.consumes.alias_conflict",
         "Two `consumes` aliases collide.",
@@ -2814,9 +2818,19 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A test `stub` names an operation the capability does not declare.",
     ),
     dg(
+        "bynk.suite.const_name_clash",
+        "A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases.",
+        &["const_decl"],
+    ),
+    dg(
         "bynk.suite.duplicate_case_name",
         "Two `case`s share a description.",
         &["case"],
+    ),
+    dg(
+        "bynk.suite.duplicate_const",
+        "A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s.",
+        &["const_decl"],
     ),
     dg(
         "bynk.suite.duplicate_env",
@@ -2827,6 +2841,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.suite.duplicate_fn",
         "A suite declares two helper `fn`s of the same name.",
         &["fn_decl"],
+    ),
+    dg(
+        "bynk.suite.duplicate_type",
+        "A suite declares two `type`s of the same name.",
+        &["type_decl"],
     ),
     dg(
         "bynk.suite.env_binding_clash",
@@ -2852,6 +2871,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.suite.fn_name_clash",
         "A suite helper `fn` has the name of a declaration already in scope in the suite's cases.",
         &["fn_decl"],
+    ),
+    dg(
+        "bynk.suite.type_generic",
+        "A suite declares a generic `type`; a suite type is a plain, non-generic shape.",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.suite.type_name_clash",
+        "A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item.",
+        &["type_decl"],
     ),
     dg(
         "bynk.suite.unknown_target",

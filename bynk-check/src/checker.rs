@@ -1373,6 +1373,60 @@ pub fn check_record_in(
     }
 }
 
+/// #3066: check the `type` and `const` declarations of a suite, already added to
+/// `input` (the suite's view). They are checked as a unit's own are:
+/// `check_type_decl`, a record's field defaults, `check_const_decl` and the
+/// cycles through the suite's constants. Returns the initialisers' expression
+/// types and callee classifications for the emitter.
+#[allow(clippy::too_many_arguments)]
+pub fn check_suite_decls(
+    types: &[TypeDecl],
+    consts: &[ConstDecl],
+    input: &ResolvedCommons,
+    tys: &Arc<Types>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    locals: &mut LocalsSink,
+) -> (HashMap<ExprId, TypedExpr>, HashMap<ExprId, Callee>) {
+    let mut expr_types = HashMap::new();
+    let mut callees = HashMap::new();
+    let mut hints = HintSink::new();
+    for t in types {
+        check_type_decl(t, &input.types, tys, errors);
+        check_record_field_defaults(
+            t,
+            input,
+            tys,
+            &mut expr_types,
+            &mut callees,
+            errors,
+            refs,
+            &mut hints,
+            locals,
+        );
+    }
+    let local: Vec<&ConstDecl> = consts.iter().collect();
+    for c in &local {
+        check_const_decl(
+            c,
+            input,
+            tys,
+            &mut expr_types,
+            &mut callees,
+            errors,
+            refs,
+            &mut hints,
+            locals,
+        );
+    }
+    let own: HashMap<String, ConstDecl> = consts
+        .iter()
+        .map(|c| (c.name.name.clone(), c.clone()))
+        .collect();
+    errors.extend(crate::consts::cycle_errors(&local, &own));
+    (expr_types, callees)
+}
+
 /// #2868: why a `given` clause on this function is refused, if it is. Only a
 /// free, effectful function in a context may declare `given`: a context knows
 /// which capabilities it consumes, where a commons is shared by contexts that
