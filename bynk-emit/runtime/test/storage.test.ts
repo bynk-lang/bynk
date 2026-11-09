@@ -82,6 +82,7 @@ test("makeIntegrationD1 refuses a wrong parameter count, as D1 does (#3003)", as
   await accepted("SELECT 1 WHERE ?3 = 1", 1, 1, 1); // the highest number
   await accepted("SELECT '?' AS \"?\", 2 AS `?`, 3 AS [?] -- ?\n /* ? */ WHERE 'it''s ?' = ?1", 1);
   await accepted("SELECT 1 AS a$b"); // `$` inside an identifier is no parameter
+  await accepted("SELECT 1 AS é$b"); // #3157: nor after a non-ASCII identifier character
   await accepted("SELECT 1 WHERE ?01 = 1", 1); // the raw spelling is the bind key
   await refused("SELECT :a, :a, @b, $c", 1, 2);
   // #3157: a non-ASCII byte is part of a name, as in SQLite's tokenizer.
