@@ -266,7 +266,8 @@ mod native {
                     // the database has migrations that failed (their warning
                     // already stands for every statement).
                     if !self.migrated.contains(&database)
-                        && let Some(err) = count_error(site, parameter_count(&site.text))
+                        && let Some(err) =
+                            parameter_count(&site.text).and_then(|used| count_error(site, used))
                     {
                         out.push(err);
                     }
@@ -376,12 +377,12 @@ mod native {
 /// (`sqlite3_bind_parameter_count`), without a schema: `?NNN` is `NNN`, a bare
 /// `?` the next number after the highest so far, the count the highest index,
 /// and a named parameter (`:a`, `@a`, `$a`) takes the next number the first
-/// time its name is seen. Quoted text (`'…'`, `"…"`, `` `…` ``, `[…]`) and
+/// time its name is seen. `None` for an index SQLite refuses (`?0`, past 32766). Quoted text (`'…'`, `"…"`, `` `…` ``, `[…]`) and
 /// comments hold none. It mirrors `sqlParameters` in the test tier's runtime
 /// (`bynk-emit/runtime/src/storage.ts`, #3043), which is the baseline for the
 /// named forms; the `agrees_with_sqlite` test pins it against `rusqlite`.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn parameter_count(sql: &str) -> usize {
+pub(crate) fn parameter_count(sql: &str) -> Option<usize> {
     let b = sql.as_bytes();
     let n = b.len();
     let mut count = 0usize;
@@ -403,7 +404,8 @@ pub(crate) fn parameter_count(sql: &str) -> usize {
         }
         *i += 1;
     };
-    let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'$';
+    // SQLite's tokenizer takes every byte >= 0x80 as part of an identifier.
+    let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'$' || c >= 0x80;
     while i < n {
         let c = b[i];
         match c {
@@ -427,9 +429,12 @@ pub(crate) fn parameter_count(sql: &str) -> usize {
                     i += 1;
                 }
                 if i > start {
-                    // A number too large for `usize` can't be a real index.
-                    let index = sql[start..i].parse::<usize>().unwrap_or(usize::MAX);
-                    count = count.max(index);
+                    // SQLite refuses `?0` and an index past its limit (32766) as
+                    // a syntax error, so there is no count to compare.
+                    match sql[start..i].parse::<usize>() {
+                        Ok(index) if (1..=32766).contains(&index) => count = count.max(index),
+                        _ => return None,
+                    }
                 } else {
                     count = count.saturating_add(1);
                 }
@@ -448,7 +453,7 @@ pub(crate) fn parameter_count(sql: &str) -> usize {
             _ => i += 1,
         }
     }
-    count
+    Some(count)
 }
 
 /// The source span of the token starting at byte `at` of a string literal's
@@ -683,10 +688,21 @@ mod tests {
             "SELECT * FROM t WHERE a = ?01 AND b = ?1",
             "INSERT INTO t VALUES (?, ?, ?)",
             "INSERT INTO t VALUES (?1, ?2, ?3) -- ?4",
+            "SELECT * FROM t WHERE a = :café AND b = :cafè",
+            "SELECT * FROM t WHERE a = :é",
         ];
         for sql in corpus {
             let want = conn.prepare(sql).unwrap().parameter_count();
-            assert_eq!(super::parameter_count(sql), want, "{sql}");
+            assert_eq!(super::parameter_count(sql), Some(want), "{sql}");
+        }
+        // An index SQLite refuses has no count (it is a syntax error there).
+        for sql in [
+            "SELECT ?0",
+            "SELECT ?32767",
+            "SELECT ?99999999999999999999999",
+        ] {
+            assert!(conn.prepare(sql).is_err(), "{sql}");
+            assert_eq!(super::parameter_count(sql), None, "{sql}");
         }
     }
 
