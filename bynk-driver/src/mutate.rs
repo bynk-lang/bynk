@@ -87,16 +87,26 @@ enum SqlTok {
 /// more `AND` conjuncts, dropping one conjunct (`to` is empty). The result is
 /// only text: a mutant the checker's SQL check refuses is `invalid`.
 pub fn sql_mutations(lit: &str) -> Vec<(usize, usize, String, String)> {
-    let body = lit.trim_start_matches(['"', ' ', '\t', '\r', '\n']);
+    // A raw literal (`r#"…"#`) keeps its prefix and hashes in `lit`.
+    let body = lit
+        .strip_prefix('r')
+        .unwrap_or(lit)
+        .trim_start_matches(['#', '"', ' ', '\t', '\r', '\n']);
     let first: String = body
         .chars()
         .take_while(|c| c.is_ascii_alphabetic())
-        .collect::<String>()
-        .to_ascii_uppercase();
-    if !matches!(
+        .collect();
+    // Upper-case keywords only, and a second structural one: prose such as
+    // "Delete <b>x</b>" or "Update failed: n > 3" is not SQL, and a mutant
+    // there would compile and survive, a false signal.
+    let is_statement = matches!(
         first.as_str(),
         "SELECT" | "INSERT" | "UPDATE" | "DELETE" | "REPLACE" | "WITH" | "FROM" | "WHERE"
-    ) {
+    );
+    let structural = lit
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .any(|w| matches!(w, "FROM" | "INTO" | "SET" | "WHERE" | "VALUES"));
+    if !is_statement || !structural {
         return Vec::new();
     }
     let bytes = lit.as_bytes();
@@ -203,7 +213,7 @@ pub fn sql_mutations(lit: &str) -> Vec<(usize, usize, String, String)> {
         let mut depth = 0usize;
         let mut ands: Vec<(usize, usize)> = Vec::new();
         let mut end = lit
-            .trim_end_matches(['"', ' ', '\t', '\r', '\n', ';'])
+            .trim_end_matches(['"', '#', ' ', '\t', '\r', '\n', ';'])
             .len();
         let mut has_or = false;
         let mut between = false;
@@ -1007,6 +1017,16 @@ mod tests {
         assert!(!found.iter().any(|(f, _)| f == "AND 5"));
         // Prose is not SQL.
         assert!(sql_mutations("\"a < b where x\"").is_empty());
+        assert!(sql_mutations("\"Delete <b>x</b>\"").is_empty());
+        assert!(sql_mutations("\"DELETE <b>x</b>\"").is_empty());
+        assert!(sql_mutations("\"Update failed: n > 3\"").is_empty());
+        // A raw literal is SQL too, and its closing `"#` is not part of a conjunct.
+        let raw = sql_mutations("r#\"SELECT 1 FROM t WHERE a > 1 AND b = 2\"#");
+        assert!(raw.iter().any(|m| m.2 == ">" && m.3 == ">="), "{raw:?}");
+        assert!(
+            raw.iter().any(|m| m.2 == "AND b = 2" && m.3.is_empty()),
+            "{raw:?}"
+        );
         // An `OR` in the clause leaves it alone; `<>` is not an ordering.
         let or = sql_mutations("\"SELECT 1 WHERE a <> 1 AND b = 2 OR c = 3\"");
         assert!(or.is_empty(), "{or:?}");
