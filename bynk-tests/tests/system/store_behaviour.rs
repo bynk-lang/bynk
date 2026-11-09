@@ -2020,6 +2020,7 @@ fn recompiling_older_source_against_a_newer_lock_is_refused() {
         "names the removed variant: {text}"
     );
     assert!(text.contains("Holder"), "names the agent: {text}");
+    assert!(text.contains("removed"), "refused as a removal: {text}");
 }
 
 // Decision A: a build with no schema lock emits no version logic, and carries
