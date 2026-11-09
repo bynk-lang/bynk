@@ -283,13 +283,29 @@ fn every_self_hosted_job_keeps_target_warm() {
                 l == format!("- *{step}") || l == format!("- &{step}")
             })
         };
-        for step in ["self_hosted_checkout", "self_hosted_clean"] {
+        for step in [
+            "self_hosted_preflight",
+            "self_hosted_checkout",
+            "self_hosted_clean",
+        ] {
             assert!(
                 has(step),
                 "`{}` can run self-hosted but lacks `{step}`",
                 job.key
             );
         }
+        let at = |step: &str| {
+            job.lines.iter().position(|l| {
+                let l = l.trim();
+                l == format!("- *{step}") || l == format!("- &{step}")
+            })
+        };
+        assert!(
+            at("self_hosted_preflight") < at("self_hosted_checkout"),
+            "`{}`: `self_hosted_preflight` must come before `self_hosted_checkout`, \
+             which wipes target/ when the runner has no git",
+            job.key
+        );
         assert!(
             !job.lines
                 .iter()
