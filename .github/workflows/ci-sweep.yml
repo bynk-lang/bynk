@@ -8,7 +8,8 @@ name: CI sweep
 # person's call (push or toggle draft/ready; for a queue group, take the PR out
 # of the queue and add it back).
 #
-# Scheduled workflows run only from the default branch, so this cannot be
+# The reporting half is scripts/ci/ci-sweep-report.sh, tested in xtask against a
+# stub `gh`. Scheduled workflows run only from the default branch, so the whole job cannot be
 # exercised before it merges; once on `main`, run it by hand with
 # `gh workflow run ci-sweep.yml`.
 on:
@@ -41,6 +42,10 @@ jobs:
       PR_GRACE_MIN: "45"
       GROUP_GRACE_MIN: "20"
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
       - name: Look for heads with no ci.yml run
         run: |
           set -euo pipefail
@@ -86,35 +91,6 @@ jobs:
           done < <(gh api "repos/$GH_REPO/git/matching-refs/heads/gh-readonly-queue/main/" \
             --jq '.[] | [.ref, .object.sha] | @tsv')
 
-          if [ -z "$findings" ]; then
-            echo "Every open PR head and queue group has a ci.yml run."
-            exit 0
-          fi
-          printf '%s' "$findings"
-
-          # Report once per SHA on a single tracking issue.
-          title="CI runs missing"
-          number=$(gh issue list --state open --author app/github-actions --search "in:title \"$title\"" --json number,title \
-            --jq "[.[] | select(.title == \"$title\")][0].number // empty")
-          known=""
-          [ -z "$number" ] || known=$(gh issue view "$number" --json body,comments --jq '.body, (.comments[].body)')
-          fresh=""
-          while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            marker=${line##*<!-- }
-            grep -qF -- "<!-- $marker" <<<"$known" || fresh="$fresh$line"$'\n'
-          done <<<"$findings"
-          if [ -z "$fresh" ]; then
-            echo "Already reported."
-            exit 0
-          fi
-          run_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID"
-          body="${fresh}
-          Found by the [CI sweep]($run_url). It only reports; nothing was re-run."
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body
-
-          GitHub sometimes drops the event that starts CI (#3119). Close this issue once the listed items are sorted out; the next finding opens a new one."
-          fi
+          # Report once per SHA on a single tracking issue. The logic lives in
+          # a script so xtask tests can run it against a stub `gh` (#3143).
+          printf '%s' "$findings" | bash scripts/ci/ci-sweep-report.sh
