@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk check` counts a D1 call's parameters even when its binding has no migrations directory (`bynk.d1.sql_param_count`); the other D1 SQL checks still need a schema, and `[check] d1_sql = false` turns both off"
----
+# 0772 — A D1 call's parameter count is checked without a schema
 
-## ADR: d1-sql-count-without-schema
-title: A D1 call's parameter count is checked without a schema
-summary: A Rust scanner counts `?`/`?N` parameters for bindings with no migrations; one opt-out key
+- **Status:** Accepted (v0.525.20)
 
 **Context.** #3070 prepares each literal D1 statement against the schema a binding's migrations build, and takes the parameter count from the prepared statement. A binding with no `migrations/<database>/` directory has no schema, so nothing was checked (decision B), and a wrong `?N` count failed only at run time. The count is a property of the SQL text and the list, not of the schema (#3126).
 
