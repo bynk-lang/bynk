@@ -149,6 +149,8 @@ pub enum ProjectPathsError {
     },
     /// #3054: a `[build]` key whose value isn't one the key accepts.
     BadBuild { key: &'static str, reason: String },
+    /// #3054: a `[profile.<name>]` table that isn't well formed.
+    BadProfile { profile: String, reason: String },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
     /// #2207 (`project_and_package`): both `[project]` and `[package]`, so the
@@ -212,10 +214,19 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("build", &["out", "target", "platform", "emit"]),
+    ("profile", PROFILE_NAMES),
     ("unstable", &["allow"]),
     ("test", &["targets", "mutate"]),
     ("workspace", &["members", "exclude"]),
 ];
+
+/// #3054: the named build profiles, each a `[profile.<name>]` table. The set is
+/// fixed: `dev` builds with the function-contract call-site guard, `release`
+/// without it.
+pub const PROFILE_NAMES: &[&str] = &["dev", "release"];
+
+/// The keys a `[profile.<name>]` table accepts.
+const PROFILE_KEYS: &[&str] = &["contracts"];
 
 /// #2207 (packaging slice 1): the **map tables**, each with the keys one of
 /// its entries accepts. A map table's own keys are names the user chooses
@@ -347,6 +358,9 @@ impl std::fmt::Display for ProjectPathsError {
             ),
             ProjectPathsError::BadBuild { key, reason } => {
                 write!(f, "`[build]` `{key}` {reason}")
+            }
+            ProjectPathsError::BadProfile { profile, reason } => {
+                write!(f, "`[profile.{profile}]` {reason}")
             }
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
@@ -521,6 +535,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
         match table {
             "workers" => drop(workers_config_from(entries)?),
             "build" => drop(build_config_from(entries)?),
+            "profile" => drop(profiles_from(entries)?),
             "unstable" => drop(unstable_config_from(entries)?),
             "test" => drop(test_targets_from(entries)?),
             "package" => drop(crate::manifest::package_config_from(entries)?),
@@ -661,6 +676,16 @@ pub struct BuildConfig {
     pub platform: Option<String>,
     /// `ts` or `js`.
     pub emit: Option<String>,
+    /// The `[profile.<name>]` tables present, by profile name.
+    pub profiles: BTreeMap<String, ProfileConfig>,
+}
+
+/// #3054: one `[profile.<name>]` table. `None` leaves the profile's built-in
+/// default (`dev` on, `release` off).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProfileConfig {
+    /// Whether the build carries the function-contract call-site guard.
+    pub contracts: Option<bool>,
 }
 
 /// Read `bynk.toml`'s `[build]` table, honouring `overlay` the way
@@ -677,10 +702,53 @@ pub fn try_read_build_config_with(
     let doc = content
         .parse::<toml::Table>()
         .map_err(|_| ProjectPathsError::Malformed)?;
-    match doc.get("build").and_then(|v| v.as_table()) {
-        Some(t) => build_config_from(t),
-        None => Ok(BuildConfig::default()),
+    let mut config = match doc.get("build").and_then(|v| v.as_table()) {
+        Some(t) => build_config_from(t)?,
+        None => BuildConfig::default(),
+    };
+    if let Some(t) = doc.get("profile").and_then(|v| v.as_table()) {
+        config.profiles = profiles_from(t)?;
     }
+    Ok(config)
+}
+
+/// The `[profile]` table's typed content: only the names in [`PROFILE_NAMES`],
+/// each a table whose only key is a boolean `contracts`.
+fn profiles_from(
+    table: &toml::Table,
+) -> Result<BTreeMap<String, ProfileConfig>, ProjectPathsError> {
+    let mut out = BTreeMap::new();
+    for (name, value) in table {
+        let bad = |reason: String| ProjectPathsError::BadProfile {
+            profile: name.clone(),
+            reason,
+        };
+        if !PROFILE_NAMES.contains(&name.as_str()) {
+            return Err(ProjectPathsError::UnknownTableKey {
+                table: "profile",
+                key: name.clone(),
+            });
+        }
+        let Some(entries) = value.as_table() else {
+            return Err(bad(format!(
+                "must be a table — write it as `[profile.{name}]`"
+            )));
+        };
+        let mut config = ProfileConfig::default();
+        for (key, v) in entries {
+            if !PROFILE_KEYS.contains(&key.as_str()) {
+                return Err(bad(format!(
+                    "has no key named `{key}` — its key is `contracts`"
+                )));
+            }
+            let Some(b) = v.as_bool() else {
+                return Err(bad("`contracts` must be `true` or `false`".to_string()));
+            };
+            config.contracts = Some(b);
+        }
+        out.insert(name.clone(), config);
+    }
+    Ok(out)
 }
 
 /// [`try_read_build_config_with`], reading `bynk.toml` from disk.
@@ -744,6 +812,7 @@ fn build_config_from(table: &toml::Table) -> Result<BuildConfig, ProjectPathsErr
         target: get("target", Some(&["bundle", "workers"]))?,
         platform: get("platform", Some(&["cloudflare", "node", "browser"]))?,
         emit: get("emit", Some(&["ts", "js"]))?,
+        profiles: BTreeMap::new(),
     })
 }
 

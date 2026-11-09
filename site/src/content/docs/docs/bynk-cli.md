@@ -524,7 +524,7 @@ Build a project into its output directory, taking its settings from
 equals `bynk compile . -o out` for a project with no `[build]` table.
 
 ```text
-bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--locked] [--offline]
+bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--profile dev|release] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -534,15 +534,16 @@ bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|
 | `--target` | `[build] target`, else `bundle` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
 | `--platform` | `[build] platform`, else `cloudflare` | The surface binding. |
 | `--emit` | `[build] emit`, else `ts` | `ts` or `js`. |
+| `--profile` | `release` | `release` builds without contract checks, the same bytes `compile` writes; `dev` builds with them. [`[profile.<name>]`](/docs/manifest/#profilename) overrides a profile's `contracts`. |
 
 Each setting is the flag, else the `[build]` key, else the default. On success
-`build` prints one line, `bynk: built <target> -> <out>`; warnings print as
+`build` prints one line, `bynk: built <target> -> <out>` (a build that is not the plain release one adds its profile: `built bundle (dev profile, contracts on) -> out`); warnings print as
 `compile` prints them.
 
 `build` infers from the project; [`compile`](#bynk-compile) is told. `compile`
 never reads `[build]`, which keeps the editor's *Show Compiled Output* view from
 changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` don't read
-it either.
+it, or `[profile.*]`, either.
 
 ---
 

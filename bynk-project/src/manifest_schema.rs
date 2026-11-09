@@ -113,6 +113,30 @@ struct BuildTable {
     emit: Option<String>,
 }
 
+/// Named build profiles, read by `bynk build --profile <name>` (default
+/// `release`). Only `dev` and `release` exist. A value here overrides the
+/// profile's built-in default, and a command-line flag overrides both.
+/// `bynk test`, `dev`, `deploy` and `compile` do not read this table.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ProfileTable {
+    /// The `dev` profile.
+    dev: Option<ProfileSettings>,
+    /// The `release` profile.
+    release: Option<ProfileSettings>,
+}
+
+/// One profile's settings.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ProfileSettings {
+    /// Whether the build carries the function-contract call-site guard.
+    /// Default: `true` in `dev`, `false` in `release`.
+    contracts: Option<bool>,
+}
+
 /// Opts in to experimental standard-library items, which carry no
 /// compatibility promise and can't be used until they are listed here.
 #[derive(JsonSchema)]
@@ -293,6 +317,7 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "lsp" => generator.subschema_for::<LspTable>(),
         "workers" => generator.subschema_for::<WorkersTable>(),
         "build" => generator.subschema_for::<BuildTable>(),
+        "profile" => generator.subschema_for::<ProfileTable>(),
         "unstable" => generator.subschema_for::<UnstableTable>(),
         "test" => generator.subschema_for::<TestTable>(),
         "package" => generator.subschema_for::<PackageTable>(),
