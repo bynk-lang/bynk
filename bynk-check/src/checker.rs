@@ -1732,6 +1732,7 @@ pub fn check_handler_body(
         requirements,
         callees,
         scopes: vec![param_scope],
+        list_lens: HashMap::new(),
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
@@ -1902,6 +1903,7 @@ pub fn check_body(
         requirements,
         callees,
         scopes: vec![scope],
+        list_lens: HashMap::new(),
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
@@ -2060,6 +2062,7 @@ pub fn check_invariants(
             requirements,
             callees,
             scopes: vec![field_scope.clone()],
+            list_lens: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2215,6 +2218,7 @@ pub(crate) fn check_contracts(
             requirements,
             callees,
             scopes: vec![scope],
+            list_lens: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2448,6 +2452,7 @@ pub fn check_transitions(
             requirements,
             callees,
             scopes: vec![scope.clone()],
+            list_lens: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2637,6 +2642,7 @@ pub fn check_migrations(
             requirements: &mut *requirements,
             callees: &mut *callees,
             scopes: vec![scope],
+            list_lens: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2978,6 +2984,10 @@ pub(crate) struct Ctx<'a> {
     pub callees: &'a mut HashMap<ExprId, Callee>,
     /// Stack of in-scope name → type frames.
     pub scopes: Vec<HashMap<String, TyId>>,
+    /// #3108: the fixed length of a `let` bound to a list literal, keyed by the
+    /// scope frame's depth and the name, so a D1 call's `params` can be a name.
+    /// [`bind`](Self::bind) and a new frame drop what they shadow or outlive.
+    pub list_lens: HashMap<(usize, String), usize>,
     /// Memoised `is`-pattern bindings, keyed by the condition sub-expression's
     /// span. `collect_is_bindings` runs at every `&&`/`implies` node and, for a
     /// left-nested `&&` chain, would otherwise re-walk each lhs subtree once per
@@ -3186,15 +3196,28 @@ impl<'a> Ctx<'a> {
 
     pub fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
+        self.drop_list_lens_from(self.scopes.len() - 1);
     }
     /// Push a frame already holding `scope`'s bindings.
     pub fn push_scope_with(&mut self, scope: HashMap<String, TyId>) {
         self.scopes.push(scope);
+        self.drop_list_lens_from(self.scopes.len() - 1);
+    }
+    fn drop_list_lens_from(&mut self, depth: usize) {
+        self.list_lens.retain(|(d, _), _| *d < depth);
+    }
+    /// #3108: the length of the list literal a `let` named `name` is bound to,
+    /// when the innermost binding of that name is such a `let`.
+    pub fn let_list_len(&self, name: &str) -> Option<usize> {
+        let depth = self.scopes.iter().rposition(|s| s.contains_key(name))?;
+        self.list_lens.get(&(depth, name.to_string())).copied()
     }
     pub fn pop_scope(&mut self) {
         self.scopes.pop();
     }
     pub fn bind(&mut self, name: String, ty: TyId) {
+        self.list_lens
+            .remove(&(self.scopes.len() - 1, name.clone()));
         self.scopes.last_mut().unwrap().insert(name, ty);
     }
 }
@@ -4450,6 +4473,13 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                         );
                     }
                     ctx.bind(l.name.name.clone(), final_ty);
+                    if l.let_else.is_none()
+                        && let ExprKind::ListLit(items, ..) = &l.value.kind
+                    {
+                        let depth = ctx.scopes.len() - 1;
+                        ctx.list_lens
+                            .insert((depth, l.name.name.clone()), items.len());
+                    }
                 }
             }
             Statement::EffectLet(l) => {

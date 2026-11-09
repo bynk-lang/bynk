@@ -50,9 +50,11 @@ pub struct D1SqlSite {
 
 /// The length of a list-literal argument; `None` when the list is a name, a
 /// call or anything whose length is not fixed by the text.
-fn literal_list_len(e: Option<&Expr>) -> Option<usize> {
+fn literal_list_len(e: Option<&Expr>, ctx: &Ctx) -> Option<usize> {
     match &e?.kind {
         ExprKind::ListLit(items, ..) => Some(items.len()),
+        // #3108: a `let` bound to a list literal in scope.
+        ExprKind::Ident(id) => ctx.let_list_len(&id.name),
         _ => None,
     }
 }
@@ -129,7 +131,7 @@ pub(crate) fn check_sql_argument(
                     text,
                     span: sql.span,
                     row: None,
-                    passed: literal_list_len(args.get(1)),
+                    passed: literal_list_len(args.get(1), ctx),
                 }),
             );
         } else {
@@ -419,7 +421,7 @@ pub(crate) fn check_typed_read(
                     row.clone(),
                     record.fields.iter().map(|f| f.name.name.clone()).collect(),
                 )),
-                passed: literal_list_len(args.get(1)),
+                passed: literal_list_len(args.get(1), ctx),
             }),
         );
     }
