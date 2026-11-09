@@ -41,6 +41,17 @@ type Code = String where Matches("[a-z]+")
 let c = Val[Code]("abc")
 ```
 
+or give the type an example, which every bare `Val[Code]` then uses (the
+compiler checks it matches the pattern):
+
+```bynk,fragment
+type Code = String where Matches("[a-z]+") @example("abc")
+```
+
+A `for all` over the type is still refused: an example is one value, so a
+property over it would run one case. See
+[`@example`](/book/reference/testing/#val-example).
+
 ## `bynk.val.agent_not_generable`
 
 ```text

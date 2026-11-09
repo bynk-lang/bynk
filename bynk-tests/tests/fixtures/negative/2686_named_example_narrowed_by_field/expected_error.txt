@@ -1,0 +1,1 @@
+bynk.val.needs_pin

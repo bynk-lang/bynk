@@ -100,7 +100,8 @@ reject a malformed one, and a route behind an actor must refuse a call with no
 credential.
 
 A route `Val` can't fill, such as one whose path parameter is a
-`String where Matches(…)`, is skipped and named. `bynk test --smoke --print`
+`String where Matches(…)` with no `@example`, is skipped and named. Give the
+type an [`@example`](/book/reference/testing/#val-example) and the route is run. `bynk test --smoke --print`
 prints the suites, so you can copy one into `tests/` and finish it by hand.
 Against a named target only `GET` routes are called, unless you pass
 `--smoke-unsafe`. See

@@ -1921,6 +1921,14 @@ fn refined_default(decl: &TypeDecl) -> Option<String> {
 /// written: a refined type's declaration, or a record field's inline `where`
 /// (#2658: `qty: Int where Positive` must fabricate `1`, not `0`).
 fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option<String> {
+    // #2686: an `@example` is the value for a refinement `Val` cannot generate
+    // (`Matches`, `IsoDate`); the checker proved it satisfies the refinement.
+    if let Some(lit) = refinement
+        .and_then(bynk_check::checker::refinement_example)
+        .and_then(lower_const_literal_raw)
+    {
+        return Some(lit);
+    }
     match base {
         BaseType::Int => {
             let mut lo: i64 = 0;

@@ -1,0 +1,1 @@
+bynk.types.example_on_named_field

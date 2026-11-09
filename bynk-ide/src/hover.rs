@@ -363,6 +363,10 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_handler_annotation_at(text, span.start) {
         return Some(content);
     }
+    // 8b. #2686: an `@example` after a type's or field's refinement.
+    if let Some(content) = crate::symbols::describe_refinement_example_at(text, span.start) {
+        return Some(content);
+    }
     // 9. v0.123 (slice 2, DECISION B): a `Recv.member` name-receiver access — a
     //    capability op (`Clock.now`), a refined/opaque `of`/`unsafe`, or a type
     //    static — via the same path signature help uses, over the project and the

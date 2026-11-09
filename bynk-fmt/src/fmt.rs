@@ -1670,6 +1670,11 @@ impl<'a> Formatter<'a> {
             }
             self.format_pred(p);
         }
+        // #2686: `@example(…)` after a type's or field's refinement.
+        for ann in &r.annotations {
+            self.push(" ");
+            self.push(&annotation_to_string(ann));
+        }
     }
 
     fn format_pred(&mut self, p: &RefinementPred) {

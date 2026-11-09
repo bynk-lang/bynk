@@ -1,0 +1,8 @@
+// #2686: an example is for `Val`; a property over it would repeat one value.
+suite demo.d {
+  property "codes cannot be generated" {
+    for all c: Code {
+      expect c == c
+    }
+  }
+}

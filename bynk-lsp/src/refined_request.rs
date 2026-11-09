@@ -263,6 +263,7 @@ fn clause(kind: &PredKind) -> Clause {
                 arg_text: None,
                 span: bynk_syntax::span::Span::default(),
             }],
+            annotations: Vec::new(),
             span: bynk_syntax::span::Span::default(),
         }),
         description,

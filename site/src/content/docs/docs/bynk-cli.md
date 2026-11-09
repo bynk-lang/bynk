@@ -1055,7 +1055,8 @@ first actor with a fabricated identity (`by User(Val[UserId])`). A context with
 more than one `from http` service puts the service's name before the method.
 
 - **What is skipped.** A route whose arguments or principal `Val` can't
-  fabricate, such as a `String where Matches(…)` path parameter, is skipped and
+  fabricate, such as a `String where Matches(…)` path parameter with no
+  [`@example`](/book/reference/testing/#val-example), is skipped and
   named with the checker's reason (`[bynk.val.needs_pin]`). Under
   `--format json` it is an `outcome: "skipped"` case, counted in `skipped`.
   The run reports `smoke: <n> cases from <m> routes, <k> skipped`, and fails if

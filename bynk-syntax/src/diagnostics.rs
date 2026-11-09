@@ -3230,6 +3230,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["type_decl"],
     ),
     dg(
+        "bynk.types.duplicate_example",
+        "A refinement carries more than one `@example`.",
+        &["refinement"],
+    ),
+    dg(
         "bynk.types.duplicate_literal_arm",
         "A `match` has two arms for the same literal value.",
         &["match_arm"],
@@ -3270,6 +3275,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.err_value_mismatch",
         "An `Err` payload has the wrong type.",
         &["err_expr"],
+    ),
+    dg(
+        "bynk.types.example_not_literal",
+        "An `@example` is not exactly one literal of the base type.",
+        &["refinement"],
+    ),
+    dg(
+        "bynk.types.example_on_named_field",
+        "An `@example` on a field whose type is a named type (it belongs on the named type).",
+        &["refinement"],
+    ),
+    dg(
+        "bynk.types.example_unneeded",
+        "An `@example` on a refinement `Val` can already generate (only `Matches` and `IsoDate` take one).",
+        &["refinement"],
+    ),
+    dg(
+        "bynk.types.example_violates",
+        "An `@example` does not satisfy its refinement's predicates.",
+        &["refinement"],
     ),
     d(
         "bynk.types.extensible_match_needs_wildcard",
@@ -3626,6 +3651,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.uninferable_element_type",
         "An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from.",
         &["list_literal"],
+    ),
+    dg(
+        "bynk.types.unknown_annotation",
+        "An annotation after a refinement is not `@example`.",
+        &["refinement"],
     ),
     dg(
         "bynk.types.unknown_field",
