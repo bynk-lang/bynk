@@ -99,17 +99,12 @@ read -r id digest < <(json asset "$asset" <<<"$release") || true
 
 mkdir -p "$out"
 echo "downloading $repo $tag $asset (authenticated)"
-if ! api -H "Accept: application/octet-stream" -o "$out/$asset" \
-       "https://api.github.com/repos/$repo/releases/assets/$id"; then
-  # Asset downloads count against the token's API rate limit, which every
-  # concurrent job shares. If it is spent (403/429), fall back to the
-  # anonymous route rather than fail outright: the digest from the lookup
-  # above still checks what arrives.
-  echo "::warning::gh-release-fetch: API download of $asset failed; trying the anonymous release URL"
-  curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-delay 3 -o "$out/$asset" \
-    "https://github.com/$repo/releases/download/$tag/$asset" ||
-    die "could not download $repo $tag $asset"
-fi
+# No anonymous fallback: CI downloads go only through the authenticated API.
+# If the token's rate limit is spent (403/429), fail loudly rather than
+# quietly retrying on the route this script exists to avoid.
+api -H "Accept: application/octet-stream" -o "$out/$asset" \
+  "https://api.github.com/repos/$repo/releases/assets/$id" ||
+  die "could not download $repo $tag $asset through the API (rate limit spent, or the asset is gone)"
 
 if command -v sha256sum >/dev/null 2>&1; then
   got=$(sha256sum "$out/$asset" | cut -d' ' -f1)
