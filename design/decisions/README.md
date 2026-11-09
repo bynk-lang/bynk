@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0770](0770-inter-do-env-strip.md) | **An inter-DO call strips `env` from the forwarded deps** (v0.525.14) — The callee rebuilds `env` from its own binding, so the caller's is never serialised | Accepted (v0.525.14) |
 | [0769](0769-suite-type-stub-and-generic-codecs.md) | **Suite types and constants in stub values; local codecs for any generic shape** (v0.525.10) — How #3111 lifts the two known limits of suite-local `type`/`const` (ADR 0759) | Accepted (v0.525.10) |
 | [0768](0768-mutate-sql-literals.md) | **`--mutate` SQL literal mutants** (v0.525.7) — How slice 3 of `bynk test --mutate` finds and validates SQL mutants | Accepted (v0.525.7) |
 | [0767](0767-mutate-guards-and-arithmetic.md) | **`--mutate` guard, branch and arithmetic mutants** (v0.525.5) — Which sites slice 2 of `bynk test --mutate` mutates, and what "guard" means | Accepted (v0.525.5) |

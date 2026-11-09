@@ -1,11 +1,6 @@
----
-level: patch
-changelog: An agent call no longer forwards the caller's Workers `env` (secrets and vars) in the inter-Durable-Object request body
----
+# 0770 — An inter-DO call strips `env` from the forwarded deps
 
-## ADR: inter-do-env-strip
-title: An inter-DO call strips `env` from the forwarded deps
-summary: The callee rebuilds `env` from its own binding, so the caller's is never serialised
+- **Status:** Accepted (v0.525.14)
 
 **Context.** `callDurableObjectMethod` serialised the caller's whole `deps`, which on the Workers target can carry the Worker `env`. Secrets and vars are plain strings, so they reached the internal request body, where a tail worker or request log can read them. Bindings serialise to `{}`. The receiving Durable Object rebuilds `env`, its `given` providers and its events fan-out from its own `this.__env`.
 
