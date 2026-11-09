@@ -64,6 +64,12 @@ pub struct MutateArgs {
 /// track yet. A file deleted since `rev` is not listed by the caller's sites
 /// anyway, since it no longer exists.
 fn changed_files(root: &Path, rev: &str) -> Result<BTreeSet<String>, String> {
+    // A leading `-` would be read by git as an option, not a revision.
+    if rev.starts_with('-') {
+        return Err(format!(
+            "`--changed {rev}`: a git ref cannot start with `-`"
+        ));
+    }
     let git = |args: &[&str]| -> Result<String, String> {
         let out = std::process::Command::new("git")
             .arg("-C")
@@ -991,6 +997,15 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         }
     }
     match fail_under {
+        // Nothing changed is nothing to fail: a diff with no `.bynk`
+        // declarations to mutate meets any threshold.
+        Some(_) if total == 0 && changed.is_some() => {
+            let rev = changed.as_deref().unwrap_or_default();
+            if !json {
+                println!("no declarations changed since {rev}, so nothing was mutated");
+            }
+            ExitCode::SUCCESS
+        }
         Some(min) if ran == 0 => {
             eprintln!(
                 "{program} test: no mutant reached a suite, so --mutate-fail-under {min} cannot be met"

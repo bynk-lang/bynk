@@ -781,7 +781,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|n
 | `--mutate-timeout SECONDS` | 3× the unmutated run, at least 10 | With `--mutate`, kill a mutant's run after this long; it counts as killed. |
 | `--mutate-all-suites` | off | With `--mutate`, run every suite against every mutant, not only the suites that reach the mutated unit. |
 | `--mutate-fail-under PERCENT` | — | With `--mutate`, exit non-zero when fewer than `PERCENT` of the mutants that ran were killed, or when no mutant reached a suite. |
-| `--changed GIT_REF` | — | With `--mutate`, mutate only declarations in `.bynk` files that differ from `GIT_REF` (what `git diff GIT_REF` names, plus files git doesn't track yet). An unknown ref is an error. |
+| `--changed GIT_REF` | — | With `--mutate`, mutate only declarations in `.bynk` files that differ from `GIT_REF` (a ref, not an option; what `git diff GIT_REF` names, plus files git doesn't track yet). An unknown ref is an error. When nothing changed, `--mutate-fail-under` passes. |
 | `--mutate-jobs N` | 1 | With `--mutate`, run `N` mutants at once (1–256), each in its own scratch output directory. The report doesn't depend on it. |
 
 **Exit code** — follows the runner's own process status: `0` when every case

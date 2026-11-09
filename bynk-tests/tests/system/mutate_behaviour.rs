@@ -415,7 +415,36 @@ fn changed_mutates_only_declarations_in_files_changed_since_the_ref() {
     assert_eq!(m["changed"]["ref"], "HEAD");
     assert_eq!(m["changed"]["files"], serde_json::json!([]));
 
-    // One file edited (a trailing comment keeps every span), one added.
+    // A clean tree meets any threshold: there is nothing to score.
+    let r = run_in(
+        &dir,
+        &[
+            "--mutate",
+            "--changed",
+            "HEAD",
+            "--mutate-fail-under",
+            "100",
+        ],
+    );
+    assert!(r.success, "{}", r.stderr);
+    assert!(
+        r.stdout.contains("no declarations changed since HEAD"),
+        "{}",
+        r.stdout
+    );
+
+    // A ref that looks like an option is refused, not handed to git.
+    let r = run_in(&dir, &["--mutate", "--changed=--output=x"]);
+    assert!(!r.success);
+    assert!(r.stderr.contains("cannot start with `-`"), "{}", r.stderr);
+
+    // One file edited (a trailing comment keeps every span), one added
+    // without being tracked.
+    std::fs::write(
+        dir.join("src/demo/fresh.bynk"),
+        "commons demo.fresh\n\nfn gt(a: Int, b: Int) -> Bool {\n  a > b\n}\n",
+    )
+    .unwrap();
     let limits = dir.join("src/demo/limits.bynk");
     let mut text = std::fs::read_to_string(&limits).unwrap();
     text.push_str("\n// touched\n");
@@ -423,7 +452,7 @@ fn changed_mutates_only_declarations_in_files_changed_since_the_ref() {
     let m = mutation_block(&dir, &["--changed", "HEAD"]);
     assert_eq!(
         m["changed"]["files"],
-        serde_json::json!(["src/demo/limits.bynk"])
+        serde_json::json!(["src/demo/fresh.bynk", "src/demo/limits.bynk"])
     );
     let files: Vec<&str> = m["mutants"]
         .as_array()
@@ -431,7 +460,15 @@ fn changed_mutates_only_declarations_in_files_changed_since_the_ref() {
         .iter()
         .map(|x| x["file"].as_str().unwrap())
         .collect();
-    assert_eq!(files, vec!["src/demo/limits.bynk"; 2]);
+    assert_eq!(
+        files.iter().filter(|f| f.ends_with("fresh.bynk")).count(),
+        1
+    );
+    assert_eq!(
+        files.iter().filter(|f| f.ends_with("limits.bynk")).count(),
+        2
+    );
+    assert_eq!(files.len(), 3);
 
     // The same run as without the flag, minus the unchanged file's mutants.
     let all = mutation_block(&dir, &[]);
@@ -439,7 +476,7 @@ fn changed_mutates_only_declarations_in_files_changed_since_the_ref() {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|x| x["file"] == "src/demo/limits.bynk")
+        .filter(|x| x["file"] != "src/demo/lonely.bynk")
         .collect();
     let got: Vec<&serde_json::Value> = m["mutants"].as_array().unwrap().iter().collect();
     assert_eq!(got, expected);
