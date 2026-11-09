@@ -312,3 +312,31 @@ fn guard_and_arithmetic_mutants_are_reported_and_a_one_sided_suite_leaves_a_surv
     assert_eq!(status("small", "n == 3", "true"), "killed");
     assert_eq!(status("small", "n == 3", "false"), "killed");
 }
+
+#[test]
+fn sql_mutants_are_reported_and_a_boundary_free_suite_leaves_a_survivor() {
+    if !can_run() {
+        return;
+    }
+    let project = fixture().with_file_name("mutate_sql");
+    let r = run_in(&project, &["--mutate", "--format", "json"]);
+    assert!(r.success, "{}", r.stderr);
+    let doc: serde_json::Value = serde_json::from_str(&r.stdout)
+        .unwrap_or_else(|e| panic!("a JSON document: {e}\n{}\n{}", r.stdout, r.stderr));
+    let status = |from: &str, to: &str| -> String {
+        doc["mutation"]["mutants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["decl"] == "above" && m["from"] == from && m["to"] == to)
+            .unwrap_or_else(|| panic!("no mutant {from} -> {to}: {}", r.stdout))["status"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    // The suite never asks at the boundary, so the weaker comparison survives.
+    assert_eq!(status(">", ">="), "survived");
+    // Dropping either conjunct changes the count the suite checks.
+    assert_eq!(status("AND live = 1", ""), "killed");
+    assert_eq!(status("n > ?1 AND", ""), "killed");
+}
