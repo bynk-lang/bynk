@@ -41,7 +41,7 @@ pub use bynk_syntax::ast::ExprId;
 mod calls;
 pub mod codable;
 mod d1;
-pub use d1::D1SqlSite;
+pub use d1::{D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
@@ -645,6 +645,10 @@ pub enum Callee {
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
     /// the project phase can prepare it against the binding's migrations.
     D1Sql(d1::D1SqlSite),
+    /// #3139: a `Json.decodeSql[T](x)` whose `x` is the rows of a literal D1 read,
+    /// recorded under the argument's id, so the project phase can check `T`'s
+    /// fields against the statement's result columns.
+    D1Decode(d1::D1DecodeSite),
     /// A cross-context capability operation call (`B.Cap.op(...)` /
     /// `Alias.Cap.op(...)`).
     CrossCap {
@@ -1738,6 +1742,7 @@ pub fn check_handler_body(
         callees,
         scopes: vec![param_scope],
         list_lens: HashMap::new(),
+        row_links: HashMap::new(),
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
@@ -1909,6 +1914,7 @@ pub fn check_body(
         callees,
         scopes: vec![scope],
         list_lens: HashMap::new(),
+        row_links: HashMap::new(),
         is_binding_cache: HashMap::new(),
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
@@ -2068,6 +2074,7 @@ pub fn check_invariants(
             callees,
             scopes: vec![field_scope.clone()],
             list_lens: HashMap::new(),
+            row_links: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2224,6 +2231,7 @@ pub(crate) fn check_contracts(
             callees,
             scopes: vec![scope],
             list_lens: HashMap::new(),
+            row_links: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2458,6 +2466,7 @@ pub fn check_transitions(
             callees,
             scopes: vec![scope.clone()],
             list_lens: HashMap::new(),
+            row_links: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2648,6 +2657,7 @@ pub fn check_migrations(
             callees: &mut *callees,
             scopes: vec![scope],
             list_lens: HashMap::new(),
+            row_links: HashMap::new(),
             is_binding_cache: HashMap::new(),
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
@@ -2993,6 +3003,10 @@ pub(crate) struct Ctx<'a> {
     /// scope frame's depth and the name, so a D1 call's `params` can be a name.
     /// [`bind`](Self::bind) and a new frame drop what they shadow or outlive.
     pub list_lens: HashMap<(usize, String), usize>,
+    /// #3139: names that hold the rows of a literal D1 read (`let r <- Cap.all(…)`, or
+    /// the payload a `match r { Ok(x) => … }` binds), keyed like `list_lens`, so a
+    /// `Json.decodeSql[T](x)` can be checked against the statement's columns.
+    pub row_links: HashMap<(usize, String), d1::RowLink>,
     /// Memoised `is`-pattern bindings, keyed by the condition sub-expression's
     /// span. `collect_is_bindings` runs at every `&&`/`implies` node and, for a
     /// left-nested `&&` chain, would otherwise re-walk each lhs subtree once per
@@ -3210,6 +3224,7 @@ impl<'a> Ctx<'a> {
     }
     fn drop_list_lens_from(&mut self, depth: usize) {
         self.list_lens.retain(|(d, _), _| *d < depth);
+        self.row_links.retain(|(d, _), _| *d < depth);
     }
     /// #3108: the length of the list literal a `let` named `name` is bound to,
     /// when the innermost binding of that name is such a `let`.
@@ -3217,11 +3232,18 @@ impl<'a> Ctx<'a> {
         let depth = self.scopes.iter().rposition(|s| s.contains_key(name))?;
         self.list_lens.get(&(depth, name.to_string())).copied()
     }
+    /// #3139: the D1 read the innermost binding of `name` holds the rows of.
+    pub fn row_link(&self, name: &str) -> Option<&d1::RowLink> {
+        let depth = self.scopes.iter().rposition(|s| s.contains_key(name))?;
+        self.row_links.get(&(depth, name.to_string()))
+    }
     pub fn pop_scope(&mut self) {
         self.scopes.pop();
     }
     pub fn bind(&mut self, name: String, ty: TyId) {
         self.list_lens
+            .remove(&(self.scopes.len() - 1, name.clone()));
+        self.row_links
             .remove(&(self.scopes.len() - 1, name.clone()));
         self.scopes.last_mut().unwrap().insert(name, ty);
     }
@@ -4369,6 +4391,7 @@ pub(super) fn bind_effect_let(
             );
         }
         ctx.bind(l.name.name.clone(), final_ty);
+        d1::link_effect_let(l, ctx);
     }
 }
 

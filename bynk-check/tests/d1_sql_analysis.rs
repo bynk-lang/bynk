@@ -14,6 +14,7 @@ const MIGRATION: &str = "CREATE TABLE orders (id TEXT PRIMARY KEY, total INTEGER
 fn source(statements: &str) -> String {
     format!(
         "context demo\n\nconsumes bynk.cloudflare {{ D1 }}\n\ncapability Orders = D1\n\n\
+         type Order = {{ id: String, total: Int, note: Option[String] }}\n\n\
          service probe {{\n  on call(id: String) -> Effect[Bool] given Orders {{\n{statements}    true\n  }}\n}}\n"
     )
 }
@@ -341,4 +342,51 @@ fn a_given_fn_is_checked_like_a_handler() {
     );
     let good = "  let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])\n";
     assert!(given_fn_categories("given-ok", good, true).is_empty());
+}
+
+/// #3139: `Json.decodeSql[T](text)` of a literal D1 read's rows is checked
+/// against the statement's columns on the editor path too: a required field with
+/// no column is reported; an `Option` field with none, an extra column, a name the
+/// check can't follow (copied, shadowed) and the opt-out are all silent.
+#[test]
+fn a_decode_is_checked_against_the_statements_columns() {
+    let decode = |sql: &str, arm: &str| {
+        format!(
+            "    let rows <- Orders.all(\"{sql}\", [])\n    \
+             let _ = match rows {{\n      Ok(text) => {arm}\n      Err(_) => false\n    }}\n"
+        )
+    };
+    let linked = "Json.decodeSql[List[Order]](text) is Ok(_)";
+    // `total` is hidden behind an alias.
+    let bad = decode("SELECT id, total AS amount FROM orders", linked);
+    assert_eq!(
+        categories("dec-bad", "", &bad),
+        ["bynk.d1.select_field_missing"]
+    );
+    assert!(
+        categories("dec-optout", "[check]\nd1_sql = false\n", &bad).is_empty(),
+        "the opt-out covers it"
+    );
+    // An `Option` field with no column, and an extra column.
+    let ok = decode("SELECT id, total, 1 AS extra FROM orders", linked);
+    assert!(categories("dec-ok", "", &ok).is_empty());
+    // A copy of the text is not followed.
+    let copied = decode(
+        "SELECT id FROM orders",
+        "{ let copy = text\n        Json.decodeSql[List[Order]](copy) is Ok(_) }",
+    );
+    assert!(categories("dec-copy", "", &copied).is_empty());
+    // A shadowing binding is not the statement's text.
+    let shadowed = decode(
+        "SELECT id FROM orders",
+        "{ let text = \"[]\"\n        Json.decodeSql[List[Order]](text) is Ok(_) }",
+    );
+    assert!(categories("dec-shadow", "", &shadowed).is_empty());
+    // `first` and `Ok(Some(text))`.
+    let first = "    let row <- Orders.first(\"SELECT id FROM orders\", [])\n    \
+                 let _ = match row {\n      Ok(Some(text)) => Json.decodeSql[Order](text) is Ok(_)\n      _ => false\n    }\n";
+    assert_eq!(
+        categories("dec-first", "", first),
+        ["bynk.d1.select_field_missing"]
+    );
 }

@@ -79,7 +79,7 @@ mod native {
     use rusqlite::{Connection, config::DbConfig};
 
     use crate::checker::Callee;
-    use crate::checker::D1SqlSite;
+    use crate::checker::{D1DecodeSite, D1SqlSite};
     use crate::d1_migrations::{D1Migrations, d1_database_name, is_d1};
     use crate::project_model::ErrorSink;
     use crate::symbols::UnitTable;
@@ -245,7 +245,13 @@ mod native {
         ) -> Vec<CompileError> {
             // A deterministic order: by position in the source.
             let mut sites: BTreeMap<(usize, usize), &D1SqlSite> = BTreeMap::new();
+            let mut decodes: BTreeMap<(usize, usize), &D1DecodeSite> = BTreeMap::new();
             for callee in callees.values() {
+                // #3139: a `Json.decodeSql` linked to a statement's rows.
+                if let Callee::D1Decode(d) = callee {
+                    decodes.insert((d.span.start, d.span.end), d);
+                    continue;
+                }
                 // A `const` SQL argument's entry is `Const`, which keeps the site.
                 let site: &D1SqlSite = match callee {
                     Callee::D1Sql(site) => site,
@@ -277,6 +283,21 @@ mod native {
                 if let Some(err) = check_site(&conn, site, &database, source) {
                     out.push(err);
                 }
+            }
+            // #3139: each linked decode's required fields against the columns
+            // of the statement the rows came from (nothing to check without a
+            // schema, or when the statement itself doesn't prepare: that is
+            // already reported at its site).
+            for d in decodes.values() {
+                let Some(instance) = table.derived.get(&d.site.cap).filter(|i| is_d1(i)) else {
+                    continue;
+                };
+                let database = d1_database_name(&worker, &instance.binding);
+                let Some(conn) = self.schemas.get(&database) else {
+                    continue;
+                };
+                let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
+                out.extend(check_decode(&conn, d));
             }
             out
         }
@@ -350,6 +371,33 @@ mod native {
             }
         };
         count_error(site, stmt.parameter_count())
+    }
+
+    /// #3139: the required fields of the decoded row with no result column in the
+    /// statement the rows came from, one `select_field_missing` each.
+    fn check_decode(conn: &Connection, d: &D1DecodeSite) -> Vec<CompileError> {
+        let Ok(stmt) = conn.prepare(&d.site.text) else {
+            return Vec::new();
+        };
+        let columns: Vec<&str> = stmt.column_names().collect();
+        let what = format!("`{}.{}`", d.site.cap, d.site.op);
+        d.required
+            .iter()
+            .filter(|f| !columns.contains(&f.as_str()))
+            .map(|f| {
+                CompileError::new(
+                    "bynk.d1.select_field_missing",
+                    d.span,
+                    format!(
+                        "`{}` has a field `{f}`, but the statement of {what} has no column `{f}`",
+                        d.row
+                    ),
+                )
+                .with_note(
+                    "`Json.decodeSql` reads columns by name; alias the column in the SQL (`… AS name`) or rename the field",
+                )
+            })
+            .collect()
     }
 
     /// `bynk.d1.sql_param_count` when the SQL uses `used` parameters and the

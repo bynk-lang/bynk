@@ -1,0 +1,58 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Order = { id: String, total: Int, note: Option[String] }
+
+// #3139: `Json.decodeSql[T](text)`, where `text` is the rows of a literal D1
+// read, is checked against that statement's result columns: a required field
+// with no column is reported; an `Option` field with none, and an extra
+// column, are not.
+// The alias hides `total`: reported, through a `match`.
+service viaMatch {
+  on call() -> Effect[Bool] given Orders {
+    let rows <- Orders.all("SELECT id, total AS amount FROM orders", [])
+    match rows {
+      Ok(text) => Json.decodeSql[List[Order]](text) is Ok(_)
+      Err(_) => false
+    }
+  }
+}
+
+// The same through `first` and `Ok(Some(…))`.
+service viaFirst {
+  on call() -> Effect[Bool] given Orders {
+    let row <- Orders.first("SELECT id, total AS amount FROM orders", [])
+    match row {
+      Ok(Some(text)) => Json.decodeSql[Order](text) is Ok(_)
+      _ => false
+    }
+  }
+}
+
+// And through `let … else`.
+service viaLetElse {
+  on call() -> Effect[Bool] given Orders {
+    let Ok(text) <- Orders.all("SELECT id FROM orders", []) else {
+      false
+    }
+    let Ok(_) = Json.decodeSql[List[Order]](text) else {
+      false
+    }
+    true
+  }
+}
+
+// Clean: every required field has a column (an extra one and a missing
+// `Option` column are fine), and a name the check can't follow is left alone.
+service clean {
+  on call() -> Effect[Bool] given Orders {
+    let rows <- Orders.all("SELECT id, total, 1 AS extra FROM orders", [])
+    match rows {
+      Ok(text) => Json.decodeSql[List[Order]](text) is Ok(_)
+      Err(_) => false
+    }
+  }
+}

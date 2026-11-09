@@ -1,0 +1,4 @@
+# exact
+bynk.d1.select_field_missing `Order` has a field `total`, but the statement of `Orders.all` has no column `total`
+bynk.d1.select_field_missing `Order` has a field `total`, but the statement of `Orders.first` has no column `total`
+bynk.d1.select_field_missing `Order` has a field `total`, but the statement of `Orders.all` has no column `total`

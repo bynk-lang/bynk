@@ -3075,6 +3075,9 @@ pub(crate) fn check_json_static(
                 );
                 return None;
             }
+            if op == "decodeSql" {
+                super::d1::record_decode(&args[0], span, t, ctx);
+            }
             if !super::codable::json_codable(t, &ctx.input.types, tys, &ctx.type_vars)
                 || t == tys.intern(Ty::Unit)
             {
