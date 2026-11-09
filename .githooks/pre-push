@@ -8,9 +8,9 @@
 #     git config core.hooksPath .githooks
 #
 # Why only the fast gates: the PR gate's critical path is the
-# `Test suite (windows-latest)` leg at ~7 minutes, and `cargo fmt --check` and
-# `cargo clippy` between them account for under a minute of it on CI. Catching
-# those two here removes the most common reason a PR needs a second run. The
+# `Test suite (windows-latest)` leg at ~7 minutes, and fmt, clippy and the strict
+# rustdoc build are the cheap lint-class gates that fail most often. Catching
+# them here removes the most common reason a PR needs a second run. The
 # test suite is deliberately NOT run on every push — it is minutes of local
 # wall clock, and a hook slow enough to be worth bypassing gets bypassed. Run
 # it yourself before opening a PR:
