@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.19** | "The D1 SQL check is pinned for context-level `fn … given` functions (literal, `const`, parameter count and `batch` are checked as in a handler)" |
 | **v0.525.18** | "`bynk test --mutate` makes SQL mutants only from the SQL the checker ties to a D1 call (including a `const` bound to one, in any case), and now reads `\\n` escapes and `CASE … END` correctly" |
 | **v0.525.17** | "The D1 SQL check is pinned for `suite … as integration` cases (they are checked like unit-suite cases); `system` suites and suite helper `fn`s can't hold a D1 call" |
 | **v0.525.16** | "The D1 SQL schema check reuses a database's built schema until its migrations change, so the language server doesn't re-run every migration on each edit; test-body statements also point inside the literal" |
