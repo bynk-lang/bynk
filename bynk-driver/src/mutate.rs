@@ -221,9 +221,7 @@ pub fn build_model(root: &Path, sources: &HashMap<PathBuf, String>) -> Model {
                 for (j, t) in sig.iter().enumerate().skip(i + 1) {
                     match t.kind {
                         TokenKind::LParen | TokenKind::LBracket => depth += 1,
-                        TokenKind::RParen | TokenKind::RBracket => {
-                            depth = depth.saturating_sub(1)
-                        }
+                        TokenKind::RParen | TokenKind::RBracket => depth = depth.saturating_sub(1),
                         TokenKind::LBrace | TokenKind::FatArrow if depth == 0 => {
                             close = Some(j);
                             break;
@@ -704,7 +702,15 @@ mod tests {
         let found: Vec<(String, &str, &str, usize, usize)> = model
             .sites
             .iter()
-            .map(|s| (s.qualified(), s.from.as_str(), s.to.as_str(), s.line, s.column))
+            .map(|s| {
+                (
+                    s.qualified(),
+                    s.from.as_str(),
+                    s.to.as_str(),
+                    s.line,
+                    s.column,
+                )
+            })
             .collect();
         assert_eq!(
             found,
