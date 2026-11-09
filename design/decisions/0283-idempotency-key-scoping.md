@@ -6,10 +6,10 @@
 shipped slice 0 of the `Idempotency` capability without any automatic scoping
 of the developer-supplied `key` — two unrelated handlers that happened to pass
 the same literal key would silently share one cache entry. This was named as
-an explicit follow-up, not a slice of
-[`design/tracks/idempotency-capability.md`](../tracks/idempotency-capability.md)
-itself (it's a correctness fix to the shipped mechanism, not new capability
-surface).
+an explicit follow-up, not a slice of the Idempotency track itself (spine
+#921, now retired — see
+[`../archive/retired-tracks.md`](../archive/retired-tracks.md)): it's a
+correctness fix to the shipped mechanism, not new capability surface.
 
 Two candidates were weighed: hash the call site's source span into the key
 (opaque, but the emitter infrastructure that tracks spans for source maps is

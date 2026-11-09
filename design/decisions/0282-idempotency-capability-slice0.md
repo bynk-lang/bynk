@@ -2,8 +2,8 @@
 
 - **Status:** Accepted (v0.236)
 
-**Context.** The `Idempotency` capability track (spine #921,
-[`design/tracks/idempotency-capability.md`](../tracks/idempotency-capability.md))
+**Context.** The `Idempotency` capability track (spine #921, now retired — see
+[`../archive/retired-tracks.md`](../archive/retired-tracks.md))
 settled §3.1 on a single generic capability op —
 `fn dedup[T](key: String, expiresAfter: Duration, compute: () -> Effect[T]) -> Effect[T]`
 — that would take the caller's "what to do on a cache miss" as a closure and
