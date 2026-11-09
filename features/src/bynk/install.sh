@@ -65,10 +65,29 @@ if missing_tools; then
     fi
 fi
 
+# A local release cache, for this repo's CI only. The published feature never
+# contains this directory: it is gitignored, and the publish job packages a
+# fresh checkout. CI fills it beforehand with authenticated, digest-checked
+# downloads (scripts/ci/devcontainer-feature-prefetch.sh), because the
+# anonymous github.com release route below answers 504s under load. Layout:
+# `latest` holds a tag; `<tag>/` holds SHA256SUMS and the archives. Once the
+# directory exists it is the only source: anything missing is an error, never a
+# fall back to the network.
+HERE=$(cd "$(dirname "$0")" && pwd)
+CACHE="$HERE/ci-release-cache"
+[ -d "$CACHE" ] || CACHE=""
+
 # Resolve the release tag. `latest` follows the github.com redirect rather than
 # the REST API, so an image build is not subject to the unauthenticated API
 # rate limit.
-if [ "$VERSION" = "latest" ]; then
+if [ "$VERSION" = "latest" ] && [ -n "$CACHE" ]; then
+    [ -f "$CACHE/latest" ] || die "the local release cache $CACHE has no latest tag"
+    TAG=$(cat "$CACHE/latest")
+    case "$TAG" in
+        v[0-9]*) ;;
+        *) die "the local release cache $CACHE has a bad latest tag ($TAG)" ;;
+    esac
+elif [ "$VERSION" = "latest" ]; then
     url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") ||
         die "could not resolve the latest release of $REPO"
     TAG="${url##*/tag/}"
@@ -90,10 +109,18 @@ BASE="https://github.com/$REPO/releases/download/$TAG"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-curl -fsSL --retry 3 -o "$WORK/SHA256SUMS" "$BASE/SHA256SUMS" ||
-    die "could not download $BASE/SHA256SUMS (is $TAG a published release?)"
-curl -fsSL --retry 3 -o "$WORK/$ASSET" "$BASE/$ASSET" ||
-    die "could not download $BASE/$ASSET"
+if [ -n "$CACHE" ]; then
+    log "using the local release cache $CACHE/$TAG (no download)"
+    for f in SHA256SUMS "$ASSET"; do
+        [ -f "$CACHE/$TAG/$f" ] || die "the local release cache has no $TAG/$f"
+        cp "$CACHE/$TAG/$f" "$WORK/$f"
+    done
+else
+    curl -fsSL --retry 3 -o "$WORK/SHA256SUMS" "$BASE/SHA256SUMS" ||
+        die "could not download $BASE/SHA256SUMS (is $TAG a published release?)"
+    curl -fsSL --retry 3 -o "$WORK/$ASSET" "$BASE/$ASSET" ||
+        die "could not download $BASE/$ASSET"
+fi
 
 # Verify before unpacking. SHA256SUMS lines are `<hex>  <basename>`.
 expected=$(awk -v f="$ASSET" '$2 == f { print $1 }' "$WORK/SHA256SUMS")
