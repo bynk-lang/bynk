@@ -185,3 +185,59 @@ fn a_select_tail_error_points_into_the_tail() {
     let span = err.error.span;
     assert_eq!(&unit[span.start..span.end], "stauts");
 }
+
+/// #3135: the cases of a `suite … as integration` are test bodies like a unit
+/// suite's, so they are prepared too (the check is the one of #3133); a valid
+/// statement stays clean, and the opt-out silences a bad one. (A `suite … as
+/// system { … }` can't call a capability directly, so it has no statement to
+/// check.)
+#[test]
+fn a_statement_in_an_integration_case_is_prepared() {
+    let suite = |sql: &str| {
+        format!(
+            "suite demo as integration\n\ncase \"reads\" {{\n  \
+             let _ <- Orders.all(\"{sql}\", [Text(\"a\")])\n}}\n"
+        )
+    };
+    let run = |test: &str, manifest: &str, sql: &str| {
+        let root =
+            std::env::temp_dir().join(format!("bynk-check-d1-sql-{test}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let unit = source("");
+        let suite = suite(sql);
+        let mut overlay = HashMap::new();
+        for (rel, text) in [
+            ("bynk.toml", manifest),
+            ("demo.bynk", unit.as_str()),
+            ("demo_integration.bynk", suite.as_str()),
+            ("migrations/demo-orders/0001_create.sql", MIGRATION),
+        ] {
+            let p = root.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, text).unwrap();
+            overlay.insert(p, text.to_string());
+        }
+        let analysed =
+            analysis::analyse_project(&Roots::Single(root.clone()), &overlay, &SchemaLock::Off);
+        let _ = std::fs::remove_dir_all(&root);
+        analysed
+            .errors
+            .iter()
+            .filter(|e| e.error.category.starts_with("bynk.d1."))
+            .map(|e| suite[e.error.span.start..e.error.span.end].to_string())
+            .collect::<Vec<_>>()
+    };
+    assert!(run("int-ok", "", "SELECT id FROM orders WHERE id = ?1").is_empty());
+    assert_eq!(
+        run("int-bad", "", "SELECT id FROM orders WHERE stauts = ?1"),
+        ["stauts"]
+    );
+    assert!(
+        run(
+            "int-off",
+            "[check]\nd1_sql = false\n",
+            "SELECT id FROM orders WHERE stauts = ?1"
+        )
+        .is_empty()
+    );
+}
