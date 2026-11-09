@@ -213,6 +213,8 @@ pub(crate) fn check_ident(
         // keep that site rather than let this entry replace it.
         let d1_site = match ctx.callees.get(&expr_id) {
             Some(Callee::D1Sql(site)) => Some(Box::new(site.clone())),
+            // Typed again (a re-check of the same argument): keep what it carried.
+            Some(Callee::Const(_, site)) => site.clone(),
             _ => None,
         };
         ctx.callees
