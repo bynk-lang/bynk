@@ -1,0 +1,1 @@
+bynk.types.sql_not_literal
