@@ -25,8 +25,10 @@ set -euo pipefail
 die() { echo "::error::gh-release-fetch: $*" >&2; exit 1; }
 : "${GH_TOKEN:?gh-release-fetch: GH_TOKEN must be set (pass github.token)}"
 
+# --retry alone retries timeouts and 408/429/5xx, not a 403: a token out of
+# rate limit stays out for the hour, so retrying that only wastes time.
 api() {
-  curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors --retry-delay 3 \
+  curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-delay 3 \
     -H "Authorization: Bearer $GH_TOKEN" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "$@"
@@ -61,13 +63,18 @@ else:
 if [[ "${1:-}" == "--latest" ]]; then
   repo="${2:?usage: gh-release-fetch.sh --latest <owner/repo> <tag-prefix>}"
   prefix="${3:?usage: gh-release-fetch.sh --latest <owner/repo> <tag-prefix>}"
-  # Releases come newest first; 100 reaches past any one tool's recent line
-  # even in a monorepo like rustsec/rustsec.
-  tag=$(api -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/$repo/releases?per_page=100" \
-        | json tags | awk -v p="$prefix" 'index($0, p) == 1 { print; exit }')
-  [[ -n "$tag" ]] || die "no release of $repo with a tag starting $prefix"
-  printf '%s\n' "$tag"
+  # The newest 100 releases reach past any one tool's recent line even in a
+  # monorepo like rustsec/rustsec. They come in creation order, so a backport
+  # on an older line could come first: take the highest by version sort (only
+  # purely numeric remainders, so a `-rc` or odd tag never wins).
+  listing=$(api -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$repo/releases?per_page=100") ||
+    die "could not list $repo's releases"
+  version=$(json tags <<<"$listing" \
+            | awk -v p="$prefix" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' \
+            | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -n1 || true)
+  [[ -n "$version" ]] || die "no release of $repo with a tag starting $prefix"
+  printf '%s%s\n' "$prefix" "$version"
   exit 0
 fi
 
@@ -76,9 +83,10 @@ tag="${2:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
 asset="${3:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
 out="${4:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
 
-read -r id digest < <(api -H "Accept: application/vnd.github+json" \
-                        "https://api.github.com/repos/$repo/releases/tags/$tag" \
-                      | json asset "$asset") || true
+release=$(api -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$repo/releases/tags/$tag") ||
+  die "could not look up $repo release $tag"
+read -r id digest < <(json asset "$asset" <<<"$release") || true
 [[ -n "${id:-}" ]] || die "$repo $tag has no asset named $asset"
 # GitHub records a sha256 digest for every release asset; without one there
 # is nothing to check the download against, so refuse rather than skip.
@@ -86,8 +94,17 @@ read -r id digest < <(api -H "Accept: application/vnd.github+json" \
 
 mkdir -p "$out"
 echo "downloading $repo $tag $asset (authenticated)"
-api -H "Accept: application/octet-stream" -o "$out/$asset" \
-  "https://api.github.com/repos/$repo/releases/assets/$id"
+if ! api -H "Accept: application/octet-stream" -o "$out/$asset" \
+       "https://api.github.com/repos/$repo/releases/assets/$id"; then
+  # Asset downloads count against the token's API rate limit, which every
+  # concurrent job shares. If it is spent (403/429), fall back to the
+  # anonymous route rather than fail outright: the digest from the lookup
+  # above still checks what arrives.
+  echo "::warning::gh-release-fetch: API download of $asset failed; trying the anonymous release URL"
+  curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-delay 3 -o "$out/$asset" \
+    "https://github.com/$repo/releases/download/$tag/$asset" ||
+    die "could not download $repo $tag $asset"
+fi
 
 if command -v sha256sum >/dev/null 2>&1; then
   got=$(sha256sum "$out/$asset" | cut -d' ' -f1)

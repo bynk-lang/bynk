@@ -90,7 +90,8 @@ case "$asset" in
   *) tar -xzf "$work/$asset" -C "$work/x" ;;
 esac
 
-cargo_bin="$(dirname "$(command -v cargo)")" || die "cargo is not on PATH"
+cargo_path="$(command -v cargo)" || die "cargo is not on PATH"
+cargo_bin="$(dirname "$cargo_path")"
 for b in "${bins[@]}"; do
   found="$(find "$work/x" -type f -name "$b$exe" | head -n1)"
   [[ -n "$found" ]] || die "$asset holds no $b$exe"
