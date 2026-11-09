@@ -186,9 +186,11 @@ fn a_select_tail_error_points_into_the_tail() {
     assert_eq!(&unit[span.start..span.end], "stauts");
 }
 
-/// #3135: the cases of an integration suite are prepared too, through the
-/// capability's one declaring participant; a valid statement stays clean, and
-/// the opt-out silences a bad one.
+/// #3135: the cases of a `suite … as integration` are test bodies like a unit
+/// suite's, so they are prepared too (the check is the one of #3133); a valid
+/// statement stays clean, and the opt-out silences a bad one. (A `suite … as
+/// system { … }` can't call a capability directly, so it has no statement to
+/// check.)
 #[test]
 fn a_statement_in_an_integration_case_is_prepared() {
     let suite = |sql: &str| {

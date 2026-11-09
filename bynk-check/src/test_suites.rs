@@ -587,9 +587,6 @@ pub fn phase_integration_bodies(
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     tys: &Arc<Types>,
-    // #3135: the migrations' schemas, which a literal D1 statement in a case or a
-    // suite helper `fn` is prepared against.
-    d1_sql: Option<&crate::d1_sql::D1Sql>,
 ) -> HashMap<String, resolver::CrossContextInfo> {
     let mut ready: HashMap<String, resolver::CrossContextInfo> = HashMap::new();
 
@@ -954,14 +951,6 @@ pub fn phase_integration_bodies(
                     )
                     .1
                 };
-                check_d1_sql_in_participants(
-                    d1_sql,
-                    &participants,
-                    unit_tables,
-                    &case_callees,
-                    parsed[i].source(),
-                    &mut body_errs,
-                );
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
                 check_event_address_tier(
@@ -3739,51 +3728,6 @@ fn check_d1_sql_sites(
 ) {
     if let (Some(d1_sql), Some(table)) = (d1_sql, unit_tables.get(target_name)) {
         errors.extend(d1_sql.check_unit(target_name, table, callees, Some(source)));
-    }
-}
-
-/// #3135: [`check_d1_sql_sites`] for an integration suite, whose `Stock.run(…)`
-/// names a capability of one of its participants. A statement is checked when
-/// exactly one participant declares that capability as a `D1`; with two the
-/// database is ambiguous (the harness picks at run time), so it is left alone,
-/// never guessed.
-fn check_d1_sql_in_participants(
-    d1_sql: Option<&crate::d1_sql::D1Sql>,
-    participants: &[String],
-    unit_tables: &HashMap<String, UnitTable>,
-    callees: &HashMap<ExprId, checker::Callee>,
-    source: &str,
-    errors: &mut Vec<CompileError>,
-) {
-    let Some(d1_sql) = d1_sql else { return };
-    for participant in participants {
-        let Some(table) = unit_tables.get(participant) else {
-            continue;
-        };
-        let owned: HashMap<ExprId, checker::Callee> = callees
-            .iter()
-            .filter(|(_, callee)| {
-                let site = match callee {
-                    checker::Callee::D1Sql(site) => site,
-                    checker::Callee::Const(_, Some(site)) => site,
-                    _ => return false,
-                };
-                table.derived.contains_key(&site.cap)
-                    && participants
-                        .iter()
-                        .filter(|p| {
-                            unit_tables
-                                .get(*p)
-                                .is_some_and(|t| t.derived.contains_key(&site.cap))
-                        })
-                        .count()
-                        == 1
-            })
-            .map(|(id, callee)| (*id, callee.clone()))
-            .collect();
-        if !owned.is_empty() {
-            errors.extend(d1_sql.check_unit(participant, table, &owned, Some(source)));
-        }
     }
 }
 

@@ -1,7 +1,7 @@
 suite shop.stock as integration
 
-// #3135: literal D1 statements in an integration case are prepared against the
-// target's migrations, `const` SQL included.
+// #3135: literal D1 statements in an `as integration` case are prepared against
+// the target's migrations (a test body like a unit suite's), `const` SQL included.
 const MISSPELT: String = "SELECT id FROM items WHERE stauts = ?1"
 
 case "an integration case reads a column the table lacks" {

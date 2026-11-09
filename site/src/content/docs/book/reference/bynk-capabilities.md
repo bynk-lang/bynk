@@ -883,9 +883,10 @@ that database's statements are then not checked. A database with no migrations
 directory isn't checked either. The statements of a `batch` are checked when each is
 written inline in the list (`batch([SqlStatement { sql: "…", params: […] }, …])`); one built
 elsewhere isn't tied to a database. Statements in the `case` and `property`
-bodies of a unit suite, and in the cases of an integration suite, are checked against
-the target's databases (an integration case's capability must be declared by exactly one
-participant; with two the database is ambiguous and the statement is left alone). Not yet
+bodies of a suite (`unit` and `integration` tier) are checked against the suite target's
+databases. A `system` suite (`suite … as system { … }`) can't call a capability directly,
+and a suite helper `fn` can't hold a D1 call (an effectful helper is
+`bynk.suite.fn_effectful`), so neither has a statement to check. Not yet
 checked: a list that is neither a literal nor a `let` bound to one. A program that creates tables
 at request time, or runs DDL (such as a `CREATE TABLE` without `IF NOT EXISTS` for a
 table a migration already made) that SQLite refuses at prepare time, can turn the
