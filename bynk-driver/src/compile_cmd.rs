@@ -196,7 +196,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
         eprintln!("{prog}: {e}");
         return ExitCode::FAILURE;
     }
-    let code = run_compile(
+    let code = run_compile_reporting(
         prog,
         CompileArgs {
             input,
@@ -207,6 +207,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
             sources_stdin: false,
             contracts,
         },
+        crate::progress::terminal_sink(),
     );
     if code == ExitCode::SUCCESS {
         let target = match target {
@@ -310,6 +311,15 @@ fn check_output_dir(project: &Path, output: &Path) -> Result<(), String> {
 
 /// Run `compile`. `prog` prefixes the messages (`"bynk"`).
 pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
+    run_compile_reporting(prog, args, None)
+}
+
+/// [`run_compile`], reporting each context to `progress` as it compiles (#3100).
+fn run_compile_reporting(
+    prog: &str,
+    args: CompileArgs,
+    progress: Option<crate::project::ProgressSink>,
+) -> ExitCode {
     let CompileArgs {
         input,
         output,
@@ -334,6 +344,7 @@ pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
                 emit,
                 sources_stdin,
                 contracts,
+                progress,
             },
         )
     } else {
@@ -348,6 +359,7 @@ struct DirSettings {
     emit: EmitFormat,
     sources_stdin: bool,
     contracts: bool,
+    progress: Option<crate::project::ProgressSink>,
 }
 
 fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -> ExitCode {
@@ -357,6 +369,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
         emit,
         sources_stdin,
         contracts,
+        progress,
     } = settings;
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read
     // its current content here (verified-absent `None` for a fresh
@@ -386,6 +399,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             .platform(platform.into())
             .schema_registry(schema_lock)
             .contracts(contracts)
+            .progress(progress)
             .tests(false),
         Err(e) => {
             eprintln!("{prog}: {e}");

@@ -25,6 +25,7 @@ pub mod fix;
 pub mod mutate;
 pub mod output;
 pub mod probe;
+pub mod progress;
 pub mod project;
 pub mod remote;
 pub mod render;
