@@ -9903,14 +9903,7 @@ pub fn emit_suite_decls(
     if !types.is_empty() {
         // The type itself plus the wrappers a test reads one through: a
         // `select[T]` is a `List[T]`, a `firstAs[T]` an `Option[T]`.
-        let mut roots: Vec<TypeRef> = Vec::new();
-        for t in types.iter().filter(|t| t.type_params.is_empty()) {
-            let named = TypeRef::Named(t.name.clone());
-            let span = t.name.span;
-            roots.push(TypeRef::List(Box::new(named.clone()), span));
-            roots.push(TypeRef::Option(Box::new(named.clone()), span));
-            roots.push(named);
-        }
+        let roots = suite_base_codec_roots(types);
         let (names, insts) = super::serialisation::collect_codec_closure(&roots, &typed.types);
         runtime_use.note_json_codec();
         runtime_use.note_boundary_codec();
@@ -9936,6 +9929,88 @@ pub fn emit_suite_decls(
     for c in consts {
         stmts.extend(emit_const_in(c, ModuleCtx::new(typed, &empty, runtime_use)));
     }
+    stmts
+        .iter()
+        .map(|s| bynk_ts::print_stmt(s, 0))
+        .collect::<String>()
+        .lines()
+        .map(|l| format!("{}\n", l.strip_prefix("export ").unwrap_or(l)))
+        .collect()
+}
+
+/// The roots a suite's local codecs always cover: each non-generic type plus the
+/// `List`/`Option` wrappers a test reads one through (a `select[T]` is a
+/// `List[T]`, a `firstAs[T]` an `Option[T]`).
+fn suite_base_codec_roots(types: &[TypeDecl]) -> Vec<TypeRef> {
+    let mut roots: Vec<TypeRef> = Vec::new();
+    for t in types.iter().filter(|t| t.type_params.is_empty()) {
+        let named = TypeRef::Named(t.name.clone());
+        let span = t.name.span;
+        roots.push(TypeRef::List(Box::new(named.clone()), span));
+        roots.push(TypeRef::Option(Box::new(named.clone()), span));
+        roots.push(named);
+    }
+    roots
+}
+
+/// #3111: the codecs a runner's body reached for beyond the always-present
+/// ones ([`emit_suite_decls`]): a suite type under another generic (`Result`,
+/// a user generic, nested containers) at a `Json` boundary. `reached` is what
+/// the runner's lowering noted; only roots that name a suite type are served
+/// here (the module-level closure serves the rest). Returns printed function
+/// declarations, unindented, to be spliced ahead of the body; empty when the
+/// body reached nothing new.
+pub fn emit_suite_late_codecs(
+    types: &[TypeDecl],
+    typed: &TypedCommons,
+    qual: &std::collections::HashMap<String, String>,
+    runtime_use: &RuntimeUse,
+    reached: &[TyId],
+) -> String {
+    if types.is_empty() || reached.is_empty() {
+        return String::new();
+    }
+    let names: std::collections::HashSet<String> =
+        types.iter().map(|t| t.name.name.clone()).collect();
+    let extra: Vec<TypeRef> = reached
+        .iter()
+        .filter_map(|t| super::ty_to_type_ref(*t, typed.tys()))
+        .filter(|r| super::serialisation::root_names_any(r, &names))
+        .collect();
+    if extra.is_empty() {
+        return String::new();
+    }
+    let (base_names, base_insts) =
+        super::serialisation::collect_codec_closure(&suite_base_codec_roots(types), &typed.types);
+    let (all_names, all_insts) = super::serialisation::collect_codec_closure(&extra, &typed.types);
+    let new_names: Vec<String> = all_names
+        .into_iter()
+        .filter(|n| !base_names.contains(n))
+        .collect();
+    let base_inst_names: std::collections::HashSet<String> =
+        base_insts.iter().map(|i| i.ts_name()).collect();
+    let new_insts: Vec<_> = all_insts
+        .into_iter()
+        .filter(|i| !base_inst_names.contains(&i.ts_name()))
+        .collect();
+    let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
+    stmts.extend(super::serialisation::decls_as_stmts_block(
+        super::serialisation::emit_helpers_for_owner_qualified(
+            &new_names,
+            &typed.types,
+            "",
+            qual,
+            runtime_use,
+        ),
+    ));
+    stmts.extend(super::serialisation::decls_as_stmts(
+        super::serialisation::emit_generic_helpers_qualified(
+            &new_insts,
+            &typed.types,
+            qual,
+            runtime_use,
+        ),
+    ));
     stmts
         .iter()
         .map(|s| bynk_ts::print_stmt(s, 0))

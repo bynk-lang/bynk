@@ -427,6 +427,22 @@ impl RuntimeUse {
         self.test_event_services.borrow().iter().cloned().collect()
     }
 
+    /// #3111: how many codec roots have been noted so far; a runner records it
+    /// before lowering and reads back what it added with
+    /// [`json_codec_roots_since`](Self::json_codec_roots_since).
+    pub fn json_codec_roots_len(&self) -> usize {
+        self.json_codec_roots.borrow().len()
+    }
+
+    /// #3111: the codec roots noted at or after `mark` (not drained).
+    pub fn json_codec_roots_since(&self, mark: usize) -> Vec<TyId> {
+        self.json_codec_roots
+            .borrow()
+            .get(mark..)
+            .unwrap_or_default()
+            .to_vec()
+    }
+
     /// Drain the accumulated `Json` codec roots — called once, after every
     /// case/property/stub body in the module has lowered.
     pub fn take_json_codec_roots(&self) -> Vec<TyId> {

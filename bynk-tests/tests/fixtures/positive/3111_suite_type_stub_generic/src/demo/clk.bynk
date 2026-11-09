@@ -1,0 +1,32 @@
+context demo.clk
+
+// #3111: a suite's stub values name its own types and constants, and its types
+// round-trip through `Result` and other generics.
+
+capability Clock {
+	fn now() -> Effect[Int]
+	fn label(prefix: String) -> Effect[String]
+}
+
+provides Clock = SystemClock {
+	fn now() -> Effect[Int] {
+		0
+	}
+	fn label(prefix: String) -> Effect[String] {
+		prefix
+	}
+}
+
+service ping {
+	on call() -> Effect[Int] given Clock {
+		let n <- Clock.now()
+		n
+	}
+}
+
+service tag {
+	on call(prefix: String) -> Effect[String] given Clock {
+		let l <- Clock.label(prefix)
+		l
+	}
+}
