@@ -533,6 +533,11 @@ interface SqliteDatabase {
   exec(sql: string): void;
 }
 
+/** A character of a SQL identifier, as SQLite's tokenizer sees it: ASCII letters, digits, `_`, `$`, and (#3157) anything non-ASCII. */
+function isWord(ch: string): boolean {
+  return /[A-Za-z0-9_$]/.test(ch) || ch.charCodeAt(0) >= 0x80;
+}
+
 /**
  * What a statement's SQL takes: the count is SQLite's `sqlite3_bind_parameter_count`,
  * which D1 compares to the number bound. A bare `?` is one past the highest
@@ -579,9 +584,9 @@ function sqlParameters(sql: string): { count: number; numbered: string[]; bare: 
       }
     } else if (
       // `$` continues an identifier (`a$b`); `:` and `@` always start a parameter, as in SQLite.
-      (c === ":" || c === "@" || (c === "$" && !(i > 0 && /[A-Za-z0-9_$]/.test(sql[i - 1]!))))) {
+      (c === ":" || c === "@" || (c === "$" && !(i > 0 && isWord(sql[i - 1]!))))) {
       const start = i++;
-      while (i < n && /[A-Za-z0-9_$]/.test(sql[i]!)) i++;
+      while (i < n && isWord(sql[i]!)) i++;
       if (i - start > 1) {
         const name = sql.slice(start, i);
         if (!names.has(name)) {
