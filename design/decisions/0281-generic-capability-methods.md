@@ -6,9 +6,9 @@
 parameter: `capability_op` (`tree-sitter-bynk/grammar.js`) was a fixed
 `"fn" name "(" params ")" "->" return_type`, unlike a qualified static call,
 which has supported explicit type arguments since v0.22b (`Json.decode[T](s)`,
-ADR 0045). The Idempotency capability track
+ADR 0045). The Idempotency capability track's §3.1
 (spine #921, now retired — see
-[`../archive/retired-tracks.md`](../archive/retired-tracks.md), §3.1) wants
+[`../archive/retired-tracks.md`](../archive/retired-tracks.md)) wants
 `fn dedup[T](…) -> Effect[Option[T]]` — a dedup check that hands
 back a cached value of whatever type the *calling handler's own return type*
 is, which the capability's author cannot know ahead of time. Capability calls
