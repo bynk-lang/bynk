@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.1** | "`bynk build`, `bynk dev` and `bynk deploy` print a `Compiling`/`Finished` line per context on a terminal; `--quiet` turns them off and a pipe is unchanged (#3100)" |
 | **v0.525.0** | "`bynk check` prepares each literal `D1` statement against the schema its migrations build, reporting a syntax error, an unknown table or column, a wrong `?N` count and a `select[T]` field with no column (`bynk.d1.sql_invalid`, `bynk.d1.sql_param_count`, `bynk.d1.select_field_missing`, and the warning `bynk.d1.migration_invalid`); `[check] d1_sql = false` turns it off" |
 | **v0.524.0** | A `String` constant bound to a literal is accepted as a database call's SQL |
 | **v0.523.1** | "`bynk build --profile dev|release` and `[profile.dev]`/`[profile.release]` tables in `bynk.toml` choose whether a build carries the function-contract call-site guard; the default stays `release`, the bytes `bynk compile` writes (#3054)" |

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0764](0764-bynk-build-progress.md) | **Per-context build progress** (v0.525.1) — the driver reports contexts through an optional sink; one terminal-gated printer serves build, dev and deploy | Accepted (v0.525.1) |
 | [0763](0763-d1-sql-schema-check.md) | **A D1 call's literal SQL is checked against the schema its migrations build** (v0.525) — Prepare each statement on a bundled in-memory SQLite, with the migrations applied, at check time | Accepted (v0.525) |
 | [0762](0762-const-string-as-sql.md) | **A String constant bound to a literal counts as a literal for the SQL rules** (v0.524) — Relaxes bynk.types.sql_not_literal for compile-time constants only | Accepted (v0.524) |
 | [0761](0761-bynk-build-profiles.md) | **Named build profiles for `bynk build`** (v0.523.1) — two fixed profiles, `contracts` the only knob, only `bynk build` reads them | Accepted (v0.523.1) |

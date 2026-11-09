@@ -1,11 +1,6 @@
----
-level: patch
-changelog: "`bynk build`, `bynk dev` and `bynk deploy` print a `Compiling`/`Finished` line per context on a terminal; `--quiet` turns them off and a pipe is unchanged (#3100)"
----
+# 0764 — Per-context build progress
 
-## ADR: bynk-build-progress
-title: Per-context build progress
-summary: the driver reports contexts through an optional sink; one terminal-gated printer serves build, dev and deploy
+- **Status:** Accepted (v0.525.1)
 
 **Context.** A successful build printed one summary line, and a `workers` build of a many-context project gave no sign of which context was compiling. #3054 split this out as item 4; #3100 accepted it.
 
