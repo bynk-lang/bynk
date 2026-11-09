@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: "A suite's stub values can name its own `type` and `const`, and a suite type works under `Result` and other generics at a JSON boundary"
----
+# 0769 — Suite types and constants in stub values; local codecs for any generic shape
 
-## ADR: suite-type-stub-and-generic-codecs
-title: Suite types and constants in stub values; local codecs for any generic shape
-summary: How #3111 lifts the two known limits of suite-local `type`/`const` (ADR 0759)
+- **Status:** Accepted (v0.525.10)
 
 **Context.** ADR 0759 recorded two limits: a suite `stub … returns` value could not name a suite `type` or `const`, and a suite type under a generic other than `List`/`Option` at a JSON boundary failed in `tsc`.
 
