@@ -6303,6 +6303,7 @@ fn collect_crossing_positions<'e>(
                 method,
                 type_args,
                 args,
+                ..
             },
             Ty::List(_) | Ty::Map(..) | Ty::Set(_),
         ) if method.name == "empty"
@@ -6326,7 +6327,9 @@ fn collect_crossing_positions<'e>(
             }
         }
         (
-            ExprKind::RecordConstruction { type_name, fields },
+            ExprKind::RecordConstruction {
+                type_name, fields, ..
+            },
             Ty::Named {
                 name,
                 kind: NamedKind::Record,

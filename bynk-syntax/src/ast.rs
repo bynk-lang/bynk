@@ -25,7 +25,8 @@ pub struct Trivia {
     pub trailing: Option<String>,
 }
 
-/// #3067: the comments inside a list literal `[a, b, c]`. `items` runs parallel
+/// #3067: the comments inside a list literal `[a, b, c]` (and, #3110, a call's
+/// arguments or a record literal's fields). `items` runs parallel
 /// to the elements: the comments above each, and the one at the end of its line.
 /// `closing` holds those before the `]`. Boxed and absent (`None`) when the list
 /// carries no comment, which keeps `ExprKind` small.
@@ -3728,6 +3729,8 @@ pub enum ExprKind {
         /// v0.20a: explicit type arguments (`name[T](…)`); empty when absent.
         type_args: Vec<TypeRef>,
         args: Vec<Expr>,
+        /// #3110: the comments between the arguments; `None` when there are none.
+        trivia: Option<Box<ListTrivia>>,
     },
     /// A lambda (v0.20a). See [`LambdaExpr`].
     Lambda(LambdaExpr),
@@ -3752,6 +3755,8 @@ pub enum ExprKind {
     RecordConstruction {
         type_name: Ident,
         fields: Vec<FieldInit>,
+        /// #3110: the comments between the fields; `None` when there are none.
+        trivia: Option<Box<ListTrivia>>,
     },
     /// `receiver.field` — field access on a record value (v0.2). v0.3 adds
     /// `.raw` on opaque types within the defining commons.
@@ -3769,6 +3774,8 @@ pub enum ExprKind {
         /// rule applies as for `Call` type application (0039).
         type_args: Vec<TypeRef>,
         args: Vec<Expr>,
+        /// #3110: the comments between the arguments; `None` when there are none.
+        trivia: Option<Box<ListTrivia>>,
     },
     /// `match disc { arm+ }` — pattern matching (v0.2).
     Match {
@@ -3801,6 +3808,9 @@ pub enum ExprKind {
         base: Box<Expr>,
         /// Field overrides (always full `name: value` form — never shorthand).
         overrides: Vec<FieldInit>,
+        /// #3110: the comments between the items — the `...base` spread first,
+        /// then each override; `None` when there are none.
+        trivia: Option<Box<ListTrivia>>,
     },
     /// `Effect.pure(value)` — wrap a synchronous value into `Effect[T]`
     /// (v0.5). Recognised in the parser as a special-form.
@@ -3816,6 +3826,8 @@ pub enum ExprKind {
     Val {
         type_ref: TypeRef,
         args: Vec<Expr>,
+        /// #3110: the comments between the arguments; `None` when there are none.
+        trivia: Option<Box<ListTrivia>>,
     },
     /// `Wire(<String>)` — a raw, pre-validation argument to a `system`-tier
     /// service address (testing-the-boundary Slice C). The inner expression is a
@@ -4735,6 +4747,7 @@ fn f(x: Int) -> Int {
                 name: _,
                 type_args: _,
                 args,
+                ..
             } => args.iter().for_each(|a| out.push(("call.arg", a))),
             ExprKind::Lambda(LambdaExpr {
                 params: _,
@@ -4764,6 +4777,7 @@ fn f(x: Int) -> Int {
             ExprKind::RecordConstruction {
                 type_name: _,
                 fields,
+                ..
             } => {
                 for FieldInit {
                     name: _,
@@ -4782,6 +4796,7 @@ fn f(x: Int) -> Int {
                 method: _,
                 type_args: _,
                 args,
+                ..
             } => {
                 out.push(("method.receiver", receiver));
                 args.iter().for_each(|a| out.push(("method.arg", a)));
@@ -4810,6 +4825,7 @@ fn f(x: Int) -> Int {
                 type_name: _,
                 base,
                 overrides,
+                ..
             } => {
                 out.push(("spread.base", base));
                 for FieldInit {
@@ -4825,9 +4841,9 @@ fn f(x: Int) -> Int {
             }
             ExprKind::EffectPure(x) => out.push(("effect_pure.inner", x)),
             ExprKind::Expect(x) => out.push(("expect_expr.inner", x)),
-            ExprKind::Val { type_ref: _, args } => {
-                args.iter().for_each(|a| out.push(("val.arg", a)))
-            }
+            ExprKind::Val {
+                type_ref: _, args, ..
+            } => args.iter().for_each(|a| out.push(("val.arg", a))),
             ExprKind::Wire(x) => out.push(("wire.inner", x)),
             ExprKind::ListLit(items, ..) => items.iter().for_each(|i| out.push(("list.item", i))),
             ExprKind::Observation(obs) => {

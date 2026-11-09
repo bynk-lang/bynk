@@ -3304,6 +3304,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             type_name,
             base,
             overrides,
+            ..
         } => {
             if let Some(tn) = type_name
                 && !cx.types.contains_key(&tn.name)
@@ -3452,6 +3453,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             name,
             type_args,
             args,
+            ..
         } => {
             // #712: explicit type arguments (`identity[T](…)`) are type
             // references and must resolve — the checker's `check_generic_call`
@@ -3587,7 +3589,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::Some(inner) => {
             check_expr_references(inner, cx);
         }
-        ExprKind::RecordConstruction { type_name, fields } => {
+        ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } => {
             match cx.types.get(&type_name.name) {
                 Some(decl) => {
                     cx.errors

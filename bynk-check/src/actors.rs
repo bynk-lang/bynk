@@ -758,6 +758,7 @@ pub fn parse_claim_predicate(e: &Expr) -> Result<ClaimPredicate, Span> {
             name,
             type_args,
             args,
+            ..
         } if type_args.is_empty() => match (name.name.as_str(), args.as_slice()) {
             ("hasClaim", [a]) => claim_str_lit(a).map(ClaimPredicate::HasClaim).ok_or(a.span),
             ("claimEquals", [a, b]) => match (claim_str_lit(a), claim_str_lit(b)) {

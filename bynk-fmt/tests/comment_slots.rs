@@ -217,7 +217,8 @@ fn parses(s: &str) -> bool {
 }
 
 /// Token texts, with a marker (and count) wherever blank lines separate two
-/// tokens: the program and its vertical spacing, but not its line breaks. Commas and empty
+/// tokens: the program and its vertical spacing, but not its line breaks (nor the
+/// indentation inside a multi-line string). Commas and empty
 /// `()` are dropped: a list a comment forces onto several lines gains a
 /// trailing comma, and a unit tail the formatter would omit is kept to carry a
 /// comment.
@@ -230,7 +231,18 @@ fn skeleton(s: &str) -> Vec<String> {
         if newlines >= 2 {
             out.push(format!("<{} blank>", newlines - 1));
         }
-        out.push(s[t.span.start..t.span.end].to_string());
+        // A multi-line string literal is re-indented to the depth it sits at,
+        // so a comment that pushes it one level deeper (#3110) moves its lines'
+        // indentation, not its content.
+        let text = &s[t.span.start..t.span.end];
+        out.push(if text.contains('\n') {
+            text.lines()
+                .map(str::trim_start)
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            text.to_string()
+        });
         prev_end = t.span.end;
     }
     out.retain(|t| t != ",");

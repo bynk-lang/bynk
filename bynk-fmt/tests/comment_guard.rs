@@ -38,14 +38,6 @@ fn refuses_to_drop_a_comment_between_binop_operands() {
 }
 
 #[test]
-fn refuses_to_drop_a_comment_inside_a_record_literal() {
-    expect_refusal(
-        "in-record",
-        "commons demo\n\ntype P = { x: Int, y: Int }\n\nfn f() -> P {\n  P {\n    x: 1,\n    // keep me\n    y: 2,\n  }\n}\n",
-    );
-}
-
-#[test]
 fn refuses_to_drop_a_comment_inside_a_match() {
     expect_refusal(
         "in-match",
@@ -843,6 +835,141 @@ fn keeps_a_commented_list_on_every_flattening_path() {
             "chain argument",
             "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => x).concat([\n    1,\n    -- c\n    2,\n  ]).first()\n}\n",
             "\txs.map((x) => x).concat([\n\t\t1,\n\t\t// c\n\t\t2,\n\t]).first()",
+        ),
+    ] {
+        let out = format_source(source, &FormatOptions::default())
+            .unwrap_or_else(|e| panic!("{name}: refused: {}", e.errors[0].message));
+        assert!(
+            out.contains(expected),
+            "{name}: `{expected}` not in place:\n{out}"
+        );
+        let again = format_source(&out, &FormatOptions::default()).expect("reformats");
+        assert_eq!(out, again, "{name}: not idempotent");
+    }
+}
+
+/// #3110: a comment between call arguments is kept: on the `(` line, above an
+/// argument, at the end of its line, and before the `)`. A commented argument
+/// list goes one argument per line, whatever encloses it.
+#[test]
+fn keeps_comments_between_call_arguments() {
+    for (name, source, expected) in [
+        (
+            "end of line, first and last",
+            "commons demo\n\nfn f() -> Int {\n  g(\n    1, // one\n    2 // two\n  )\n}\n",
+            "\tg(\n\t\t1,  // one\n\t\t2  // two\n\t)\n",
+        ),
+        (
+            "own line above the first",
+            "commons demo\n\nfn f() -> Int {\n  g(\n    // the first\n    1,\n    2\n  )\n}\n",
+            "\tg(\n\t\t// the first\n\t\t1,\n\t\t2\n\t)\n",
+        ),
+        (
+            "own line between",
+            "commons demo\n\nfn f() -> Int {\n  g(\n    1,\n    // the second\n    2\n  )\n}\n",
+            "\t\t1,\n\t\t// the second\n\t\t2\n",
+        ),
+        (
+            "own line after the last",
+            "commons demo\n\nfn f() -> Int {\n  g(\n    1,\n    2\n    // the rest\n  )\n}\n",
+            "\t\t2\n\t\t// the rest\n\t)\n",
+        ),
+        (
+            "on the paren line",
+            "commons demo\n\nfn f() -> Int {\n  g( // the call\n    1,\n    2\n  )\n}\n",
+            "\tg(\n\t\t// the call\n\t\t1,\n",
+        ),
+        (
+            "method call",
+            "commons demo\n\nfn f(xs: List[Int]) -> Int {\n  xs.fold(\n    0, // init\n    (a, b) => a + b\n  )\n}\n",
+            "\t\t0,  // init\n\t\t(a, b) => a + b\n",
+        ),
+        (
+            "in a chain",
+            "commons demo\n\nfn f(xs: List[Int]) -> List[Int] {\n  xs.map((x) => x).concat(\n    xs, // more\n    xs\n  ).first()\n}\n",
+            "\t\t.concat(\n\t\t\txs,  // more\n\t\t\txs\n\t\t)\n\t\t.first()",
+        ),
+        (
+            "nested in a let",
+            "commons demo\n\nfn f() -> Int {\n  let x = g(\n    1, // one\n    2\n  )\n  x\n}\n",
+            "\tlet x = g(\n\t\t1,  // one\n\t\t2\n\t)\n",
+        ),
+        (
+            "binop operand",
+            "commons demo\n\nfn f() -> Int {\n  1 + g(\n    1, // one\n    2\n  )\n}\n",
+            "\t1 + g(\n\t\t1,  // one\n",
+        ),
+        (
+            "empty",
+            "commons demo\n\nfn f() -> Int {\n  g(\n    // none yet\n  )\n}\n",
+            "\tg(\n\t\t// none yet\n\t)\n",
+        ),
+    ] {
+        let out = format_source(source, &FormatOptions::default())
+            .unwrap_or_else(|e| panic!("{name}: refused: {}", e.errors[0].message));
+        assert!(
+            out.contains(expected),
+            "{name}: `{expected}` not in place:\n{out}"
+        );
+        let again = format_source(&out, &FormatOptions::default()).expect("reformats");
+        assert_eq!(out, again, "{name}: not idempotent");
+    }
+}
+
+/// #3110: a comment between record-literal fields is kept in the same places,
+/// and a record spread's `...base` counts as the first item.
+#[test]
+fn keeps_comments_between_record_fields() {
+    for (name, source, expected) in [
+        (
+            "end of line, first and last",
+            "commons demo\n\nfn f() -> T {\n  T {\n    a: 1, // one\n    b: 2, // two\n  }\n}\n",
+            "\tT {\n\t\ta: 1,  // one\n\t\tb: 2,  // two\n\t}\n",
+        ),
+        (
+            "last without a trailing comma",
+            "commons demo\n\nfn f() -> T {\n  T {\n    a: 1,\n    b: 2 // two\n  }\n}\n",
+            "\t\ta: 1,\n\t\tb: 2,  // two\n\t}\n",
+        ),
+        (
+            "own line above the first",
+            "commons demo\n\nfn f() -> T {\n  T {\n    // the first\n    a: 1,\n    b: 2,\n  }\n}\n",
+            "\tT {\n\t\t// the first\n\t\ta: 1,\n",
+        ),
+        (
+            "own line between",
+            "commons demo\n\nfn f() -> T {\n  T {\n    a: 1,\n    // the second\n    b: 2,\n  }\n}\n",
+            "\t\ta: 1,\n\t\t// the second\n\t\tb: 2,\n",
+        ),
+        (
+            "own line after the last",
+            "commons demo\n\nfn f() -> T {\n  T {\n    a: 1,\n    b: 2,\n    // the rest\n  }\n}\n",
+            "\t\tb: 2,\n\t\t// the rest\n\t}\n",
+        ),
+        (
+            "single field",
+            "commons demo\n\nfn f() -> T {\n  T { a: 1 // one\n  }\n}\n",
+            "\tT {\n\t\ta: 1,  // one\n\t}\n",
+        ),
+        (
+            "shorthand field",
+            "commons demo\n\nfn f(a: Int) -> T {\n  T {\n    a, // the a\n    b: 2,\n  }\n}\n",
+            "\t\ta,  // the a\n\t\tb: 2,\n",
+        ),
+        (
+            "spread",
+            "commons demo\n\nfn f(t: T) -> T {\n  T {\n    ...t, // base\n    // the a\n    a: 1,\n  }\n}\n",
+            "\t\t...t,  // base\n\t\t// the a\n\t\ta: 1,\n",
+        ),
+        (
+            "bare spread",
+            "commons demo\n\nfn f(t: T) -> T {\n  {\n    // base\n    ...t,\n    a: 1, // one\n  }\n}\n",
+            "\t\t// base\n\t\t...t,\n\t\ta: 1,  // one\n",
+        ),
+        (
+            "call argument",
+            "commons demo\n\nfn f() -> Int {\n  g(T {\n    a: 1, // one\n    b: 2,\n  })\n}\n",
+            "\tg(T {\n\t\ta: 1,  // one\n\t\tb: 2,\n\t})",
         ),
     ] {
         let out = format_source(source, &FormatOptions::default())
