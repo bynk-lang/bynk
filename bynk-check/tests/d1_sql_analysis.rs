@@ -241,3 +241,57 @@ fn a_statement_in_an_integration_case_is_prepared() {
         .is_empty()
     );
 }
+
+/// #3108: a context-level `fn … given Orders` is checked like a handler: all
+/// four forms (a literal, a `const`, a parameter count, a `batch`) report on the
+/// editor path, and a valid body reports nothing.
+fn given_fn_categories(test: &str, body: &str) -> Vec<&'static str> {
+    let root =
+        std::env::temp_dir().join(format!("bynk-check-d1-sql-{test}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |rel: &str, text: &str| {
+        let p: PathBuf = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    write("bynk.toml", "");
+    let unit = format!(
+        "context demo\n\nconsumes bynk.cloudflare {{ D1 }}\n\ncapability Orders = D1\n\n\
+         const MISSPELT: String = \"SELECT id FROM orders WHERE stauts = ?1\"\n\n\
+         fn lookup(id: String) -> Effect[Bool] given Orders {{\n{body}  true\n}}\n\n\
+         service probe {{\n  on call(id: String) -> Effect[Bool] given Orders {{\n    lookup(id)\n  }}\n}}\n"
+    );
+    write("demo.bynk", &unit);
+    write("migrations/demo-orders/0001_create.sql", MIGRATION);
+    let analysed = analysis::analyse_project(
+        &Roots::Single(root.clone()),
+        &HashMap::from([(root.join("demo.bynk"), unit)]),
+        &SchemaLock::Off,
+    );
+    let out = analysed
+        .errors
+        .iter()
+        .map(|e| e.error.category)
+        .collect::<Vec<_>>();
+    let _ = std::fs::remove_dir_all(&root);
+    out
+}
+
+#[test]
+fn a_given_fn_is_checked_like_a_handler() {
+    let bad = "  let _ <- Orders.all(\"SELECT id FROM orders WHERE stauts = ?1\", [Text(id)])\n  \
+               let _ <- Orders.all(MISSPELT, [Text(id)])\n  \
+               let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id), Text(id)])\n  \
+               let _ <- Orders.batch([SqlStatement { sql: \"SELECT id FROM orders WHERE stauts = ?1\", params: [Text(id)] }])\n";
+    assert_eq!(
+        given_fn_categories("given-bad", bad),
+        [
+            "bynk.d1.sql_invalid",
+            "bynk.d1.sql_invalid",
+            "bynk.d1.sql_param_count",
+            "bynk.d1.sql_invalid"
+        ]
+    );
+    let good = "  let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])\n";
+    assert!(given_fn_categories("given-ok", good).is_empty());
+}
