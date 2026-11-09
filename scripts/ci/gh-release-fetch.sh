@@ -35,8 +35,13 @@ api() {
 }
 
 # json <query-name> [arg]: read JSON on stdin and answer one of the two
-# questions this script asks, with jq when present, else python3.
+# questions this script asks, with jq when present, else python3. On Windows
+# both write CRLF, and a trailing \r on the digest fails the sha256 compare
+# with two identical-looking hashes; strip it.
 json() {
+  json_raw "$@" | tr -d '\r'
+}
+json_raw() {
   if command -v jq >/dev/null 2>&1; then
     case "$1" in
       asset) jq -r --arg n "$2" '.assets[] | select(.name == $n) | "\(.id) \(.digest // "")"' ;;
