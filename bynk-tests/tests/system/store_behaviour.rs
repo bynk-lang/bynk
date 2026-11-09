@@ -1978,6 +1978,51 @@ fn rolling_back_past_an_added_sum_variant_faults_newer_schema() {
     );
 }
 
+// #3144 (companion to #3113/#3131): the rollback above redeploys the older
+// build as it was, because recompiling the older source against the newer
+// lock is refused: the added variant reads as removed. Needs no node or tsc.
+#[test]
+fn recompiling_older_source_against_a_newer_lock_is_refused() {
+    let older_src = rollback_source("", "");
+    let newer_src = rollback_source(
+        " | Triangle(base: Int)",
+        "\x20 on call putTriangle(base: Int) -> Effect[()] {\n\
+\x20   shape := Some(Triangle(base))\n\
+\x20   Effect.pure(())\n\
+\x20 }\n",
+    );
+    let lock_v2 = lock_through("older_vs_newer_lock", &[&older_src, &newer_src]);
+
+    let dir = std::env::temp_dir().join(format!(
+        "bynk-store-behaviour-{}-older_vs_newer_lock",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join("src/shop.bynk"), &older_src).unwrap();
+    let result = bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(dir.join("src"))
+            .target(bynk_driver::project::BuildTarget::Bundle)
+            .schema_registry(bynk_driver::project::SchemaLock::On {
+                existing: Some(lock_v2),
+            }),
+    )
+    .map_err(bynk_driver::project::ProjectFailure::flatten);
+    let _ = fs::remove_dir_all(&dir);
+
+    let diags = match result {
+        Ok(_) => panic!("the older source must be refused against the newer lock"),
+        Err(d) => d,
+    };
+    let text = format!("{diags:?}");
+    assert!(
+        text.contains("Triangle"),
+        "names the removed variant: {text}"
+    );
+    assert!(text.contains("Holder"), "names the agent: {text}");
+    assert!(text.contains("removed"), "refused as a removal: {text}");
+}
+
 // Decision A: a build with no schema lock emits no version logic, and carries
 // a stored marker through untouched rather than faulting on it or restamping it.
 const UNVERSIONED_DRIVER_TS: &str = r#"
