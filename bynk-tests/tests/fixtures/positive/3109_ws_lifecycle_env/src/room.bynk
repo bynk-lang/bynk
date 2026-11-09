@@ -1,0 +1,45 @@
+context room
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+
+// #3109: each lifecycle body constructs a second agent, `Audit`, through its
+// Durable Object namespace. The body runs inside Room's Durable Object, so the
+// namespace must come from that object's own `env`.
+service chat from websocket(in: Frame, out: Frame) {
+	on open(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Room(room).join("\(u.identity)", connection)
+		let _ <- Audit(room).note("open")
+	}
+
+	on message(room: RoomKey, frame: Frame) -> Effect[()] by u: User {
+		let _ <- Audit(room).note(frame.text)
+	}
+
+	on close(room: RoomKey) -> Effect[()] by u: User {
+		let _ <- Audit(room).note("close")
+	}
+}
+
+agent Room {
+	key id: RoomKey
+
+	store conns: Map[String, Connection[Frame]]
+
+	on call join(name: String, conn: Connection[Frame]) -> Effect[()] {
+		let _ <- conns.put(name, conn)
+	}
+}
+
+agent Audit {
+	key id: RoomKey
+
+	store notes: Map[String, Int]
+
+	on call note(text: String) -> Effect[()] {
+		let _ <- notes.put(text, 1)
+	}
+}

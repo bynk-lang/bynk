@@ -6602,7 +6602,15 @@ pub(crate) fn emit_agent(
         && a.handlers
             .iter()
             .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees));
-    let needs_env_ctor = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
+    // #3109: likewise the `from websocket` bodies this agent's Durable Object
+    // hosts (`on open` / `on message` / `on close`): they run here, so any
+    // Service Binding or DO namespace they reach comes from this object's `env`.
+    let ws_hosts_reach_env = ctx.target == BuildTarget::Workers
+        && ws_open_hosts_for(&a.name.name, commons, &ctx.local_agents, &ctx.actors)
+            .iter()
+            .any(|h| h.reaches_env(commons));
+    let needs_env_ctor =
+        given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env || ws_hosts_reach_env;
     if needs_env_ctor {
         writeln!(out, "  private __env: unknown;").unwrap();
         writeln!(
@@ -7420,6 +7428,7 @@ pub(crate) fn emit_agent(
         host.rebuild = WsDepsRebuild {
             given: given_deps_expr.clone(),
             uses_emit: agent_uses_emit,
+            reaches_env: host.reaches_env(commons),
         };
     }
     for host in &ws_open_hosts {
@@ -8122,6 +8131,15 @@ impl WsOpenHost<'_> {
     fn has_inbound(&self) -> bool {
         self.message.is_some() || self.close.is_some()
     }
+
+    /// #3109: whether any of the service's hosted lifecycle bodies reaches the
+    /// Worker `env` (a consumed context's service or a local agent).
+    fn reaches_env(&self, commons: &TypedCommons) -> bool {
+        std::iter::once(self.handler)
+            .chain(self.message)
+            .chain(self.close)
+            .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees))
+    }
 }
 
 /// The TS type of a resolved actor sum (`deps.who`): each member's tagged
@@ -8527,11 +8545,13 @@ fn given_deps_const_stmt(expr: &str) -> bynk_ts::TsStmt {
 struct WsDepsRebuild {
     given: Option<String>,
     uses_emit: bool,
+    /// #3109: a body reaches `deps.env` (Service Bindings, DO namespaces).
+    reaches_env: bool,
 }
 
 impl WsDepsRebuild {
     fn is_empty(&self) -> bool {
-        self.given.is_none() && !self.uses_emit
+        self.given.is_none() && !self.uses_emit && !self.reaches_env
     }
 
     fn stmts(&self) -> Vec<bynk_ts::TsStmt> {
@@ -8555,6 +8575,12 @@ impl WsDepsRebuild {
         }
         if self.uses_emit {
             v.push("...__eventsDeps");
+        }
+        if self.reaches_env {
+            // A spread, not a shorthand `env`: exempt from excess-property
+            // checks for a lifecycle body whose own deps type omits `env`. The
+            // `never` cast satisfies the body's precise binding-shape type.
+            v.push("...{ env: env as never }");
         }
         v
     }

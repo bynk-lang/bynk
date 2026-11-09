@@ -74,8 +74,10 @@ function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {
 export class Room {
   state: __DurableObjectState;
   __key!: RoomId;
-  constructor(state: __DurableObjectState) {
+  private __env: unknown;
+  constructor(state: __DurableObjectState, env?: unknown) {
     this.state = state;
+    this.__env = env;
   }
 
   private async loadState(): globalThis.Promise<RoomState> {
@@ -150,14 +152,16 @@ export class Room {
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; key: unknown };
       this.__key = __decodeAgentKey(__RoomKey, __payload.key) as RoomId;
       const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, key: __payload.key });
-      await this.__wsOpen_ChatGateway(connection, __payload.args[0] as RoomId, { identity: __payload.identity as UserId });
+      const env = this.__env as unknown as globalThis.Record<string, unknown>;
+      await this.__wsOpen_ChatGateway(connection, __payload.args[0] as RoomId, { identity: __payload.identity as UserId, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {
       const methodName = url.pathname.slice("/_bynk/agent/".length);
       const { args, deps, key } = (await request.json()) as { args: unknown[]; deps: unknown; key: unknown };
       this.__key = __decodeAgentKey(__RoomKey, key) as RoomId;
-      const result = await (this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName](...__decodeAgentArgs(__RoomWire, methodName, args), deps);
+      const env = this.__env as unknown as globalThis.Record<string, unknown>;
+      const result = await (this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName](...__decodeAgentArgs(__RoomWire, methodName, args), { ...((deps ?? {}) as globalThis.Record<string, unknown>) });
       return new globalThis.Response(globalThis.JSON.stringify(__encodeAgentResult(__RoomWire, methodName, result)), { headers: { "content-type": "application/json" } });
     }
     return new globalThis.Response("Not Found", { status: 404 });
@@ -168,13 +172,14 @@ export class Room {
     if (__att === null) { ws.close(1011, "no session"); return; }
     const connection = new __WorkersConnection<ServerFrame>(ws, __att.connId);
     this.__key = __decodeAgentKey(__RoomKey, __att.key) as RoomId;
+    const env = this.__env as unknown as globalThis.Record<string, unknown>;
     let __raw: string;
     try { __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message); } catch { ws.close(1003, "unreadable frame"); return; }
     let __json: __JsonValue;
     try { __json = globalThis.JSON.parse(__raw) as __JsonValue; } catch { ws.close(1003, "malformed frame"); return; }
     const __dec = __deserialise_ClientFrame(__json, "frame");
     if (__dec.tag === "Err") { ws.close(1008, "invalid frame"); return; }
-    await this.__wsMessage_ChatGateway(connection, __att.args[0] as RoomId, __dec.value, { identity: __att.identity as UserId });
+    await this.__wsMessage_ChatGateway(connection, __att.args[0] as RoomId, __dec.value, { identity: __att.identity as UserId, ...{ env: env as never } });
   }
 
   async webSocketClose(ws: { deserializeAttachment(): unknown; send(data: string): void; close(code?: number, reason?: string): void }, code: number, reason: string, wasClean: boolean): globalThis.Promise<void> {
@@ -183,7 +188,8 @@ export class Room {
     if (__att === null) { ws.close(1011, "no session"); return; }
     const connection = new __WorkersConnection<ServerFrame>(ws, __att.connId);
     this.__key = __decodeAgentKey(__RoomKey, __att.key) as RoomId;
-    await this.__wsClose_ChatGateway(connection, __att.args[0] as RoomId, { identity: __att.identity as UserId });
+    const env = this.__env as unknown as globalThis.Record<string, unknown>;
+    await this.__wsClose_ChatGateway(connection, __att.args[0] as RoomId, { identity: __att.identity as UserId, ...{ env: env as never } });
   }
 
 }
