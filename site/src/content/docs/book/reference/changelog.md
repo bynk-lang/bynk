@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.6** | "`bynk check` counts a D1 call's parameters when the list is a `let` bound to a list literal; the `[check] d1_sql = false` opt-out and the editor path are tested" |
 | **v0.525.5** | "`bynk test --mutate` also mutates `if` conditions, `match` arm guards and binary `+`/`-`" |
 | **v0.525.4** | "`bynk fmt` keeps a comment between call arguments and between record-literal fields (#3110)" |
 | **v0.525.3** | "`bynk test` reads `[profile.dev] contracts`, and `bynk deploy` refuses `[profile.release] contracts = true`; one shared rule resolves a verb's profile (#3107)" |
