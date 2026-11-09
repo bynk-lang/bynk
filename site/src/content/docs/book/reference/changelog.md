@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.8** | "`bynk check` prepares the `SqlStatement`s written inline in a D1 `batch` against the migrations' schema" |
 | **v0.525.7** | "`bynk test --mutate` also mutates SQL literals: comparisons, `max`/`min`, and one `AND` conjunct of a `WHERE`" |
 | **v0.525.6** | "`bynk check` counts a D1 call's parameters when the list is a `let` bound to a list literal; the `[check] d1_sql = false` opt-out and the editor path are tested" |
 | **v0.525.5** | "`bynk test --mutate` also mutates `if` conditions, `match` arm guards and binary `+`/`-`" |
