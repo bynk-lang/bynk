@@ -245,7 +245,7 @@ fn a_statement_in_an_integration_case_is_prepared() {
 /// #3108: a context-level `fn … given Orders` is checked like a handler: all
 /// four forms (a literal, a `const`, a parameter count, a `batch`) report on the
 /// editor path, and a valid body reports nothing.
-fn given_fn_categories(test: &str, body: &str) -> Vec<&'static str> {
+fn given_fn_categories(test: &str, body: &str, called: bool) -> Vec<&'static str> {
     let root =
         std::env::temp_dir().join(format!("bynk-check-d1-sql-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -255,11 +255,17 @@ fn given_fn_categories(test: &str, body: &str) -> Vec<&'static str> {
         std::fs::write(p, text).unwrap();
     };
     write("bynk.toml", "");
+    // An uncalled fn leaves the handler with nothing to be `given`.
+    let (given, call) = if called {
+        (" given Orders", "lookup(id)")
+    } else {
+        ("", "true")
+    };
     let unit = format!(
         "context demo\n\nconsumes bynk.cloudflare {{ D1 }}\n\ncapability Orders = D1\n\n\
          const MISSPELT: String = \"SELECT id FROM orders WHERE stauts = ?1\"\n\n\
          fn lookup(id: String) -> Effect[Bool] given Orders {{\n{body}  true\n}}\n\n\
-         service probe {{\n  on call(id: String) -> Effect[Bool] given Orders {{\n    lookup(id)\n  }}\n}}\n"
+         service probe {{\n  on call(id: String) -> Effect[Bool]{given} {{\n    {call}\n  }}\n}}\n"
     );
     write("demo.bynk", &unit);
     write("migrations/demo-orders/0001_create.sql", MIGRATION);
@@ -283,15 +289,18 @@ fn a_given_fn_is_checked_like_a_handler() {
                let _ <- Orders.all(MISSPELT, [Text(id)])\n  \
                let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id), Text(id)])\n  \
                let _ <- Orders.batch([SqlStatement { sql: \"SELECT id FROM orders WHERE stauts = ?1\", params: [Text(id)] }])\n";
+    let expected = [
+        "bynk.d1.sql_invalid",
+        "bynk.d1.sql_invalid",
+        "bynk.d1.sql_param_count",
+        "bynk.d1.sql_invalid",
+    ];
+    // Checked where the fn is declared, so a fn no handler calls is checked too.
+    assert_eq!(given_fn_categories("given-bad", bad, true), expected);
     assert_eq!(
-        given_fn_categories("given-bad", bad),
-        [
-            "bynk.d1.sql_invalid",
-            "bynk.d1.sql_invalid",
-            "bynk.d1.sql_param_count",
-            "bynk.d1.sql_invalid"
-        ]
+        given_fn_categories("given-bad-uncalled", bad, false),
+        expected
     );
     let good = "  let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])\n";
-    assert!(given_fn_categories("given-ok", good).is_empty());
+    assert!(given_fn_categories("given-ok", good, true).is_empty());
 }

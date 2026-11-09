@@ -16,6 +16,12 @@ fn lookup(id: String) -> Effect[Bool] given Orders {
   true
 }
 
+// No handler calls this one: it is checked where it is declared.
+fn orphan(id: String) -> Effect[Bool] given Orders {
+  let _ <- Orders.all("SELECT id FROM orders WHERE stauts = ?1", [Text(id)])
+  true
+}
+
 service probe {
   on call(id: String) -> Effect[Bool] given Orders {
     lookup(id)
