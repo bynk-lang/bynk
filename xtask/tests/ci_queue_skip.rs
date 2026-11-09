@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-/// The clause a job's `if:` carries, up to (not including) the quoted job name.
+/// The clause a job's `if:` carries, up to (but not including) the quoted job name.
 const CLAUSE: &str = "!contains(fromJSON(needs.changes.outputs.queue_passed), '";
 
 /// Jobs gated on `changes` that deliberately carry no clause, and why.
