@@ -278,6 +278,7 @@ fn a_binding_without_migrations_is_checked_for_its_parameter_count() {
         ["bynk.d1.sql_param_count"],
         "a migrated binding is unchanged"
     );
+}
 
 /// #3108: a context-level `fn … given Orders` is checked like a handler: all
 /// four forms (a literal, a `const`, a parameter count, a `batch`) report on the
