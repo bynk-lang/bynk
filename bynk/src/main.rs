@@ -217,6 +217,7 @@ fn run() -> ExitCode {
             target,
             platform,
             emit,
+            profile,
             lock,
         } => {
             if !prepare(&input, lock.options()) {
@@ -230,6 +231,7 @@ fn run() -> ExitCode {
                     target,
                     platform,
                     emit,
+                    profile,
                 },
             )
         }
@@ -252,6 +254,7 @@ fn run() -> ExitCode {
                 platform,
                 emit,
                 sources_stdin,
+                contracts: false,
             })
         }
         Command::Fmt { args } => run_fmt(args),

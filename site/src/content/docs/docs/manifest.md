@@ -9,7 +9,7 @@ Every section and every key is optional. An omitted section falls back to its
 defaults, and a manifest that lists only `[project]` behaves identically to one
 that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
 (`bynk-fmt`), which both the CLI and the language server read it through;
-`[lsp]` by the language server; `[build]` by `bynk build`; `[workers]` by the compiler, for a Workers
+`[lsp]` by the language server; `[build]` and `[profile.*]` by `bynk build`; `[workers]` by the compiler, for a Workers
 build; `[test]` by the test runner, for a run against a deployment.
 
 A project is an **application** (`[project]`) or a shareable **package**
@@ -49,6 +49,12 @@ out = "out"                 # where `bynk build` writes, relative to the project
 target = "bundle"           # "bundle" or "workers"
 platform = "cloudflare"     # "cloudflare", "node" or "browser"
 emit = "ts"                 # "ts" or "js"
+
+[profile.dev]
+contracts = true            # the function-contract call-site guard; `dev` default
+
+[profile.release]
+contracts = false           # `release` default
 
 [workers]
 compatibility_flags = []    # extra Cloudflare flags, after the default
@@ -491,6 +497,23 @@ output directory, so editing `[build]` never changes what is deployed or what
 the editor's *Show Compiled Output* view shows. The table describes the
 artefact; how contexts map to deployment units belongs to `[deploy]`, which is
 reserved.
+
+## `[profile.<name>]`
+
+Two named profiles, `dev` and `release`, that `bynk build --profile <name>`
+chooses between (`release` when the flag is omitted). The only setting a profile
+carries today is whether the build keeps the function-contract call-site guard.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `contracts` | bool | `true` in `dev`, `false` in `release` | Whether the build carries the `requires`/`ensures` call-site guard. |
+
+A setting resolves as the command-line flag, else `[profile.<name>]`, else
+`[build]`, else the built-in default; `contracts` has no flag and no `[build]`
+key, so it is the profile's table, else the profile's default. The `release`
+default is the deployable and equals what `bynk compile` writes. Only `bynk
+build` reads these tables: `bynk test` and `bynk dev` keep building with
+contracts on, and `bynk compile`, `deploy` and `tail` with them off.
 
 ## `[workers]`
 

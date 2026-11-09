@@ -40,7 +40,7 @@ pub mod test_stream;
 pub mod tsc_report;
 
 pub use compile_cmd::{
-    BuildArgs, CliPlatform, CliTarget, CompileArgs, EmitFormat, run_build, run_compile,
+    BuildArgs, CliPlatform, CliProfile, CliTarget, CompileArgs, EmitFormat, run_build, run_compile,
 };
 pub use output::{write_document, write_modules, write_modules_for_node, write_output};
 

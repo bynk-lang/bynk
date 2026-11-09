@@ -11,6 +11,32 @@ use clap::ValueEnum;
 use crate::project::{BuildTarget, CompileOptions, SchemaLock, compile_project};
 use bynk_check::firstparty::Platform;
 
+/// `--profile`: a named build profile (#3054). It chooses the defaults a
+/// `[profile.<name>]` table can override; today that is `contracts` only.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CliProfile {
+    /// The development build: the function-contract call-site guard is on.
+    Dev,
+    /// The deployable build (the default): no contract guard, the same bytes
+    /// `bynk compile` writes.
+    Release,
+}
+
+impl CliProfile {
+    fn name(self) -> &'static str {
+        match self {
+            CliProfile::Dev => "dev",
+            CliProfile::Release => "release",
+        }
+    }
+
+    /// Whether the profile carries the contract guard when the manifest says
+    /// nothing.
+    fn contracts_by_default(self) -> bool {
+        self == CliProfile::Dev
+    }
+}
+
 /// `--target`: the build topology.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CliTarget {
@@ -82,6 +108,10 @@ pub struct CompileArgs {
     pub emit: EmitFormat,
     /// #2471: layer the JSON document on stdin over the project's sources.
     pub sources_stdin: bool,
+    /// #3054: build with the function-contract call-site guard. `bynk compile`
+    /// passes `false`; only `bynk build --profile dev` (or a `[profile]` table)
+    /// turns it on.
+    pub contracts: bool,
 }
 
 /// What a `build` run was asked to do: the flags given, over `[build]`.
@@ -93,6 +123,8 @@ pub struct BuildArgs {
     pub target: Option<CliTarget>,
     pub platform: Option<CliPlatform>,
     pub emit: Option<EmitFormat>,
+    /// The profile; `release` when unset.
+    pub profile: Option<CliProfile>,
 }
 
 /// Run `build` (#3054): resolve each setting as flag, else `[build]`, else the
@@ -105,6 +137,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
         target,
         platform,
         emit,
+        profile,
     } = args;
     if !input.is_dir() {
         eprintln!(
@@ -149,6 +182,15 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // CLI flag > `[profile.<name>]` > `[build]` > built-in default. `contracts`
+    // has no flag and no `[build]` key, so it is the profile's table, else the
+    // profile's default.
+    let profile = profile.unwrap_or(CliProfile::Release);
+    let contracts = config
+        .profiles
+        .get(profile.name())
+        .and_then(|p| p.contracts)
+        .unwrap_or_else(|| profile.contracts_by_default());
     let output = out.unwrap_or_else(|| input.join(config.out.as_deref().unwrap_or("out")));
     if let Err(e) = check_output_dir(&input, &output) {
         eprintln!("{prog}: {e}");
@@ -163,6 +205,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
             platform,
             emit,
             sources_stdin: false,
+            contracts,
         },
     );
     if code == ExitCode::SUCCESS {
@@ -170,7 +213,15 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
             CliTarget::Bundle => "bundle",
             CliTarget::Workers => "workers",
         };
-        eprintln!("{prog}: built {target} -> {}", output.display());
+        let profile = match (profile, contracts) {
+            (CliProfile::Release, false) => String::new(),
+            (p, c) => format!(
+                " ({} profile, contracts {})",
+                p.name(),
+                if c { "on" } else { "off" }
+            ),
+        };
+        eprintln!("{prog}: built {target}{profile} -> {}", output.display());
     }
     code
 }
@@ -266,27 +317,47 @@ pub fn run_compile(prog: &str, args: CompileArgs) -> ExitCode {
         platform,
         emit,
         sources_stdin,
+        contracts,
     } = args;
     if sources_stdin && !input.is_dir() {
         eprintln!("{prog}: --sources-stdin needs a project directory, not a single file");
         return ExitCode::FAILURE;
     }
     if input.is_dir() {
-        compile_dir(prog, &input, &output, target, platform, emit, sources_stdin)
+        compile_dir(
+            prog,
+            &input,
+            &output,
+            DirSettings {
+                target,
+                platform,
+                emit,
+                sources_stdin,
+                contracts,
+            },
+        )
     } else {
         compile_file(prog, &input, &output, emit)
     }
 }
 
-fn compile_dir(
-    prog: &str,
-    input: &Path,
-    output: &Path,
+/// What a project (directory) compile is configured with.
+struct DirSettings {
     target: CliTarget,
     platform: CliPlatform,
     emit: EmitFormat,
     sources_stdin: bool,
-) -> ExitCode {
+    contracts: bool,
+}
+
+fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -> ExitCode {
+    let DirSettings {
+        target,
+        platform,
+        emit,
+        sources_stdin,
+        contracts,
+    } = settings;
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read
     // its current content here (verified-absent `None` for a fresh
     // project) and hand it in; write the reconciled content back after
@@ -314,6 +385,7 @@ fn compile_dir(
             .target(target.into())
             .platform(platform.into())
             .schema_registry(schema_lock)
+            .contracts(contracts)
             .tests(false),
         Err(e) => {
             eprintln!("{prog}: {e}");

@@ -286,6 +286,40 @@
         }
       }
     },
+    "profile": {
+      "additionalProperties": false,
+      "description": "Named build profiles, read by `bynk build --profile <name>` (default\n`release`). Only `dev` and `release` exist. A value here overrides the\nprofile's built-in default, and a command-line flag overrides both.\n`bynk test`, `dev`, `deploy` and `compile` do not read this table.",
+      "properties": {
+        "dev": {
+          "additionalProperties": false,
+          "description": "The `dev` profile.",
+          "properties": {
+            "contracts": {
+              "description": "Whether the build carries the function-contract call-site guard.\nDefault: `true` in `dev`, `false` in `release`.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "release": {
+          "additionalProperties": false,
+          "description": "The `release` profile.",
+          "properties": {
+            "contracts": {
+              "description": "Whether the build carries the function-contract call-site guard.\nDefault: `true` in `dev`, `false` in `release`.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#profile"
+        }
+      }
+    },
     "project": {
       "additionalProperties": false,
       "description": "Project metadata. Neither key affects compilation: both are for display\nonly, and have no default.",
