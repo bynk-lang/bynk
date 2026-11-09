@@ -336,9 +336,12 @@ fn sql_mutants_are_reported_and_a_boundary_free_suite_leaves_a_survivor() {
     };
     // The suite never asks at the boundary, so the weaker comparison survives.
     assert_eq!(status(">", ">="), "survived");
-    // Dropping either conjunct changes the count the suite checks.
+    // Dropping a conjunct without a parameter changes the rows the suite checks.
     assert_eq!(status("AND live = 1", ""), "killed");
-    assert_eq!(status("n > ?1 AND", ""), "killed");
+    // Dropping the one with `?1` leaves a statement that takes no parameter while
+    // the list passes one: the checker refuses it (#3126, this project has no
+    // migrations), so it is `invalid` and left out of the score.
+    assert_eq!(status("n > ?1 AND", ""), "invalid");
 }
 
 fn mutation_block(project: &Path, extra: &[&str]) -> serde_json::Value {

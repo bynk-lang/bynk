@@ -18,7 +18,11 @@
 //! - `bynk.d1.migration_invalid` (warning): a migration that doesn't apply; the
 //!   database's statements are then not checked, since each would only echo it.
 //!
-//! A database with no migrations directory is not checked: no schema is known.
+//! A database with no migrations directory has no schema, so `sql_invalid` and
+//! `select_field_missing` have nothing to check against; but the parameter
+//! count is a property of the SQL text, so [`parameter_count`] (a scanner that
+//! mirrors SQLite's) still checks it (#3126). A database whose migrations
+//! failed is skipped entirely, as each statement would only echo that warning.
 //! Never stricter than the test tier is the aim, since that tier runs the same
 //! migrations on Node's own SQLite.
 //!
@@ -80,11 +84,17 @@ mod native {
     use crate::project_model::ErrorSink;
     use crate::symbols::UnitTable;
 
+    use super::parameter_count;
+
     /// The schema each migrated database builds, ready to `prepare` against.
     pub struct D1Sql {
         /// Database name → its connection. A database whose migrations failed,
         /// or that has none, has no entry.
         pub(super) schemas: HashMap<String, Arc<Mutex<Connection>>>,
+        /// The databases that have migration files, whether or not they applied.
+        /// A database in neither map has no migrations, and only its parameter
+        /// counts are checked (#3126).
+        pub(super) migrated: std::collections::HashSet<String>,
     }
 
     impl std::fmt::Debug for D1Sql {
@@ -175,13 +185,16 @@ mod native {
     impl D1Sql {
         /// Apply every database's migrations to its own in-memory SQLite. One
         /// that fails is reported as a warning at its file, and the database is
-        /// left out. `None` when no database has migrations (nothing to check).
+        /// left out. Always `Some`: a database with no migrations still has its
+        /// parameter counts checked (#3126).
         pub fn build(migrations: &D1Migrations, errors: &mut ErrorSink) -> Option<Arc<D1Sql>> {
             let mut schemas = HashMap::new();
+            let mut migrated = std::collections::HashSet::new();
             for (database, files) in migrations {
                 if files.is_empty() {
                     continue;
                 }
+                migrated.insert(database.clone());
                 let key = migrations_key(database, files);
                 let contents = migration_contents(files);
                 // A poisoned lock (a panic elsewhere) is recovered, not treated as
@@ -217,7 +230,7 @@ mod native {
                 }
                 schemas.insert(database.clone(), conn);
             }
-            (!schemas.is_empty()).then(|| Arc::new(D1Sql { schemas }))
+            Some(Arc::new(D1Sql { schemas, migrated }))
         }
 
         /// Check every literal statement the unit's call sites recorded.
@@ -249,6 +262,14 @@ mod native {
                 };
                 let database = d1_database_name(&worker, &instance.binding);
                 let Some(conn) = self.schemas.get(&database) else {
+                    // No schema: checked for its parameter count alone, unless
+                    // the database has migrations that failed (their warning
+                    // already stands for every statement).
+                    if !self.migrated.contains(&database)
+                        && let Some(err) = count_error(site, parameter_count(&site.text))
+                    {
+                        out.push(err);
+                    }
                     continue;
                 };
                 let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
@@ -327,7 +348,13 @@ mod native {
                 );
             }
         };
-        let used = stmt.parameter_count();
+        count_error(site, stmt.parameter_count())
+    }
+
+    /// `bynk.d1.sql_param_count` when the SQL uses `used` parameters and the
+    /// list literal passes a different number.
+    fn count_error(site: &D1SqlSite, used: usize) -> Option<CompileError> {
+        let what = format!("`{}.{}`", site.cap, site.op);
         let passed = site.passed?;
         (used != passed).then(|| {
             CompileError::new(
@@ -343,6 +370,85 @@ mod native {
             )
         })
     }
+}
+
+/// #3126: how many parameters `sql` binds, by SQLite's rule
+/// (`sqlite3_bind_parameter_count`), without a schema: `?NNN` is `NNN`, a bare
+/// `?` the next number after the highest so far, the count the highest index,
+/// and a named parameter (`:a`, `@a`, `$a`) takes the next number the first
+/// time its name is seen. Quoted text (`'…'`, `"…"`, `` `…` ``, `[…]`) and
+/// comments hold none. It mirrors `sqlParameters` in the test tier's runtime
+/// (`bynk-emit/runtime/src/storage.ts`, #3043), which is the baseline for the
+/// named forms; the `agrees_with_sqlite` test pins it against `rusqlite`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn parameter_count(sql: &str) -> usize {
+    let b = sql.as_bytes();
+    let n = b.len();
+    let mut count = 0usize;
+    let mut names: std::collections::HashSet<&[u8]> = std::collections::HashSet::new();
+    let mut i = 0;
+    // Skip a quoted run starting at `i`; `doubled` when the close doubles to escape.
+    let skip = |i: &mut usize, close: u8, doubled: bool| {
+        *i += 1;
+        while *i < n {
+            if b[*i] == close {
+                if doubled && b.get(*i + 1) == Some(&close) {
+                    *i += 2;
+                } else {
+                    break;
+                }
+            } else {
+                *i += 1;
+            }
+        }
+        *i += 1;
+    };
+    let is_word = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'$';
+    while i < n {
+        let c = b[i];
+        match c {
+            b'\'' | b'"' | b'`' => skip(&mut i, c, true),
+            b'[' => skip(&mut i, b']', false),
+            b'-' if b.get(i + 1) == Some(&b'-') => {
+                while i < n && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                i = match sql[i + 2..].find("*/") {
+                    Some(end) => i + 2 + end + 2,
+                    None => n,
+                };
+            }
+            b'?' => {
+                i += 1;
+                let start = i;
+                while i < n && b[i].is_ascii_digit() {
+                    i += 1;
+                }
+                if i > start {
+                    // A number too large for `usize` can't be a real index.
+                    let index = sql[start..i].parse::<usize>().unwrap_or(usize::MAX);
+                    count = count.max(index);
+                } else {
+                    count = count.saturating_add(1);
+                }
+            }
+            // `$` continues an identifier (`a$b`); `:` and `@` always start a parameter.
+            b':' | b'@' | b'$' if c != b'$' || !(i > 0 && is_word(b[i - 1])) => {
+                let start = i;
+                i += 1;
+                while i < n && is_word(b[i]) {
+                    i += 1;
+                }
+                if i - start > 1 && names.insert(&b[start..i]) {
+                    count = count.saturating_add(1);
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    count
 }
 
 /// The source span of the token starting at byte `at` of a string literal's
@@ -485,7 +591,16 @@ mod tests {
             ]),
             &mut errors,
         );
-        assert!(built.is_none(), "no database left to check against");
+        let built = built.expect("built");
+        assert!(
+            built.schemas.is_empty(),
+            "no database left to check against"
+        );
+        assert_eq!(
+            built.migrated.len(),
+            1,
+            "but it is still known to be migrated"
+        );
         assert!(errors.is_empty(), "a warning, not an error");
         let warnings = errors.into_warnings();
         assert_eq!(warnings.len(), 1);
@@ -537,6 +652,49 @@ mod tests {
             1,
             "block comment"
         );
+    }
+
+    /// #3126: the scanner agrees with SQLite's own count on a corpus (the
+    /// cases #3043 pinned, plus the quoting forms and named parameters).
+    #[test]
+    fn the_scanner_agrees_with_sqlite() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE t (a, b, c)").unwrap();
+        let corpus = [
+            "SELECT * FROM t",
+            "SELECT * FROM t WHERE a = ?1 AND b = ?2",
+            "SELECT * FROM t WHERE a = ?1 OR b = ?1",
+            "SELECT * FROM t WHERE a = ?3",
+            "SELECT * FROM t WHERE a = ? AND b = ?",
+            "SELECT * FROM t WHERE a = ?2 AND b = ?",
+            "SELECT * FROM t WHERE a = ? AND b = ?5 AND c = ?",
+            "SELECT '?1' FROM t",
+            "SELECT 'it''s ?1' FROM t WHERE a = ?1",
+            "SELECT \"?1\" AS \"?2\" FROM t",
+            "SELECT `?1` FROM (SELECT 1 AS `?1`) WHERE 1 = ?1",
+            "SELECT [?1] FROM (SELECT 1 AS [?1]) WHERE 1 = ?1",
+            "SELECT * FROM t -- ?1\nWHERE a = ?1",
+            "SELECT * FROM t /* ?5 */ WHERE a = ?1",
+            "SELECT * FROM t WHERE a = ?1 /* unterminated ?9",
+            "SELECT * FROM t WHERE a = :x AND b = :x AND c = :y",
+            "SELECT * FROM t WHERE a = @x AND b = $y",
+            "SELECT * FROM t WHERE a = ?1 AND b = :x",
+            "SELECT * FROM t WHERE a = :x AND b = ?",
+            "SELECT * FROM t WHERE a = ?01 AND b = ?1",
+            "INSERT INTO t VALUES (?, ?, ?)",
+            "INSERT INTO t VALUES (?1, ?2, ?3) -- ?4",
+        ];
+        for sql in corpus {
+            let want = conn.prepare(sql).unwrap().parameter_count();
+            assert_eq!(super::parameter_count(sql), want, "{sql}");
+        }
+    }
+
+    #[test]
+    fn a_database_without_migrations_is_checked_for_its_parameter_count_alone() {
+        let mut errors = ErrorSink::new();
+        let built = D1Sql::build(&migrations(&[]), &mut errors).expect("always built");
+        assert!(built.schemas.is_empty() && built.migrated.is_empty());
     }
 
     #[test]
@@ -629,7 +787,7 @@ mod tests {
                 &migrations(&[("0001_a.sql", "NOT SQL AT ALL;")]),
                 &mut errors,
             );
-            assert!(built.is_none());
+            assert!(built.expect("built").schemas.is_empty());
             assert_eq!(errors.into_warnings().len(), 1);
         }
     }

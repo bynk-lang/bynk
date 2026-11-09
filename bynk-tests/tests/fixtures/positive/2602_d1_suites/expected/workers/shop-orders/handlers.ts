@@ -22,6 +22,10 @@ export interface Order {
 export const Order = {
 };
 
+export function overboundValues(id: string): readonly SqlValue[] {
+  return [SqlValue.Text(id), SqlValue.Integer(1)];
+}
+
 export type Orders = bynk_cloudflare.D1;
 
 export const __OrdersToken: symbol = globalThis.Symbol("Orders");
@@ -115,7 +119,7 @@ export const move = {
 
 export const overbound = {
   async call(id: string, deps: { Orders: Orders }): globalThis.Promise<Result<SqlRun, SqlError>> {
-    return deps.Orders.run("DELETE FROM orders WHERE id = ?1", [SqlValue.Text(id), SqlValue.Integer(1)]);
+    return deps.Orders.run("DELETE FROM orders WHERE id = ?1", overboundValues(id));
   },
 };
 

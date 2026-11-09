@@ -69,10 +69,17 @@ service move {
 	}
 }
 
+// The list comes from a call, so its length is not visible to the checker
+// (#3126 reports a literal list that is the wrong length, which this fixture
+// is deliberately not about: it pins the run-time refusal).
+fn overboundValues(id: String) -> List[SqlValue] {
+	[Text(id), Integer(1)]
+}
+
 service overbound {
 	on call(id: String) -> Effect[Result[SqlRun, SqlError]] given Orders {
 		// #3003: one value too many for the one `?1` the SQL uses.
-		Orders.run("DELETE FROM orders WHERE id = ?1", [Text(id), Integer(1)])
+		Orders.run("DELETE FROM orders WHERE id = ?1", overboundValues(id))
 	}
 }
 

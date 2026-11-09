@@ -21,6 +21,16 @@ fn source(statements: &str) -> String {
 /// The categories `analyse_project` reports for a project whose manifest is
 /// `manifest` and whose one `demo` unit holds `statements`.
 fn categories(test: &str, manifest: &str, statements: &str) -> Vec<&'static str> {
+    categories_with(test, manifest, statements, true)
+}
+
+/// As [`categories`], with the migrations directory written only when `migrated`.
+fn categories_with(
+    test: &str,
+    manifest: &str,
+    statements: &str,
+    migrated: bool,
+) -> Vec<&'static str> {
     let root =
         std::env::temp_dir().join(format!("bynk-check-d1-sql-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -32,7 +42,9 @@ fn categories(test: &str, manifest: &str, statements: &str) -> Vec<&'static str>
     write("bynk.toml", manifest);
     let unit = source(statements);
     write("demo.bynk", &unit);
-    write("migrations/demo-orders/0001_create.sql", MIGRATION);
+    if migrated {
+        write("migrations/demo-orders/0001_create.sql", MIGRATION);
+    }
     let analysed = analysis::analyse_project(
         &Roots::Single(root.clone()),
         &HashMap::from([(root.join("demo.bynk"), unit)]),
@@ -239,5 +251,31 @@ fn a_statement_in_an_integration_case_is_prepared() {
             "SELECT id FROM orders WHERE stauts = ?1"
         )
         .is_empty()
+    );
+}
+
+/// #3126: a binding with no migrations has no schema, so `sql_invalid` has
+/// nothing to check against, but the parameter count, a property of the SQL text
+/// and the list, is still reported on the editor path; `[check] d1_sql = false`
+/// silences it, and a migrated binding is unchanged.
+#[test]
+fn a_binding_without_migrations_is_checked_for_its_parameter_count() {
+    let counted =
+        "    let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id), Text(id)])\n";
+    assert_eq!(
+        categories_with("nomig-count", "", counted, false),
+        ["bynk.d1.sql_param_count"]
+    );
+    assert!(
+        categories_with("nomig-bad-column", "", BAD_COLUMN, false).is_empty(),
+        "no schema, so the column is not checked"
+    );
+    assert!(
+        categories_with("nomig-optout", "[check]\nd1_sql = false\n", counted, false).is_empty()
+    );
+    assert_eq!(
+        categories("mig-count", "", counted),
+        ["bynk.d1.sql_param_count"],
+        "a migrated binding is unchanged"
     );
 }

@@ -1,0 +1,6 @@
+# exact
+bynk.d1.sql_param_count the SQL of `Orders.all` takes 2 parameters, but the list passes 1
+bynk.d1.sql_param_count the SQL of `Orders.all` takes 1 parameter, but the list passes 2
+bynk.d1.sql_param_count the SQL of `Orders.all` takes 2 parameters, but the list passes 1
+bynk.d1.sql_param_count the SQL of `Orders.all` takes 1 parameter, but the list passes 2
+bynk.d1.sql_param_count the SQL of `Orders.batch` takes 2 parameters, but the list passes 1

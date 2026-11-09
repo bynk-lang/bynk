@@ -61,7 +61,7 @@ compatibility_flags = []    # extra Cloudflare flags, after the default
 workers_dev = true          # false takes each Worker off workers.dev; left out unless set
 
 [check]
-d1_sql = true               # false stops literal D1 SQL being prepared against the migrations' schema
+d1_sql = true               # false stops literal D1 SQL being checked: prepared against the migrations' schema, and its parameter count
 
 [unstable]
 allow = []                  # experimental standard-library items to use
