@@ -1,0 +1,18 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+const MISSPELT: String = "SELECT id FROM orders WHERE stauts = ?1"
+const COUNTED: String = "SELECT id FROM orders WHERE id = ?1"
+
+// #3108: a `const` SQL bound to a literal is prepared like an inline one.
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    let _ <- Orders.all(MISSPELT, [Text(id)])
+    let _ <- Orders.all(COUNTED, [Text(id), Text(id)])
+    let _ <- Orders.batch([SqlStatement { sql: MISSPELT, params: [Text(id)] }])
+    true
+  }
+}

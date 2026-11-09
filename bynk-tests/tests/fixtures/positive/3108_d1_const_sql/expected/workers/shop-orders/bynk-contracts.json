@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "find": "c6114eace483b152",
+    "save": "4b121388abe38e8b"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "find": "Svc(\"find\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),N(\"SqlError\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Int\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))"
+  }
+}

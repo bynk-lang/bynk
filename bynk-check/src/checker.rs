@@ -720,7 +720,12 @@ pub enum Callee {
     /// idents name a constant, and only the checker's scope walk can tell a
     /// constant from a local that shadows it. Recorded like the bare
     /// `HttpResult` variant reference (`Callee::Intrinsic`).
-    Const(String),
+    ///
+    /// #3108: when the name is a D1 call's SQL argument, the second field keeps
+    /// that statement's [`Callee::D1Sql`] site, which this entry would
+    /// otherwise replace (one id, one entry), so the constant's SQL is still
+    /// prepared.
+    Const(String, Option<Box<d1::D1SqlSite>>),
 }
 
 /// Whether a [`Callee::Query`] call returns another `Query[T]` (chainable)

@@ -1,0 +1,6 @@
+[project]
+name = "d1-const-sql"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

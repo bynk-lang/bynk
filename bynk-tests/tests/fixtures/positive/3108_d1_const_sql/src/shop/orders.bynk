@@ -1,0 +1,24 @@
+context shop.orders
+
+// #3108: a `const` SQL is prepared against the migrations like an inline one,
+// and still lowers to the constant's own call.
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+const INSERT_ORDER: String = "INSERT INTO orders (id, total) VALUES (?1, ?2)"
+const ONE_ORDER: String = "SELECT id, total FROM orders WHERE id = ?1"
+
+service save {
+	on call(id: String, total: Int) -> Effect[Result[SqlRun, SqlError]] given Orders {
+		Orders.run(INSERT_ORDER, [Text(id), Integer(total)])
+	}
+}
+
+service find {
+	on call(id: String) -> Effect[Result[String, SqlError]] given Orders {
+		Orders.all(ONE_ORDER, [Text(id)])
+	}
+}
