@@ -84,7 +84,7 @@ mod native {
     pub struct D1Sql {
         /// Database name → its connection. A database whose migrations failed,
         /// or that has none, has no entry.
-        pub(super) schemas: HashMap<String, Mutex<Connection>>,
+        pub(super) schemas: HashMap<String, Arc<Mutex<Connection>>>,
     }
 
     impl std::fmt::Debug for D1Sql {
@@ -95,6 +95,41 @@ mod native {
         }
     }
 
+    /// One database's schema: its migrations applied in order to a fresh
+    /// in-memory SQLite. `None` (with a `migration_invalid` warning) when one
+    /// doesn't apply.
+    fn build_database(
+        database: &str,
+        files: &[crate::d1_migrations::MigrationFile],
+        errors: &mut ErrorSink,
+    ) -> Option<Connection> {
+        let conn = Connection::open_in_memory().ok()?;
+        conn.execute_batch(TRACKING_TABLE).ok()?;
+        for file in files {
+            if let Err(e) = conn.execute_batch(&file.sql) {
+                let key = format!("{PROJECT_MIGRATIONS_DIR}/{database}/{}", file.name);
+                errors.push_for(
+                    Some(&PathBuf::from(&key)),
+                    CompileError::new(
+                        "bynk.d1.migration_invalid",
+                        Span::default(),
+                        format!("migration `{key}` doesn't apply: {e}"),
+                    )
+                    .with_note(format!(
+                        "applied in order to an empty in-memory SQLite; the SQL of `{database}` is not checked against its schema until this applies"
+                    )),
+                );
+                return None;
+            }
+        }
+        // A double-quoted name that matches no column silently becomes a
+        // string literal (SQLite's `DQS` fallback), so a misspelt column
+        // would prepare, and `select[T]`'s quoted column list would
+        // never miss. Off for statements; migrations ran with it on.
+        let _ = conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DML, false);
+        Some(conn)
+    }
+
     /// Wrangler's tracking table, which a statement could read (`bynk revert`
     /// does), created before the migrations run as `wrangler d1 migrations`
     /// does.
@@ -102,6 +137,26 @@ mod native {
         id INTEGER PRIMARY KEY AUTOINCREMENT, \
         name TEXT UNIQUE, \
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)";
+
+    /// #3108: the schemas built so far in this process, by a hash of the database's
+    /// name and migration contents. The language server analyses the project on
+    /// every edit; a schema is rebuilt only when its migrations changed. A
+    /// connection is only ever prepared against (never written), so sharing one
+    /// between analyses is safe. Bounded: past [`CACHE_LIMIT`] entries it starts
+    /// over, so edited migrations' stale schemas don't pile up.
+    static SCHEMA_CACHE: Mutex<Option<HashMap<u64, Arc<Mutex<Connection>>>>> = Mutex::new(None);
+    const CACHE_LIMIT: usize = 64;
+
+    fn migrations_key(database: &str, files: &[crate::d1_migrations::MigrationFile]) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        database.hash(&mut h);
+        for file in files {
+            file.name.hash(&mut h);
+            file.sql.hash(&mut h);
+        }
+        h.finish()
+    }
 
     impl D1Sql {
         /// Apply every database's migrations to its own in-memory SQLite. One
@@ -113,39 +168,27 @@ mod native {
                 if files.is_empty() {
                     continue;
                 }
-                let Ok(conn) = Connection::open_in_memory() else {
+                let key = migrations_key(database, files);
+                let cached = SCHEMA_CACHE
+                    .lock()
+                    .ok()
+                    .and_then(|c| c.as_ref()?.get(&key).cloned());
+                if let Some(conn) = cached {
+                    schemas.insert(database.clone(), conn);
+                    continue;
+                }
+                let Some(conn) = build_database(database, files, errors) else {
                     continue;
                 };
-                if conn.execute_batch(TRACKING_TABLE).is_err() {
-                    continue;
-                }
-                let mut ok = true;
-                for file in files {
-                    if let Err(e) = conn.execute_batch(&file.sql) {
-                        let key = format!("{PROJECT_MIGRATIONS_DIR}/{database}/{}", file.name);
-                        errors.push_for(
-                            Some(&PathBuf::from(&key)),
-                            CompileError::new(
-                                "bynk.d1.migration_invalid",
-                                Span::default(),
-                                format!("migration `{key}` doesn't apply: {e}"),
-                            )
-                            .with_note(format!(
-                                "applied in order to an empty in-memory SQLite; the SQL of `{database}` is not checked against its schema until this applies"
-                            )),
-                        );
-                        ok = false;
-                        break;
+                let conn = Arc::new(Mutex::new(conn));
+                if let Ok(mut cache) = SCHEMA_CACHE.lock() {
+                    let cache = cache.get_or_insert_with(HashMap::new);
+                    if cache.len() >= CACHE_LIMIT {
+                        cache.clear();
                     }
+                    cache.insert(key, conn.clone());
                 }
-                // A double-quoted name that matches no column silently becomes a
-                // string literal (SQLite's `DQS` fallback), so a misspelt column
-                // would prepare, and `select[T]`'s quoted column list would
-                // never miss. Off for statements; migrations ran with it on.
-                let _ = conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DML, false);
-                if ok {
-                    schemas.insert(database.clone(), Mutex::new(conn));
-                }
+                schemas.insert(database.clone(), conn);
             }
             (!schemas.is_empty()).then(|| Arc::new(D1Sql { schemas }))
         }
@@ -203,7 +246,7 @@ mod native {
     /// `None` (the whole argument is reported) when the offset is unknown, lies
     /// in the compiler's generated `select` prefix, or can't be mapped back
     /// into the source with certainty.
-    fn error_span(source: &str, site: &D1SqlSite, offset: i32) -> Option<Span> {
+    pub(super) fn error_span(source: &str, site: &D1SqlSite, offset: i32) -> Option<Span> {
         let offset = usize::try_from(offset).ok()?;
         let (decoded, origin) = match &site.literal {
             Some((lit, origin)) => (lit.as_str(), *origin),
@@ -519,5 +562,87 @@ mod tests {
         // Not a literal at all (a `const`'s use site): no quote to start from.
         let lit = bynk_syntax::span::Span::new(2, 8);
         assert_eq!(literal_subspan("f(CONSTX)", lit, "SELECT x", 0), None);
+    }
+
+    /// #3108: an unchanged database's schema is built once and shared; a changed
+    /// migration builds a new one.
+    #[test]
+    fn a_schema_is_cached_until_its_migrations_change() {
+        let build = |sql: &str| {
+            let mut errors = ErrorSink::new();
+            D1Sql::build(&migrations(&[("0001_a.sql", sql)]), &mut errors).expect("applies")
+        };
+        let a = build("CREATE TABLE cache_probe (id TEXT);");
+        let b = build("CREATE TABLE cache_probe (id TEXT);");
+        assert!(
+            std::sync::Arc::ptr_eq(&a.schemas["demo-orders"], &b.schemas["demo-orders"]),
+            "the same migrations reuse the built schema"
+        );
+        let c = build("CREATE TABLE cache_probe (id TEXT, more TEXT);");
+        assert!(!std::sync::Arc::ptr_eq(
+            &a.schemas["demo-orders"],
+            &c.schemas["demo-orders"]
+        ));
+        assert!(
+            c.schemas["demo-orders"]
+                .lock()
+                .unwrap()
+                .prepare("SELECT more FROM cache_probe")
+                .is_ok(),
+            "the edited migration's columns are there"
+        );
+    }
+
+    /// A migration that fails is not cached: it warns on every build.
+    #[test]
+    fn a_failing_migration_still_warns_each_time() {
+        for _ in 0..2 {
+            let mut errors = ErrorSink::new();
+            let built = D1Sql::build(
+                &migrations(&[("0001_a.sql", "NOT SQL AT ALL;")]),
+                &mut errors,
+            );
+            assert!(built.is_none());
+            assert_eq!(errors.into_warnings().len(), 1);
+        }
+    }
+
+    fn site(
+        text: &str,
+        literal: Option<(&str, isize)>,
+        span: (usize, usize),
+    ) -> crate::checker::D1SqlSite {
+        crate::checker::D1SqlSite {
+            cap: "Orders".into(),
+            op: "select".into(),
+            text: text.into(),
+            span: bynk_syntax::span::Span::new(span.0, span.1),
+            row: None,
+            passed: None,
+            literal: literal.map(|(l, o)| (l.to_string(), o)),
+        }
+    }
+
+    /// An offset in the compiler's generated `SELECT <columns>` prefix isn't in
+    /// the author's literal: the whole argument is reported.
+    #[test]
+    fn an_error_in_the_generated_select_prefix_falls_back() {
+        let source = r#"f("FROM t WHERE x = 1")"#;
+        let text = "SELECT \"id\" FROM t WHERE x = 1";
+        let site = site(text, Some(("FROM t WHERE x = 1", 12)), (2, 22));
+        // Offset 7 is the `"id"` the compiler wrote; offset 25 is `x` in the tail.
+        assert_eq!(super::native::error_span(source, &site, 7), None);
+        let span = super::native::error_span(source, &site, 25).expect("in the tail");
+        assert_eq!(&source[span.start..span.end], "x");
+    }
+
+    /// A quoted identifier written with escaped quotes can't be mapped
+    /// verbatim; it falls back rather than point at the wrong text.
+    #[test]
+    fn an_escaped_quoted_identifier_falls_back() {
+        let source = r#"f("SELECT \"nope\" FROM t")"#;
+        let decoded = "SELECT \"nope\" FROM t";
+        let lit = bynk_syntax::span::Span::new(2, source.len() - 1);
+        assert_eq!(literal_subspan(source, lit, decoded, 7), None);
     }
 }
