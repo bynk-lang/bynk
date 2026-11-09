@@ -1,11 +1,6 @@
----
-level: patch
-changelog: CI runs in stages matched to a PR's state — fast checks on drafts, the full three-OS gate once a PR is ready for review, and a thin integration check in the merge queue
----
+# 0765 — CI gates by stage — the full check runs when a PR is ready, and the merge queue checks integration only
 
-## ADR: ci-staged-gates
-title: CI gates by stage — the full check runs when a PR is ready, and the merge queue checks integration only
-summary: Draft PRs get fast feedback, ready PRs get the full three-OS gate during review, and the queue re-checks only what can break when PRs combine
+- **Status:** Accepted (v0.525.2)
 
 **Context.** `ci.yml` runs the same Linux-only PR stage on every push, draft
 or ready. Windows, macOS, the Linux system tier, TypeScript 7, the Node floor

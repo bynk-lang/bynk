@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0765](0765-ci-staged-gates.md) | **CI gates by stage — the full check runs when a PR is ready, and the merge queue checks integration only** (v0.525.2) — Draft PRs get fast feedback, ready PRs get the full three-OS gate during review, and the queue re-checks only what can break when PRs combine | Accepted (v0.525.2) |
 | [0764](0764-bynk-build-progress.md) | **Per-context build progress** (v0.525.1) — the driver reports contexts through an optional sink; one terminal-gated printer serves build, dev and deploy | Accepted (v0.525.1) |
 | [0763](0763-d1-sql-schema-check.md) | **A D1 call's literal SQL is checked against the schema its migrations build** (v0.525) — Prepare each statement on a bundled in-memory SQLite, with the migrations applied, at check time | Accepted (v0.525) |
 | [0762](0762-const-string-as-sql.md) | **A String constant bound to a literal counts as a literal for the SQL rules** (v0.524) — Relaxes bynk.types.sql_not_literal for compile-time constants only | Accepted (v0.524) |
