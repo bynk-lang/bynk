@@ -882,7 +882,7 @@ A migration that doesn't apply is the warning `bynk.d1.migration_invalid`, and
 that database's statements are then not checked. A database with no migrations
 directory isn't checked either. The statements of a `batch` are checked when each is
 written inline in the list (`batch([SqlStatement { sql: "…", params: […] }, …])`); one built
-elsewhere isn't tied to a database. Statements in the `case` and `property`
+elsewhere isn't tied to a database. Statements in a context-level `fn … given Orders` are checked like a handler's. Statements in the `case` and `property`
 bodies of a suite (`unit` and `integration` tier) are checked against the suite target's
 databases. A `system` suite (`suite … as system { … }`) can't call a capability directly,
 and a suite helper `fn` can't hold a D1 call (an effectful helper is
