@@ -724,6 +724,24 @@ jobs:
       # and wipes target/ outright once it passes 40 GB: nothing else evicts old
       # dependency hashes or incremental dirs (`msrv`'s second rustc adds its
       # own), and a full disk fails jobs.
+      # Runs before checkout, which wipes the workspace (and the warm target/)
+      # when it finds no git. A runner missing a tool the jobs assume then fails
+      # here in seconds, naming the runner, instead of as an opaque exit 127 in
+      # the clean step after target/ is gone (#3114).
+      - &self_hosted_preflight
+        name: Check the runner's tools (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: |
+          missing=""
+          for tool in git du cut; do
+            command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=Unhealthy self-hosted runner::Runner '$RUNNER_NAME' has no${missing} on its PATH. Fix the runner, or set the SELF_HOSTED_LINUX repository variable to something other than 'true' to send these jobs to GitHub-hosted runners."
+            exit 1
+          fi
       - &self_hosted_checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -762,6 +780,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
+      - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
@@ -815,6 +834,7 @@ jobs:
     steps: &test_steps
       # The self-hosted checkout and clean steps (see `clippy`, where they are
       # defined).
+      - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
@@ -1118,6 +1138,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 30
     steps:
+      - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
@@ -1190,6 +1211,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
+      - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
       # Derive the toolchain from the *declared* rust-version rather than a
@@ -1294,6 +1316,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
+      - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
@@ -1614,6 +1637,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
+      - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0

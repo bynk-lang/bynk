@@ -283,7 +283,11 @@ fn every_self_hosted_job_keeps_target_warm() {
                 l == format!("- *{step}") || l == format!("- &{step}")
             })
         };
-        for step in ["self_hosted_checkout", "self_hosted_clean"] {
+        for step in [
+            "self_hosted_preflight",
+            "self_hosted_checkout",
+            "self_hosted_clean",
+        ] {
             assert!(
                 has(step),
                 "`{}` can run self-hosted but lacks `{step}`",
