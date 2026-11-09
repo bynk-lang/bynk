@@ -717,9 +717,15 @@ parameter is a `SqlValue`, named by SQLite storage class: `Null`,
 `Boolean(Bool)`, which binds as `1` or `0`. A value is always bound, never
 spliced into the text.
 
-The SQL must be a string literal: the first argument of `all`, `first` and
-`run`, and the `sql` of every `SqlStatement`. An interpolated string, a
-variable or any other expression is `bynk.types.sql_not_literal`, so request
+The SQL must be a string literal, or a bare reference to a `String` `const`
+bound to one: the first argument of `all`, `first` and `run`, and the `sql` of
+every `SqlStatement`. A constant's value is fixed at compile time and can carry
+no run-time input, so a query used in several places can be declared once
+(`const CountSql: String = "SELECT count(*) AS n FROM deliveries"`). That
+covers a constant bound to a `"""` block, one that names another constant, and
+one imported from a commons. A parameter, a `let` binding, an interpolated
+string, `"a" + B` (not a constant at all) or any other expression is
+`bynk.types.sql_not_literal`, so request
 data can't reach the SQL text: write `?1` and pass `Text(id)`. A long
 statement reads best as a multi-line string, `"""…"""`, which strips the
 closing delimiter's indentation and takes no interpolation holes here (a hole
@@ -789,7 +795,7 @@ still refuses `0`/`1` for a `Bool`, at every boundary.
 
 `select[T]` and `firstAs[T]` read rows straight into a record, so the `SELECT`
 column list isn't spelt twice. The first argument is the statement **from
-`FROM` on**, a string literal that must not begin with `SELECT`
+`FROM` on**, a string literal (or such a constant) that must not begin with `SELECT`
 (`bynk.types.select_tail_has_select`); the compiler writes `SELECT` and `T`'s
 fields as quoted identifiers, in declaration order, and prepends them at compile
 time, so the SQL is still a constant:

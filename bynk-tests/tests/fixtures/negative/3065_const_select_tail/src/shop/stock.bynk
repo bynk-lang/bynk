@@ -1,0 +1,16 @@
+context shop.stock
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+capability Stock = D1
+
+type Item = { id: String }
+
+const GoodSql: String = "SELECT 1"
+
+service s {
+  on call() -> Effect[Result[List[Item], SqlReadError]] given Stock {
+    Stock.select[Item](GoodSql, [])
+  }
+}

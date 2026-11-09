@@ -1,0 +1,18 @@
+suite shop.stock
+
+case "a constant is the SQL of run, first and select" {
+  let _ <- Stock.run(CreateSql, [])
+  let _ <- Stock.run(InsertSql, [])
+  let one <- Stock.first(CountAlias, [])
+  expect one is Ok(Some(_))
+  let rows <- Stock.select[Item](ItemsFrom, [])
+  expect rows == Ok([Item { id: "a" }])
+  let again <- Stock.firstAs[Item](ItemsFrom, [])
+  expect again == Ok(Some(Item { id: "a" }))
+  let aliased <- Stock.select[Item](Tail, [])
+  expect aliased == Ok([Item { id: "a" }])
+  let hidden <- Stock.firstAs[Item](HiddenTail, [])
+  expect hidden == Ok(Some(Item { id: "a" }))
+  let stmt = respelled(statement())
+  expect stmt.sql == "INSERT INTO items (id) VALUES ('a')"
+}
