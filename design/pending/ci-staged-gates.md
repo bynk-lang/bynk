@@ -47,10 +47,10 @@ queue makes every defect it finds cost an ejection, a re-queue, and a re-run
 of each entry behind it. The second job is the only one a queue is needed
 for.
 
-The PR stage also does not tell a draft from a ready PR. Every push to a draft
-pays for the full Linux PR stage, although a draft is by definition still
-changing. In the other direction, `promote` marks a draft ready once
-`ci-fast` passes (~1–6 min), so in practice the draft phase barely exists.
+The PR stage also does not tell a draft from a ready PR. Both get the same
+Linux-only check, so nothing marks the point where a PR is worth the full
+one. And `promote` marks a draft ready once `ci-fast` passes (~1–6 min), so
+in practice the draft phase barely exists.
 
 **Decision.** CI runs in five stages. Each check runs at the earliest stage
 where a failure is cheap, and no check runs in two stages without a reason.
@@ -69,21 +69,43 @@ The rules that make the stages hold together:
   On a ready PR it covers the ready set. In the queue it covers the queue set.
   The queue can never wedge on a check its stage does not run. This is the
   same invariant the current workflow relies on.
-- **Becoming ready starts the full check.** `pull_request` runs on
-  `ready_for_review` as well as the default activity types. `promote` flips a
-  draft with the `GITHUB_TOKEN`, and events caused by that token do not start
-  workflow runs. So `promote` must dispatch the ready-stage run itself, just
-  as it already dispatches the Claude review. A ready-stage run started this
-  way must still report its checks on the PR's head SHA.
+- **A draft-only run never reports `CI green` as passing.** Required checks
+  match on name and head SHA, so a green `CI green` from the draft set would
+  let a PR be approved and queued on the draft set alone. Since the queue no
+  longer runs the platform legs, that defect would reach `main`. When a run
+  ends with the PR still a draft and the ready set not run, `CI green` fails,
+  with a message saying the ready-stage check has not run. It cannot simply be
+  skipped, because GitHub counts a skipped required check as passing. Drafts
+  cannot merge anyway, so the red mark costs nothing. The ready-set run that
+  follows reports `CI green` again on the same SHA, and the latest result is
+  the one that counts.
+- **Promotion runs the full check in the same run, not a dispatched one.**
+  `promote` flips a draft with the `GITHUB_TOKEN`, and events that token causes
+  do not start workflow runs. So the `ready_for_review` it fires starts
+  nothing. Rather than dispatch a second run, the ready-set jobs take `needs:
+  promote` and run in the same `pull_request` run when `promote` flipped the
+  PR or the PR was already ready. The run keeps its concurrency group, so a
+  newer push still cancels it, its `pull_request` context for the `changes`
+  path filter, and its reporting on the head SHA. It also needs no write
+  token beyond what `promote` has today. The draft and ready stages simply run
+  one after the other on that push.
+- **A human marking a PR ready starts the full check** through the
+  `ready_for_review` activity type. That is a normal event, so it covers fork
+  PRs too, which `promote` never touches.
 - **`promote` waits for the draft stage, not just `ci-fast`.** A draft is
   promoted once the Linux unit and integration tiers pass too. Promotion then
   means "worth a full run and a review", not just "it lints".
-- **A draft can ask for the full check early.** A `ci:full` label runs the
-  ready set on a draft, for work its author already suspects is
-  platform-sensitive. It is opt-in, so it does not bring back the saturation
-  the Linux-only PR stage was introduced to stop.
+- **There is no label to ask for the full check early.** To get it, mark the
+  PR ready: that is what "ready" now means. A `ci:full` label was considered
+  and rejected. It needs the `labeled` activity type, and that starts a run on
+  *every* label change. Such a run shares the PR's concurrency group, so it
+  cancels an in-progress ready run. It then reports `CI green` without having
+  run the check, which an unrelated label edit must never be able to do.
+- **The trigger lists its activity types explicitly**: `opened`,
+  `synchronize`, `reopened` and `ready_for_review`.
 - **Superseded runs are cancelled** on drafts and ready PRs alike, as
-  `pull_request` runs are today.
+  `pull_request` runs are today. Every draft-stage and ready-stage run is a
+  `pull_request` run in the PR's own concurrency group.
 - **The queue does not repeat the ready check.** A queued PR has already
   passed the full set at its own head. The queue re-checks only what combining
   it with the entries ahead can break, and on the platform where that is
@@ -107,8 +129,8 @@ The rules that make the stages hold together:
   run on a ready PR's pushes instead of on each queue entry. A ready PR gets
   far fewer pushes than a draft, and superseded runs are cancelled. The queue
   also stops making re-runs: ~35 extra full three-OS runs in the two days
-  measured. Draft pushes get cheaper, since they no longer pay for every PR
-  stage job. This is a prediction, and the first thing to measure after the
+  measured. Draft pushes cost what PR pushes cost today, because the draft set
+  is today's PR stage. This is a prediction, and the first thing to measure after the
   change: if p95 runner wait rises back towards the ~8 min that caused the
   original split, revisit the ready set, not the staging.
 - **What we give up.** Two PRs that each pass the full check alone could break
