@@ -44,4 +44,4 @@ console_error_panic_hook = "0.1"
 
 [dev-dependencies]
 # #2705: decode the returned source map in tests.
-oxc_sourcemap = "9"
+oxc_sourcemap = "8"

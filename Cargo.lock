@@ -371,7 +371,7 @@ name = "bynk-strip"
 version = "0.525.3"
 dependencies = [
  "oxc",
- "oxc_sourcemap 9.0.0",
+ "oxc_sourcemap",
 ]
 
 [[package]]
@@ -431,7 +431,7 @@ dependencies = [
  "bynk-model",
  "bynk-syntax",
  "console_error_panic_hook",
- "oxc_sourcemap 9.0.0",
+ "oxc_sourcemap",
  "serde",
  "serde_json",
  "wasm-bindgen",
@@ -1368,7 +1368,7 @@ dependencies = [
  "oxc_ecmascript",
  "oxc_index",
  "oxc_semantic",
- "oxc_sourcemap 8.1.2",
+ "oxc_sourcemap",
  "oxc_span",
  "oxc_str",
  "oxc_syntax",
@@ -1514,22 +1514,9 @@ dependencies = [
 
 [[package]]
 name = "oxc_sourcemap"
-version = "8.1.2"
+version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b415102a94b483bbd76d13e850fe87961197e5795c79a8523ebec5d82025f94f"
-dependencies = [
- "base64-simd",
- "json-escape-simd",
- "rustc-hash",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "oxc_sourcemap"
-version = "9.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1133371a5fadc14b9f66a8fec14be3564a77647c7ab21b1ef0ec973bd82613ce"
+checksum = "9ac6db7d8c33f46a0b9ebb702c077364abcd6b64c3a3a97bb86b9f5b3554833c"
 dependencies = [
  "base64-simd",
  "json-escape-simd",
