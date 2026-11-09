@@ -340,3 +340,159 @@ fn sql_mutants_are_reported_and_a_boundary_free_suite_leaves_a_survivor() {
     assert_eq!(status("AND live = 1", ""), "killed");
     assert_eq!(status("n > ?1 AND", ""), "killed");
 }
+
+fn mutation_block(project: &Path, extra: &[&str]) -> serde_json::Value {
+    let mut args = vec!["--mutate", "--format", "json"];
+    args.extend_from_slice(extra);
+    let r = run_in(project, &args);
+    assert!(r.success, "{}", r.stderr);
+    let doc: serde_json::Value = serde_json::from_str(&r.stdout)
+        .unwrap_or_else(|e| panic!("a JSON document: {e}\n{}\n{}", r.stdout, r.stderr));
+    doc["mutation"].clone()
+}
+
+/// #3134: the mutants run in parallel scratch directories, but the report is
+/// the one a sequential run gives: same mutants, same order, same ids.
+#[test]
+fn mutate_jobs_reports_exactly_what_one_job_reports() {
+    if !can_run() {
+        return;
+    }
+    let project = fixture().with_file_name("mutate_guards");
+    let one = mutation_block(&project, &["--mutate-jobs", "1"]);
+    let four = mutation_block(&project, &["--mutate-jobs", "4"]);
+    assert!(
+        one["mutants"].as_array().unwrap().len() > 4,
+        "enough mutants to spread over four jobs: {one}"
+    );
+    assert_eq!(one, four);
+    assert_eq!(one, mutation_block(&project, &[]), "one job is the default");
+    assert!(
+        !project.join("out").exists(),
+        "scratch output is not the project's `out/`"
+    );
+}
+
+#[test]
+fn a_timeout_still_applies_to_each_parallel_job() {
+    if !can_run() {
+        return;
+    }
+    let m = mutation_block(&fixture(), &["--mutate-jobs", "3", "--mutate-timeout", "0"]);
+    assert_eq!(m["timeout"], 2);
+    assert_eq!(m["invalid"], 0);
+}
+
+fn git(dir: &Path, args: &[&str]) {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+        .args(["-c", "commit.gpgsign=false"])
+        .args(args)
+        .output()
+        .expect("run git");
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn changed_mutates_only_declarations_in_files_changed_since_the_ref() {
+    if !can_run() || !tool_exists("git") {
+        return;
+    }
+    let dir = copy_fixture("mutate-changed", None);
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+
+    // Nothing differs from HEAD: nothing to mutate.
+    let m = mutation_block(&dir, &["--changed", "HEAD"]);
+    assert_eq!(m["total"], 0);
+    assert_eq!(m["changed"]["ref"], "HEAD");
+    assert_eq!(m["changed"]["files"], serde_json::json!([]));
+
+    // A clean tree meets any threshold: there is nothing to score.
+    let r = run_in(
+        &dir,
+        &[
+            "--mutate",
+            "--changed",
+            "HEAD",
+            "--mutate-fail-under",
+            "100",
+        ],
+    );
+    assert!(r.success, "{}", r.stderr);
+    assert!(
+        r.stdout.contains("no declarations changed since HEAD"),
+        "{}",
+        r.stdout
+    );
+
+    // A ref that looks like an option is refused, not handed to git.
+    let r = run_in(&dir, &["--mutate", "--changed=--output=x"]);
+    assert!(!r.success);
+    assert!(r.stderr.contains("cannot start with `-`"), "{}", r.stderr);
+
+    // One file edited (a trailing comment keeps every span), one added
+    // without being tracked.
+    std::fs::write(
+        dir.join("src/demo/fresh.bynk"),
+        "commons demo.fresh\n\nfn gt(a: Int, b: Int) -> Bool {\n  a > b\n}\n",
+    )
+    .unwrap();
+    let limits = dir.join("src/demo/limits.bynk");
+    let mut text = std::fs::read_to_string(&limits).unwrap();
+    text.push_str("\n// touched\n");
+    std::fs::write(&limits, text).unwrap();
+    let m = mutation_block(&dir, &["--changed", "HEAD"]);
+    assert_eq!(
+        m["changed"]["files"],
+        serde_json::json!(["src/demo/fresh.bynk", "src/demo/limits.bynk"])
+    );
+    let files: Vec<&str> = m["mutants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["file"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        files.iter().filter(|f| f.ends_with("fresh.bynk")).count(),
+        1
+    );
+    assert_eq!(
+        files.iter().filter(|f| f.ends_with("limits.bynk")).count(),
+        2
+    );
+    assert_eq!(files.len(), 3);
+
+    // The same run as without the flag, minus the unchanged file's mutants.
+    let all = mutation_block(&dir, &[]);
+    let expected: Vec<&serde_json::Value> = all["mutants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|x| x["file"] != "src/demo/lonely.bynk")
+        .collect();
+    let got: Vec<&serde_json::Value> = m["mutants"].as_array().unwrap().iter().collect();
+    assert_eq!(got, expected);
+
+    // A ref git does not know is an error, not an empty run.
+    let r = run_in(&dir, &["--mutate", "--changed", "no-such-ref"]);
+    assert!(!r.success);
+    assert!(r.stderr.contains("--changed no-such-ref"), "{}", r.stderr);
+}
+
+#[test]
+fn changed_and_mutate_jobs_need_mutate_and_jobs_needs_a_count() {
+    let r = run_in(&fixture(), &["--changed", "HEAD"]);
+    assert!(!r.success, "`--changed` needs `--mutate`");
+    let r = run_in(&fixture(), &["--mutate-jobs", "2"]);
+    assert!(!r.success, "`--mutate-jobs` needs `--mutate`");
+    let r = run_in(&fixture(), &["--mutate", "--mutate-jobs", "0"]);
+    assert!(!r.success, "zero jobs is refused");
+}

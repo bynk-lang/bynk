@@ -53,6 +53,61 @@ pub struct MutateArgs {
     pub timeout: Option<Duration>,
     pub all_suites: bool,
     pub fail_under: Option<u32>,
+    /// `--changed`: only mutate declarations in files that differ from this ref.
+    pub changed: Option<String>,
+    /// `--mutate-jobs`: how many mutants run at once (at least 1).
+    pub jobs: usize,
+}
+
+/// The project-relative, forward-slashed `.bynk` paths that differ from `rev`
+/// (#3134): what `git diff <rev>` names under `root`, plus files git does not
+/// track yet. A file deleted since `rev` is not listed by the caller's sites
+/// anyway, since it no longer exists.
+fn changed_files(root: &Path, rev: &str) -> Result<BTreeSet<String>, String> {
+    // A leading `-` would be read by git as an option, not a revision.
+    if rev.starts_with('-') {
+        return Err(format!(
+            "`--changed {rev}`: a git ref cannot start with `-`"
+        ));
+    }
+    let git = |args: &[&str]| -> Result<String, String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .map_err(|e| format!("`--changed` needs `git`, which could not run: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "`--changed {rev}`: git could not compare against it: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    // `--relative` makes the paths relative to `root` (and drops files outside
+    // it); `-z` keeps unusual file names intact.
+    let diff = git(&["diff", "--name-only", "--relative", "-z", rev, "--"])?;
+    let new = git(&[
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "--full-name",
+        "--",
+        ".",
+    ]);
+    let prefix = git(&["rev-parse", "--show-prefix"])?;
+    let prefix = prefix.trim_end();
+    let mut files: BTreeSet<String> = diff.split('\0').map(str::to_string).collect();
+    // `ls-files --full-name` is repository-relative: strip `root`'s prefix.
+    for f in new?.split('\0') {
+        if let Some(rel) = f.strip_prefix(prefix) {
+            files.insert(rel.to_string());
+        }
+    }
+    files.retain(|f| f.ends_with(".bynk"));
+    Ok(files)
 }
 
 /// The replacements a token kind takes, as `(source text, replacement text)`.
@@ -561,6 +616,9 @@ fn names(entry: &str, site: &Site) -> bool {
     }
 }
 
+/// One mutant's result, filled in by whichever job ran it.
+type Slot = std::sync::Mutex<Option<(Status, Vec<String>)>>;
+
 /// How a mutant's run ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Status {
@@ -686,6 +744,8 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         timeout,
         all_suites,
         fail_under,
+        changed,
+        jobs,
     } = args;
     if !input.is_dir() {
         return fail(
@@ -719,6 +779,16 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             );
         }
     }
+    let changed_set = match &changed {
+        Some(rev) => match changed_files(&input, rev) {
+            Ok(files) => Some(files),
+            Err(e) => return fail(program, json, e),
+        },
+        None => None,
+    };
+    if let Some(files) = &changed_set {
+        model.sites.retain(|s| files.contains(&s.path));
+    }
     let scratch = Scratch(std::env::temp_dir().join(format!(
         "bynk-mutate-{}-{}",
         std::process::id(),
@@ -727,10 +797,10 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             .map_or(0, |d| d.as_nanos())
     )));
     let seed = Some(seed.unwrap_or_else(|| DEFAULT_SEED.to_string()));
-    let base_args = |suites: Vec<String>| TestArgs {
+    let base_args = |dir: &str, suites: Vec<String>| TestArgs {
         no_run: false,
         format: TestFormat::Json,
-        output: Some(scratch.0.join("out")),
+        output: Some(scratch.0.join(dir)),
         seed: seed.clone(),
         suite: suites,
         ..TestArgs::discovery(input.clone())
@@ -742,7 +812,7 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         eprintln!("{program} test: running the unmutated suites first");
     }
     let started = Instant::now();
-    let (ok, text, doc) = run_once(base_args(suite.clone()));
+    let (ok, text, doc) = run_once(base_args("out", suite.clone()));
     let baseline_time = started.elapsed();
     let Some(mut baseline) = doc.clone().filter(|_| ok) else {
         if json {
@@ -771,48 +841,88 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         model.sites.truncate(max);
     }
     let total = model.sites.len();
-    let mut results: Vec<(Site, Status, Vec<String>)> = Vec::new();
-    for (i, site) in model.sites.iter().enumerate() {
-        let selected: Vec<String> = if all_suites {
-            suite.clone()
+    // Each mutant is independent, so they run on `jobs` threads, each with its
+    // own scratch output directory. A result lands in the slot of its site's
+    // index, so the report reads the same whatever `jobs` was (#3134).
+    let jobs = jobs.clamp(1, total.max(1));
+    let slots: Vec<Slot> = (0..total).map(|_| std::sync::Mutex::new(None)).collect();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let finished = std::sync::atomic::AtomicUsize::new(0);
+    let worker = |w: usize| {
+        // `bynk test` puts its compiled JavaScript beside the output
+        // directory (`<parent>/out-js`), so a job needs a parent of its own,
+        // not just its own `out`.
+        let dir = if jobs == 1 {
+            "out".to_string()
         } else {
-            let reaching = model.suites_reaching(&site.unit);
-            suite_names
-                .iter()
-                .filter(|n| reaching.contains(*n))
-                .cloned()
-                .collect()
+            format!("job-{w}/out")
         };
-        let status = if !all_suites && selected.is_empty() {
-            Status::NoSuite
-        } else {
-            let text = apply(&sources[&site.key], site);
-            let (_, _, doc) = run_once(TestArgs {
-                mutant_overlay: Some((site.key.clone(), text)),
-                run_timeout: Some(timeout),
-                ..base_args(selected.clone())
-            });
-            doc.as_ref().map_or(Status::Invalid, classify)
-        };
-        if !json {
-            eprintln!(
-                "[{}/{total}] {}:{}:{} `{}` → `{}`: {}",
-                i + 1,
-                site.path,
-                site.line,
-                site.column,
-                site.from,
-                site.to,
-                status.word().replace('_', " ")
-            );
+        loop {
+            let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let Some(site) = model.sites.get(i) else {
+                break;
+            };
+            let selected: Vec<String> = if all_suites {
+                suite.clone()
+            } else {
+                let reaching = model.suites_reaching(&site.unit);
+                suite_names
+                    .iter()
+                    .filter(|n| reaching.contains(*n))
+                    .cloned()
+                    .collect()
+            };
+            let status = if !all_suites && selected.is_empty() {
+                Status::NoSuite
+            } else {
+                let text = apply(&sources[&site.key], site);
+                let (_, _, doc) = run_once(TestArgs {
+                    mutant_overlay: Some((site.key.clone(), text)),
+                    run_timeout: Some(timeout),
+                    ..base_args(&dir, selected.clone())
+                });
+                doc.as_ref().map_or(Status::Invalid, classify)
+            };
+            if !json {
+                let n = finished.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                eprintln!(
+                    "[{n}/{total}] {}:{}:{} `{}` → `{}`: {}",
+                    site.path,
+                    site.line,
+                    site.column,
+                    site.from,
+                    site.to,
+                    status.word().replace('_', " ")
+                );
+            }
+            let shown = if all_suites && status != Status::Invalid {
+                suite_names.clone()
+            } else {
+                selected
+            };
+            *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some((status, shown));
         }
-        let shown = if all_suites && status != Status::Invalid {
-            suite_names.clone()
-        } else {
-            selected
-        };
-        results.push((site.clone(), status, shown));
-    }
+    };
+    std::thread::scope(|scope| {
+        for w in 1..jobs {
+            let worker = &worker;
+            scope.spawn(move || worker(w));
+        }
+        worker(0);
+    });
+    let results: Vec<(Site, Status, Vec<String>)> = model
+        .sites
+        .iter()
+        .cloned()
+        .zip(slots)
+        .map(|(site, slot)| {
+            let (status, shown) = slot
+                .into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or((Status::Invalid, Vec::new()));
+            (site, status, shown)
+        })
+        .collect();
 
     let count = |s: Status| results.iter().filter(|(_, st, _)| *st == s).count();
     let (killed, timed_out) = (count(Status::Killed), count(Status::Timeout));
@@ -854,6 +964,9 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
             "score": score,
             "mutants": mutants,
         });
+        if let (Some(rev), Some(files)) = (&changed, &changed_set) {
+            baseline["mutation"]["changed"] = json!({ "ref": rev, "files": files });
+        }
         println!(
             "{}",
             serde_json::to_string_pretty(&baseline).unwrap_or_default()
@@ -884,6 +997,15 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
         }
     }
     match fail_under {
+        // Nothing changed is nothing to fail: a diff with no `.bynk`
+        // declarations to mutate meets any threshold.
+        Some(_) if total == 0 && changed.is_some() => {
+            let rev = changed.as_deref().unwrap_or_default();
+            if !json {
+                println!("no declarations changed since {rev}, so nothing was mutated");
+            }
+            ExitCode::SUCCESS
+        }
         Some(min) if ran == 0 => {
             eprintln!(
                 "{program} test: no mutant reached a suite, so --mutate-fail-under {min} cannot be met"
