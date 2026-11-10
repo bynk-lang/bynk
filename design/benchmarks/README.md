@@ -30,3 +30,9 @@ published diagnostics (the server publishes only changes). Run it on a quiet
 machine: the `host` block records the CPU so records from different hardware
 are not compared by accident. The `keystroke_latency` row of
 `design/greenfield-status.md` reads the newest record.
+
+A record measures the tree at its `commit`, while the workspace was at `version`
+(the file is named for the latter): it is not the released binary of that
+version. The default `--sizes` is `10,50,200` for a quick run; pass
+`--sizes 10,50,200,500` for a release record, so the 500-context row (which the
+`keystroke_latency` reading shows) is not dropped.

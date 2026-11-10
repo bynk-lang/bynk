@@ -148,11 +148,6 @@ pub fn run(root: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Value
         let cli_check = time_cli(&bynk, &dir, opts.runs, false)?;
         progress(&format!("{n} contexts: bynk check after an edit"));
         let cli_recheck = time_cli(&bynk, &dir, opts.runs, true)?;
-        // The edit leaves the file in its broken state on odd counts; restore it.
-        let path = dir.join(EDITED_FILE);
-        let src = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        fs::write(&path, edit_source(&src, true)).map_err(|e| e.to_string())?;
-
         progress(&format!("{n} contexts: language server"));
         let (first, edits) = time_lsp(&lsp, &dir, opts.edits)?;
 
@@ -326,7 +321,7 @@ impl Client {
             let msg = self
                 .rx
                 .recv_timeout(left)
-                .map_err(|_| "timed out waiting for the language server".to_string())?;
+                .map_err(|_| "timed out after 120 s waiting for the language server (is the project path file-URI safe: no spaces, `#` or `%`?)".to_string())?;
             let at = t.elapsed();
             if want(&msg) {
                 return Ok(at);
@@ -506,7 +501,7 @@ mod tests {
 
     #[test]
     fn the_latest_record_is_the_highest_version_and_reads_back() {
-        let root = std::env::temp_dir().join("xtask-bench-latest");
+        let root = std::env::temp_dir().join(format!("xtask-bench-latest-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join(RECORD_DIR)).unwrap();
         assert!(latest_record(&root).is_none());
