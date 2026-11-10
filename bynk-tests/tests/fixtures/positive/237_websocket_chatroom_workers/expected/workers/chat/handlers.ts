@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse } from "../../__bynk_runtime/connection.js";
@@ -88,7 +88,7 @@ export class Room {
   }
 
   private async commitState(s: RoomState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeRoomState(s), __entryFieldsOfRoom);
+    await __commitStored(this, this.state.storage, __encodeRoomState(s), __entryFieldsOfRoom, s);
   }
 
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {

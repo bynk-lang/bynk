@@ -2533,7 +2533,12 @@ fn lower_method_call(
     {
         let var = cx.agent_store_var().to_string();
         let c = format!("{var}.{}", id.name);
-        let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
+        // Cache reaping (#3189): note the clock the op read against the state the handler
+        // commits, so the commit can delete the entries that clock says are expired.
+        let now = format!(
+            "__noteClock({var}, await {}.Clock.now())",
+            cx.cap_deps_expr()
+        );
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
         return pre.finish(match method.name.as_str() {
             "remove" => format!("((delete {c}[{}]), undefined)", a[0]),

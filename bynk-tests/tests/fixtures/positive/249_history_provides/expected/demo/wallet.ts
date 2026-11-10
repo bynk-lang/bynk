@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -76,7 +76,7 @@ export class Wallet {
       globalThis.console.error("InvariantViolation Wallet.nonneg", { agent: "Wallet", invariant: "nonneg" });
       throw __invariantViolation("Wallet", "nonneg", "invariant", "demo/wallet.bynk:16:13");
     }
-    await __commitStored(this, this.state.storage, __encodeWalletState(s), __entryFieldsOfWallet);
+    await __commitStored(this, this.state.storage, __encodeWalletState(s), __entryFieldsOfWallet, s);
   }
 
   async topUp(amount: Amount, deps: { Ledger: Ledger }): globalThis.Promise<void> {

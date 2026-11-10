@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -81,7 +81,7 @@ export class Projection {
   }
 
   private async commitState(s: ProjectionState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeProjectionState(s), __entryFieldsOfProjection);
+    await __commitStored(this, this.state.storage, __encodeProjectionState(s), __entryFieldsOfProjection, s);
   }
 
   async touch(deps: { Indexes: Indexes }): globalThis.Promise<Option<R2Object>> {

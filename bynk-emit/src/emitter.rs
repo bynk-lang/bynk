@@ -4046,6 +4046,8 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             // and the wholesale-shaped state a handler reads.
             parts.push("__readStored");
             parts.push("__commitStored");
+            // Cache reaping (#3189): a `Cache` op notes the clock it read.
+            parts.push("__noteClock");
         }
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),

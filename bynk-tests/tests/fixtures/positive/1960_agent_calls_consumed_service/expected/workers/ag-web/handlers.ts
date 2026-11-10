@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
@@ -47,7 +47,7 @@ export class Calls {
   }
 
   private async commitState(s: CallsState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeCallsState(s), __entryFieldsOfCalls);
+    await __commitStored(this, this.state.storage, __encodeCallsState(s), __entryFieldsOfCalls, s);
   }
 
   async bump(deps: {}): globalThis.Promise<number> {
@@ -120,7 +120,7 @@ export class Acc {
   }
 
   private async commitState(s: AccState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeAccState(s), __entryFieldsOfAcc);
+    await __commitStored(this, this.state.storage, __encodeAccState(s), __entryFieldsOfAcc, s);
   }
 
   async add(n: number, deps: { env: { AG_DOUBLER: __ServiceBinding; ACC: __DurableObjectNamespace; CALLS: __DurableObjectNamespace } }): globalThis.Promise<number> {

@@ -6,7 +6,7 @@ import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkByt
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -100,7 +100,7 @@ export class Lamp {
   }
 
   private async commitState(s: LampState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLampState(s), __entryFieldsOfLamp);
+    await __commitStored(this, this.state.storage, __encodeLampState(s), __entryFieldsOfLamp, s);
   }
 
   async set(l: Light, deps: {}): globalThis.Promise<void> {
@@ -160,7 +160,7 @@ export class Reading {
   }
 
   private async commitState(s: ReadingState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeReadingState(s), __entryFieldsOfReading);
+    await __commitStored(this, this.state.storage, __encodeReadingState(s), __entryFieldsOfReading, s);
   }
 
   async set(v: number, deps: {}): globalThis.Promise<void> {
@@ -220,7 +220,7 @@ export class Figure {
   }
 
   private async commitState(s: FigureState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeFigureState(s), __entryFieldsOfFigure);
+    await __commitStored(this, this.state.storage, __encodeFigureState(s), __entryFieldsOfFigure, s);
   }
 
   async set(s: Shape, deps: {}): globalThis.Promise<void> {
@@ -280,7 +280,7 @@ export class Outcome {
   }
 
   private async commitState(s: OutcomeState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeOutcomeState(s), __entryFieldsOfOutcome);
+    await __commitStored(this, this.state.storage, __encodeOutcomeState(s), __entryFieldsOfOutcome, s);
   }
 
   async set(v: number, deps: {}): globalThis.Promise<void> {
@@ -340,7 +340,7 @@ export class Note {
   }
 
   private async commitState(s: NoteState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeNoteState(s), __entryFieldsOfNote);
+    await __commitStored(this, this.state.storage, __encodeNoteState(s), __entryFieldsOfNote, s);
   }
 
   async set(l: Labelled, deps: {}): globalThis.Promise<void> {
@@ -400,7 +400,7 @@ export class Store {
   }
 
   private async commitState(s: StoreState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeStoreState(s), __entryFieldsOfStore);
+    await __commitStored(this, this.state.storage, __encodeStoreState(s), __entryFieldsOfStore, s);
   }
 
   async set(s: string, deps: {}): globalThis.Promise<void> {
@@ -460,7 +460,7 @@ export class Lights {
   }
 
   private async commitState(s: LightsState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLightsState(s), __entryFieldsOfLights);
+    await __commitStored(this, this.state.storage, __encodeLightsState(s), __entryFieldsOfLights, s);
   }
 
   async set(ls: readonly Light[], deps: {}): globalThis.Promise<void> {
@@ -521,7 +521,7 @@ export class Board {
   }
 
   private async commitState(s: BoardState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBoardState(s), __entryFieldsOfBoard);
+    await __commitStored(this, this.state.storage, __encodeBoardState(s), __entryFieldsOfBoard, s);
   }
 
   async set(k: string, l: Light, deps: {}): globalThis.Promise<void> {
@@ -582,13 +582,13 @@ export class Memo {
   }
 
   private async commitState(s: MemoState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeMemoState(s), __entryFieldsOfMemo);
+    await __commitStored(this, this.state.storage, __encodeMemoState(s), __entryFieldsOfMemo, s);
   }
 
   async set(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); globalThis.Object.defineProperty(__state.c, k, { value: { v: Some(v), exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); globalThis.Object.defineProperty(__state.c, k, { value: { v: Some(v), exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -597,7 +597,7 @@ export class Memo {
 
   async get(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<Option<number>>> {
     const __state = await this.loadState();
-    const v = await (async () => { const __now = await deps.Clock.now(); const __k = k; return (globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now) ? Some(__state.c[__k].v) : None; })();
+    const v = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = k; return (globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now) ? Some(__state.c[__k].v) : None; })();
     return v;
   }
 
@@ -643,7 +643,7 @@ export class History {
   }
 
   private async commitState(s: HistoryState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeHistoryState(s), __entryFieldsOfHistory);
+    await __commitStored(this, this.state.storage, __encodeHistoryState(s), __entryFieldsOfHistory, s);
   }
 
   async add(s: Shape, deps: { Clock: Clock }): globalThis.Promise<void> {
@@ -705,7 +705,7 @@ export class Panel {
   }
 
   private async commitState(s: PanelState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodePanelState(s), __entryFieldsOfPanel);
+    await __commitStored(this, this.state.storage, __encodePanelState(s), __entryFieldsOfPanel, s);
   }
 
   async setLevel(n: number, deps: {}): globalThis.Promise<void> {
@@ -775,7 +775,7 @@ export class Gate {
         throw __invariantViolation("Gate", "old_is_a_light", "transition", "src/demo/state.bynk:130:14");
       }
     }
-    await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate);
+    await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate, s);
   }
 
   async set(l: Light, deps: {}): globalThis.Promise<void> {
