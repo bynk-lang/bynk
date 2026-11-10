@@ -1752,6 +1752,45 @@ pub fn collect_type_decls<'a>(
     out
 }
 
+/// #3192: a generic type may refer to itself only uniformly (its own parameters,
+/// in order); any other recursive edge is polymorphic recursion, refused at the
+/// declaration with `bynk.generics.polymorphic_recursion`. Uniform recursion
+/// declares and works in memory and is refused only where a codec is required.
+fn check_polymorphic_recursion(
+    decl: &TypeDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    for (callee, span) in bynk_syntax::ast::polymorphic_recursion_edges(decl, types) {
+        let name = &decl.name.name;
+        let params = decl
+            .type_params
+            .iter()
+            .map(|p| p.name.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let note = if callee == *name {
+            format!(
+                "a recursive generic type must pass its parameters through unchanged, as `{callee}[{params}]`"
+            )
+        } else {
+            format!(
+                "a mutually recursive generic may be applied only to `{name}`'s own type parameters ({params}) or to types that mention none; wrapping a parameter (`List[T]`) makes the set of instantiations unbounded"
+            )
+        };
+        errors.push(
+            CompileError::new(
+                "bynk.generics.polymorphic_recursion",
+                span,
+                format!(
+                    "`{name}` refers to `{callee}` with arguments other than its own type parameters — polymorphic recursion generates an unbounded set of instantiations"
+                ),
+            )
+            .with_note(note),
+        );
+    }
+}
+
 /// Item-level body of the boundary confinement, shared with the single-file
 /// (legacy) compile path in `bynk-emit`'s `lib.rs`. Relocated alongside
 /// `phase_function_type_boundaries` (P5.2).
@@ -1764,11 +1803,13 @@ pub fn check_function_type_boundary_items(
         match item {
             CommonsItem::Type(t) => match &t.body {
                 TypeBody::Record(r) => {
+                    check_polymorphic_recursion(t, types, errors);
                     for f in &r.fields {
                         reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
                     }
                 }
                 TypeBody::Sum(s) => {
+                    check_polymorphic_recursion(t, types, errors);
                     for v in &s.variants {
                         for p in &v.payload {
                             reject_fn_types(&p.type_ref, SUM_PAYLOAD, types, errors);

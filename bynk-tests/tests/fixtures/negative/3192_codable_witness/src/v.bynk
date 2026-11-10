@@ -1,0 +1,13 @@
+context v
+
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+fn enc[T: Codable](x: T) -> String {
+	Json.encode(x)
+}
+
+fn use(t: Tree[Int]) -> String {
+	enc(t)
+}
