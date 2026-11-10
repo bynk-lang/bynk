@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.534.1** | "The emitter lowers an agent class's handler methods in `emit_agent_handlers`, as part of splitting `emit_agent` (#3167)" |
 | **v0.534.0** | `bynk deploy revert` refuses a rollback to a build that writes an older storage layout over stored data (per-entry storage, slice 5b) |
 | **v0.533.0** | A `system` case can drive an `Oidc` route as `by WrongAlgorithm` (an `alg: none` token and an HS256 token keyed with the public key) and `by NoSubject` (an empty and a missing `sub`), each expected to read `Rejected(Unauthorized)` |
 | **v0.532.4** | Under `bynk test`, `remove` on a held `Map[K, Connection]` now closes the connection the entry held before deleting it, as the Workers build does, so a case can observe the close with `TestConnection.closed()` ([#3224](https://github.com/bynk-lang/bynk/issues/3224)) |
