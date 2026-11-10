@@ -18,7 +18,8 @@ fn no_function_grows_past_its_ceiling() {
     assert!(
         problems.is_empty(),
         "function-length ratchet (#3167):\n  {}\n\n`cargo xtask fn-lengths` lists every function over {} lines; \
-         `--apply` rewrites {} from the tree (lowering ceilings only: do not raise one to make this pass)",
+         `--apply` rewrites {} from the tree (it also lowers ceilings after a function shrinks). \
+         Prefer splitting the function to raising its ceiling.",
         problems.join("\n  "),
         xtask::fn_length::THRESHOLD,
         xtask::fn_length::CEILINGS_FILE,

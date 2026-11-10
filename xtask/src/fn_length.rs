@@ -16,7 +16,11 @@
 //!
 //! The measurement reuses the greenfield probes' scanner, which skips braces inside
 //! strings, character literals and comments, and the extents of `#[cfg(test)]`
-//! modules.
+//! modules. What is counted: every function in a workspace crate's `src/`. What is
+//! not: `#[cfg(test)]` modules and anything under a crate's `tests/` (or `benches/`),
+//! and, because none is checked in, generated Rust (the files that *write* generated
+//! docs are ordinary source and are counted). A generated source file added later
+//! should be excluded here deliberately, with the reason.
 
 use std::path::Path;
 
@@ -186,8 +190,9 @@ pub fn render_ceilings(measured: &[FnLen]) -> String {
         "# Ratcheted maximum function length (#3167). `file::function = lines`, for every\n\
          # non-test function of at least {THRESHOLD} lines. A function may not grow past its\n\
          # ceiling, none may newly reach {THRESHOLD} lines, and an entry whose function has dropped\n\
-         # below {THRESHOLD} (or gone) must be removed. Lower a ceiling after shrinking a function:\n\
-         # `cargo xtask fn-lengths --apply` rewrites this file from the tree.\n"
+         # below {THRESHOLD} (or gone) must be removed. Prefer splitting a function to raising its\n\
+         # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`\n\
+         # rewrites this file from the tree (lowering ceilings after a function shrinks).\n"
     );
     for f in measured {
         s.push_str(&format!("{} = {}\n", f.key(), f.lines));
@@ -202,13 +207,16 @@ pub fn violations(measured: &[FnLen], ceilings: &[(String, usize)]) -> Vec<Strin
     for f in measured {
         match ceilings.iter().find(|(k, _)| *k == f.key()) {
             None => out.push(format!(
-                "{} is {} lines, over the {THRESHOLD}-line threshold, and has no ceiling: split it, \
-                 or (if it must be this long) add it to {CEILINGS_FILE} and say why in review",
+                "{} is {} lines, over the {THRESHOLD}-line threshold, and has no ceiling: split it \
+                 into functions with one concern each, or, if it must be this long, justify that in \
+                 review and record it with `cargo xtask fn-lengths --apply`",
                 f.key(),
                 f.lines
             )),
             Some((_, ceiling)) if f.lines > *ceiling => out.push(format!(
-                "{} grew to {} lines, past its ceiling of {ceiling}",
+                "{} grew to {} lines, past its ceiling of {ceiling}: split the new code into its own \
+                 function, or, if the growth is warranted, justify it in review and record it with \
+                 `cargo xtask fn-lengths --apply`",
                 f.key(),
                 f.lines
             )),

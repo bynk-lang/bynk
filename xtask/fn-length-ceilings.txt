@@ -1,8 +1,9 @@
 # Ratcheted maximum function length (#3167). `file::function = lines`, for every
 # non-test function of at least 300 lines. A function may not grow past its
 # ceiling, none may newly reach 300 lines, and an entry whose function has dropped
-# below 300 (or gone) must be removed. Lower a ceiling after shrinking a function:
-# `cargo xtask fn-lengths --apply` rewrites this file from the tree.
+# below 300 (or gone) must be removed. Prefer splitting a function to raising its
+# ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
+# rewrites this file from the tree (lowering ceilings after a function shrinks).
 bynk-emit/src/emitter/lower.rs::lower_method_call = 1853
 bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1264
 bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1045
