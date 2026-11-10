@@ -1,0 +1,8 @@
+commons settings
+
+type Settings = { mode: String }
+
+// #3214: `Yaml` decodes only; there is no `Yaml.encode`.
+fn save(s: Settings) -> String {
+  Yaml.encode(s)
+}

@@ -869,6 +869,9 @@ pub fn emit_worker_compose(
             crate::emitter::ISO_DATE_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.yaml() {
+        append_missing_bindings(&mut runtime_imports, crate::emitter::YAML_RUNTIME_IMPORTS);
+    }
     if runtime_use.settle_all() {
         append_missing_bindings(
             &mut runtime_imports,

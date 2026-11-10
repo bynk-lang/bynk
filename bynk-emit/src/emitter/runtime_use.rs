@@ -98,6 +98,8 @@ pub struct RuntimeUse {
     time_ops: Cell<bool>,
     /// #2867: an `IsoDate` refinement check was emitted.
     iso_date: Cell<bool>,
+    /// #3214: the module lowers `Yaml.decode[T]` and imports the YAML parser.
+    yaml: Cell<bool>,
     /// #2640: the module references the `par` block's join, `__bynkSettleAll`.
     settle_all: Cell<bool>,
     /// #2683: the module references `e.within(d)`'s race, `__bynkWithin`.
@@ -202,6 +204,12 @@ impl RuntimeUse {
         if matches!(pred, bynk_syntax::ast::PredKind::IsoDate) {
             self.iso_date.set(true);
         }
+    }
+
+    /// #3214: record that the module lowers `Yaml.decode[T]`, so the YAML parser
+    /// module is imported (and emitted); no other module pays for it.
+    pub fn note_yaml(&self) {
+        self.yaml.set(true);
     }
 
     /// Record that the module references the `Instant` ISO-8601 helpers (#2592).
@@ -462,6 +470,11 @@ impl RuntimeUse {
     /// Whether `__bynkIsIsoDate` must be imported (#2867).
     pub fn iso_date(&self) -> bool {
         self.iso_date.get()
+    }
+
+    /// Whether the YAML parser must be imported (#3214).
+    pub fn yaml(&self) -> bool {
+        self.yaml.get()
     }
 
     /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).

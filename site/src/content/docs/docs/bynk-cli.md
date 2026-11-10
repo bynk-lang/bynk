@@ -448,7 +448,7 @@ Type-check a `.bynk` file or project without writing output. Runs the compiler
 pipeline **in-process**.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--each] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -458,6 +458,7 @@ bynk check [INPUT] [--format rich|short] [--fix] [--emit] [--locked] [--offline]
 
 | `--fix` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. See [Applying fixes](#applying-fixes). |
 | `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |
+| `--each` | off | Check each project directly inside a directory that has no `bynk.toml`. See [A directory of projects](#a-directory-of-projects). |
 
 **Exit code** — `0` when the input type-checks (warnings are surfaced but do not
 fail the build, per the [diagnostics rule](#exit-codes-and-diagnostics));
@@ -470,6 +471,37 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+### A directory of projects
+
+A directory with no `bynk.toml` at or above it, but projects below it (a
+repository of independent examples, say), is not a project, so `bynk check`
+refuses it and names them. `--each` runs the check over each project directly
+inside it instead, exactly as at a workspace root whose `members` is `["*"]`:
+a `── alpha ──` header per project, every project checked, and a non-zero exit
+if any fails. It is opt-in, so a command typed in the wrong directory never
+quietly runs a dozen projects.
+
+- **Which projects.** The immediate subdirectories that hold a `bynk.toml`, in
+  name order. A project inside a project is that project's own business, and
+  `out`, `node_modules` and hidden directories are never projects. A
+  subdirectory with `.bynk` files but no `bynk.toml` is skipped, with a note
+  naming it; one with none is skipped quietly. If projects exist only deeper,
+  `--each` names them and asks for the directory that holds them.
+- **Where it applies.** Only to such a directory. At a workspace root it changes
+  nothing, since the root already runs each member. At a project, inside one, or
+  on a single file it is an error, so the flag never silently does nothing, and
+  `.bynk` files directly in the directory are refused, as at a workspace root.
+- **Each project stands alone.** It resolves its own `bynk.toml`, lock and
+  dependencies, as when run by itself. Path dependencies *between* projects work
+  as they do when each is run alone, but a dependency's own path dependencies
+  are honoured only inside a real workspace: add the root manifest for that.
+- **`--fix` and `--emit`** work across the projects, as across workspace members.
+
+`bynk test --each` does the same for [`bynk test`](#bynk-test), and `bynk fmt`
+needs no flag, since it already formats a directory of projects. `build`,
+`compile`, `deploy` and the other commands that act on one project do not take
+`--each`.
 
 ### Type-checking the generated code
 
@@ -753,7 +785,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
+bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
 ```
 
 | Argument | Default | Meaning |
@@ -761,6 +793,7 @@ bynk test [INPUT] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|n
 | `INPUT` | `.` | Project root directory. |
 | `-o, --output OUTPUT` | `<input>/out` | Where to write the compiled TypeScript test-runner modules. |
 | `--no-run` | off | Skip the runner. With `--format rich`, emit the generated test files; with `--format json`, emit a discovery document listing every suite and case without running them. |
+| `--each` | off | Test each project directly inside a directory that has no `bynk.toml`. See [A directory of projects](#a-directory-of-projects). |
 | `--require-tests` | off | Fail when the project declares no tests. Without it, `bynk test` prints `warning: no tests found in <dir>` on stderr and exits 0; with it that is an `error:` and exit 1 (`error.kind == "no_tests"` under `--format json`). Applies with `--no-run`. At a workspace root, each member must declare a test. |
 | `--format` | `rich` | `rich` is the grouped ✓ / ✗ human output; `json` is a single pinned JSON document of results, for tooling; `ndjson` is the same results as a stream of one JSON event per line, written as each suite finishes (see [Streaming results](#streaming-results)). `ndjson` is refused with `--coverage` and `--no-run`, and across a workspace. |
 | `--inspect` | off | Launch the runner under Node's inspector (`node --inspect-brk`) and print the inspector URL. Requires Node ≥ 22.18 (or ≥ 23.6 unflagged). Does not run `tsc`. |
@@ -794,6 +827,12 @@ tests every member in path order, printing a `── packages/money ──` line
 each member's output. Every member runs, and the exit code is non-zero if any
 fails. `--format json`, `--output` and `--against` each belong to one project,
 so they are refused at a root: run them inside a member.
+
+**A directory of projects** — `--each` runs the same loop over each project
+directly inside a directory that has no `bynk.toml` (see
+[A directory of projects](#a-directory-of-projects)): a header per project,
+every project run, non-zero if any fails, and the same flags refused as at a
+workspace root. `--suite` and `--case` are judged across all the projects.
 
 ### Selecting tests
 

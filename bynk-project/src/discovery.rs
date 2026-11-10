@@ -599,7 +599,7 @@ pub fn holds_bynk_source(dir: &Path) -> bool {
 }
 
 /// Whether a walk skips `dir`: an author `exclude`, or a hidden directory.
-fn is_skipped_dir(dir: &Path, excludes: &[PathBuf]) -> bool {
+pub(crate) fn is_skipped_dir(dir: &Path, excludes: &[PathBuf]) -> bool {
     excludes.iter().any(|ex| dir == ex || dir.starts_with(ex))
         || dir
             .file_name()
