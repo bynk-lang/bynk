@@ -1,11 +1,6 @@
----
-level: minor
-changelog: On a held `Map[K, Connection]`, `put` over a key that already holds a connection now closes the displaced connection first, as `remove` does, on both Workers and `bynk test`; putting back the connection the key already holds closes nothing ([#3261](https://github.com/bynk-lang/bynk/issues/3261))
----
+# 0787 — A put over an existing key in a held Map closes the displaced connection
 
-## ADR: held-map-put-closes-the-displaced-connection
-title: A put over an existing key in a held Map closes the displaced connection
-summary: Close on replace: put closes the connection it displaces, on both targets, unless it is the connection being put
+- **Status:** Accepted (v0.537)
 
 **Context.** The WebSocket guide (§2.9) frames a held `Connection` as a resource you cannot lose, and `remove` honours that by closing the connection before deleting the entry. `put` over a key that already held a connection did not: Workers overwrote the stored connection id and the bundle target overwrote the in-memory `TestConnection`, so the displaced connection was neither closed nor returned. Its client socket stayed open with nothing holding it. This surfaced in review of #3255 (#3224) and is recorded as #3261, with three options: close on replace, refuse, or document the drop. The maintainer's decision is recorded on the issue: https://github.com/bynk-lang/bynk/issues/3261#issuecomment-6770811011.
 
