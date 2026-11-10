@@ -31,6 +31,9 @@ import {
   formString,
   multipartMediaTypeMatches,
   multipartObject,
+  cookieObject,
+  cookiePairs,
+  cookieString,
   queryObject,
   queryString,
   renderRejection,
@@ -1122,6 +1125,62 @@ test("multipartMediaTypeMatches: the media type only; a missing boundary is the 
   assert.equal(multipartMediaTypeMatches(req("Multipart/Form-Data")), true);
   assert.equal(multipartMediaTypeMatches(req("application/x-www-form-urlencoded")), false);
   assert.equal(multipartMediaTypeMatches(req(null)), false);
+});
+
+// #3277: a handler's `cookies`.
+const cookieRequest = (header: string | null) =>
+  new Request("https://test/me", { headers: header === null ? {} : { cookie: header } });
+const CK = (name: string, kind: "string" | "int" | "bool" | "enum", list = false, option = false) =>
+  ({ name, kind, list, option }) as const;
+
+test("cookiePairs: RFC 6265 pairs, trimmed, quotes dropped, no percent-decoding", () => {
+  assert.deepEqual(cookiePairs("a=1; b = two ;c=\"q r\"; d=%41; e="), [
+    ["a", "1"],
+    ["b", "two"],
+    ["c", "q r"],
+    ["d", "%41"],
+    ["e", ""],
+  ]);
+  assert.deepEqual(cookiePairs("novalue; =x; ok=1"), [["ok", "1"]]);
+  assert.deepEqual(cookiePairs(null), []);
+  assert.deepEqual(cookiePairs("a=1; a=2"), [
+    ["a", "1"],
+    ["a", "2"],
+  ]);
+});
+
+test("cookieObject: reads declared cookies, ignoring unknown ones", () => {
+  const r = cookieObject(cookieRequest("sid=abc; theme=dark; n=7; tag=x; tag=y"), [
+    CK("sid", "string", false, true),
+    CK("n", "int"),
+    CK("tag", "string", true),
+  ]);
+  assert.deepEqual(r, { ok: true, value: { sid: { kind: "Some", value: "abc" }, n: 7, tag: ["x", "y"] } });
+});
+
+test("cookieObject: an absent header is no cookies", () => {
+  assert.deepEqual(cookieObject(cookieRequest(null), [CK("sid", "string", false, true)]), { ok: true, value: {} });
+});
+
+test("cookieObject: a name sent twice for a single-valued field names cookies.<field>", () => {
+  const r = cookieObject(cookieRequest("sid=a; sid=b"), [CK("sid", "string")]);
+  assert.deepEqual(r, {
+    ok: false,
+    error: { kind: "StructuralMismatch", path: "cookies.sid", expected: "a single value", actual: "2 values" },
+  });
+});
+
+test("cookieObject: a value is not decoded, and an empty one is a value", () => {
+  assert.deepEqual(cookieObject(cookieRequest("a=%41; b="), [CK("a", "string"), CK("b", "string")]), {
+    ok: true,
+    value: { a: "%41", b: "" },
+  });
+});
+
+test("cookieString: a record's wire form as a Cookie header", () => {
+  const wire = { sid: { kind: "Some", value: "abc" }, n: 7, none: { kind: "None" }, tag: ["x", "y"] } as unknown as JsonValue;
+  assert.equal(cookieString(wire), "sid=abc; n=7; tag=x; tag=y");
+  assert.equal(cookieString({} as JsonValue), "");
 });
 
 test("requestQuery: get, all and params read the raw string", () => {

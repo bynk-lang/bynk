@@ -1948,6 +1948,16 @@ part count over `maxParts`, or a file over `maxFile`, is a `413` of kind `Payloa
 a part of the wrong kind for its field, or two files for a single `File`, is a
 `StructuralMismatch` at `body.<field>`.
 
+**`cookies`.** An `on http` handler MAY declare a parameter named `cookies` (unless a `:cookies`
+path segment binds the name), typed as a record (`bynk.http.cookies_wrong_type`) whose fields are
+each a string-constructible leaf (`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or
+opaque type over one), an `Option` of one, or a `List` of one
+(`bynk.http.cookies_field_not_stringy`). The router parses the `Cookie` header into
+name/value pairs (RFC 6265 §5.4; values are not decoded), reads them into the record's JSON
+form by the rules of a typed `query` (unknown names ignored; a name repeated on a
+non-`List` field is `StructuralMismatch`), and applies the record's codec, so refinements and
+defaults hold; a failure is a `400` whose `path` is rooted at `cookies`.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at

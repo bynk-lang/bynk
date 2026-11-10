@@ -1016,6 +1016,11 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
         "the request's headers, read-only",
     ),
     (
+        "cookies",
+        "T",
+        "the request's cookies: a record `T` decoded from the `Cookie` header and validated before the handler runs (`400` on a violation)",
+    ),
+    (
         "body",
         "T",
         "the request body, parsed and validated before the handler runs (not on `GET` or `DELETE`)",

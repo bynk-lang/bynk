@@ -471,10 +471,15 @@ pub(super) fn emit_system_http_support(
             let is_query = |p: &&bynk_syntax::ast::Param| {
                 p.name.name == "query" && !path_params.contains(&"query")
             };
+            // #3277: a `cookies` param is neither: the drivers send it as the request's
+            // `Cookie` header, from a typed record or a `Wire` string.
+            let is_cookies = |p: &&bynk_syntax::ast::Param| {
+                p.name.name == "cookies" && !path_params.contains(&"cookies")
+            };
             let (_path_ps, body_ps): (Vec<_>, Vec<_>) = h
                 .params
                 .iter()
-                .filter(|p| !is_headers(p) && !is_query(p))
+                .filter(|p| !is_headers(p) && !is_query(p) && !is_cookies(p))
                 .partition(|p| path_params.contains(&p.name.name.as_str()));
             // The query string the typed drivers append to the URL, and the one
             // the raw drivers append (a `Wire("?…")` text, or a `RequestQuery`).
@@ -503,6 +508,42 @@ pub(super) fn emit_system_http_support(
                 }
                 None => (String::new(), String::new()),
             };
+            // #3277: the `Cookie` header the typed drivers send (a typed record's wire
+            // form), and the one the raw drivers send (a `Wire` string).
+            let (typed_cookie, raw_cookie) = match h.params.iter().find(|p| is_cookies(p)) {
+                Some(p) => {
+                    let var = bynk_emit::emitter::ts_ident(&p.name.name);
+                    runtime_use.note_cookie_string();
+                    let ser = bynk_ts::print_expr(
+                        &bynk_emit::emitter::serialisation::serialise_expr_via(
+                            &p.type_ref,
+                            &var,
+                            &type_ns,
+                            runtime_use,
+                        ),
+                    );
+                    (
+                        format!("\"cookie\": __cookieString({ser}), "),
+                        format!("\"cookie\": {var}, "),
+                    )
+                }
+                None => (String::new(), String::new()),
+            };
+            if let Some(cp) = h.params.iter().find(|p| is_cookies(p)) {
+                let idx = h
+                    .params
+                    .iter()
+                    .position(|p| p.name.name == cp.name.name)
+                    .expect("cookies param is drawn from h.params");
+                route_body.insert(
+                    (
+                        sname.clone(),
+                        method.as_str().to_string(),
+                        format!("{path}{}", emitter::COOKIES_ROUTE_SUFFIX),
+                    ),
+                    (idx, cp.type_ref.clone()),
+                );
+            }
             if let Some(qp) = h.params.iter().find(|p| is_query(p))
                 && matches!(qp.type_ref, bynk_syntax::ast::TypeRef::Named(_))
             {
@@ -893,7 +934,7 @@ pub(super) fn emit_system_http_support(
                 (headers_spread, "")
             };
             let typed_options = ident(format!(
-                "{{ method: {method:?}, headers: {{ {spread_first}{content_type}{spread_last}{auth_header}{sig_header}}}, {body_init}}}",
+                "{{ method: {method:?}, headers: {{ {spread_first}{content_type}{spread_last}{typed_cookie}{auth_header}{sig_header}}}, {body_init}}}",
                 method = method.as_str(),
             ));
             // #2135: the bytes a signing driver signs: what it sends.
@@ -957,7 +998,7 @@ pub(super) fn emit_system_http_support(
                     content_type.clone()
                 };
                 let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {spread_first}{raw_content_type}{spread_last}{auth_header}{sig_header}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {spread_first}{raw_content_type}{spread_last}{raw_cookie}{auth_header}{sig_header}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(

@@ -803,6 +803,9 @@ pub(super) fn emit_integration_module(
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut runtime_names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
+    if runtime_use.cookie_string() {
+        append_missing_bindings(&mut runtime_names, emitter::COOKIE_STRING_RUNTIME_IMPORTS);
+    }
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
     }

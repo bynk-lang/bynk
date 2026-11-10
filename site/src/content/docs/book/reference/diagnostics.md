@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **798** codes in total.
+There are **800** codes in total.
 
 ## Agents
 
@@ -202,6 +202,8 @@ There are **798** codes in total.
 | `bynk.http.cache_max_age_fractional_seconds` | A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds. |  | — |
 | `bynk.http.cache_on_non_get` | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
 | `bynk.http.cache_unknown_arg` | A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`). |  | — |
+| `bynk.http.cookies_field_not_stringy` | A field of an HTTP handler's `cookies` record has a type a cookie cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.cookies_wrong_type` | An HTTP handler's `cookies` parameter is not a record type. |  | — |
 | `bynk.http.cors_invalid_field` | A `cors` policy field (`headers`/`credentials`/`maxAge`) has the wrong value shape. |  | — |
 | `bynk.http.cors_invalid_origins` | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
 | `bynk.http.cors_not_http` | A `cors { }` policy appears on a service that is not `from http`. |  | — |

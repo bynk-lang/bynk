@@ -3361,6 +3361,17 @@ fn lower_method_call(
                     format!("{path}{}", crate::emitter::FORM_ROUTE_SUFFIX),
                 ))
                 .is_some();
+        // #3277: the `cookies` record's position, when this call's route takes one.
+        let cookies_info = if is_raw {
+            cx.system_http_route_body(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                format!("{path}{}", crate::emitter::COOKIES_ROUTE_SUFFIX),
+            ))
+            .cloned()
+        } else {
+            None
+        };
         let rest: Vec<String> = args[1..]
             .iter()
             .enumerate()
@@ -3378,6 +3389,22 @@ fn lower_method_call(
                     Some(Ty::RequestHeaders | Ty::RequestQuery)
                 ) {
                     return lowered;
+                }
+                // #3277: a typed `cookies` record becomes the `Cookie` header text
+                // the raw driver sends.
+                if let Some((cookies_idx, ty)) = &cookies_info
+                    && *cookies_idx == i
+                {
+                    cx.note_cookie_string();
+                    return format!(
+                        "__cookieString({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    );
                 }
                 // #2854: a typed `query` record becomes the query string the
                 // raw driver appends to the URL.

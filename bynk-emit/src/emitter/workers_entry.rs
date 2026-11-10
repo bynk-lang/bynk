@@ -785,6 +785,7 @@ pub fn emit_worker_entry(
                 bynk_model::lower_handler_kind_ir(&h.kind)
             {
                 let query_fields = query_field_specs(h, &path, visible_types);
+                let cookies_fields = cookies_field_specs(h, &path, visible_types);
                 http_routes.push(HttpRoute {
                     service: (*sname).clone(),
                     method,
@@ -817,6 +818,7 @@ pub fn emit_worker_entry(
                     rejected: rejected_surface(service, sname),
                     query_fields,
                     form_fields: form_field_specs(h, visible_types),
+                    cookies_fields,
                     multipart: multipart_spec(service.limits.as_ref(), h, visible_types),
                 });
             }
@@ -1050,6 +1052,10 @@ pub fn emit_worker_entry(
     // #2854: a route taking `query` decodes it (typed) or views it (raw).
     if http_routes.iter().any(|r| r.query_fields.is_some()) {
         imports.push("__queryObject".to_string());
+    }
+    // #3277: a route taking `cookies` decodes the `Cookie` header.
+    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
+        imports.push("__cookieObject".to_string());
     }
     // #3276: a `@multipart` route checks its `Content-Type` and reads its parts.
     if http_routes
@@ -1913,6 +1919,9 @@ pub fn emit_worker_entry(
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut imports, crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
+    if runtime_use.cookie_string() {
+        append_missing_bindings(&mut imports, crate::emitter::COOKIE_STRING_RUNTIME_IMPORTS);
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut imports, crate::emitter::EQ_RUNTIME_IMPORTS);
     }
@@ -2534,6 +2543,10 @@ struct HttpRoute {
     /// route's `body` as a form: the router checks the `Content-Type` (`415`) and
     /// decodes the body through the same record codec a JSON body takes.
     form_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    /// #3277: the fields of the handler's `cookies` record, as the runtime's
+    /// `cookieObject` reads them off the `Cookie` header: `(name, wire kind, list,
+    /// option)`. `None` when the route takes no `cookies` parameter.
+    cookies_fields: Option<Vec<(String, &'static str, bool, bool)>>,
     /// #3276: a `@multipart` route's body fields (as `form_fields`, with the `File`
     /// fields kind `"file"`) and its per-file and part-count caps.
     multipart: Option<MultipartSpec>,
@@ -2615,6 +2628,27 @@ fn form_field_specs(
         return None;
     }
     let p = h.params.iter().find(|p| p.name.name == "body")?;
+    let TypeRef::Named(id) = &p.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    Some(record_field_specs(rec, types))
+}
+
+/// #3277: the fields of a handler's `cookies` record, or `None` when it has no
+/// `cookies` parameter (or a `:cookies` path segment binds the name).
+fn cookies_field_specs(
+    h: &Handler,
+    path: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<Vec<(String, &'static str, bool, bool)>> {
+    use bynk_syntax::ast::TypeBody;
+    if path.split('/').any(|seg| seg == ":cookies") {
+        return None;
+    }
+    let p = h.params.iter().find(|p| p.name.name == "cookies")?;
     let TypeRef::Named(id) = &p.type_ref else {
         return None;
     };
@@ -3055,6 +3089,59 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("query", member(ident("__r_query"), "value")));
             call_args.push(ident("query"));
+            continue;
+        }
+        // #3277: `cookies` is decoded off the `Cookie` header and validated before
+        // the handler runs, answering `400` as a `body` does; the record's own codec
+        // checks refinements and fills defaults.
+        let cookies_is_path = route.path.split('/').any(|seg| seg == ":cookies");
+        if pname == "cookies"
+            && !cookies_is_path
+            && let Some(fields) = &route.cookies_fields
+        {
+            let spec: Vec<TsExpr> = fields
+                .iter()
+                .map(|(name, kind, list, option)| {
+                    TsExpr::object(vec![
+                        ("name".to_string(), str_lit(name.clone())),
+                        ("kind".to_string(), str_lit(*kind)),
+                        ("list".to_string(), bool_lit(*list)),
+                        ("option".to_string(), bool_lit(*option)),
+                    ])
+                })
+                .collect();
+            guarded.push(const_(
+                "__c",
+                call(
+                    ident("__cookieObject"),
+                    vec![ident("request"), TsExpr::array(spec)],
+                ),
+            ));
+            guarded.push(if_(
+                TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::Not,
+                    expr: Box::new(member(ident("__c"), "ok")),
+                },
+                return_(Some(stamp_rejection(
+                    json_response(member(ident("__c"), "error"), 400),
+                    cors_const,
+                    security_const,
+                    rejected,
+                ))),
+            ));
+            let dser = deserialise_call(&p.type_ref, "__c.value", "cookies", ru);
+            guarded.push(const_("__r_cookies", dser));
+            guarded.push(if_(
+                strict_eq(member(ident("__r_cookies"), "tag"), str_lit("Err")),
+                return_(Some(stamp_rejection(
+                    json_response(member(ident("__r_cookies"), "error"), 400),
+                    cors_const,
+                    security_const,
+                    rejected,
+                ))),
+            ));
+            guarded.push(const_("cookies", member(ident("__r_cookies"), "value")));
+            call_args.push(ident("cookies"));
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The

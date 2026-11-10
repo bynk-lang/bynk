@@ -917,6 +917,12 @@ pub fn emit_worker_compose(
             crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.cookie_string() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::COOKIE_STRING_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.eq() {
         append_missing_bindings(&mut runtime_imports, crate::emitter::EQ_RUNTIME_IMPORTS);
     }

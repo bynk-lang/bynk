@@ -806,6 +806,51 @@ export function queryObject(
   return fieldsObject(new URL(request.url).searchParams, fields, "query", false);
 }
 
+/** #3277 (decision B): the `name=value` pairs of a `Cookie` header, in order
+ *  (RFC 6265 §5.4): pairs split on `;`, each on its first `=`, names and values
+ *  trimmed, one pair of double quotes dropped from a value. A pair with no `=` or
+ *  an empty name is skipped. Values are **not** percent-decoded: a cookie value is
+ *  opaque, and the writer emits what it was given. */
+export function cookiePairs(header: string | null): [string, string][] {
+  const out: [string, string][] = [];
+  if (header === null) return out;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const name = part.slice(0, eq).trim();
+    if (name === "") continue;
+    let value = part.slice(eq + 1).trim();
+    if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    out.push([name, value]);
+  }
+  return out;
+}
+
+/** #3277 (decisions A, B): decode the request's `Cookie` header into the JSON
+ *  object a record's codec reads, field by field, by the typed `query` rules (a
+ *  name sent twice fills a `List`, and is otherwise refused; an unknown cookie is
+ *  ignored). A rejection names `cookies.<field>`. */
+export function cookieObject(
+  request: Request,
+  fields: readonly QueryField[],
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
+  const search = new URLSearchParams();
+  for (const [name, value] of cookiePairs(request.headers.get("cookie"))) search.append(name, value);
+  return fieldsObject(search, fields, "cookies", false);
+}
+
+/** #3277: a `cookies` record's wire form as the `Cookie` header a request for it
+ *  carries (`a=1; b=x; b=y`), `""` when every field is absent. A list repeats its
+ *  name, an `Option` is its value or nothing. Test drivers use it. */
+export function cookieString(wire: JsonValue): string {
+  const query = queryString(wire);
+  if (query === "") return "";
+  // `queryString` form-encodes; a cookie value is not decoded, so it is written raw.
+  const pairs: string[] = [];
+  new URLSearchParams(query.slice(1)).forEach((value, name) => pairs.push(`${name}=${value}`));
+  return pairs.join("; ");
+}
+
 /** #3276 (decisions B-D): decode a form body (`application/x-www-form-urlencoded`)
  *  into the JSON object a record's codec reads. The same reader as
  *  [`queryObject`] — one table of leaf rules — with the two differences a
@@ -1361,5 +1406,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formObject as __formObject, formString as __formString, queryObject as __queryObject, queryString as __queryString, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formObject as __formObject, formString as __formString, cookieObject as __cookieObject, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

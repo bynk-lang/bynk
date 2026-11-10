@@ -1,0 +1,63 @@
+suite web.api {
+	case "a cookies record reaches the handler" {
+		let r <- api.GET("/me", Session { sid: None, theme: Dark, visits: 2, tags: ["a"] })
+		expect r is Ok("- dark 2 1")
+	}
+}
+
+suite web.api as system {
+	case "a typed cookies record round-trips through the router" {
+		let r <- api.GET("/me", Session { sid: Some("abc"), theme: Dark, visits: 3, tags: ["x", "y"] })
+		expect r is Ok("abc dark 3 2")
+	}
+
+	case "absent cookies take None and their defaults" {
+		let r <- api.GET("/me", Wire(""))
+		expect r is Handled(Ok("- light 0 0"))
+	}
+
+	case "cookies are read off the Cookie header" {
+		let r <- api.GET("/me", Wire("sid=abc; theme=Dark; visits=3; tag=x"))
+		expect r is Handled(Ok("abc dark 3 0"))
+	}
+
+	case "a name sent twice fills a list" {
+		let r <- api.GET("/me", Wire("tags=a; tags=b; tags=c"))
+		expect r is Handled(Ok("- light 0 3"))
+	}
+
+	case "unknown cookies are ignored" {
+		let r <- api.GET("/me", Wire("_ga=GA1.2; sid=abc"))
+		expect r is Handled(Ok("abc light 0 0"))
+	}
+
+	case "a cookie value is not decoded" {
+		let r <- api.GET("/me", Wire("sid=a%41"))
+		expect r is Handled(Ok("a%41 light 0 0"))
+	}
+
+	case "a refinement violation is refused before the handler" {
+		let r <- api.GET("/me", Wire("sid=waytoolongtoken"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a non-numeric cookie is a structural mismatch" {
+		let r <- api.GET("/me", Wire("visits=many"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a name sent twice for a single-valued cookie is refused" {
+		let r <- api.GET("/me", Wire("sid=a; sid=b"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "an unknown enum variant is refused" {
+		let r <- api.GET("/me", Wire("theme=Neon"))
+		expect r is Rejected(_)
+	}
+
+	case "a path parameter and cookies together" {
+		let r <- api.GET("/items/:id", "7", Wire("visits=4"))
+		expect r is Handled(Ok("7 4"))
+	}
+}

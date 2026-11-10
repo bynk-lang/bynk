@@ -926,6 +926,10 @@
       "summary": "A GET or DELETE handler declares a `body` parameter."
     },
     {
+      "code": "bynk.http.cookies_field_not_stringy",
+      "summary": "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry."
+    },
+    {
       "code": "bynk.http.duplicate_route",
       "summary": "Two handlers share the same method and route."
     },

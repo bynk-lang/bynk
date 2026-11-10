@@ -19,7 +19,7 @@ service <Name> from http {
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers) or [`query`](#query-strings) parameter. A path parameter's type must be
+  [`headers`](#request-headers), [`query`](#query-strings) or [`cookies`](#cookies) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -361,6 +361,56 @@ flagged: `?` keeps its `404` there. When the `?` is the whole value of a plain
 (`bynk check --fix`, or the editor's quick fix) that rewrites it to the
 `let Some(x) = headers.get("X") else { BadRequest("missing X") }` above, keeping
 the binding name and leaving the message for you to edit.
+
+## Cookies
+
+A handler reads the request's cookies through a `cookies: T` parameter, where `T` is a
+record. The router parses the `Cookie` header, decodes it into `T` and validates it before
+the handler runs, as it does a typed [`query`](#typed-query): refinements, defaults,
+`Option` and `List` fields, and a `400` with the same `RefinementViolation` or
+`StructuralMismatch` body a bad `body` gets (the `path` names the cookie,
+`cookies.sid`). The parameter may sit anywhere among the parameters.
+
+```bynk,fragment
+type Token = String where NonEmpty && MaxLength(128)
+type Theme = enum { Light, Dark }
+
+type Session = {
+  sid:   Option[Token],
+  theme: Theme = Light,
+}
+```
+
+```bynk,fragment
+on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+  match cookies.sid {
+    Some(_) => Ok("signed in")
+    None => Unauthorized
+  }
+}
+```
+
+A field of `T` is a value a cookie can carry, the set a typed `query` takes: a `String`,
+`Int`, `Bool` or `Decimal`, a refined or opaque type over one of those, or an enum;
+an `Option` of one, which is `None` when the cookie is absent; or a `List` of one, filled
+by a name sent twice. Anything else is refused (`bynk.http.cookies_field_not_stringy`), and
+so is a `cookies` that is not a record (`bynk.http.cookies_wrong_type`).
+
+- **Parsing.** The header is read as RFC 6265 §5.4 describes: pairs split on `;`, each on its
+  first `=`, names and values trimmed, one pair of double quotes dropped from a value. A pair
+  with no `=`, or an empty name, is ignored. Cookies the record does not name are ignored,
+  so an analytics cookie is not an error.
+- **No decoding.** A cookie value is opaque. It is **not** percent-decoded, so `a%41` is the
+  five characters it is, and the writer emits what it is given. A service that stores
+  structured data in a cookie encodes it itself (`toBase64Url`, `Json.encode`).
+- **A name sent twice.** A browser sends the longer-`Path` cookie first when two share a
+  name. On a field that is not a `List` that is a `400` (`StructuralMismatch`), rather than the
+  first one silently winning, as for a repeated query key.
+- **An empty cookie** (`a=`) is a value, not an absent one.
+
+A cookie is not authentication: it reaches the router from the client, so treat every field
+as input to check. Writing cookies, and a cookie-backed actor, are separate. See
+[#3181](https://github.com/bynk-lang/bynk/issues/3181).
 
 ## Method semantics
 

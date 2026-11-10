@@ -1592,6 +1592,15 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
     ),
+    dg(
+        "bynk.http.cookies_field_not_stringy",
+        "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry.",
+        &["http_handler"],
+    ),
+    d(
+        "bynk.http.cookies_wrong_type",
+        "An HTTP handler's `cookies` parameter is not a record type.",
+    ),
     d(
         "bynk.http.cors_invalid_field",
         "A `cors` policy field (`headers`/`credentials`/`maxAge`) has the wrong value shape.",
