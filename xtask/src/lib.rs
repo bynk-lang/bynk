@@ -301,6 +301,12 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
                     errors.push(format!(
                         "changelog must not start with a version number (the stamp adds it): {value:?}"
                     ));
+                } else if is_wrapped_in_quotes(value) {
+                    errors.push(format!(
+                        "changelog is wrapped in quotes: {value:?}. The value is Markdown, not YAML, \
+                         and lands verbatim in the changelog row, so the quotes would show. Write it \
+                         without them."
+                    ));
                 } else if let Some(dest) = relative_markdown_link_in(value) {
                     errors.push(format!(
                         "changelog reads as a Markdown link to the relative destination {dest:?} \
@@ -611,6 +617,15 @@ fn is_kebab(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// Whether `value` is wrapped in one matching pair of quotes, `'…'` or `"…"`.
+/// A pending file's `changelog` is Markdown that the stamp copies into the row
+/// verbatim, not a YAML scalar, so such quotes would appear in the changelog
+/// (#3236, #3247 both landed that way).
+fn is_wrapped_in_quotes(value: &str) -> bool {
+    let b = value.as_bytes();
+    b.len() >= 2 && matches!(b[0], b'\'' | b'"') && b[b.len() - 1] == b[0]
+}
+
 /// Whether the changelog's first token reads as a repo version the author has
 /// accidentally prefixed — the stamp prepends the number, so the blurb must not
 /// carry one. Matched to the repo's actual spellings: a `v` prefix (`v0.186`,
@@ -909,6 +924,32 @@ mod tests {
             "expected rejection, got {:?}",
             err("x.md", content)
         );
+    }
+
+    #[test]
+    fn a_changelog_wrapped_in_quotes_is_rejected() {
+        // The stamp copies the value verbatim, so the quotes would land in the
+        // changelog row (#3236, #3247).
+        for value in ["'Add a thing'", "\"Add a thing\""] {
+            let content = format!("---\nlevel: patch\nchangelog: {value}\n---\n");
+            assert!(
+                err("x.md", &content)
+                    .iter()
+                    .any(|e| e.contains("wrapped in quotes")),
+                "expected rejection of {value}, got {:?}",
+                err("x.md", &content)
+            );
+        }
+        // A quote that does not wrap the whole value is prose, not a wrapper.
+        for value in [
+            "Add a 'thing'",
+            "'Add' a thing",
+            "Add a thing's tail",
+            "\"Add\" and 'a thing'",
+        ] {
+            let content = format!("---\nlevel: patch\nchangelog: {value}\n---\n");
+            assert_eq!(ok("x.md", &content).changelog, value, "{value}");
+        }
     }
 
     #[test]

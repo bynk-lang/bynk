@@ -44,7 +44,9 @@ summary: How a case addresses a handler and names its principal
   stamp turns this into the next `X.Y.Z`.
 - **`changelog`** — the changelog row, on one line, **without** a version number
   (the stamp prepends it). It lands verbatim in the Book's
-  `reference/changelog.md` table, so it is **Markdown**: wrap code in backticks,
+  `reference/changelog.md` table, so it is **Markdown**, not YAML: do not wrap
+  it in quotes (they would appear in the changelog, and the stamp rejects them).
+  Wrap code in backticks,
   or a generic call like `Events.emit[E](event)` parses as a link to a relative
   `event` and fails the docs site's link-checker. The stamp rejects a relative
   link here, pre-merge, because the site only ever sees the row *after* it is
