@@ -1,0 +1,10 @@
+{
+  "name": "bynk-runtime-benchmarks",
+  "private": true,
+  "type": "module",
+  "description": "Run-time cost of compiled Bynk against hand-written TypeScript twins. Run with `cargo xtask bench-runtime`; see README.md. Deliberately has no lockfile and is never published; the versions below are pinned exactly so a recorded run names what it measured.",
+  "dependencies": {
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0"
+  }
+}
