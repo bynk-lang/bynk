@@ -117,6 +117,25 @@ impl LocalsSink {
         });
     }
 
+    /// Fold in what `other` recorded (#3243 S2.3). A file already present keeps
+    /// its entries; `other`'s are appended and its merge index shifted to match.
+    pub fn absorb(&mut self, other: LocalsSink) {
+        let LocalsSink { files, index, .. } = other;
+        let mut offsets: HashMap<PathBuf, usize> = HashMap::new();
+        for (file, entries) in files {
+            let slot = self.files.entry(file.clone()).or_default();
+            offsets.insert(file, slot.len());
+            slot.extend(entries);
+        }
+        for ((file, name, span), positions) in index {
+            let base = offsets.get(&file).copied().unwrap_or(0);
+            self.index
+                .entry((file, name, span))
+                .or_default()
+                .extend(positions.into_iter().map(|p| p + base));
+        }
+    }
+
     /// Drain the recorded bindings, each file's entries ordered by def span.
     pub fn take_files(&mut self) -> FileLocals {
         self.index.clear();

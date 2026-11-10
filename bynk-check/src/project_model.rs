@@ -175,6 +175,13 @@ impl ErrorSink {
             self.push_for(file.as_deref(), e);
         }
     }
+    /// Append everything `other` collected (#3243 S2.3): the per-file scratch
+    /// sink a file's check wrote into, folded into the project's in the order
+    /// the checks ran, so the result is what one shared sink would hold.
+    pub fn absorb(&mut self, other: ErrorSink) {
+        self.entries.extend(other.entries);
+        self.warnings.extend(other.warnings);
+    }
     /// True when no **error-severity** diagnostic has been collected — the
     /// build-failure gate. Warnings do not count (ADR 0117).
     pub fn is_empty(&self) -> bool {

@@ -152,6 +152,12 @@ impl RefSink {
         self.extra_uses.insert(namespace.to_string(), uses);
     }
 
+    /// Append everything `other` recorded (#3243 S2.3), in order.
+    pub fn absorb(&mut self, other: RefSink) {
+        self.edges.extend(other.edges);
+        self.extra_uses.extend(other.extra_uses);
+    }
+
     /// Enter a per-file recording context. `namespace` is the unit whose
     /// merged tables resolve bare names in this file (the file's own unit,
     /// or a test file's target unit).
