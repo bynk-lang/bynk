@@ -36,3 +36,8 @@ A record measures the tree at its `commit`, while the workspace was at `version`
 version. The default `--sizes` is `10,50,200` for a quick run; pass
 `--sizes 10,50,200,500` for a release record, so the 500-context row (which the
 `keystroke_latency` reading shows) is not dropped.
+
+The run-time cost of compiled Bynk (bundle size, start-up and request latency
+against hand-written TypeScript twins, [#3177](https://github.com/bynk-lang/bynk/issues/3177))
+is recorded separately, in [`runtime/`](runtime/), with `cargo xtask bench-runtime
+--record`. See [`benchmarks/runtime/`](../../benchmarks/runtime/README.md).

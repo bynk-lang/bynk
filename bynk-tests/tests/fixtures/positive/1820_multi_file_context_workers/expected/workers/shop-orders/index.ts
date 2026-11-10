@@ -3,10 +3,13 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
-export { Book, Tally } from "./handlers.js";
+export const Book = __serialiseAgentClass(handlers.Book);
+
+export const Tally = __serialiseAgentClass(handlers.Tally);
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
   if (ctx === undefined) return;
