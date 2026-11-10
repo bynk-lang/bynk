@@ -11,6 +11,7 @@ up in [`design/`](../README.md).
 | `bynk-tooling-proposal-queue.md` | Folded into the tooling roadmap as its remaining-backlog section | [`../bynk-tooling-roadmap.md`](../bynk-tooling-roadmap.md) §7 |
 | `v0.29.6-refactor-codewriter.md` | Shelved — its central premise was contradicted on inspection (indentation is not centrally threaded) | n/a (not implemented) |
 | `bynk-phd-exploratory-memo.md` | Dropped — the research-instrument identity was retired when Bynk committed to a single production-language identity (#540 §7(1)) | [`../bynk-positioning.md`](../bynk-positioning.md) |
+| `feature-implementation-checklist.md` | A dated (~v0.107.0) audit of the design notes against the compiler; many ❌ rows have since shipped | [`../bynk-status-and-roadmap.md`](../bynk-status-and-roadmap.md) for present state; [`../proposals/README.md`](../proposals/README.md) and the PR template for the per-increment doc delta |
 
 The first four rows were archived in the 18 June 2026 design-docs consolidation,
 alongside the refresh of `bynk-status-and-roadmap.md` to v0.54; the PhD memo was
