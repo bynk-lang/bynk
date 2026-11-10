@@ -1767,10 +1767,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["string_literal"],
     ),
     warn(d(
-        "bynk.types.deprecated_json_error",
-        "`JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable).",
-    )),
-    warn(d(
         "bynk.list.deprecated_function",
         "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
@@ -3239,6 +3235,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.decimal_negation_too_large",
         "A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622).",
     ),
+    warn(d(
+        "bynk.types.deprecated_json_error",
+        "`JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable).",
+    )),
     dg(
         "bynk.types.derives_automatic",
         "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1).",

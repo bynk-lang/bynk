@@ -25,6 +25,10 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "The exact decimal base type — an arbitrary-precision coefficient with a scale (`1.20d`).",
     ),
     k(
+        "DecodeError",
+        "The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
+    ),
+    k(
         "Duration",
         "The time-span base type, in milliseconds (`5.minutes`).",
     ),
@@ -36,10 +40,6 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "The absolute-time base type, in epoch milliseconds (`Clock.now()`).",
     ),
     k("Int", "The integer base type."),
-    k(
-        "DecodeError",
-        "The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
-    ),
     k(
         "JsonError",
         "Deprecated spelling of `DecodeError`; it still compiles, with a warning and an auto-fix.",
