@@ -39,13 +39,13 @@ Where they differ is **what enforces the shape**:
 
 Where Encore is ahead — and this is the honest part:
 
-- **It ships today.** Encore provisions infrastructure and deploys to real clouds
-  now, with built-in observability and distributed tracing, and it is
-  production-proven with a company behind it. Bynk scaffolds, checks, tests, and
-  serves locally today, but a one-command remote deploy is still on the roadmap,
-  not yet shipped — taking a project live is a manual step for now. If "can I
-  deploy this next week?" is the question, Encore answers it and Bynk does not
-  yet.
+- **Reach and track record.** Bynk provisions and deploys to Cloudflare with one
+  command ([`bynk deploy`](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)), and `bynk migrate`, `bynk revert` and `bynk tail`
+  cover state migrations, rollback and live logs. Encore is still ahead on
+  breadth: it targets AWS and GCP as well as its own cloud, ships built-in
+  distributed tracing (Bynk's is [still planned](https://github.com/bynk-lang/bynk/issues/555)),
+  and is production-proven with a company behind it. Bynk's deploy path is
+  Cloudflare-only and has a far shorter production history.
 - **Maturity and breadth.** Encore is years and many production users ahead of a
   pre-1.0 language.
 
@@ -92,7 +92,8 @@ line than a wiki page.
 ## The honest summary
 
 - Against **Encore**: Bynk trades a mature, deploy-ready framework for
-  language-level enforcement — and is not yet finished (no one-command deploy).
+  language-level enforcement — and gives up multi-cloud targets, built-in tracing
+  and a long production record.
 - Against **TS + Zod + discipline**: Bynk trades ecosystem breadth and flexibility
   for the same good shape made *inexpressible to violate*, so it holds by
   construction rather than by vigilance.
