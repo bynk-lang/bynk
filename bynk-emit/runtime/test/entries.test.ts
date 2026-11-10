@@ -226,6 +226,40 @@ test("flush: a failing flush leaves storage as it was", async () => {
   assert.equal(o.pending, 301, "the overlay is left as it was");
 });
 
+test("flush: a write staged while a flush is awaiting survives it", async () => {
+  const s = new InMemoryStorage();
+  const o = new EntryOverlay(s);
+  o.put("a", 1);
+  const run = s.transaction.bind(s);
+  s.transaction = ((closure) =>
+    run(async (txn) => {
+      const r = await closure(txn);
+      o.put("late", 2); // staged while the flush is still awaiting its transaction
+      o.put("a", 3); // and one that restages a key the flush wrote
+      return r;
+    })) as typeof s.transaction;
+  await o.flush();
+  assert.equal(o.pending, 2, "the late writes are still staged");
+  s.transaction = run;
+  await o.flush();
+  assert.equal(await s.get("late"), 2);
+  assert.equal(await s.get("a"), 3);
+});
+
+test("an undefined value is refused by the overlay and by the double, as the platform refuses it", async () => {
+  const s = new InMemoryStorage();
+  assert.throws(() => new EntryOverlay(s).put("k", undefined), TypeError);
+  await assert.rejects(() => s.put("k", undefined), TypeError);
+  await assert.rejects(() => s.put({ k: undefined }), TypeError);
+  await assert.rejects(() => s.transaction(async (txn) => txn.put("k", undefined)), TypeError);
+});
+
+test("splitWholesale: a Cache entry with no numeric exp is carried over with no expiry key, as it never expired under wholesale", () => {
+  const { entries } = splitWholesale({ c: { a: { v: 1 }, b: { v: 2, exp: "soon" }, d: { v: 3, exp: 9 } } }, [{ name: "c", kind: "cache" }]);
+  assert.deepEqual(entries[mapKey("c", "a")], { v: 1 });
+  assert.deepEqual(Object.keys(entries).filter((k) => k.startsWith("x/")), [expiryKey("c", 9, "d")]);
+});
+
 test("reindex moves a posting in the write-set, and does nothing when the value is unchanged", async () => {
   const s = new InMemoryStorage();
   await s.put(postingKey("o", "byCust", "c1", "o9"), 1);

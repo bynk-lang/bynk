@@ -129,6 +129,7 @@ export class EntryOverlay {
   }
 
   put(key: string, value: unknown): void {
+    if (value === undefined) throw new TypeError(`cannot stage an undefined value for storage key ${key}`);
     this.deletes.delete(key);
     this.puts.set(key, value);
   }
@@ -192,7 +193,8 @@ export class EntryOverlay {
    * Write every staged put and delete, and `extra` (typically the `"state"` record),
    * in one transaction, in batches within the platform's limit, then clear the
    * overlay. A throw anywhere rolls the whole flush back. On a throw the overlay is
-   * left as it was.
+   * left as it was. A write staged while the flush is awaiting is kept for the next
+   * flush, not dropped: only what this flush wrote is cleared.
    */
   async flush(extra: Readonly<Record<string, unknown>> = {}): Promise<void> {
     const puts: Array<[string, unknown]> = [...this.puts, ...Object.entries(extra)];
@@ -206,8 +208,9 @@ export class EntryOverlay {
         await txn.put(Object.fromEntries(puts.slice(i, i + STORAGE_BATCH_LIMIT)));
       }
     });
-    this.puts = new Map();
-    this.deletes = new Set();
+    // Clear only what was written, and only where it has not been restaged since.
+    for (const [k, v] of puts) if (this.puts.get(k) === v) this.puts.delete(k);
+    for (const k of deletes) if (this.deletes.has(k)) this.deletes.delete(k);
   }
 
   /** Drop every staged write, as a faulted handler does. */

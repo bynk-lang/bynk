@@ -144,6 +144,7 @@ export class InMemoryStorage implements DurableObjectStorage {
   async put(entries: Readonly<Record<string, unknown>>): Promise<void>;
   async put(keyOrEntries: string | Readonly<Record<string, unknown>>, value?: unknown): Promise<void> {
     if (typeof keyOrEntries === "string") {
+      checkDefined(keyOrEntries, value);
       this.stats.writes += 1;
       this.stats.keysWritten += 1;
       this.data.set(keyOrEntries, cloneStored(value));
@@ -151,6 +152,7 @@ export class InMemoryStorage implements DurableObjectStorage {
     }
     const entries = Object.entries(keyOrEntries);
     checkBatch("put", entries.length);
+    for (const [k, v] of entries) checkDefined(k, v);
     this.stats.writes += 1;
     this.stats.keysWritten += entries.length;
     for (const [k, v] of entries) this.data.set(k, cloneStored(v));
@@ -210,11 +212,13 @@ export class InMemoryStorage implements DurableObjectStorage {
       }) as DurableObjectTransaction["get"],
       put: (async (keyOrEntries: string | Readonly<Record<string, unknown>>, value?: unknown) => {
         if (typeof keyOrEntries === "string") {
+          checkDefined(keyOrEntries, value);
           staged.set(keyOrEntries, cloneStored(value));
           return;
         }
         const entries = Object.entries(keyOrEntries);
         checkBatch("put", entries.length);
+        for (const [k, x] of entries) checkDefined(k, x);
         for (const [k, x] of entries) staged.set(k, cloneStored(x));
       }) as DurableObjectTransaction["put"],
       delete: (async (keyOrKeys: string | readonly string[]) => {
@@ -254,6 +258,12 @@ export class InMemoryStorage implements DurableObjectStorage {
       this.inTransaction = false;
     }
   }
+}
+
+// The platform refuses an `undefined` value; the double is not more lenient, and
+// a staged `undefined` is this double's own delete marker, so it must not slip in.
+function checkDefined(key: string, value: unknown): void {
+  if (value === undefined) throw new TypeError(`cannot store an undefined value under key ${key}`);
 }
 
 function checkBatch(op: string, n: number): void {
