@@ -45,15 +45,102 @@ pub const EDITED_FILE: &str = "src/ctx0.bynk";
 /// contexts, each with `groups` groups of a refined type, a record, an agent
 /// with two handlers and an http service. Every file checks clean.
 pub fn generate_project(contexts: usize, groups: usize) -> Vec<(String, String)> {
+    generate_project_shaped(Shape::Independent, contexts, groups)
+}
+
+/// The two project shapes the benchmarks measure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shape {
+    /// `contexts` independent contexts with small handler bodies: the shape the
+    /// budget (#3168) is stated on.
+    Independent,
+    /// Contexts that consume each other and larger handler bodies, closer to a
+    /// real project (#3243): context `i` consumes context `(i-1)/4`, a 4-ary
+    /// tree, so a project of N contexts is about `log4(N)` consumes-levels deep
+    /// and the contexts near the root are consumed by many. Every context
+    /// forwards a `price` call through its parent.
+    Linked,
+}
+
+impl Shape {
+    /// The shape's name, for progress and the CLI.
+    pub fn name(self) -> &'static str {
+        match self {
+            Shape::Independent => "independent",
+            Shape::Linked => "linked",
+        }
+    }
+
+    /// The key a record stores this shape's sizes under.
+    pub fn record_key(self) -> &'static str {
+        match self {
+            Shape::Independent => "sizes",
+            Shape::Linked => "linked_sizes",
+        }
+    }
+}
+
+/// [`generate_project`] for a given [`Shape`].
+pub fn generate_project_shaped(
+    shape: Shape,
+    contexts: usize,
+    groups: usize,
+) -> Vec<(String, String)> {
     let mut files = vec![(
         "bynk.toml".to_string(),
         "[project]\nname = \"bench\"\nversion = \"0.1.0\"\n\n[lsp]\ndiagnostics_debounce_ms = 0\n"
             .to_string(),
     )];
     for i in 0..contexts {
-        files.push((format!("src/ctx{i}.bynk"), generate_context(i, groups)));
+        let source = match shape {
+            Shape::Independent => generate_context(i, groups),
+            Shape::Linked => generate_linked_context(i, groups),
+        };
+        files.push((format!("src/ctx{i}.bynk"), source));
     }
     files
+}
+
+/// A context of the [`Shape::Linked`] project: it consumes its parent, forwards
+/// `price` through it, and each group has a record, an agent with three handlers
+/// whose bodies do real work (a cross-context call, branching, a filter, a map
+/// and a sum), and an http service.
+fn generate_linked_context(index: usize, groups: usize) -> String {
+    let mut s = format!("context ctx{index}\n\n");
+    let parent = index.checked_sub(1).map(|i| i / 4);
+    if let Some(p) = parent {
+        s.push_str(&format!("consumes ctx{p}\n\n"));
+    }
+    let forward = match parent {
+        Some(p) => format!("    let p <- ctx{p}.price(n)\n    Effect.pure(p)\n"),
+        None => "    Effect.pure(n)\n".to_string(),
+    };
+    s.push_str(&format!(
+        "service price {{\n  on call(n: Int) -> Effect[Int] {{\n{forward}  }}\n}}\n\n"
+    ));
+    for j in 0..groups {
+        // The cross-context call in the first handler needs a parent to call.
+        let priced = match parent {
+            Some(p) => format!("    let p <- ctx{p}.price(row.qty)\n"),
+            None => "    let p = row.qty\n".to_string(),
+        };
+        s.push_str(&format!(
+            "type Id{j} = String where NonEmpty\n\n\
+             type Row{j} = {{\n  id:    Id{j},\n  label: String,\n  qty:   Int,\n  note:  String,\n}}\n\n\
+             agent Store{j} {{\n  key name: String\n\n  store rows: Map[String, Row{j}]\n\n  \
+             on call put(row: Row{j}) -> Effect[Row{j}] {{\n{priced}    \
+             let size = row.label.length() + row.note.length()\n    \
+             let tag = if (size > 10) {{ \"long\" }} else {{ \"short\" }}\n    \
+             let kept = if (p > 0) {{ row }} else {{ Row{j} {{ id: row.id, label: tag, qty: 1, note: row.note }} }}\n    \
+             let _ <- rows.put(kept.id, kept)\n    kept\n  }}\n\n  \
+             on call total(min: Int) -> Effect[Int] {{\n    rows.filter((r) => r.qty > min).sum((r) => r.qty)\n  }}\n\n  \
+             on call labels() -> Effect[List[String]] {{\n    rows.filter((r) => r.qty > 0).map((r) => r.label).collect()\n  }}\n}}\n\n\
+             service api{j} from http {{\n  \
+             on POST(\"/rows{j}\") (body: Row{j}) -> Effect[HttpResult[Row{j}]] by Visitor {{\n    \
+             let row <- Store{j}(\"default\").put(body)\n    Created(row)\n  }}\n}}\n\n"
+        ));
+    }
+    s
 }
 
 fn generate_context(index: usize, groups: usize) -> String {
@@ -114,6 +201,8 @@ pub struct Options {
     pub sizes: Vec<usize>,
     pub runs: usize,
     pub edits: usize,
+    /// The shapes to measure; both by default.
+    pub shapes: Vec<Shape>,
 }
 
 impl Default for Options {
@@ -122,6 +211,7 @@ impl Default for Options {
             sizes: vec![10, 50, 200],
             runs: 7,
             edits: 20,
+            shapes: vec![Shape::Independent, Shape::Linked],
         }
     }
 }
@@ -130,47 +220,58 @@ impl Default for Options {
 pub fn run(root: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Value, String> {
     let bynk = binary(root, "bynk")?;
     let lsp = binary(root, "bynk-lsp")?;
-    let mut sizes = Vec::new();
-    for &n in &opts.sizes {
-        progress(&format!("{n} contexts: generating"));
-        let dir = root.join(format!("target/bench-project-{n}"));
-        let _ = fs::remove_dir_all(&dir);
-        let files = generate_project(n, GROUPS_PER_CONTEXT);
-        let mut lines = 0usize;
-        for (rel, body) in &files {
-            let p = dir.join(rel);
-            fs::create_dir_all(p.parent().expect("has parent")).map_err(|e| e.to_string())?;
-            fs::write(&p, body).map_err(|e| e.to_string())?;
-            lines += body.lines().count();
+    let mut by_shape: Vec<(Shape, Vec<Value>)> = Vec::new();
+    for &shape in &opts.shapes {
+        let mut sizes = Vec::new();
+        for &n in &opts.sizes {
+            let label = format!("{n} {} contexts", shape.name());
+            progress(&format!("{label}: generating"));
+            let dir = root.join(match shape {
+                Shape::Independent => format!("target/bench-project-{n}"),
+                Shape::Linked => format!("target/bench-linked-project-{n}"),
+            });
+            let _ = fs::remove_dir_all(&dir);
+            let files = generate_project_shaped(shape, n, GROUPS_PER_CONTEXT);
+            let mut lines = 0usize;
+            for (rel, body) in &files {
+                let p = dir.join(rel);
+                fs::create_dir_all(p.parent().expect("has parent")).map_err(|e| e.to_string())?;
+                fs::write(&p, body).map_err(|e| e.to_string())?;
+                lines += body.lines().count();
+            }
+
+            progress(&format!("{label}: bynk check"));
+            let cli_check = time_cli(&bynk, &dir, opts.runs, false)?;
+            progress(&format!("{label}: bynk check after an edit"));
+            let cli_recheck = time_cli(&bynk, &dir, opts.runs, true)?;
+            progress(&format!("{label}: language server"));
+            let lsp_run = time_lsp(&lsp, &dir, opts.edits)?;
+
+            sizes.push(json!({
+                "contexts": n,
+                "groups_per_context": GROUPS_PER_CONTEXT,
+                "source_lines": lines,
+                "cli_check": summary(&cli_check),
+                "cli_recheck": summary(&cli_recheck),
+                "lsp_first_round": summary(&[lsp_run.first]),
+                "lsp_edit": summary(&lsp_run.edits),
+                "lsp_first_round_levels": level_medians(&lsp_run.first_levels.into_iter().collect::<Vec<_>>()),
+                "lsp_edit_levels": level_medians(&lsp_run.edit_levels),
+                "lsp_edit_outside_analysis_ms": outside_analysis(&lsp_run.edits, &lsp_run.edit_levels),
+            }));
         }
-
-        progress(&format!("{n} contexts: bynk check"));
-        let cli_check = time_cli(&bynk, &dir, opts.runs, false)?;
-        progress(&format!("{n} contexts: bynk check after an edit"));
-        let cli_recheck = time_cli(&bynk, &dir, opts.runs, true)?;
-        progress(&format!("{n} contexts: language server"));
-        let lsp_run = time_lsp(&lsp, &dir, opts.edits)?;
-
-        sizes.push(json!({
-            "contexts": n,
-            "groups_per_context": GROUPS_PER_CONTEXT,
-            "source_lines": lines,
-            "cli_check": summary(&cli_check),
-            "cli_recheck": summary(&cli_recheck),
-            "lsp_first_round": summary(&[lsp_run.first]),
-            "lsp_edit": summary(&lsp_run.edits),
-            "lsp_first_round_levels": level_medians(&lsp_run.first_levels.into_iter().collect::<Vec<_>>()),
-            "lsp_edit_levels": level_medians(&lsp_run.edit_levels),
-            "lsp_edit_outside_analysis_ms": outside_analysis(&lsp_run.edits, &lsp_run.edit_levels),
-        }));
+        by_shape.push((shape, sizes));
     }
-    Ok(json!({
+    let mut record = json!({
         "version": workspace_version(root)?,
         "commit": git(root, &["rev-parse", "--short", "HEAD"]).unwrap_or_default(),
         "host": host(),
         "debounce_ms_in_lsp_runs": 0,
-        "sizes": sizes,
-    }))
+    });
+    for (shape, sizes) in by_shape {
+        record[shape.record_key()] = Value::Array(sizes);
+    }
+    Ok(record)
 }
 
 fn workspace_version(root: &Path) -> Result<String, String> {
@@ -542,12 +643,69 @@ pub fn latest_record(root: &Path) -> Option<(Version, Value)> {
 /// The accepted editor-latency budget (#3168, accepted by the maintainer):
 /// the language server's edit-to-diagnostics **p95** stays under this many
 /// milliseconds on the [`BUDGET_CONTEXTS`]-context synthetic project. It is
-/// checked against each release record, not gated in CI; a record that breaches
-/// it is the trigger for the incremental-scheduler decision (#1523).
+/// checked against each release record, not gated in CI. (The scheduler's own
+/// trigger is separate: [`TRIGGER_P95_MS`].)
 pub const BUDGET_P95_MS: f64 = 100.0;
 
 /// The project size the budget is stated for.
 pub const BUDGET_CONTEXTS: u64 = 50;
+
+/// The incremental-scheduler trigger (#1523, #3243): the scheduler decision is
+/// reopened when the language server's edit-to-diagnostics **p95** exceeds this
+/// many milliseconds at [`TRIGGER_CONTEXTS`] contexts, on **either** project
+/// shape, in a release record. It was the trigger the scheduler (S2 of #3243)
+/// was first deferred on; the maintainer has since decided to build it, and this
+/// stays as the yardstick the slices are measured against.
+pub const TRIGGER_P95_MS: f64 = 250.0;
+
+/// The project size the scheduler trigger is stated for.
+pub const TRIGGER_CONTEXTS: u64 = 200;
+
+/// The p95 at [`TRIGGER_CONTEXTS`] contexts for `shape`'s sizes, if measured.
+fn trigger_p95(record: &Value, shape: Shape) -> Option<f64> {
+    record[shape.record_key()]
+        .as_array()?
+        .iter()
+        .find(|s| s["contexts"].as_u64() == Some(TRIGGER_CONTEXTS))?["lsp_edit"]["p95_ms"]
+        .as_f64()
+}
+
+/// The scheduler trigger's reading on `record`, one clause: which shapes were
+/// measured at [`TRIGGER_CONTEXTS`] contexts, their p95, and whether the trigger
+/// is reached. `None` when neither shape measured that size.
+fn trigger_reading(record: &Value) -> Option<String> {
+    let cells: Vec<(Shape, f64)> = [Shape::Independent, Shape::Linked]
+        .into_iter()
+        .filter_map(|shape| Some((shape, trigger_p95(record, shape)?)))
+        .collect();
+    if cells.is_empty() {
+        return None;
+    }
+    let reached = cells.iter().any(|(_, p)| *p > TRIGGER_P95_MS);
+    let shown: Vec<String> = cells
+        .iter()
+        .map(|(shape, p)| format!("{} {p} ms", shape.name()))
+        .collect();
+    Some(format!(
+        "scheduler yardstick p95 > {TRIGGER_P95_MS} ms at {TRIGGER_CONTEXTS} contexts: {} ({})",
+        if reached { "REACHED" } else { "not reached" },
+        shown.join(", ")
+    ))
+}
+
+/// A warning for `cargo xtask bench` when `record` reaches the scheduler
+/// trigger on either shape; `None` otherwise.
+pub fn trigger_warning(record: &Value) -> Option<String> {
+    let reached = [Shape::Independent, Shape::Linked]
+        .into_iter()
+        .any(|shape| trigger_p95(record, shape).is_some_and(|p| p > TRIGGER_P95_MS));
+    reached.then(|| {
+        format!(
+            "{} — latency is at the incremental-scheduler yardstick (#3243, #1523)",
+            trigger_reading(record).unwrap_or_default()
+        )
+    })
+}
 
 /// The budget's verdict on a record: `Some(p95)` of the [`BUDGET_CONTEXTS`]-context
 /// size, or `None` when the record did not measure that size.
@@ -564,7 +722,7 @@ fn budget_p95(record: &Value) -> Option<f64> {
 pub fn budget_warning(record: &Value) -> Option<String> {
     let p95 = budget_p95(record).filter(|p| *p >= BUDGET_P95_MS)?;
     Some(format!(
-        "edit-to-diagnostics p95 is {p95} ms at {BUDGET_CONTEXTS} contexts, over the {BUDGET_P95_MS} ms budget: this record is the trigger for the incremental-scheduler decision (#1523)"
+        "edit-to-diagnostics p95 is {p95} ms at {BUDGET_CONTEXTS} contexts, over the {BUDGET_P95_MS} ms budget (the accepted latency budget, #3168)"
     ))
 }
 
@@ -595,8 +753,11 @@ pub fn reading(version: Version, record: &Value) -> Option<String> {
             format!("; budget p95 < {BUDGET_P95_MS} ms at {BUDGET_CONTEXTS} contexts: not measured")
         }
     };
+    let trigger = trigger_reading(record)
+        .map(|t| format!("; {t}"))
+        .unwrap_or_default();
     Some(format!(
-        "edit-to-diagnostics median: {}; debounce excluded{budget} (v{version}, {RECORD_DIR}/v{version}.json)",
+        "edit-to-diagnostics median: {}; debounce excluded{budget}{trigger} (v{version}, {RECORD_DIR}/v{version}.json)",
         cells.join(", ")
     ))
 }
@@ -668,7 +829,7 @@ mod tests {
                 .unwrap()
                 .contains("over the 100 ms budget")
         );
-        assert!(budget_warning(&rec(250.0)).unwrap().contains("#1523"));
+        assert!(budget_warning(&rec(250.0)).unwrap().contains("#3168"));
         // A record that did not measure 50 contexts says nothing, and reads "not measured".
         let none = json!({"sizes": [{"contexts": 10, "source_lines": 1, "lsp_edit": {"median_ms": 1.0, "p95_ms": 1.0}}]});
         assert_eq!(budget_warning(&none), None);
@@ -679,6 +840,80 @@ mod tests {
             reading(v, &rec(120.0))
                 .unwrap()
                 .contains("BREACHED (120 ms)")
+        );
+    }
+
+    /// The trigger is p95 > 250 ms at 200 contexts on either shape; a shape that
+    /// did not measure 200 contexts says nothing.
+    #[test]
+    fn the_scheduler_trigger_is_checked_on_both_shapes() {
+        let at = |key: &str, p95: f64| json!({ key: [{"contexts": 200, "lsp_edit": {"median_ms": 1.0, "p95_ms": p95}}] });
+        let merged = |a: Value, b: Value| {
+            let mut m = a;
+            m["linked_sizes"] = b["linked_sizes"].clone();
+            m
+        };
+        let quiet = merged(at("sizes", 118.5), at("linked_sizes", 190.0));
+        assert_eq!(trigger_warning(&quiet), None);
+        assert!(
+            trigger_reading(&quiet)
+                .unwrap()
+                .contains("not reached (independent 118.5 ms, linked 190 ms)")
+        );
+        // Either shape reaching it is enough; exactly 250 is not over it.
+        let linked_over = merged(at("sizes", 118.5), at("linked_sizes", 250.1));
+        assert!(trigger_warning(&linked_over).unwrap().contains("REACHED"));
+        let indep_over = merged(at("sizes", 300.0), at("linked_sizes", 10.0));
+        assert!(trigger_warning(&indep_over).is_some());
+        assert_eq!(
+            trigger_warning(&merged(at("sizes", 250.0), at("linked_sizes", 250.0))),
+            None
+        );
+        // A record measuring neither shape at 200 contexts has no reading.
+        assert_eq!(trigger_reading(&json!({"sizes": [{"contexts": 50}]})), None);
+        // The probe line carries it when present, and still reads without it.
+        let v = Version::parse("0.1.0").unwrap();
+        let rec = json!({
+            "sizes": [
+                {"contexts": 50, "lsp_edit": {"median_ms": 1.0, "p95_ms": 2.0}},
+                {"contexts": 200, "lsp_edit": {"median_ms": 1.0, "p95_ms": 118.5}},
+            ],
+            "linked_sizes": [{"contexts": 200, "lsp_edit": {"median_ms": 1.0, "p95_ms": 190.0}}],
+        });
+        assert!(
+            reading(v, &rec)
+                .unwrap()
+                .contains("scheduler yardstick p95 > 250 ms at 200 contexts: not reached")
+        );
+    }
+
+    #[test]
+    fn the_linked_shape_consumes_a_parent_tree_and_keeps_the_edit_target() {
+        let files = generate_project_shaped(Shape::Linked, 10, 2);
+        let src = |i: usize| {
+            &files
+                .iter()
+                .find(|(p, _)| p == &format!("src/ctx{i}.bynk"))
+                .unwrap()
+                .1
+        };
+        // The root consumes nothing; the others consume `(i-1)/4`.
+        assert!(!src(0).contains("consumes"));
+        assert!(src(1).contains("consumes ctx0\n"));
+        assert!(src(4).contains("consumes ctx0\n"));
+        assert!(src(5).contains("consumes ctx1\n"));
+        assert!(src(9).contains("consumes ctx2\n"));
+        // Each group's handlers are bigger than the independent shape's.
+        assert_eq!(src(3).matches("agent Store").count(), 2);
+        assert!(src(3).lines().count() > generate_context(3, 2).lines().count());
+        // The edit still toggles a field in the edited file, and round-trips.
+        let edited = src(0);
+        assert_ne!(&edit_source(edited, false), edited);
+        assert_eq!(&edit_source(&edit_source(edited, false), true), edited);
+        // The independent generator is unchanged by shapes.
+        assert_eq!(
+            generate_project(4, 3),
+            generate_project_shaped(Shape::Independent, 4, 3)
         );
     }
 
