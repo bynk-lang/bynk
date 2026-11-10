@@ -922,6 +922,12 @@ for it, so a handler should not branch on that case.
 - **Unchosen file inputs.** A browser sends an unchosen `<input type="file">` as a part
   with `filename=""` and no bytes. It is no file: an `Option[File]` is `None`, a `List`
   gets no element, and a required `File` is missing.
+- **A `File` stays in the handler.** It is refused anywhere it would be persisted or sent: an
+  agent's store, a handler's parameter or result, an event, a call argument
+  (`bynk.types.file_at_boundary`). A record field or the `@multipart` body itself may name one,
+  which is how a body names its parts. Take the `bytes` and store those.
+- **`maxParts` bounds what the handler sees,** not the cost of parsing: the whole capped body is
+  parsed first, so `maxBody` is the guard against an oversized upload.
 - **Where the bytes go.** The handler holds the file as `Bytes`, so `R2.put(key, f.bytes)`
   stores it. A body over the cap is refused, so a large upload does not fit here:
   streaming a part into the handler is

@@ -5413,16 +5413,6 @@ fn body_kind_conflict(ann: &Annotation, this: &str, other: &str) -> CompileError
     .with_note("`@raw`, `@form` and `@multipart` each fix the wire format of the one `body` parameter; use one")
 }
 
-/// #3276: whether `r` is a `@multipart` file field: `File`, or an `Option` or a
-/// `List` of one. `File` is the std record `bynk` exports (`consumes bynk { File }`).
-fn is_file_field_type(r: &TypeRef) -> bool {
-    match r {
-        TypeRef::Option(inner, _) | TypeRef::List(inner, _) => is_file_field_type(inner),
-        TypeRef::Named(id) => id.name == "File",
-        _ => false,
-    }
-}
-
 /// #3276: whether `r` is a `Bool`, or a refined or opaque type over one (the
 /// leaves a browser's unchecked checkbox leaves absent).
 fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
@@ -5435,6 +5425,87 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
         ),
         _ => false,
     }
+}
+
+/// #3276: whether `name` is the `File` record `bynk` exports, found by its
+/// declaration's first-party span (as `is_crypto_key_type` finds a key), so a
+/// user type that happens to be called `File` is not mistaken for it.
+pub fn is_std_file_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    name == "File"
+        && types.get(name).is_some_and(|decl| {
+            crate::firstparty::unit(bynk_std::BYNK_UNIT).is_some_and(|unit| {
+                decl.span.file == crate::project_model::firstparty_file_id(unit)
+            })
+        })
+}
+
+/// #3276: whether `r` is a `@multipart` file field: `File`, or an `Option` or a
+/// `List` of it (one layer, as a form leaf is). `File` is the record `bynk`
+/// exports (`consumes bynk { File }`).
+fn is_file_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    let named = |t: &TypeRef| matches!(t, TypeRef::Named(id) if is_std_file_type(&id.name, types));
+    match r {
+        TypeRef::Option(inner, _) | TypeRef::List(inner, _) => named(inner),
+        other => named(other),
+    }
+}
+
+/// #3276: the field path by which `t` reaches a `File`, if it does: `Some(vec![])`
+/// for a `File` itself, otherwise the record fields (or sum payloads) through
+/// which a type carries one, as [`bynk_syntax::ast::stream_path`] does a stream.
+fn file_path(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> Option<Vec<String>> {
+    fn walk(
+        t: &TypeRef,
+        types: &HashMap<String, Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<String>> {
+        match t {
+            TypeRef::Named(id) if is_std_file_type(&id.name, types) => Some(Vec::new()),
+            TypeRef::Named(id) => named(&id.name, types, visited),
+            TypeRef::App { name, args, .. } => named(&name.name, types, visited)
+                .or_else(|| args.iter().find_map(|a| walk(a, types, visited))),
+            TypeRef::Option(a, _) | TypeRef::List(a, _) | TypeRef::Set(a, _) => {
+                walk(a, types, visited)
+            }
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                walk(a, types, visited).or_else(|| walk(b, types, visited))
+            }
+            _ => None,
+        }
+    }
+    fn named(
+        name: &str,
+        types: &HashMap<String, Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<String>> {
+        if !visited.insert(name.to_string()) {
+            return None;
+        }
+        let decl = types.get(name)?;
+        let found = match &decl.body {
+            TypeBody::Record(r) => r.fields.iter().find_map(|f| {
+                walk(&f.type_ref, types, visited).map(|mut p| {
+                    p.insert(0, f.name.name.clone());
+                    p
+                })
+            }),
+            TypeBody::Sum(s) => s.variants.iter().find_map(|v| {
+                v.payload.iter().find_map(|f| {
+                    walk(&f.type_ref, types, visited).map(|mut p| {
+                        p.insert(0, f.name.name.clone());
+                        p
+                    })
+                })
+            }),
+            _ => None,
+        };
+        visited.remove(name);
+        found
+    }
+    walk(t, types, &mut std::collections::HashSet::new())
 }
 
 /// #3276: the `body` of a `@form` handler is a record whose fields are each a
@@ -5473,7 +5544,7 @@ fn validate_form_body(
         return;
     };
     for f in &record.fields {
-        let is_file = multipart && is_file_field_type(&f.type_ref);
+        let is_file = multipart && is_file_field_type(&f.type_ref, types);
         if !is_file && !is_query_field_type(&f.type_ref, types) {
             errors.push(
                 CompileError::new(
@@ -6202,9 +6273,19 @@ pub fn reject_fn_types(
                 ),
             );
         }
+        // #3276: a `File` is a file part of a `@multipart` request, held in
+        // memory for the handler that receives it. A record field or sum payload
+        // may carry one (that is how a `@multipart` body names its parts), but it
+        // is never persisted, sent across a boundary or returned.
+        TypeRef::Named(id) if !stream_passes(what) && is_std_file_type(&id.name, types) => {
+            errors.push(file_at_boundary(&id.name, &[], id.span, what));
+        }
         // K-streams (#2623): a record or sum that carries a stream, at any
         // depth, is non-boundary like the stream.
         TypeRef::Named(id) if !stream_passes(what) => {
+            if let Some(path) = file_path(r, types) {
+                errors.push(file_at_boundary(&id.name, &path, id.span, what));
+            }
             if let Some(path) = bynk_syntax::ast::stream_path(r, types) {
                 errors.push(stream_carrying_at_boundary(&id.name, &path, id.span, what));
             }
@@ -6220,6 +6301,31 @@ pub fn reject_fn_types(
         | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
+}
+
+/// #3276: `bynk.types.file_at_boundary` for a `File`, or a type that carries one,
+/// at a position that persists or sends it.
+fn file_at_boundary(name: &str, path: &[String], span: Span, what: &str) -> CompileError {
+    let reach = if path.is_empty() {
+        String::new()
+    } else {
+        let chain = path
+            .iter()
+            .map(|f| format!("`{f}`"))
+            .collect::<Vec<_>>()
+            .join(", then ");
+        format!(" (it is reached through {chain})")
+    };
+    CompileError::new(
+        "bynk.types.file_at_boundary",
+        span,
+        format!(
+            "`{name}` cannot appear in {what} — it holds a file part of a multipart request in memory, never persisted, sent across a boundary or returned{reach}"
+        ),
+    )
+    .with_note(
+        "take the part's `bytes` (and `filename`, `contentType`) in the `@multipart` handler and store them where they belong, as `R2.put(key, f.bytes)` does",
+    )
 }
 
 /// K-streams (#2623): the positions a `Stream` may appear in. A capability

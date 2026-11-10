@@ -1,0 +1,13 @@
+context api
+
+type File = { name: String }
+type Up = { photo: File }
+
+service api from http {
+  limits { maxBody: 1000 }
+
+  @multipart
+  on POST("/up") (body: Up) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

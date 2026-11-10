@@ -2570,6 +2570,7 @@ struct MultipartSpec {
 fn query_leaf_kind(
     r: &TypeRef,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    allow_file: bool,
 ) -> &'static str {
     use bynk_syntax::ast::{BaseType, TypeBody};
     let of_base = |b: &BaseType| match b {
@@ -2583,7 +2584,10 @@ fn query_leaf_kind(
     match r {
         TypeRef::Base(b, _) => of_base(b),
         // #3276: the `File` a `@multipart` body names a part with.
-        TypeRef::Named(id) if id.name == "File" => "file",
+        // The checker admits only the std `File` as a multipart file field
+        // (`bynk.http.form_field_not_stringy` refuses a user type of that name), so
+        // the name is enough here, on the multipart path alone.
+        TypeRef::Named(id) if allow_file && id.name == "File" => "file",
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
             Some(TypeBody::Refined { base, .. }) | Some(TypeBody::Opaque { base, .. }) => {
                 of_base(base)
@@ -2614,7 +2618,7 @@ fn query_field_specs(
     let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    Some(record_field_specs(rec, types))
+    Some(record_field_specs(rec, types, false))
 }
 
 /// #3276: the fields of a `@form` handler's `body` record, as `formObject` reads
@@ -2634,7 +2638,7 @@ fn form_field_specs(
     let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    Some(record_field_specs(rec, types))
+    Some(record_field_specs(rec, types, false))
 }
 
 /// #3277: the fields of a handler's `cookies` record, or `None` when it has no
@@ -2684,7 +2688,7 @@ fn multipart_spec(
     let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    let fields = record_field_specs(rec, types);
+    let fields = record_field_specs(rec, types, true);
     let has_files = fields.iter().any(|(_, kind, _, _)| *kind == "file");
     Some(MultipartSpec {
         fields,
@@ -2704,6 +2708,7 @@ fn multipart_spec(
 fn record_field_specs(
     rec: &bynk_syntax::ast::RecordBody,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    allow_file: bool,
 ) -> Vec<(String, &'static str, bool, bool)> {
     rec.fields
         .iter()
@@ -2715,7 +2720,7 @@ fn record_field_specs(
             };
             (
                 f.name.name.clone(),
-                query_leaf_kind(inner, types),
+                query_leaf_kind(inner, types, allow_file),
                 list,
                 option,
             )

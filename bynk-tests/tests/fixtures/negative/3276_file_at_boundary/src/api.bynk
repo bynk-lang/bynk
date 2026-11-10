@@ -1,0 +1,28 @@
+context api
+
+consumes bynk { File }
+
+type Upload = { photo: File }
+type Holder = { held: Option[File] }
+
+agent Shelf {
+  key id: String
+  store files: Map[String, File]
+
+  on call count() -> Effect[Int] {
+    0
+  }
+}
+
+service api from http {
+  limits { maxBody: 1000 }
+
+  @multipart
+  on POST("/up") (body: Upload) -> Effect[HttpResult[File]] by v: Visitor {
+    Ok(body.photo)
+  }
+
+  on POST("/hold") (body: Holder) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

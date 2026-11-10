@@ -969,7 +969,10 @@ export async function multipartObject(
   let parts = 0;
   const search = new URLSearchParams();
   const uploaded = new Map<string, File[]>();
-  for (const [name, value] of form.entries()) {
+  // `forEach`, not `entries()`: the emitted project's `lib` has no `DOM.Iterable`.
+  const entries: [string, FormDataEntryValue][] = [];
+  form.forEach((value, name) => entries.push([name, value]));
+  for (const [name, value] of entries) {
     if (++parts > limits.maxParts) {
       return tooLarge(`more than ${limits.maxParts} parts`);
     }
