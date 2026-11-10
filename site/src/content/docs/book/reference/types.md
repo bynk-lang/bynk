@@ -856,9 +856,10 @@ whether directly, through another type, or through an `Option`/`List` wrapper
 (`type Node[T] = { value: T, next: Option[Node[T]] }`, or a `Tree[T]` sum whose
 `Branch` variant holds a `List[Tree[T]]`) — has no finite set of
 monomorphised codecs, so it is rejected with
-`bynk.generics.recursive_generic_at_boundary`. Because a record field is itself a
-boundary position, the self-referential field makes such a record **undeclarable**,
-not merely unusable at a boundary — the error fires at the declaration. (A
+`bynk.generics.recursive_generic_at_boundary`. Because a record field and a sum-variant payload are themselves boundary
+positions, the self-referential field or payload makes such a type
+**undeclarable**, not merely unusable at a boundary — the error fires at the
+declaration. (A
 *non-generic* recursive record or sum is unaffected: its single codec is
 self-referential and terminates on the data, so it declares and serialises as
 before; only the per-instantiation generic form is deferred.) Use a concrete
@@ -992,8 +993,10 @@ fn find(users: List[User]) -> Opt[User] {
 Like a generic record, a generic-sum instantiation is **serialisable** exactly
 when its type arguments are, through a monomorphised codec per instantiation
 (`__serialise_ApiResult_User` / `__deserialise_ApiResult_User`); a recursive generic
-sum has no finite codec set and is rejected at a boundary with
-`bynk.generics.recursive_generic_at_boundary`. A generic sum may not carry an
+sum has no finite codec set, so it is rejected with
+`bynk.generics.recursive_generic_at_boundary`, which names it as a recursive
+generic *sum*. As with a record, the error fires at the declaration, since the
+self-referential variant payload is itself a boundary position. A generic sum may not carry an
 `embeds` clause (`bynk.generics.generic_sum_embeds`).
 
 ## Opaque types
