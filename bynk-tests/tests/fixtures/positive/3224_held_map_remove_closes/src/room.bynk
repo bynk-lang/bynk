@@ -1,0 +1,29 @@
+context room
+
+type RoomId = opaque String
+type UserId = opaque String
+type ServerFrame = { text: String }
+
+// #3224: `remove` on a held `store Map[K, Connection]` removes the entry and
+// closes the connection it held (the ownership rule of the WebSocket guide), on
+// the bundle target `bynk test` builds as well as on Workers. Under `bynk test` the
+// connection is a `TestConnection`, so a case can observe the close with
+// `closed()`.
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+
+  on call count() -> Effect[Int] {
+    conns.size()
+  }
+}
