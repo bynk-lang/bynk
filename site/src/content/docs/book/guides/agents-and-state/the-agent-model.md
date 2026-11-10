@@ -49,9 +49,9 @@ never seen before — the zero value. The handler reads its `store` fields, writ
 new values with `:=`, and the runtime commits them for that key when the handler
 returns. Different keys (`a`, `b`) are wholly independent instances.
 
-Because an instance's whole state is persisted as one stored value (about 8 MB at
-most, read and rewritten by every handler call), the key is also your scaling
-lever: spread a growing collection across many keys rather than into one agent. See
+Because every call still loads all of an instance's state (each entry is stored
+separately, but none is read lazily yet), the key is also your scaling lever: spread
+a growing collection across many keys rather than into one agent. See
 [the size and cost of an agent's state](/book/reference/agents/#size-and-cost-of-an-agents-state).
 
 ## Why state must be zeroable
