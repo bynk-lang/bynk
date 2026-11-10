@@ -7,10 +7,10 @@ A test file is a `suite` block naming its target unit, containing named `case`s:
 
 ```bynk,fragment
 suite counters {
-  case "a fresh counter starts at zero" {
-    let n <- Counter(CounterId.unsafe("fresh")).current()
-    expect n == 0
-  }
+	case "a fresh counter starts at zero" {
+		let n <- Counter(CounterId.unsafe("fresh")).current()
+		expect n == 0
+	}
 }
 ```
 
@@ -58,13 +58,13 @@ such send after the call returns, so the case's expectations see its effects.
 
 ```bynk,fragment
 suite app.web {
-  case "the greeting names the visitor" {
-    let r <- api.GET("/hello") by Visitor
-    match r {
-      Ok(greeting) => expect greeting.startsWith("Hello")
-      _ => expect false
-    }
-  }
+	case "the greeting names the visitor" {
+		let r <- api.GET("/hello") by Visitor
+		match r {
+			Ok(greeting) => expect greeting.startsWith("Hello"),
+			_ => expect false,
+		}
+	}
 }
 ```
 
@@ -83,14 +83,19 @@ apply. An event they reject reaches no handler code.
 
 ```bynk,fragment
 suite shop.ledger {
-  case "an event delivered twice is counted once" {
-    let e = OrderPlaced { id: "o1" }
-    let env = EventEnvelope { eventId: "evt-1", publisherId: "shop.orders", emittedAt: Instant.fromEpochMillis(0), schemaVersion: 1 }
-    let _ <- OnPlaced.event(e, env)
-    let _ <- OnPlaced.event(e, env)
-    let t <- Books("main").totals()
-    expect t.orders == 1
-  }
+	case "an event delivered twice is counted once" {
+		let e = OrderPlaced { id: "o1" }
+		let env = EventEnvelope {
+			eventId: "evt-1",
+			publisherId: "shop.orders",
+			emittedAt: Instant.fromEpochMillis(0),
+			schemaVersion: 1,
+		}
+		let _ <- OnPlaced.event(e, env)
+		let _ <- OnPlaced.event(e, env)
+		let t <- Books("main").totals()
+		expect t.orders == 1
+	}
 }
 ```
 
@@ -124,20 +129,17 @@ A case drives a `from websocket` service by the handlers it declares, against a
 
 ```bynk,fragment
 suite chat {
-  case "a joiner is welcomed and then hears the broadcast" {
-    let alice = TestConnection[ServerFrame]()
-    let bob = TestConnection[ServerFrame]()
-    let room = RoomId.unsafe("r1")
-
-    let _ <- ChatGateway.open(alice, room) by Participant(UserId.unsafe("alice"))
-    let _ <- ChatGateway.open(bob, room) by Participant(UserId.unsafe("bob"))
-    expect alice.sent() == [ServerFrame { text: "welcome" }]
-
-    let _ <- ChatGateway.message(alice, ClientFrame { text: "hi" })
-    expect bob.sent() == [ServerFrame { text: "welcome" }, ServerFrame { text: "hi" }]
-
-    let _ <- ChatGateway.close(bob)
-  }
+	case "a joiner is welcomed and then hears the broadcast" {
+		let alice = TestConnection[ServerFrame]()
+		let bob = TestConnection[ServerFrame]()
+		let room = RoomId.unsafe("r1")
+		let _ <- ChatGateway.open(alice, room) by Participant(UserId.unsafe("alice"))
+		let _ <- ChatGateway.open(bob, room) by Participant(UserId.unsafe("bob"))
+		expect alice.sent() == [ServerFrame { text: "welcome" }]
+		let _ <- ChatGateway.message(alice, ClientFrame { text: "hi" })
+		expect bob.sent() == [ServerFrame { text: "welcome" }, ServerFrame { text: "hi" }]
+		let _ <- ChatGateway.close(bob)
+	}
 }
 ```
 
@@ -179,13 +181,13 @@ services by passing the asset instead of a route:
 
 ```bynk,fragment
 suite t.web {
-  case "the stylesheet is served" {
-    let r <- api.GET(style)
-    match r {
-      Raw(body, ct) => expect ct == "text/css; charset=utf-8"
-      _ => expect false
-    }
-  }
+	case "the stylesheet is served" {
+		let r <- api.GET(style)
+		match r {
+			Raw(body, ct) => expect ct == "text/css; charset=utf-8",
+			_ => expect false,
+		}
+	}
 }
 ```
 
@@ -208,10 +210,10 @@ with none, the handler sees no claims:
 
 ```bynk,fragment
 suite ci.release {
-  case "a release from the trusted workflow" {
-    let r <- api.POST("/release") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
-    expect r is Ok(_)
-  }
+	case "a release from the trusted workflow" {
+		let r <- api.POST("/release") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+		expect r is Ok(_)
+	}
 }
 ```
 
@@ -231,15 +233,15 @@ from `"name: value"` lines, or an empty one:
 
 ```bynk,fragment
 suite reg.api {
-  case "a bearer token is read from the headers" {
-    let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
-    expect r == Ok("token abc")
-  }
+	case "a bearer token is read from the headers" {
+		let r <- api.GET("/whoami", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+		expect r == Ok("token abc")
+	}
 
-  case "no token" {
-    let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
-    expect r is RawError(401, _, _)
-  }
+	case "no token" {
+		let r <- api.GET("/whoami", RequestHeaders.empty()) by Visitor
+		expect r is RawError(401, _, _)
+	}
 }
 ```
 
@@ -255,10 +257,10 @@ is tested this way:
 
 ```bynk,fragment
 suite greeter.web as system {
-  case "the locale is negotiated from Accept-Language" {
-    let r <- api.GET("/hello", RequestHeaders.of(["Accept-Language: fr"])) by Visitor
-    expect r is Ok("Bonjour, Ada !")
-  }
+	case "the locale is negotiated from Accept-Language" {
+		let r <- api.GET("/hello", RequestHeaders.of(["Accept-Language: fr"])) by Visitor
+		expect r is Ok("Bonjour, Ada !")
+	}
 }
 ```
 
@@ -278,10 +280,15 @@ an ordinary argument, in the parameter's position, as it takes `headers` and
 
 ```bynk,fragment
 suite activity.api {
-  case "a filter reaches the handler" {
-    let r <- api.GET("/activity", ActivityFilter { repo: Some("bynk-lang/bynk"), since: None, tag: [], limit: 100 })
-    expect r is Ok(_)
-  }
+	case "a filter reaches the handler" {
+		let r <- api.GET("/activity", ActivityFilter {
+			repo: Some("bynk-lang/bynk"),
+			since: None,
+			tag: [],
+			limit: 100,
+		})
+		expect r is Ok(_)
+	}
 }
 ```
 
@@ -297,10 +304,10 @@ the query's slot:
 
 ```bynk,fragment
 suite activity.api as system {
-  case "a limit out of range is refused before the handler" {
-    let r <- api.GET("/activity", Wire("?limit=0"))
-    expect r is Rejected(RefinementViolation(_))
-  }
+	case "a limit out of range is refused before the handler" {
+		let r <- api.GET("/activity", Wire("?limit=0"))
+		expect r is Rejected(RefinementViolation(_))
+	}
 }
 ```
 
@@ -364,15 +371,19 @@ handler's own result, so `expect r is Ok(_)` reads the same at every tier.
 
 ```bynk,fragment
 suite shop.inventory as system {
-  case "a delivery is counted once, however often it is delivered" {
-    let d = Delivery { id: "d1", sku: "widget", qty: 6 }
-    let a <- deliveries.message(d)
-    let b <- deliveries.message(d)
-    expect a is Ack
-    expect b is Ack
-    let s <- api.GET("/stock/widget") by Admin("root")
-    expect s is Ok(6)
-  }
+	case "a delivery is counted once, however often it is delivered" {
+		let d = Delivery {
+			id: "d1",
+			sku: "widget",
+			qty: 6,
+		}
+		let a <- deliveries.message(d)
+		let b <- deliveries.message(d)
+		expect a is Ack
+		expect b is Ack
+		let s <- api.GET("/stock/widget") by Admin("root")
+		expect s is Ok(6)
+	}
 }
 ```
 
@@ -600,22 +611,24 @@ go to the real network.
 
 ```bynk,fragment
 suite ci.release as system {
-  case "a trusted workflow's token is admitted" {
-    let r <- api.POST("/release", Release { tag: "v1" })
-              by Workload("wid", TokenClaims.of(["repository: acme/money"]))
-    expect r is Ok(_)
-  }
+	case "a trusted workflow's token is admitted" {
+		let r <- api.POST(
+			"/release",
+			Release { tag: "v1" }
+		) by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+		expect r is Ok(_)
+	}
 
-  case "tokens the seam must refuse are refused" {
-    let forged   <- api.POST("/release", Release { tag: "v1" }) by Forged
-    let expired  <- api.POST("/release", Release { tag: "v1" }) by Expired
-    let wrongIss <- api.POST("/release", Release { tag: "v1" }) by WrongIssuer
-    let wrongAud <- api.POST("/release", Release { tag: "v1" }) by WrongAudience
-    expect forged   is Rejected(Unauthorized)
-    expect expired  is Rejected(Unauthorized)
-    expect wrongIss is Rejected(Unauthorized)
-    expect wrongAud is Rejected(Unauthorized)
-  }
+	case "tokens the seam must refuse are refused" {
+		let forged <- api.POST("/release", Release { tag: "v1" }) by Forged
+		let expired <- api.POST("/release", Release { tag: "v1" }) by Expired
+		let wrongIss <- api.POST("/release", Release { tag: "v1" }) by WrongIssuer
+		let wrongAud <- api.POST("/release", Release { tag: "v1" }) by WrongAudience
+		expect forged is Rejected(Unauthorized)
+		expect expired is Rejected(Unauthorized)
+		expect wrongIss is Rejected(Unauthorized)
+		expect wrongAud is Rejected(Unauthorized)
+	}
 }
 ```
 
@@ -876,13 +889,14 @@ left, a value or `fails` on the right, **never a computed body**:
 
 ```bynk,fragment
 suite pricing {
-  stub Rates.lookup("GBP") returns 1.25        // suite-scoped: applies to every case
-  stub Rates.lookup(_)     returns 1.0         // fallback; first matching clause wins
+	stub Rates.lookup("GBP") returns 1.25  // suite-scoped: applies to every case
 
-  case "a store fault faults the quote" {
-    stub Kv.get(_) fails                        // case-scoped: overrides for this case
-    expect Prices(Val[AcctId]).quote("GBP") faults
-  }
+	stub Rates.lookup(_) returns 1.0  // fallback; first matching clause wins
+
+	case "a store fault faults the quote" {
+		stub Kv.get(_) fails  // case-scoped: overrides for this case
+		expect Prices(Val[AcctId]).quote("GBP") faults
+	}
 }
 ```
 
@@ -999,12 +1013,12 @@ suite hooks.github
 
 --- Request headers for one GitHub delivery.
 fn gh(event: String, delivery: String) -> RequestHeaders {
-  RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
+	RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
 }
 
 case "an issue event is recorded" {
-  let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
-  expect r is Ok("accepted")
+	let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
+	expect r is Ok("accepted")
 }
 ```
 
@@ -1036,14 +1050,16 @@ through `select[T]`, a repository name or a limit shared by several cases.
 ```bynk,fragment
 suite shop.stock
 
-type Counted = { n: Int }
+type Counted = {
+	n: Int,
+}
 
 const Repo: String = "bynk-lang/bynk"
 
 case "a count reads back as a typed row" {
-  let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
-  let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
-  expect rows == Ok([Counted { n: 0 }])
+	let _ <- Stock.run("CREATE TABLE items (id TEXT)", [])
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
 }
 ```
 
@@ -1080,8 +1096,8 @@ suite github.events
 fixture issueOpened = "fixtures/github/issues-opened.json"
 
 case "a real issues delivery decodes" {
-  let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
-  expect r is Ok(_)
+	let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
+	expect r is Ok(_)
 }
 ```
 
@@ -1097,21 +1113,23 @@ the same suite declares:
 
 ```bynk,fragment
 suite shop.orders as system {
-  env {
-    AUTH_JWT_SECRET = "test-secret"
-    PAYMENTS_PROCESSOR = "fake"
-  }
+	env {
+		AUTH_JWT_SECRET = "test-secret"
+		PAYMENTS_PROCESSOR = "fake"
+	}
 
-  case "the fake processor is chosen" {
-    let r <- api.GET("/processor") by Visitor
-    expect r is Ok("fake")
-  }
+	case "the fake processor is chosen" {
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("fake")
+	}
 
-  case "a case can switch it back" {
-    env { PAYMENTS_PROCESSOR = "live" }
-    let r <- api.GET("/processor") by Visitor
-    expect r is Ok("live")
-  }
+	case "a case can switch it back" {
+		env {
+			PAYMENTS_PROCESSOR = "live"
+		}
+		let r <- api.GET("/processor") by Visitor
+		expect r is Ok("live")
+	}
 }
 ```
 
@@ -1364,13 +1382,12 @@ values *and* whole behaviours:
 
 ```bynk,fragment
 suite demo.wallet {
-  property "no accepted spend without a prior accepted top-up" {
-    for all run: History[Wallet] {
-      expect run.all((s) =>
-        (s.call is Spend && s.accepted)
-          implies run.upTo(s).any((p) => p.call is TopUp && p.accepted))
-    }
-  }
+	property "no accepted spend without a prior accepted top-up" {
+		for all run: History[Wallet] {
+			expect run.all((s) => (s.call is Spend && s.accepted)
+				implies run.upTo(s).any((p) => p.call is TopUp && p.accepted))
+		}
+	}
 }
 ```
 
@@ -1441,12 +1458,12 @@ function's return type and its body, declare any number of named `requires`
 commons commerce.money
 
 fn discount(p: Int, pct: Int) -> Int
-  requires p_nonneg: p >= 0
-  requires pct_in_range: pct >= 0 && pct <= 100
-  ensures never_above: result <= p
-  ensures never_negative: result >= 0
+	requires p_nonneg: p >= 0
+	requires pct_in_range: pct >= 0 && pct <= 100
+	ensures never_above: result <= p
+	ensures never_negative: result >= 0
 {
-  p - (p * pct) / 100
+	p - (p * pct) / 100
 }
 ```
 
@@ -1529,12 +1546,12 @@ pure-observation `case` needs no `stub` or setup at all:
 
 ```bynk,fragment
 suite orders {
-  case "an oversized order is rejected and logged" {
-    let r <- place.call(50000)
-    expect r is Err(_)
-    expect Logger.log called once with msg == "rejected: amount too large"
-    expect Store.put never called            // a rejected order writes nothing
-  }
+	case "an oversized order is rejected and logged" {
+		let r <- place.call(50000)
+		expect r is Err(_)
+		expect Logger.log called once with msg == "rejected: amount too large"
+		expect Store.put never called  // a rejected order writes nothing
+	}
 }
 ```
 
@@ -1595,10 +1612,10 @@ tiers never touch. Its participants are **inferred** from the unit under test's
 
 ```bynk,fragment
 suite checkout as system {
-  case "small order authorises across the wire" {
-    let r <- shop.orders.place(100)
-    expect r is Ok(_)
-  }
+	case "small order authorises across the wire" {
+		let r <- shop.orders.place(100)
+		expect r is Ok(_)
+	}
 }
 ```
 

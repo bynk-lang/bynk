@@ -151,42 +151,38 @@ Here is `shortener.bynk` so far — the data model wired into the API:
 ```bynk
 context shortener
 
-type LinkError = enum {
-  AlreadyExists,
-  NotFound,
-  Invalid,
-}
+type LinkError = enum { AlreadyExists, NotFound, Invalid }
 
 type CreateLinkRequest = {
-  target: String,
+	target: String,
 }
 
 type CreatedView = {
-  code: String,
-  target: String,
+	code: String,
+	target: String,
 }
 
 type ResolveView = {
-  target: String,
-  hits: Int,
+	target: String,
+	hits: Int,
 }
 
 fn describe(error: LinkError) -> String {
-  match error {
-    AlreadyExists => "code already in use"
-    NotFound => "no such code"
-    Invalid => "invalid code"
-  }
+	match error {
+		AlreadyExists => "code already in use",
+		NotFound => "no such code",
+		Invalid => "invalid code",
+	}
 }
 
 service api from http {
-  on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[CreatedView]] by Visitor {
-    Created(CreatedView { code: "abc123", target: body.target })
-  }
+	on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[CreatedView]] by Visitor {
+		Created(CreatedView { code: "abc123", target: body.target })
+	}
 
-  on GET("/links/:code") (code: String) -> Effect[HttpResult[ResolveView]] by Visitor {
-    NotFound
-  }
+	on GET("/links/:code") (code: String) -> Effect[HttpResult[ResolveView]] by Visitor {
+		NotFound
+	}
 }
 ```
 

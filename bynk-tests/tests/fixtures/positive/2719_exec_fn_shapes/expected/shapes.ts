@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkSettleAll, __bynkWithin, __bynkRace } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface Box {
@@ -128,6 +128,7 @@ export class Roller {
   private async loadState(): globalThis.Promise<RollerState> {
     const stored = await this.state.storage.get<RollerState>("state");
     if (stored === undefined) return __zeroOfRollerState();
+    __checkStoredLayout("Roller", stored);
     const __zero = __zeroOfRollerState();
     __reportUnknownStoredKeys("Roller", stored, __zero);
     const __merged = { ...__zero, ...stored };

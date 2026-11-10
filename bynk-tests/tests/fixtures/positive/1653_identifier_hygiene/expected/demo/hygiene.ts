@@ -6,7 +6,7 @@ import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr } from "../__bynk_runtime/int.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -439,6 +439,7 @@ export class Bag {
   private async loadState(): globalThis.Promise<BagState> {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
+    __checkStoredLayout("Bag", stored);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", stored, __zero);
     const __merged = { ...__zero, ...stored };

@@ -3521,6 +3521,18 @@ pub fn type_carries_stream(
     .is_some()
 }
 
+/// `"sum"` when the named type is declared with a sum body, otherwise `"record"`
+/// — the noun the recursive-generic diagnostic uses for the type it names.
+pub fn generic_kind_word(
+    name: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+) -> &'static str {
+    match types.get(name).map(|t| &t.body) {
+        Some(TypeBody::Sum(_)) => "sum",
+        _ => "record",
+    }
+}
+
 /// v0.174 (#592): does the generic record type `name` transitively contain a
 /// reference to itself — through any field-type path, including collection and
 /// `Option` wrappers, sum-variant payloads, and generic type arguments? Such a

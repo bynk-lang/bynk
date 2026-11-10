@@ -1,6 +1,6 @@
 //! Which types are `Ord`, and the checks that need it. Constrained generics
 //! slice 1 (#2660; the model is the track's Q2/Q5 in
-//! `design/tracks/constrained-generics.md`).
+//! `design/archive/retired-tracks.md`).
 //!
 //! `Ord` is a declared, structural property. A type is `Ord` when it is one of:
 //!

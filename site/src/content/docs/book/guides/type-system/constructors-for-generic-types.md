@@ -14,13 +14,21 @@ commons guide.sorted
 
 uses bynk.list
 
-type Sorted[T: Ord] = { items: List[T] }
+type Sorted[T: Ord] = {
+	items: List[T],
+}
 
-fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] {
+	Sorted { items: sort(xs) }
+}
 
-fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }
+fn Sorted.empty() -> Sorted[T] {
+	Sorted { items: [] }
+}
 
-fn ranked(names: List[String]) -> Sorted[String] { Sorted.fromList(names) }
+fn ranked(names: List[String]) -> Sorted[String] {
+	Sorted.fromList(names)
+}
 ```
 
 The caller never mentions `T`. `Sorted.fromList(names)` takes it from the argument, and
@@ -33,15 +41,21 @@ the compiler passes the comparator for `String`.
 ```bynk
 commons guide.sortedempty
 
-type Sorted[T: Ord] = { items: List[T] }
+type Sorted[T: Ord] = {
+	items: List[T],
+}
 
-fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }
+fn Sorted.empty() -> Sorted[T] {
+	Sorted { items: [] }
+}
 
-fn none() -> Sorted[Int] { Sorted.empty() }
+fn none() -> Sorted[Int] {
+	Sorted.empty()
+}
 
 fn named() -> Int {
-  let s = Sorted.empty[String]()
-  0
+	let s = Sorted.empty[String]()
+	0
 }
 ```
 

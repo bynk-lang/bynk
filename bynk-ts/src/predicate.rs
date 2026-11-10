@@ -1,6 +1,6 @@
 //! The `PredKind` → TypeScript runtime-check mapping and the TypeScript string-literal
 //! escaper it depends on. Moved here from `bynk-emit`'s `emitter` (crate-hygiene A2,
-//! `design/tracks/crate-hygiene.md` §5) so the language server can build the same
+//! `design/archive/retired-tracks.md` §5) so the language server can build the same
 //! condition without depending on the emitter; behaviour is unchanged.
 
 use crate::program::{TsBinaryOp, TsExpr, TsLit};

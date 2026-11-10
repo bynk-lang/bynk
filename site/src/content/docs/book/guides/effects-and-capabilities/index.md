@@ -23,6 +23,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Query rows into a record without repeating the columns](/book/guides/effects-and-capabilities/query-rows-into-a-record/)
 - [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/)
 - [Cache responses at Cloudflare's edge](/book/guides/effects-and-capabilities/cache-at-the-edge/)
+- [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
 
 **See also:** [Reference — Capabilities & providers](/book/reference/capabilities/),

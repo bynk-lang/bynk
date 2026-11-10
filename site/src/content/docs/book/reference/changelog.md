@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.525**.
+written against **v0.526**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,12 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.526.1** | An unresolved type in lowering now stops with an internal error instead of becoming `()` |
+| **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |
+| **v0.525.26** | A suite that names a declaration the parser skipped after a syntax error no longer reports it as an unknown function; an unknown agent construction's note no longer talks of a commons |
+| **v0.525.25** | "The checker resolves a built-in method call to a typed `KernelOp`, and the editor's completion tables are generated from it, as the first slice of the typed built-in dispatch (#3164)" |
+| **v0.525.24** | The Book's types reference now documents generic sums, and `bynk.generics.recursive_generic_at_boundary` names a recursive generic sum as a sum rather than a record |
+| **v0.525.23** | A gated `explained_codes` probe ratchets `bynk explain` coverage upwards, and the increment checklist asks a new error code to ship with an explanation |
 | **v0.525.22** | "The test D1's parameter scanner treats non-ASCII characters as part of a named parameter, as SQLite does, so `:café` and `:cafè` count as two parameters (#3157)" |
 | **v0.525.21** | "`bynk check` checks `Json.decodeSql[T]` of a literal D1 `all` / `first` read against the statement's result columns: a required field of `T` with no column is `bynk.d1.select_field_missing`" |
 | **v0.525.20** | "`bynk check` counts a D1 call's parameters even when its binding has no migrations directory (`bynk.d1.sql_param_count`); the other D1 SQL checks still need a schema, and `[check] d1_sql = false` turns both off" |

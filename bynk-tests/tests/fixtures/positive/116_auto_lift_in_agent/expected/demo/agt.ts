@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Counter = number & { readonly __brand: "demo.agt.Counter" };
@@ -55,6 +55,7 @@ export class Box {
   private async loadState(): globalThis.Promise<BoxState> {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
+    __checkStoredLayout("Box", stored);
     const __zero = __zeroOfBoxState();
     __reportUnknownStoredKeys("Box", stored, __zero);
     const __merged = { ...__zero, ...stored };

@@ -1,7 +1,7 @@
 context flags
 
 uses keys
-consumes bynk.cloudflare { Kv }   // locks this unit to Cloudflare
+consumes bynk.cloudflare { Kv }  // locks this unit to Cloudflare
 
 ---
 A user proves identity with a JWT. `Editor` is the same user who additionally
@@ -10,7 +10,8 @@ authorisation (403).
 ---
 type UserId = String where NonEmpty
 
-actor User   { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
 actor Editor = User where hasClaim("editor")
 
 ---
@@ -19,39 +20,42 @@ The stored shape of a flag. Persisted as JSON in KV and decoded on read. (The
 they are unit-tested.)
 ---
 type Flag = {
-  enabled:     Bool,
-  description: String,
+	enabled: Bool,
+	description: String,
 }
 
 service api from http {
-  // Public: list the names of all known flags.
-  on GET("/flags") () -> Effect[HttpResult[List[String]]] by Visitor given Kv {
-    let keys <- Kv.list(Some("flag:"))
-    Ok(keys.map((k) => nameOf(k)))
-  }
+	// Public: list the names of all known flags.
+	on GET("/flags") () -> Effect[HttpResult[List[String]]] by Visitor given Kv {
+		let keys <- Kv.list(Some("flag:"))
+		Ok(keys.map((k) => nameOf(k)))
+	}
 
-  // Public: read one flag.
-  on GET("/flags/:name") (name: FlagKey) -> Effect[HttpResult[Flag]] by Visitor given Kv {
-    let stored <- Kv.get(keyOf(name))
-    match stored {
-      None => NotFound
-      Some(s) => match Json.decode[Flag](s) {
-        Ok(flag) => Ok(flag)
-        Err(_)   => ServerError("stored flag is corrupt")
-      }
-    }
-  }
+	// Public: read one flag.
+	on GET("/flags/:name") (name: FlagKey) -> Effect[HttpResult[Flag]] by Visitor given Kv {
+		let stored <- Kv.get(keyOf(name))
+		match stored {
+			None => NotFound,
+			Some(s) => match Json.decode[Flag](s) {
+				Ok(flag) => Ok(flag),
+				Err(_) => ServerError("stored flag is corrupt"),
+			},
+		}
+	}
 
-  // Editors only: create or update a flag. A non-editor token is 403, an
-  // anonymous request 401 — both enforced at the boundary.
-  on PUT("/flags/:name") (name: FlagKey, body: Flag) -> Effect[HttpResult[Flag]] by e: Editor given Kv {
-    let _ <- Kv.put(keyOf(name), Json.encode(body))
-    Ok(body)
-  }
+	// Editors only: create or update a flag. A non-editor token is 403, an
+	// anonymous request 401 — both enforced at the boundary.
+	on PUT("/flags/:name") (
+		name: FlagKey,
+		body: Flag
+	) -> Effect[HttpResult[Flag]] by e: Editor given Kv {
+		let _ <- Kv.put(keyOf(name), Json.encode(body))
+		Ok(body)
+	}
 
-  // Editors only: remove a flag.
-  on DELETE("/flags/:name") (name: FlagKey) -> Effect[HttpResult[String]] by e: Editor given Kv {
-    let _ <- Kv.delete(keyOf(name))
-    NoContent
-  }
+	// Editors only: remove a flag.
+	on DELETE("/flags/:name") (name: FlagKey) -> Effect[HttpResult[String]] by e: Editor given Kv {
+		let _ <- Kv.delete(keyOf(name))
+		NoContent
+	}
 }

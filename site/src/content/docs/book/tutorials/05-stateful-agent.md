@@ -170,123 +170,122 @@ above is all we need: mint a raw string, then validate it into a `ShortCode`.
 context shortener
 
 type ShortCode = String where MinLength(6) && MaxLength(8)
+
 type Url = String where MinLength(1) && MaxLength(2048)
 
-type LinkError = enum {
-  AlreadyExists,
-  NotFound,
-  Invalid,
-}
+type LinkError = enum { AlreadyExists, NotFound, Invalid }
 
 fn describe(error: LinkError) -> String {
-  match error {
-    AlreadyExists => "code already in use"
-    NotFound => "no such code"
-    Invalid => "invalid code"
-  }
+	match error {
+		AlreadyExists => "code already in use",
+		NotFound => "no such code",
+		Invalid => "invalid code",
+	}
 }
 
 type CreateLinkRequest = {
-  target: Url,
+	target: Url,
 }
 
 type CreatedView = {
-  code: ShortCode,
-  target: Url,
+	code: ShortCode,
+	target: Url,
 }
 
 type ResolveView = {
-  target: Url,
-  hits: Int,
+	target: Url,
+	hits: Int,
 }
 
 capability CodeGen {
-  fn next() -> Effect[String]
+	fn next() -> Effect[String]
 }
 
 provides CodeGen = FixedCodeGen {
-  fn next() -> Effect[String] {
-    "abc123"
-  }
+	fn next() -> Effect[String] {
+		"abc123"
+	}
 }
 
 agent Link {
-  key code: ShortCode
+	key code: ShortCode
 
-  store target: Cell[Option[Url]]
-  store hits:   Cell[Int]
+	store target: Cell[Option[Url]]
+	store hits: Cell[Int]
 
-  on call register(url: Url) -> Effect[Result[(), LinkError]] {
-    match target {
-      Some(_) => Err(AlreadyExists)
-      None => {
-        target := Some(url)
-        Ok(())
-      }
-    }
-  }
+	on call register(url: Url) -> Effect[Result[(), LinkError]] {
+		match target {
+			Some(_) => Err(AlreadyExists),
+			None => {
+				target := Some(url)
+				Ok(())
+			},
+		}
+	}
 
-  on call resolve() -> Effect[Result[ResolveView, LinkError]] {
-    match target {
-      Some(url) => {
-        let next = hits + 1
-        hits := next
-        Ok(ResolveView { target: url, hits: next })
-      }
-      None => Err(NotFound)
-    }
-  }
+	on call resolve() -> Effect[Result[ResolveView, LinkError]] {
+		match target {
+			Some(url) => {
+				let next = hits + 1
+				hits := next
+				Ok(ResolveView { target: url, hits: next })
+			},
+			None => Err(NotFound),
+		}
+	}
 }
 
 service create {
-  on call(target: Url) -> Effect[Result[ShortCode, LinkError]] given CodeGen {
-    let raw <- CodeGen.next()
-    match ShortCode.of(raw) {
-      Err(_) => Err(Invalid)
-      Ok(code) => {
-        let link = Link(code)
-        let outcome <- link.register(target)
-        match outcome {
-          Ok(_) => Ok(code)
-          Err(e) => Err(e)
-        }
-      }
-    }
-  }
+	on call(target: Url) -> Effect[Result[ShortCode, LinkError]] given CodeGen {
+		let raw <- CodeGen.next()
+		match ShortCode.of(raw) {
+			Err(_) => Err(Invalid),
+			Ok(code) => {
+				let link = Link(code)
+				let outcome <- link.register(target)
+				match outcome {
+					Ok(_) => Ok(code),
+					Err(e) => Err(e),
+				}
+			},
+		}
+	}
 }
 
 service api from http {
-  on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen {
-    let raw <- CodeGen.next()
-    match ShortCode.of(raw) {
-      Err(_) => ServerError("generated an invalid code")
-      Ok(code) => {
-        let link = Link(code)
-        let outcome <- link.register(body.target)
-        match outcome {
-          Ok(_) => Created(CreatedView { code: code, target: body.target })
-          Err(linkError) => match linkError {
-            AlreadyExists => Conflict("code already in use")
-            NotFound => ServerError("unexpected state")
-            Invalid => ServerError("invalid code")
-          }
-        }
-      }
-    }
-  }
+	on POST("/links") (
+		body: CreateLinkRequest
+	) -> Effect[HttpResult[CreatedView]] by Visitor given CodeGen {
+		let raw <- CodeGen.next()
+		match ShortCode.of(raw) {
+			Err(_) => ServerError("generated an invalid code"),
+			Ok(code) => {
+				let link = Link(code)
+				let outcome <- link.register(body.target)
+				match outcome {
+					Ok(_) => Created(CreatedView { code: code, target: body.target }),
+					Err(linkError) => match linkError {
+						AlreadyExists => Conflict("code already in use"),
+						NotFound => ServerError("unexpected state"),
+						Invalid => ServerError("invalid code"),
+					},
+				}
+			},
+		}
+	}
 
-  on GET("/links/:code") (code: ShortCode) -> Effect[HttpResult[ResolveView]] by Visitor {
-    let link = Link(code)
-    let outcome <- link.resolve()
-    match outcome {
-      Ok(view) => Ok(view)
-      Err(linkError) => match linkError {
-        NotFound => NotFound
-        AlreadyExists => ServerError("unexpected state")
-        Invalid => ServerError("invalid code")
-      }
-    }
-  }
+	on GET("/links/:code") (code: ShortCode) -> Effect[HttpResult[ResolveView]] by Visitor {
+		let link = Link(code)
+		let outcome <- link.resolve()
+		match outcome {
+			Ok(view) => Ok(view),
+			Err(linkError) => match linkError {
+				NotFound => NotFound,
+				AlreadyExists => ServerError("unexpected state"),
+				Invalid => ServerError("invalid code"),
+			},
+		}
+	}
 }
 ```
 

@@ -4,8 +4,8 @@ uses tokens
 consumes bynk { Clock }
 
 type LoginRequest = {
-  token: Token,
-  user:  UserId,
+	token: Token,
+	user: UserId,
 }
 
 ---
@@ -18,52 +18,52 @@ Eviction consults the clock, so every cache op *except* `remove` declares
 `given Clock` — the time dependency is visible in the signature.
 ---
 agent Sessions {
-  key shard: String
+	key shard: String
 
-  store live: Cache[Token, UserId] @ttl(30.minutes)
+	store live: Cache[Token, UserId] @ttl(30.minutes)
 
-  // start or refresh a session; stamps a fresh 30-minute expiry
-  on call login(token: Token, user: UserId) -> Effect[()] given Clock {
-    do live.put(token, user)
-  }
+	// start or refresh a session; stamps a fresh 30-minute expiry
+	on call login(token: Token, user: UserId) -> Effect[()] given Clock {
+		do live.put(token, user)
+	}
 
-  // resolve a token to its user, or None if unknown or expired
-  on call whoami(token: Token) -> Effect[Option[UserId]] given Clock {
-    live.get(token)
-  }
+	// resolve a token to its user, or None if unknown or expired
+	on call whoami(token: Token) -> Effect[Option[UserId]] given Clock {
+		live.get(token)
+	}
 
-  // end a session now; `remove` is idempotent and needs no clock
-  on call logout(token: Token) -> Effect[()] {
-    do live.remove(token)
-  }
+	// end a session now; `remove` is idempotent and needs no clock
+	on call logout(token: Token) -> Effect[()] {
+		do live.remove(token)
+	}
 
-  // how many sessions are currently live (expired entries are not counted)
-  on call active() -> Effect[Int] given Clock {
-    live.size()
-  }
+	// how many sessions are currently live (expired entries are not counted)
+	on call active() -> Effect[Int] given Clock {
+		live.size()
+	}
 }
 
 service api from http {
-  on POST("/sessions") (body: LoginRequest) -> Effect[HttpResult[String]] by Visitor {
-    do Sessions("default").login(body.token, body.user)
-    Created("ok")
-  }
+	on POST("/sessions") (body: LoginRequest) -> Effect[HttpResult[String]] by Visitor {
+		do Sessions("default").login(body.token, body.user)
+		Created("ok")
+	}
 
-  on GET("/sessions/:token") (token: Token) -> Effect[HttpResult[UserId]] by Visitor {
-    let who <- Sessions("default").whoami(token)
-    match who {
-      Some(user) => Ok(user)
-      None       => NotFound
-    }
-  }
+	on GET("/sessions/:token") (token: Token) -> Effect[HttpResult[UserId]] by Visitor {
+		let who <- Sessions("default").whoami(token)
+		match who {
+			Some(user) => Ok(user),
+			None => NotFound,
+		}
+	}
 
-  on POST("/sessions/:token/logout") (token: Token) -> Effect[HttpResult[String]] by Visitor {
-    do Sessions("default").logout(token)
-    NoContent
-  }
+	on POST("/sessions/:token/logout") (token: Token) -> Effect[HttpResult[String]] by Visitor {
+		do Sessions("default").logout(token)
+		NoContent
+	}
 
-  on GET("/sessions") () -> Effect[HttpResult[Int]] by Visitor {
-    let n <- Sessions("default").active()
-    Ok(n)
-  }
+	on GET("/sessions") () -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Sessions("default").active()
+		Ok(n)
+	}
 }

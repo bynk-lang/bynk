@@ -84,12 +84,12 @@ consumes commerce.order
 consumes bynk { Logger }
 
 service OnDomesticPayment from Events(PaymentConfirmed { region: Region.Domestic, .. }) {
-  on event(e: PaymentConfirmed) -> Effect[()] given Logger {
-    // e.region is NOT statically Region.Domestic here — e is
-    // PaymentConfirmed as always. Only *delivery* is filtered: this
-    // subscriber only runs for emissions where region == Domestic.
-    Logger.info(e.orderId)
-  }
+	on event(e: PaymentConfirmed) -> Effect[()] given Logger {
+		// e.region is NOT statically Region.Domestic here — e is
+		// PaymentConfirmed as always. Only *delivery* is filtered: this
+		// subscriber only runs for emissions where region == Domestic.
+		Logger.info(e.orderId)
+	}
 }
 ```
 
@@ -123,16 +123,16 @@ consumes commerce.order
 consumes bynk { Idempotency }
 
 service OnPayment from Events(PaymentConfirmed) {
-  on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency {
-    let seen <- Idempotency.dedup[()](env.eventId)
-    match seen {
-      Some(_) => (),
-      None => {
-        // react to e here, exactly once per eventId
-        let _ <- Idempotency.remember[()](env.eventId, (), 7.days)
-      }
-    }
-  }
+	on event(e: PaymentConfirmed, env: EventEnvelope) -> Effect[()] given Idempotency {
+		let seen <- Idempotency.dedup[()](env.eventId)
+		match seen {
+			Some(_) => (),
+			None => {
+				// react to e here, exactly once per eventId
+				let _ <- Idempotency.remember[()](env.eventId, (), 7.days)
+			},
+		}
+	}
 }
 ```
 
@@ -172,13 +172,18 @@ guard as delivery does, so delivering the same envelope twice checks the dedup:
 
 ```bynk,fragment
 suite commerce.notifications {
-  case "a redelivered payment is handled once" {
-    let e = PaymentConfirmed { orderId: "o1" }
-    let env = EventEnvelope { eventId: "evt-1", publisherId: "commerce.order", emittedAt: Instant.fromEpochMillis(0), schemaVersion: 1 }
-    let _ <- OnPayment.event(e, env)
-    let _ <- OnPayment.event(e, env)
-    expect Idempotency.remember called once
-  }
+	case "a redelivered payment is handled once" {
+		let e = PaymentConfirmed { orderId: "o1" }
+		let env = EventEnvelope {
+			eventId: "evt-1",
+			publisherId: "commerce.order",
+			emittedAt: Instant.fromEpochMillis(0),
+			schemaVersion: 1,
+		}
+		let _ <- OnPayment.event(e, env)
+		let _ <- OnPayment.event(e, env)
+		expect Idempotency.remember called once
+	}
 }
 ```
 
@@ -201,8 +206,8 @@ exports transparent { PaymentConfirmed, Region }
 type Region = enum { Domestic, International }
 
 event PaymentConfirmed = {
-  orderId: String,
-  region: Region = Region.Domestic,
+	orderId: String,
+	region: Region = Region.Domestic,
 }
 ```
 

@@ -58,6 +58,7 @@
     - [Compose a provider from other capabilities](guides/effects-and-capabilities/compose-a-provider.md)
     - [Share a capability across contexts](guides/effects-and-capabilities/share-across-contexts.md)
     - [Wrap a library as an adapter](guides/effects-and-capabilities/wrap-a-library.md)
+    - [Call Workers AI through an adapter](guides/effects-and-capabilities/call-workers-ai-through-an-adapter.md)
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)

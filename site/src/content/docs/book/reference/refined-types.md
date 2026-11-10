@@ -175,9 +175,17 @@ commons demo
 
 type Name = String where NonEmpty
 
-fn shout(n: Name) -> String { n.toUpper() }        // n.toUpper() : String
-fn size(n: Name)  -> Int    { n.length() }         // n.length()  : Int
-fn tag(n: Name)   -> String { "user:".concat(n) }  // a refined arg widens too
+fn shout(n: Name) -> String {
+	n.toUpper()
+}  // n.toUpper() : String
+
+fn size(n: Name) -> Int {
+	n.length()
+}  // n.length()  : Int
+
+fn tag(n: Name) -> String {
+	"user:".concat(n)
+}  // a refined arg widens too
 ```
 
 This is the same rule refinement already follows for arithmetic, comparison, and

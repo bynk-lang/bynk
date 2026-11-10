@@ -99,6 +99,12 @@ Concretely, the implementing PR must, *where the increment touches them*:
   shape. The link-check / doc-example / spelling gates catch broken *references*;
   they do **not** catch a sample corrupted inside a code fence or a claim that
   silently went out of date — those are the author's responsibility.
+- **Ship an explanation with each new error code.** A new *error* diagnostic
+  code gets a curated `bynk explain` entry (`EXPLANATIONS` in
+  `bynk-syntax/src/diagnostics.rs`): why the rule exists and a before-and-after
+  example, ideally compile-checked. Warnings and internal codes may be left to
+  the one-line registry summary. The `explained_codes` probe ratchets coverage
+  upwards; the backlog is tracked in #3163.
 - **Keep examples consistent and compiling.** Snippets demonstrating the same
   thing use the same form; prefer `{{#include}}` from a compiled worked example
   over hand-written fences so CI keeps them honest and they cannot rot.

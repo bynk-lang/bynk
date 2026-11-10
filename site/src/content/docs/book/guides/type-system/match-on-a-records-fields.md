@@ -13,17 +13,21 @@ Name the record type, then list the fields you care about and end with `..`:
 
 ```bynk
 commons shop {
-  type Status = enum { Pending, Paid, Cancelled }
+	type Status = enum { Pending, Paid, Cancelled }
 
-  type Order = { id: String, status: Status, total: Int }
+	type Order = {
+		id: String,
+		status: Status,
+		total: Int,
+	}
 
-  fn describe(o: Order) -> String {
-    match o {
-      Order { status: Paid, total, .. } if total > 100 => "large paid order"
-      Order { status: Paid, .. } => "paid"
-      _ => "other"
-    }
-  }
+	fn describe(o: Order) -> String {
+		match o {
+			Order { status: Paid, total, .. } if total > 100 => "large paid order",
+			Order { status: Paid, .. } => "paid",
+			_ => "other",
+		}
+	}
 }
 ```
 
@@ -46,16 +50,20 @@ Record patterns nest inside variant payloads:
 
 ```bynk
 commons shop {
-  type Status = enum { Pending, Paid, Cancelled }
+	type Status = enum { Pending, Paid, Cancelled }
 
-  type Order = { id: String, status: Status, total: Int }
+	type Order = {
+		id: String,
+		status: Status,
+		total: Int,
+	}
 
-  fn paidTotal(o: Option[Order]) -> Int {
-    match o {
-      Some(Order { status: Paid, total, .. }) => total
-      _ => 0
-    }
-  }
+	fn paidTotal(o: Option[Order]) -> Int {
+		match o {
+			Some(Order { status: Paid, total, .. }) => total,
+			_ => 0,
+		}
+	}
 }
 ```
 
@@ -66,13 +74,17 @@ also open the `if` block:
 
 ```bynk
 commons shop {
-  type Status = enum { Pending, Paid, Cancelled }
+	type Status = enum { Pending, Paid, Cancelled }
 
-  type Order = { id: String, status: Status, total: Int }
+	type Order = {
+		id: String,
+		status: Status,
+		total: Int,
+	}
 
-  fn billed(o: Order) -> Int {
-    if o is (Order { status: Paid, total, .. }) { total } else { 0 }
-  }
+	fn billed(o: Order) -> Int {
+		if o is (Order { status: Paid, total, .. }) { total } else { 0 }
+	}
 }
 ```
 

@@ -21,9 +21,13 @@ fn safeUrl(url: String) -> Bool {
 		|| (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\"))
 }
 
-fn isEven(n: Int) -> Bool { n - n / 2 * 2 == 0 }
+fn isEven(n: Int) -> Bool {
+	n - n / 2 * 2 == 0
+}
 
-fn isOdd(n: Int) -> Bool { !isEven(n) }
+fn isOdd(n: Int) -> Bool {
+	!isEven(n)
+}
 
 ---
 Wrap every odd-numbered piece of `s.split(mark)` in `open`/`close`: the text
@@ -49,7 +53,10 @@ fn pairs(s: String, mark: String, open: String, close: String) -> String {
 	}
 }
 
-type Spans = { text: String, index: Int }
+type Spans = {
+	text: String,
+	index: Int,
+}
 
 ---
 `**strong**` and `*emphasis*` in a stretch of already-escaped text.
@@ -95,7 +102,9 @@ fn links(s: String) -> String {
 ---
 Emphasis and links in a stretch of already-escaped text.
 ---
-fn spans(s: String) -> String { links(s) }
+fn spans(s: String) -> String {
+	links(s)
+}
 
 ---
 Inline Markdown to HTML: `code`, **strong**, *emphasis* and [links](https://bynk-lang.org).

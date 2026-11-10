@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0774](0774-stored-layout-marker-and-forward-compat-guard.md) | **A stored record's `__layout` marker, and a build that faults on one it does not know** (v0.526) — `__layout` is reserved beside `__v`; absent is the wholesale layout; any marker a build does not know faults NewerLayout before decode or write-back | Accepted (v0.526) |
 | [0773](0773-d1-decodesql-column-check.md) | **Json.decodeSql's fields are checked against the statement's columns** (v0.525.21) — How a decode is linked to the D1 statement whose rows it decodes, and what is reported | Accepted (v0.525.21) |
 | [0772](0772-d1-sql-count-without-schema.md) | **A D1 call's parameter count is checked without a schema** (v0.525.20) — A Rust scanner counts `?`/`?N` parameters for bindings with no migrations; one opt-out key | Accepted (v0.525.20) |
 | [0771](0771-mutate-sql-from-d1-sites.md) | **`--mutate` takes SQL mutants from D1 call sites, not a keyword guess** (v0.525.18) — The checker's D1 sites pick the SQL literals; the scan runs on decoded text | Accepted (v0.525.18) |

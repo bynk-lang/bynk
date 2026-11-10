@@ -912,22 +912,51 @@ fn check_refinement_annotations(
     }
 }
 
-/// The TypeScript zero-value expression for `type_ref` (with an optional
-/// inline field refinement), or `None` if the type is not zeroable.
-pub fn zero_value_ts(
+/// A target-neutral zero value: what a state field holds before it is first
+/// written. The checker decides *whether* a type has one; each backend decides
+/// how to spell it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ZeroValue {
+    /// `0`: the zero of `Int`, `Float`, `Duration` (milliseconds) and
+    /// `Instant` (epoch milliseconds, the Unix epoch).
+    Number,
+    /// `false`.
+    False,
+    /// The empty string.
+    EmptyString,
+    /// The empty octet sequence (the zero of `Bytes`, ADR 0142).
+    EmptyBytes,
+    /// An `Option`'s zero, `None`, whatever its inner type.
+    None,
+    /// A record's zero: each field's zero, in declaration order.
+    Record(Vec<(String, ZeroValue)>),
+}
+
+/// The zero value of `type_ref` (with an optional inline field refinement), or
+/// `None` if the type is not zeroable.
+pub fn zero_value(
     type_ref: &TypeRef,
     inline: Option<&Refinement>,
     types: &HashMap<String, Arc<TypeDecl>>,
-) -> Option<String> {
-    zero_value_ts_inner(type_ref, inline, types, &mut Vec::new())
+) -> Option<ZeroValue> {
+    zero_value_inner(type_ref, inline, types, &mut Vec::new())
 }
 
-fn zero_value_ts_inner(
+/// Whether `type_ref` has a zero value.
+pub fn is_zeroable(
+    type_ref: &TypeRef,
+    inline: Option<&Refinement>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    zero_value(type_ref, inline, types).is_some()
+}
+
+fn zero_value_inner(
     type_ref: &TypeRef,
     inline: Option<&Refinement>,
     types: &HashMap<String, Arc<TypeDecl>>,
     visiting: &mut Vec<String>,
-) -> Option<String> {
+) -> Option<ZeroValue> {
     match type_ref {
         TypeRef::Base(b, _) => {
             if refinement_admits_zero(*b, inline) {
@@ -937,7 +966,7 @@ fn zero_value_ts_inner(
             }
         }
         // Option's zero is None, regardless of the inner type.
-        TypeRef::Option(_, _) => Some("None".to_string()),
+        TypeRef::Option(_, _) => Some(ZeroValue::None),
         TypeRef::Named(id) => {
             let decl = types.get(&id.name)?;
             match &decl.body {
@@ -974,40 +1003,33 @@ fn zero_value_ts_inner(
     }
 }
 
-/// The zero record `{ f₁: z₁, …, fₙ: zₙ }` for a set of fields, or `None` if
-/// any field is not zeroable.
+/// The zero record for a set of fields, or `None` if any field is not
+/// zeroable.
 fn agent_state_zero_record(
     fields: &[RecordField],
     types: &HashMap<String, Arc<TypeDecl>>,
     visiting: &mut Vec<String>,
-) -> Option<String> {
+) -> Option<ZeroValue> {
     let mut parts = Vec::new();
     for f in fields {
-        let z = zero_value_ts_inner(&f.type_ref, f.refinement.as_ref(), types, visiting)?;
-        parts.push(format!("{}: {}", f.name.name, z));
+        let z = zero_value_inner(&f.type_ref, f.refinement.as_ref(), types, visiting)?;
+        parts.push((f.name.name.clone(), z));
     }
-    Some(format!("{{ {} }}", parts.join(", ")))
+    Some(ZeroValue::Record(parts))
 }
 
-fn zero_of_base(b: BaseType) -> Option<String> {
-    Some(
-        match b {
-            BaseType::Int => "0",
-            BaseType::Bool => "false",
-            BaseType::String => "\"\"",
-            BaseType::Float => "0",
-            // v0.86/v0.90: a `Duration` is milliseconds and an `Instant` is
-            // epoch milliseconds; the zero of each is `0` (the Unix epoch).
-            BaseType::Duration | BaseType::Instant => "0",
-            // v0.110 (ADR 0142): the zero of `Bytes` is the empty octet
-            // sequence (`""` in base64), erased to an empty `Uint8Array`.
-            BaseType::Bytes => "new globalThis.Uint8Array()",
-            // #2622: a `Decimal`'s zero is a runtime value (`0d`), not an inline
-            // literal, so a bare `Decimal` state field has no zero default.
-            BaseType::Decimal => return None,
+fn zero_of_base(b: BaseType) -> Option<ZeroValue> {
+    Some(match b {
+        BaseType::Int | BaseType::Float | BaseType::Duration | BaseType::Instant => {
+            ZeroValue::Number
         }
-        .to_string(),
-    )
+        BaseType::Bool => ZeroValue::False,
+        BaseType::String => ZeroValue::EmptyString,
+        BaseType::Bytes => ZeroValue::EmptyBytes,
+        // #2622: a `Decimal`'s zero is a runtime value (`0d`), not an inline
+        // literal, so a bare `Decimal` state field has no zero default.
+        BaseType::Decimal => return None,
+    })
 }
 
 /// Whether the zero value of `base` satisfies every predicate in `refinement`.

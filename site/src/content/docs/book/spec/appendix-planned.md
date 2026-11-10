@@ -11,7 +11,8 @@ title: "Appendix A — Planned features"
 Two directions are designed but not yet shipped:
 
 - **Sagas** — long-running, multi-step workflows with compensation, coordinating
-  effects across contexts.
+  effects across contexts. Deferred until after 1.0; tracked in
+  [#3185](https://github.com/bynk-lang/bynk/issues/3185).
 - **Event replay** — re-delivering past events to a subscriber that joins late or
   recovers, with ordering across concurrent publishes. Events themselves have
   shipped ([§5.7b](/book/spec/static-semantics/#events)), range patterns in a

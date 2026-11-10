@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
 
 export type OrderId = string & { readonly __brand: "shop.one.OrderId" };
@@ -51,6 +51,7 @@ export class Order {
   private async loadState(): globalThis.Promise<OrderState> {
     const stored = await this.state.storage.get<OrderState>("state");
     if (stored === undefined) return __zeroOfOrderState();
+    __checkStoredLayout("Order", stored);
     const __zero = __zeroOfOrderState();
     __reportUnknownStoredKeys("Order", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -116,6 +117,7 @@ export class Label {
   private async loadState(): globalThis.Promise<LabelState> {
     const stored = await this.state.storage.get<LabelState>("state");
     if (stored === undefined) return __zeroOfLabelState();
+    __checkStoredLayout("Label", stored);
     const __zero = __zeroOfLabelState();
     __reportUnknownStoredKeys("Label", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -181,6 +183,7 @@ export class Tally {
   private async loadState(): globalThis.Promise<TallyState> {
     const stored = await this.state.storage.get<TallyState>("state");
     if (stored === undefined) return __zeroOfTallyState();
+    __checkStoredLayout("Tally", stored);
     const __zero = __zeroOfTallyState();
     __reportUnknownStoredKeys("Tally", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -246,6 +249,7 @@ export class Grid {
   private async loadState(): globalThis.Promise<GridState> {
     const stored = await this.state.storage.get<GridState>("state");
     if (stored === undefined) return __zeroOfGridState();
+    __checkStoredLayout("Grid", stored);
     const __zero = __zeroOfGridState();
     __reportUnknownStoredKeys("Grid", stored, __zero);
     const __merged = { ...__zero, ...stored };
