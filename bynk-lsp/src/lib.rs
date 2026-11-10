@@ -169,6 +169,26 @@ impl Analysis {
     }
 }
 
+/// The owning unit name of `file`, read from `cache` when the text is the one it
+/// was last read from, else re-parsed and stored (#3243 S0).
+fn cached_owner_unit<'c>(
+    cache: &'c mut std::collections::HashMap<PathBuf, (u64, Option<String>)>,
+    file: &bynk_ide::FileDiagnostics,
+) -> Option<&'c str> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    file.text.hash(&mut hasher);
+    let hash = hasher.finish();
+    let fresh = cache
+        .get(&file.source_path)
+        .is_some_and(|(cached, _)| *cached == hash);
+    if !fresh {
+        let owner = crate::symbols::own_declaration_name(&file.text).map(|(unit, _)| unit);
+        cache.insert(file.source_path.clone(), (hash, owner));
+    }
+    cache.get(&file.source_path)?.1.as_deref()
+}
+
 /// One project's mutable state — the fields that were flat on `State` before
 /// slice D, now one set per discovered project root. Every request routes by
 /// URI (via `resolve_root`) to its owning entry, so two projects analyse,
@@ -183,6 +203,12 @@ struct ProjectState {
     /// rename, and the re-pointed definition/hover read this; positions
     /// convert against the analysed snapshots (v0.24 rule).
     analysis: Option<Arc<Analysis>>,
+    /// #3243 S0: each file's owning unit name, as `own_declaration_name` reads
+    /// it, keyed by project-relative path with a hash of the text it was read
+    /// from. The doc-link hint scan needs it for every file on every round;
+    /// re-tokenising and re-parsing every file just to learn a name that only
+    /// changes when the file does was about 8% of a round.
+    doc_owner_cache: std::collections::HashMap<PathBuf, (u64, Option<String>)>,
     /// v0.24: URIs that currently carry published project diagnostics — the
     /// previous round's dirty set, so newly-clean files get a clearing
     /// (empty) publish. Per-project (slice D): a round for this root must only
@@ -810,7 +836,17 @@ impl Backend {
         // Spans convert against the snapshot the analysis saw — never a newer
         // buffer (Settled, v0.24 proposal). Built for every file up front: a
         // diagnostic's secondary label may lie in a sibling file.
-        let doc_link_report = self.state.read().await.doc_link_report;
+        let (doc_link_report, mut doc_owner_cache) = {
+            let state = self.state.read().await;
+            (
+                state.doc_link_report,
+                state
+                    .projects
+                    .get(&root)
+                    .map(|ps| ps.doc_owner_cache.clone())
+                    .unwrap_or_default(),
+            )
+        };
         let files: ProjectFiles<'_> = result
             .files
             .iter()
@@ -833,12 +869,12 @@ impl Backend {
                 .collect();
             // #2459: the opt-in unresolved-doc-link hint (LSP-only).
             if doc_link_report != doc_link_hints::Level::Off
-                && let Some((owner_unit, _)) = crate::symbols::own_declaration_name(&file.text)
+                && let Some(owner_unit) = cached_owner_unit(&mut doc_owner_cache, file)
             {
                 diags.extend(doc_link_hints::unresolved_link_diagnostics(
                     &file.text,
                     &file.source_path,
-                    &owner_unit,
+                    owner_unit,
                     &result.index,
                     &result.doc_scope,
                     result
@@ -853,6 +889,8 @@ impl Backend {
             diagnostics.insert(file.source_path.clone(), file.diagnostics.clone());
             snapshots.insert(file.source_path.clone(), file.text.clone());
         }
+        let result_paths: std::collections::HashSet<PathBuf> =
+            result.files.iter().map(|f| f.source_path.clone()).collect();
         // v0.25: retain the round's index + snapshots for references/rename
         // and the binding-correct definition/hover. v0.26: plus the raw
         // diagnostics, for `codeAction` (the suggestions ride on them).
@@ -886,6 +924,10 @@ impl Backend {
             }
             ps.analysis_round_committed = round;
             ps.analysis_failed = false;
+            // Keep only the files this round saw, so the cache cannot grow with
+            // deleted files.
+            doc_owner_cache.retain(|path, _| result_paths.contains(path));
+            ps.doc_owner_cache = doc_owner_cache;
             ps.analysis = Some(analysis);
         }
         // Project-level diagnostics with no single owning file surface at
@@ -11079,5 +11121,45 @@ mod tests {
             "type_receiver's slow path must resolve `w: Widget` off the \
              closed widget.bynk's real disk content: {labels:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod owner_cache_tests {
+    use super::cached_owner_unit;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    fn file(text: &str) -> bynk_ide::FileDiagnostics {
+        bynk_ide::FileDiagnostics {
+            source_path: PathBuf::from("src/a.bynk"),
+            text: text.to_string(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    /// #3243 S0: the owner unit is read once per distinct text, and follows an edit
+    /// that renames the unit; a file with no parseable unit has no owner.
+    #[test]
+    fn the_owner_unit_is_cached_per_text_and_follows_an_edit() {
+        let mut cache = HashMap::new();
+        assert_eq!(
+            cached_owner_unit(&mut cache, &file("commons shop.a\n")),
+            Some("shop.a")
+        );
+        let (hash, _) = cache[&PathBuf::from("src/a.bynk")].clone();
+        // The same text is a hit: the entry is untouched.
+        assert_eq!(
+            cached_owner_unit(&mut cache, &file("commons shop.a\n")),
+            Some("shop.a")
+        );
+        assert_eq!(cache[&PathBuf::from("src/a.bynk")].0, hash);
+        // A renamed unit is a different text, so a fresh read.
+        assert_eq!(
+            cached_owner_unit(&mut cache, &file("commons shop.b\n")),
+            Some("shop.b")
+        );
+        // Unparseable text: no owner, and the miss is remembered.
+        assert_eq!(cached_owner_unit(&mut cache, &file("\u{1}\u{1}")), None);
     }
 }
