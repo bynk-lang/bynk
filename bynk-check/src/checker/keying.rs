@@ -1,6 +1,6 @@
 //! Which types are `Key`, and the checks that need it. Constrained generics
 //! slice 2 (#2684; the model is the track's Q6 in
-//! `design/tracks/constrained-generics.md`).
+//! `design/archive/retired-tracks.md`).
 //!
 //! `Key` admits a type as a value `Map` key or `Set` member (and as a `distinct`,
 //! `groupBy` or join key). It is automatic, never derived: a type is `Key` when it

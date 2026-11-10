@@ -1,7 +1,7 @@
 //! The expression/pattern/statement printer: renders a parsed AST fragment back to Bynk
 //! source text.
 //!
-//! Moved here from `bynk-fmt` (crate-hygiene A3, `design/tracks/crate-hygiene.md` §5) so the
+//! Moved here from `bynk-fmt` (crate-hygiene A3, `design/archive/retired-tracks.md` §5) so the
 //! checker can quote an expression in a diagnostic without depending on the formatter. The
 //! formatter and the checker both call it from here; the text is unchanged byte for byte.
 

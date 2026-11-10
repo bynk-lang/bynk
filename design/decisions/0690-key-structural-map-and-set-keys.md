@@ -10,7 +10,7 @@ collection must agree with it, and only the language can make lookup, `distinct`
 in three places (the resolver's `check_keyable`, the checker's `is_keyable` and
 the store's `type_ref_is_keyable`), and an unbounded type parameter was admitted
 in key position in some of them and rejected in others. This is slice 2 (#2684) of
-the constrained-generics track (`design/tracks/constrained-generics.md`, Q6 and §8),
+the constrained-generics track (`design/archive/retired-tracks.md`, Q6),
 which builds on slice 0's bounds and slice 1's `Ord`. The maintainer approved
 #2684 as written, the Recommended option for every decision below. It amends ADR
 0421's note that structural keys are a possible follow-on, and supersedes the

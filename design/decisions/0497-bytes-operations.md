@@ -5,7 +5,7 @@
 **Context.** ADR 0142 shipped `Bytes` as a length plus a UTF-8/base64 bridge. Its D4 named
 `concat`, `slice`, `fromHex`/`toHex` and lexicographic ordering as follow-ons. Without them a
 program can carry binary data but can't join two buffers, take a prefix, print a digest in hex or
-read a JWT segment. The standard-library track (`design/tracks/standard-library.md`, spine #1936)
+read a JWT segment. The standard-library track (`design/archive/retired-tracks.md`, spine #1936)
 lists these as kernel gap PR-5, which blocks crypto (K4), binary `Fetch` bodies (K5), KV `Bytes`
 values (P1), D1 (P4) and R2 (P5). Slice K1 (#2016) builds them.
 

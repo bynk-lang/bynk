@@ -8,7 +8,7 @@ ended up inside the type checker: `bynk-check/src/firstparty/`, next to a 266-li
 `bynk-check/src/firstparty.rs` that was almost entirely data. It held unit names, the `*_SRC` and
 binding consts, `Platform`, `platform_of`, `provider_takes_env` and `FIRSTPARTY_SOURCES`. Library
 content and checker logic therefore shared a crate, and there was no home a later unbundling could
-lift out whole. The standard-library track (spine #1936, `design/tracks/standard-library.md` §8 D1
+lift out whole. The standard-library track (spine #1936, `design/archive/retired-tracks.md` D1
 and D9) settled both questions, and S0 (#1940) carries them out.
 
 **Decision.**
