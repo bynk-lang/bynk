@@ -20,6 +20,13 @@ What it shows:
   needs no clock), so `bynk test .` constructs it by key, drives its handlers,
   and asserts on the scalar aggregates directly.
 
+> **Size.** An agent's whole state is one stored value of about 2 MB at most, and
+> every handler call reads and rewrites it. The HTTP service here routes every
+> order to the single `Book("default")` instance for brevity, which is the shape to
+> avoid in production: key the agent by customer, order or channel, or keep a large
+> table in D1. The Book's agents reference
+> ("Size and cost of an agent's state") has the detail.
+
 ## Layout
 
 ```text
