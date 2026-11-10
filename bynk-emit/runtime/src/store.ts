@@ -81,8 +81,13 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   }
 
   /** A handle holding `entries`, in the order given. */
-  static from<V>(entries: Iterable<readonly [string, V]>, indexers: readonly Indexer<V>[] = []): StoreMap<V> {
-    const handle = new StoreMap<V>(indexers);
+  static from<V, M extends StoreMap<V> = StoreMap<V>>(
+    this: new (indexers: readonly Indexer<V>[]) => M,
+    entries: Iterable<readonly [string, V]>,
+    indexers: readonly Indexer<V>[] = [],
+  ): M {
+    // `new this`, so a subclass (`StoreCache`) builds an instance of itself.
+    const handle = new this(indexers);
     for (const [k, v] of entries) handle.put(k, v);
     return handle;
   }
@@ -142,13 +147,17 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   }
 
   byIndex(index: string, by: string): readonly V[] {
-    const pks = this.postings.get(index)?.get(by) ?? [];
+    const buckets = this.postings.get(index);
+    // The indexes are fixed when the handle is built, so an unknown name is a lowering bug.
+    if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
+    const pks = buckets.get(by) ?? [];
     return pks.map((pk) => (this.slots.get(pk) as Slot<V>).value);
   }
 
-  /** The posting lists of `index`, as an encoded state record holds them. */
+  /** A copy of the posting lists of `index`, as an encoded state record holds them. */
   postingsOf(index: string): ReadonlyMap<string, readonly string[]> {
-    return this.postings.get(index) ?? new Map();
+    const buckets = this.postings.get(index) ?? new Map<string, string[]>();
+    return new Map([...buckets].map(([by, pks]) => [by, [...pks]]));
   }
 
   private addPosting(ix: Indexer<V>, key: string, slot: Slot<V>): void {
@@ -220,12 +229,6 @@ export interface StoreCacheHandle<V> extends StoreMapHandle<CacheEntry<V>> {
 
 /** The eager, in-memory `store Cache` handle. Expiry is judged by the caller. */
 export class StoreCache<V> extends StoreMap<CacheEntry<V>> implements StoreCacheHandle<V> {
-  static ofEntries<V>(entries: Iterable<readonly [string, CacheEntry<V>]>): StoreCache<V> {
-    const handle = new StoreCache<V>();
-    for (const [k, v] of entries) handle.put(k, v);
-    return handle;
-  }
-
   liveSize(now: number): number {
     let live = 0;
     for (const e of this.values()) if (e.exp > now) live += 1;

@@ -162,9 +162,11 @@ test("cache: liveSize counts the entries whose exp is after now", () => {
   assert.equal(c.size(), 3);
 });
 
-test("cache: ofEntries() builds a handle in the order given", () => {
-  const c = StoreCache.ofEntries([["b", { v: 1, exp: 9 }], ["10", { v: 2, exp: 9 }]]);
+test("cache: from() builds a handle in the order given", () => {
+  const c = StoreCache.from([["b", { v: 1, exp: 9 }], ["10", { v: 2, exp: 9 }]]);
   assert.deepEqual(c.keys(), ["b", "10"]);
+  assert.ok(c instanceof StoreCache);
+  assert.equal(c.liveSize(0), 2);
 });
 
 const stamped = (): StoreLog<string> => {
@@ -218,4 +220,34 @@ test("log: from() takes stamped entries as they are stored, and entries() is a c
   assert.deepEqual(l.values(), ["x", "y"]);
   (l.entries() as Array<unknown>).pop();
   assert.equal(l.size(), 2);
+});
+
+test("index: postingsOf returns a copy, and an undeclared index throws", () => {
+  const m = new StoreMap<Line>([byOrder]);
+  m.put("l1", { order: "o1", sku: "a" });
+  (m.postingsOf("order").get("o1") as string[]).push("bogus");
+  assert.deepEqual(m.byIndex("order", "o1").map((l) => l.sku), ["a"]);
+  assert.deepEqual([...m.postingsOf("order")], [["o1", ["l1"]]]);
+  assert.throws(() => m.byIndex("nope", "x"), /no index "nope"/);
+});
+
+test("index: several indexers are maintained independently", () => {
+  const bySku: Indexer<Line> = { index: "sku", of: (l) => l.sku };
+  const m = new StoreMap<Line>([byOrder, bySku]);
+  m.put("l1", { order: "o1", sku: "a" });
+  m.put("l2", { order: "o1", sku: "a" });
+  // Changes the order index value, keeps the sku one.
+  m.put("l1", { order: "o2", sku: "a" });
+  assert.deepEqual(m.byIndex("order", "o1").map((l) => l.order), ["o1"]);
+  assert.deepEqual(m.byIndex("order", "o2").length, 1);
+  assert.equal(m.byIndex("sku", "a").length, 2);
+});
+
+test("index: removing a key whose indexed value changed drops its current posting", () => {
+  const m = new StoreMap<Line>([byOrder]);
+  m.put("l1", { order: "o1", sku: "a" });
+  m.put("l1", { order: "o2", sku: "a" });
+  m.remove("l1");
+  assert.equal(m.postingsOf("order").size, 0);
+  assert.deepEqual(m.byIndex("order", "o2"), []);
 });
