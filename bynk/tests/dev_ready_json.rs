@@ -146,12 +146,6 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
             .arg(&dir)
             .arg("--base-port")
             .arg(port.to_string())
-            // `wrangler dev` always starts an inspector, on 9229 unless told
-            // otherwise, and `--inspect-port` alone is ignored for a lone
-            // worker: `--inspect` is what passes it on. Without it two of these
-            // sessions at once both bind 9229 and one dies with `Address
-            // already in use` (#3233).
-            .arg("--inspect")
             .arg("--inspect-port")
             .arg(inspector.to_string())
             .arg("--ready-json")

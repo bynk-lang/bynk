@@ -153,10 +153,12 @@ pub enum Command {
         #[arg(long)]
         inspect: bool,
         /// First inspector port, allocated per context exactly as `--base-port`
-        /// is (default 9229). Used under `--inspect`, and also whenever several
-        /// contexts are served, so their always-on inspectors do not collide.
-        #[arg(long, default_value_t = 9229)]
-        inspect_port: u16,
+        /// is. Always honoured, even for one context. Without it the base is
+        /// 9229 under `--inspect` or with several contexts, and a single
+        /// context without `--inspect` gets a free port of its own, so
+        /// sessions started together do not collide on 9229.
+        #[arg(long, value_name = "PORT")]
+        inspect_port: Option<u16>,
         /// Which `bynk.deploy.lock` environment `-- --remote` reads the KV id
         /// from. `dev` never provisions, so this only selects among what
         /// `bynk deploy --env NAME` already recorded — irrelevant without
