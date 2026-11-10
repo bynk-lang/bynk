@@ -157,10 +157,11 @@ fn run() -> ExitCode {
             each,
             lock,
         } => {
-            if !prepare_each(&input, each, lock.options()) {
+            let prepared = prepare_each(&input, each, lock.options());
+            if matches!(prepared, Prepared::Stop) {
                 return ExitCode::FAILURE;
             }
-            run_check(input, format, fix, emit, each)
+            prepared.finish(run_check(input, format, fix, emit, each))
         }
         Command::Openapi {
             input,
@@ -261,10 +262,11 @@ fn run() -> ExitCode {
         }
         Command::Fmt { args } => run_fmt(args),
         Command::Test { args, lock } => {
-            if !prepare_each(&args.input, args.each, lock.options()) {
+            let prepared = prepare_each(&args.input, args.each, lock.options());
+            if matches!(prepared, Prepared::Stop) {
                 return ExitCode::FAILURE;
             }
-            run_test(*args)
+            prepared.finish(run_test(*args))
         }
         Command::Fetch { path, lock, format } => {
             if matches!(format, bynk::cli::DeployFormatArg::Json) {
@@ -610,25 +612,74 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
     }
 }
 
+/// How a command goes on after preparing its dependencies (#3274).
+enum Prepared {
+    /// Run the command.
+    Run,
+    /// Preparing failed and the command must not run (the error is printed).
+    Stop,
+    /// Some `--each` project failed to prepare, and each said so by name; the
+    /// command still runs over every project, then fails.
+    RunThenFail,
+}
+
+impl Prepared {
+    /// The command's exit code, given what it returned.
+    fn finish(self, code: ExitCode) -> ExitCode {
+        match self {
+            Self::RunThenFail => ExitCode::FAILURE,
+            _ => code,
+        }
+    }
+}
+
 /// #3274: [`prepare`], or, for `--each` over a manifest-less directory of
 /// projects, each of its projects in turn: every one is its own lock root, as
-/// when it is run alone. An `--each` that is not an implicit workspace (a
-/// project, a workspace root, a file) prepares as it always did; the command
-/// itself reports what is wrong with the flag.
-fn prepare_each(input: &Path, each: bool, opts: bynk::fetch::FetchOptions) -> bool {
-    if !each {
-        return prepare(input, opts);
-    }
-    let Ok(Some(Ok(workspace))) = bynk_driver::workspace_at_each(input, true) else {
-        return prepare(input, opts);
+/// when it is run alone. One that fails to prepare is named and does not stop
+/// the others, so every project still runs and the run fails at the end. An
+/// `--each` that is not an implicit workspace (a project, a workspace root, a
+/// file, a directory that is refused) prepares nothing of its own: the command
+/// reports what is wrong with the flag, with no fetching or lock writes first.
+fn prepare_each(input: &Path, each: bool, opts: bynk::fetch::FetchOptions) -> Prepared {
+    let one = |dir: &Path| {
+        if prepare(dir, opts.clone()) {
+            Prepared::Run
+        } else {
+            Prepared::Stop
+        }
     };
-    if bynk_driver::project::is_workspace_root(input) {
-        return prepare(input, opts);
+    if !each {
+        return one(input);
     }
-    workspace
-        .members
-        .iter()
-        .all(|member| prepare(&bynk_driver::member_dir(input, member), opts.clone()))
+    match bynk_driver::workspace_at_each(input, true) {
+        Err(_) => Prepared::Run,
+        Ok(Some(Ok(workspace))) if !bynk_driver::project::is_workspace_root(input) => {
+            let mut failed = false;
+            for member in &workspace.members {
+                let dir = bynk_driver::member_dir(input, member);
+                let ok = match bynk::fetch::prepare(
+                    &find_project_root(&dir).unwrap_or_else(|| dir.clone()),
+                    &opts,
+                ) {
+                    Ok(done) => {
+                        report_prepared(&done);
+                        true
+                    }
+                    Err(e) => {
+                        eprintln!("bynk: {}: {e}", dir.display());
+                        false
+                    }
+                };
+                failed |= !ok;
+            }
+            if failed {
+                Prepared::RunThenFail
+            } else {
+                Prepared::Run
+            }
+        }
+        Ok(_) => one(input),
+    }
 }
 
 /// #2378: `bynk org`.

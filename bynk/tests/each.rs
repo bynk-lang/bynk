@@ -350,3 +350,48 @@ fn each_matches_a_root_workspace_manifest() {
     assert_eq!(implicit.0, 1);
     assert_eq!(implicit, real);
 }
+
+/// A project that cannot prepare its dependencies is named, and does not stop
+/// the others: every project still runs, and the run fails at the end.
+#[test]
+fn a_project_that_fails_to_prepare_does_not_stop_the_others() {
+    let root = projects_dir("prepare", &["alpha", "gamma"]);
+    write(
+        &root.join("beta/bynk.toml"),
+        "[project]\nname = \"beta\"\n\n[dependencies]\nmissing = { package = \"acme/missing\", path = \"../nowhere\" }\n",
+    );
+    write(&root.join("beta/src/shared.bynk"), GOOD);
+    let (code, _, err) = run(&root, &["check", "--each", "--locked"]);
+    assert_eq!(code, 1, "{err}");
+    assert_eq!(
+        headers(&err),
+        ["── alpha ──", "── beta ──", "── gamma ──"],
+        "every project ran: {err}"
+    );
+    assert!(
+        err.contains("bynk: beta:"),
+        "the failure names the project: {err}"
+    );
+}
+
+/// A misused flag is refused before anything is fetched or locked: at a project
+/// with a dependency it must not touch the lock.
+#[test]
+fn a_refused_each_prepares_nothing() {
+    let root = scratch("refused-prepare");
+    write(
+        &root.join("bynk.toml"),
+        "[project]\nname = \"p\"\n\n[dependencies]\nmissing = { package = \"acme/missing\", path = \"../nowhere\" }\n",
+    );
+    write(&root.join("src/shared.bynk"), GOOD);
+    let (code, _, err) = run(&root, &["check", "--each"]);
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        err.contains("`--each` applies to a directory of projects"),
+        "{err}"
+    );
+    assert!(
+        !err.contains("nowhere"),
+        "no dependency was resolved first: {err}"
+    );
+}
