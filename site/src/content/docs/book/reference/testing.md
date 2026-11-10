@@ -311,6 +311,9 @@ suite signup.api as system {
 }
 ```
 
+On a `@form` route the driver's own `content-type` is the default: a trailing `RequestHeaders`
+with a `Content-Type` line replaces it, which is how a case probes the route's `415`:
+`api.POST("/signup", Wire("{}"), RequestHeaders.of(["Content-Type: application/json"]))`.
 (On a [`@raw`](/book/reference/http/#raw-request-bodies) route, a `Wire` body is sent as
 `text/plain` instead, which is how a case probes the `415`.)
 

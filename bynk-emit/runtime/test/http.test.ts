@@ -907,7 +907,7 @@ test("queryObject: a repeated key on a single-valued field is refused", () => {
 });
 
 // #3276: a `@form` body — the query reader's leaf table, plus a browser's two quirks.
-const F = (name: string, kind: "string" | "int" | "bool" | "enum", list = false, option = false) =>
+const F = (name: string, kind: "string" | "decimal" | "int" | "bool" | "enum", list = false, option = false) =>
   ({ name, kind, list, option }) as const;
 
 test("formObject: reads each declared field, ignoring unknown keys", () => {
@@ -944,6 +944,12 @@ test("formObject: an empty value is absent for an Option and a non-String leaf, 
     F("n", "int"),
   ]);
   assert.deepEqual(r, { ok: true, value: { title: "" } });
+});
+
+test("formObject: an empty Decimal is absent, and a filled one passes on as text", () => {
+  assert.deepEqual(formObject("price=", [F("price", "decimal")]), { ok: true, value: {} });
+  assert.deepEqual(formObject("price=1.50", [F("price", "decimal")]), { ok: true, value: { price: "1.50" } });
+  assert.deepEqual(formObject("price=", [F("price", "decimal", false, true)]), { ok: true, value: {} });
 });
 
 test("formObject: a value that is not its field's type passes on as text; no trimming, no locale", () => {

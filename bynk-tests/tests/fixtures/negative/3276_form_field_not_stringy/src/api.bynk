@@ -2,9 +2,12 @@ context api
 
 type Address = { city: String }
 
+type Agreed = Bool
+
 type Signup = {
   address: Address,
   subscribed: Bool,
+  agreed: Agreed,
 }
 
 service api from http {

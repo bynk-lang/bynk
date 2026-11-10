@@ -2,6 +2,7 @@
 // context signup.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -60,6 +61,14 @@ export interface Search {
 export const Search = {
 };
 
+export interface Priced {
+  readonly price: { readonly coefficient: bigint; readonly scale: number };
+  readonly subscribed: boolean;
+}
+
+export const Priced = {
+};
+
 export const api = {
   async http_POST_signup(body: SignupForm, deps: {}): globalThis.Promise<HttpResult<string>> {
     const age = ((__d) => {
@@ -104,6 +113,12 @@ export const api = {
   },
   async http_POST_search(body: Search, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(body.q);
+  },
+  async http_POST_hook(body: Search, deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(`hook ${String(body.q)}`);
+  },
+  async http_POST_priced(body: Priced, deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(`${__bynkDecimalToString(body.price)} ${String(body.subscribed)}`);
   },
   async http_POST_json(body: Search, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(body.q);
@@ -167,6 +182,35 @@ export function __deserialise_Plan(json: __JsonValue, path: string = "$"): Resul
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_Priced(value: Priced): __JsonValue {
+  return {
+    price: __bynkDecimalToString(value.price) as __JsonValue,
+    subscribed: value.subscribed as __JsonValue,
+  };
+}
+
+export function __deserialise_Priced(json: __JsonValue, path: string = "$"): Result<Priced, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_price: __JsonValue = "price" in obj ? obj["price"] : "0.00";
+  if (typeof __d_price !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "decimal string", actual: typeof __d_price });
+  }
+  const __b_price = __bynkDecimalParseWire(__d_price);
+  if (__b_price.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "decimal string", actual: "invalid decimal" });
+  }
+  const __price = __b_price.value;
+  const __d_subscribed: __JsonValue = "subscribed" in obj ? obj["subscribed"] : false;
+  if (typeof __d_subscribed !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.subscribed`, expected: "boolean", actual: typeof __d_subscribed });
+  }
+  const __subscribed = __d_subscribed;
+  return Ok({ price: __price, subscribed: __subscribed } as Priced);
 }
 
 export function __serialise_Search(value: Search): __JsonValue {

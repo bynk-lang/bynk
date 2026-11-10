@@ -783,8 +783,10 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
 export interface QueryField {
   readonly name: string;
   /** The field's leaf wire form: `Int` and `Bool` are parsed, an `enum` is a
-   *  unit variant named by the value, everything else is the text itself. */
-  readonly kind: "string" | "int" | "bool" | "enum" | "file";
+   *  unit variant named by the value, a `Decimal` and everything else is the text
+   *  itself (`"decimal"` differs from `"string"` only in that a form's empty value
+   *  is absent for it). A `"file"` is a `@multipart` file part. */
+  readonly kind: "string" | "decimal" | "int" | "bool" | "enum" | "file";
   readonly list: boolean;
   /** An `Option` field: a present value is wrapped in `Some`, so a value that
    *  reads like the envelope (`?kind=None`) is still the leaf's, not `None`. */

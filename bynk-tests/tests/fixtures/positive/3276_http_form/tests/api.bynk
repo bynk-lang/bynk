@@ -92,4 +92,44 @@ suite signup.api as system {
 		let r <- api.POST("/search", Wire("q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
 		expect r is Rejected(PayloadTooLarge(_))
 	}
+
+	case "an empty Decimal is absent and takes its default" {
+		let r <- api.POST("/priced", Wire("price=&subscribed=on"))
+		expect r is Handled(Ok("0.00 true"))
+	}
+
+	case "a filled Decimal reads as its text" {
+		let r <- api.POST("/priced", Wire("price=1.50&subscribed=off"))
+		expect r is Handled(Ok("1.50 false"))
+	}
+
+	case "a route answers 415 to another content type" {
+		let r <- api.POST("/search", Wire("{\"q\":\"x\"}"), RequestHeaders.of(["Content-Type: application/json"]))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a form with a non-UTF-8 charset is a 415" {
+		let r <- api.POST("/search", Wire("q=x"), RequestHeaders.of(["Content-Type: application/x-www-form-urlencoded; charset=iso-8859-1"]))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "no content type is a 415" {
+		let r <- api.POST("/search", Wire("q=x"), RequestHeaders.of(["Content-Type: text/plain"]))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a signed webhook form is verified, then decoded" {
+		let ok <- api.POST("/hook", Search { q: "go" })
+		let wire <- api.POST("/hook", Wire("q=wired"))
+		expect ok is Ok("hook go")
+		expect wire is Handled(Ok("hook wired"))
+	}
+
+	case "an unsigned or forged webhook form is refused" {
+		let n = Search { q: "go" }
+		let none <- api.POST("/hook", n) by Nobody
+		let forged <- api.POST("/hook", n) by Forged
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+	}
 }

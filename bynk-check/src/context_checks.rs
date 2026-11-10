@@ -5365,6 +5365,20 @@ fn is_file_field_type(r: &TypeRef) -> bool {
     }
 }
 
+/// #3276: whether `r` is a `Bool`, or a refined or opaque type over one (the
+/// leaves a browser's unchecked checkbox leaves absent).
+fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    match r {
+        TypeRef::Base(b, _) => matches!(b, BaseType::Bool),
+        TypeRef::Named(id) => matches!(
+            types.get(&id.name).map(|t| &t.body),
+            Some(TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. })
+                if matches!(base, BaseType::Bool)
+        ),
+        _ => false,
+    }
+}
+
 /// #3276: the `body` of a `@form` handler is a record whose fields are each a
 /// form leaf: the typed `query` set (a `String`, `Int`, `Bool` or `Decimal`, a
 /// refined or opaque type over one, an enum), optionally in an `Option` or a
@@ -5419,7 +5433,7 @@ fn validate_form_body(
                     "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key); form keys are flat, so a nested record is not allowed"
                 }),
             );
-        } else if f.init.is_none() && matches!(&f.type_ref, TypeRef::Base(BaseType::Bool, _)) {
+        } else if f.init.is_none() && is_bool_leaf(&f.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.form_bool_without_default",

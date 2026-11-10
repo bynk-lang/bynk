@@ -884,8 +884,16 @@ pub(super) fn emit_system_http_support(
             // declaration, its params, the `new Request(...)` call, the
             // `await ... .fetch(...)` chain, the final `return
             // responseTo*(...)` — is real `bynk_ts` structure.
+            // #3276: a `@form` route's `content-type` is the driver's default, so a
+            // case's own `Content-Type` (a trailing `RequestHeaders`) overrides it,
+            // which is how a case probes the route's `415`.
+            let (spread_first, spread_last) = if is_form {
+                ("", headers_spread)
+            } else {
+                (headers_spread, "")
+            };
             let typed_options = ident(format!(
-                "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}{auth_header}{sig_header}}}, {body_init}}}",
+                "{{ method: {method:?}, headers: {{ {spread_first}{content_type}{spread_last}{auth_header}{sig_header}}}, {body_init}}}",
                 method = method.as_str(),
             ));
             // #2135: the bytes a signing driver signs: what it sends.
@@ -949,7 +957,7 @@ pub(super) fn emit_system_http_support(
                     content_type.clone()
                 };
                 let raw_options = ident(format!(
-                    "{{ method: {method:?}, headers: {{ {headers_spread}{raw_content_type}{auth_header}{sig_header}}}, {raw_body_init}}}",
+                    "{{ method: {method:?}, headers: {{ {spread_first}{raw_content_type}{spread_last}{auth_header}{sig_header}}}, {raw_body_init}}}",
                     method = method.as_str(),
                 ));
                 routes.push(sysdrive_driver(
