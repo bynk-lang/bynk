@@ -16,7 +16,10 @@ cargo xtask bench-runtime --sizes-only    # bundle sizes only: deterministic, no
 and 15). It builds a release `bynk`, installs this directory's pinned npm
 dependencies (no lockfile, nothing committed) and runs `bench.mjs`. Needs Node 22
 or later. Nothing is deployed: everything runs locally under workerd, through
-Miniflare.
+Miniflare. The npm install pins the top-level packages only (transitive
+dependencies float) and runs install scripts, since workerd downloads its
+binary; that is fine for a manual developer tool, and worth revisiting if this
+ever runs in CI.
 
 ## What is measured
 
@@ -52,8 +55,11 @@ not a strawman and not a golfed minimum:
   library, which would make the twin larger; the twin is therefore a floor on
   size, not a typical figure.
 - The same observable behaviour. Before measuring, the harness sends each route's
-  request to both variants and stops if the status codes differ (or, for
-  deterministic routes, the bodies). The twins validate what the Bynk types
+  request to both variants and stops if the status codes differ or the bodies
+  differ (compared sorted where row order is unspecified; a rate-limited route is
+  primed into the limit first, and compares status only because its body carries
+  a time). During measuring it stops if any timed request gets a status other
+  than the one its route names, so a row never silently times an error path. The twins validate what the Bynk types
   validate: a name of 1 to 40 characters, a non-empty client, string ids, a
   positive integer quantity.
 - Idiomatic Durable Objects. State is stored the way a hand-written object

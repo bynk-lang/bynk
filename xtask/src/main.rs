@@ -166,6 +166,13 @@ fn bench_runtime(args: &[String]) -> ExitCode {
             }
         }
     }
+    if pass.iter().any(|a| a == "--sizes-only") && pass.iter().any(|a| a == "--record") {
+        eprintln!(
+            "xtask bench-runtime: --sizes-only cannot be recorded (it would replace the full record with a partial one)"
+        );
+        usage();
+        return ExitCode::from(2);
+    }
     let root = repo_root();
     let dir = root.join("benchmarks/runtime");
     let steps: [(&str, Command); 2] = [

@@ -37,6 +37,12 @@ const REQUESTS = Number(flag("requests", 1000)); // timed requests per route per
 const WARMUP = Number(flag("warmup", 200)); // untimed requests before each timed batch
 const STARTUPS = Number(flag("startups", 15)); // fresh instances for the start-up figure
 const SIZES_ONLY = args.includes("--sizes-only");
+if (SIZES_ONLY && flag("record", null)) {
+  // A sizes-only run has no latency or start-up figures; recording it would
+  // replace the full record for this version with a partial one.
+  console.error("bench.mjs: --sizes-only cannot be combined with --record");
+  process.exit(2);
+}
 
 // ------------------------------------------------------------------ examples
 //
@@ -46,6 +52,10 @@ const SIZES_ONLY = args.includes("--sizes-only");
 
 const JSON_HEADERS = { "content-type": "application/json" };
 const post = (path, body) => [path, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }];
+
+// A client may make ten requests in a window before it is limited, so the
+// rotating-clients route uses enough clients that none is limited during a run.
+const CLIENTS = Math.ceil((WARMUP + REQUESTS) / 10);
 
 const SEED_ORDERS = 100;
 const SEED_LINES = 500;
@@ -57,9 +67,9 @@ const EXAMPLES = {
     durable: null,
     seed: null,
     routes: [
-      { name: "GET /", req: () => ["/"], exact: true },
-      { name: "GET /hello/:name", req: (i) => [`/hello/user${i % 50}`], exact: true },
-      { name: "GET /hello/:name (rejected: 41 characters)", req: () => ["/hello/" + "x".repeat(41)], exact: true },
+      { name: "GET /", req: () => ["/"], exact: true, status: 200 },
+      { name: "GET /hello/:name", req: (i) => [`/hello/user${i % 50}`], exact: true, status: 200 },
+      { name: "GET /hello/:name (rejected: 41 characters)", req: () => ["/hello/" + "x".repeat(41)], exact: true, status: 400 },
     ],
   },
   orders: {
@@ -68,17 +78,22 @@ const EXAMPLES = {
     durable: { BOOK: { className: "Book", useSQLite: true } },
     // 100 orders and 500 lines, so the joins and the grouping have work to do.
     seed: async (fetchOne, lineCount = SEED_LINES) => {
-      for (let o = 0; o < SEED_ORDERS; o++) await fetchOne(...post("/orders", { id: `o${o}`, customer: `customer${o % 10}` }));
+      const created = async (...request) => {
+        const status = await fetchOne(...request);
+        if (status !== 201) throw new Error(`seeding: ${request[0]} answered ${status}, expected 201`);
+      };
+      for (let o = 0; o < SEED_ORDERS; o++) await created(...post("/orders", { id: `o${o}`, customer: `customer${o % 10}` }));
       for (let l = 0; l < lineCount; l++) {
-        await fetchOne(...post("/lines", { id: `l${l}`, orderId: `o${l % SEED_ORDERS}`, sku: `sku${l % 7}`, qty: 1 + (l % 5) }));
+        await created(...post("/lines", { id: `l${l}`, orderId: `o${l % SEED_ORDERS}`, sku: `sku${l % 7}`, qty: 1 + (l % 5) }));
       }
     },
     routes: [
-      { name: "GET /orders/:id/lines (5 lines, indexed)", req: (i) => [`/orders/o${i % SEED_ORDERS}/lines`], exact: true },
-      { name: "GET /totals (group 500 lines)", req: () => ["/totals"], exact: false /* row order differs */ },
-      { name: "GET /sales (join 500 lines to 100 orders)", req: () => ["/sales"], exact: false },
-      { name: "POST /lines (accepted)", req: (i) => post("/lines", { id: `n${i}`, orderId: `o${i % SEED_ORDERS}`, sku: "sku0", qty: 1 }), exact: false, mutates: true },
-      { name: "POST /lines (rejected: qty 0)", req: (i) => post("/lines", { id: `r${i}`, orderId: "o0", sku: "sku0", qty: 0 }), exact: false },
+      { name: "GET /orders/:id/lines (5 lines, indexed)", req: (i) => [`/orders/o${i % SEED_ORDERS}/lines`], exact: true, status: 200 },
+      // Row order differs between the two, so the bodies are compared sorted.
+      { name: "GET /totals (group 500 lines)", req: () => ["/totals"], exact: "sorted", status: 200 },
+      { name: "GET /sales (join 500 lines to 100 orders)", req: () => ["/sales"], exact: "sorted", status: 200 },
+      { name: "POST /lines (accepted)", req: (i) => post("/lines", { id: `n${i}`, orderId: `o${i % SEED_ORDERS}`, sku: "sku0", qty: 1 }), exact: false, status: 201 },
+      { name: "POST /lines (rejected: qty 0)", req: (i) => post("/lines", { id: `r${i}`, orderId: "o0", sku: "sku0", qty: 0 }), exact: false, status: 400 },
     ],
   },
   "rate-limiter": {
@@ -87,11 +102,11 @@ const EXAMPLES = {
     durable: { LIMITER: { className: "Limiter", useSQLite: true } },
     seed: null,
     routes: [
-      // Fifty clients in rotation: each is its own Durable Object, so after the
-      // first lap this is a warm object per request.
-      { name: "GET /check/:client (50 clients, mostly allowed)", req: (i) => [`/check/client${i % 50}`], exact: false },
+      // Clients in rotation: each is its own Durable Object, so after the first
+      // lap this is a warm object per request.
+      { name: `GET /check/:client (${CLIENTS} clients in rotation, all allowed)`, req: (i) => [`/check/client${i % CLIENTS}`], exact: false, status: 200 },
       // One client over its limit: every request after the tenth is a 429.
-      { name: "GET /check/:client (one client, limited)", req: () => ["/check/hot"], exact: false },
+      { name: "GET /check/:client (one client, limited)", req: () => ["/check/hot"], exact: false, status: 429, prime: 10 },
     ],
   },
 };
@@ -261,9 +276,14 @@ async function measureRoutes(ex, scripts) {
       for (let r = 0; r < ex.routes.length; r++) {
         const route = ex.routes[r];
         let counter = run * 1_000_000 + r * 100_000; // distinct ids for mutating routes
-        for (let i = 0; i < WARMUP; i++) await timedFetch(mf, ...route.req(route.mutates ? counter++ : i));
+        for (let i = 0; i < WARMUP; i++) await timedFetch(mf, ...route.req(counter++));
         const times = [];
-        for (let i = 0; i < REQUESTS; i++) times.push((await timedFetch(mf, ...route.req(route.mutates ? counter++ : i))).ms);
+        for (let i = 0; i < REQUESTS; i++) {
+          const { ms, status } = await timedFetch(mf, ...route.req(counter++));
+          // Time only the path the route claims to time.
+          if (status !== route.status) throw new Error(`${route.name} (${variant}): answered ${status}, expected ${route.status}`);
+          times.push(ms);
+        }
         times.sort((x, y) => x - y);
         acc[variant][r].p50.push(percentile(times, 50));
         acc[variant][r].p99.push(percentile(times, 99));
@@ -301,7 +321,11 @@ async function measureStateScaling(ex, scripts) {
         const write = () => timedFetch(mf, ...post("/lines", { id: `w${n}`, orderId: `o${n++ % SEED_ORDERS}`, sku: "sku0", qty: 1 }));
         for (let i = 0; i < 50; i++) await write();
         const times = [];
-        for (let i = 0; i < SCALING_REQUESTS; i++) times.push((await write()).ms);
+        for (let i = 0; i < SCALING_REQUESTS; i++) {
+          const { ms, status } = await write();
+          if (status !== 201) throw new Error(`write scaling (${variant}, ${lines} lines): POST /lines answered ${status}, expected 201`);
+          times.push(ms);
+        }
         times.sort((x, y) => x - y);
         acc[variant].push(percentile(times, 50));
         await mf.dispose();
@@ -324,6 +348,9 @@ async function conformance(name, ex, scripts) {
     if (ex.seed) await ex.seed(fetchOne);
     answers[variant] = [];
     for (const route of ex.routes) {
+      // A route that needs earlier requests first (a limiter that must be over its
+      // limit) gets them, so the request compared is the one that is timed.
+      for (let i = 0; i < (route.prime ?? 0); i++) await mf.dispatchFetch(`http://bench.local${route.req(i)[0]}`, route.req(i)[1]).then((r) => r.arrayBuffer());
       const [path, init] = route.req(7);
       const res = await mf.dispatchFetch(`http://bench.local${path}`, init);
       const text = await res.text();
@@ -334,8 +361,10 @@ async function conformance(name, ex, scripts) {
   ex.routes.forEach((route, i) => {
     const a = answers.bynk[i];
     const b = answers.twin[i];
+    if (a.status !== route.status) throw new Error(`${name}: ${route.name}: Bynk answers ${a.status}, expected ${route.status}`);
     if (a.status !== b.status) throw new Error(`${name}: ${route.name}: Bynk answers ${a.status}, the twin ${b.status}`);
-    if (route.exact && a.body !== b.body) throw new Error(`${name}: ${route.name}: bodies differ\n  bynk: ${a.body}\n  twin: ${b.body}`);
+    const canon = (body) => (route.exact === "sorted" ? JSON.stringify(JSON.parse(body).map((row) => JSON.stringify(row)).sort()) : body);
+    if (route.exact && canon(a.body) !== canon(b.body)) throw new Error(`${name}: ${route.name}: bodies differ\n  bynk: ${a.body}\n  twin: ${b.body}`);
   });
 }
 
@@ -366,6 +395,7 @@ const report = {
 };
 
 
+const scriptsByExample = {};
 for (const [name, ex] of Object.entries(EXAMPLES)) {
   process.stderr.write(`${name}: compiling and bundling\n`);
   const bynkOut = compileBynk(name);
@@ -388,14 +418,13 @@ for (const [name, ex] of Object.entries(EXAMPLES)) {
     entry.bynk.routes = routes.bynk;
     entry.twin.routes = routes.twin;
   }
+  scriptsByExample[name] = measured.scripts;
   report.examples[name] = entry;
 }
 
 if (!SIZES_ONLY) {
   process.stderr.write("orders: measuring how a write scales with state size\n");
-  const bynkOut = compileBynk("orders");
-  const m = await measureSizes("orders", EXAMPLES.orders, bynkOut);
-  report.writeScaling = await measureStateScaling(EXAMPLES.orders, m.scripts);
+  report.writeScaling = await measureStateScaling(EXAMPLES.orders, scriptsByExample.orders);
 }
 
 // Growth: one context, K groups of (refined type, record, agent, route).
