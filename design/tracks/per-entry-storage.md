@@ -137,14 +137,18 @@ Cloudflare still links; the API pages do not restate them): while a storage
 operation runs, no other event is delivered; an `await` on non-storage I/O does
 not close the input gate.
 
-Local workerd, a handler that loads, awaits, then commits `n + 1` under `"state"`,
-with five concurrent requests:
+Local workerd, a handler that loads, awaits, then commits `n + 1` under `"state"`.
+Each run read `n` once before and once after five concurrent requests had all
+completed (each row's starting `n` is the previous row's end plus the reads); the
+"after" read is itself one further increment, so the expected change is 5 + 1 = 6:
 
-| Await between load and commit | Expected increments | Observed |
+| Await between load and commit | Expected change | Observed change |
 |---|---|---|
-| none | 6 | 6 |
-| a 200 ms timer | 6 | 2 (four updates lost) |
-| a `fetch()` | 6 | 5 (one lost) |
+| none | 6 | 6 (n 2 → 8) |
+| a 200 ms timer | 6 | 2 (n 10 → 12; four updates lost) |
+| a `fetch()` | 6 | 5 (n 14 → 19; one update lost) |
+
+One run per row, so the counts show that updates can be lost, not how often.
 
 So **a lost update on the single `"state"` record is possible today** whenever a
 handler awaits a non-storage effect between `loadState` and `commitState`, which
@@ -211,8 +215,12 @@ Numbers are assigned at merge.
   and only for builds with a lock.
 - **Mitigation:** slice 0 ships a build that faults on an unknown `__layout` first;
   the writer flips only in a later release; downgrade across the flip is explicitly
-  unsupported and the changelog says so. The upgrade is one atomic flush, so a
-  crash mid-upgrade leaves the old record intact.
+  unsupported and the changelog says so. A crash mid-upgrade must leave the old
+  record intact: the upgrade is atomic through the slice-1 flush mechanism, or, if
+  Q4 shows a large record does not fit one flush (an 8 MB `Map` can mean thousands
+  of entry keys, beyond one 128-key batch), it is resumable and idempotent
+  (`__layout: "upgrading"`). Which of the two holds is not settled until Q2's
+  mechanism and Q4 are closed.
 - **Verification:** a fixture that presents an unknown layout and asserts a fault
   with nothing written; the refused-commit regression against the new flush; a live
   check on a real Worker before the flip.
@@ -227,6 +235,18 @@ Live status is on the spine. Mirror:
 - [ ] Slice 3 — index postings
 - [ ] Slice 4 — `Cache` and `Log`
 - [ ] Slice 5 — sweep reporting, docs, live check
+
+### Q6 — `Cache` housekeeping: expired entries are never deleted today
+
+Reported by another worker documenting the size ceiling: a `Cache` with `@ttl`
+hides expired entries on read (ADR 0113) but never deletes them, so a `Cache`
+keyed by many distinct keys grows toward the single-value ceiling regardless of
+expiry. Decision G of #3189 already keeps lazy check-on-read eviction and adds
+bounded reaping at commit through the `x/` expiry index, which would fix this as a
+side effect of slice 4. Not decided here: whether reaping at commit is enough, or
+whether deletion on read or an alarm (still deferred by ADR 0113) is wanted. Slice
+4's proposal settles it; until then the ceiling note must say a `Cache` grows
+without bound.
 
 ## 10. Non-goals
 
