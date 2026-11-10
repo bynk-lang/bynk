@@ -5824,39 +5824,39 @@ fn classify_agent_store<'a>(
     }
 }
 
-pub(crate) fn emit_agent(
+/// The names of an agent's state registry and fresh-state factory.
+struct AgentStateNames {
+    /// The per-agent state registry (`__agentStates…`).
+    registry: String,
+    /// The fresh-state factory (`__zeroOf<Agent>State`).
+    zero_fn: String,
+}
+
+/// The agent's state record, as the TypeScript the rest of the agent reads: the
+/// `<Agent>State` interface, the per-agent state registry, and the fresh-state
+/// factory (#3167). Pushes those three declarations, in that order, onto `stmts`.
+/// Returns the registry's and the factory's names, which `loadState`, the
+/// rehydration step and the test reset refer to.
+fn emit_agent_state_record(
     a: &AgentDecl,
-    state: &[StoreFieldIr],
+    layout: &AgentStoreLayout,
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    source_text: &str,
-) -> Vec<bynk_ts::TsStmt> {
+    stmts: &mut Vec<bynk_ts::TsStmt>,
+) -> AgentStateNames {
     let tys = commons.tys();
-    let mut stmts = Vec::new();
-    if let Some(doc) = a.documentation.as_deref() {
-        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
-    }
     let state_ty = format!("{}State", a.name.name);
     let AgentStoreLayout {
         store_field_ty,
         effective_fields,
-        is_workers,
         held_maps,
-        held_maps_ts,
         store_map_fields,
-        map_names,
-        map_value_ts,
         store_map_indexes,
-        store_set_fields,
         set_field_names,
-        set_names,
         store_cache_fields,
-        cache_ttls,
         store_log_fields,
-        log_retains,
-        log_value_ts,
-    } = classify_agent_store(a, state, commons, ctx);
-    let is_store_agent = true;
+        ..
+    } = layout;
     // 1) State record type.
     //
     // Arc C, slice 19 (#1367): the first of step (9)'s own proposed 5-6
@@ -5879,7 +5879,7 @@ pub(crate) fn emit_agent(
     // See its own construction below for the actual choice, not just this
     // note.
     let mut members: Vec<bynk_ts::TsTypeMember> = Vec::new();
-    for f in &effective_fields {
+    for f in effective_fields {
         let cell_ty = match store_field_ty.get(f.name.name.as_str()) {
             Some(StoreKindIr::Cell(t)) => *t,
             other => panic!(
@@ -5895,7 +5895,7 @@ pub(crate) fn emit_agent(
             readonly: true,
         });
     }
-    for (name, _) in &store_map_fields {
+    for (name, _) in store_map_fields {
         let value_ty = match store_field_ty.get(name.name.as_str()) {
             Some(StoreKindIr::Map(_, v)) => *v,
             other => panic!(
@@ -5918,7 +5918,7 @@ pub(crate) fn emit_agent(
         });
     }
     // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`.
-    for (name, _) in &held_maps {
+    for (name, _) in held_maps {
         members.push(bynk_ts::TsTypeMember::Prop {
             name: name.name.clone(),
             ty: bynk_ts::TsType::named_with_args(
@@ -5932,7 +5932,7 @@ pub(crate) fn emit_agent(
             readonly: true,
         });
     }
-    for name in &set_field_names {
+    for name in set_field_names {
         members.push(bynk_ts::TsTypeMember::Prop {
             name: name.to_string(),
             ty: bynk_ts::TsType::named_with_args(
@@ -5975,7 +5975,7 @@ pub(crate) fn emit_agent(
             });
         }
     }
-    for (name, _, _) in &store_cache_fields {
+    for (name, _, _) in store_cache_fields {
         let value_ty = match store_field_ty.get(name.name.as_str()) {
             Some(StoreKindIr::Cache(_, v, _)) => *v,
             other => panic!(
@@ -6010,7 +6010,7 @@ pub(crate) fn emit_agent(
             readonly: true,
         });
     }
-    for (name, _, _) in &store_log_fields {
+    for (name, _, _) in store_log_fields {
         let elem_ty = match store_field_ty.get(name.name.as_str()) {
             Some(StoreKindIr::Log(t, _)) => *t,
             other => panic!(
@@ -6104,7 +6104,7 @@ pub(crate) fn emit_agent(
     // debug-build crash for a `store` field initialised with a `match` or a
     // statement-shaped/`is`-binding `if`, not merely a formatting nit).
     let mut zero_record_has_multiline_value = false;
-    for f in &effective_fields {
+    for f in effective_fields {
         let val = if let Some(init) = &f.init {
             let mut pre = Pre::new();
             let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
@@ -6147,14 +6147,14 @@ pub(crate) fn emit_agent(
         ));
     }
     // A fresh `store Map`/`store Set`/`store Cache` is the empty record.
-    for (name, _) in &store_map_fields {
+    for (name, _) in store_map_fields {
         zero_entries.push(bynk_ts::TsObjectEntry::Prop(
             name.name.clone(),
             bynk_ts::TsExpr::object(vec![]),
         ));
     }
     // A fresh held `Map[K, Connection]` (a `K → connId` record) is empty too.
-    for (name, _) in &held_maps {
+    for (name, _) in held_maps {
         zero_entries.push(bynk_ts::TsObjectEntry::Prop(
             name.name.clone(),
             bynk_ts::TsExpr::object(vec![]),
@@ -6169,20 +6169,20 @@ pub(crate) fn emit_agent(
             ));
         }
     }
-    for name in &set_field_names {
+    for name in set_field_names {
         zero_entries.push(bynk_ts::TsObjectEntry::Prop(
             name.to_string(),
             bynk_ts::TsExpr::object(vec![]),
         ));
     }
-    for (name, _, _) in &store_cache_fields {
+    for (name, _, _) in store_cache_fields {
         zero_entries.push(bynk_ts::TsObjectEntry::Prop(
             name.name.clone(),
             bynk_ts::TsExpr::object(vec![]),
         ));
     }
     // A fresh `store Log` is the empty array.
-    for (name, _, _) in &store_log_fields {
+    for (name, _, _) in store_log_fields {
         zero_entries.push(bynk_ts::TsObjectEntry::Prop(
             name.name.clone(),
             bynk_ts::TsExpr::array(vec![]),
@@ -6217,6 +6217,44 @@ pub(crate) fn emit_agent(
     );
     zero_fn_decl.no_blank_before = true;
     stmts.push(zero_fn_decl);
+    AgentStateNames { registry, zero_fn }
+}
+
+pub(crate) fn emit_agent(
+    a: &AgentDecl,
+    state: &[StoreFieldIr],
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+) -> Vec<bynk_ts::TsStmt> {
+    let tys = commons.tys();
+    let mut stmts = Vec::new();
+    if let Some(doc) = a.documentation.as_deref() {
+        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+    }
+    let state_ty = format!("{}State", a.name.name);
+    let layout = classify_agent_store(a, state, commons, ctx);
+    let AgentStateNames { registry, zero_fn } =
+        emit_agent_state_record(a, &layout, commons, ctx, &mut stmts);
+    let AgentStoreLayout {
+        effective_fields,
+        is_workers,
+        held_maps,
+        held_maps_ts,
+        store_map_fields,
+        map_names,
+        map_value_ts,
+        store_map_indexes,
+        store_set_fields,
+        set_names,
+        store_cache_fields,
+        cache_ttls,
+        store_log_fields,
+        log_retains,
+        log_value_ts,
+        ..
+    } = layout;
+    let is_store_agent = true;
     // v0.96 (ADR 0124): the rehydration validation gate. `loadState` validates a
     // *loaded* (merged) state against the current type definition before any
     // handler reads it — the load-time twin of the commit-time invariant gate.
