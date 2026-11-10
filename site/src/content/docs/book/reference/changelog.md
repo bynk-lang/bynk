@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.540.1** | The emitter lowers a built-in method call's kernel dispatch in `lower_kernel_method_call` and its UFCS fallback in `lower_ufcs_method_call`, the first step of splitting `lower_method_call` per receiver kind (#3167) |
 | **v0.540.0** | Expired `Cache` entries are deleted when an agent commits, no longer only hidden, so a `Cache` no longer grows without bound (per-entry storage, slice 4) |
 | **v0.539.5** | The emitter declares an agent's construction factory in `emit_agent_factory` and its history-property driver in `emit_agent_history_driver`, completing the split of `emit_agent` (#3167) |
 | **v0.539.4** | The project analysis collects each file's diagnostics, references, hints, locals, expression types and requirements into per-file scratch sinks before folding them together, the unit of output a later slice can reuse between editor rounds; no behaviour changes |
