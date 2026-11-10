@@ -209,3 +209,66 @@ fn fmt_still_formats_a_directory_of_projects() {
     assert_eq!(code, 1, "stderr:\n{err}");
     assert!(err.contains("beta.bynk"), "{err}");
 }
+
+/// `fmt` inside a project that holds a nested project formats the nested
+/// project's files too, as it always has: it is unaffected by the boundary rule
+/// that `check` and `test` follow.
+#[test]
+fn fmt_inside_a_project_still_reaches_a_nested_project() {
+    let root = scratch("fmt-inside");
+    write(
+        &root.join("bynk.toml"),
+        "[project]\nname = \"outer\"\n\n[paths]\ninclude = [\".\"]\n",
+    );
+    project(&root.join("vendor"), "inner");
+    write(
+        &root
+            .join("vendor")
+            .join("inner")
+            .join("src")
+            .join("inner.bynk"),
+        "commons inner {  fn   dbl(n:Int)->Int{n+n}  }\n",
+    );
+    let (code, _out, err) = run(&root, &["fmt", "--check", "."]);
+    assert_eq!(code, 1, "stderr:\n{err}");
+    assert!(err.contains("inner.bynk"), "{err}");
+}
+
+/// The same inside a workspace member.
+#[test]
+fn fmt_in_a_workspace_member_still_reaches_a_nested_project() {
+    let root = projects_dir("fmt-member", &["alpha"]);
+    write(
+        &root.join("bynk.toml"),
+        "[workspace]\nmembers = [\"alpha\"]\n",
+    );
+    write(
+        &root.join("alpha").join("bynk.toml"),
+        "[project]\nname = \"alpha\"\n\n[paths]\ninclude = [\".\"]\n",
+    );
+    project(&root.join("alpha").join("vendor"), "inner");
+    write(
+        &root
+            .join("alpha")
+            .join("vendor")
+            .join("inner")
+            .join("src")
+            .join("inner.bynk"),
+        "commons inner {  fn   dbl(n:Int)->Int{n+n}  }\n",
+    );
+    let (code, _out, err) = run(&root, &["fmt", "--check", "."]);
+    assert_eq!(code, 1, "stderr:\n{err}");
+    assert!(err.contains("inner.bynk"), "{err}");
+}
+
+/// `compile` shares `check`'s rooting, so it refuses a directory of projects too.
+#[test]
+fn compile_refuses_a_directory_of_projects() {
+    let root = projects_dir("compile", &["alpha", "beta"]);
+    let (code, _out, err) = run(&root, &["compile", ".", "--output", "out-compile"]);
+    assert_eq!(code, 1, "stderr:\n{err}");
+    assert!(
+        err.contains("not a project") && err.contains("`alpha`"),
+        "{err}"
+    );
+}

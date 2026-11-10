@@ -226,9 +226,19 @@ pub fn read_bynk_tree_split(
     trees: &[PathBuf],
     excludes: &[PathBuf],
 ) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
+    read_bynk_tree_split_with(trees, excludes, true)
+}
+
+/// [`read_bynk_tree_split`], with `respect_projects` choosing whether a nested
+/// project (#3242) is skipped (`true`) or walked through (`false`, for `fmt`).
+fn read_bynk_tree_split_with(
+    trees: &[PathBuf],
+    excludes: &[PathBuf],
+    respect_projects: bool,
+) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
     let mut out = HashMap::new();
     for (i, root) in trees.iter().enumerate() {
-        match read_bynk_tree(root, excludes) {
+        match walk_bynk_tree(root, excludes, respect_projects) {
             Ok(files) => out.extend(files),
             Err(e)
                 if i > 0 && &e.path == root && e.source.kind() == std::io::ErrorKind::NotFound => {}
@@ -247,6 +257,21 @@ pub fn read_bynk_tree_split(
 /// "which files are in this project", shared by the CLI's own walk and
 /// `compile_project`'s in-memory partitioning, so the two can no longer drift.
 pub fn sources_for_roots(roots: &Roots) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
+    sources_for_roots_with(roots, true)
+}
+
+/// [`sources_for_roots`] for `bynk fmt`, which formats through a nested project
+/// as it always has (#3242): each file takes its own project's `[fmt]` settings.
+pub fn sources_for_roots_across_projects(
+    roots: &Roots,
+) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
+    sources_for_roots_with(roots, false)
+}
+
+fn sources_for_roots_with(
+    roots: &Roots,
+    respect_projects: bool,
+) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
     let mut trees: Vec<PathBuf> = roots.trees().into_iter().map(|(root, _)| root).collect();
     // #2223: and each path dependency's trees, computed as `compile_project`
     // computes them, so its partitioning finds every dependency file a home.
@@ -257,7 +282,7 @@ pub fn sources_for_roots(roots: &Roots) -> Result<HashMap<PathBuf, String>, Disc
                 .map(|(root, _)| root),
         );
     }
-    read_bynk_tree_split(&trees, &roots.excludes())
+    read_bynk_tree_split_with(&trees, &roots.excludes(), respect_projects)
 }
 
 #[cfg(test)]

@@ -193,7 +193,7 @@ fn project_sources(
             return Err(ProjectPathsError::WorkspaceRoot.into());
         }
         let paths = try_read_project_paths_with(input, &overlay)?;
-        let sources = split_sources(input, &paths)?;
+        let sources = split_sources(input, &paths, projects)?;
         if projects == Projects::Separate {
             note_skipped_projects(
                 input,
@@ -299,7 +299,7 @@ fn options_for_split(
     input: &Path,
     paths: project::ProjectPaths,
 ) -> Result<CompileOptions, discovery::DiscoveryError> {
-    let sources = split_sources(input, &paths)?;
+    let sources = split_sources(input, &paths, Projects::Separate)?;
     Ok(CompileOptions::split(input.to_path_buf(), paths).sources(sources))
 }
 
@@ -312,12 +312,16 @@ fn options_for_split(
 fn split_sources(
     input: &Path,
     paths: &project::ProjectPaths,
+    projects: Projects,
 ) -> Result<HashMap<PathBuf, String>, discovery::DiscoveryError> {
     let roots = project::Roots::Split {
         project_root: input.to_path_buf(),
         paths: paths.clone(),
     };
-    discovery::sources_for_roots(&roots)
+    match projects {
+        Projects::Separate => discovery::sources_for_roots(&roots),
+        Projects::AsOneTree => discovery::sources_for_roots_across_projects(&roots),
+    }
 }
 
 /// Why [`try_project_options`] could not produce a usable [`CompileOptions`]:

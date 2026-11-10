@@ -89,7 +89,7 @@ bynk: note: skipped `vendor/inner`: it has its own bynk.toml, so it is a separat
 ```
 
 A directory that is **not** a project, with no `bynk.toml` here or in any
-directory above, but several projects below it (a repository of independent
+directory above, but one or more projects below it (a repository of independent
 projects, say), has no single program to compile. `bynk check` and `bynk test`
 refuse there, name the projects (the first five, then a count), and exit non-zero:
 
