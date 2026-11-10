@@ -5487,15 +5487,40 @@ fn declaration_location(
     format!("{}:{line}:{col}", ctx.identity_path.replace('\\', "/"))
 }
 
-pub(crate) fn emit_agent(
-    a: &AgentDecl,
-    state: &[StoreFieldIr],
+/// How an agent's `store` fields classify, read once from the agent's
+/// declaration and the checker's resolved [`StoreFieldIr`]s (#3167): the `Cell`
+/// fields that form the state record, the plain and held `Map`s, the `Set`s,
+/// `Cache`s and `Log`s, and the per-field facts (TS types, TTLs, retain windows,
+/// secondary indexes) the state record, its load/commit and the handler
+/// lowering each need. Computed once so those steps share one classification.
+pub(crate) struct AgentStoreLayout<'a> {
+    pub(crate) store_field_ty: HashMap<&'a str, &'a StoreKindIr>,
+    pub(crate) effective_fields: Vec<RecordField>,
+    pub(crate) is_workers: bool,
+    pub(crate) held_maps: Vec<(&'a Ident, &'a TypeRef)>,
+    pub(crate) held_maps_ts: HashMap<String, String>,
+    pub(crate) store_map_fields: Vec<(&'a Ident, &'a TypeRef)>,
+    pub(crate) map_names: HashSet<String>,
+    pub(crate) map_value_ts: HashMap<String, String>,
+    pub(crate) store_map_indexes: HashMap<String, Vec<String>>,
+    pub(crate) store_set_fields: Vec<(&'a Ident, &'a TypeRef)>,
+    pub(crate) set_field_names: Vec<&'a str>,
+    pub(crate) set_names: HashSet<String>,
+    pub(crate) store_cache_fields: Vec<(&'a Ident, &'a TypeRef, i64)>,
+    pub(crate) cache_ttls: HashMap<String, i64>,
+    pub(crate) store_log_fields: Vec<(&'a Ident, &'a TypeRef, Option<i64>)>,
+    pub(crate) log_retains: HashMap<String, Option<i64>>,
+    pub(crate) log_value_ts: HashMap<String, String>,
+}
+
+/// Classify an agent's `store` fields (see [`AgentStoreLayout`]).
+fn classify_agent_store<'a>(
+    a: &'a AgentDecl,
+    state: &'a [StoreFieldIr],
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
-    source_text: &str,
-) -> Vec<bynk_ts::TsStmt> {
+) -> AgentStoreLayout<'a> {
     let tys = commons.tys();
-    let mut stmts = Vec::new();
     // #1187's Agent state-field slice: the checker-resolved TyId for each
     // Cell/Map/Cache/Log field's element type, keyed by field name — read
     // once here so the state-interface block below can render through
@@ -5503,17 +5528,13 @@ pub(crate) fn emit_agent(
     // this lookup at every one of its four sites.
     let store_field_ty: HashMap<&str, &StoreKindIr> =
         state.iter().map(|f| (f.field.as_str(), &f.kind)).collect();
-    if let Some(doc) = a.documentation.as_deref() {
-        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
-    }
-    let state_ty = format!("{}State", a.name.name);
+    let is_store_agent = true;
     // v0.81 (storage track, ADR 0109): an agent's `Cell` fields ARE its state
     // record, so the whole state machinery (interface, zero factory, load/commit,
     // invariant gate) derives the record fields from the cells. Each `Cell[T]`
     // field becomes a `T`-typed record field carrying the cell's initialiser.
     // Handler bodies lower as bare reads / `:=` over `__state`, with an implicit
     // commit at handler end.
-    let is_store_agent = true;
     // P6.53 (design/tracks/the-ir.md §6b): membership reads `state`'s own
     // typed `StoreKindIr::Cell` instead of a string comparison against
     // `f.kind.head.name` — a user type genuinely named `Cell` (with a
@@ -5782,6 +5803,60 @@ pub(crate) fn emit_agent(
             (n.name.clone(), ts)
         })
         .collect();
+    AgentStoreLayout {
+        store_field_ty,
+        effective_fields,
+        is_workers,
+        held_maps,
+        held_maps_ts,
+        store_map_fields,
+        map_names,
+        map_value_ts,
+        store_map_indexes,
+        store_set_fields,
+        set_field_names,
+        set_names,
+        store_cache_fields,
+        cache_ttls,
+        store_log_fields,
+        log_retains,
+        log_value_ts,
+    }
+}
+
+pub(crate) fn emit_agent(
+    a: &AgentDecl,
+    state: &[StoreFieldIr],
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+) -> Vec<bynk_ts::TsStmt> {
+    let tys = commons.tys();
+    let mut stmts = Vec::new();
+    if let Some(doc) = a.documentation.as_deref() {
+        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+    }
+    let state_ty = format!("{}State", a.name.name);
+    let AgentStoreLayout {
+        store_field_ty,
+        effective_fields,
+        is_workers,
+        held_maps,
+        held_maps_ts,
+        store_map_fields,
+        map_names,
+        map_value_ts,
+        store_map_indexes,
+        store_set_fields,
+        set_field_names,
+        set_names,
+        store_cache_fields,
+        cache_ttls,
+        store_log_fields,
+        log_retains,
+        log_value_ts,
+    } = classify_agent_store(a, state, commons, ctx);
+    let is_store_agent = true;
     // 1) State record type.
     //
     // Arc C, slice 19 (#1367): the first of step (9)'s own proposed 5-6
