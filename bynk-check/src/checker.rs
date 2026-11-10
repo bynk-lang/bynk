@@ -83,7 +83,7 @@ pub use calls::{
 };
 pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
-pub use refinements::{locale_tag_accepts, locale_tag_pattern, zero_value_ts};
+pub use refinements::{ZeroValue, is_zeroable, locale_tag_accepts, locale_tag_pattern, zero_value};
 
 // ==== Type representation ====
 

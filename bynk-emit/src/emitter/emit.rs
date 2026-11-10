@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
+use super::zero_value::zero_value_ts;
 use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
@@ -6005,7 +6006,7 @@ pub(crate) fn emit_agent(
                 format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
             }
         } else {
-            bynk_check::checker::zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types)
+            zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types)
                 .unwrap_or_else(|| "undefined as never".to_string())
         };
         if val.contains('\n') {
@@ -6417,11 +6418,7 @@ pub(crate) fn emit_agent(
                             p = present(n)
                         ));
                     } else {
-                        match bynk_check::checker::zero_value_ts(
-                            &f.type_ref,
-                            f.refinement.as_ref(),
-                            &commons.types,
-                        ) {
+                        match zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types) {
                             Some(z) => entries.push(format!(
                                 "{n}: {p} ? {raw} : {zw}",
                                 p = present(n),
@@ -7908,7 +7905,7 @@ pub(crate) fn emit_agent(
             .collect();
         let driver = format!("__bynkDriveHistory_{}", a.name.name);
         let factory = agent_factory_name(&a.name.name);
-        let key_val = bynk_check::checker::zero_value_ts(&a.key_type, None, &commons.types)
+        let key_val = zero_value_ts(&a.key_type, None, &commons.types)
             .unwrap_or_else(|| "undefined as never".to_string());
         // P7.2: `call`'s real shape is a discriminated union across `hs` (one
         // variant per handler, built further down from `history_variant_tag` +

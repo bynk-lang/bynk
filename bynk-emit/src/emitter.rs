@@ -91,6 +91,7 @@ mod cmp;
 mod codec;
 mod lower;
 pub(crate) mod runtime_use;
+mod zero_value;
 pub use lower::*;
 pub use runtime_use::RuntimeUse;
 pub mod emit;
