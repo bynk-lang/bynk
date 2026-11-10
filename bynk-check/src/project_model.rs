@@ -162,6 +162,14 @@ impl ErrorSink {
         errs: impl IntoIterator<Item = CompileError>,
     ) {
         self.register_parsed(parsed);
+        self.extend_attributed(errs);
+    }
+    /// [`Self::extend_attributed_by_span`] for a caller that has already called
+    /// [`Self::register_parsed`] on the final `parsed` set. Registering hashes
+    /// every file's path, so a caller that attributes once per unit (the
+    /// per-unit check loops) registers once up front and calls this: doing it
+    /// per call made that loop cost units times files (#3243).
+    pub fn extend_attributed(&mut self, errs: impl IntoIterator<Item = CompileError>) {
         for e in errs {
             let file = self.files.get(&e.span.file).cloned();
             self.push_for(file.as_deref(), e);
@@ -6373,6 +6381,29 @@ mod label_attribution_tests {
                 LabelFile::Unavailable,
             ]
         );
+    }
+
+    /// #3243: attributing against files registered once up front — what the
+    /// per-unit check loops do — puts an error in the file its span names, and
+    /// leaves one whose span matches no registered file unattributed.
+    #[test]
+    fn extend_attributed_uses_the_files_registered_up_front() {
+        let known = FileId(40);
+        let mut sink = ErrorSink::new();
+        sink.register_file(known, PathBuf::from("src/a.bynk"));
+        sink.extend_attributed([CompileError::new(
+            "bynk.test.known",
+            Span::new_in(known, 0, 1),
+            "in a registered file",
+        )]);
+        sink.extend_attributed([CompileError::new(
+            "bynk.test.unknown",
+            Span::new_in(FileId(41), 0, 1),
+            "in no registered file",
+        )]);
+        let all = sink.into_all();
+        assert_eq!(all[0].source_path.as_deref(), Some(Path::new("src/a.bynk")));
+        assert_eq!(all[1].source_path, None);
     }
 
     /// #1956: a label into a first-party unit carries that unit's reserved
