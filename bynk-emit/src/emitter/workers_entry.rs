@@ -1097,12 +1097,19 @@ pub fn emit_worker_entry(
     // `handlers.ts` must be visible here.
     let mut agent_names: Vec<&String> = table.agents.keys().collect();
     agent_names.sort();
-    if !agent_names.is_empty() {
+    //
+    // #3202: each is exported wrapped, so the instance runs the handlers that
+    // reach it one at a time (`__serialiseAgentClass`, `runtime/src/agent.ts`).
+    for name in &agent_names {
         header_decls.push(TsStmt::decl(
-            TsDecl::ReExport {
-                names: agent_names.iter().map(|n| n.to_string()).collect(),
-                from: "./handlers.js".to_string(),
-            },
+            TsDecl::Export(Box::new(TsDecl::ConstDecl {
+                name: name.to_string(),
+                ty: None,
+                init: call(
+                    ident("__serialiseAgentClass"),
+                    vec![member(ident("handlers"), name.as_str())],
+                ),
+            })),
             None,
         ));
     }
@@ -1889,6 +1896,9 @@ pub fn emit_worker_entry(
         append_missing_bindings(&mut imports, crate::emitter::INT_RUNTIME_IMPORTS);
     }
     append_missing_bindings(&mut imports, &runtime_use.cmp_imports());
+    if !agent_names.is_empty() {
+        append_missing_bindings(&mut imports, ", __serialiseAgentClass");
+    }
     for stmt in
         crate::emitter::runtime_files::runtime_import_stmts(false, &imports, "../../runtime.js")
     {
