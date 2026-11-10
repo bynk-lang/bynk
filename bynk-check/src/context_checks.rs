@@ -5370,7 +5370,7 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
 }
 
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its
-/// declaration's first-party span (as [`is_crypto_key_type`] finds a key), so a
+/// declaration's first-party span (as `is_crypto_key_type` finds a key), so a
 /// user type that happens to be called `File` is not mistaken for it.
 pub fn is_std_file_type(
     name: &str,
