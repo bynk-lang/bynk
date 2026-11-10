@@ -89,7 +89,33 @@ fn check_round(
         "the canonical report is not deterministic ({ctx}): {}",
         first_difference(&fresh_report, &again)
     );
+    dump_digest(ctx, &fresh_report);
     fresh.errors.iter().map(|e| e.error.category).collect()
+}
+
+/// With `BYNK_ORACLE_DUMP=<file>` set, append `<ctx> <digest of the report>` for
+/// every round. Run the suite on two builds and diff the files to show a
+/// refactor of the analysis changed nothing observable: the fresh-vs-memoised
+/// comparison above cannot, since both sides run the code under test.
+///
+/// The digest is only stable on one toolchain (`DefaultHasher`'s algorithm is
+/// not guaranteed across releases), so compare two builds with the same
+/// `rustc`. The file is appended to: delete it before each run, or an earlier
+/// run's rounds are mixed in.
+fn dump_digest(ctx: &str, report: &impl std::fmt::Debug) {
+    use std::hash::{Hash, Hasher};
+    use std::io::Write;
+    let Ok(path) = std::env::var("BYNK_ORACLE_DUMP") else {
+        return;
+    };
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    format!("{report:?}").hash(&mut hasher);
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .expect("dump file");
+    writeln!(file, "{ctx} {:016x}", hasher.finish()).expect("write dump");
 }
 
 // --- the corpus ---------------------------------------------------------------
