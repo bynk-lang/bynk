@@ -187,15 +187,15 @@ fn cross_context(c: &CrossContextInfo) -> String {
         format!("self_context={:?}", self_context),
         format!("consumed_contexts={:?}", consumed_contexts),
         format!("aliases={{{}}}", sorted_map(aliases).join("; ")),
-        format!("consumed_services={{{}}}", two_level(&consumed_services)),
-        format!("consumed_types={{{}}}", two_level(&consumed_types)),
+        format!("consumed_services={{{}}}", two_level(consumed_services)),
+        format!("consumed_types={{{}}}", two_level(consumed_types)),
         format!(
             "consumed_type_renames={{{}}}",
-            two_level(&consumed_type_renames)
+            two_level(consumed_type_renames)
         ),
         format!(
             "consumed_capabilities={{{}}}",
-            two_level(&consumed_capabilities)
+            two_level(consumed_capabilities)
         ),
         format!(
             "flattened_caps={{{}}}",
@@ -204,17 +204,14 @@ fn cross_context(c: &CrossContextInfo) -> String {
         format!("consumed_event_names={{{events}}}"),
         format!(
             "consumed_type_owners={{{}}}",
-            two_level(&consumed_type_owners)
+            two_level(consumed_type_owners)
         ),
         format!(
             "consumed_type_aliases={{{}}}",
-            two_level(&consumed_type_aliases)
+            two_level(consumed_type_aliases)
         ),
-        format!(
-            "callee_type_aliases={{{}}}",
-            two_level(&callee_type_aliases)
-        ),
-        format!("callee_alias_keys={{{}}}", two_level(&callee_alias_keys)),
+        format!("callee_type_aliases={{{}}}", two_level(callee_type_aliases)),
+        format!("callee_alias_keys={{{}}}", two_level(callee_alias_keys)),
     ]
     .join(" ")
 }
