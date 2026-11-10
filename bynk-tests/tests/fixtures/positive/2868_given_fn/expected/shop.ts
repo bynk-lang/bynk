@@ -20,11 +20,16 @@ export async function warnAll(items: readonly string[], deps: { Logger: Logger }
 }
 
 export async function countdown(n: number, deps: { Logger: Logger }): globalThis.Promise<number> {
-  if (n <= 0) {
-    return 0;
-  } else {
-    const __r0 = await warn("tick", deps);
-    return countdown(n - 1, deps);
+  let __tco0 = n;
+  __tco: while (true) {
+    const n = __tco0;
+    if (n <= 0) {
+      return 0;
+    } else {
+      const __r0 = await warn("tick", deps);
+      __tco0 = n - 1;
+      continue __tco;
+    }
   }
 }
 

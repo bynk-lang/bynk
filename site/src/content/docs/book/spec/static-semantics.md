@@ -281,7 +281,9 @@ name of its own, and a `let` binding is not in scope in its own initialiser, so
 `let f = (x) => f(x)` is rejected (`bynk.resolve.unknown_function`): a lambda
 cannot call itself. Termination is not checked: a well-formed program may recurse without
 bound, and what happens at run time is specified in
-[§7.3.2](/book/spec/emission/#732-expressions).
+[§7.3.2](/book/spec/emission/#732-expressions): a direct self call in tail
+position runs in constant stack, and any other recursion is bounded by the
+host's stack.
 
 A free function cannot name a capability ([§5.5](#55-effects-capabilities--providers)),
 so it cannot perform an effect of its own accord. It can perform the effects of
@@ -303,7 +305,8 @@ commons loops {
 
 Iteration over a collection is the kernel's (`fold`, `forEach`, the traverse
 family, [§5.10](#510-collections)), which needs no recursion and has no depth
-limit; recursion is for structures and loops the kernel does not cover.
+limit; recursion is for structures and loops the kernel does not cover, and a loop
+written as a self tail call (an accumulator) has no depth limit either.
 
 **Numeric operators** (v0.21). The arithmetic operators `+ - * /` are
 defined on `Int` operands (yielding `Int`) and on `Float` operands

@@ -27,7 +27,17 @@ export function pick<T>(a: T, b: T, first: boolean): T {
 }
 
 export function countdown<T>(a: T, n: number): boolean {
-  return (n === 0 ? same(a, a) : countdown(a, n - 1));
+  let __tco0 = a, __tco1 = n;
+  __tco: while (true) {
+    const a = __tco0;
+    const n = __tco1;
+    if (n === 0) {
+      return same(a, a);
+    } else {
+      __tco1 = n - 1;
+      continue __tco;
+    }
+  }
 }
 
 export function inc(n: number): number {

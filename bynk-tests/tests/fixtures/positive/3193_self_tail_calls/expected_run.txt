@@ -1,0 +1,2 @@
+# #3193: self tail calls run as loops. Every case passes.
+passed=19 failed=0

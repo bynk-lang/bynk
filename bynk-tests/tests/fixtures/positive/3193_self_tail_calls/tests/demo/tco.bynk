@@ -1,0 +1,88 @@
+---
+#3193: runtime proofs that a self tail call neither grows the stack nor
+changes what the function computes.
+---
+suite demo.tco
+
+case "a million self tail calls run in constant stack" {
+  expect count(1000000, 0) == 1000000
+}
+
+case "an accumulator pair swaps and reads old values" {
+  expect fibLoop(10, 0, 1) == 55
+  expect fibLoop(70, 0, 1) == 190392490709135
+}
+
+case "an Effect function with a million self tail calls" {
+  let n <- countE(1000000, 0)
+  expect n == 1000000
+}
+
+case "an Effect function that awaits before a million self tail calls" {
+  do repeat(1000000, (i) => Effect.pure(()))
+  expect true
+}
+
+case "a recursive match is a loop" {
+  expect lastOf([1, 2, 3], 0) == 3
+  expect lastOf([], 9) == 9
+}
+
+case "a guarded match arm is a loop" {
+  expect collatz(27, 0) == 111
+}
+
+case "each iteration's closure keeps its own binding" {
+  let fs = adders(3, [])
+  expect fs.map((f) => f(10)) == [13, 12, 11]
+}
+
+case "a method tail call is a loop" {
+  let c = Chain.build(200000, End)
+  expect c.total(0) == 20000100000
+  expect c.length(0) == 200000
+}
+
+case "a generic tail call at its own instantiation is a loop" {
+  expect lastOr([1, 2, 3], 0) == 3
+  expect lastOr(["a", "b"], "z") == "b"
+}
+
+case "requires holds on every iteration" {
+  expect down(10, 0) == 5
+}
+
+case "requires holds on every iteration of an Effect function" {
+  let n <- downE(10, 0)
+  expect n == 5
+}
+
+case "requires reports the iteration whose arguments violate it" {
+  expect downE(5, 0) faults
+}
+
+case "an ensures function is unchanged" {
+  expect countEnsured(50, 0) == 50
+}
+
+case "a non-tail self call is unchanged" {
+  expect sumTo(100) == 5050
+}
+
+case "mutual recursion is unchanged" {
+  expect isEven(100)
+  expect !isOdd(100)
+}
+
+case "a shifting generic instantiation is unchanged" {
+  expect nest(10, 1) == 10
+  expect nestTail(10, 1) == 0
+}
+
+case "a wrapped self call is unchanged" {
+  expect wrapped(10) == Some(10)
+}
+
+case "a self call under ? is unchanged" {
+  expect tried(10) == Ok(10)
+}
