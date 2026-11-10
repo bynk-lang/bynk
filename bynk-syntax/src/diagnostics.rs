@@ -364,7 +364,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn parse(n: Int) -> Age { n }                           // ✗ an `Int` is not an `Age`\n\n\
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
         page: "/book/reference/refined-types",
-        anchor: "of--checked-construction",
+        anchor: "of-checked-construction",
     },
 ];
 
