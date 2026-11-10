@@ -1272,6 +1272,70 @@ fn store_rehydration_gate_runtime_semantics() {
     verify("rehydration", REHYDRATE_SOURCE, REHYDRATE_DRIVER_TS);
 }
 
+// Per-entry storage slice 0 (#3189): a stored record carrying a `__layout`
+// marker was written by a later build. Loading it faults `NewerLayout` as a
+// `RehydrationViolation` before anything is decoded, and the record is left
+// exactly as found (never zero-merged and written back, which would orphan the
+// per-entry keys a later layout keeps beside it). A record without the marker,
+// the layout this build reads, still loads.
+const LAYOUT_GUARD_DRIVER_TS: &str = r#"
+import { Gauge } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState() {
+  const m = new Map<string, unknown>();
+  return {
+    m,
+    storage: {
+      async get(key: string): Promise<unknown> { return m.get(key); },
+      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+    },
+  };
+}
+
+const quiet = globalThis.console.error;
+globalThis.console.error = () => {};
+const faultDetail = async (f: () => Promise<unknown>): Promise<string> => {
+  try {
+    await f();
+    return "no fault";
+  } catch (e) {
+    const rv = (e as { rehydrationViolation?: { kind: string; detail: { kind: string } } }).rehydrationViolation;
+    return rv === undefined ? "other fault" : `${rv.kind}/${rv.detail.kind}`;
+  }
+};
+
+for (const marker of [2, 99, "x"]) {
+  const st = fakeState();
+  const record = { level: 3, note: "ok", __layout: marker };
+  await st.storage.put("state", record);
+  const before = JSON.stringify(st.m.get("state"));
+  const g = new Gauge(st as never);
+  assert(
+    (await faultDetail(() => g.read({}))) === "RehydrationViolation/NewerLayout",
+    `__layout ${String(marker)} faults NewerLayout`,
+  );
+  assert(JSON.stringify(st.m.get("state")) === before, "the record is not written back");
+}
+globalThis.console.error = quiet;
+
+const ok = fakeState();
+await ok.storage.put("state", { level: 4, note: "ok" });
+assert((await new Gauge(ok as never).read({})) === 4, "a record without a layout marker loads");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn newer_layout_marker_faults_and_is_not_written_back() {
+    verify("layout_guard", REHYDRATE_SOURCE, LAYOUT_GUARD_DRIVER_TS);
+}
+
 // #2607 (Decision F): rehydration decodes a stored record through the same
 // codec a wire body passes, so a record held in a `Cell` that has since gained
 // a defaulted field loads an instance stored before the field existed, and the

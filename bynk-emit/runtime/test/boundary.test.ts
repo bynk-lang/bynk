@@ -8,6 +8,7 @@ import {
   callService,
   faultResponse,
   FAULT_HEADER,
+  checkStoredLayout,
   checkStoredSchemaVersion,
   deliverEvent,
   deserialiseEventEnvelope,
@@ -308,6 +309,43 @@ test("rehydrationViolation: logs the agent, path and kind, never the value", () 
   // #1825 review: readable, but not enumerable, so logging `e` hides `detail`.
   assert.equal((e as { rehydrationViolation?: { agent: string } }).rehydrationViolation?.agent, "Tracking");
   assert.ok(!Object.keys(e).includes("rehydrationViolation"));
+});
+
+// Per-entry storage slice 0 (#3189): an absent `__layout` is the wholesale layout
+// this build reads; any marker present was written by a later build and faults
+// before anything is decoded or written back.
+test("checkStoredLayout: passes an absent marker, faults NewerLayout on any other", () => {
+  const quiet = globalThis.console.error;
+  const logged: unknown[][] = [];
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  const outcome = (stored: object): { kind: string; stored?: number | null } => {
+    try {
+      checkStoredLayout("Cart", stored);
+      return { kind: "ok" };
+    } catch (e) {
+      const d = (e as { rehydrationViolation: { kind: string; detail: { kind: string; stored: number | null } } })
+        .rehydrationViolation;
+      assert.equal(d.kind, "RehydrationViolation");
+      return { kind: d.detail.kind, stored: d.detail.stored };
+    }
+  };
+  try {
+    assert.deepEqual(outcome({}), { kind: "ok" });
+    assert.deepEqual(outcome({ __v: 7, items: {} }), { kind: "ok" });
+    assert.deepEqual(outcome({ __layout: 2 }), { kind: "NewerLayout", stored: 2 });
+    for (const bad of ["2", 0, -1, 1.5, null, Number.NaN]) {
+      assert.deepEqual(outcome({ __layout: bad }), { kind: "NewerLayout", stored: null }, String(bad));
+    }
+  } finally {
+    globalThis.console.error = quiet;
+  }
+  // The log line carries the marker number, never the record.
+  assert.deepEqual(logged[0], [
+    "RehydrationViolation Cart",
+    { agent: "Cart", path: "<root>", kind: "NewerLayout", stored: 2 },
+  ]);
 });
 
 // State-migrations S1 (#2211): the `__v` marker check. An absent marker is

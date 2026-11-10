@@ -229,7 +229,10 @@ Two consequences follow:
   `bynk.schema.lock`, written in the same commit. A record written by a *newer*
   build (after a rollback) faults on load as `RehydrationViolation` with detail
   `NewerSchema` and is never written back; a malformed marker faults with
-  `NoMigrationPath`. A stored field the current definition no longer declares is
+  `NoMigrationPath`. A record carrying a `__layout` marker, which a build reserves for
+  a later storage layout, faults on load as `RehydrationViolation` with detail
+  `NewerLayout` and is never written back; no released build writes one yet. A stored
+  field the current definition no longer declares is
   logged once, by name only, as
   `bynk: agent <Agent> has stored field "<name>" the current definition does not declare; it is kept, not read`.
 

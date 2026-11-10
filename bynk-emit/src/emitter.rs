@@ -4040,6 +4040,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         // also checks its stored `__v` marker (Decision A: none without one).
         if has_agent {
             parts.push("__reportUnknownStoredKeys");
+            // Per-entry storage slice 0 (#3189): faults on a `__layout` marker
+            // a later build wrote.
+            parts.push("__checkStoredLayout");
         }
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
