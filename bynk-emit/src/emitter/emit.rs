@@ -5949,7 +5949,7 @@ fn emit_agent_state_record(
     // v0.93 (ADR 0118): a sibling posting-list per `@indexed(by: f)` — field
     // value (stringified) → the primary keys whose value has it. Persisted and
     // committed wholesale with the map it indexes.
-    for (map, fields) in sorted_index_fields(&store_map_indexes) {
+    for (map, fields) in sorted_index_fields(store_map_indexes) {
         for f in fields {
             members.push(bynk_ts::TsTypeMember::Prop {
                 name: format!("{map}__idx_{f}"),
@@ -6161,7 +6161,7 @@ fn emit_agent_state_record(
         ));
     }
     // A fresh `@indexed` posting-list is empty too (v0.93, ADR 0118).
-    for (map, fields) in sorted_index_fields(&store_map_indexes) {
+    for (map, fields) in sorted_index_fields(store_map_indexes) {
         for f in fields {
             zero_entries.push(bynk_ts::TsObjectEntry::Prop(
                 format!("{map}__idx_{f}"),
