@@ -64,6 +64,16 @@ pub struct TestArgs {
     /// Input project root directory. Defaults to the current directory.
     #[arg(default_value = ".")]
     pub input: PathBuf,
+    /// Run over each project directly inside a directory that has no
+    /// `bynk.toml` of its own (#3274): as at a `[workspace]` root, one report
+    /// per project under a `── path ──` header, every project run, and a
+    /// non-zero exit if any fails. A subdirectory without a `bynk.toml` is not
+    /// a project and is skipped. At a workspace root it changes nothing; at a
+    /// project, or inside one, it is an error. The flags that name one
+    /// project's output (`--format json`, `--output`, `--mutate`, `--against`)
+    /// are refused, as at a workspace root.
+    #[arg(long)]
+    pub each: bool,
     /// Where to write compiled TypeScript test runner modules.
     /// Defaults to `<input>/out`.
     #[arg(short, long)]
@@ -257,6 +267,7 @@ impl TestArgs {
     pub(crate) fn discovery(input: PathBuf) -> Self {
         TestArgs {
             input,
+            each: false,
             output: None,
             no_run: true,
             require_tests: false,
@@ -369,6 +380,8 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         mutate_jobs,
         mutant_overlay,
         run_timeout,
+        // #3274: resolved by the caller, which runs each project on its own.
+        each: _,
     } = args;
     // `json` is "machine-readable": the document or the stream. `stream` says
     // which; everything that prints a document goes through `print_run`.

@@ -349,37 +349,71 @@ impl std::fmt::Display for ProjectOptionsError {
             Self::Discovery(e) => write!(f, "{e}"),
             Self::ContractsLock(e) => write!(f, "{e}"),
             Self::NestedProjects { root, projects } => {
-                const SHOWN: usize = 5;
-                let names: Vec<String> = projects
-                    .iter()
-                    .take(SHOWN)
-                    .map(|p| format!("`{}`", shown(p.strip_prefix(root).unwrap_or(p))))
-                    .collect();
-                let more = projects.len().saturating_sub(SHOWN);
-                write!(
-                    f,
-                    "`{}` is not a project (no `bynk.toml` here or above) but holds {} that have their own: {}{}.\n\
-                     Run the command inside one of them, or add a `bynk.toml` here with\n\
-                     \n    [workspace]\n    members = [\"*\"]\n\n\
-                     to run it over each",
-                    match shown(root) {
-                        s if s.is_empty() => ".".to_string(),
-                        s => s,
-                    },
-                    if projects.len() == 1 {
-                        "a project".to_string()
-                    } else {
-                        format!("{} projects", projects.len())
-                    },
-                    names.join(", "),
-                    if more > 0 {
-                        format!(" and {more} more")
-                    } else {
-                        String::new()
-                    }
-                )
+                write!(f, "{}", nested_projects_message(root, projects, true))
             }
         }
+    }
+}
+
+impl ProjectOptionsError {
+    /// The message, for a command that cannot take `--each` (#3274): the
+    /// refusal of a directory of projects then advises only running inside one
+    /// or adding a root manifest. Every other error reads as [`std::fmt::Display`] does,
+    /// and so does a directory of projects for `check` and `test`, which can.
+    pub fn render(&self, each_applies: bool) -> String {
+        match self {
+            Self::NestedProjects { root, projects } => {
+                nested_projects_message(root, projects, each_applies)
+            }
+            other => other.to_string(),
+        }
+    }
+}
+
+/// #3242/#3274: the refusal of a directory that is not a project but holds some.
+fn nested_projects_message(root: &Path, projects: &[PathBuf], each_applies: bool) -> String {
+    const SHOWN: usize = 5;
+    let names: Vec<String> = projects
+        .iter()
+        .take(SHOWN)
+        .map(|p| format!("`{}`", shown(p.strip_prefix(root).unwrap_or(p))))
+        .collect();
+    let more = projects.len().saturating_sub(SHOWN);
+    format!(
+        "`{}` is not a project (no `bynk.toml` here or above) but holds {} that have their own: {}{}.\n\
+         Run the command inside one of them, {}or add a `bynk.toml` here with\n\
+         \n    [workspace]\n    members = [\"*\"]\n\n\
+         to {}",
+        dir_label(root),
+        if projects.len() == 1 {
+            "a project".to_string()
+        } else {
+            format!("{} projects", projects.len())
+        },
+        names.join(", "),
+        if more > 0 {
+            format!(" and {more} more")
+        } else {
+            String::new()
+        },
+        if each_applies {
+            "pass `--each` to run it over each, "
+        } else {
+            ""
+        },
+        if each_applies {
+            "keep that choice in the repository"
+        } else {
+            "run it over each"
+        },
+    )
+}
+
+/// A directory as a message names it: `.` rather than an empty string.
+fn dir_label(dir: &Path) -> String {
+    match shown(dir) {
+        s if s.is_empty() => ".".to_string(),
+        s => s,
     }
 }
 
@@ -1192,12 +1226,20 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 /// #2642: `fix` first applies the machine-applicable suggestions ([`fix`]) to
 /// the input, or to each workspace member in turn, then reports what remains
 /// as an ordinary check does. A refused or failed fix fails the run.
-pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool) -> ExitCode {
+pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool, each: bool) -> ExitCode {
     // #2207 (decision C): at a workspace root, check every member in order.
     // Every member runs, and the run fails if any does. `rich` heads each
     // member's report with its path; `short` adds no headers, and its paths
     // are already relative to where the command ran.
-    if let Some(workspace) = workspace_at(input) {
+    // #3274: `each` makes a manifest-less directory of projects the same.
+    let workspace = match workspace_at_each(input, each) {
+        Ok(w) => w,
+        Err(message) => {
+            eprintln!("{prog}: {message}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(workspace) = workspace {
         let workspace = match workspace {
             Ok(w) => w,
             Err(e) => {
@@ -1244,6 +1286,101 @@ pub fn run_check(prog: &str, input: &Path, short: bool, fix: bool) -> ExitCode {
 /// `[workspace]`), the workspace it loads to, or why it doesn't.
 pub fn workspace_at(input: &Path) -> Option<Result<project::Workspace, ProjectPathsError>> {
     (input.is_dir() && project::is_workspace_root(input)).then(|| project::load_workspace(input))
+}
+
+/// #3274: [`workspace_at`], or, with `each`, the workspace `--each` stands for:
+///
+/// - a real workspace root is itself (the flag changes nothing there);
+/// - a manifest-less directory with no `bynk.toml` above it is the implicit
+///   workspace of its immediate-subdirectory projects, with a note for each
+///   manifest-less subdirectory holding `.bynk` files;
+/// - anything else (a file, a project, a directory inside a project, a
+///   directory with no project directly below it, or one with `.bynk` files of
+///   its own) is refused with a message, so the flag never quietly does nothing.
+///
+/// The `Err` is the message, without a command prefix.
+pub fn workspace_at_each(
+    input: &Path,
+    each: bool,
+) -> Result<Option<Result<project::Workspace, ProjectPathsError>>, String> {
+    if !each || project::is_workspace_root(input) {
+        return Ok(workspace_at(input));
+    }
+    let name = dir_label(input);
+    if !input.is_dir() {
+        return Err(format!(
+            "`--each` takes a directory of projects, not `{name}`"
+        ));
+    }
+    if input.join("bynk.toml").exists() || input.join("src").is_dir() {
+        return Err(format!(
+            "`--each` applies to a directory of projects, but `{name}` is a project: run the command without it"
+        ));
+    }
+    if has_manifest_above(input) {
+        return Err(format!(
+            "`--each` applies to a directory of projects, but `{name}` is inside a project (a `bynk.toml` is above it): run the command without it"
+        ));
+    }
+    match bynk_project::implicit_workspace(input) {
+        Ok(implicit) => {
+            for dir in &implicit.skipped {
+                note_skipped_manifestless(input, dir);
+            }
+            Ok(Some(Ok(implicit.workspace)))
+        }
+        Err(bynk_project::ImplicitWorkspaceError::RootSources) => Err(format!(
+            "`{name}` holds `.bynk` files of its own, which no project under it would read: move them into a project, or drop `--each`"
+        )),
+        Err(bynk_project::ImplicitWorkspaceError::NoProjects { deeper }) => {
+            if deeper.is_empty() {
+                Err(format!(
+                    "`{name}` holds no project: no subdirectory of it has a `bynk.toml`"
+                ))
+            } else {
+                let shown_deeper: Vec<String> = deeper
+                    .iter()
+                    .take(5)
+                    .map(|p| format!("`{}`", shown(p.strip_prefix(input).unwrap_or(p))))
+                    .collect();
+                let more = deeper.len().saturating_sub(5);
+                Err(format!(
+                    "`{name}` holds no project directly inside it, but {} further down: {}{}.\n\
+                     `--each` runs the projects directly inside a directory: pass the directory that holds them",
+                    if deeper.len() == 1 {
+                        "one".to_string()
+                    } else {
+                        format!("{}", deeper.len())
+                    },
+                    shown_deeper.join(", "),
+                    if more > 0 {
+                        format!(" and {more} more")
+                    } else {
+                        String::new()
+                    }
+                ))
+            }
+        }
+    }
+}
+
+/// #3274: the one-line note for a subdirectory `--each` set aside because it
+/// holds `.bynk` files but no `bynk.toml`, once per directory per process.
+fn note_skipped_manifestless(root: &Path, dir: &Path) {
+    static SAID: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> =
+        std::sync::Mutex::new(None);
+    let key = root.join(dir);
+    let first = SAID
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(Default::default)
+        .insert(key);
+    if first {
+        eprintln!(
+            "bynk: note: skipped `{}`: it has no bynk.toml, so it is not a project",
+            shown(dir)
+        );
+    }
 }
 
 /// #2207: a member's directory as the command names it: `root` (as the user
