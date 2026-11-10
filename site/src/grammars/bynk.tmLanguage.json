@@ -243,18 +243,12 @@
           "match": "\\bprivate\\b(?=\\s+(?:fn|type|messages|asset|embed|const)\\b)"
         },
         {
-          "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere. #3191: that `by` is a clause word here, coloured with it.",
-          "match": "\\b(advance)\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s+by\\b)",
+          "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere. #3191: that `by` is a clause word here, so one rule matches the whole prefix and colours both (a TextMate lookahead rule would take the position first and leave the `by` to a later rule that could not match).",
+          "match": "\\b(advance)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(by)\\b",
           "captures": {
-            "1": { "name": "keyword.control.bynk" }
-          }
-        },
-        {
-          "comment": "#2137/#3191: the `by` of `advance <Cap> by <Duration>`, matched with the words before it since a TextMate lookbehind cannot be variable-length.",
-          "match": "\\badvance\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(by)\\b",
-          "captures": {
-            "1": { "name": "entity.name.type.bynk" },
-            "2": { "name": "keyword.control.bynk" }
+            "1": { "name": "keyword.control.bynk" },
+            "2": { "name": "entity.name.type.bynk" },
+            "3": { "name": "keyword.control.bynk" }
           }
         },
         {

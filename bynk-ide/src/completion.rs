@@ -1575,6 +1575,17 @@ pub(crate) fn is_by_clause_position(line: &str) -> bool {
         return false;
     };
     let before = line[..idx].trim_start();
+    // The clause follows a value or a type: a `)`, `]`, an identifier or a
+    // closing literal. After `(`, `,` or an operator `by` is an argument or a
+    // parameter name (`f(a, by`, `g: (Int) -> Int, by`).
+    if !before
+        .trim_end()
+        .chars()
+        .last()
+        .is_some_and(|c| c.is_alphanumeric() || matches!(c, '_' | ')' | ']' | '"' | '\''))
+    {
+        return false;
+    }
     // A handler's `by` follows its return type, before the body's `{`.
     let after_return_type = before
         .rfind("->")
@@ -4536,6 +4547,10 @@ fn Box.size(self) -> Int { 1 }
         assert!(!is_by_clause_position("    let x = a + by "));
         assert!(!is_by_clause_position("  fn shift(xs: List[Int], by "));
         assert!(!is_by_clause_position("    advance Clock by "));
+        // `by` as an argument or a parameter after a comma or an operator.
+        assert!(!is_by_clause_position("    let r <- f(a, by "));
+        assert!(!is_by_clause_position("  on call f(g: (Int) -> Int, by "));
+        assert!(!is_by_clause_position("    let r <- f(by "));
         // A reference in a one-line body, after the return type's `->`.
         assert!(!is_by_clause_position("  fn f(by: Int) -> Int { by "));
         assert!(!is_by_clause_position("    by "));
