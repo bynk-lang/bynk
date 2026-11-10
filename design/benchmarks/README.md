@@ -21,7 +21,8 @@ reports, per size, median / p95 / max in milliseconds:
 | `cli_check` | `bynk check`, a fresh process each run (cold compiler caches) |
 | `cli_recheck` | the same after a one-line edit; nothing survives between runs today |
 | `lsp_first_round` | open one file; wait for the server's first project-wide diagnostics |
-| `lsp_edit` | a one-line edit in the open buffer to its diagnostics arriving, warm: **edit-to-diagnostics** |
+| `lsp_edit` | a one-line edit in the open buffer to its diagnostics arriving, warm: **edit-to-diagnostics**. The edit changes a record field's type: a *signature-level* edit, the pessimistic one for any reuse |
+| `lsp_body_edit` | the same, for a **body-only** edit (a comparison inside a handler body becomes ill-typed and back); the edit an incremental analysis is meant to make cheap, and the one most keystrokes are |
 
 The LSP runs use `[lsp] diagnostics_debounce_ms = 0`, so `lsp_edit` is compute
 time; the default 300 ms debounce is added on top for a user. Each edit toggles

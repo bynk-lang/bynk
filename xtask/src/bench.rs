@@ -173,6 +173,21 @@ pub fn edit_source(source: &str, valid: bool) -> String {
     }
 }
 
+/// A **body-only** edit: a comparison inside a handler body becomes ill-typed
+/// and back (`> 0)` to `> "x")`). Nothing outside that body changes, so it is
+/// the edit an incremental analysis is meant to make cheap, and, like
+/// [`edit_source`], it moves the diagnostics so the client can see its own round.
+/// The signature edit [`edit_source`] makes is the pessimistic one for a cache.
+pub fn edit_body(source: &str, valid: bool) -> String {
+    const GOOD: &str = "> 0)";
+    const BAD: &str = "> \"x\")";
+    if valid {
+        source.replacen(BAD, GOOD, 1)
+    } else {
+        source.replacen(GOOD, BAD, 1)
+    }
+}
+
 /// Nearest-rank percentile of `samples` (milliseconds), `p` in 0..=100.
 pub fn percentile(samples: &[f64], p: f64) -> f64 {
     assert!(!samples.is_empty(), "percentile of no samples");
@@ -257,6 +272,8 @@ pub fn run(root: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Value
                 "lsp_edit": summary(&lsp_run.edits),
                 "lsp_first_round_levels": level_medians(&lsp_run.first_levels.into_iter().collect::<Vec<_>>()),
                 "lsp_edit_levels": level_medians(&lsp_run.edit_levels),
+                "lsp_body_edit": summary(&lsp_run.body_edits),
+                "lsp_body_edit_levels": level_medians(&lsp_run.body_edit_levels),
                 "lsp_edit_outside_analysis_ms": outside_analysis(&lsp_run.edits, &lsp_run.edit_levels),
             }));
         }
@@ -500,6 +517,9 @@ struct LspTimings {
     first_levels: Option<[f64; 4]>,
     /// One `[file, unit, definition, project]` per timed edit.
     edit_levels: Vec<[f64; 4]>,
+    /// Edit-to-diagnostics for a **body-only** edit (see [`edit_body`]).
+    body_edits: Vec<f64>,
+    body_edit_levels: Vec<[f64; 4]>,
 }
 
 fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> {
@@ -562,6 +582,49 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
         }
     }
 
+    // The signature phase opened broken and toggles each edit, so it ends broken
+    // after an even number of edits and clean after an odd number. If broken,
+    // restore the clean text first (waiting for the round, which clears the
+    // diagnostic), so the body phase starts from a state where its first edit
+    // adds one; if already clean, sending the clean text again would change
+    // nothing, publish nothing, and wait forever.
+    let mut version = (edits + warmup) as i64 + 1;
+    if (edits + warmup).is_multiple_of(2) {
+        version += 1;
+        c.discard_timings();
+        send(
+            &mut c.child,
+            &json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{
+                "textDocument": {"uri": uri, "version": version},
+                "contentChanges": [{"text": clean}],
+            }}),
+        )?;
+        c.wait(|m| is_diagnostics_for(m, &uri, version))?;
+        let _ = c.round_timing();
+    }
+    let mut body_samples = Vec::new();
+    let mut body_levels = Vec::new();
+    for j in 0..(edits + warmup) {
+        version += 1;
+        // The first edit breaks the body, the next restores it, and so on.
+        let valid = j % 2 == 1;
+        let edited = edit_body(&clean, valid);
+        c.discard_timings();
+        send(
+            &mut c.child,
+            &json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{
+                "textDocument": {"uri": uri, "version": version},
+                "contentChanges": [{"text": edited}],
+            }}),
+        )?;
+        let took = c.wait(|m| is_diagnostics_for(m, &uri, version))?;
+        let levels = c.round_timing();
+        if j >= warmup {
+            body_samples.push(ms(took));
+            body_levels.extend(levels);
+        }
+    }
+
     let _ = send(
         &mut c.child,
         &json!({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null}),
@@ -575,6 +638,8 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
         edits: samples,
         first_levels,
         edit_levels,
+        body_edits: body_samples,
+        body_edit_levels: body_levels,
     })
 }
 
@@ -915,6 +980,24 @@ mod tests {
             generate_project(4, 3),
             generate_project_shaped(Shape::Independent, 4, 3)
         );
+    }
+
+    #[test]
+    fn the_body_edit_changes_only_a_body_and_round_trips() {
+        for shape in [Shape::Independent, Shape::Linked] {
+            let files = generate_project_shaped(shape, 4, 2);
+            let src = &files.iter().find(|(p, _)| p == EDITED_FILE).unwrap().1;
+            let broken = edit_body(src, false);
+            assert_ne!(&broken, src, "{} has a body to edit", shape.name());
+            // Only the one comparison changed: same length difference as the swap.
+            assert_eq!(broken.len() + "> 0)".len(), src.len() + "> \"x\")".len());
+            assert_eq!(&edit_body(&broken, true), src);
+            // The signature edit and the body edit touch different things.
+            // Both edits apply to the same file without disturbing each other.
+            let both = edit_source(&broken, false);
+            assert_ne!(both, broken, "the signature edit still applies");
+            assert_eq!(&edit_body(&edit_source(&both, true), true), src);
+        }
     }
 
     #[test]
