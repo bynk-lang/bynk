@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0777](0777-per-entry-storage-runtime-primitives.md) | **The per-entry storage runtime: key layout, a staged write-set flushed in one transaction, and the wholesale split** (v0.528) — Key shapes, EntryOverlay with an atomic chunked flush through storage.transaction, splitWholesale, and an in-memory storage that enforces the 128-key batch and counts operations | Accepted (v0.528) |
 | [0776](0776-annotate-every-lambda-parameter.md) | **The emitter annotates every lambda parameter with its checked type** (v0.527.7) — A lambda parameter is annotated unconditionally, not only where it has no source annotation and a pattern | Accepted (v0.527.7) |
 | [0775](0775-self-tail-calls-run-in-constant-stack.md) | **A direct self tail call runs in constant stack** (v0.527) — The emitter lowers a direct self tail call to a loop and the spec guarantees it, reversing the tail-call half of #2612 | Accepted (v0.527) |
 | [0774](0774-stored-layout-marker-and-forward-compat-guard.md) | **A stored record's `__layout` marker, and a build that faults on one it does not know** (v0.526) — `__layout` is reserved beside `__v`; absent is the wholesale layout; any marker a build does not know faults NewerLayout before decode or write-back | Accepted (v0.526) |
