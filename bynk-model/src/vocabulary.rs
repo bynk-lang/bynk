@@ -142,13 +142,9 @@ pub struct OpSig {
 /// delegating forward at `bynk_emit::emitter::emit::emit_forwarded_methods`),
 /// never its body (P6.18). `bynk_model::lower_attached_fn_sig_ir_from_types`
 /// resolves `params`/`return_ty` in the scope the method's own `[T, …]` list
-/// names (mirroring `OpSig`'s identical `type_params` treatment) — a
-/// genuinely unresolvable name degrades to `Ty::Unit`, deliberately, the
-/// same non-panicking posture `OpSig` already established: nothing
-/// checker-side actually validates an attached method's own
-/// `params`/`return_type` against the *importing* context's own visible
-/// types (only the declaring commons' own checking does), so a resolve miss
-/// here is an expected, not exceptional, state.
+/// names. A name that does not resolve there degrades to `Ty::Unit`: today
+/// that includes the *receiver's* type variables on a generic type's attached
+/// fn (`Bag.largest -> Option[A]`), a known imprecision tracked in #3213.
 #[derive(Debug, Clone)]
 pub struct FnSig {
     pub name: String,

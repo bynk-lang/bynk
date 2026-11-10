@@ -176,15 +176,9 @@ pub fn is_effectful_return(r: &TypeRef) -> bool {
 /// standalone reader of already-resolved data, applied to signature data
 /// instead of a body walk.
 ///
-/// A service handler's own param type is *not* resolution-checked by the
-/// checker at all (`1199_service_handler_unresolvable_param_type_no_ice`
-/// pins it), so a resolve miss degrades to `Ty::Unit` here rather than
-/// panicking — the same fallback `lower_protocol_ir` documents for a
-/// WebSocket frame type, and for the same reason: an ADR 0334 panic may
-/// only assert a guarantee the checker actually gives. (The agent-handler
-/// signature reader that did panic on a miss was correct for *its* input,
-/// which the checker does guarantee resolves; it went with the body
-/// lowering in Slice D1 of `#1542`.)
+/// A resolve miss is an internal error (#3166): the resolver rejects an
+/// unknown handler parameter or return type (`bynk.resolve.unknown_type`), and
+/// only `bynk-emit` calls this, after certification.
 pub fn lower_service_handler_signature_ir(
     h: &Handler,
     program: &CheckedProgram,
@@ -335,16 +329,11 @@ fn lower_type_shape_in(decl: &Arc<TypeDecl>, program: &TypedCommons) -> TypeShap
 /// seeding every fn/method-level constructor here does. Shared by every
 /// arm of that function's own kind dispatch, and by [`lower_store_field_shape_ir`].
 ///
-/// **Not an ADR 0334 `.expect()`-style panic on a resolve miss, deliberately**
-/// — the same posture `lower_op_sig_ir`'s own doc comment already argues
-/// for a capability op's `params`/`return_type`, confirmed empirically for
-/// store fields specifically (#1187's Agent state-field slice, step 0):
-/// `store x: Cell[Bogus] = "hello"` certified then (exit 0, no diagnostic),
-/// so a `Bogus` store-field type reached this pass with no `expr_types`/
-/// `types` entry at all. Since #1679 the resolver rejects an unknown store
-/// field type (`bynk.resolve.unknown_type`), so this fallback is defensive:
-/// it keeps lowering total rather than asserting a guarantee it does not
-/// itself check.
+/// A resolve miss is an internal error (#3166), not a silent `()`. It used to
+/// degrade, because `store x: Cell[Bogus] = "hello"` once certified (#1187's
+/// Agent state-field slice, step 0); since #1679 the resolver rejects an
+/// unknown store field type (`bynk.resolve.unknown_type`), so a miss now
+/// means the checker let something through.
 fn resolve_store_field_ty(cx: &LowerIrCtx, field: &str, r: &bynk_syntax::ast::TypeRef) -> TyId {
     cx.resolve_checked_type_ref(r, &format!("store field `{field}`"))
 }
@@ -448,12 +437,8 @@ fn store_field_kind_and_indexed(f: &StoreField, cx: &LowerIrCtx) -> (StoreKindIr
 /// `init`-lowering sibling existed until Slice D1 of `#1542`; it lowered the
 /// initialiser through the deleted expression lowerer and had no caller.)
 ///
-/// The field's own type reference falls back to `Ty::Unit` on a resolve
-/// miss rather than panicking — no checker pass validates a store field's
-/// type reference, only its shape and annotation legality, so `store x:
-/// Cell[Bogus]` certifies today and this reader must not turn that into an
-/// ICE (`store_field_falls_back_to_unit_on_an_unresolvable_type_like_the_checker_does`
-/// pins it).
+/// The field's own type reference is resolved with an internal error on a
+/// miss (#3166); the resolver rejects an unknown store field type.
 pub fn lower_store_field_shape_ir(f: &StoreField, program: &CheckedProgram) -> StoreFieldIr {
     let cx = LowerIrCtx::new(program, HashSet::new());
     let (kind, indexed) = store_field_kind_and_indexed(f, &cx);
@@ -583,15 +568,8 @@ fn lower_event_pattern_ir(pattern: &EventPattern) -> EventPatternIr {
 /// [`lower_store_field_shape_ir`]), so a `from websocket`/`from Events`
 /// fixture can pin the descriptor by itself.
 ///
-/// `WebSocket`/`Events`'s own type refs resolve through the `Ty::Unit`
-/// fallback, not an ADR 0334 panic — deliberately: `resolver.rs` skips
-/// `CommonsItem::Service` in every one of its own type-ref-resolution
-/// passes (`resolver.rs:303-304`/`493-494`/`577-578`), and the one checker
-/// site that does resolve a WebSocket frame type itself falls back to
-/// `Ty::Unit` on a miss rather than erroring (`context_checks.rs:775-778`).
-/// Panicking here would make this an ADR-0334 site asserting a guarantee
-/// the checker doesn't actually give (the agent `key_ty` site that once did,
-/// review of #1169, went with the item assembly in Slice D1 of `#1542`).
+/// `WebSocket`/`Events` type refs are resolved with an internal error on a
+/// miss (#3166): the resolver rejects an unknown protocol type.
 pub fn lower_protocol_ir(protocol: &ServiceProtocol, program: &CheckedProgram) -> ProtocolIr {
     lower_protocol_ir_from_commons(protocol, program.program())
 }
@@ -827,23 +805,8 @@ pub fn capability_op_sig_from_commons(
 /// rather than reusing `fn_rigid_type_vars`'s fn/method-shaped
 /// receiver-widening, which does not apply here.
 ///
-/// **Not an ADR 0334 `.expect()`-style panic on a resolve miss,
-/// deliberately** — the same posture [`lower_agent_item_ir`]'s own `key_ty`
-/// doc comment already argues for `agent.key_type`, and for the identical
-/// reason: a capability op's own `params`/`return_type` are never actually
-/// resolution-checked by the checker at all. The resolver skips
-/// `CommonsItem::Capability` outright (`resolver.rs:301/491/575`, "v0.5
-/// items are resolved via a separate context-level pass"); the context-level
-/// pass that replaces it, `check_capability_decls`, only calls
-/// `checker::record_type_refs`, which silently does nothing on a name absent
-/// from `types` rather than erroring (`checker.rs:2593-2597`); and
-/// `build_capability_op_info` itself, the checker-facing constructor this
-/// pass mirrors, degrades to `Ty::Unit` on the same miss rather than
-/// treating it as impossible (`context_checks.rs:36,40`). `capability Store
-/// { fn get(k: Bogus) -> Effect[Int] }` certifies today, silently. Panicking
-/// here on a state the checker itself accepts would make this the first ADR
-/// 0334 site in this module to assert a guarantee that does not actually
-/// hold — mirror the checker's own fallback instead (review of #1182).
+/// A resolve miss is an internal error (#3166): the resolver rejects an
+/// unknown type in a capability op's signature.
 fn lower_op_sig_ir(op: &CapabilityOp, program: &CheckedProgram) -> OpSig {
     lower_op_sig_ir_from_commons(op, program.program())
 }
@@ -1116,6 +1079,70 @@ mod tests {
     use bynk_syntax::ast::{AgentDecl, Commons, CommonsItem, HandlerKind, ServiceDecl, SourceUnit};
     use bynk_syntax::span::Span;
     use bynk_syntax::{lexer, parser};
+
+    /// The invariant the internal-error paths rely on (#3166): the resolver
+    /// rejects an unknown type in a service handler's parameter and in a
+    /// capability op's signature, so neither reaches lowering on a certified
+    /// program.
+    #[test]
+    fn the_resolver_rejects_unknown_types_before_lowering_can_see_them() {
+        for source in [
+            "context demo\n\ncapability Store {\n  fn get(k: Bogus) -> Effect[Int]\n}\n",
+            "context demo\n\ntype Frame = String\n\nservice Gw from websocket(in: Bogus, out: Frame) {\n  on open() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n",
+            "context demo\n\nservice Sub from Events(Bogus) {\n  on event(e: Bogus) -> Effect[()] {\n    Effect.pure(())\n  }\n}\n",
+            "context demo\n\nservice Api from http {\n  on GET(\"/x\") (b: Bogus) -> Effect[HttpResult[String]] {\n    Effect.pure(Ok(\"ok\"))\n  }\n}\n",
+        ] {
+            let tokens = lexer::tokenize(source).expect("lex");
+            let SourceUnit::Context(ctx) = parser::parse_unit(&tokens, source).expect("parse")
+            else {
+                panic!("expected a context unit")
+            };
+            let commons = Commons {
+                name: ctx.name,
+                items: ctx.items,
+                uses: ctx.uses,
+                documentation: ctx.documentation,
+                form: ctx.form,
+                span: ctx.span,
+                trivia: ctx.trivia,
+                trailing_comments: ctx.trailing_comments,
+            };
+            let Err(errors) = resolver::resolve(commons) else {
+                panic!("`Bogus` must not resolve")
+            };
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.category == "bynk.resolve.unknown_type"),
+                "{errors:?}"
+            );
+        }
+    }
+
+    /// An attached fn of a generic type names the receiver's own type
+    /// variables, which `lower_fn_sig_ir_from_types` cannot resolve; that
+    /// reader must stay total (#3213 tracks resolving them properly).
+    #[test]
+    fn an_attached_fn_of_a_generic_type_still_lowers() {
+        let program = checked_context_program(
+            r#"
+context demo
+
+type Bag[A] = { items: List[A] }
+
+fn Bag.largest(self) -> Option[A] {
+  None
+}
+"#,
+        );
+        let sigs = lower_attached_fn_sig_ir_from_types(
+            &program.program().methods["Bag"],
+            &program.program().types,
+            &program.program().ty_intern,
+        );
+        assert_eq!(sigs.len(), 1);
+        assert_eq!(sigs[0].name, "largest");
+    }
 
     /// #3166: a type reference the checker accepted but that does not resolve
     /// is an internal error naming the declaration and the type, not a silent
