@@ -1,5 +1,5 @@
-// The in-memory handle for an agent's `store Map`, `store Set` and `store Cache`
-// fields (#3254).
+// The in-memory handles for an agent's `store Map`, `store Set`, `store Cache` and
+// `store Log` fields (#3254).
 //
 // A store collection is **insertion-ordered**: `keys()`, `values()` and `entries()`
 // enumerate in the order the keys were first inserted, re-inserting an existing key
@@ -12,6 +12,10 @@
 // Every method may return a promise (`Awaitable`), so a handle backed by storage
 // can replace this eager one without the emitted code changing: the emitted code
 // awaits each call. The eager handles here return plain values.
+//
+// A `Log` is an append-ordered sequence, not a keyed collection: its handle appends,
+// prunes past a retention cutoff, and reads time windows; a handle backed by storage
+// reads a window as a key range instead of scanning.
 //
 // A `Map` handle also keeps its `@indexed` postings: for each declared index, the
 // primary keys whose value carries a given index value, in the entries' insertion
@@ -199,5 +203,116 @@ export class StoreSet implements StoreSetHandle {
 
   keys(): readonly string[] {
     return [...this.members];
+  }
+}
+
+/** A `store Cache` entry: the value, and the clock reading (ms) after which it is gone. */
+export interface CacheEntry<V> {
+  readonly v: V;
+  readonly exp: number;
+}
+
+/** An agent's `store Cache`: a `Map` handle over `{ v, exp }`. */
+export interface StoreCacheHandle<V> extends StoreMapHandle<CacheEntry<V>> {
+  /** How many entries are live at `now` (their `exp` is after it). */
+  liveSize(now: number): Awaitable<number>;
+}
+
+/** The eager, in-memory `store Cache` handle. Expiry is judged by the caller. */
+export class StoreCache<V> extends StoreMap<CacheEntry<V>> implements StoreCacheHandle<V> {
+  static ofEntries<V>(entries: Iterable<readonly [string, CacheEntry<V>]>): StoreCache<V> {
+    const handle = new StoreCache<V>();
+    for (const [k, v] of entries) handle.put(k, v);
+    return handle;
+  }
+
+  liveSize(now: number): number {
+    let live = 0;
+    for (const e of this.values()) if (e.exp > now) live += 1;
+    return live;
+  }
+}
+
+/** A `store Log` entry: the clock reading (ms) it was appended at, and the value. */
+export interface LogEntry<V> {
+  readonly t: number;
+  readonly v: V;
+}
+
+/** An agent's `store Log`. Every read is in append order unless it says otherwise. */
+export interface StoreLogHandle<V> {
+  /** Append `value`, stamped `now`. */
+  append(value: V, now: number): Awaitable<void>;
+  /** Drop every entry appended before `cutoff` (`t < cutoff`), as `@retain` does. */
+  prune(cutoff: number): Awaitable<void>;
+  size(): Awaitable<number>;
+  /** The values, oldest first. */
+  values(): Awaitable<readonly V[]>;
+  /** The stamped entries, oldest first. */
+  entries(): Awaitable<ReadonlyArray<LogEntry<V>>>;
+  /** The values appended at or after `t`. */
+  since(t: number): Awaitable<readonly V[]>;
+  /** The values appended before `t`. */
+  before(t: number): Awaitable<readonly V[]>;
+  /** The values appended from `from` to `to`, both inclusive. */
+  between(from: number, to: number): Awaitable<readonly V[]>;
+  /** The `n` most recent values, newest first. */
+  recent(n: number): Awaitable<readonly V[]>;
+  /** Every value, newest first. */
+  reversed(): Awaitable<readonly V[]>;
+}
+
+/** The eager, in-memory `store Log` handle: the array the lowering indexes today. */
+export class StoreLog<V> implements StoreLogHandle<V> {
+  private items: LogEntry<V>[] = [];
+
+  /** A handle holding `entries`, oldest first. */
+  static from<V>(entries: Iterable<LogEntry<V>>): StoreLog<V> {
+    const handle = new StoreLog<V>();
+    handle.items = [...entries];
+    return handle;
+  }
+
+  append(value: V, now: number): void {
+    this.items.push({ t: now, v: value });
+  }
+
+  prune(cutoff: number): void {
+    this.items = this.items.filter((e) => e.t >= cutoff);
+  }
+
+  size(): number {
+    return this.items.length;
+  }
+
+  values(): readonly V[] {
+    return this.items.map((e) => e.v);
+  }
+
+  entries(): ReadonlyArray<LogEntry<V>> {
+    return [...this.items];
+  }
+
+  since(t: number): readonly V[] {
+    return this.items.filter((e) => e.t >= t).map((e) => e.v);
+  }
+
+  before(t: number): readonly V[] {
+    return this.items.filter((e) => e.t < t).map((e) => e.v);
+  }
+
+  between(from: number, to: number): readonly V[] {
+    return this.items.filter((e) => e.t >= from && e.t <= to).map((e) => e.v);
+  }
+
+  recent(n: number): readonly V[] {
+    return this.items
+      .slice(Math.max(0, this.items.length - Math.max(0, n)))
+      .reverse()
+      .map((e) => e.v);
+  }
+
+  reversed(): readonly V[] {
+    return [...this.items].reverse().map((e) => e.v);
   }
 }
