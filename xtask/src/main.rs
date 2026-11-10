@@ -582,8 +582,8 @@ fn release_notes(args: &[String]) -> ExitCode {
         usage();
         return ExitCode::from(2);
     };
-    let Some(version) = tag.strip_prefix('v').and_then(xtask::stamp::Version::parse) else {
-        eprintln!("xtask release-notes: {tag:?} is not a plain `vX.Y.Z` tag");
+    let Some(version) = xtask::release_notes::parse_release_tag(tag) else {
+        eprintln!("xtask release-notes: {tag:?} is not a `vX.Y.Z[-suffix]` tag");
         return ExitCode::from(2);
     };
     let root = repo_root();

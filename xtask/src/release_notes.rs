@@ -62,6 +62,14 @@ pub fn parse_entries(page: &str) -> Vec<(Version, String)> {
     out
 }
 
+/// The version a release tag names: `vX.Y.Z`, with any pre-release suffix
+/// (`v0.16.0-rc1`) dropped, as `release.yml`'s verify job does, so a pre-release
+/// tag still gets a release body.
+pub fn parse_release_tag(tag: &str) -> Option<Version> {
+    let rest = tag.strip_prefix('v')?;
+    Version::parse(rest.split('-').next()?)
+}
+
 fn ordering_key(v: Version) -> (u64, u64, u64) {
     (v.major, v.minor, v.patch)
 }
@@ -138,6 +146,14 @@ mod tests {
     #[test]
     fn insertion_needs_the_marker() {
         assert!(insert_upgrading_entries("# no marker\n", &[]).is_err());
+    }
+
+    #[test]
+    fn a_release_tag_may_carry_a_prerelease_suffix() {
+        assert_eq!(parse_release_tag("v0.16.0"), Some(v("0.16.0")));
+        assert_eq!(parse_release_tag("v0.16.0-rc1"), Some(v("0.16.0")));
+        assert_eq!(parse_release_tag("0.16.0"), None);
+        assert_eq!(parse_release_tag("vjunk"), None);
     }
 
     #[test]
