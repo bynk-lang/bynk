@@ -268,7 +268,7 @@ pub enum UncheckedReason {
     /// handler return, which strips it before it gets here).
     Effect,
     ValidationError,
-    JsonError,
+    DecodeError,
     HttpResult,
     QueueResult,
     /// #1883, slice 1a: an `Asset` (rejected at boundaries by the checker).
@@ -520,7 +520,7 @@ fn collect_type_names(
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }
@@ -572,7 +572,7 @@ fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => t.clone(),
     }
 }
@@ -633,7 +633,7 @@ pub fn rename_type_ref(t: &TypeRef, renames: &HashMap<String, String>) -> TypeRe
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => t.clone(),
     }
 }
@@ -757,7 +757,7 @@ pub fn codec_suffix(t: &TypeRef) -> String {
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::Unit(_) => "Unit".to_string(),
     }
 }
@@ -1399,7 +1399,7 @@ fn scalar_base_guards(b: BaseType) -> Vec<BaseGuard> {
 /// **This encodes the *deserialise*-side dispatch only** (mirroring
 /// `emit_field_deserialise`'s arms one-for-one, including its `Effect` /
 /// `HttpResult` arm, which it folds into the same unchecked cast as
-/// `ValidationError`/`JsonError`/`QueueResult`). The emitter does not
+/// `ValidationError`/`DecodeError`/`QueueResult`). The emitter does not
 /// actually agree with itself on those two shapes across its other three
 /// dispatches: `serialise_field_expr_via` *recurses* through `Effect` rather
 /// than casting it unchecked, `deserialise_expr_via` also recurses through
@@ -1463,8 +1463,8 @@ pub fn wire_ref(t: &TypeRef, _types: &HashMap<String, Arc<TypeDecl>>) -> WireRef
         TypeRef::ValidationError(_) => WireRef::Unchecked {
             reason: UncheckedReason::ValidationError,
         },
-        TypeRef::JsonError(_) => WireRef::Unchecked {
-            reason: UncheckedReason::JsonError,
+        TypeRef::DecodeError(_) => WireRef::Unchecked {
+            reason: UncheckedReason::DecodeError,
         },
         TypeRef::QueueResult(_) => WireRef::Unchecked {
             reason: UncheckedReason::QueueResult,
@@ -2048,9 +2048,9 @@ service Api {
             }
         ));
         assert!(matches!(
-            wire_ref(&TypeRef::JsonError(sp()), &types),
+            wire_ref(&TypeRef::DecodeError(sp()), &types),
             WireRef::Unchecked {
-                reason: UncheckedReason::JsonError
+                reason: UncheckedReason::DecodeError
             }
         ));
         assert!(matches!(

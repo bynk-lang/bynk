@@ -80,7 +80,7 @@ pub(crate) fn json_codable(
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Actor(_)
         | Ty::ActorSum(_) => false,
     }

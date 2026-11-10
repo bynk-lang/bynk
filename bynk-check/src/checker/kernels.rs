@@ -2881,9 +2881,9 @@ pub(crate) fn first_recursive_generic(
 
 /// v0.22b: type the `Json` codec statics (ADR 0045). `encode(v) -> String`
 /// over any codable value (it throws on a non-finite `Float`, per 0040 —
-/// documented, not typed); `decode[T](s) -> Result[T, JsonError]` with `T`
+/// documented, not typed); `decode[T](s) -> Result[T, DecodeError]` with `T`
 /// explicit (`Json.decode[Order](s)`) or inferred from an expected
-/// `Result[T, JsonError]`.
+/// `Result[T, DecodeError]`.
 pub(crate) fn check_json_static(
     method: &Ident,
     type_args: &[TypeRef],
@@ -3028,7 +3028,7 @@ pub(crate) fn check_json_static(
                 // `Json.decode[Typo]("{}")` previously compiled clean.
                 [one] => resolve_expr_type_ref(one, ctx)?,
                 [] => match expected.map(|e| tys.get(e)).as_deref() {
-                    Some(Ty::Result(t, e)) if *e == tys.intern(Ty::JsonError) => *t,
+                    Some(Ty::Result(t, e)) if *e == tys.intern(Ty::DecodeError) => *t,
                     _ => {
                         ctx.errors.push(
                             CompileError::new(
@@ -3038,7 +3038,7 @@ pub(crate) fn check_json_static(
                             )
                             .with_note(
                                 "give it explicitly (`Json.decode[Order](s)`) or use the \
-                                 result where a `Result[T, JsonError]` is expected",
+                                 result where a `Result[T, DecodeError]` is expected",
                             ),
                         );
                         return None;
@@ -3115,7 +3115,7 @@ pub(crate) fn check_json_static(
             ) {
                 return None;
             }
-            Some(tys.intern(Ty::Result(t, tys.intern(Ty::JsonError))))
+            Some(tys.intern(Ty::Result(t, tys.intern(Ty::DecodeError))))
         }
         _ => {
             // The resolver owns the unknown-static diagnostic.

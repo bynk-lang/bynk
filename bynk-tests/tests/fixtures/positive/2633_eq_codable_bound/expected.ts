@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import { __bynkEq } from "./__bynk_runtime/equality.js";
-import type { ValidationError, JsonError } from "./__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "./__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
 
 export function pick<T>(a: T, b: T, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {

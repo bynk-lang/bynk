@@ -147,7 +147,7 @@ pub fn type_ref_to_string(t: &TypeRef) -> String {
             format!("Map[{}, {}]", type_ref_to_string(k), type_ref_to_string(v))
         }
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::Unit(_) => "()".to_string(),
         // v0.157 (ADR 0183): a user generic-type application, as written.
         TypeRef::App { name, args, .. } => format!(

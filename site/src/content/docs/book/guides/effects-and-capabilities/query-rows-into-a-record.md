@@ -69,7 +69,7 @@ service find {
 
 Both operations return `Result[…, SqlReadError]`, where `SqlReadError` is
 `Sql(SqlError)` for the statement's own failure (a missing column, say) and
-`Decode(JsonError)` for a row that did not fit `T`, a column whose stored value
+`Decode(DecodeError)` for a row that did not fit `T`, a column whose stored value
 disagrees with its field's type:
 
 ```bynk,fragment

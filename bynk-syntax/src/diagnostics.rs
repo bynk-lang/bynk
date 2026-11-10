@@ -1767,6 +1767,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["string_literal"],
     ),
     warn(d(
+        "bynk.types.deprecated_json_error",
+        "`JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable).",
+    )),
+    warn(d(
         "bynk.list.deprecated_function",
         "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),

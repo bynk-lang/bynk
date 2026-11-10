@@ -60,12 +60,12 @@ service loose {
 	}
 }
 
-// #2957: the bound error reaches functions typed at `SqlError` / `JsonError`.
+// #2957: the bound error reaches functions typed at `SqlError` / `DecodeError`.
 fn sqlText(e: SqlError) -> String {
 	"sql"
 }
 
-fn jsonText(e: JsonError) -> String {
+fn jsonText(e: DecodeError) -> String {
 	"decode"
 }
 

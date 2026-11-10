@@ -37,8 +37,12 @@ pub const KEYWORDS: &[KeywordInfo] = &[
     ),
     k("Int", "The integer base type."),
     k(
+        "DecodeError",
+        "The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
+    ),
+    k(
         "JsonError",
-        "The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
+        "Deprecated spelling of `DecodeError`; it still compiles, with a warning and an auto-fix.",
     ),
     k("None", "The empty variant of `Option`."),
     k("Ok", "The success variant of `Result`."),

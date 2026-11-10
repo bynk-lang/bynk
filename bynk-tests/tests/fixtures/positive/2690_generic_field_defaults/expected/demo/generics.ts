@@ -2,7 +2,7 @@
 // commons demo.generics
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
 /**
@@ -72,7 +72,7 @@ export function cache(k: string): Cache<number> {
 }
 
 export function decodedSearch(json: string): Search {
-  const __r0 = ((__s: string): Result<Search, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Search(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Search); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(json);
+  const __r0 = ((__s: string): Result<Search, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Search(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Search); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(json);
   switch (__r0.tag) {
     case "Ok": {
       const s = __r0.value;
@@ -86,7 +86,7 @@ export function decodedSearch(json: string): Search {
 }
 
 export function decodedCache(json: string): Cache<number> {
-  const __r0 = ((__s: string): Result<Cache<number>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Cache_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Cache<number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(json);
+  const __r0 = ((__s: string): Result<Cache<number>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Cache_Int(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Cache<number>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(json);
   switch (__r0.tag) {
     case "Ok": {
       const c = __r0.value;
@@ -100,7 +100,7 @@ export function decodedCache(json: string): Cache<number> {
 }
 
 export function decodedCacheOf<T>(json: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Option<Cache<T>> {
-  const __r0 = ((__s: string): Result<Cache<T>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codecOf_Cache(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Cache<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(json);
+  const __r0 = ((__s: string): Result<Cache<T>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codecOf_Cache(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Cache<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(json);
   switch (__r0.tag) {
     case "Ok": {
       const c = __r0.value;

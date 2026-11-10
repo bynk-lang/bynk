@@ -12,7 +12,7 @@
 //!   #878), emitted by a `messages` bundle's `render`;
 //! - the boundary-codec group (`Ok`, `Err`, `Result`, `BoundaryError`, #914),
 //!   which an *inlined* deserialiser builds directly;
-//! - the JSON-codec group (`Ok`, `Err`, `Result`, `JsonValue`, `JsonError`,
+//! - the JSON-codec group (`Ok`, `Err`, `Result`, `JsonValue`, `DecodeError`,
 //!   #914), which the `Json.decode[T]` wrapper names in its own signature and
 //!   body, independently of which arm the inner deserialiser takes.
 //!
@@ -389,7 +389,7 @@ impl RuntimeUse {
     }
 
     /// Record that the module emits the `Json.decode[T]` wrapper, whose
-    /// signature and body name `Result`, `JsonValue` and `JsonError` regardless
+    /// signature and body name `Result`, `JsonValue` and `DecodeError` regardless
     /// of which arm the inner deserialiser takes.
     pub fn note_json_codec(&self) {
         self.json_codec.set(true);
@@ -510,7 +510,7 @@ impl RuntimeUse {
         self.boundary_codec.get()
     }
 
-    /// Whether the `Ok` / `Err` / `Result` / `JsonValue` / `JsonError` group
+    /// Whether the `Ok` / `Err` / `Result` / `JsonValue` / `DecodeError` group
     /// must be imported.
     pub fn json_codec(&self) -> bool {
         self.json_codec.get()

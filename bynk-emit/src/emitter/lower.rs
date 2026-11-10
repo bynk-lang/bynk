@@ -2952,7 +2952,7 @@ fn lower_method_call(
     // Keyed on the recorded callee, not the method name. #2957: the error
     // tags are `as const` — `Err<E>` infers `E` from the literal, and a bare
     // `"Sql"` widens to `string`, so a match on `Err(Sql(e))` would not narrow
-    // and `e` would reach tsc as `JsonError | SqlError`.
+    // and `e` would reach tsc as `DecodeError | SqlError`.
     if let Some(Callee::D1Select {
         cap,
         row,
@@ -4114,7 +4114,7 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
 /// `JSON.parse` + `deserialise_*`, mapping a parse failure to a `Malformed`
-/// JsonError and a BoundaryError to the uniform `kind`/`path`/`message`
+/// DecodeError and a BoundaryError to the uniform `kind`/`path`/`message`
 /// record (ADR 0047). Returns `None` when the receiver is not `Json` or the
 /// shape does not match, so the dispatcher falls through.
 ///
@@ -4166,7 +4166,7 @@ fn lower_json_codec_call(
 }
 
 /// The arrow function that decodes JSON text into `t`:
-/// `((__s: string): Result<T, JsonError> => …)`, for `Json.decode` /
+/// `((__s: string): Result<T, DecodeError> => …)`, for `Json.decode` /
 /// `Json.decodeSql` (`sql`: SQLite's `0`/`1` flags read as `Bool`) and for the
 /// typed `D1` reads (#2865), which apply it to the rows `all`/`first` return.
 /// `None` when `t` has no TS rendering.
@@ -4193,7 +4193,7 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     if cx.records_codec_roots() {
         note_ground_roots(t, cx);
     }
-    // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
+    // #914: the wrapper below names `Result`, `JsonValue` and `DecodeError`
     // in its own signature and body, whichever arm the inner deserialiser
     // takes — including the delegating ones, which record nothing. A
     // module that curates its import list (the test-scaffold modules)
@@ -4215,7 +4215,7 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
         String::new()
     };
     Some(format!(
-        "(__s: string): Result<{ts}, JsonError> => {{ \
+        "(__s: string): Result<{ts}, DecodeError> => {{ \
          let __j: __JsonValue; \
          try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
          catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
@@ -7632,7 +7632,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Actor(_)
         | Ty::ActorSum(_)
         | Ty::Var(_) => EqualityLowering::Structural,

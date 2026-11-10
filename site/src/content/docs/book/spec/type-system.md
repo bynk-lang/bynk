@@ -182,7 +182,7 @@ surface.
 the error type produced by a refined or opaque `.of` constructor when validation
 fails.
 
-`JsonError` (v0.22b) is the error type produced by `Json.decode`
+`DecodeError` (v0.22b) is the error type produced by `Json.decode`
 ([§5.2](/book/spec/static-semantics/#52-well-typedness)) — a compiler-known **record**
 with `String` fields `kind`, `path`, and `message`, inspectable by ordinary
 field access. Like `ValidationError` it is a built-in name, not a declarable

@@ -15,13 +15,13 @@ commons guide.codec
 
 type Point = { x: Int, y: Int }
 
-fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] {
+fn roundTrip[T: Codable](v: T) -> Result[T, DecodeError] {
   Json.decode[T](Json.encode(v))
 }
 
 fn encodeAll[T: Codable](xs: List[T]) -> String { Json.encode(xs) }
 
-fn check(p: Point) -> Result[Point, JsonError] { roundTrip(p) }
+fn check(p: Point) -> Result[Point, DecodeError] { roundTrip(p) }
 ```
 
 The caller supplies the codec the compiler already generates for the concrete type, so

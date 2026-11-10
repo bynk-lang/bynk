@@ -18,7 +18,7 @@ case "a sum and a refined type" {
 }
 
 case "a refined type is revalidated through the witness" {
-  let bad: Result[Email, JsonError] = dec[Email]("\"ab\"")
+  let bad: Result[Email, DecodeError] = dec[Email]("\"ab\"")
   expect bad == Json.decode[Email]("\"ab\"")
   expect !bad.isOk()
   expect dec[Email]("\"abc\"").isOk()

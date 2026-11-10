@@ -121,7 +121,7 @@
     "Float",
     "Instant",
     "Int",
-    "JsonError",
+    "DecodeError",
     "None",
     "Ok",
     "Option",

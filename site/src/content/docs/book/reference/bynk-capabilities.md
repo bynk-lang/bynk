@@ -819,7 +819,7 @@ refused.
 
 `select` gives `Result[List[T], SqlReadError]` and `firstAs`
 `Result[Option[T], SqlReadError]`. `SqlReadError` is `Sql(SqlError)` for the
-statement's own failure and `Decode(JsonError)` for a row that did not decode,
+statement's own failure and `Decode(DecodeError)` for a row that did not decode,
 such as a column whose stored value disagrees with its field.
 
 Three things about the JSON a row becomes:

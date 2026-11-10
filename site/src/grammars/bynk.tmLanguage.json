@@ -352,7 +352,7 @@
       "patterns": [
         {
           "name": "support.type.builtin.bynk",
-          "match": "\\b(Int|String|Bool|Float|Duration|Instant|Bytes|Decimal|Result|Option|Effect|ValidationError|JsonError|HttpResult|List|Map|History)\\b"
+          "match": "\\b(Int|String|Bool|Float|Duration|Instant|Bytes|Decimal|Result|Option|Effect|ValidationError|DecodeError|JsonError|HttpResult|List|Map|History)\\b"
         },
         {
           "name": "support.function.predicate.bynk",

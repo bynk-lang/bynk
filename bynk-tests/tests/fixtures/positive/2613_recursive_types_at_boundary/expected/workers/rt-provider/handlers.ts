@@ -2,7 +2,7 @@
 // context rt.provider
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
@@ -24,8 +24,8 @@ export interface Planted {
 export const Planted = {
 };
 
-export function roundTrip(t: Tree): Result<Tree, JsonError> {
-  return ((__s: string): Result<Tree, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Tree(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Tree); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Tree(t)));
+export function roundTrip(t: Tree): Result<Tree, DecodeError> {
+  return ((__s: string): Result<Tree, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Tree(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Tree); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(globalThis.JSON.stringify(__serialise_Tree(t)));
 }
 
 export const trees = {

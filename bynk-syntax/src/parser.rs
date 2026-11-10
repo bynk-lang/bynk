@@ -1771,7 +1771,8 @@ pub fn is_reserved_keyword(kind: TokenKind) -> bool {
             | Instant
             | Bytes
             | Decimal
-            | JsonError
+            | DecodeError
+            | JsonErrorDeprecated
             | Property
             | Adapter
             | Binding

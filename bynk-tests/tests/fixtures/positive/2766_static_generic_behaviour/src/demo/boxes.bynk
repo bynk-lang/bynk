@@ -33,7 +33,7 @@ type Packed[T: Codable] = { json: String }
 
 fn Packed.pack(v: T) -> Packed[T] { Packed { json: Json.encode(v) } }
 
-fn Packed.unpack(w: Packed[T]) -> Result[T, JsonError] { Json.decode[T](w.json) }
+fn Packed.unpack(w: Packed[T]) -> Result[T, DecodeError] { Json.decode[T](w.json) }
 
 fn none[T]() -> Option[T] { None }
 

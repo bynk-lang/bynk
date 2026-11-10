@@ -993,8 +993,8 @@ mod tests {
             "ValidationError"
         );
         assert_eq!(
-            emitter::ts_type_ref(&TypeRef::JsonError(Span::default())),
-            "JsonError"
+            emitter::ts_type_ref(&TypeRef::DecodeError(Span::default())),
+            "DecodeError"
         );
     }
 

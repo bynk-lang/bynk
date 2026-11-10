@@ -5,6 +5,7 @@
 //! stay in the parent module, reached as ancestor privates via `self`.
 
 use super::*;
+use crate::error::Applicability;
 
 impl<'a> Parser<'a> {
     // -- type declarations --
@@ -996,9 +997,30 @@ impl<'a> Parser<'a> {
                     self.bump();
                     Ok(TypeRef::ValidationError(t.span))
                 }
-                TokenKind::JsonError => {
+                TokenKind::DecodeError => {
                     self.bump();
-                    Ok(TypeRef::JsonError(t.span))
+                    Ok(TypeRef::DecodeError(t.span))
+                }
+                // The deprecated spelling: the same type, with a warning that
+                // carries a machine-applicable rewrite (ADR 0117, ADR 0054).
+                TokenKind::JsonErrorDeprecated => {
+                    self.bump();
+                    self.warnings.push(
+                        CompileError::new(
+                            "bynk.types.deprecated_json_error",
+                            t.span,
+                            "`JsonError` is deprecated — it is now `DecodeError`, the error type of both `Json.decode` and `Yaml.decode`",
+                        )
+                        .with_note(
+                            "`JsonError` was renamed to `DecodeError` (ADR 0047 is amended); the old spelling still compiles for now and `bynk fmt` rewrites it",
+                        )
+                        .with_suggestion(
+                            "rename to `DecodeError`",
+                            vec![(t.span, "DecodeError".to_string())],
+                            Applicability::MachineApplicable,
+                        ),
+                    );
+                    Ok(TypeRef::DecodeError(t.span))
                 }
                 TokenKind::Option => {
                     self.bump();

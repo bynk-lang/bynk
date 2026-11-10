@@ -2,7 +2,7 @@
 // adapter bynk.cloudflare
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 
 import { FetchError, Request, Response } from "../bynk.js";
 
@@ -313,11 +313,11 @@ export const SqlError = {
  */
 export type SqlReadError =
     { readonly tag: "Sql"; readonly error: SqlError }
-  | { readonly tag: "Decode"; readonly error: JsonError };
+  | { readonly tag: "Decode"; readonly error: DecodeError };
 
 export const SqlReadError = {
   Sql: (error: SqlError): SqlReadError => ({ tag: "Sql", error }),
-  Decode: (error: JsonError): SqlReadError => ({ tag: "Decode", error }),
+  Decode: (error: DecodeError): SqlReadError => ({ tag: "Decode", error }),
 };
 
 /**

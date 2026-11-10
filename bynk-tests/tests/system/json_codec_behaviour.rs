@@ -2,7 +2,7 @@
 //!
 //! Snapshots prove the emitted shape; this proves the behaviour: a record
 //! with a `Float` field round-trips exactly (the v0.21 dependency), a
-//! malformed document decodes to a `Malformed` JsonError, a shape mismatch
+//! malformed document decodes to a `Malformed` DecodeError, a shape mismatch
 //! carries the tracked field path, and — the 0049 tightening — a fractional
 //! number into a bare-`Int` field is rejected. Compiles the json-codec
 //! fixture in single-file mode and drives `save`/`load` with `tsc` + `node`.
@@ -103,7 +103,7 @@ if (back.tag === "Ok") {
   assert(back.value.tags.length === 2, "tags survive");
 }
 
-// 2) Malformed input -> a Malformed JsonError.
+// 2) Malformed input -> a Malformed DecodeError.
 const malformed = load("{");
 assert(malformed.tag === "Err", "malformed input errs");
 if (malformed.tag === "Err") {
@@ -133,7 +133,7 @@ if (fractional.tag === "Err") {
 const many = loadMany('[{"id":"a","price":1.0,"qty":1,"status":{"kind":"Pending"},"tags":[]}]');
 assert(many.tag === "Ok" && many.value.length === 1, "List[Order] decodes");
 
-// 6) The Bynk-side JsonError fields compose (describe() formats kind/path/message).
+// 6) The Bynk-side DecodeError fields compose (describe() formats kind/path/message).
 const description = describe("{");
 assert(description.startsWith("Malformed at $"), `describe formats the error, got: ${description}`);
 
