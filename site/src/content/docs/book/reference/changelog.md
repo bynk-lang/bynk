@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.536.1** | `BYNK_PHASE_TIMING=1` makes an analysis round report its time by R3.13 query level (file, unit, definition, project), and `cargo xtask bench` records it per release from the language server |
 | **v0.536.0** | The decode error type is renamed from `JsonError` to `DecodeError`; `JsonError` stays as a deprecated alias with an auto-fix |
 | **v0.535.0** | An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2) |
 | **v0.534.7** | The emitter writes an agent class's Workers dispatch and websocket-open dispatch in `emit_agent_dispatch`, as part of splitting `emit_agent` (#3167) |
