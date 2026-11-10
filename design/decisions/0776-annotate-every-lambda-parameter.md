@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The emitter annotates every lambda parameter with its checked type, so a lambda handed to a kernel method (`append`, `map`, `filter`, `flatMap`, `any`) no longer fails `tsc --strict` with an implicit `any` ([#3228](https://github.com/bynk-lang/bynk/issues/3228))
----
+# 0776 — The emitter annotates every lambda parameter with its checked type
 
-## ADR: annotate-every-lambda-parameter
-title: The emitter annotates every lambda parameter with its checked type
-summary: A lambda parameter is annotated unconditionally, not only where it has no source annotation and a pattern
+- **Status:** Accepted (v0.527.7)
 
 **Context.** `lower_lambda` printed a parameter's type only when the source annotated it, or (#2712) when it was a record pattern. Any other parameter was a bare name, which TypeScript types from context. Several kernel lowerings give none: `acc.append((x) => …)` lowers to a spread element, and `map`, `filter`, `flatMap`, `any` and `count` lower to an immediately invoked arrow, `((x) => …)(__x)`. Neither position is a contextual type, so `tsc --strict` rejected the emitted code with TS7006 (implicit `any`) for a program the Bynk checker had accepted (#3228, found in #3193).
 
