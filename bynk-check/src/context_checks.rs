@@ -4013,7 +4013,7 @@ fn check_agent_decls(
                     hints,
                     locals,
                 );
-            } else if checker::zero_value_ts(elem, None, &typed.types).is_none() {
+            } else if !checker::is_zeroable(elem, None, &typed.types) {
                 errors.push(
                     CompileError::new(
                         "bynk.agents.non_zeroable_state_field",
