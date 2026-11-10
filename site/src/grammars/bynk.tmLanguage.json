@@ -193,13 +193,13 @@
     "keyword-labels": {
       "comment": "#79 (bynk#2837): a reserved word names a field where it is a label, followed by `:` (`{ type: String }`, `Account { type: t, .. }`, `Push(from: …)`). The words are those #keywords and #constants colour unconditionally; a guarded contextual word (`key`, `store`, `trace`, …) is already an identifier before `:`. `::` and `:=` are not a label's colon.",
       "name": "variable.other.property.bynk",
-      "match": "\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false)\\b(?=\\s*:(?![:=]))"
+      "match": "\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false)\\b(?=\\s*:(?![:=]))"
     },
     "keyword-members": {
       "comment": "#79 (bynk#2837): a reserved word after `.` on the same line is a member: a method when a call or type arguments follow (`Sorted.from(xs)`, `fn Sorted.from(…)`), a field otherwise (`a.type`). A one-line match keeps the compiler's same-line rule; `(?<!\\.)` leaves `..` and `...` alone. The words are #keyword-labels' plus `trace` and `faults`, whose guards a member can trip.",
       "patterns": [
         {
-          "match": "(?<!\\.)(\\.)[ \\t]*\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false|trace|faults)\\b(?=\\s*[(\\[])",
+          "match": "(?<!\\.)(\\.)[ \\t]*\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false|trace|faults)\\b(?=\\s*[(\\[])",
           "captures": {
             "2": {
               "name": "entity.name.function.member.bynk"
@@ -207,7 +207,7 @@
           }
         },
         {
-          "match": "(?<!\\.)(\\.)[ \\t]*\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false|trace|faults)\\b",
+          "match": "(?<!\\.)(\\.)[ \\t]*\\b(commons|context|adapter|binding|suite|case|property|type|event|asset|embed|const|fn|capability|provides|stub|service|agent|actor|invariant|transition|requires|ensures|exports|uses|consumes|protocol|messages|if|else|let|do|match|is|on|given|call|as|expect|from|http|cron|queue|websocket|schedule|message|self|opaque|transparent|where|implies|enum|record|called|never|once|times|before|returns|each|fails|true|false|trace|faults)\\b",
           "captures": {
             "2": {
               "name": "variable.other.property.bynk"
@@ -243,9 +243,24 @@
           "match": "\\bprivate\\b(?=\\s+(?:fn|type|messages|asset|embed|const)\\b)"
         },
         {
-          "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere.",
+          "comment": "#2137: `advance` is a CONTEXTUAL keyword opening a test case's `advance Clock by <Duration>` statement — highlighted only before `<Cap> by`, so it stays an ordinary identifier elsewhere. #3191: that `by` is a clause word here, coloured with it.",
+          "match": "\\b(advance)\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s+by\\b)",
+          "captures": {
+            "1": { "name": "keyword.control.bynk" }
+          }
+        },
+        {
+          "comment": "#2137/#3191: the `by` of `advance <Cap> by <Duration>`, matched with the words before it since a TextMate lookbehind cannot be variable-length.",
+          "match": "\\badvance\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(by)\\b",
+          "captures": {
+            "1": { "name": "entity.name.type.bynk" },
+            "2": { "name": "keyword.control.bynk" }
+          }
+        },
+        {
+          "comment": "#3191: `by` is a CONTEXTUAL keyword — a clause word only where an actor follows it, `by <Actor>`, `by <binder>: <Actor>` or a call's `by <Actor>(…)` — and an ordinary name (a parameter, a binding, a field) everywhere else, so it is highlighted only before a capitalised actor name, optionally behind a binder and its colon.",
           "name": "keyword.control.bynk",
-          "match": "\\badvance\\b(?=\\s+[A-Za-z_][A-Za-z0-9_]*\\s+by\\b)"
+          "match": "\\bby\\b(?=\\s+(?:[A-Za-z_][A-Za-z0-9_]*\\s*:\\s*)?[A-Z])"
         },
         {
           "comment": "#2640: `par` is a CONTEXTUAL keyword opening a `par { … }` binding block — highlighted only before `{`, so it stays an ordinary identifier elsewhere.",
@@ -279,7 +294,7 @@
         },
         {
           "name": "keyword.control.bynk",
-          "match": "\\b(if|else|let|do|match|is|on|given|call|by|as|expect|from|http|cron|queue|websocket|schedule|message)\\b"
+          "match": "\\b(if|else|let|do|match|is|on|given|call|as|expect|from|http|cron|queue|websocket|schedule|message)\\b"
         },
         {
           "name": "variable.language.self.bynk",

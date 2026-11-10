@@ -253,8 +253,10 @@ pub fn complete_in(
     if after_clause_keyword(line_prefix, "on") {
         return handler_kind_candidates();
     }
-    // 4d. `by <cursor>` — the project's actor names.
-    if after_clause_keyword(line_prefix, "by") {
+    // 4d. `by <cursor>` — the project's actor names, where `by` is the clause
+    //     word. #3191: `by` is also an ordinary name, so a variable named `by`
+    //     followed by an operator is not offered actors.
+    if is_by_clause_position(line_prefix) {
         return actor_candidates(doc_text, files);
     }
     // 4e. `exports <cursor>` — the export kinds (adapter).
@@ -1559,6 +1561,30 @@ fn after_clause_keyword(line: &str, kw: &str) -> bool {
             .all(|c| c.is_alphanumeric() || c == '_')
 }
 
+/// #3191: the cursor is completing the actor after a `by` that is the clause
+/// word rather than a name: after a handler's return type (`-> T by`), a
+/// service header (`service s from http by`), an effect-let value
+/// (`let r <- call by`) or an `expect` subject (`expect call by`). Anywhere else
+/// on the line `by` is an ordinary name (a parameter, a binding), and
+/// `advance Clock by` takes a duration, not an actor.
+pub(crate) fn is_by_clause_position(line: &str) -> bool {
+    if !after_clause_keyword(line, "by") {
+        return false;
+    }
+    let Some(idx) = line.rfind("by") else {
+        return false;
+    };
+    let before = line[..idx].trim_start();
+    // A handler's `by` follows its return type, before the body's `{`.
+    let after_return_type = before
+        .rfind("->")
+        .is_some_and(|i| !before[i..].contains('{'));
+    after_return_type
+        || before.contains("<-")
+        || before.starts_with("service ")
+        || before.starts_with("expect ")
+}
+
 /// #472 (finding 2, PR #827 review): `for all x: T, y: U where <cursor>` — a
 /// generative-test binder's clause. Unlike a type declaration's or a refined
 /// pattern's `where`, this one takes an arbitrary `Bool` expression over the
@@ -2738,6 +2764,19 @@ fn keyword_and_snippet_candidates() -> Vec<Completion> {
         .filter(|k| k.word.chars().next().is_some_and(char::is_lowercase))
         .map(|k| Completion::item(k.word, CompletionKind::Keyword, Some(k.meaning.to_string())))
         .collect();
+    // #3191: `by` is a contextual keyword (an ordinary name outside its clause
+    // positions), so it is no longer in `KEYWORDS`; it stays offered here, as a
+    // clause word after a return type or an effect-let value.
+    if let Some(by) = keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "by")
+    {
+        out.push(Completion::item(
+            by.word,
+            CompletionKind::Keyword,
+            Some(by.meaning.to_string()),
+        ));
+    }
     for &(label, body) in SNIPPETS {
         out.push(Completion::snippet(label, body));
     }
@@ -4419,7 +4458,7 @@ fn Box.size(self) -> Int { 1 }
     #[test]
     fn by_offers_project_actors() {
         let doc = "context a.b\n\nactor Caller { auth = Bearer }\n";
-        let got = labels("    by ", doc);
+        let got = labels("  on call f() -> Effect[Int] by ", doc);
         assert!(got.contains(&"Caller".to_string()), "{got:?}");
     }
 
@@ -4482,6 +4521,24 @@ fn Box.size(self) -> Int { 1 }
         // A standalone keyword does.
         assert!(after_clause_keyword("  service s from ", "from"));
         assert!(after_clause_keyword("    by ", "by"));
+    }
+
+    #[test]
+    fn by_offers_actors_only_where_it_is_the_clause_word() {
+        // The clause positions.
+        assert!(is_by_clause_position(
+            "  on GET(\"/\") () -> Effect[Int] by "
+        ));
+        assert!(is_by_clause_position("service api from http by "));
+        assert!(is_by_clause_position("    let r <- svc.POST(\"/h\") by "));
+        assert!(is_by_clause_position("    expect svc.GET(\"/h\") by "));
+        // A name: a binding, a parameter, a reference, or `advance`'s amount.
+        assert!(!is_by_clause_position("    let x = a + by "));
+        assert!(!is_by_clause_position("  fn shift(xs: List[Int], by "));
+        assert!(!is_by_clause_position("    advance Clock by "));
+        // A reference in a one-line body, after the return type's `->`.
+        assert!(!is_by_clause_position("  fn f(by: Int) -> Int { by "));
+        assert!(!is_by_clause_position("    by "));
     }
 
     #[test]

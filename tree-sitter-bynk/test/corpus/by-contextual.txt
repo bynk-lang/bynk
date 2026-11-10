@@ -1,0 +1,194 @@
+================================================================================
+`by` as an ordinary name — parameter, binding, lambda, shorthand (#3191)
+================================================================================
+
+context demo
+
+type Step = { by: Int }
+
+fn shift(xs: List[Int], by: Int) -> List[Int] {
+  xs.map((x) => x + by)
+}
+
+fn mk() -> Step {
+  let by = 2
+  Step { by }
+}
+
+fn amount(s: Step) -> Int {
+  let Step { by, .. } = s
+  by
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (record_type
+        (record_field
+          (identifier)
+          (base_type))))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type)))
+      (param
+        (identifier)
+        (base_type))
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (block
+        (method_call
+          (identifier)
+          (identifier)
+          (lambda_expr
+            (lambda_param
+              (identifier))
+            (binary_expr
+              (identifier)
+              (identifier))))))
+    (fn_decl
+      (identifier)
+      (identifier)
+      (block
+        (let_stmt
+          (identifier)
+          (number_literal))
+        (record_construction
+          (identifier)
+          (field_init
+            (identifier)))))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (let_else_stmt
+          (record_pattern
+            (identifier)
+            (record_pattern_field
+              (identifier)))
+          (identifier))
+        (identifier)))))
+
+================================================================================
+`by` — a tail statement after an effect-let, not a call-site clause (#3191)
+================================================================================
+
+context demo
+
+fn next_line() -> Effect[Int] {
+  let by = 3
+  let a <- f()
+  by
+}
+
+fn one_line() -> Effect[Int] { let by = 1 let a <- f() by }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (block
+        (let_stmt
+          (identifier)
+          (number_literal))
+        (effect_let_stmt
+          (identifier)
+          (call
+            (identifier)))
+        (identifier)))
+    (fn_decl
+      (identifier)
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (block
+        (let_stmt
+          (identifier)
+          (number_literal))
+        (effect_let_stmt
+          (identifier)
+          (call
+            (identifier)))
+        (identifier)))))
+
+================================================================================
+`by` keeps its clauses — handler, call site and `advance` (#3191)
+================================================================================
+
+context demo
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by who: Visitor {
+    Ok("x")
+  }
+}
+
+suite demo {
+  case "c" {
+    let r <- svc.GET("/") by User("bob")
+    advance Clock by 1.minutes
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol)
+      (handler
+        (http_handler
+          (http_method)
+          (string_literal)
+          (generic_type_ref
+            (builtin_type)
+            (generic_type_ref
+              (builtin_type)
+              (base_type)))
+          (by_clause
+            (identifier)
+            (identifier))
+          (block
+            (ok_expr
+              (string_literal)))))))
+  (suite_decl
+    (qualified_name
+      (identifier))
+    (case
+      (string_literal)
+      (effect_let_stmt
+        (identifier)
+        (method_call
+          (identifier)
+          (identifier)
+          (string_literal))
+        (call_site_actor
+          (identifier)
+          (string_literal)))
+      (advance_stmt
+        (identifier)
+        (field_access
+          (number_literal)
+          (identifier))))))

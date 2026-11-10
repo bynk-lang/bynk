@@ -72,10 +72,6 @@ pub const KEYWORDS: &[KeywordInfo] = &[
         "Name an adapter's TypeScript binding module (`binding \"<module>\"`).",
     ),
     k(
-        "by",
-        "Name the actor a handler consumes, after the return type — or a service-level default on the header (`… -> T by <name>: <Actor>`).",
-    ),
-    k(
         "capability",
         "Declare a capability (a dependency interface) in a context, or a distinct instance of a platform resource (`capability Sessions = Kv`).",
     ),
@@ -235,6 +231,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
     k(
         "advance",
         "Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`).",
+    ),
+    k(
+        "by",
+        "A clause word only in its positions — naming the actor a handler consumes after the return type or on a service header (`… -> T by <name>: <Actor>`), the actor of a call (`let r <- f() by User(\"bob\")`), and the amount of `advance Clock by <Duration>`; an ordinary name (a parameter, a binding, a field) everywhere else.",
     ),
     k(
         "derives",

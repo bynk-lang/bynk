@@ -299,10 +299,10 @@ case "an over-limit request is denied" {
 
 ## Keywords
 
-**61** hard keywords — never usable as an identifier:
+**60** hard keywords — never usable as an identifier:
 `Bool` `Bytes` `Decimal` `Duration` `Effect` `Err` `Float` `Instant` `Int` `JsonError`
 `None` `Ok` `Option` `Result` `Some` `String` `ValidationError` `actor`
-`adapter` `agent` `as` `binding` `by` `capability` `commons` `consumes`
+`adapter` `agent` `as` `binding` `capability` `commons` `consumes`
 `context` `cron` `do` `else` `ensures` `enum` `expect` `exports` `false` `fn`
 `from` `given` `http` `if` `implies` `invariant` `is` `let` `match` `opaque`
 `property` `protocol` `provides` `queue` `record` `requires` `self` `service`
@@ -311,8 +311,8 @@ case "an over-limit request is denied" {
 Reserved only in their own position (ordinary names elsewhere): `asset` `case`
 `const` `embed` `event` `messages` `on` `suite`.
 
-Contextual words (keywords in one place only): `advance` `derives` `drop` `fixture` `key` `migrate`
-`par` `private` `removed` `replaces` `store`.
+Contextual words (keywords in one place only): `advance` `by` `derives` `drop` `fixture` `key`
+`migrate` `par` `private` `removed` `replaces` `store`.
 
 Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 `Connection` `History` `HttpResult` `List` `Map` `Query` `QueueResult`

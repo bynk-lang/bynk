@@ -794,6 +794,10 @@ An `actor` is a nominal *boundary contract* — a closed, compiler-known
 authentication scheme plus an optional sealed identity — consumed by a handler's
 `by` clause (§4.4.8). Actors are context-only.
 
+`by` is a contextual keyword ([§3.1.1](/book/spec/lexical-grammar/#311-identifier)):
+here, after a handler's return type or a service header, it can only be this
+clause, since neither a type nor a header is followed by an expression.
+
 ### §4.4.9 actor_decl (v0.45)
 
 {{#grammar actor_decl}}
@@ -1623,3 +1627,12 @@ expression, and a block body of `expect`s.
 acts as when it drives a service handler, with its identity value. Distinct
 from the handler's [`by_clause`](#448-by_clause), which binds an actor and
 carries no identity argument. Well-formedness: §5.9.
+
+`by` is a contextual keyword ([§3.1.1](/book/spec/lexical-grammar/#311-identifier)),
+and a block has no statement terminators, so after the value of an effect-let (or
+an `expect` subject) a `by` is either this clause or the first token of the next
+statement, an ordinary name. It is the clause only when it is on the same line as
+the end of the value **and** an identifier (the actor) follows it. A `by` on a
+later line, or one not followed by an identifier (`{ let a <- f() by }`), begins
+the next statement. The formatter writes the clause on the value's own line, so
+formatted code is never misread.
