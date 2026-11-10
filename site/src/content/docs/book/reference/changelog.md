@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.534.6** | The checker registers a project's files for error attribution once instead of once per unit, removing a units-times-files cost (500 contexts: 18% fewer instructions in `bynk check`) |
 | **v0.534.5** | The language server remembers each file's owning unit for the doc-link hint scan instead of re-parsing every file on every round, about 7% off a 200-context edit |
 | **v0.534.4** | The checker shares a unit's parsed declarations and agents by reference instead of deep-cloning them for every agent and handler, so a project check is up to a third faster (500 contexts: a language-server edit 521 ms to 344 ms) |
 | **v0.534.3** | The editor-latency budget (language-server edit-to-diagnostics p95 under 100 ms on the 50-context project) is stated in the benchmark README and the `keystroke_latency` row, and `cargo xtask bench` warns when a record breaches it |
