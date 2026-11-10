@@ -1792,9 +1792,12 @@ fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
             let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
             let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
                 + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
-            let (parsed, _) =
-                bynk_syntax::parser::parse_unit_with_warnings_from(&tokens, unit.source, &mut next_id)
-                    .ok()?;
+            let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
+                &tokens,
+                unit.source,
+                &mut next_id,
+            )
+            .ok()?;
             let SourceUnit::Adapter(a) = &parsed else {
                 return None;
             };
