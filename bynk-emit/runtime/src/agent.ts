@@ -479,7 +479,12 @@ export class AgentQueue {
 
   // Run `fn` once every call queued before it has finished. The wait, and only
   // the wait, is bounded by `waitMs`; a call that gives up passes its place on.
-  run<T>(agent: string, waitMs: number, fn: () => Promise<T>): Promise<T> {
+  //
+  // `fn` is handed `yieldSlot`, which gives the place up early, once: a handler
+  // that has committed and has only a reply left to send (the events fan-out,
+  // which calls subscribers that may call this instance back) lets the next
+  // call in without waiting for the reply to finish.
+  run<T>(agent: string, waitMs: number, fn: (yieldSlot: () => void) => Promise<T>): Promise<T> {
     const ahead = this.pending;
     const prev = this.tail;
     let release!: () => void;
@@ -504,11 +509,17 @@ export class AgentQueue {
       } finally {
         globalThis.clearTimeout(timer);
       }
-      try {
-        return await fn();
-      } finally {
+      let held = true;
+      const yieldSlot = (): void => {
+        if (!held) return;
+        held = false;
         this.pending -= 1;
         release();
+      };
+      try {
+        return await fn(yieldSlot);
+      } finally {
+        yieldSlot();
       }
     })();
   }
@@ -521,7 +532,11 @@ export class AgentQueue {
 // caught by the queue-wait timeout.
 const bundleQueues = new globalThis.WeakMap<object, AgentQueue>();
 
-export function serialiseBundleAgent<C>(state: DurableObjectState, instance: C): C {
+export function serialiseBundleAgent<C>(
+  state: DurableObjectState,
+  instance: C,
+  waitMs: number = AGENT_QUEUE_WAIT_MS,
+): C {
   let queue = bundleQueues.get(state);
   if (queue === undefined) {
     queue = new AgentQueue();
@@ -534,7 +549,7 @@ export function serialiseBundleAgent<C>(state: DurableObjectState, instance: C):
       const v = Reflect.get(target, prop, receiver) as unknown;
       if (typeof v !== "function" || typeof prop !== "string") return v;
       return (...args: unknown[]): Promise<unknown> =>
-        q.run(agent, AGENT_QUEUE_WAIT_MS, async () => Reflect.apply(v, target, args));
+        q.run(agent, waitMs, async () => Reflect.apply(v, target, args));
     },
   }) as C;
 }
@@ -547,6 +562,8 @@ interface InstanceGate {
   // The chain of the handler running now. Only one runs at a time, so one
   // field is unambiguous.
   chain: readonly string[];
+  // Gives the running handler's place up early; unset between handlers.
+  yieldSlot?: () => void;
 }
 
 function isNamespace(v: unknown): v is DurableObjectNamespace {
@@ -574,15 +591,36 @@ function chainEnv(env: unknown, gate: InstanceGate): unknown {
           }
           return (id: unknown): DurableObjectStub => {
             const stub = f.call(ns, id) as DurableObjectStub;
-            return {
-              fetch: (input: string, init?: unknown): Promise<Response> => {
-                const i = (init ?? {}) as { headers?: Record<string, string> };
-                return stub.fetch(input, {
-                  ...i,
-                  headers: { ...i.headers, [AGENT_CHAIN_HEADER]: gate.chain.join(",") },
-                });
+            // A proxy over the real stub that changes only `fetch`: everything
+            // else on it (`id`, `name`, RPC methods) is the stub's own.
+            return new Proxy(stub, {
+              get(target, key) {
+                const member = Reflect.get(target, key, target) as unknown;
+                if (key !== "fetch") return typeof member === "function" ? member.bind(target) : member;
+                return (input: unknown, init?: unknown): Promise<Response> => {
+                  // The events fan-out runs after the handler has committed and
+                  // calls subscribers that may call this instance back. Holding
+                  // the place while it runs would make that call wait out the
+                  // queue limit, so the place is given up here.
+                  if (typeof input === "string" && input.endsWith("/_bynk/fanout")) gate.yieldSlot?.();
+                  const i = (init ?? {}) as { headers?: unknown };
+                  const headers = new globalThis.Headers(i.headers as HeadersInit | undefined);
+                  headers.set(AGENT_CHAIN_HEADER, gate.chain.join(","));
+                  // A `Request` input already carries its own headers: merge
+                  // them, so none is lost, with the chain set last.
+                  if (typeof input === "object" && input !== null && "headers" in input) {
+                    (input as Request).headers.forEach((v, k) => {
+                      if (!headers.has(k)) headers.set(k, v);
+                    });
+                  }
+                  return (target.fetch as (a: unknown, b?: unknown) => Promise<Response>).call(
+                    target,
+                    input,
+                    { ...(i as object), headers },
+                  );
+                };
               },
-            };
+            });
           };
         },
       });
@@ -654,12 +692,19 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
           new globalThis.Response(reentrantAgentCall(gate.agent).message, { status: 500 }),
         );
       }
-      const run = gate.queue.run(gate.agent, gate.waitMs, async () => {
-        gate.chain = [...incoming, gate.id];
+      const run = gate.queue.run(gate.agent, gate.waitMs, async (yieldSlot) => {
+        const chain = [...incoming, gate.id];
+        gate.chain = chain;
+        gate.yieldSlot = yieldSlot;
         try {
           return await Reflect.apply(original, this, args);
         } finally {
-          gate.chain = [];
+          // A handler that yielded its place must not clear what the next
+          // handler set.
+          if (gate.chain === chain) {
+            gate.chain = [];
+            gate.yieldSlot = undefined;
+          }
         }
       });
       // A contention fault answers a `fetch` as the emitted dispatch answers a

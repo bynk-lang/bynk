@@ -404,6 +404,12 @@ Two faults keep the queue from hanging, and they are different faults:
   no cycle at all, which is why it is not reported as re-entrancy. The limit is not
   configurable yet.
 
+Two agents that call each other from separate roots (`A`'s handler calls `B` while `B`'s
+handler calls `A`) wait on each other until both fault `AgentBusy`; the chain only sees a
+call that is part of one chain. A handler that emits events gives its place up when it
+hands the events to the fan-out, after its state is committed, so a subscriber that calls
+the publisher back is served rather than queued behind it.
+
 In the in-memory bundle target (`bynk test` without a Workers runtime) calls are queued
 the same way, but a cycle is only caught by the wait limit, not named as
 `ReentrantAgentCall`.

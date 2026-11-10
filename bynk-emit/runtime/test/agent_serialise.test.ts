@@ -252,6 +252,107 @@ test("bundle mode: external calls queue, a call through `this` does not", async 
   assert.equal(await make().sibling(), 7);
 });
 
+test("bundle mode: a call that waits too long faults AgentBusy", async () => {
+  class Slow {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async hold(): Promise<string> {
+      await sleep(200);
+      return "done";
+    }
+  }
+  const state = makeTestState("k");
+  const make = (): Slow => serialiseBundleAgent(state, new Slow(state), 30);
+  const first = make().hold();
+  await quiet(async () => {
+    await assert.rejects(() => make().hold(), /AgentBusy: agent Slow busy/);
+  });
+  assert.equal(await first, "done");
+});
+
+test("the chain wrapper keeps the stub's other members and merges Headers and Request headers", async () => {
+  const seen: Array<Record<string, string>> = [];
+  class Peer {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(request: Request): Promise<Response> {
+      seen.push(Object.fromEntries(request.headers));
+      return new Response("ok");
+    }
+  }
+  const inner = makeIntegrationDoNamespace(Peer as never);
+  const ns: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: (id) => ({ ...inner.get(id), name: "peer" }) as never,
+  };
+  class Caller {
+    state: DurableObjectState;
+    env: Env;
+    constructor(state: DurableObjectState, env: Env) {
+      this.state = state;
+      this.env = env;
+    }
+    async fetch(): Promise<Response> {
+      const stub = (this.env.P as DurableObjectNamespace).get("p") as unknown as { name: string; fetch: (a: string, b?: unknown) => Promise<Response> };
+      assert.equal(stub.name, "peer", "other stub members survive the wrapper");
+      await stub.fetch("https://_bynk/_bynk/agent/m", { headers: new Headers({ "x-a": "1" }) });
+      return new Response("ok");
+    }
+  }
+  const env = { P: ns } as Env;
+  const C = serialiseAgentClass(Caller as never) as unknown as new (s: DurableObjectState, e: Env) => Caller;
+  await (new C(makeTestState("c"), env) as unknown as { fetch(r: Request): Promise<Response> }).fetch(
+    new Request("https://_bynk/_bynk/agent/go"),
+  );
+  assert.equal(seen[0]?.["x-a"], "1", "a Headers instance is merged, not dropped");
+  assert.equal(seen[0]?.[AGENT_CHAIN_HEADER], "Caller:c");
+});
+
+// A publisher awaits the events fan-out after it commits; the fan-out calls a
+// subscriber that calls the publisher back.
+test("events fan-out that calls the publisher back does not wait out the queue limit", async () => {
+  const env = {} as Env;
+  class Pub {
+    state: DurableObjectState;
+    env: Env;
+    constructor(state: DurableObjectState, e: Env) {
+      this.state = state;
+      this.env = e;
+    }
+    async fetch(request: Request): Promise<Response> {
+      const path = new URL(request.url).pathname.split("/").pop();
+      if (path === "read") return new Response("read");
+      await this.state.storage.put("state", { n: 1 }); // commit
+      const r = await (this.env.FAN as DurableObjectNamespace)
+        .get("singleton")
+        .fetch("https://_bynk/_bynk/fanout", { method: "POST" });
+      return new Response(await r.text());
+    }
+  }
+  class Fan {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(): Promise<Response> {
+      // The subscriber reaches the publisher through a path that carries no chain.
+      const pub = rawPub.get(rawPub.idFromName("p"));
+      return new Response(await (await pub.fetch("https://_bynk/_bynk/agent/read", { method: "POST" })).text());
+    }
+  }
+  env.PUB = makeIntegrationDoNamespace(Pub as never, env, 200);
+  const rawPub = env.PUB as DurableObjectNamespace;
+  env.FAN = makeIntegrationDoNamespace(Fan as never, env, 200);
+  const t0 = Date.now();
+  const r = await call(rawPub, "p", "emit");
+  assert.equal(await r.text(), "read");
+  assert.ok(Date.now() - t0 < 150, "the subscriber's call was served, not queued behind the fan-out");
+});
+
 test("serialiseAgentClass passes extra constructor arguments and keeps the class name", () => {
   class Named {
     state: DurableObjectState;
