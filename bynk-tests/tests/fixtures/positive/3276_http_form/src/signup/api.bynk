@@ -20,10 +20,8 @@ type Search = {
 
 type Priced = {
 	price: Decimal = 0.00d,
-	subscribed: Gate,
+	subscribed: Bool = false,
 }
-
-type Gate = Bool
 
 // A webhook whose HMAC covers the form's octets as received.
 actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Hook-Sig") }

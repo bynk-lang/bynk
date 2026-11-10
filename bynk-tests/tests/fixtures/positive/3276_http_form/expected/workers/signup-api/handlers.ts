@@ -63,18 +63,10 @@ export const Search = {
 
 export interface Priced {
   readonly price: { readonly coefficient: bigint; readonly scale: number };
-  readonly subscribed: Gate;
+  readonly subscribed: boolean;
 }
 
 export const Priced = {
-};
-
-export type Gate = boolean & { readonly __brand: "signup.api.Gate" };
-
-export const Gate = {
-  of(value: boolean): Result<Gate, ValidationError> {
-    return Ok(value as Gate);
-  },
 };
 
 export const api = {
@@ -167,23 +159,6 @@ export function __deserialise_Email(json: __JsonValue, path: string = "$"): Resu
   return Ok(validated.value as Email);
 }
 
-export function __serialise_Gate(value: Gate): __JsonValue {
-  return value as unknown as boolean;
-}
-
-export function __deserialise_Gate(json: __JsonValue, path: string = "$"): Result<Gate, __BoundaryError> {
-  if (typeof json !== "boolean") {
-    return Err({ kind: "StructuralMismatch", path, expected: "boolean", actual: typeof json });
-  }
-  const validated = (typeof (Gate as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
-    ? (Gate as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
-    : (Ok(json as unknown as Gate) as Result<unknown, ValidationError>);
-  if (validated.tag === "Err") {
-    return Err({ kind: "RefinementViolation", path, violation: validated.error });
-  }
-  return Ok(validated.value as Gate);
-}
-
 export function __serialise_Plan(value: Plan): __JsonValue {
   switch (value.tag) {
     case "Free":
@@ -212,7 +187,7 @@ export function __deserialise_Plan(json: __JsonValue, path: string = "$"): Resul
 export function __serialise_Priced(value: Priced): __JsonValue {
   return {
     price: __bynkDecimalToString(value.price) as __JsonValue,
-    subscribed: __serialise_Gate(value.subscribed),
+    subscribed: value.subscribed as __JsonValue,
   };
 }
 
@@ -230,9 +205,11 @@ export function __deserialise_Priced(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "decimal string", actual: "invalid decimal" });
   }
   const __price = __b_price.value;
-  const __r_subscribed = __deserialise_Gate(obj["subscribed"], `${path}.subscribed`);
-  if (__r_subscribed.tag === "Err") return __r_subscribed;
-  const __subscribed = __r_subscribed.value;
+  const __d_subscribed: __JsonValue = "subscribed" in obj ? obj["subscribed"] : false;
+  if (typeof __d_subscribed !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.subscribed`, expected: "boolean", actual: typeof __d_subscribed });
+  }
+  const __subscribed = __d_subscribed;
   return Ok({ price: __price, subscribed: __subscribed } as Priced);
 }
 
