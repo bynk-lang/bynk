@@ -1,6 +1,7 @@
 ---
 level: minor
 changelog: A `system` case can drive an `Oidc` route as `by WrongAlgorithm` (an `alg: none` token and an HS256 token keyed with the public key) and `by NoSubject` (an empty and a missing `sub`), each expected to read `Rejected(Unauthorized)`
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
 ---
 
 ## ADR: oidc-algorithm-and-subject-failure-principals
