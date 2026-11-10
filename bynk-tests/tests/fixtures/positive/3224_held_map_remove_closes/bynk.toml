@@ -1,0 +1,6 @@
+[project]
+name = "held-map-remove-closes"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
