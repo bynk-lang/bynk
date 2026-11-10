@@ -3822,10 +3822,32 @@ fn lower_method_call(
             .unwrap_or_else(|| id.name.clone());
         return pre.finish(format!("{}.{}({})", recv, method.name, all.join(", ")));
     }
-    // v0.20b: built-in kernel methods on the collection types,
-    // dispatched on the receiver's checked type. Emitted inline
-    // (typed IIFEs / spreads) — no runtime imports, so files that
-    // never touch collections emit byte-identically to v0.20a.
+    // v0.20b: built-in kernel methods, resolved by the checker (#3164).
+    if let Some(s) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
+    }
+    // Instance call: UFCS lowering with the receiver as first arg.
+    let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
+    pre.finish(call)
+}
+
+/// A built-in method call the checker resolved to a typed [`KernelOp`] (#3164):
+/// the one place the emitter turns a kernel operation into TypeScript, matching
+/// on the receiver kind and the operation. `None` when the operation has no
+/// inline lowering here, so the caller falls through to the UFCS lowering; any
+/// hoisted statements the attempt produced stay in `pre`.
+fn lower_kernel_method_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.20b: built-in kernel methods on the collection types, dispatched on the
+    // receiver's checked type. Emitted inline (typed IIFEs / spreads) — no runtime
+    // imports, so files that never touch collections emit byte-identically to v0.20a.
     // The checker resolved this call to a typed `KernelOp` (#3164), so each arm
     // matches on the resolved operation, not on the method's spelling, and the
     // receiver's type arguments are read off its checked type.
@@ -3847,7 +3869,7 @@ fn lower_method_call(
                 };
                 if let Some(s) = pre.absorb_opt(lower_list_kernel(e, receiver, op, args, *elem, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.91 (ADR 0119): a chained op on a lazy `Query` — the source is
@@ -3878,7 +3900,7 @@ fn lower_method_call(
                     },
                     tys,
                 ) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
@@ -3888,7 +3910,7 @@ fn lower_method_call(
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
                 if let Some(s) = lower_stream_method(recv, op, &a) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #3051: a case's recording `TestConnection[F]`.
@@ -3899,7 +3921,7 @@ fn lower_method_call(
                     TestConnectionOp::Closed => format!("({recv}).closed"),
                     TestConnectionOp::Connection => format!("({recv}).mint()"),
                 };
-                return pre.finish(s);
+                return Some(s);
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
@@ -3907,7 +3929,7 @@ fn lower_method_call(
             KernelOp::Connection(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                return pre.finish(format!("({recv}).{}({})", op.name(), a.join(", ")));
+                return Some(format!("({recv}).{}({})", op.name(), a.join(", ")));
             }
             KernelOp::Map(op) => {
                 let Ty::Map(key, val) = &recv_ty else {
@@ -3916,7 +3938,7 @@ fn lower_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // K6a (#2596): the `Set` kernel.
@@ -3925,7 +3947,7 @@ fn lower_method_call(
                     mismatch(kop)
                 };
                 if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.21: the numeric kernel. `toFloat` is the identity
@@ -3934,12 +3956,12 @@ fn lower_method_call(
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
             KernelOp::Int(op) => {
                 if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             KernelOp::Float(op) => {
                 if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
@@ -3947,7 +3969,7 @@ fn lower_method_call(
             // renders the number.
             KernelOp::Duration(op) => {
                 if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
@@ -3955,7 +3977,7 @@ fn lower_method_call(
             // renders the number.
             KernelOp::Instant(op) => {
                 if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
@@ -3963,26 +3985,26 @@ fn lower_method_call(
             KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                return pre.finish(format!("({recv}).{}({})", kop.name(), args.join(", ")));
+                return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
             KernelOp::Bytes(op) => {
                 if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
                 if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
                 if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.22a: Option/Result combinators (ADR 0048).
@@ -3993,7 +4015,7 @@ fn lower_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             KernelOp::Result(op) => {
@@ -4003,7 +4025,7 @@ fn lower_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #2683 / #2711: `within` and `race`, on every `Effect[T]`.
@@ -4016,8 +4038,7 @@ fn lower_method_call(
                         cx.note_within();
                         let recv = pre.lower(receiver, cx);
                         let after = pre.lower(&args[0], cx);
-                        return pre
-                            .finish(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
+                        return Some(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
                     }
                     // #2711: `a.race(b)` takes the first side to succeed and
                     // hands the rest to the same execution context, uncancelled.
@@ -4054,7 +4075,7 @@ fn lower_method_call(
                         operands.reverse();
                         let lowered: Vec<String> =
                             operands.into_iter().map(|o| pre.lower(o, cx)).collect();
-                        return pre.finish(format!(
+                        return Some(format!(
                             "__bynkRace([{}], {})",
                             lowered.join(", "),
                             cx.exec_expr()
@@ -4075,11 +4096,27 @@ fn lower_method_call(
                         e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
         }
     }
+    None
+}
+
+/// The instance-call fallback (UFCS lowering, #3167): the receiver becomes the
+/// first argument of the namespace function for the receiver's checked type. The
+/// result is the call expression; hoisted statements go to `pre`.
+fn lower_ufcs_method_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> String {
+    let tys = cx.commons().tys();
     // Instance call: UFCS lowering with the receiver as first arg. The
     // namespace comes from the receiver's checked type. Every method call the
     // checker accepts has one: a test-service call's outcome is typed by its
@@ -4146,11 +4183,11 @@ fn lower_method_call(
         }
     };
     let call = format!("{ns}.{}{explicit}({})", method.name, all.join(", "));
-    pre.finish(if needs_exec {
+    if needs_exec {
         settle_exec_call(call, cx)
     } else {
         call
-    })
+    }
 }
 
 /// #2795: whether a type's TypeScript spelling is in scope in every emitted
