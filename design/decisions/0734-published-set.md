@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (v0.508.5)
 
-**Context.** The crate-hygiene track (#2775, `design/tracks/crate-hygiene.md`) found the published set wider than what installs. `bynk-grammar` is published at every release, first in the release order, though only `bynkc`'s integration tests use it. ADR 0099 held it up as the model leaf crate. Each such crate is public surface the project promises to keep, and removing one without a rule risks stranding or breaking downstream pins.
+**Context.** The crate-hygiene track (#2775, `design/archive/retired-tracks.md`) found the published set wider than what installs. `bynk-grammar` is published at every release, first in the release order, though only `bynkc`'s integration tests use it. ADR 0099 held it up as the model leaf crate. Each such crate is public surface the project promises to keep, and removing one without a rule risks stranding or breaking downstream pins.
 
 **Decision.**
 - **H-4, publish only what installs.** A crate is published only if an installed binary's normal dependency tree reaches it. Test and docs tooling is `publish = false` with a path-only workspace entry, as `bynk-testkit` is.

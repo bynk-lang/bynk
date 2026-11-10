@@ -10,7 +10,7 @@ workaround was a free function beside the type under an invented name, so a gene
 type's constructors and a plain type's (`Counter.zero()`) had two spellings. Slices 0
 to 3 (#2645, #2672, #2710, #2724) made bounds on a type's parameters meaningful, and a
 constructor such as `Sorted.empty()` needs one. This is slice 4 (#2766) of the
-constrained-generics track (`design/tracks/constrained-generics.md`). The maintainer
+constrained-generics track (`design/archive/retired-tracks.md`). The maintainer
 approved #2766 as written: decisions A to I as recommended.
 
 **Decision.**

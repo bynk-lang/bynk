@@ -272,15 +272,16 @@ The forward plan lives in dedicated, domain-scoped docs:
   *(October 2026: all of these have shipped except sagas; replay/ordering (the
   actors Q8) is a future track.)* Deferred, not cancelled. Far-reaching features run as feature tracks per ADR
   0076 ([`tracks/`](tracks/README.md)); each slice becomes a `proposals/` entry.
-- **Concurrent effects** — in progress (spine
-  [#2615](https://github.com/bynk-lang/bynk/issues/2615),
-  [`tracks/concurrent-effects.md`](tracks/concurrent-effects.md)): slice 0, the
+- **Concurrent effects** — shipped and retired (spine
+  [#2615](https://github.com/bynk-lang/bynk/issues/2615), closing summary in
+  [`concurrent-effects.md`](archive/retired-tracks.md)): slice 0, the
   `par { … }` binding block, has shipped ([#2640](https://github.com/bynk-lang/bynk/issues/2640));
   slice 0b, aligning the `parTraverse` family to settle-all, has shipped
   ([#2662](https://github.com/bynk-lang/bynk/issues/2662)); slice 3, the general
   timeout `e.within(d)` with its virtual-time test harness, has shipped
-  ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); `within` in an agent handler
-  or a function is a recorded follow-up.
+  ([#2683](https://github.com/bynk-lang/bynk/issues/2683)); race (`a.race(b)`) has
+  shipped ([#2711](https://github.com/bynk-lang/bynk/issues/2711)); `within` in a
+  function awaits [#2682](https://github.com/bynk-lang/bynk/issues/2682).
 - **Editor tooling** — [`bynk-tooling-roadmap.md`](bynk-tooling-roadmap.md)
   (LSP + VS Code); the LSP track completed (ADRs 0093–0095,
   [`bynk-lsp-spec.md`](bynk-lsp-spec.md); remainder in issues #257/#258).

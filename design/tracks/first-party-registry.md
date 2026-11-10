@@ -36,7 +36,7 @@
     and stdlib work never share an increment.
   - [ADR 0109](../decisions/0109-handler-atomic-commit.md): handler atomic
     commit.
-  - The standard-library track ([`standard-library.md`](standard-library.md),
+  - The standard-library track ([`standard-library.md`](../archive/retired-tracks.md),
     #1936). It owns every `bynk-std` capability this service needs (§4).
 
 ## 1. The theme

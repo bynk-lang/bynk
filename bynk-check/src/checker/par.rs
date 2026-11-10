@@ -1,7 +1,7 @@
 //! #2640 (concurrent effects, slice 0): checking a `par { … }` block.
 //!
 //! The block issues every binding's effect, then waits for them all
-//! (ADR 0432-pending, `design/tracks/concurrent-effects.md` Q1). It holds only
+//! (ADR 0432-pending, `design/archive/retired-tracks.md` Q1). It holds only
 //! `let x <- e` and `do e`; each is checked exactly as it would be written
 //! sequentially, against the scope *outside* the block, and the bound names
 //! enter the enclosing scope once every binding has been checked.
