@@ -12,23 +12,26 @@ declare:
 ```bynk
 commons guide.orders
 
-type OrderId = { region: String, n: Int }
+type OrderId = {
+	region: String,
+	n: Int,
+}
 
 type Status = enum { Open, Shipped, Cancelled }
 
 fn remember(m: Map[OrderId, Int], id: OrderId, qty: Int) -> Map[OrderId, Int] {
-  m.insert(id, qty)
+	m.insert(id, qty)
 }
 
 fn known(m: Map[OrderId, Int], id: OrderId) -> Bool {
-  match m.get(id) {
-    Some(_) => true,
-    None => false,
-  }
+	match m.get(id) {
+		Some(_) => true,
+		None => false,
+	}
 }
 
 fn openOnly(xs: List[Status]) -> Set[Status] {
-  Set.of(xs.filter((s) => s == Open))
+	Set.of(xs.filter((s) => s == Open))
 }
 ```
 
@@ -46,16 +49,16 @@ A key must compare with `==` the way you expect, so a `Float` is out, at any dep
 ```bynk
 commons guide.counting
 
-fn countBy[K: Key, V](xs: List[V], key: (V) -> K) -> Map[K, Int] {
-  let init: Map[K, Int] = Map.empty()
-  xs.fold(init, (acc, x) => {
-    let k = key(x)
-    let seen = match acc.get(k) {
-      Some(n) => n,
-      None => 0,
-    }
-    acc.insert(k, seen + 1)
-  })
+fn countBy[K: Key, V](xs: List[V], key: V -> K) -> Map[K, Int] {
+	let init: Map[K, Int] = Map.empty()
+	xs.fold(init, (acc, x) => {
+		let k = key(x)
+		let seen = match acc.get(k) {
+			Some(n) => n,
+			None => 0,
+		}
+		acc.insert(k, seen + 1)
+	})
 }
 ```
 

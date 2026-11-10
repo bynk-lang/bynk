@@ -40,6 +40,9 @@ struct Block {
     line: usize,
     info: String,
     body: String,
+    /// The fence is indented (it sits inside a list item or admonition), so the
+    /// body carries that indentation too.
+    indented: bool,
 }
 
 fn docs_root() -> PathBuf {
@@ -117,6 +120,7 @@ fn collect_blocks() -> Vec<Block> {
                     line: idx + 1,
                     info,
                     body,
+                    indented: trimmed.len() != line.len(),
                 });
             }
         }
@@ -384,5 +388,55 @@ fn every_doc_example_compiles() {
         failures.is_empty(),
         "doc example compilation gate failed:\n  {}",
         failures.join("\n  ")
+    );
+}
+
+/// #3174: the Book's code is what `bynk fmt` produces, so the examples a reader
+/// copies match the project `bynk new` scaffolds (tabs, trailing commas) and the
+/// formatter does not rewrite them.
+///
+/// Every Book `bynk` block that parses on its own is held to the canonical
+/// formatting. Left out, because the formatter cannot be asked about them
+/// as-is: `ignore` blocks (pseudo-syntax), blocks that do not parse standalone
+/// (most `fragment`s, and `fail` blocks that fail to parse), blocks whose fence
+/// is indented, and the generated wire-format page, whose example source is
+/// stamped into hashes the page shows. Fix a failure by pasting the block through
+/// `bynk fmt -`.
+#[test]
+fn book_examples_are_canonically_formatted() {
+    use bynk_fmt::{FormatOptions, format_source};
+
+    let mut dirty = Vec::new();
+    for b in collect_blocks() {
+        if !b.file.starts_with("book/")
+            || b.file == "book/reference/wire-format.md"
+            || b.indented
+            || b.info.contains("ignore")
+        {
+            continue;
+        }
+        // A display-only `{{#include …}}` body is not Bynk source.
+        if b.body
+            .lines()
+            .any(|l| l.trim_start().starts_with("{{#include"))
+        {
+            continue;
+        }
+        let Ok(formatted) = format_source(&b.body, &FormatOptions::default()) else {
+            continue;
+        };
+        if formatted != b.body {
+            dirty.push(format!(
+                "{}:{} (`{}…`)",
+                b.file,
+                b.line,
+                first_line(&b.body)
+            ));
+        }
+    }
+    assert!(
+        dirty.is_empty(),
+        "Book examples not canonically formatted (run the block through `bynk fmt -`):\n{}",
+        dirty.join("\n")
     );
 }

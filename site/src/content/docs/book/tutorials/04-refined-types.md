@@ -159,47 +159,44 @@ for the full rule.
 context shortener
 
 type ShortCode = String where MinLength(6) && MaxLength(8)
+
 type Url = String where MinLength(1) && MaxLength(2048)
 
-type LinkError = enum {
-  AlreadyExists,
-  NotFound,
-  Invalid,
-}
+type LinkError = enum { AlreadyExists, NotFound, Invalid }
 
 fn describe(error: LinkError) -> String {
-  match error {
-    AlreadyExists => "code already in use"
-    NotFound => "no such code"
-    Invalid => "invalid code"
-  }
+	match error {
+		AlreadyExists => "code already in use",
+		NotFound => "no such code",
+		Invalid => "invalid code",
+	}
 }
 
 type CreateLinkRequest = {
-  target: Url,
+	target: Url,
 }
 
 type CreatedView = {
-  code: ShortCode,
-  target: Url,
+	code: ShortCode,
+	target: Url,
 }
 
 type ResolveView = {
-  target: Url,
-  hits: Int,
+	target: Url,
+	hits: Int,
 }
 
 service api from http {
-  on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[CreatedView]] by Visitor {
-    match ShortCode.of("abc123") {
-      Ok(code) => Created(CreatedView { code: code, target: body.target })
-      Err(_) => ServerError("invalid code")
-    }
-  }
+	on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[CreatedView]] by Visitor {
+		match ShortCode.of("abc123") {
+			Ok(code) => Created(CreatedView { code: code, target: body.target }),
+			Err(_) => ServerError("invalid code"),
+		}
+	}
 
-  on GET("/links/:code") (code: ShortCode) -> Effect[HttpResult[ResolveView]] by Visitor {
-    NotFound
-  }
+	on GET("/links/:code") (code: ShortCode) -> Effect[HttpResult[ResolveView]] by Visitor {
+		NotFound
+	}
 }
 ```
 

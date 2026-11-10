@@ -962,14 +962,20 @@ bodies into **plain JSON**:
 ```bynk
 context api
 
-type Activity = { id: String, action: Option[String], deleted: Option[Bool] }
+type Activity = {
+	id: String,
+	action: Option[String],
+	deleted: Option[Bool],
+}
 
 service api from http {
-  json { options: plain }
+	json {
+		options: plain,
+	}
 
-  on GET("/activity") () -> Effect[HttpResult[List[Activity]]] by r: Visitor {
-    Ok([Activity { id: "a1", action: Some("opened"), deleted: None }])
-  }
+	on GET("/activity") () -> Effect[HttpResult[List[Activity]]] by r: Visitor {
+		Ok([Activity { id: "a1", action: Some("opened"), deleted: None }])
+	}
 }
 ```
 
@@ -1060,13 +1066,13 @@ under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain
 context notes
 
 service api from http {
-  on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("pong")
+	}
 
-  on GET("/notes/:id") (id: String) -> Effect[HttpResult[String]] by Visitor {
-    NotFound
-  }
+	on GET("/notes/:id") (id: String) -> Effect[HttpResult[String]] by Visitor {
+		NotFound
+	}
 }
 ```
 

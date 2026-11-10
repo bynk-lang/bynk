@@ -13,9 +13,9 @@ after `cron`), takes at most one parameter, and returns `Effect[Result[(), E]]`.
 context reaper
 
 service sweeper from cron {
-  on schedule("*/5 * * * *") () -> Effect[Result[(), String]] {
-    Ok(())
-  }
+	on schedule("*/5 * * * *") () -> Effect[Result[(), String]] {
+		Ok(())
+	}
 }
 ```
 
@@ -34,9 +34,9 @@ keys):
 context reaper
 
 service sweeper from cron {
-  on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
-    Ok(())
-  }
+	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		Ok(())
+	}
 }
 ```
 
@@ -64,10 +64,10 @@ scheduled time when the handler declares it. The address yields the handler's
 
 ```bynk,fragment
 suite reaper as system {
-  case "the hourly sweep succeeds" {
-    let r <- sweeper.schedule("0 * * * *", 3600000)
-    expect r is Ok(_)
-  }
+	case "the hourly sweep succeeds" {
+		let r <- sweeper.schedule("0 * * * *", 3600000)
+		expect r is Ok(_)
+	}
 }
 ```
 

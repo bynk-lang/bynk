@@ -14,17 +14,20 @@ context api
 
 type UserId = String where NonEmpty
 
-type Note = { id: String, owner: String }
+type Note = {
+	id: String,
+	owner: String,
+}
 
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
-  on GET("/notes/:id") (id: String) -> Effect[HttpResult[Note]] by who: User | Visitor {
-    match who {
-      User(u) => Ok(Note { id: id, owner: u })
-      Visitor => Ok(Note { id: id, owner: "public" })
-    }
-  }
+	on GET("/notes/:id") (id: String) -> Effect[HttpResult[Note]] by who: User | Visitor {
+		match who {
+			User(u) => Ok(Note { id: id, owner: u }),
+			Visitor => Ok(Note { id: id, owner: "public" }),
+		}
+	}
 }
 ```
 
@@ -77,18 +80,21 @@ context api
 
 type UserId = String where NonEmpty
 
-type Event = { id: String }
+type Event = {
+	id: String,
+}
 
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
 actor Hook { auth = Signature(secret = "WH_SECRET", header = "X-Signature") }
 
 service api from http {
-  on POST("/ingest") (body: Event) -> Effect[HttpResult[String]] by who: User | Hook {
-    match who {
-      User(u) => Ok(u)
-      Hook    => Ok(body.id)
-    }
-  }
+	on POST("/ingest") (body: Event) -> Effect[HttpResult[String]] by who: User | Hook {
+		match who {
+			User(u) => Ok(u),
+			Hook => Ok(body.id),
+		}
+	}
 }
 ```
 

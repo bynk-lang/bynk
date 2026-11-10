@@ -12,10 +12,10 @@ its target unit, containing named `case`s.
 
 ```bynk,fragment
 suite counters {
-  case "a fresh counter starts at zero" {
-    let n <- Counter(CounterId.unsafe("fresh")).current()
-    expect n == 0
-  }
+	case "a fresh counter starts at zero" {
+		let n <- Counter(CounterId.unsafe("fresh")).current()
+		expect n == 0
+	}
 }
 ```
 
@@ -41,21 +41,21 @@ never part of the deployable:
 suite hooks.github
 
 fn gh(event: String) -> RequestHeaders {
-  RequestHeaders.of(["X-GitHub-Event: \(event)"])
+	RequestHeaders.of(["X-GitHub-Event: \(event)"])
 }
 
 fn payload() -> Bytes {
-  Bytes.fromUtf8("{\"ref\":\"main\"}")
+	Bytes.fromUtf8("{\"ref\":\"main\"}")
 }
 
 case "a push is recorded" {
-  let r <- github.POST("/github", gh("push"), payload()) by GitHub
-  expect r is Ok("recorded")
+	let r <- github.POST("/github", gh("push"), payload()) by GitHub
+	expect r is Ok("recorded")
 }
 
 case "a ping is acknowledged" {
-  let r <- github.POST("/github", gh("ping"), payload()) by GitHub
-  expect r is Ok("pong")
+	let r <- github.POST("/github", gh("ping"), payload()) by GitHub
+	expect r is Ok("pong")
 }
 ```
 
@@ -73,8 +73,8 @@ suite github.events
 fixture issueOpened = "fixtures/github/issues-opened.json"
 
 case "a real issues delivery decodes" {
-  let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
-  expect r is Ok(_)
+	let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
+	expect r is Ok(_)
 }
 ```
 
@@ -104,12 +104,12 @@ refinement; pass an argument to pin a specific value:
 
 ```bynk,fragment
 suite quantities {
-  case "vals" {
-    let a = Val[Quantity]       // a valid Quantity
-    let b = Val[Quantity](50)   // pinned to 50
-    expect a == a
-    expect b == b
-  }
+	case "vals" {
+		let a = Val[Quantity]  // a valid Quantity
+		let b = Val[Quantity](50)  // pinned to 50
+		expect a == a
+		expect b == b
+	}
 }
 ```
 
@@ -132,10 +132,10 @@ is long to read and goes stale as the shape grows. Snapshot the whole value inst
 
 ```bynk,fragment
 suite github.events {
-  case "an issues delivery reads" {
-    let r = read("{\"id\":\"d-1\",\"action\":{\"kind\":\"Opened\"}}")
-    expect r matches snapshot "issues opened"
-  }
+	case "an issues delivery reads" {
+		let r = read("{\"id\":\"d-1\",\"action\":{\"kind\":\"Opened\"}}")
+		expect r matches snapshot "issues opened"
+	}
 }
 ```
 
@@ -167,11 +167,11 @@ the parameters; `ensures` clauses are postconditions over the parameters and
 commons commerce.money
 
 fn discount(p: Int, pct: Int) -> Int
-  requires p_nonneg: p >= 0
-  requires pct_in_range: pct >= 0 && pct <= 100
-  ensures never_above: result <= p
+	requires p_nonneg: p >= 0
+	requires pct_in_range: pct >= 0 && pct <= 100
+	ensures never_above: result <= p
 {
-  p - (p * pct) / 100
+	p - (p * pct) / 100
 }
 ```
 
@@ -217,11 +217,11 @@ claim holds across many. `for all x: T` binds `x` to a generated inhabitant of
 
 ```bynk,fragment
 suite pricing {
-  property "more discount, never a higher price" {
-    for all p: Price, a: Percent, b: Percent where a <= b {
-      expect discount(p, b) <= discount(p, a)
-    }
-  }
+	property "more discount, never a higher price" {
+		for all p: Price, a: Percent, b: Percent where a <= b {
+			expect discount(p, b) <= discount(p, a)
+		}
+	}
 }
 ```
 
@@ -241,13 +241,14 @@ test:
 
 ```bynk,fragment
 suite pricing {
-  stub Rates.lookup("GBP") returns 1.25    // suite-scoped; applies to every case
-  stub Rates.lookup(_)     returns 1.0     // fallback; first matching clause wins
+	stub Rates.lookup("GBP") returns 1.25  // suite-scoped; applies to every case
 
-  case "a store fault faults the quote" {
-    stub Kv.get(_) fails                    // case-scoped; overrides for this case
-    expect Prices(Val[AcctId]).quote("GBP") faults
-  }
+	stub Rates.lookup(_) returns 1.0  // fallback; first matching clause wins
+
+	case "a store fault faults the quote" {
+		stub Kv.get(_) fails  // case-scoped; overrides for this case
+		expect Prices(Val[AcctId]).quote("GBP") faults
+	}
 }
 ```
 
@@ -312,12 +313,12 @@ pure-observation case needs no `stub`:
 
 ```bynk,fragment
 suite payments {
-  case "a rejected charge is logged and writes nothing" {
-    let r <- authorise.call(-1)
-    expect r is Err(_)
-    expect Logger.log called once with msg == "rejected"
-    expect Store.put never called
-  }
+	case "a rejected charge is logged and writes nothing" {
+		let r <- authorise.call(-1)
+		expect r is Err(_)
+		expect Logger.log called once with msg == "rejected"
+		expect Store.put never called
+	}
 }
 ```
 

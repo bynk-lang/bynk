@@ -16,15 +16,25 @@ commons shop.limits
 How many times a request is retried.
 ---
 const MaxRetries: Int = 3
-const Timeout: Duration = 30.seconds
-const Greeting: String = "hello"
-const PageSize: Int = 50
-const DefaultPage: Page = Page { size: PageSize, offset: 0 }
 
-type Page = { size: Int, offset: Int }
+const Timeout: Duration = 30.seconds
+
+const Greeting: String = "hello"
+
+const PageSize: Int = 50
+
+const DefaultPage: Page = Page {
+	size: PageSize,
+	offset: 0,
+}
+
+type Page = {
+	size: Int,
+	offset: Int,
+}
 
 fn attempts() -> Int {
-  MaxRetries + 1
+	MaxRetries + 1
 }
 ```
 

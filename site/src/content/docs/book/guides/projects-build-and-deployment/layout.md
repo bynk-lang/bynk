@@ -24,11 +24,15 @@ even in the *same file*:
 ```bynk,fragment
 // src/quantities.bynk — an atomic file: the commons and its tests together
 commons quantities {
-  fn double(n: Int) -> Int { n + n }
+	fn double(n: Int) -> Int {
+		n + n
+	}
 }
 
 suite quantities {
-  case "doubles" { expect double(3) == 6 }
+	case "doubles" {
+		expect double(3) == 6
+	}
 }
 ```
 

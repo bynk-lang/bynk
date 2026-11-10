@@ -10,12 +10,16 @@ A record pattern in a `let` binds them in one.
 
 ```bynk
 commons shop {
-  type Item = { sku: String, qty: Int, note: String }
+	type Item = {
+		sku: String,
+		qty: Int,
+		note: String,
+	}
 
-  fn label(item: Item) -> String {
-    let Item { sku, qty, .. } = item
-    "\(sku) x\(qty)"
-  }
+	fn label(item: Item) -> String {
+		let Item { sku, qty, .. } = item
+		"\(sku) x\(qty)"
+	}
 }
 ```
 
@@ -31,14 +35,21 @@ hold a nested record pattern:
 
 ```bynk
 commons shop {
-  type Customer = { name: String, email: String }
+	type Customer = {
+		name: String,
+		email: String,
+	}
 
-  type Order = { id: String, total: Int, customer: Customer }
+	type Order = {
+		id: String,
+		total: Int,
+		customer: Customer,
+	}
 
-  fn contact(o: Order) -> String {
-    let Order { total: amount, id: _, customer: Customer { email, .. }, .. } = o
-    "\(email): \(amount)"
-  }
+	fn contact(o: Order) -> String {
+		let Order { total: amount, id: _, customer: Customer { email, .. }, .. } = o
+		"\(email): \(amount)"
+	}
 }
 ```
 
@@ -57,14 +68,18 @@ A pattern with a literal or a variant for a field can fail, so it needs an
 
 ```bynk
 commons shop {
-  type Status = enum { Pending, Paid }
+	type Status = enum { Pending, Paid }
 
-  type Order = { id: String, status: Status, total: Int }
+	type Order = {
+		id: String,
+		status: Status,
+		total: Int,
+	}
 
-  fn paidTotal(o: Order) -> Int {
-    let Order { status: Paid, total, .. } = o else { 0 }
-    total
-  }
+	fn paidTotal(o: Order) -> Int {
+		let Order { status: Paid, total, .. } = o else { 0 }
+		total
+	}
 }
 ```
 
@@ -83,15 +98,19 @@ throwaway name and the repeated `item.`:
 
 ```bynk
 commons shop {
-  type Item = { sku: String, qty: Int, price: Int }
+	type Item = {
+		sku: String,
+		qty: Int,
+		price: Int,
+	}
 
-  fn skus(items: List[Item]) -> List[String] {
-    items.map((Item { sku, .. }) => sku)
-  }
+	fn skus(items: List[Item]) -> List[String] {
+		items.map((Item { sku, .. }) => sku)
+	}
 
-  fn total(items: List[Item]) -> Int {
-    items.fold(0, (sum, Item { qty, price, .. }) => sum + qty * price)
-  }
+	fn total(items: List[Item]) -> Int {
+		items.fold(0, (sum, Item { qty, price, .. }) => sum + qty * price)
+	}
 }
 ```
 

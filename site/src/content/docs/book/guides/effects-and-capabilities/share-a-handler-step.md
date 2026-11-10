@@ -13,27 +13,27 @@ uses those capabilities exactly as a handler does:
 context shop.audit
 
 capability Logger {
-  fn error(message: String) -> Effect[()]
+	fn error(message: String) -> Effect[()]
 }
 
 provides Logger = NullLogger {
-  fn error(message: String) -> Effect[()] { () }
+	fn error(message: String) -> Effect[()] {}
 }
 
 fn orZero(read: Result[Int, String]) -> Effect[Int] given Logger {
-  match read {
-    Ok(n) => Effect.pure(n)
-    Err(why) => {
-      let _ <- Logger.error("could not read: \(why)")
-      Effect.pure(0)
-    }
-  }
+	match read {
+		Ok(n) => Effect.pure(n),
+		Err(why) => {
+			let _ <- Logger.error("could not read: \(why)")
+			Effect.pure(0)
+		},
+	}
 }
 
 service api {
-  on call(n: Int) -> Effect[Int] given Logger {
-    orZero(Ok(n))
-  }
+	on call(n: Int) -> Effect[Int] given Logger {
+		orZero(Ok(n))
+	}
 }
 ```
 

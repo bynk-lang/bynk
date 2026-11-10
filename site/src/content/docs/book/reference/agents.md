@@ -275,15 +275,19 @@ on its own when every record already stored still reads. That covers adding a
 ```bynk
 context shop
 
-type Prefs = { theme: String, size: Int = 12 }   // `size` added since the last deploy
+type Prefs = {
+	theme: String,
+	size: Int = 12,
+}  // `size` added since the last deploy
 
 agent Profile {
-  key id: String
-  store prefs: Cell[Prefs] = Prefs { theme: "light" }
+	key id: String
 
-  on call size() -> Effect[Int] {
-    prefs.size
-  }
+	store prefs: Cell[Prefs] = Prefs { theme: "light" }
+
+	on call size() -> Effect[Int] {
+		prefs.size
+	}
 }
 ```
 

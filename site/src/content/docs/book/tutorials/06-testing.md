@@ -45,32 +45,32 @@ cases. Inside a case, `expect` checks a predicate. Put this in
 suite shortener
 
 case "a fresh code resolves to NotFound" {
-  match ShortCode.of("fresh2") {
-    Err(_) => expect false
-    Ok(code) => {
-      let link = Link(code)
-      let outcome <- link.resolve()
-      expect outcome is Err(_)
-    }
-  }
+	match ShortCode.of("fresh2") {
+		Err(_) => expect false,
+		Ok(code) => {
+			let link = Link(code)
+			let outcome <- link.resolve()
+			expect outcome is Err(_)
+		},
+	}
 }
 
 case "register then resolve returns the target" {
-  match ShortCode.of("reg001") {
-    Err(_) => expect false
-    Ok(code) => match Url.of("https://example.com/page") {
-      Err(_) => expect false
-      Ok(url) => {
-        let link = Link(code)
-        let _ <- link.register(url)
-        let outcome <- link.resolve()
-        match outcome {
-          Ok(view) => expect view.target == url
-          Err(_) => expect false
-        }
-      }
-    }
-  }
+	match ShortCode.of("reg001") {
+		Err(_) => expect false,
+		Ok(code) => match Url.of("https://example.com/page") {
+			Err(_) => expect false,
+			Ok(url) => {
+				let link = Link(code)
+				let _ <- link.register(url)
+				let outcome <- link.resolve()
+				match outcome {
+					Ok(view) => expect view.target == url,
+					Err(_) => expect false,
+				}
+			},
+		},
+	}
 }
 ```
 
@@ -147,17 +147,17 @@ argument pattern, and a value on the right:
 
 ```bynk,fragment
 suite shortener {
-  stub CodeGen.next() returns "test01"
+	stub CodeGen.next() returns "test01"
 
-  case "create mints a code via the stubbed generator" {
-    match Url.of("https://example.com") {
-      Err(_) => expect false
-      Ok(url) => {
-        let outcome <- create.call(url)
-        expect outcome is Ok(_)
-      }
-    }
-  }
+	case "create mints a code via the stubbed generator" {
+		match Url.of("https://example.com") {
+			Err(_) => expect false,
+			Ok(url) => {
+				let outcome <- create.call(url)
+				expect outcome is Ok(_)
+			},
+		}
+	}
 }
 ```
 

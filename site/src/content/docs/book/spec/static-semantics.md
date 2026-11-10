@@ -290,14 +290,14 @@ capability calls on behalf of the handler that passed it one:
 
 ```bynk
 commons loops {
-  fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
-    if n <= 0 {
-      Effect.pure(())
-    } else {
-      do step(n)
-      repeat(n - 1, step)
-    }
-  }
+	fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+		if n <= 0 {
+			Effect.pure(())
+		} else {
+			do step(n)
+			repeat(n - 1, step)
+		}
+	}
 }
 ```
 
@@ -585,13 +585,13 @@ itself needs an expected type (a bare `Ok`/`Err`/`None`/`[]`) annotates a
 
 ```bynk
 commons checkout {
-  fn parseQty(s: String) -> Int {
-    Int.parse(s.trim()).map((n) => n.clamp(1, 99)).getOrElse(1)
-  }
+	fn parseQty(s: String) -> Int {
+		Int.parse(s.trim()).map((n) => n.clamp(1, 99)).getOrElse(1)
+	}
 
-  fn label(name: Option[String]) -> Result[String, String] {
-    name.map((n) => n.toUpper()).okOr("missing name")
-  }
+	fn label(name: Option[String]) -> Result[String, String] {
+		name.map((n) => n.toUpper()).okOr("missing name")
+	}
 }
 ```
 
@@ -680,26 +680,26 @@ values, never compile diagnostics.
 
 ```bynk
 commons store {
-  type Item = {
-    sku: String,
-    price: Float,
-    qty: Int,
-  }
+	type Item = {
+		sku: String,
+		price: Float,
+		qty: Int,
+	}
 
-  fn snapshot(i: Item) -> String {
-    Json.encode(i)
-  }
+	fn snapshot(i: Item) -> String {
+		Json.encode(i)
+	}
 
-  fn restore(s: String) -> Result[Item, JsonError] {
-    Json.decode[Item](s)
-  }
+	fn restore(s: String) -> Result[Item, JsonError] {
+		Json.decode[Item](s)
+	}
 
-  fn restoreError(s: String) -> String {
-    match Json.decode[Item](s) {
-      Ok(i) => i.sku
-      Err(e) => e.kind.concat(" at ").concat(e.path)
-    }
-  }
+	fn restoreError(s: String) -> String {
+		match Json.decode[Item](s) {
+			Ok(i) => i.sku,
+			Err(e) => e.kind.concat(" at ").concat(e.path),
+		}
+	}
 }
 ```
 
@@ -2918,8 +2918,7 @@ provides Clock = FixedClock {
 }
 
 service stamps {
-	on call(names: List[String]) -> Effect[Result[List[Int], ()]]
-			given Clock {
+	on call(names: List[String]) -> Effect[Result[List[Int], ()]] given Clock {
 		let stamped <- traverse(names, (name) => Clock.now())
 		Ok(stamped)
 	}

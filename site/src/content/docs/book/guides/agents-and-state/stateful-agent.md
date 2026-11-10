@@ -16,18 +16,18 @@ context counters
 type CounterId = opaque String
 
 agent Counter {
-  key id: CounterId
+	key id: CounterId
 
-  store count: Cell[Int]
+	store count: Cell[Int]
 
-  on call current() -> Effect[Int] {
-    count
-  }
+	on call current() -> Effect[Int] {
+		count
+	}
 
-  on call increment() -> Effect[Int] {
-    let _ <- count.update((c) => c + 1)
-    count
-  }
+	on call increment() -> Effect[Int] {
+		let _ <- count.update((c) => c + 1)
+		count
+	}
 }
 ```
 
