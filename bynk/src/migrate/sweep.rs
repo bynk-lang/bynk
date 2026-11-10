@@ -225,6 +225,8 @@ pub(crate) struct ClassResult {
     pub layout: Option<i64>,
     /// The woken instances that were on an older layout and now are not.
     pub layout_moved: usize,
+    /// The woken instances whose record was already in the Worker's layout (or a later one).
+    pub layout_already: usize,
     /// Why the target could not be swept at all.
     pub error: Option<String>,
 }
@@ -276,6 +278,7 @@ pub(crate) fn execute(
             oldest_after: None,
             layout: None,
             layout_moved: 0,
+            layout_already: 0,
             error: Some(error),
         };
         let key = match mint() {
@@ -348,9 +351,14 @@ fn summary_line(r: &ClassResult) -> String {
     if let Some(l) = r.layout.filter(|l| *l > 1) {
         line.push_str(&format!(
             "; layout {l}: {} moved up, {} already there",
-            r.layout_moved,
-            r.woke.saturating_sub(r.layout_moved)
+            r.layout_moved, r.layout_already
         ));
+        // An instance with no stored record, or whose layout marker is not a layout,
+        // is in neither count, and is said so rather than counted as done.
+        let neither = r.woke.saturating_sub(r.layout_moved + r.layout_already);
+        if neither > 0 {
+            line.push_str(&format!(", {neither} with no readable layout"));
+        }
     }
     for (id, fault) in &r.failed {
         line.push_str(&format!("\n    {id}: {fault}"));
@@ -389,6 +397,7 @@ fn wake_class(
         oldest_after: None,
         layout: None,
         layout_moved: 0,
+        layout_already: 0,
         error: None,
     };
     let mut ready = Err("not tried".to_string());
@@ -432,10 +441,12 @@ fn wake_class(
                     layout_before,
                 } => {
                     result.woke += 1;
-                    if let (Some(before), Some(now)) = (layout_before, result.layout)
-                        && before < now
-                    {
-                        result.layout_moved += 1;
+                    if let (Some(before), Some(now)) = (layout_before, result.layout) {
+                        if before < now {
+                            result.layout_moved += 1;
+                        } else {
+                            result.layout_already += 1;
+                        }
                     }
                     if let Some(after) = after {
                         result.oldest_after =
@@ -931,6 +942,8 @@ mod tests {
         /// The layout the Worker writes and the one its instances start in;
         /// `None` is a Worker that reports no layout at all.
         layouts: Option<(i64, i64)>,
+        /// Ids answered with exactly this result object instead of the default.
+        answers: Vec<(String, serde_json::Value)>,
     }
 
     impl FakeWorker {
@@ -943,6 +956,7 @@ mod tests {
                 calls: RefCell::new(Vec::new()),
                 not_ready: RefCell::new(0),
                 layouts: None,
+                answers: Vec::new(),
             }
         }
     }
@@ -972,7 +986,9 @@ mod tests {
                 .iter()
                 .map(|id| {
                     let mut flaky = self.flaky.borrow_mut();
-                    if let Some(at) = flaky.iter().position(|f| f == id) {
+                    if let Some((_, answer)) = self.answers.iter().find(|(a, _)| a == id) {
+                        answer.clone()
+                    } else if let Some(at) = flaky.iter().position(|f| f == id) {
                         flaky.remove(at);
                         serde_json::json!({ "id": id, "fault": "Unreachable" })
                     } else if self.broken.contains(id) {
@@ -1141,6 +1157,38 @@ mod tests {
     }
 
     #[test]
+    fn empty_instances_and_unreadable_markers_are_not_counted_as_already_there() {
+        let secrets = FakeSecrets::default();
+        let mut worker = FakeWorker::new(3, 3);
+        worker.layouts = Some((2, 1));
+        worker.answers = vec![
+            // No stored record: the wake answers before and after as null.
+            (
+                "id0".into(),
+                serde_json::json!({ "id": "id0", "before": null, "after": null }),
+            ),
+            // A marker that is not a layout: layoutBefore is null.
+            (
+                "id1".into(),
+                serde_json::json!({ "id": "id1", "before": 3, "after": 3, "layoutBefore": null }),
+            ),
+            // Already in the Worker's layout.
+            (
+                "id2".into(),
+                serde_json::json!({ "id": "id2", "before": 3, "after": 3, "layoutBefore": 2 }),
+            ),
+        ];
+        // id3 and id4 take the default: layout 1, so they move up.
+        let (results, out) = run(&one_plan(5), &secrets, &worker, false);
+        let r = &results[0];
+        assert_eq!((r.layout_moved, r.layout_already), (2, 1), "{r:?}");
+        assert!(
+            out.contains("layout 2: 2 moved up, 1 already there, 2 with no readable layout"),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn the_original_layout_and_a_worker_that_reports_none_add_nothing_to_the_line() {
         let secrets = FakeSecrets::default();
         let mut worker = FakeWorker::new(3, 2);
@@ -1199,6 +1247,7 @@ mod tests {
             oldest_after: oldest,
             layout: None,
             layout_moved: 0,
+            layout_already: 0,
             error: None,
         }
     }
