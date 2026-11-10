@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.527.4** | An attached fn of a generic type resolves the receiver's type variables when its signature is lowered |
 | **v0.527.3** | "The emitter lowers a built-in method call by its typed `KernelOp`, not by the method's spelling, as the second slice of the typed built-in dispatch (#3164)" |
 | **v0.527.2** | "The checker's built-in method typing matches on the typed `KernelOp` exhaustively, so a method listed for completion without a typing rule, or the converse, no longer compiles, and the registry drift tests are retired (#3164)" |
 | **v0.527.1** | '`bynk explain` gains written explanations for six common newcomer diagnostics' |
