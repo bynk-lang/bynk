@@ -589,7 +589,7 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
     // adds one; if already clean, sending the clean text again would change
     // nothing, publish nothing, and wait forever.
     let mut version = (edits + warmup) as i64 + 1;
-    if (edits + warmup) % 2 == 0 {
+    if (edits + warmup).is_multiple_of(2) {
         version += 1;
         c.discard_timings();
         send(
