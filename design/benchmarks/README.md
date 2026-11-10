@@ -36,3 +36,15 @@ A record measures the tree at its `commit`, while the workspace was at `version`
 version. The default `--sizes` is `10,50,200` for a quick run; pass
 `--sizes 10,50,200,500` for a release record, so the 500-context row (which the
 `keystroke_latency` reading shows) is not dropped.
+
+## The budget
+
+The accepted editor-latency budget (#3168): the language server's
+**edit-to-diagnostics p95 stays under 100 ms on the 50-context project**, with
+the debounce excluded. It is checked against each release record, not gated in
+CI. `cargo xtask bench` prints a warning when the 50-context p95 reaches it, and
+the `keystroke_latency` row of `design/greenfield-status.md` states whether the
+newest record meets it. A record that breaches the budget is the trigger for the
+incremental-scheduler decision, [#1523](https://github.com/bynk-lang/bynk/issues/1523).
+The 50-context size must be in a record for the budget to be checked, which the
+default `--sizes` includes.
