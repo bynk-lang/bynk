@@ -70,7 +70,9 @@ so the message can say *which* setting is wrong, not just "invalid".
 
 ```bynk
 commons settings {
-	type Settings = { mode: String = "auto" }
+	type Settings = {
+		mode: String = "auto",
+	}
 
 	fn describe(text: String) -> String {
 		match Yaml.decode[Settings](text) {
