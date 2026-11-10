@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../../__bynk_runtime/agent.js";
 
@@ -56,7 +56,7 @@ export class Book {
   }
 
   private async commitState(s: BookState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBookState(s), __entryFieldsOfBook);
+    await __commitStored(this, this.state.storage, __encodeBookState(s), __entryFieldsOfBook, s);
   }
 
   async add(line: Line, deps: { Stamp: Stamp; Fees: shop_fees.Fees }): globalThis.Promise<number> {

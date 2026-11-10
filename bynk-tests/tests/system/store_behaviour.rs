@@ -610,6 +610,91 @@ assert(r.tag === "Some" && r.value === 9, "put resets the entry's TTL");
 console.log("ALL OK");
 "#;
 
+// #3189: expired `Cache` entries are deleted at commit, by the program's own clock.
+const CACHE_REAP_SOURCE: &str = "context shop\n\
+\n\
+capability Clock {\n\
+\x20 fn now() -> Effect[Int]\n\
+}\n\
+\n\
+provides Clock = SystemClock {\n\
+\x20 fn now() -> Effect[Int] {\n\
+\x20   0\n\
+\x20 }\n\
+}\n\
+\n\
+agent Sessions {\n\
+\x20 key id: String\n\
+\x20 store hits: Cell[Int]\n\
+\x20 store live: Cache[String, Int] @ttl(1.minutes)\n\
+\n\
+\x20 on call put(k: String, n: Int) -> Effect[()] given Clock {\n\
+\x20   let _ <- live.put(k, n)\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+\x20 on call fetch(k: String) -> Effect[Option[Int]] given Clock {\n\
+\x20   let r <- live.get(k)\n\
+\x20   Effect.pure(r)\n\
+\x20 }\n\
+\x20 on call bump(n: Int) -> Effect[()] {\n\
+\x20   hits := n\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+}\n";
+
+const CACHE_REAP_DRIVER_TS: &str = r#"
+import { Sessions } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const m = new Map<string, unknown>();
+const storage = {
+  async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+  async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+  async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+  async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+  async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
+};
+const entryKeys = () => [...m.keys()].filter((k) => k.startsWith("m/live/")).sort();
+const expiryKeys = () => [...m.keys()].filter((k) => k.startsWith("x/live/"));
+
+// A fake clock far behind the real one: a runtime that reaped by Date.now() would delete
+// every entry below at once.
+let nowMs = 1_000_000;
+const deps = { Clock: { now: async (): Promise<number> => nowMs } };
+const c = new Sessions({ storage } as never);
+
+await c.put("a", 1, deps);
+await c.put("b", 2, deps);
+await c.put("c", 3, deps);
+assert(entryKeys().join() === "m/live/a,m/live/b,m/live/c", `a live entry is not reaped: ${entryKeys().join()}`);
+
+// Nothing has expired yet: another write reaps nothing.
+await c.put("d", 4, deps);
+assert(entryKeys().length === 4, "live entries stay under the fake clock");
+
+// A commit with no Cache write reaps nothing, even though the entries are expired by now.
+nowMs += 60_001;
+await c.bump(7, {});
+assert(entryKeys().length === 4, "a commit that never read the clock reaps nothing");
+assert(expiryKeys().length === 4, "and keeps their expiry entries");
+
+// A Cache write after expiry reaps the expired entries, and only through the program's clock.
+await c.put("e", 5, deps);
+assert(entryKeys().join() === "m/live/e", `expired entries are deleted: ${entryKeys().join()}`);
+assert(expiryKeys().length === 1, "and their expiry entries with them");
+const r = await c.fetch("e", deps);
+assert(r.tag === "Some" && r.value === 5, "the live entry still reads");
+const gone = await c.fetch("a", deps);
+assert(gone.tag === "None", "a reaped entry reads as absent, as it did before");
+
+console.log("ALL OK");
+"#;
+
 // v0.94 (ADR 0116/0120): joins & grouping in the combiner form. A storage
 // `joinOn`/`leftJoin`/`groupBy` over two store maps (the lazy `Query` lowering),
 // plus an in-memory `List` join (the eager lowering), projecting each result
@@ -1299,6 +1384,11 @@ fn query_join_and_group_runtime_semantics() {
 #[test]
 fn store_log_agent_runtime_semantics() {
     verify("log", LOG_SOURCE, LOG_DRIVER_TS);
+}
+
+#[test]
+fn cache_reaping_runtime_semantics() {
+    verify("cache_reap", CACHE_REAP_SOURCE, CACHE_REAP_DRIVER_TS);
 }
 
 #[test]

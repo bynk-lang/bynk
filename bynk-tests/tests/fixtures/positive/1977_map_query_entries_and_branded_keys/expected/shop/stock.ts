@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -65,7 +65,7 @@ export class Box {
   }
 
   private async commitState(s: BoxState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBoxState(s), __entryFieldsOfBox);
+    await __commitStored(this, this.state.storage, __encodeBoxState(s), __entryFieldsOfBox, s);
   }
 
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
@@ -132,7 +132,7 @@ export class ByKey {
   }
 
   private async commitState(s: ByKeyState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeByKeyState(s), __entryFieldsOfByKey);
+    await __commitStored(this, this.state.storage, __encodeByKeyState(s), __entryFieldsOfByKey, s);
   }
 
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
@@ -212,7 +212,7 @@ export class Ledger {
   }
 
   private async commitState(s: LedgerState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger);
+    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger, s);
   }
 
   async open(a: number, n: number, deps: {}): globalThis.Promise<void> {

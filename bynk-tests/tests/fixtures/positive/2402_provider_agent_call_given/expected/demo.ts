@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -58,7 +58,7 @@ export class Index {
   }
 
   private async commitState(s: IndexState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeIndexState(s), __entryFieldsOfIndex);
+    await __commitStored(this, this.state.storage, __encodeIndexState(s), __entryFieldsOfIndex, s);
   }
 
   async withdraw(version: string, deps: { Files: Files }): globalThis.Promise<number> {
@@ -109,7 +109,7 @@ export class Front {
   }
 
   private async commitState(s: FrontState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeFrontState(s), __entryFieldsOfFront);
+    await __commitStored(this, this.state.storage, __encodeFrontState(s), __entryFieldsOfFront, s);
   }
 
   async go(version: string, deps: { Files: Files }): globalThis.Promise<number> {

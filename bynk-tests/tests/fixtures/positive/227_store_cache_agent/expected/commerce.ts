@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -58,13 +58,13 @@ export class Sessions {
   }
 
   private async commitState(s: SessionsState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeSessionsState(s), __entryFieldsOfSessions);
+    await __commitStored(this, this.state.storage, __encodeSessionsState(s), __entryFieldsOfSessions, s);
   }
 
   async put(token: string, userId: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); globalThis.Object.defineProperty(__state.live, token, { value: { v: userId, exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); globalThis.Object.defineProperty(__state.live, token, { value: { v: userId, exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -73,13 +73,13 @@ export class Sessions {
 
   async lookup(token: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const found = await (async () => { const __now = await deps.Clock.now(); const __k = token; return (globalThis.Object.hasOwn(__state.live, __k) && __state.live[__k].exp > __now) ? Some(__state.live[__k].v) : None; })();
+    const found = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = token; return (globalThis.Object.hasOwn(__state.live, __k) && __state.live[__k].exp > __now) ? Some(__state.live[__k].v) : None; })();
     return found;
   }
 
   async active(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = await deps.Clock.now(); return globalThis.Object.values(__state.live).filter((__e) => __e.exp > __now).length; })();
+    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return globalThis.Object.values(__state.live).filter((__e) => __e.exp > __now).length; })();
     return n;
   }
 

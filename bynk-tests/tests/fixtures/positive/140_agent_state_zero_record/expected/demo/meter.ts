@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -77,7 +77,7 @@ export class Meter {
   }
 
   private async commitState(s: MeterState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeMeterState(s), __entryFieldsOfMeter);
+    await __commitStored(this, this.state.storage, __encodeMeterState(s), __entryFieldsOfMeter, s);
   }
 
   async hits(deps: {}): globalThis.Promise<Result<number, MeterError>> {

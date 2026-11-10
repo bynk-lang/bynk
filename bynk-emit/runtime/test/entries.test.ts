@@ -375,7 +375,7 @@ test("sameStored compares plain data structurally, whatever the key order", () =
 });
 
 // The codec: the stored record read and written per entry (#3189, slice 2).
-import { commitStored, readStored } from "../src/entries.ts";
+import { CACHE_REAP_LIMIT, commitStored, noteClock, readStored } from "../src/entries.ts";
 import type { EntryField } from "../src/entries.ts";
 
 const FIELDS: EntryField[] = [
@@ -563,4 +563,76 @@ test("codec: a field re-kinded from a Map to a Set is joined as the Map it was, 
   await commitStored(self, s as never, st, asSet);
   assert.deepEqual([...(await s.list({ prefix: "m/users/" })).keys()], []);
   assert.deepEqual(Object.keys(((await readStored({}, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>).users), ["a", "b"]);
+});
+
+// Cache reaping (#3189): expired entries are deleted at commit, by the clock the program read.
+const CACHE_ONLY: EntryField[] = [{ name: "hits", kind: "cache" }];
+
+async function seedCache(s: InMemoryStorage, self: object, entries: Record<string, { v: unknown; exp: number }>) {
+  await readStored(self, s as never, {});
+  await commitStored(self, s as never, { hits: entries }, CACHE_ONLY);
+}
+
+test("cache reaping: expired entries are deleted, live ones are not", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { old: { v: 1, exp: 10 }, edge: { v: 2, exp: 50 }, live: { v: 3, exp: 51 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(state, 50); // the program's clock, not the runtime's
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  const keys = [...(await s.list({ prefix: "m/hits/" })).keys()];
+  assert.deepEqual(keys, ["m/hits/live"], "exp <= now is expired, as the read treats it");
+  assert.deepEqual([...(await s.list({ prefix: "x/hits/" })).keys()].length, 1, "and the expired entries' expiry keys go too");
+  assert.deepEqual(((await s.get("c/hits")) as any).size, 1);
+});
+
+test("cache reaping: a clock behind every entry reaps nothing, however late the real time is", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { a: { v: 1, exp: 1_000_000 }, b: { v: 2, exp: 2_000_000 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(state, 5); // a fake clock far behind Date.now()
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 2);
+});
+
+test("cache reaping: a commit with no noted clock reaps nothing", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { a: { v: 1, exp: 1 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  await commitStored(self, s as never, state, CACHE_ONLY); // and no state at all
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 1);
+});
+
+test("cache reaping: at most the bound is deleted per commit, oldest expiry first", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  const all: Record<string, { v: unknown; exp: number }> = {};
+  const n = CACHE_REAP_LIMIT + 10;
+  for (let i = 0; i < n; i++) all[`k${i}`] = { v: i, exp: i + 1 };
+  await seedCache(s, self, all);
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(state, 10_000);
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  const left = [...(await s.list({ prefix: "m/hits/" })).keys()];
+  assert.equal(left.length, 10, "64 reaped, 10 left");
+  assert.ok(left.every((k) => Number(k.slice("m/hits/k".length)) >= CACHE_REAP_LIMIT), "the oldest expiries went first");
+  // the next commit reaps the rest
+  const again = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(again, 10_000);
+  await commitStored(self, s as never, again, CACHE_ONLY, again);
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 0);
+});
+
+test("noteClock keeps the latest clock a handler read", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { a: { v: 1, exp: 40 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  assert.equal(noteClock(state, 100), 100);
+  noteClock(state, 30); // an earlier read does not lower it
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 0);
 });
