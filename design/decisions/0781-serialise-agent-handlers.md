@@ -1,11 +1,6 @@
----
-level: minor
-changelog: An agent instance runs one handler at a time, so a handler that awaits another agent is no longer interleaved with a second handler and no longer loses updates; re-entrant calls fault `ReentrantAgentCall`, long waits fault `AgentBusy`
----
+# 0781 — An agent instance runs one handler at a time
 
-## ADR: serialise-agent-handlers
-title: An agent instance runs one handler at a time
-summary: Every handler that reaches an instance, read-only ones included, runs through a per-instance queue; a re-entrant call faults ReentrantAgentCall and a long wait faults AgentBusy
+- **Status:** Accepted (v0.532)
 
 **Context.** A handler loads its agent's state, runs, and commits the whole record (ADR 0109, ADR 0110 D3). The Durable Object runtime closes its input gate only while a storage operation is in flight, so a handler that awaits anything else, such as a call to another agent or a capability, lets a second request run against the same instance. Both handlers then load the same starting record and the second commit overwrites the first. A local workerd run (#3202) lost four of six expected increments across a timer await and one of six across a `fetch`. The design notes (§12) and the Book already say the handler is the atomic unit and name the Durable Object gates as the source of that guarantee; the gates alone do not deliver it once a handler awaits. The maintainer decided the instance serialises its handlers (actor semantics).
 
