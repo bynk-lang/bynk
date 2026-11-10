@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../../__bynk_runtime/agent.js";
 
 export type OrderId = string & { readonly __brand: "shop.orders.OrderId" };
@@ -42,6 +42,7 @@ export class Book {
   private async loadState(): globalThis.Promise<BookState> {
     const stored = await this.state.storage.get<BookState>("state");
     if (stored === undefined) return __zeroOfBookState();
+    __checkStoredLayout("Book", stored);
     const __zero = __zeroOfBookState();
     __reportUnknownStoredKeys("Book", stored, __zero);
     const __merged = { ...__zero, ...stored };

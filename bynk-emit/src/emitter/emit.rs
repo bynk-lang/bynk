@@ -6699,6 +6699,19 @@ pub(crate) fn emit_agent(
                 None,
             ),
         ];
+        // Per-entry storage slice 0 (#3189): any `__layout` marker was written
+        // by a later build, so fault before anything is decoded, merged or
+        // written back. Unconditional: a lockless agent has no `__v` check.
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__checkStoredLayout".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                    bynk_ts::TsExpr::Ident("stored".to_string()),
+                ],
+            },
+            None,
+        ));
         // State-migrations S1 (#2211, track §3.2, Decision D): with the
         // schema lock, check the raw record's `__v` marker before anything is
         // merged or decoded, so a record from a newer build (or with no path
@@ -7987,7 +8000,8 @@ pub(crate) fn emit_agent(
         };
         writeln!(
             out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}();{version_check}{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};"
+            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check}{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
+            agent_name = a.name.name
         )
         .unwrap();
         // P7.2: `e` is a caught throw of unknown shape by construction — a

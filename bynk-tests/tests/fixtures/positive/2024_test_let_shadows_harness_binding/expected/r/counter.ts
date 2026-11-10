@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { HttpResult } from "../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -41,6 +41,7 @@ export class Counter {
   private async loadState(): globalThis.Promise<CounterState> {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
+    __checkStoredLayout("Counter", stored);
     const __zero = __zeroOfCounterState();
     __reportUnknownStoredKeys("Counter", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -71,7 +72,7 @@ export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectName
 export async function __bynkDriveHistory_Counter(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown }>> {
   __CounterRegistry.reset();
   const __inst = __makeCounter("") as any;
-  const __load = async (): globalThis.Promise<CounterState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfCounterState(); const __m = { ...__zeroOfCounterState(), ...__s }; __rehydrateCounterState(__m, __s); return __m; };
+  const __load = async (): globalThis.Promise<CounterState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfCounterState(); __checkStoredLayout("Counter", __s); const __m = { ...__zeroOfCounterState(), ...__s }; __rehydrateCounterState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
   const __steps: globalThis.Array<{ call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;

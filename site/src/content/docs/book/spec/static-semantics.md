@@ -1102,6 +1102,13 @@ stored marker through unchanged. A stored key the current definition does not
 declare, other than `__v`, is reported once per isolate by name, never by value, and
 is still carried through.
 
+**The layout marker.** `__layout` is a second reserved key in the stored record,
+beside `__v`, naming how the record is laid out in storage. An absent `__layout` is the
+layout described above, the only one a build can yet read or write. A load checks
+`__layout` on the raw stored record first, whether or not the project has the lock, and
+any marker present faults, `RehydrationViolation` with detail `NewerLayout` (a later
+build wrote the record). The faulting record is never decoded, merged or written back.
+
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.
 - **The old shape.** `T` names a record type whose fields MUST match, on structure,

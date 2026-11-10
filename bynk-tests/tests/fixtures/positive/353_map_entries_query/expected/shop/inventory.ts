@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export interface Item {
@@ -47,6 +47,7 @@ export class Inventory {
   private async loadState(): globalThis.Promise<InventoryState> {
     const stored = await this.state.storage.get<InventoryState>("state");
     if (stored === undefined) return __zeroOfInventoryState();
+    __checkStoredLayout("Inventory", stored);
     const __zero = __zeroOfInventoryState();
     __reportUnknownStoredKeys("Inventory", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -119,6 +120,7 @@ export class Ledger {
   private async loadState(): globalThis.Promise<LedgerState> {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
+    __checkStoredLayout("Ledger", stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", stored, __zero);
     const __merged = { ...__zero, ...stored };
