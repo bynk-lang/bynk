@@ -149,6 +149,13 @@ the HTTP ports are allocated from `--base-port` — so in a two-context project 
 inspectors land on 9229 and 9230, and you attach to whichever context you want to
 break in. Narrow with `--context` if you'd rather debug one alone.
 
+`--inspect-port` is honoured whether or not you pass `--inspect`. `wrangler`
+always starts an inspector, so without a port of its own every session would
+claim 9229 and two `bynk dev` sessions started together (two terminals, two
+projects) would collide. A single context with neither flag is therefore given
+a free port; `--inspect` (or several contexts) starts from 9229. If the port is
+already taken, `bynk dev` says so before starting wrangler.
+
 It prints an inspector URL per context on start. Attach any CDP client — VS Code's built-in
 JavaScript debugger, Chrome DevTools — and breakpoints set in `.bynk` bind and
 pause on real requests: the compiler emits source maps (since v0.68, per-statement
