@@ -6,6 +6,8 @@ import {
   LAYOUT_PER_ENTRY,
   LAYOUT_WHOLESALE,
   decodeKeyPart,
+  diffEntries,
+  sameStored,
   encodeKeyPart,
   entryKeyOf,
   expiredRange,
@@ -348,4 +350,26 @@ test("utf8Compare orders by UTF-8 bytes, not UTF-16 code units", () => {
   assert.ok("～" > "\u{1f600}");
   assert.equal(utf8Compare("a", "a"), 0);
   assert.ok(utf8Compare("a", "ab") < 0);
+});
+
+test("diffEntries: only new, changed and removed keys are written", () => {
+  const base = new Map<string, unknown>([
+    ["m/f/a", { x: 1 }],
+    ["m/f/b", { x: 2 }],
+    ["m/f/c", { x: 3 }],
+  ]);
+  const next = { "m/f/a": { x: 1 }, "m/f/b": { x: 20 }, "m/f/d": { x: 4 } };
+  const d = diffEntries(base, next);
+  assert.deepEqual(d.puts, { "m/f/b": { x: 20 }, "m/f/d": { x: 4 } });
+  assert.deepEqual(d.deletes, ["m/f/c"]);
+  assert.deepEqual(diffEntries(new Map(Object.entries(next)), next), { puts: {}, deletes: [] });
+});
+
+test("sameStored compares plain data structurally, including key order", () => {
+  assert.ok(sameStored({ a: 1, b: [1, { c: 2 }] }, { b: [1, { c: 2 }], a: 1 }));
+  assert.ok(!sameStored({ a: 1 }, { a: 1, b: undefined }));
+  assert.ok(!sameStored([1, 2], [2, 1]));
+  assert.ok(!sameStored({ a: 1 }, [1]));
+  assert.ok(!sameStored(null, {}));
+  assert.ok(sameStored(null, null));
 });

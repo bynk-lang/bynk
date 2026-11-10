@@ -319,3 +319,41 @@ export function splitWholesale(stored: Readonly<Record<string, unknown>>, fields
   record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
   return { record, entries };
 }
+
+// Structural equality of two stored (wire-shape, JSON-like) values: plain data only.
+export function sameStored(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    const y = b as readonly unknown[];
+    return a.length === y.length && a.every((v, i) => sameStored(v, y[i]));
+  }
+  const ka = Object.keys(a as object);
+  const kb = Object.keys(b as object);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => Object.hasOwn(b as object, k) && sameStored((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** What a commit has to write to take storage from `base` to `next`. */
+export interface EntryDiff {
+  /** Keys whose value is new or changed, with the new value. */
+  readonly puts: Record<string, unknown>;
+  /** Keys present in `base` and absent from `next`. */
+  readonly deletes: readonly string[];
+}
+
+/**
+ * The writes that take the per-entry keys a handler read (`base`) to the keys its
+ * final state encodes to (`next`): only what changed. An unchanged entry is not
+ * written, so a handler that touches one entry of a large collection writes one key.
+ */
+export function diffEntries(base: ReadonlyMap<string, unknown>, next: Readonly<Record<string, unknown>>): EntryDiff {
+  const puts: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(next)) {
+    if (!base.has(k) || !sameStored(base.get(k), v)) puts[k] = v;
+  }
+  const deletes: string[] = [];
+  for (const k of base.keys()) if (!Object.hasOwn(next, k)) deletes.push(k);
+  return { puts, deletes };
+}
