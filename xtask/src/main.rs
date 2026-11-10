@@ -744,6 +744,15 @@ fn bench(args: &[String]) -> ExitCode {
             }
         }
     }
+    // A record is read back by the `keystroke_latency` probe, which needs the
+    // independent shape's `sizes`; a record of one shape would shadow earlier
+    // complete ones. Measure one shape freely, but record only both.
+    if record && opts.shapes.len() != 2 {
+        eprintln!(
+            "xtask bench: --record needs both shapes (--shape both), so the record is complete"
+        );
+        return ExitCode::from(2);
+    }
     let root = repo_root();
     let result = match xtask::bench::run(&root, &opts, &|m| eprintln!("bench: {m}")) {
         Ok(r) => r,
@@ -756,6 +765,9 @@ fn bench(args: &[String]) -> ExitCode {
     // The accepted budget is a per-release check, not a CI gate: say so loudly,
     // but still print and (with --record) write the result.
     if let Some(warning) = xtask::bench::budget_warning(&result) {
+        eprintln!("bench: WARNING: {warning}");
+    }
+    if let Some(warning) = xtask::bench::trigger_warning(&result) {
         eprintln!("bench: WARNING: {warning}");
     }
     if record {
