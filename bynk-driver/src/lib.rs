@@ -358,7 +358,7 @@ impl std::fmt::Display for ProjectOptionsError {
 impl ProjectOptionsError {
     /// The message, for a command that cannot take `--each` (#3274): the
     /// refusal of a directory of projects then advises only running inside one
-    /// or adding a root manifest. Every other error reads as [`Display`] does,
+    /// or adding a root manifest. Every other error reads as [`std::fmt::Display`] does,
     /// and so does a directory of projects for `check` and `test`, which can.
     pub fn render(&self, each_applies: bool) -> String {
         match self {
