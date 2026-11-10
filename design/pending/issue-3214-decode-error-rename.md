@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage, explained_codes
 changelog: "`JsonError` is renamed `DecodeError`, the decode error type of every decoder; `JsonError` is a deprecated alias with an auto-fix"
 ---
 
