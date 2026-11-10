@@ -1,5 +1,6 @@
 # v0.7.1 §6 confirms that the grammar disallows non-tail effectful expressions
 # as bare statements — only `let`, `commit`, and `assert` may appear as
-# statements. Verify the parser rejects it.
-bynk.parse.expected_token
-expected `}` to close the block, found integer literal
+# statements. Verify the parser rejects it, with the dedicated diagnostic
+# that says how to bind it (#3161) rather than "expected `}`".
+bynk.parse.bare_expression_statement
+an expression cannot stand alone as a statement
