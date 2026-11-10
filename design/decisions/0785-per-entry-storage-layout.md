@@ -1,12 +1,6 @@
----
-level: minor
-probes: verbatim_sites, ts_writes
-changelog: An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2)
----
+# 0785 — Collection entries are stored per entry, in a layout frozen for 1.0
 
-## ADR: per-entry-storage-layout
-title: Collection entries are stored per entry, in a layout frozen for 1.0
-summary: Each Map, Set, Cache and Log entry and each index posting is its own Durable Object key; the state record keeps the Cells and a `__layout: 2` marker; an older record is split by its next commit and every handler commits only the entries it changed
+- **Status:** Accepted (v0.535)
 
 **Context.** An agent's whole state was one value under the key `state`, so a handler that touched one entry of a large `Map` read and wrote all of it, and the value hit the platform's 8 MB limit. The per-entry storage track (`design/tracks/per-entry-storage.md`, #3195, proposal #3189) moves each collection entry to its own key. The slices before this one added the forward-compatibility guard (a build faults on a layout it does not know), the handler serialisation that makes a load-modify-commit cycle safe, the runtime primitives, and the sweep and revert reporting. This slice writes the layout. It has to land before the stored-state freeze at 1.0 (ADR 0538), so the stored bytes it settles are the ones every later build keeps reading.
 

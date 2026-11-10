@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.534**.
+written against **v0.535**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.535.0** | An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2) |
+| **v0.534.7** | The emitter writes an agent class's Workers dispatch and websocket-open dispatch in `emit_agent_dispatch`, as part of splitting `emit_agent` (#3167) |
 | **v0.534.6** | The checker registers a project's files for error attribution once instead of once per unit, removing a units-times-files cost (500 contexts: 18% fewer instructions in `bynk check`) |
 | **v0.534.5** | The language server remembers each file's owning unit for the doc-link hint scan instead of re-parsing every file on every round, about 7% off a 200-context edit |
 | **v0.534.4** | The checker shares a unit's parsed declarations and agents by reference instead of deep-cloning them for every agent and handler, so a project check is up to a third faster (500 contexts: a language-server edit 521 ms to 344 ms) |
