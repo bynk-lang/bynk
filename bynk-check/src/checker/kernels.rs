@@ -904,39 +904,9 @@ pub(crate) fn check_list_kernel_method(
 /// `store` map receiver lifts into a `Query` (vs the entry ops `put`/`get`/…).
 /// `count` is the query terminal; the map's entry-count op is `size`.
 pub(crate) fn is_query_op(name: &str) -> bool {
-    matches!(
-        name,
-        "map"
-            | "filter"
-            | "flatMap"
-            | "sortBy"
-            | "sortByDescending"
-            | "take"
-            | "skip"
-            | "distinct"
-            | "distinctBy"
-            | "joinOn"
-            | "leftJoin"
-            | "join"
-            | "groupBy"
-            | "collect"
-            | "first"
-            | "firstOrElse"
-            | "count"
-            | "fold"
-            | "any"
-            | "all"
-            | "sum"
-            | "min"
-            | "max"
-            | "average"
-            | "forEach"
-            | "parTraverse"
-            | "traverseAll"
-            | "parTraverseAll"
-            | "traverseTry"
-            | "parTraverseTry"
-    )
+    // Generated from the typed operations (#3164), so a `QueryOp` can't be left
+    // out of the store-lift gate.
+    QueryOp::from_name(name).is_some()
 }
 
 /// v0.91 (ADR 0115/0119, query-algebra slice 2): type a **lazy** storage-query
