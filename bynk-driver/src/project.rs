@@ -3130,6 +3130,7 @@ fn run_checks(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_uses,
+        &broken,
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
@@ -5164,6 +5165,39 @@ mod tests {
         let notes = format!("{:?}", e.error.notes);
         assert!(notes.contains("constructs an agent"), "{notes}");
         assert!(!notes.contains("this commons"), "{notes}");
+    }
+
+    /// #3162, integration suites: a `system`-tier suite that constructs an
+    /// agent the parser skipped gets the syntax error alone, as a unit suite does.
+    #[test]
+    fn a_system_suite_naming_a_skipped_agent_reports_only_the_syntax_error() {
+        let root = scratch_project(
+            "system_suite_skipped_agent",
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                (
+                    "src/m.bynk",
+                    "context m\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n\n\
+                     agent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
+                     on call bump(by: Int) -> Effect[Int] {\n    n\n  }\n}\n",
+                ),
+                (
+                    "tests/m_test.bynk",
+                    "suite m as system {\n  case \"bump\" {\n    let a <- Counter(\"x\").bump(2)\n    \
+                     expect a == 2\n  }\n}\n",
+                ),
+            ],
+        );
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let cats: Vec<String> = check_project(&options)
+            .errors
+            .iter()
+            .map(|ae| ae.error.category.to_string())
+            .collect();
+        assert_eq!(cats, ["bynk.parse.reserved_keyword"], "{cats:?}");
     }
 
     // -- Slice 0: file identity is not the unit-validation path ---------------
