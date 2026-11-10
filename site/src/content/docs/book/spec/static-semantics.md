@@ -2350,8 +2350,8 @@ answer to the Worker's fetch of the actor's `jwks` URL (replaced by the
 from the principal's literal `TokenClaims.of(…)` lines
 (`bynk.test.system_claims_need_literal`). The deployed Worker is not changed.
 
-`Nobody`, `Forged`, `Stale`, `Expired`, `WrongIssuer` and `WrongAudience` are
-reserved call-site principals, not declarations, and take no identity
+`Nobody`, `Forged`, `Stale`, `Expired`, `WrongIssuer`, `WrongAudience`,
+`WrongAlgorithm` and `NoSubject` are reserved call-site principals, not declarations, and take no identity
 (`bynk.test.actor_no_identity`). `by Nobody` MUST address a route with a Bearer,
 `Oidc` or `Signature` actor, alone or as a sum member
 (`bynk.test.nobody_needs_secured_route`). `by Forged` MUST address a route with
@@ -2363,7 +2363,16 @@ with a Bearer actor, alone or as a sum member, or an `Oidc` actor
 (`bynk.test.expired_needs_bearer_route`). `by WrongIssuer` and `by WrongAudience`
 MUST address a route with an `Oidc` actor (`bynk.test.wrong_issuer_needs_oidc_route`,
 `bynk.test.wrong_audience_needs_oidc_route`); each sends a correctly signed,
-unexpired token whose `iss`, or `aud`, is not the actor's. On an `Oidc` route,
+unexpired token whose `iss`, or `aud`, is not the actor's. `by WrongAlgorithm`
+and `by NoSubject` MUST address a route with an `Oidc` actor
+(`bynk.test.wrong_algorithm_needs_oidc_route`,
+`bynk.test.no_subject_needs_oidc_route`) and each presents two tokens in turn,
+the call reading the first outcome that is not the seam's refusal, or the refusal
+when every token was refused. Otherwise valid, `by WrongAlgorithm`'s tokens are one
+with `alg: none` and no signature, and one with `alg: HS256` MACed with the
+published public key as the secret; `by NoSubject`'s are correctly signed, one
+with an empty `sub` and one with no `sub` claim. The seam refuses all four before
+the handler runs, whatever the identity type's refinement. On an `Oidc` route,
 `by Forged` sends a token signed by a key the served JWKS does not publish.
 It sends a correctly signed token with a valid `sub` and an `exp` one hour
 before the test clock; `by Forged` on a Bearer route sends a token with a valid

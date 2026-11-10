@@ -4778,12 +4778,63 @@ fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> Co
 /// `Forged` (a wrong secret), `Stale` (a timestamp past the tolerance) or
 /// `Expired` (a Bearer or `Oidc` token whose `exp` has passed), or (#3052)
 /// `WrongIssuer` / `WrongAudience` (an `Oidc` token for another issuer or
-/// audience).
+/// audience), or (#3225) `WrongAlgorithm` / `NoSubject` (an `Oidc` token signed
+/// under a refused algorithm, or one with no usable `sub`).
 pub(crate) fn is_bad_signature_principal(name: &str) -> bool {
     matches!(
         name,
-        "Forged" | "Stale" | "Expired" | "WrongIssuer" | "WrongAudience"
+        "Forged"
+            | "Stale"
+            | "Expired"
+            | "WrongIssuer"
+            | "WrongAudience"
+            | "WrongAlgorithm"
+            | "NoSubject"
     )
+}
+
+/// #3052, #3225: what an `Oidc`-only failure principal is, for the diagnostic
+/// raised when the call does not reach an `Oidc` seam.
+struct OidcOnlyPrincipal {
+    /// The diagnostic code.
+    code: &'static str,
+    /// What it sends, as the message words it.
+    sends: &'static str,
+    /// What the note adds after "use `by X` on a route guarded by an `Oidc`
+    /// actor" for a handler whose route has no such seam.
+    why_not_elsewhere: &'static str,
+}
+
+/// The `Oidc`-only failure principals; `None` for every other name.
+fn oidc_only_principal(name: &str) -> Option<OidcOnlyPrincipal> {
+    let (code, sends, why_not_elsewhere) = match name {
+        "WrongIssuer" => (
+            "bynk.test.wrong_issuer_needs_oidc_route",
+            "a token for another issuer",
+            "; a `Bearer` token has no issuer to check",
+        ),
+        "WrongAudience" => (
+            "bynk.test.wrong_audience_needs_oidc_route",
+            "a token for another audience",
+            "; a `Bearer` token has no audience to check",
+        ),
+        "WrongAlgorithm" => (
+            "bynk.test.wrong_algorithm_needs_oidc_route",
+            "tokens signed under a refused algorithm (`alg: none`, and `HS256` keyed with the public key)",
+            "; only an `Oidc` seam is driven with these tokens",
+        ),
+        "NoSubject" => (
+            "bynk.test.no_subject_needs_oidc_route",
+            "tokens with an empty and with a missing `sub`",
+            "; only an `Oidc` seam is driven with these tokens",
+        ),
+        _ => return None,
+    };
+    Some(OidcOnlyPrincipal {
+        code,
+        sends,
+        why_not_elsewhere,
+    })
 }
 
 pub(crate) fn nobody_outcome(value: &Expr, ty: TyId, ctx: &Ctx) -> TyId {
@@ -5133,26 +5184,24 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             ("Expired", _) => {}
-            ("WrongIssuer" | "WrongAudience", _) if !oidc => {
-                let (code, what) = if name == "WrongIssuer" {
-                    ("bynk.test.wrong_issuer_needs_oidc_route", "issuer")
-                } else {
-                    ("bynk.test.wrong_audience_needs_oidc_route", "audience")
-                };
+            (n, _) if !oidc && oidc_only_principal(n).is_some() => {
+                let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
                     CompileError::new(
-                        code,
+                        kind.code,
                         p.span,
                         format!(
-                            "`by {name}` sends a token for another {what} to an `Oidc` seam, but this handler's route has no `Oidc` seam that checks it"
+                            "`by {name}` sends {} to an `Oidc` seam, but this handler's route has no `Oidc` seam that checks it",
+                            kind.sends
                         ),
                     )
                     .with_note(format!(
-                        "use `by {name}` on a route guarded by an `Oidc` actor; a `Bearer` token has no {what} to check"
+                        "use `by {name}` on a route guarded by an `Oidc` actor{}",
+                        kind.why_not_elsewhere
                     )),
                 );
             }
-            ("WrongIssuer" | "WrongAudience", _) => {}
+            (n, _) if oidc_only_principal(n).is_some() => {}
             ("Forged" | "Stale", None) if !(name == "Forged" && (bearer || oidc)) => {
                 let err = CompileError::new(
                     "bynk.test.forged_needs_signature_route",
@@ -5435,16 +5484,11 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                     "`by Expired` sends an expired token to a `Bearer` or `Oidc` seam, but this address reaches no `Bearer`- or `Oidc`-secured http route",
                 )
                 .with_note("use `by Expired` on an http route guarded by a `Bearer` or `Oidc` actor")
-            } else if name == "WrongIssuer" || name == "WrongAudience" {
-                let (code, what) = if name == "WrongIssuer" {
-                    ("bynk.test.wrong_issuer_needs_oidc_route", "issuer")
-                } else {
-                    ("bynk.test.wrong_audience_needs_oidc_route", "audience")
-                };
+            } else if let Some(kind) = oidc_only_principal(name) {
                 CompileError::new(
-                    code,
+                    kind.code,
                     p.span,
-                    format!("`by {name}` sends a token for another {what} to an `Oidc` seam, but this address reaches no `Oidc`-secured http route"),
+                    format!("`by {name}` sends {} to an `Oidc` seam, but this address reaches no `Oidc`-secured http route", kind.sends),
                 )
                 .with_note(format!("use `by {name}` on an http route guarded by an `Oidc` actor"))
             } else {

@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "subjectless tokens to a Bearer route" {
+		let r <- api.GET("/health") by NoSubject
+		expect r is Rejected(Unauthorized)
+	}
+}

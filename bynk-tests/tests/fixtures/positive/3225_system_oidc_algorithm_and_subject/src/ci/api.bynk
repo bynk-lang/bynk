@@ -1,0 +1,44 @@
+context ci.api
+
+type WorkloadId = String where NonEmpty
+
+// A refinement that admits the empty string.
+type AnyId = String where MaxLength(64)
+
+// A refined identity: the seam refuses an empty `sub` before the identity type
+// is ever asked about it.
+actor Workload {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+	identity = WorkloadId
+}
+
+// An identity whose refinement admits an empty string, so only the seam stands
+// between an empty `sub` and the handler.
+actor Anyone {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+	identity = AnyId
+}
+
+// The same shape, pointed at another issuer by its `trustFrom` variable.
+actor Pinned {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json", trustFrom = "PINNED_OIDC_TRUST"),
+	identity = WorkloadId
+}
+
+service api from http {
+	on GET("/who") () -> Effect[HttpResult[String]] by w: Workload {
+		Ok("who \(w.identity)")
+	}
+
+	on GET("/anyone") () -> Effect[HttpResult[String]] by a: Anyone {
+		Ok("anyone [\(a.identity)]")
+	}
+
+	on POST("/release") (body: String) -> Effect[HttpResult[String]] by Workload {
+		Ok("released \(body)")
+	}
+
+	on GET("/pinned") () -> Effect[HttpResult[String]] by p: Pinned {
+		Ok("pinned \(p.identity)")
+	}
+}

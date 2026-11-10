@@ -1,0 +1,5 @@
+# run by bynk-tests/tests/system/behaviour_fixtures.rs; see that file for the format.
+# #3225: the last two cases claim the seam admitted a bad token; it did not.
+passed=7 failed=2
+fail a wrong-algorithm token is not handled
+fail a no-subject token is not handled

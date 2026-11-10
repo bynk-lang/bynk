@@ -586,6 +586,65 @@ fn a_lax_oidc_verifier_fails_the_refusal_cases() {
     }
 }
 
+/// #3225: `by WrongAlgorithm` and `by NoSubject` must be able to fail. Each of
+/// the emitted `Oidc` verifier's two checks that they rely on, the algorithm
+/// allow-list and the non-empty `sub`, is turned off in turn, and exactly the
+/// cases that rely on it must turn red.
+#[test]
+fn a_lax_oidc_verifier_fails_the_algorithm_and_subject_cases() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: the `tsc` shim is a POSIX shell script");
+        return;
+    }
+    if !(tool_exists("tsc") && tool_exists("node")) {
+        if require::is_required(REQUIRE_ENV) {
+            panic!("tsc and node are required, but {REQUIRE_ENV} is set and one is missing");
+        }
+        eprintln!("\n!!! MUTATION TEST SKIPPED !!!\nit needs `tsc` and `node` on PATH.\n");
+        return;
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3225_system_oidc_algorithm_and_subject");
+    let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("behaviour-fixtures");
+    let passed = |cases: &[(String, bool)], name: &str| {
+        cases
+            .iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("no case `{name}` ran"))
+            .1
+    };
+    let algorithm = [
+        "alg none and an HS256 token keyed with the public key are refused",
+        "a wrong-algorithm raw request is refused",
+    ];
+    let subject = [
+        "an empty sub and a missing sub are refused when the identity is refined",
+        "an empty sub and a missing sub are refused when the identity is any string",
+        "a no-subject raw request is refused",
+    ];
+    // (the check turned off, the cases that rely on it, the cases that must
+    // stay green)
+    let checks: [(&str, &str, &[&str], &[&str]); 2] = [
+        (
+            "alg",
+            r#"return Err("unsupported alg")"#,
+            &algorithm,
+            &subject,
+        ),
+        ("sub", r#"return Err("missing sub")"#, &subject, &algorithm),
+    ];
+    for (tag, needle, fails, stays_green) in checks {
+        let lax = run_mutated(&fixture, &scratch, &format!("oidc-{tag}"), needle);
+        for case in fails {
+            assert!(!passed(&lax, case), "{tag}: `{case}` should fail");
+        }
+        for case in stays_green {
+            assert!(passed(&lax, case), "{tag}: `{case}` should stay green");
+        }
+        assert!(passed(&lax, "a valid token is admitted"), "{tag}");
+    }
+}
+
 /// #3052: nothing in the production Worker accepts the test issuer. The test
 /// issuer (its key pair, its `kid`, its `fetch` wrapper) lives only in the
 /// generated test module, so none of it is in a fixture's emitted Workers.
