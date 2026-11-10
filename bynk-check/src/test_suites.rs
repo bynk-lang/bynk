@@ -160,6 +160,10 @@ pub fn phase_test_bodies(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
+    // #3162: the declarations recovery skipped, per unit. A case that names
+    // one of its target's (or a used unit's) skipped declarations is not told
+    // the name is unknown: the syntax error already says why.
+    broken: &crate::project_model::BrokenDeclNames,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     locals: &mut LocalsSink,
@@ -294,8 +298,23 @@ pub fn phase_test_bodies(
             }
             None => bodies_errs,
         };
+        // #3162: as `prepare_unit_check_ctx` does for a unit's own files, the
+        // names visible to the suite are its target's and those of the units
+        // the target `uses` or `consumes`. The echoes still fail the target.
+        let visible_broken: Vec<String> = std::iter::once(target_name)
+            .chain(
+                unit_uses
+                    .get(target_name)
+                    .into_iter()
+                    .chain(unit_consumes.get(target_name))
+                    .flatten(),
+            )
+            .filter_map(|u| broken.get(u))
+            .flatten()
+            .cloned()
+            .collect();
         let bodies_failed = !bodies_errs.is_empty();
-        errors.extend(bodies_errs);
+        errors.extend(resolver::split_broken_decl_echoes(bodies_errs, &visible_broken).0);
 
         if bodies_failed {
             continue;
