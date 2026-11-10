@@ -9,18 +9,18 @@ any other generic.
 commons guide.tree
 
 type Tree[A] =
-  | Leaf
-  | Node(left: Tree[A], value: A, right: Tree[A])
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
 
 fn depth[A](t: Tree[A]) -> Int {
-  match t {
-    Leaf => 0
-    Node(l, _, r) => {
-      let dl = depth(l)
-      let dr = depth(r)
-      1 + if dl > dr { dl } else { dr }
-    }
-  }
+	match t {
+		Leaf => 0,
+		Node(l, _, r) => {
+			let dl = depth(l)
+			let dr = depth(r)
+			1 + if dl > dr { dl } else { dr }
+		},
+	}
 }
 ```
 
