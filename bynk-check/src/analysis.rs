@@ -406,6 +406,9 @@ pub fn analyse_project_with_policy(
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --
     normalize_service_defaults(&mut parsed);
     let parsed = parsed;
+    // #3243: `parsed` is final here. Register its files once, so the per-unit
+    // attribution below does not re-register every file for every unit.
+    errors.register_parsed(&parsed);
 
     // -- 3. Group. P5.2: closes category 6 of this module's own residual-gap
     //       accounting (see doc comment above) — `phase_group` now also
@@ -814,7 +817,7 @@ pub fn analyse_project_with_policy(
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().collect::<Vec<_>>());
-        errors.extend_attributed_by_span(&parsed, plan_errors);
+        errors.extend_attributed(plan_errors);
     }
 
     // P5.4 (`design/tracks/semantics-in-the-checker.md` §6): test/
@@ -936,7 +939,13 @@ pub fn analyse_project_with_policy(
             &unit_tables,
         );
         cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        let agents: HashMap<String, AgentDecl> = table.agents.clone();
+        // `ContextSequenceInfo` owns plain `AgentDecl`s (it is read across crates);
+        // the checker's `Arc`-shared table is unwrapped here, once per context.
+        let agents: HashMap<String, AgentDecl> = table
+            .agents
+            .iter()
+            .map(|(k, v)| (k.clone(), AgentDecl::clone(v)))
+            .collect();
         sequence_info.insert(
             name.clone(),
             ContextSequenceInfo {

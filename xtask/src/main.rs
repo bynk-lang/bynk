@@ -770,6 +770,11 @@ fn bench(args: &[String]) -> ExitCode {
         }
     };
     let text = serde_json::to_string_pretty(&result).expect("serialises") + "\n";
+    // The accepted budget is a per-release check, not a CI gate: say so loudly,
+    // but still print and (with --record) write the result.
+    if let Some(warning) = xtask::bench::budget_warning(&result) {
+        eprintln!("bench: WARNING: {warning}");
+    }
     if record {
         let version = result["version"].as_str().unwrap_or("unknown");
         let path = xtask::bench::record_path(&root, version);
