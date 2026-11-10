@@ -88,8 +88,9 @@ behaves the same in `bynk test` as when deployed, so a case can check it: after 
 second `put`, the displaced `TestConnection` reports `closed()`.
 
 A connection held under two keys is one socket, so closing it through either key, by
-`remove` or by replacement, closes it for both: the other key is left holding a
-closed connection.
+`remove` or by replacement, closes it for both. The other key keeps its entry, but the
+connection behind it is closed: in `bynk test` it is the closed `TestConnection`, and
+when deployed a closed socket no longer resolves, so `get` on that key returns `None`.
 
 ## Receive inbound frames and broadcast
 
