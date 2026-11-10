@@ -414,8 +414,8 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
 }
 
 /// [`check_emit`] over a project or, at a workspace root, every member.
-pub fn check_emit_all(prog: &str, input: &Path, short: bool) -> bool {
-    if let Some(Ok(ws)) = crate::workspace_at(input) {
+pub fn check_emit_all(prog: &str, input: &Path, short: bool, each: bool) -> bool {
+    if let Ok(Some(Ok(ws))) = crate::workspace_at_each(input, each) {
         let mut ok = true;
         for m in &ws.members {
             ok &= check_emit(prog, &crate::member_dir(input, m), short);

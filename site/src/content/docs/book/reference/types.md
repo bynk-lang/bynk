@@ -629,6 +629,65 @@ Every payload Bynk wrote decodes as before, but a hand-written tagged object
 with an extra key, such as `{"kind": "Some", "value": "d", "note": "x"}`, is
 read as a bare value, so it fails for an `Option[String]`.
 
+
+### `Yaml.decode` {#yaml-decode}
+
+`Yaml.decode[T](s)` is `Json.decode[T]` over YAML text. There is no `Yaml.encode`.
+
+| Form | Type | Purpose |
+|---|---|---|
+| `Yaml.decode[T](s)` | `Result[T, DecodeError]` | parse a YAML document into `T`, validating structure (and any refinements) |
+
+The YAML is parsed to the same tree of `null`, booleans, numbers, strings, lists and
+objects that `JSON.parse` yields, and then checked by the identical typed decode, so
+`T` is any type `Json.decode` accepts, the record mapping, field defaults,
+`Option`-for-absent-key, refinements and `$.path` errors are the same, and `T` is
+inferred from an expected `Result[T, DecodeError]` just as it is for `Json.decode`.
+See the guide [Read a YAML settings file into a typed value](/book/guides/type-system/decode-yaml/).
+
+**The subset.** YAML 1.2, one document: block and flow mappings and sequences,
+plain, single-quoted and double-quoted scalars (multi-line included), literal `|` and
+folded `>` block scalars with chomping and indentation indicators, comments, and
+scalar mapping keys. A leading `---` and a trailing `...` are accepted.
+
+**Scalar resolution** is the YAML 1.2 core schema, by shape, for plain scalars only:
+
+| Written | Is |
+|---|---|
+| `null`, `Null`, `NULL`, `~`, or nothing | `null` |
+| `true`, `True`, `TRUE`, `false`, `False`, `FALSE` | a boolean |
+| `12`, `-3`, `+7`, `0o17`, `0x1F` | an integer |
+| `1.5`, `-.5`, `1e3`, `5.` | a float |
+| anything else | a string |
+
+So `on`, `off`, `yes`, `no`, `y` and `n` are strings, as are `2001-12-14`, `1_000` and
+`0b101`. A quoted scalar is always a string. A mapping key is always text: `1: a`
+has the key `"1"`. An integer beyond 2^53 is read as `JSON.parse` would read it.
+
+**Refusals.** Each is a `DecodeError` with its own `kind`, the `$.path` where it was
+found (`$` before any key), and `line L, column C` in `message`. Nothing is decoded
+partially.
+
+| `kind` | Cause |
+|---|---|
+| `Malformed` | a syntax error, including a tab used as indentation |
+| `UnsupportedAnchor` | an anchor, `&name` |
+| `UnsupportedAlias` | an alias, `*name` |
+| `UnsupportedMergeKey` | a merge key, `<<` (a quoted `"<<"` is only a key) |
+| `UnsupportedTag` | any tag, `!tag` or `!!tag`, because resolution is by shape |
+| `MultipleDocuments` | a second document in the stream |
+| `UnsupportedSyntax` | a construct outside the subset: a complex key (`? key`), a directive (`%YAML`), a key written as a collection |
+| `UnsupportedValue` | `.inf`, `-.inf` or `.nan`: the decoded tree cannot hold a non-finite number |
+| `DuplicateKey` | the same key twice in one mapping (the same rule as a duplicate `Map` key) |
+| `LimitExceeded` | input over 1,048,576 bytes of UTF-8, or collections nested more than 256 levels |
+
+**Limits.** The depth limit is the recursive-codec bound ([§6](/book/spec/type-system/)),
+applied while parsing so that a deeply nested document is refused rather than unwound.
+The size limit is the HTTP body limit. `Json.decode` has no size limit of its own.
+
+An error from the typed step after parsing (`StructuralMismatch`,
+`RefinementViolation`) names its field path exactly as it does for JSON.
+
 ## Deliberate faults: `unreachable` and `todo` {#faults}
 
 Two ambient built-in functions raise a fault on purpose. Both take a `String`

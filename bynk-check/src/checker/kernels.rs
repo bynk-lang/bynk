@@ -2906,8 +2906,11 @@ pub(crate) fn first_recursive_generic(
 /// over any codable value (it throws on a non-finite `Float`, per 0040 —
 /// documented, not typed); `decode[T](s) -> Result[T, DecodeError]` with `T`
 /// explicit (`Json.decode[Order](s)`) or inferred from an expected
-/// `Result[T, DecodeError]`.
+/// `Result[T, DecodeError]`. #3214: `Yaml.decode[T]` is typed by the same code
+/// (`ns` is `Json` or `Yaml`; `Yaml` has no `encode`): the YAML text parses to the
+/// same JSON-shaped tree, so the target domain and the result are `Json.decode`'s.
 pub(crate) fn check_json_static(
+    ns: &str,
     method: &Ident,
     type_args: &[TypeRef],
     args: &[Expr],
@@ -2935,7 +2938,7 @@ pub(crate) fn check_json_static(
         true
     };
     match method.name.as_str() {
-        "encode" | "encodePlain" => {
+        "encode" | "encodePlain" if ns == "Json" => {
             // #2991: `encodePlain` is `encode` writing `Option` as `v` / `null`.
             let plain = method.name == "encodePlain";
             if !type_args.is_empty() {
@@ -3031,7 +3034,7 @@ pub(crate) fn check_json_static(
         }
         // P4c (#2628): `decodeSql` is `decode` over a SQLite row, whose
         // `Bool` columns arrive as `0`/`1`.
-        "decode" | "decodeSql" => {
+        "decode" | "decodeSql" if ns == "Json" || method.name == "decode" => {
             let op = method.name.as_str();
             if !arity1(ctx) {
                 return None;
@@ -3039,7 +3042,7 @@ pub(crate) fn check_json_static(
             check_arg(
                 &args[0],
                 tys.intern(Ty::Base(BaseType::String)),
-                &format!("the `Json.{op}` input"),
+                &format!("the `{ns}.{op}` input"),
                 ctx,
             );
             let t = match type_args {
@@ -3053,12 +3056,12 @@ pub(crate) fn check_json_static(
                             CompileError::new(
                                 "bynk.generics.uninferable_type_arg",
                                 span,
-                                format!("cannot infer the target type of `Json.{op}`"),
+                                format!("cannot infer the target type of `{ns}.{op}`"),
                             )
-                            .with_note(
-                                "give it explicitly (`Json.decode[Order](s)`) or use the \
-                                 result where a `Result[T, DecodeError]` is expected",
-                            ),
+                            .with_note(format!(
+                                "give it explicitly (`{ns}.decode[Order](s)`) or use the \
+                                     result where a `Result[T, DecodeError]` is expected"
+                            )),
                         );
                         return None;
                     }
@@ -3068,7 +3071,7 @@ pub(crate) fn check_json_static(
                         "bynk.generics.type_arg_mismatch",
                         span,
                         format!(
-                            "`Json.{op}` takes exactly one type argument, got {}",
+                            "`{ns}.{op}` takes exactly one type argument, got {}",
                             type_args.len()
                         ),
                     ));
@@ -3082,7 +3085,7 @@ pub(crate) fn check_json_static(
             if super::d1::carries_statement(t, &ctx.input.types, tys) {
                 ctx.errors.push(super::d1::statement_at_boundary(
                     span,
-                    "a `Json` codec target",
+                    &format!("a `{ns}` codec target"),
                 ));
                 return None;
             }
@@ -3113,7 +3116,11 @@ pub(crate) fn check_json_static(
                     CompileError::new(
                         "bynk.types.json_uncodable",
                         span,
-                        format!("`{}` cannot be decoded from JSON", t.display(tys)),
+                        format!(
+                            "`{}` cannot be decoded from {}",
+                            t.display(tys),
+                            if ns == "Yaml" { "YAML" } else { "JSON" }
+                        ),
                     )
                     .with_note(
                         "the codec covers base types, named types, and the built-in \
@@ -3129,7 +3136,7 @@ pub(crate) fn check_json_static(
                 ctx,
                 t,
                 span,
-                &format!("`Json.{op}` decodes into this type"),
+                &format!("`{ns}.{op}` decodes into this type"),
             ) {
                 return None;
             }

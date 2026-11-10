@@ -673,11 +673,25 @@ explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
 (the program itself created that state). A user-declared type named `Json`
 shadows the built-in module.
 
+**`Yaml.decode`** (#3214). `Yaml.decode[T](s) -> Result[T, DecodeError]` is a
+compiler-backed static on the built-in `Yaml` module, typed exactly as
+`Json.decode[T]` is: the same domain of `T` (`bynk.types.json_uncodable` otherwise,
+worded "decoded from YAML"), the same explicit or inferred type argument
+(`bynk.generics.uninferable_type_arg`), the same `Codable` rule for a type
+parameter. `Yaml` has no other static: `Yaml.encode` is
+`bynk.resolve.unknown_static_member`, and `Yaml.decodeSql` does not exist. A
+user-declared type named `Yaml` shadows the built-in module. The text is parsed as
+YAML 1.2 by the rules of [§7.3.9a](/book/spec/emission/#739a-the-yaml-decoder), and the resulting
+JSON-shaped value is decoded by the same `__deserialise_<T>` as `Json.decode`, so
+field defaults, `Option`, refinements, the nesting bound and the `$.path` of an
+error are `Json.decode`'s.
+
 **`DecodeError`** (v0.22b, ADR 0047). The decode error is a compiler-known
 record — `kind`, `path`, `message`, all `String` — putting a boundary
 failure in the program's hands for the first time (the `ValidationError`
 precedent). `kind` is `"Malformed"` for unparseable input, else the
-boundary kind (`"StructuralMismatch"`, `"RefinementViolation"`); `path` is
+boundary kind (`"StructuralMismatch"`, `"RefinementViolation"`), or, for
+`Yaml.decode`, one of the refusal kinds of [§7.3.9a](/book/spec/emission/#739a-the-yaml-decoder); `path` is
 the tracked field path (`$.items[2].qty`); decode failures are runtime
 values, never compile diagnostics. The type was named `JsonError` until it
 became the error of every decoder (ADR 0047 is amended); `JsonError` remains a

@@ -171,7 +171,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
     use checker::codable::{WitnessKind, witness_list};
     match typed.callees.get(&e.id) {
         Some(Callee::Intrinsic { ns, op })
-            if *ns == crate::builtin_names::types::JSON
+            if (*ns == crate::builtin_names::types::JSON
+                || *ns == crate::builtin_names::types::YAML)
                 && matches!(op.as_str(), "decode" | "decodeSql") =>
         {
             match typed.expr_ty(e.id).as_deref() {

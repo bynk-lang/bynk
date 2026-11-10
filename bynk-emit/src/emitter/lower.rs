@@ -3016,7 +3016,7 @@ fn lower_method_call(
         } else {
             tys.intern(Ty::List(row))
         };
-        let decoder = json_decoder_fn(target, true, cx)
+        let decoder = json_decoder_fn(target, DecodeSource::Sql, cx)
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
@@ -4215,6 +4215,19 @@ fn lower_json_codec_call(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
+    // #3214: `Yaml.decode[T](text)` is `Json.decode[T]` with the YAML parser in
+    // place of `JSON.parse`; the typed decode and its errors are the same.
+    if matches!(
+        cx.commons().callees.get(&e.id),
+        Some(Callee::Intrinsic { ns, .. }) if *ns == YAML
+    ) && args.len() == 1
+        && method.name == "decode"
+        && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+        && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
+    {
+        let arg = pre.lower(&args[0], cx);
+        return Some(pre.finish(format!("({decoder})({arg})")));
+    }
     if matches!(
         cx.commons().callees.get(&e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
@@ -4228,7 +4241,15 @@ fn lower_json_codec_call(
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(t, method.name == "decodeSql", cx)
+            && let Some(decoder) = json_decoder_fn(
+                t,
+                if method.name == "decodeSql" {
+                    DecodeSource::Sql
+                } else {
+                    DecodeSource::Json
+                },
+                cx,
+            )
         {
             let arg = pre.lower(&args[0], cx);
             return Some(pre.finish(format!("({decoder})({arg})")));
@@ -4238,12 +4259,28 @@ fn lower_json_codec_call(
     text.map(|expr| pre.finish(expr))
 }
 
-/// The arrow function that decodes JSON text into `t`:
+/// Which text front end feeds a typed decode.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DecodeSource {
+    /// `Json.decode`: the text is JSON.
+    Json,
+    /// `Json.decodeSql` and the typed `D1` reads: JSON, with SQLite's `0`/`1` flags read as `Bool`.
+    Sql,
+    /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
+    Yaml,
+}
+
+/// The arrow function that decodes text into `t`:
 /// `((__s: string): Result<T, DecodeError> => …)`, for `Json.decode` /
-/// `Json.decodeSql` (`sql`: SQLite's `0`/`1` flags read as `Bool`) and for the
-/// typed `D1` reads (#2865), which apply it to the rows `all`/`first` return.
-/// `None` when `t` has no TS rendering.
-fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -> Option<String> {
+/// `Json.decodeSql` / `Yaml.decode` (`source`) and for the typed `D1` reads
+/// (#2865), which apply it to the rows `all`/`first` return. `None` when `t`
+/// has no TS rendering.
+fn json_decoder_fn(
+    t: bynk_check::checker::TyId,
+    source: DecodeSource,
+    cx: &mut LowerCtx,
+) -> Option<String> {
+    let sql = source == DecodeSource::Sql;
     let tys = cx.commons().tys();
     let rigid = super::codec::has_var(t, cx.commons());
     let tref = if rigid {
@@ -4287,11 +4324,23 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     } else {
         String::new()
     };
+    // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
+    // are already positioned `DecodeError`s.
+    let parse = if source == DecodeSource::Yaml {
+        cx.runtime_use().note_yaml();
+        "const __p = __bynkYamlParse(__s); \
+         if (__p.tag === \"Err\") return Err(__p.error); \
+         const __j: __JsonValue = __p.value; "
+            .to_string()
+    } else {
+        "let __j: __JsonValue; \
+         try { __j = globalThis.JSON.parse(__s) as __JsonValue; } \
+         catch (__e) { return Err({ kind: \"Malformed\", path: \"$\", message: String(__e) }); } "
+            .to_string()
+    };
     Some(format!(
         "(__s: string): Result<{ts}, DecodeError> => {{ \
-         let __j: __JsonValue; \
-         try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
-         catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
+         {parse}\
          {sql_bools}const __r = {des}; \
          if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
          const __be = __r.error; \

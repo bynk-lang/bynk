@@ -196,6 +196,16 @@ impl RequirementSink {
         self.paths.entry(file.clone()).or_default().merge(graph);
     }
 
+    /// Fold in what `other` recorded (#3243 S2.3), per file, in order.
+    pub fn absorb(&mut self, other: RequirementSink) {
+        for (file, entries) in other.files {
+            self.files.entry(file).or_default().extend(entries);
+        }
+        for (file, graph) in other.paths {
+            self.paths.entry(file).or_default().merge(graph);
+        }
+    }
+
     /// Drain the capability paths recorded per file.
     pub fn take_paths(&mut self) -> FileCapabilityPaths {
         std::mem::take(&mut self.paths)

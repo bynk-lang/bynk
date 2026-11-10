@@ -1202,7 +1202,8 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             else {
                 return;
             };
-            if *ns != JSON {
+            // #3214: `Yaml.decode[T]` decodes through the same codec helpers.
+            if *ns != JSON && *ns != YAML {
                 return;
             }
             match op.as_str() {
@@ -4177,6 +4178,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.yaml() {
+            parts.extend(YAML_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
+        }
         if ctx.runtime_use.settle_all() {
             parts.extend(
                 SETTLE_ALL_RUNTIME_IMPORTS
@@ -4311,6 +4315,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // #3214: the YAML parser, imported only by a module that calls `Yaml.decode`.
+        let yaml_imports = if runtime_use.yaml() {
+            YAML_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         let url_ops_imports = if runtime_use.url_ops() {
             URL_OPS_RUNTIME_IMPORTS
         } else {
@@ -4388,7 +4398,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4428,6 +4438,9 @@ pub const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantF
 
 /// #2867: the `IsoDate` predicate's check, appended only when a refinement check uses it.
 pub const ISO_DATE_RUNTIME_IMPORTS: &str = ", __bynkIsIsoDate";
+
+/// #3214: the YAML parser behind `Yaml.decode[T]`, appended only when a body has one.
+pub const YAML_RUNTIME_IMPORTS: &str = ", __bynkYamlParse";
 
 /// #2640: the join a `par { … }` block awaits, appended only when a body has one.
 pub const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";

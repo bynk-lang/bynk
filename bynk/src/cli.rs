@@ -353,6 +353,14 @@ pub enum Command {
         /// directories only.
         #[arg(long)]
         emit: bool,
+        /// Run over each project directly inside a directory that has no
+        /// `bynk.toml` of its own (#3274): as at a `[workspace]` root, one
+        /// report per project under a `── path ──` header, every project run,
+        /// and a non-zero exit if any fails. A subdirectory without a
+        /// `bynk.toml` is not a project and is skipped. At a workspace root
+        /// it changes nothing; at a project, or inside one, it is an error.
+        #[arg(long)]
+        each: bool,
         #[command(flatten)]
         lock: LockArgs,
     },

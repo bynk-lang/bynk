@@ -40,6 +40,7 @@ const MODULES = [
   "storage",
   "entries",
   "boundary",
+  "yaml",
   "codec",
   "httpresult",
   "http",
