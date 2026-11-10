@@ -6031,6 +6031,11 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_query_string();
     }
 
+    /// Record that this lowering used an `HttpResult` cookie method (#3277).
+    fn note_http_result_cookie(&self) {
+        self.runtime_use().note_http_result_cookie();
+    }
+
     /// Record that this lowering turned a typed `cookies` record into a `Cookie` header (#3277).
     fn note_cookie_string(&self) {
         self.runtime_use().note_cookie_string();

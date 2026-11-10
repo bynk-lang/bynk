@@ -34,6 +34,9 @@ import {
   cookieObject,
   cookiePairs,
   cookieString,
+  parseSetCookie,
+  serialiseCookie,
+  type CookieValue,
   queryObject,
   queryString,
   renderRejection,
@@ -1181,6 +1184,104 @@ test("cookieString: a record's wire form as a Cookie header", () => {
   const wire = { sid: { kind: "Some", value: "abc" }, n: 7, none: { kind: "None" }, tag: ["x", "y"] } as unknown as JsonValue;
   assert.equal(cookieString(wire), "sid=abc; n=7; tag=x; tag=y");
   assert.equal(cookieString({} as JsonValue), "");
+});
+
+// #3277: setting cookies.
+const none = { tag: "None" } as const;
+const baseCookie: CookieValue = {
+  name: "sid",
+  value: "abc",
+  maxAge: none,
+  expires: none,
+  domain: none,
+  path: "/",
+  secure: true,
+  httpOnly: true,
+  sameSite: { tag: "Lax" },
+  partitioned: false,
+};
+
+test("serialiseCookie: the safe defaults, in a fixed attribute order", () => {
+  assert.equal(serialiseCookie(baseCookie), "sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax");
+});
+
+test("serialiseCookie: every attribute", () => {
+  const c: CookieValue = {
+    ...baseCookie,
+    name: "__Secure-id",
+    maxAge: { tag: "Some", value: 1_800_000 },
+    expires: { tag: "Some", value: 0 },
+    domain: { tag: "Some", value: "example.com" },
+    path: "/app",
+    sameSite: { tag: "Unrestricted" },
+    partitioned: true,
+  };
+  assert.equal(
+    serialiseCookie(c),
+    "__Secure-id=abc; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=1800; Domain=example.com; Path=/app; Secure; HttpOnly; SameSite=None; Partitioned",
+  );
+});
+
+test("serialiseCookie: refuses what a browser would reject or a header cannot carry", () => {
+  const bad = (c: Partial<CookieValue>) => assert.throws(() => serialiseCookie({ ...baseCookie, ...c }), /Set-Cookie/);
+  bad({ name: "a b" });
+  bad({ name: "" });
+  bad({ value: "a b" });
+  bad({ value: "a;b" });
+  bad({ value: "a,b" });
+  bad({ value: "a\r\nSet-Cookie: x=y" });
+  bad({ path: "/a;b" });
+  bad({ domain: { tag: "Some", value: "ex ample.com" } });
+  bad({ name: "__Host-sid", path: "/app" });
+  bad({ name: "__Host-sid", domain: { tag: "Some", value: "example.com" } });
+  bad({ name: "__Host-sid", secure: false });
+  bad({ name: "__Secure-sid", secure: false });
+  bad({ sameSite: { tag: "Unrestricted" }, secure: false });
+  bad({ partitioned: true, secure: false });
+  bad({ value: "x".repeat(4096) });
+  assert.doesNotThrow(() => serialiseCookie({ ...baseCookie, name: "__Host-sid" }));
+  assert.doesNotThrow(() => serialiseCookie({ ...baseCookie, value: '"quoted"' }));
+});
+
+test("httpResultToResponse: one Set-Cookie per attached cookie, on any variant", () => {
+  const withCookies = (result: object) => httpResultToResponse(result as never, (v) => v as JsonValue);
+  const r = withCookies({
+    tag: "SeeOther",
+    location: "/home",
+    cookies: [baseCookie, { ...baseCookie, name: "theme", value: "dark", httpOnly: false }],
+  });
+  assert.equal(r.status, 303);
+  assert.deepEqual(r.headers.getSetCookie(), [
+    "sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax",
+    "theme=dark; Path=/; Secure; SameSite=Lax",
+  ]);
+  assert.deepEqual(withCookies({ tag: "NoContent" }).headers.getSetCookie(), []);
+  // A bad cookie faults the request; it never reaches the wire.
+  assert.throws(() => withCookies({ tag: "NoContent", cookies: [{ ...baseCookie, value: "a b" }] }));
+});
+
+test("parseSetCookie reads back what serialiseCookie writes", () => {
+  const c: CookieValue = {
+    ...baseCookie,
+    maxAge: { tag: "Some", value: 60_000 },
+    domain: { tag: "Some", value: "example.com" },
+    path: "/app",
+    sameSite: { tag: "Strict" },
+    httpOnly: false,
+  };
+  assert.deepEqual(parseSetCookie(serialiseCookie(c)), c);
+  assert.deepEqual(parseSetCookie("a=b"), { ...baseCookie, name: "a", value: "b", secure: false, httpOnly: false });
+});
+
+test("responseToHttpResult: the cookies a router sent are attached to the decoded result", async () => {
+  const res = new Response(null, { status: 204 });
+  res.headers.append("set-cookie", "sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax");
+  const r = (await responseToHttpResult(res, () => ({ tag: "Ok", value: null }) as never)) as unknown as {
+    tag: string;
+    cookies: CookieValue[];
+  };
+  assert.equal(r.tag, "NoContent");
+  assert.deepEqual(r.cookies, [baseCookie]);
 });
 
 test("requestQuery: get, all and params read the raw string", () => {

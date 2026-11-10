@@ -1,0 +1,39 @@
+context auth.api
+
+consumes bynk { Cookie }
+
+type Login = { user: String }
+
+fn session(id: String) -> Cookie {
+	Cookie { name: "__Host-sid", value: id, maxAge: Some(30.minutes) }
+}
+
+service api from http {
+	// A cookie attached to a created resource, with the safe defaults.
+	on POST("/login") (body: Login) -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok").withCookie(session("abc"))
+	}
+
+	// A login that redirects: the cookie rides on any variant.
+	on GET("/go") () -> Effect[HttpResult[()]] by v: Visitor {
+		SeeOther("/home").withCookie(session("abc"))
+	}
+
+	// Several cookies, a script-readable preference among them.
+	on POST("/prefs") () -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent
+			.withCookie(Cookie { name: "theme", value: "dark", httpOnly: false, path: "/app" })
+			.withCookie(Cookie { name: "lang", value: "fr", maxAge: Some(1.days) })
+	}
+
+	// Deleting a cookie sends it again, empty and already expired.
+	on POST("/logout") () -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" })
+	}
+
+	// A computed value a cookie cannot carry faults the request: a 500, and
+	// never a malformed header.
+	on POST("/bad") (body: Login) -> Effect[HttpResult[()]] by v: Visitor {
+		NoContent.withCookie(Cookie { name: "sid", value: body.user })
+	}
+}

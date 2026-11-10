@@ -3446,6 +3446,19 @@ pub(crate) fn check_method_call(
                 r,
             );
         }
+        // #3277: an `HttpResult[T]` — `withCookie`, `clearCookie`, `cookies`.
+        Ty::HttpResult(_) => {
+            let kop = HttpResultOp::from_name(&method.name);
+            let r = check_http_result_method(method, kop, recv_ty, args, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::HttpResult),
+                method,
+                r,
+            );
+        }
         // #2854 (decision B): an HTTP handler's `query` — `get`, `all`, `params`.
         Ty::RequestQuery => {
             let kop = RequestQueryOp::from_name(&method.name);

@@ -1778,6 +1778,113 @@ pub(crate) fn check_bytes_kernel_method(
     Some(tys.intern(ret))
 }
 
+/// #3277: the `Cookie` record of the `bynk` adapter, parsed once from the
+/// embedded source. A system suite sees only the types of the context it
+/// tests, so this is how `HttpResult.cookies()` still names `Cookie` there.
+fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
+    use bynk_syntax::ast::{CommonsItem, SourceUnit};
+    static COOKIE: std::sync::OnceLock<Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>>> =
+        std::sync::OnceLock::new();
+    COOKIE
+        .get_or_init(|| {
+            let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+            let file = crate::project_model::firstparty_file_id(unit);
+            let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
+            let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
+                + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
+            let (parsed, _) =
+                bynk_syntax::parser::parse_unit_with_warnings_from(&tokens, unit.source, &mut next_id)
+                    .ok()?;
+            let SourceUnit::Adapter(a) = &parsed else {
+                return None;
+            };
+            a.items.iter().find_map(|i| match i {
+                CommonsItem::Type(t) if t.name.name == "Cookie" => {
+                    Some(std::sync::Arc::new(t.clone()))
+                }
+                _ => None,
+            })
+        })
+        .clone()
+}
+
+/// #3277: type a method on an `HttpResult[T]`. `withCookie(c)` and `clearCookie(c)`
+/// take a `bynk` `Cookie` and answer the same `HttpResult[T]` with the cookie
+/// attached (the router sends one `Set-Cookie` per cookie); `cookies()` is the
+/// `List[Cookie]` a result carries, which is how a test reads what a handler sets.
+pub(crate) fn check_http_result_method(
+    method: &Ident,
+    op: Option<HttpResultOp>,
+    recv_ty: TyId,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let Some(op) = op else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "`HttpResult` has no method `{}` — it has `withCookie(c)`, `clearCookie(c)` and `cookies()`",
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    // The `Cookie` the `bynk` adapter exports: the caller's own, or, in a system
+    // suite that sees only the context it tests, one that context consumes.
+    let found = ctx
+        .input
+        .types
+        .get("Cookie")
+        .filter(|d| crate::context_checks::is_std_bynk_type("Cookie", &ctx.input.types, d))
+        .cloned()
+        .or_else(std_cookie_decl);
+    // The embedded declaration always parses, so `found` is `Some`; a miss
+    // would be a toolchain fault, answered by typing nothing.
+    let Some(decl) = found else {
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let cookie = crate::checker::named_ty(&decl, tys);
+    let expected_args = usize::from(!matches!(op, HttpResultOp::Cookies));
+    if args.len() != expected_args {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`HttpResult.{}` takes {} argument{}, got {}",
+                method.name,
+                expected_args,
+                if expected_args == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if let Some(a) = args.first() {
+        check_arg(
+            a,
+            cookie,
+            &format!("the `HttpResult.{}` cookie", method.name),
+            ctx,
+        );
+    }
+    Some(match op {
+        HttpResultOp::WithCookie | HttpResultOp::ClearCookie => recv_ty,
+        HttpResultOp::Cookies => tys.intern(Ty::List(cookie)),
+    })
+}
+
 /// #2341 (decision A): type a method on an HTTP handler's `headers`
 /// (`RequestHeaders`). `get(name)` reads a header case-insensitively, joining
 /// repeated ones with `", "`; `bearer()` is the token of an

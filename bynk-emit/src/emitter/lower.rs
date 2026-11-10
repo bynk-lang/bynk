@@ -4003,6 +4003,28 @@ fn lower_method_call(
                     return pre.finish(s);
                 }
             }
+            // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
+            // router turns into one `Set-Cookie` each. `clearCookie` is the cookie
+            // sent again, empty and already expired, under the same name, `Domain`
+            // and `Path`, which is what removes it.
+            KernelOp::HttpResult(op) => {
+                cx.note_http_result_cookie();
+                let recv = pre.lower(receiver, cx);
+                let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                let arg = args.first().cloned().unwrap_or_default();
+                let expr = match op {
+                    bynk_check::kernel_op::HttpResultOp::WithCookie => format!(
+                        "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), ({arg})] }}))({recv})"
+                    ),
+                    bynk_check::kernel_op::HttpResultOp::ClearCookie => format!(
+                        "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), {{ ...({arg}), value: \"\", maxAge: Some(0), expires: Some(0) }}] }}))({recv})"
+                    ),
+                    bynk_check::kernel_op::HttpResultOp::Cookies => {
+                        format!("((({recv}) as any).cookies ?? [])")
+                    }
+                };
+                return pre.finish(expr);
+            }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
             KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {

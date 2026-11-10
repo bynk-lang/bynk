@@ -177,6 +177,21 @@ export function httpResultToResponse<T>(
   serialiseValue: (v: T) => JsonValue,
   opts?: { readonly weakEtag?: boolean },
 ): Response {
+  const response = baseHttpResultToResponse(result, serialiseValue, opts);
+  // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
+  // not valid (a name or value with a forbidden character, a `__Host-` name with
+  // a `Domain`, over 4096 bytes) faults the request, as a bad `RawTagged` etag
+  // does, and never reaches the wire as a malformed header.
+  const cookies = (result as { readonly cookies?: readonly CookieValue[] }).cookies;
+  if (cookies !== undefined) for (const c of cookies) response.headers.append("set-cookie", serialiseCookie(c));
+  return response;
+}
+
+function baseHttpResultToResponse<T>(
+  result: HttpResult<T>,
+  serialiseValue: (v: T) => JsonValue,
+  opts?: { readonly weakEtag?: boolean },
+): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
     return new Response(result.body as BodyInit, {
@@ -415,6 +430,18 @@ function smokeNote(route: string, status: number): void {
 }
 
 export async function responseToHttpResult<T>(
+  response: Response,
+  deserialiseValue: (json: JsonValue) => Result<T, BoundaryError>,
+  route?: string,
+): Promise<HttpResult<T>> {
+  const result = await decodeHttpResult(response, deserialiseValue, route);
+  // #3277: the cookies the router sent, as the `Cookie`s a handler attached, so a
+  // `system` case reads them with `r.cookies()`.
+  const lines = response.headers.getSetCookie();
+  return lines.length === 0 ? result : ({ ...result, cookies: lines.map(parseSetCookie) } as unknown as HttpResult<T>);
+}
+
+async function decodeHttpResult<T>(
   response: Response,
   deserialiseValue: (json: JsonValue) => Result<T, BoundaryError>,
   route?: string,
@@ -804,6 +831,131 @@ export function queryObject(
   fields: readonly QueryField[],
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   return fieldsObject(new URL(request.url).searchParams, fields, "query", false);
+}
+
+/** #3277: a `bynk` `Cookie` as the runtime holds it: `Option`s are `{ tag }`, a
+ *  `Duration` is milliseconds, an `Instant` epoch milliseconds, and `sameSite` a
+ *  unit variant. */
+export interface CookieValue {
+  readonly name: string;
+  readonly value: string;
+  readonly maxAge: Option<number>;
+  readonly expires: Option<number>;
+  readonly domain: Option<string>;
+  readonly path: string;
+  readonly secure: boolean;
+  readonly httpOnly: boolean;
+  readonly sameSite: { readonly tag: "Strict" | "Lax" | "Unrestricted" };
+  readonly partitioned: boolean;
+}
+
+// RFC 6265 §4.1.1: a name is a `token`, a value is `cookie-octet`s (optionally in
+// double quotes), a `Path` any char but control characters and `;`, a `Domain` host characters.
+const COOKIE_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const COOKIE_VALUE = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*$/;
+const COOKIE_PATH = /^[\x20-\x3A\x3C-\x7E]*$/;
+const COOKIE_DOMAIN = /^[A-Za-z0-9.-]+$/;
+/** What a browser stores: a `Set-Cookie` larger than this is dropped silently. */
+export const COOKIE_MAX_BYTES = 4096;
+
+/** #3277: the `Set-Cookie` line for `c`. Throws, naming the rule, for a cookie a
+ *  browser would reject or that would be a malformed header; the compile-time
+ *  checks catch these where the cookie is a literal, and this is the backstop for a
+ *  computed one. */
+export function serialiseCookie(c: CookieValue): string {
+  const bad = (why: string): never => {
+    throw new globalThis.Error(`Set-Cookie ${JSON.stringify(c.name)}: ${why}`);
+  };
+  if (!COOKIE_NAME.test(c.name)) bad("the name is not an RFC 6265 token");
+  const quoted = c.value.length >= 2 && c.value.startsWith('"') && c.value.endsWith('"');
+  if (!COOKIE_VALUE.test(quoted ? c.value.slice(1, -1) : c.value)) {
+    bad("the value has a character a cookie cannot carry (whitespace, a quote, `,`, `;`, `\\` or a control character)");
+  }
+  const domain = c.domain.tag === "Some" ? c.domain.value : undefined;
+  if (domain !== undefined && !COOKIE_DOMAIN.test(domain)) bad("the Domain is not a host name");
+  if (!COOKIE_PATH.test(c.path)) bad("the Path has a control character or `;`");
+  if (c.name.startsWith("__Host-") && !(c.secure && c.path === "/" && domain === undefined)) {
+    bad("a `__Host-` cookie must be Secure, have Path=/ and no Domain");
+  }
+  if (c.name.startsWith("__Secure-") && !c.secure) bad("a `__Secure-` cookie must be Secure");
+  if (c.sameSite.tag === "Unrestricted" && !c.secure) bad("SameSite=None needs Secure");
+  if (c.partitioned && !c.secure) bad("a Partitioned cookie needs Secure");
+  const parts = [`${c.name}=${c.value}`];
+  if (c.expires.tag === "Some") parts.push(`Expires=${new Date(c.expires.value).toUTCString()}`);
+  if (c.maxAge.tag === "Some") parts.push(`Max-Age=${Math.max(0, Math.trunc(c.maxAge.value / 1000))}`);
+  if (domain !== undefined) parts.push(`Domain=${domain}`);
+  parts.push(`Path=${c.path}`);
+  if (c.secure) parts.push("Secure");
+  if (c.httpOnly) parts.push("HttpOnly");
+  parts.push(`SameSite=${c.sameSite.tag === "Unrestricted" ? "None" : c.sameSite.tag}`);
+  if (c.partitioned) parts.push("Partitioned");
+  const line = parts.join("; ");
+  if (new TextEncoder().encode(line).length > COOKIE_MAX_BYTES) {
+    bad(`the Set-Cookie is over ${COOKIE_MAX_BYTES} bytes, which a browser drops`);
+  }
+  return line;
+}
+
+/** #3277: a `Set-Cookie` line read back as a `Cookie` (the system driver's view of
+ *  what a handler sent). An attribute the line lacks takes the record's default
+ *  where it has one (`SameSite` reads `Lax`, as a browser treats it). */
+export function parseSetCookie(line: string): CookieValue {
+  const [first, ...attrs] = line.split(";").map((p) => p.trim());
+  const eq = first.indexOf("=");
+  const none = { tag: "None" } as const;
+  let maxAge: Option<number> = none;
+  let expires: Option<number> = none;
+  let domain: Option<string> = none;
+  let path = "/";
+  let secure = false;
+  let httpOnly = false;
+  let sameSite: CookieValue["sameSite"] = { tag: "Lax" };
+  let partitioned = false;
+  for (const attr of attrs) {
+    const i = attr.indexOf("=");
+    const key = (i < 0 ? attr : attr.slice(0, i)).trim().toLowerCase();
+    const value = i < 0 ? "" : attr.slice(i + 1).trim();
+    switch (key) {
+      case "max-age":
+        maxAge = { tag: "Some", value: Number(value) * 1000 };
+        break;
+      case "expires":
+        expires = { tag: "Some", value: Date.parse(value) };
+        break;
+      case "domain":
+        domain = { tag: "Some", value };
+        break;
+      case "path":
+        path = value;
+        break;
+      case "secure":
+        secure = true;
+        break;
+      case "httponly":
+        httpOnly = true;
+        break;
+      case "samesite": {
+        const v = value.toLowerCase();
+        sameSite = { tag: v === "strict" ? "Strict" : v === "none" ? "Unrestricted" : "Lax" };
+        break;
+      }
+      case "partitioned":
+        partitioned = true;
+        break;
+    }
+  }
+  return {
+    name: eq < 0 ? first : first.slice(0, eq),
+    value: eq < 0 ? "" : first.slice(eq + 1),
+    maxAge,
+    expires,
+    domain,
+    path,
+    secure,
+    httpOnly,
+    sameSite,
+    partitioned,
+  };
 }
 
 /** #3277 (decision B): the `name=value` pairs of a `Cookie` header, in order

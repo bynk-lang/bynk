@@ -5427,6 +5427,18 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     }
 }
 
+/// #3277: whether `decl` (the type table's entry for `name`) is a type the `bynk`
+/// adapter exports, found by its first-party span.
+pub fn is_std_bynk_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    decl: &TypeDecl,
+) -> bool {
+    types.get(name).is_some_and(|d| d.span == decl.span)
+        && crate::firstparty::unit(bynk_std::BYNK_UNIT)
+            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+}
+
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its
 /// declaration's first-party span (as `is_crypto_key_type` finds a key), so a
 /// user type that happens to be called `File` is not mistaken for it.

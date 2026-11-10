@@ -2659,7 +2659,7 @@ fn cookies_field_specs(
     let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    Some(record_field_specs(rec, types))
+    Some(record_field_specs(rec, types, false))
 }
 
 /// #3276: the body field spec of a `@form` or `@multipart` handler, as the system

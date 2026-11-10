@@ -23,9 +23,9 @@ use crate::builtin_names::types::*;
 use crate::hints::HintSink;
 use crate::index::{RefSink, SymbolKind};
 use crate::kernel_op::{
-    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp,
-    IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp,
-    SetOp, StreamOp, StringOp, TestConnectionOp, TokenClaimsOp,
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
+    InstantOp, IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp,
+    ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp, TokenClaimsOp,
 };
 use crate::locals::LocalsSink;
 use crate::requirements::{
