@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.526.3** | An increment can declare `breaking:` in its pending file; the stamp collects it into the Book's upgrading page and each release body gains an "Upgrading from vX" section |
 | **v0.526.2** | "`bynk check` prepares a literal D1 `batch`'s statements in order, each against the schema the earlier statements leave, so a batch that drops then recreates a table, or creates a table and then uses it, is no longer refused (#3197)" |
 | **v0.526.1** | An unresolved type in lowering now stops with an internal error instead of becoming `()` |
 | **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |
