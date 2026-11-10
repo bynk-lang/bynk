@@ -81,6 +81,73 @@ pub fn load_workspace(root: &Path) -> Result<Workspace, ProjectPathsError> {
     })
 }
 
+/// #3274: the workspace a manifest-less directory of projects stands for under
+/// `--each`, with what it set aside.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplicitWorkspace {
+    /// Exactly what `[workspace] members = ["*"]` at `root` would give, so every
+    /// command runs it down the same path as a real workspace.
+    pub workspace: Workspace,
+    /// Immediate subdirectories that hold `.bynk` files but no `bynk.toml`:
+    /// not projects, so not members, but named so nothing is ignored silently.
+    pub skipped: Vec<PathBuf>,
+}
+
+/// Why a directory is not an implicit workspace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImplicitWorkspaceError {
+    /// `.bynk` files sit directly in the directory, which no member would read,
+    /// as at a workspace root ([`ProjectPathsError::WorkspaceRootSources`]).
+    RootSources,
+    /// No immediate subdirectory holds a `bynk.toml`. `deeper` lists the
+    /// outermost projects further down, if any; an implicit workspace never
+    /// reaches past one level.
+    NoProjects { deeper: Vec<PathBuf> },
+}
+
+/// #3274: the implicit workspace at `root`, a directory with no `bynk.toml`
+/// of its own. Its members are the immediate subdirectories that hold a
+/// `bynk.toml`, in name order: `members = ["*"]` as a real workspace reads it,
+/// except that a subdirectory without a manifest is set aside rather than an
+/// error (a repository of examples keeps a `docs/` beside them). Directories
+/// that discovery skips (hidden, `out`, `node_modules`) are never members.
+pub fn implicit_workspace(root: &Path) -> Result<ImplicitWorkspace, ImplicitWorkspaceError> {
+    if has_bynk_file(root) {
+        return Err(ImplicitWorkspaceError::RootSources);
+    }
+    let mut members = BTreeSet::new();
+    let mut skipped = BTreeSet::new();
+    let entries = fs::read_dir(root).map(|rd| rd.flatten().collect::<Vec<_>>());
+    for entry in entries.unwrap_or_default() {
+        let path = entry.path();
+        if !path.is_dir() || crate::discovery::is_skipped_dir(&path, &[]) {
+            continue;
+        }
+        let rel = PathBuf::from(entry.file_name());
+        if crate::discovery::is_project_boundary(&path) {
+            members.insert(rel);
+        } else if crate::discovery::holds_bynk_source(&path) {
+            skipped.insert(rel);
+        }
+    }
+    if members.is_empty() {
+        return Err(ImplicitWorkspaceError::NoProjects {
+            deeper: crate::discovery::nested_projects(root, &[]),
+        });
+    }
+    Ok(ImplicitWorkspace {
+        workspace: Workspace {
+            root: root.to_path_buf(),
+            config: WorkspaceConfig {
+                members: vec!["*".to_string()],
+                exclude: Vec::new(),
+            },
+            members: members.into_iter().collect(),
+        },
+        skipped: skipped.into_iter().collect(),
+    })
+}
+
 /// The workspace root above `project_root` whose members include it, if any.
 pub fn find_parent_workspace(project_root: &Path) -> Option<PathBuf> {
     let me = project_root.canonicalize().ok()?;

@@ -429,7 +429,9 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             .progress(progress)
             .tests(false),
         Err(e) => {
-            eprintln!("{prog}: {e}");
+            // #3274: `compile` can't take `--each`, so its refusal of a
+            // directory of projects doesn't advise it.
+            eprintln!("{prog}: {}", e.render(false));
             return ExitCode::FAILURE;
         }
     };

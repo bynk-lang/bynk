@@ -15,6 +15,7 @@ export * from "./errors.ts";
 export * from "./storage.ts";
 export * from "./entries.ts";
 export * from "./boundary.ts";
+export * from "./yaml.ts";
 export * from "./codec.ts";
 export * from "./httpresult.ts";
 export * from "./http.ts";
