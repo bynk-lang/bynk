@@ -993,7 +993,10 @@ mod tests {
             assert_eq!(broken.len() + "> 0)".len(), src.len() + "> \"x\")".len());
             assert_eq!(&edit_body(&broken, true), src);
             // The signature edit and the body edit touch different things.
-            assert!(!broken.contains("Strng"));
+            // Both edits apply to the same file without disturbing each other.
+            let both = edit_source(&broken, false);
+            assert_ne!(both, broken, "the signature edit still applies");
+            assert_eq!(&edit_body(&edit_source(&both, true), true), src);
         }
     }
 
