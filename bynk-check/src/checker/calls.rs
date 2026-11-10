@@ -2952,7 +2952,9 @@ fn record_kernel(
         Some(op) => {
             ctx.callees.insert(expr_id, Callee::Kernel { recv, op });
         }
-        None => assert!(
+        // A debug assertion, not a hard one: this runs in the language server
+        // on every edit, where a gap should not be a panic.
+        None => debug_assert!(
             result.is_none(),
             "bynk internal error (#3164): kernel method `{}` was accepted but has no `KernelOp`",
             method.name
