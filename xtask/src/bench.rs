@@ -345,6 +345,20 @@ impl Client {
         Ok(Client { child, rx, timings })
     }
 
+    /// Drop any timing lines already received (a late line from a previous round).
+    fn discard_timings(&self) {
+        while self.timings.try_recv().is_ok() {}
+    }
+
+    /// The timing line of the round whose diagnostics just arrived. The server
+    /// writes it to stderr before it publishes, but stdout and stderr are read
+    /// by separate threads, so the diagnostics can be seen first: wait briefly
+    /// for the line rather than take whatever has arrived. `None` when the
+    /// server writes none (an older `bynk-lsp`), after a few seconds.
+    fn round_timing(&self) -> Option<[f64; 4]> {
+        self.timings.recv_timeout(Duration::from_secs(5)).ok()
+    }
+
     /// Wait for a message satisfying `want`, answering any server-to-client
     /// request on the way (an empty `null` result is accepted for all of them).
     fn wait(&mut self, mut want: impl FnMut(&Value) -> bool) -> Result<Duration, String> {
@@ -420,9 +434,7 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
     };
     send(&mut c.child, &did_open(&text))?;
     let first = c.wait(|m| is_diagnostics_for(m, &uri, 1))?;
-    // The round's timing line is written before its diagnostics are published,
-    // so it is already queued; take the newest.
-    let first_levels = c.timings.try_iter().last();
+    let first_levels = c.round_timing();
 
     let mut samples = Vec::new();
     let mut edit_levels = Vec::new();
@@ -432,6 +444,8 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
         // Opened broken, so the first edit restores it.
         let valid = i % 2 == 0;
         let edited = edit_source(&clean, valid);
+        // Nothing from an earlier round may be mistaken for this one's.
+        c.discard_timings();
         send(
             &mut c.child,
             &json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{
@@ -440,7 +454,7 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
             }}),
         )?;
         let took = c.wait(|m| is_diagnostics_for(m, &uri, version))?;
-        let levels = c.timings.try_iter().last();
+        let levels = c.round_timing();
         if i >= warmup {
             samples.push(ms(took));
             edit_levels.extend(levels);

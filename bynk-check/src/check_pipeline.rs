@@ -109,10 +109,11 @@ impl CrossContextViewsCache {
             .clone();
         // The cache is built for one `unit_info` and reused for the whole
         // per-unit loop; a different map would silently get the first one's views.
+        // This catches a map of a different size, not a same-sized different one.
         debug_assert_eq!(
             views.0.len(),
             unit_info.len(),
-            "CrossContextViewsCache reused with a different unit_info"
+            "CrossContextViewsCache reused with a unit_info of a different size (it is built for one map)"
         );
         views
     }
@@ -756,9 +757,20 @@ mod tests {
             ("shop/orders.bynk", &consumer("orders", "1")),
             ("shop/billing.bynk", &consumer("billing", "\"two\"")),
         ]);
+        let errors = &broken.analysis.errors;
         assert!(
-            !broken.error_categories().is_empty(),
+            !errors.is_empty(),
             "a wrongly typed cross-context call in one consumer must be reported"
+        );
+        // Every error is in the consumer that made the call; the other consumer
+        // and the context they share stay clean.
+        assert!(
+            errors.iter().all(|e| e
+                .source_path
+                .as_deref()
+                .is_some_and(|p| p.ends_with("billing.bynk"))),
+            "errors must be attributed to billing.bynk only: {:?}",
+            errors.iter().map(|e| &e.source_path).collect::<Vec<_>>()
         );
     }
 
