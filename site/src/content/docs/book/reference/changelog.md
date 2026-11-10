@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.24** | The Book's types reference now documents generic sums, and `bynk.generics.recursive_generic_at_boundary` names a recursive generic sum as a sum rather than a record |
 | **v0.525.23** | A gated `explained_codes` probe ratchets `bynk explain` coverage upwards, and the increment checklist asks a new error code to ship with an explanation |
 | **v0.525.22** | "The test D1's parameter scanner treats non-ASCII characters as part of a named parameter, as SQLite does, so `:café` and `:cafè` count as two parameters (#3157)" |
 | **v0.525.21** | "`bynk check` checks `Json.decodeSql[T]` of a literal D1 `all` / `first` read against the statement's result columns: a required field of `T` with no column is `bynk.d1.select_field_missing`" |
