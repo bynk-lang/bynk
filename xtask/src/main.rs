@@ -12,6 +12,9 @@
 //!   checks itself against (reserved keywords, semantic-token legend);
 //!   `--check` fails when the committed snapshot is stale, `--tag T --out F`
 //!   writes the release asset.
+//! - `bench-runtime` (#3177) measures the run-time cost of compiled Bynk against
+//!   hand-written TypeScript twins (bundle size, start-up, request latency),
+//!   locally under workerd; `--record` writes `design/benchmarks/runtime-v<version>.json`.
 //! - `tier-probe` (C4b, #2940) fails when a test is in no test tier, or in two.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
 //!   `--fast` stops before the test suite (fmt, clippy, rustdoc).
@@ -78,6 +81,7 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("bench-runtime") => bench_runtime(&args[1..]),
         Some("ci") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--fast") {
                 eprintln!("xtask ci: unknown argument {bad:?}");
@@ -124,6 +128,86 @@ fn manifest_schema(check: bool) -> ExitCode {
         }
         Err(e) => {
             eprintln!("manifest-schema: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// #3177: run-time benchmarks of compiled Bynk against hand-written TypeScript
+/// twins (`benchmarks/runtime/`). Builds a release `bynk`, installs the
+/// harness's pinned npm dependencies (no lockfile, nothing committed), and runs
+/// `bench.mjs`. `--sizes-only` skips workerd and is deterministic; `--record`
+/// writes `design/benchmarks/runtime-v<version>.json`; `--runs`, `--requests`
+/// and `--startups` set the sample sizes.
+fn bench_runtime(args: &[String]) -> ExitCode {
+    let mut pass = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--sizes-only" => pass.push("--sizes-only".to_string()),
+            "--record" => {
+                pass.push("--record".to_string());
+                pass.push("design/benchmarks".to_string());
+            }
+            "--runs" | "--requests" | "--startups" => {
+                let Some(value) = it.next().filter(|v| v.parse::<u32>().is_ok_and(|n| n > 0))
+                else {
+                    eprintln!("xtask bench-runtime: {a} needs a positive whole number");
+                    usage();
+                    return ExitCode::from(2);
+                };
+                pass.push(a.clone());
+                pass.push(value.clone());
+            }
+            other => {
+                eprintln!("xtask bench-runtime: unknown argument {other:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let root = repo_root();
+    let dir = root.join("benchmarks/runtime");
+    let steps: [(&str, Command); 2] = [
+        ("cargo build --release -p bynk", {
+            let mut c = Command::new("cargo");
+            c.args(["build", "--release", "-p", "bynk"])
+                .current_dir(&root);
+            c
+        }),
+        ("npm install", {
+            let mut c = Command::new("npm");
+            c.args(["install", "--no-package-lock", "--no-audit", "--no-fund"])
+                .current_dir(&dir);
+            c
+        }),
+    ];
+    for (label, mut cmd) in steps {
+        match cmd.status() {
+            Ok(status) if status.success() => {}
+            Ok(status) => {
+                eprintln!("xtask bench-runtime: `{label}` failed ({status})");
+                return ExitCode::FAILURE;
+            }
+            Err(e) => {
+                eprintln!("xtask bench-runtime: could not run `{label}`: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let status = Command::new("node")
+        .arg("bench.mjs")
+        .args(&pass)
+        .current_dir(&dir)
+        .status();
+    match status {
+        Ok(status) if status.success() => ExitCode::SUCCESS,
+        Ok(status) => {
+            eprintln!("xtask bench-runtime: bench.mjs failed ({status})");
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("xtask bench-runtime: could not run node: {e}");
             ExitCode::FAILURE
         }
     }
@@ -582,7 +666,7 @@ fn have_nextest(root: &Path) -> bool {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

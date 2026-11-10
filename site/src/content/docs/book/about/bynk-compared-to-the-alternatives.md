@@ -198,6 +198,99 @@ The other two are different jobs:
   Bynk's `agent`, but the goal differs: Bynk's agent is a unit of keyed, typed
   state, not an AI-agent framework.
 
+## What Bynk costs at run time
+
+The sections above argue correctness. This one is the cost side, measured against
+hand-written TypeScript doing the same job, because "what does it weigh and how
+fast is it" is the other half of the question.
+
+For each of three examples (`hello-world`, `orders`, `rate-limiter`) the
+repository holds a hand-written TypeScript *twin*: the Worker a careful author
+would write for the same behaviour, with no libraries. Routing, validation and
+JSON handling are written by hand, and the Durable Objects store state the way a
+hand-written one usually does. Before measuring, the harness checks that the twin
+answers each route the way the Bynk build does, and stops if it does not. A real
+project would often add a validation library, which would make a twin larger, so
+the twin sizes below are a floor. What the twin leaves out, Bynk includes:
+structured boundary errors, a security-header policy, `HEAD` handling, fault
+reporting, and the cross-context and migration endpoints.
+
+Everything ran locally under workerd (through Miniflare) on one 4-vCPU Xeon
+container at 2.1 GHz, with Node 22, on `bynk 0.525.24`. Nothing was deployed.
+Bundle sizes are exact. Start-up and latency are medians of several runs, shown
+with their range, and differences of a few tenths of a millisecond are noise.
+
+**Bundle size.** The worker's entry point, bundled and minified with esbuild, and
+that gzipped:
+
+| Example | Bynk, minified | Bynk, gzipped | Twin, minified | Twin, gzipped |
+|---|---|---|---|---|
+| `hello-world` | 11.1 KiB | 4.1 KiB | 0.7 KiB | 0.4 KiB |
+| `orders` | 27.8 KiB | 7.7 KiB | 2.4 KiB | 1.0 KiB |
+| `rate-limiter` | 20.5 KiB | 6.6 KiB | 1.0 KiB | 0.6 KiB |
+
+That is roughly 10 to 25 KiB of extra minified code, or 3 to 7 KiB gzipped. Most
+of it is a fixed cost, the shared runtime (HTTP, boundary and agent-storage
+support), rather than the program, and it grows slowly with the program: a synthetic context with one group
+of a refined type, a record, an agent and a route bundles to 18.2 KiB (6.2 KiB
+gzipped), and 25 such groups to 124.9 KiB (10.8 KiB gzipped), about 4.5 KiB
+minified and 0.2 KiB gzipped per group.
+
+**Start-up.** Time from creating a fresh instance to its first answered request,
+which includes starting workerd. An empty worker is the floor.
+
+| Example | Bynk | Twin | Empty worker |
+|---|---|---|---|
+| `hello-world` | 85 ms | 80 ms | 80 ms |
+| `orders` | 102 ms | 93 ms | 87 ms |
+| `rate-limiter` | 97 ms | 83 ms | 75 ms |
+
+Each is the median of 15 instances. Individual instances ranged from about 72 ms
+to 123 ms, so the ranges overlap; read this as "a few to a dozen milliseconds
+more than the twin", not as a precise figure.
+
+**Request latency.** One request at a time, after a warm-up, five independent
+runs of 1,000 requests per route. Medians of the per-run p50 and p99, in
+milliseconds (Bynk / twin):
+
+| Route | p50 | p99 |
+|---|---|---|
+| `hello-world` `GET /` | 1.46 / 1.51 | 5.4 / 5.6 |
+| `hello-world` `GET /hello/:name` | 1.55 / 1.51 | 5.6 / 5.3 |
+| `hello-world` rejected name | 1.57 / 1.51 | 6.2 / 5.2 |
+| `orders` `GET /orders/:id/lines` (indexed) | 2.58 / 1.81 | 7.0 / 5.8 |
+| `orders` `GET /totals` (group 500 lines) | 2.65 / 2.62 | 6.7 / 6.2 |
+| `orders` `GET /sales` (join 500 lines to 100 orders) | 2.95 / 3.07 | 6.9 / 8.3 |
+| `orders` `POST /lines` | 5.59 / 2.69 | 10.6 / 6.9 |
+| `orders` `POST /lines` rejected (`qty` 0) | 1.85 / 1.75 | 5.9 / 5.2 |
+| `rate-limiter` `GET /check/:client` (50 clients) | 2.17 / 1.95 | 6.5 / 6.0 |
+| `rate-limiter` `GET /check/:client` (one client, limited) | 1.89 / 1.79 | 6.1 / 5.8 |
+
+The figures include Miniflare's own proxying, about a millisecond and a half even
+for the smallest route, which is the same for both, so compare the columns rather
+than reading the absolute numbers as a deployed Worker's.
+
+For stateless routes, and for validation and rejection, Bynk is within a few
+tenths of a millisecond of the hand-written Worker. The visible cost is in the
+agent. A Bynk agent loads and commits its whole state on every call, whereas the
+hand-written Durable Object reads and writes the records it needs, so reads
+through an index and above all writes cost more, and the gap grows with the
+state. `POST /lines` against an `orders` book holding 0, 500 and 2,000 lines took
+3.4, 4.4 and 7.5 ms at p50 for Bynk, against 2.9, 2.8 and 2.6 ms for the twin (the
+medians of three runs, which agreed to within about 0.2 ms). This is a known
+property of the current storage layout
+([#3159](https://github.com/bynk-lang/bynk/issues/3159)), and the accepted
+per-entry storage work ([#3189](https://github.com/bynk-lang/bynk/issues/3189))
+is expected to change it, so the agent rows here will be re-measured when it
+lands.
+
+Not measured: deployed latency, network time, cold isolates on Cloudflare's
+fleet, or CPU and memory use. The twins, the harness and the recorded results are
+in the repository under
+[`benchmarks/runtime/`](https://github.com/bynk-lang/bynk/tree/main/benchmarks/runtime),
+and `cargo xtask bench-runtime --record` writes the figures for each release to
+`design/benchmarks/`, so a change that adds weight shows up as a diff.
+
 ## The honest summary
 
 - Against **Encore**: Bynk trades a mature, deploy-ready framework for
@@ -211,6 +304,9 @@ The other two are different jobs:
 - Against **Rust on Workers** and **Gleam**: Bynk trades a general-purpose
   language and its ecosystem and portability for a Cloudflare architecture that is
   checked rather than conventional.
+- On **cost**: Bynk's bundles are larger (about 10 to 25 KiB minified more than a
+  library-free hand-written Worker) and its agents write more than a hand-written
+  object does; its stateless request path matches hand-written code.
 - Against **hand-written Durable Objects, Workflows and the Agents SDK**: Bynk
   gives the Durable Object shape a typed form, and does not yet cover what
   Workflows does.
