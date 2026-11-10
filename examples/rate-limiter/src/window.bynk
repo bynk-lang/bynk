@@ -9,11 +9,11 @@ its own `RateView` from them. Background:
 [fixed window rate limiting](https://en.wikipedia.org/wiki/Rate_limiting).
 ---
 type Decision = {
-  windowStart: Int,
-  count:       Int,
-  allowed:     Bool,
-  remaining:   Int,
-  resetAt:     Int,
+	windowStart: Int,
+	count: Int,
+	allowed: Bool,
+	remaining: Int,
+	resetAt: Int,
 }
 
 ---
@@ -26,16 +26,16 @@ clock reading. If the current window has lapsed the request opens a fresh one; a
 request over the limit is *not* counted, so a client cannot deepen its own hole.
 ---
 fn decide(prevStart: Int, prevCount: Int, now: Int, windowMs: Int, limit: Int) -> Decision {
-  let fresh: Bool      = now - prevStart >= windowMs
-  let windowStart: Int = if (fresh) { now } else { prevStart }
-  let used: Int        = if (fresh) { 0 } else { prevCount }
-  let allowed: Bool    = used < limit
-  let count: Int       = if (allowed) { used + 1 } else { used }
-  Decision {
-    windowStart: windowStart,
-    count:       count,
-    allowed:     allowed,
-    remaining:   limit - count,
-    resetAt:     windowStart + windowMs,
-  }
+	let fresh: Bool = now - prevStart >= windowMs
+	let windowStart: Int = if (fresh) { now } else { prevStart }
+	let used: Int = if (fresh) { 0 } else { prevCount }
+	let allowed: Bool = used < limit
+	let count: Int = if (allowed) { used + 1 } else { used }
+	Decision {
+		windowStart: windowStart,
+		count: count,
+		allowed: allowed,
+		remaining: limit - count,
+		resetAt: windowStart + windowMs,
+	}
 }

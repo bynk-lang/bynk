@@ -11,8 +11,9 @@ with `&&`):
 
 ```bynk
 commons signup {
-  type Age = Int where InRange(0, 150)
-  type Username = String where MinLength(3) && MaxLength(20)
+	type Age = Int where InRange(0, 150)
+
+	type Username = String where MinLength(3) && MaxLength(20)
 }
 ```
 
@@ -24,8 +25,9 @@ it never coerces to or from `Int` — and takes float bounds:
 
 ```bynk
 commons pricing {
-  type Ratio = Float where InRange(0.0, 1.0)
-  type Price = Float where Positive
+	type Ratio = Float where InRange(0.0, 1.0)
+
+	type Price = Float where Positive
 }
 ```
 

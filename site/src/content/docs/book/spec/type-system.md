@@ -86,9 +86,9 @@ own type, directly, through another sum or record, or inside an `Option`,
 
 ```bynk
 commons trees {
-  type Tree =
-    | Leaf
-    | Node(left: Tree, value: Int, right: Tree)
+	type Tree =
+		| Leaf
+		| Node(left: Tree, value: Int, right: Tree)
 }
 ```
 
@@ -115,8 +115,15 @@ is permitted, because that position can hold a value that ends the chain
 
 ```bynk
 commons files {
-  type Dir = { name: String, children: List[Dir] }
-  type Chain = { value: Int, next: Option[Chain] }
+	type Dir = {
+		name: String,
+		children: List[Dir],
+	}
+
+	type Chain = {
+		value: Int,
+		next: Option[Chain],
+	}
 }
 ```
 
@@ -250,19 +257,20 @@ requires the value to be **finite** ([§7.2](/book/spec/emission/#72-targets)).
 
 ```bynk
 commons pricing {
-  type Price = Decimal where Positive
-  type Ratio = Decimal where InRange(0.00d, 1.00d)
+	type Price = Decimal where Positive
 
-  fn discounted(p: Price, r: Ratio) -> Decimal {
-    (p * r).round(2, RoundingMode.HalfEven)
-  }
+	type Ratio = Decimal where InRange(0.00d, 1.00d)
 
-  fn toCents(d: Decimal) -> Int {
-    match (d * 100d).round(0, RoundingMode.HalfEven).toInt() {
-      Some(n) => n
-      None => 0
-    }
-  }
+	fn discounted(p: Price, r: Ratio) -> Decimal {
+		(p * r).round(2, RoundingMode.HalfEven)
+	}
+
+	fn toCents(d: Decimal) -> Int {
+		match (d * 100d).round(0, RoundingMode.HalfEven).toInt() {
+			Some(n) => n,
+			None => 0,
+		}
+	}
 }
 ```
 

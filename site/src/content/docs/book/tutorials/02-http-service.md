@@ -25,9 +25,9 @@ code:
 context shortener
 
 service api from http {
-  on GET("/links/:code") (code: String) -> Effect[HttpResult[String]] by Visitor {
-    NotFound
-  }
+	on GET("/links/:code") (code: String) -> Effect[HttpResult[String]] by Visitor {
+		NotFound
+	}
 }
 ```
 
@@ -110,17 +110,17 @@ type for the request. Update `shortener.bynk`:
 context shortener
 
 type CreateLinkRequest = {
-  target: String,
+	target: String,
 }
 
 service api from http {
-  on GET("/links/:code") (code: String) -> Effect[HttpResult[String]] by Visitor {
-    NotFound
-  }
+	on GET("/links/:code") (code: String) -> Effect[HttpResult[String]] by Visitor {
+		NotFound
+	}
 
-  on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[String]] by Visitor {
-    Created(body.target)
-  }
+	on POST("/links") (body: CreateLinkRequest) -> Effect[HttpResult[String]] by Visitor {
+		Created(body.target)
+	}
 }
 ```
 

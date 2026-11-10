@@ -16,13 +16,13 @@ context shop.prices
 consumes bynk
 
 capability Prices {
-  fn get(region: String, sku: Int) -> Effect[Int]
+	fn get(region: String, sku: Int) -> Effect[Int]
 }
 
 service prices {
-  on call(sku: Int) -> Effect[Int] given Prices {
-    Prices.get("east", sku).race(Prices.get("west", sku))
-  }
+	on call(sku: Int) -> Effect[Int] given Prices {
+		Prices.get("east", sku).race(Prices.get("west", sku))
+	}
 }
 ```
 
@@ -71,13 +71,13 @@ argument, decide the winner:
 
 ```bynk,fragment
 suite shop.prices {
-  case "the faster mirror wins" {
-    stub Prices.get("east", _) returns 1 after 2.seconds
-    stub Prices.get("west", _) returns 2 after 1.seconds
-    let p <- prices.call(7)
-    expect p == 2
-    expect Prices.get called 2 times     // the loser was still called
-  }
+	case "the faster mirror wins" {
+		stub Prices.get("east", _) returns 1 after 2.seconds
+		stub Prices.get("west", _) returns 2 after 1.seconds
+		let p <- prices.call(7)
+		expect p == 2
+		expect Prices.get called 2 times  // the loser was still called
+	}
 }
 ```
 

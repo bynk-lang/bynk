@@ -17,20 +17,24 @@ commons shop.export
 type Format = enum { Csv, Json }
 
 fn export(rows: List[String]) -> String {
-  exportWith(rows, ExportOptions {})
+	exportWith(rows, ExportOptions {})
 }
 
 fn exportWith(rows: List[String], options: ExportOptions) -> String {
-  let body = rows.fold("", (acc, r) => if acc == "" { r } else { "\(acc)\(options.separator)\(r)" })
-  match options.format {
-    Csv => body
-    Json => "[\(body)]"
-  }
+	let body = rows.fold("", (acc, r) => if acc == "" {
+		r
+	} else {
+		"\(acc)\(options.separator)\(r)"
+	})
+	match options.format {
+		Csv => body,
+		Json => "[\(body)]",
+	}
 }
 
 type ExportOptions = {
-  separator: String = ",",
-  format: Format = Format.Csv,
+	separator: String = ",",
+	format: Format = Format.Csv,
 }
 ```
 

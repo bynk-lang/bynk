@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Id = number & { readonly __brand: "demo.agt.Id" };
@@ -48,6 +48,7 @@ export class Toggle {
   private async loadState(): globalThis.Promise<ToggleState> {
     const stored = await this.state.storage.get<ToggleState>("state");
     if (stored === undefined) return __zeroOfToggleState();
+    __checkStoredLayout("Toggle", stored);
     const __zero = __zeroOfToggleState();
     __reportUnknownStoredKeys("Toggle", stored, __zero);
     const __merged = { ...__zero, ...stored };

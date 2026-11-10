@@ -105,7 +105,7 @@ export interface RehydrationViolation {
   readonly kind: "RehydrationViolation";
   readonly agent: string;
   readonly path: string;
-  readonly detail: BoundaryError | SchemaVersionMismatch | MigrationFailed;
+  readonly detail: BoundaryError | SchemaVersionMismatch | MigrationFailed | LayoutMismatch;
 }
 
 // State-migrations S2 (#2224 Decision D): a `migrate from N` step threw while
@@ -159,6 +159,34 @@ export function checkStoredSchemaVersion(
   });
 }
 
+// Per-entry storage slice 0 (#3189, track `per-entry-storage.md` §6): a stored
+// record's `__layout` marker names a storage layout this build cannot read. No
+// layout marker is defined yet: an absent marker is today's wholesale layout,
+// so ANY `__layout` was written by a later build (the deploy was rolled back).
+// Reading it would zero-merge the collection fields it no longer holds inline
+// and write them back wholesale, orphaning every per-entry key, so it faults
+// before anything is decoded, merged or written back. `stored` is the marker
+// when it is a positive integer, else null (not user data, so it is logged).
+export interface LayoutMismatch {
+  readonly kind: "NewerLayout";
+  readonly stored: number | null;
+}
+
+// Per-entry storage slice 0 (#3189): check a raw stored record's `__layout`
+// marker before anything else reads it (before the `__v` check, which a
+// lockless agent does not run). Absent is the wholesale layout this build
+// reads; any present marker is `NewerLayout`, thrown as a `RehydrationViolation`
+// so a faulting record is never decoded or written back. A later slice that
+// teaches a build a layout widens the set this accepts.
+export function checkStoredLayout(agent: string, stored: object): void {
+  const raw = (stored as { readonly __layout?: unknown }).__layout;
+  if (raw === undefined) return;
+  throw rehydrationViolation(agent, {
+    kind: "NewerLayout",
+    stored: typeof raw === "number" && globalThis.Number.isInteger(raw) && raw >= 1 ? raw : null,
+  });
+}
+
 // State-migrations S1 (#2211, track §3.4): warn, once per isolate per
 // (agent, key), about a stored key the current definition does not declare — a
 // field renamed or removed before the schema lock recorded it. The key is kept
@@ -186,7 +214,7 @@ export function migrationFailed(agent: string, from: number): Error {
 
 export function rehydrationViolation(
   agent: string,
-  detail: BoundaryError | SchemaVersionMismatch | MigrationFailed,
+  detail: BoundaryError | SchemaVersionMismatch | MigrationFailed | LayoutMismatch,
 ): Error {
   const path = "path" in detail ? detail.path : "<root>";
   // #1827: logged here, where every load-time gate builds it, as the
@@ -198,7 +226,9 @@ export function rehydrationViolation(
     `RehydrationViolation ${agent}`,
     "current" in detail
       ? { agent, path, kind: detail.kind, stored: detail.stored, current: detail.current }
-      : "from" in detail
+      : detail.kind === "NewerLayout"
+        ? { agent, path, kind: detail.kind, stored: detail.stored }
+        : "from" in detail
         ? { agent, path, kind: detail.kind, from: detail.from }
         : { agent, path, kind: detail.kind },
   );
@@ -634,5 +664,5 @@ export function deserialiseEventEnvelope(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { boundaryError as __boundaryError, callService as __callService, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall };
+export { boundaryError as __boundaryError, callService as __callService, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall };
 export type { BoundaryError as __BoundaryError, JsonValue as __JsonValue, ServiceBinding as __ServiceBinding };

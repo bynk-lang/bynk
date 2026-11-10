@@ -95,7 +95,10 @@ header followed by its declarations:
 commons greetings
 
 type Subject = String where NonEmpty
-fn greeting(s: Subject) -> String { "Hello, \(s)!" }
+
+fn greeting(s: Subject) -> String {
+	"Hello, \(s)!"
+}
 ```
 
 [Tutorial 1](/book/tutorials/01-first-program/) builds one from scratch; where a

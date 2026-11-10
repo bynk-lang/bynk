@@ -35,21 +35,21 @@ The billing system that predates this project.
 capability Billing = Service @worker("legacy-billing")
 
 service charge {
-  on call(order: String) -> Effect[Int] given Billing {
-    let req = Request {
-      method: Post,
-      url: "https://legacy-billing/charges",
-      contentType: Some("application/json"),
-      authorization: None,
-      headers: Map.empty(),
-      body: Some("{\"order\":\"\(order)\"}"),
-    }
-    let res <- Billing.send(req)
-    match res {
-      Ok(r) => r.status,
-      Err(_) => 0,
-    }
-  }
+	on call(order: String) -> Effect[Int] given Billing {
+		let req = Request {
+			method: Post,
+			url: "https://legacy-billing/charges",
+			contentType: Some("application/json"),
+			authorization: None,
+			headers: Map.empty(),
+			body: Some("{\"order\":\"\(order)\"}"),
+		}
+		let res <- Billing.send(req)
+		match res {
+			Ok(r) => r.status,
+			Err(_) => 0,
+		}
+	}
 }
 ```
 

@@ -4,20 +4,20 @@ suite keys
 // tested directly — no KV, no auth, no HTTP.
 
 case "keyOf namespaces a flag name" {
-  expect keyOf(Val[FlagKey]("new-dashboard")) == "flag:new-dashboard"
+	expect keyOf(Val[FlagKey]("new-dashboard")) == "flag:new-dashboard"
 }
 
 case "nameOf is the inverse of keyOf" {
-  let k = keyOf(Val[FlagKey]("beta"))
-  expect nameOf(k) == "beta"
+	let k = keyOf(Val[FlagKey]("beta"))
+	expect nameOf(k) == "beta"
 }
 
 case "an empty flag name is rejected at the boundary" {
-  expect FlagKey.of("") is Err(_)
+	expect FlagKey.of("") is Err(_)
 }
 
 case "a 64-character name is accepted, 65 is rejected" {
-  // exactly 64 'a's, then 65
-  expect FlagKey.of("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") is Ok(_)
-  expect FlagKey.of("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") is Err(_)
+	// exactly 64 'a's, then 65
+	expect FlagKey.of("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") is Ok(_)
+	expect FlagKey.of("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") is Err(_)
 }

@@ -13,9 +13,9 @@ prelude actor `Visitor` (scheme `None`) accepts everyone and yields no identity:
 context api
 
 service api from http {
-  on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
-    Ok("ok")
-  }
+	on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ok")
+	}
 }
 ```
 
@@ -33,14 +33,16 @@ context api
 
 type UserId = String where NonEmpty
 
-type Profile = { id: UserId }
+type Profile = {
+	id: UserId,
+}
 
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
-  on GET("/me") () -> Effect[HttpResult[Profile]] by u: User {
-    Ok(Profile { id: u.identity })
-  }
+	on GET("/me") () -> Effect[HttpResult[Profile]] by u: User {
+		Ok(Profile { id: u.identity })
+	}
 }
 ```
 
@@ -65,16 +67,18 @@ against the real seam, with no script to mint tokens:
 
 ```bynk,fragment
 suite api.activity as system {
-  env { AUTH_JWT_SECRET = "test-secret" }
+	env {
+		AUTH_JWT_SECRET = "test-secret"
+	}
 
-  case "tokens the seam must refuse are refused" {
-    let none    <- api.GET("/me") by Nobody    // no token
-    let forged  <- api.GET("/me") by Forged    // signed with a wrong secret
-    let expired <- api.GET("/me") by Expired   // correctly signed, `exp` an hour ago
-    expect none is Rejected(Unauthorized)
-    expect forged is Rejected(Unauthorized)
-    expect expired is Rejected(Unauthorized)
-  }
+	case "tokens the seam must refuse are refused" {
+		let none <- api.GET("/me") by Nobody  // no token
+		let forged <- api.GET("/me") by Forged  // signed with a wrong secret
+		let expired <- api.GET("/me") by Expired  // correctly signed, `exp` an hour ago
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+		expect expired is Rejected(Unauthorized)
+	}
 }
 ```
 
@@ -97,9 +101,9 @@ type UserId = String where NonEmpty
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http {
-  on POST("/ping") () -> Effect[HttpResult[String]] by User {
-    Ok("pong")
-  }
+	on POST("/ping") () -> Effect[HttpResult[String]] by User {
+		Ok("pong")
+	}
 }
 ```
 
@@ -153,15 +157,15 @@ type UserId = String where NonEmpty
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 service api from http by Visitor {
-  // Inherits the default: public.
-  on GET("/health") () -> Effect[HttpResult[String]] {
-    Ok("ok")
-  }
+	// Inherits the default: public.
+	on GET("/health") () -> Effect[HttpResult[String]] {
+		Ok("ok")
+	}
 
-  // Overrides the default: this route requires a verified user.
-  on GET("/me") () -> Effect[HttpResult[UserId]] by u: User {
-    Ok(u.identity)
-  }
+	// Overrides the default: this route requires a verified user.
+	on GET("/me") () -> Effect[HttpResult[UserId]] by u: User {
+		Ok(u.identity)
+	}
 }
 ```
 

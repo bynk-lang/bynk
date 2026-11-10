@@ -14,15 +14,18 @@ every length.
 
 ```bynk
 commons shop {
-  type Item = { sku: String, qty: Int }
+	type Item = {
+		sku: String,
+		qty: Int,
+	}
 
-  fn describe(items: List[Item]) -> String {
-    match items {
-      [] => "empty"
-      [only] => only.sku
-      [first, _, ..] => first.sku
-    }
-  }
+	fn describe(items: List[Item]) -> String {
+		match items {
+			[] => "empty",
+			[only] => only.sku,
+			[first, _, ..] => first.sku,
+		}
+	}
 }
 ```
 
@@ -39,12 +42,12 @@ non-exhaustive `match` on `List[Item]` — `[_, _, ..]` is not covered
 
 ```bynk
 commons shop {
-  fn sum(xs: List[Int]) -> Int {
-    match xs {
-      [] => 0
-      [x, ..rest] => x + sum(rest)
-    }
-  }
+	fn sum(xs: List[Int]) -> Int {
+		match xs {
+			[] => 0,
+			[x, ..rest] => x + sum(rest),
+		}
+	}
 }
 ```
 
@@ -64,19 +67,21 @@ patterns work:
 
 ```bynk
 commons shop {
-  type Segment = { name: String }
+	type Segment = {
+		name: String,
+	}
 
-  fn isApi(path: List[Segment]) -> Bool {
-    path is [Segment { name: "api", .. }, ..]
-  }
+	fn isApi(path: List[Segment]) -> Bool {
+		path is [Segment { name: "api", .. }, ..]
+	}
 
-  fn firstValue(xs: List[Option[Int]]) -> Int {
-    match xs {
-      [Some(n), ..] => n
-      [None, ..] => -1
-      [] => 0
-    }
-  }
+	fn firstValue(xs: List[Option[Int]]) -> Int {
+		match xs {
+			[Some(n), ..] => n,
+			[None, ..] => -1,
+			[] => 0,
+		}
+	}
 }
 ```
 
@@ -89,10 +94,10 @@ the pattern:
 
 ```bynk
 commons shop {
-  fn firstOrZero(jobs: List[Int]) -> Int {
-    let [head, ..] = jobs else { 0 }
-    head
-  }
+	fn firstOrZero(jobs: List[Int]) -> Int {
+		let [head, ..] = jobs else { 0 }
+		head
+	}
 }
 ```
 

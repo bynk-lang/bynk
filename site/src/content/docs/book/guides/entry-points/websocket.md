@@ -18,18 +18,24 @@ the canonical disposal being transfer into an agent that holds it.
 context chat
 
 type RoomId = opaque String
+
 type UserId = opaque String
-type ServerFrame = { text: String }
-type ClientFrame = { text: String }
+
+type ServerFrame = {
+	text: String,
+}
+
+type ClientFrame = {
+	text: String,
+}
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
-  on open (roomId: RoomId) -> Effect[()] by user: Participant {
-    let _ <- connection.send(ServerFrame { text: "welcome" })
-    let _ <- Room(roomId).join(user.identity, connection)
-    ()
-  }
+	on open(roomId: RoomId) -> Effect[()] by user: Participant {
+		let _ <- connection.send(ServerFrame { text: "welcome" })
+		let _ <- Room(roomId).join(user.identity, connection)
+	}
 }
 ```
 
@@ -121,22 +127,19 @@ connection (`.closed()`). The whole flow runs under Node:
 
 ```bynk,fragment
 suite chat {
-  case "a message reaches the room, and a member who left hears nothing" {
-    let a = TestConnection[ServerFrame]()
-    let b = TestConnection[ServerFrame]()
-    let room = RoomId.unsafe("r1")
-
-    let _ <- ChatGateway.open(a, room) by Participant(UserId.unsafe("alice"))
-    let _ <- ChatGateway.open(b, room) by Participant(UserId.unsafe("bob"))
-    expect a.sent() == [ServerFrame { text: "welcome" }]
-
-    let _ <- ChatGateway.message(a, ClientFrame { text: "hello room" })
-    // both a.sent() and b.sent() now end with "hello room"
-
-    let _ <- ChatGateway.close(b)
-    let _ <- ChatGateway.message(a, ClientFrame { text: "after leave" })
-    expect b.sent().length() == 2    // bob has left
-  }
+	case "a message reaches the room, and a member who left hears nothing" {
+		let a = TestConnection[ServerFrame]()
+		let b = TestConnection[ServerFrame]()
+		let room = RoomId.unsafe("r1")
+		let _ <- ChatGateway.open(a, room) by Participant(UserId.unsafe("alice"))
+		let _ <- ChatGateway.open(b, room) by Participant(UserId.unsafe("bob"))
+		expect a.sent() == [ServerFrame { text: "welcome" }]
+		let _ <- ChatGateway.message(a, ClientFrame { text: "hello room" })
+		// both a.sent() and b.sent() now end with "hello room"
+		let _ <- ChatGateway.close(b)
+		let _ <- ChatGateway.message(a, ClientFrame { text: "after leave" })
+		expect b.sent().length() == 2  // bob has left
+	}
 }
 ```
 
@@ -161,51 +164,55 @@ Putting the pieces together — the §20 chat-room as one compiling program:
 context chat
 
 type RoomId = opaque String
+
 type UserId = opaque String
-type ServerFrame = { text: String }
-type ClientFrame = { text: String }
+
+type ServerFrame = {
+	text: String,
+}
+
+type ClientFrame = {
+	text: String,
+}
 
 actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
-  on open (roomId: RoomId) -> Effect[()] by user: Participant {
-    let _ <- connection.send(ServerFrame { text: "welcome" })
-    let _ <- Room(roomId).join(user.identity, connection)
-    ()
-  }
+	on open(roomId: RoomId) -> Effect[()] by user: Participant {
+		let _ <- connection.send(ServerFrame { text: "welcome" })
+		let _ <- Room(roomId).join(user.identity, connection)
+	}
 
-  on message (roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant {
-    let _ <- Room(roomId).post(user.identity, frame.text)
-    ()
-  }
+	on message(roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant {
+		let _ <- Room(roomId).post(user.identity, frame.text)
+	}
 
-  on close (roomId: RoomId) -> Effect[()] by user: Participant {
-    let _ <- Room(roomId).leave(user.identity)
-    ()
-  }
+	on close(roomId: RoomId) -> Effect[()] by user: Participant {
+		let _ <- Room(roomId).leave(user.identity)
+	}
 }
 
 agent Room {
-  key id: RoomId
-  store members: Set[UserId]
-  store conns: Map[UserId, Connection[ServerFrame]]
+	key id: RoomId
 
-  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
-    let _ <- members.add(u)
-    let _ <- conns.put(u, conn)
-    ()
-  }
+	store members: Set[UserId]
+	store conns: Map[UserId, Connection[ServerFrame]]
 
-  on call leave(u: UserId) -> Effect[()] {
-    let _ <- members.remove(u)
-    let _ <- conns.remove(u)
-    ()
-  }
+	on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+		let _ <- members.add(u)
+		let _ <- conns.put(u, conn)
+	}
 
-  on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
-    ()
-  }
+	on call leave(u: UserId) -> Effect[()] {
+		let _ <- members.remove(u)
+		let _ <- conns.remove(u)
+	}
+
+	on call post(sender: UserId, text: String) -> Effect[()] {
+		let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame {
+			text: text,
+		}))
+	}
 }
 ```
 

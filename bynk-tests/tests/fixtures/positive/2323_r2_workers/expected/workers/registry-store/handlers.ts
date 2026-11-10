@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
 import { R2Condition, R2Object, R2Put } from "../../bynk/cloudflare.js";
@@ -68,6 +68,7 @@ export class Projection {
   private async loadState(): globalThis.Promise<ProjectionState> {
     const stored = await this.state.storage.get<ProjectionState>("state");
     if (stored === undefined) return __zeroOfProjectionState();
+    __checkStoredLayout("Projection", stored);
     const __zero = __zeroOfProjectionState();
     __reportUnknownStoredKeys("Projection", stored, __zero);
     const __merged = { ...__zero, ...stored };

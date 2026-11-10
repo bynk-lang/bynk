@@ -18,14 +18,23 @@ context api
 
 type UserId = String where NonEmpty
 
-type Profile = { id: UserId }
+type Profile = {
+	id: UserId,
+}
 
-actor User { auth = Oidc(issuer = "https://issuer.example.com", audience = "my-api", jwks = "https://issuer.example.com/.well-known/jwks.json"), identity = UserId }
+actor User {
+	auth = Oidc(
+		issuer = "https://issuer.example.com",
+		audience = "my-api",
+		jwks = "https://issuer.example.com/.well-known/jwks.json"
+	),
+	identity = UserId
+}
 
 service api from http {
-  on GET("/me") () -> Effect[HttpResult[Profile]] by u: User {
-    Ok(Profile { id: u.identity })
-  }
+	on GET("/me") () -> Effect[HttpResult[Profile]] by u: User {
+		Ok(Profile { id: u.identity })
+	}
 }
 ```
 
@@ -71,23 +80,23 @@ of the actor's `jwks` URL, and mints the tokens.
 
 ```bynk,fragment
 suite ci.release as system {
-  case "a trusted workflow is admitted" {
-    let r <- api.GET("/me") by User("ada")
-    expect r is Ok(_)
-  }
+	case "a trusted workflow is admitted" {
+		let r <- api.GET("/me") by User("ada")
+		expect r is Ok(_)
+	}
 
-  case "tokens the seam must refuse are refused" {
-    let none     <- api.GET("/me") by Nobody          // no token
-    let forged   <- api.GET("/me") by Forged          // signed by a key the JWKS lacks
-    let expired  <- api.GET("/me") by Expired         // correctly signed, `exp` an hour ago
-    let wrongIss <- api.GET("/me") by WrongIssuer     // correctly signed, another `iss`
-    let wrongAud <- api.GET("/me") by WrongAudience   // correctly signed, another `aud`
-    expect none     is Rejected(Unauthorized)
-    expect forged   is Rejected(Unauthorized)
-    expect expired  is Rejected(Unauthorized)
-    expect wrongIss is Rejected(Unauthorized)
-    expect wrongAud is Rejected(Unauthorized)
-  }
+	case "tokens the seam must refuse are refused" {
+		let none <- api.GET("/me") by Nobody  // no token
+		let forged <- api.GET("/me") by Forged  // signed by a key the JWKS lacks
+		let expired <- api.GET("/me") by Expired  // correctly signed, `exp` an hour ago
+		let wrongIss <- api.GET("/me") by WrongIssuer  // correctly signed, another `iss`
+		let wrongAud <- api.GET("/me") by WrongAudience  // correctly signed, another `aud`
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+		expect expired is Rejected(Unauthorized)
+		expect wrongIss is Rejected(Unauthorized)
+		expect wrongAud is Rejected(Unauthorized)
+	}
 }
 ```
 

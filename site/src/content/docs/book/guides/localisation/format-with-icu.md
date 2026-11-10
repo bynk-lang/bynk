@@ -20,7 +20,7 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.count" => "{n, plural, one {# item} other {# items}}"
+	"cart.count" => "{n, plural, one {# item} other {# items}}"
 }
 ```
 
@@ -38,11 +38,11 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.count" => "{n, plural, one {# item} other {# items}}"
+	"cart.count" => "{n, plural, one {# item} other {# items}}"
 }
 
 messages "pl" {
-  "cart.count" => "{n, plural, one {# produkt} few {# produkty} other {# produktów}}"
+	"cart.count" => "{n, plural, one {# produkt} few {# produkty} other {# produktów}}"
 }
 ```
 
@@ -64,7 +64,7 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "review.liked" => "{g, select, male {He} female {She} other {They}} liked this."
+	"review.liked" => "{g, select, male {He} female {She} other {They}} liked this."
 }
 ```
 
@@ -80,9 +80,9 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "stats.views" => "{n, number} views"
-  "stats.rounded" => "{n, number, integer} views"
-  "stats.share" => "{n, number, percent} of readers"
+	"stats.views" => "{n, number} views"
+	"stats.rounded" => "{n, number, integer} views"
+	"stats.share" => "{n, number, percent} of readers"
 }
 ```
 
@@ -98,8 +98,8 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "order.placed" => "Placed {at, date}"
-  "order.placed_long" => "Placed {at, date, long}"
+	"order.placed" => "Placed {at, date}"
+	"order.placed_long" => "Placed {at, date, long}"
 }
 ```
 
@@ -126,8 +126,8 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.count" => "{n, plural, one {it''s # item} other {it''s # items}}"
-  "syntax.hint" => "{n, plural, other {use '{'name'}' to substitute}}"
+	"cart.count" => "{n, plural, one {it''s # item} other {it''s # items}}"
+	"syntax.hint" => "{n, plural, other {use '{'name'}' to substitute}}"
 }
 ```
 

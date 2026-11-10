@@ -6,35 +6,35 @@ suite events
 // cut at or before it sees them all.
 
 case "the last-day count reads the clock and starts empty" {
-  let r <- api.GET("/events/last-day") by Visitor
-  expect r is Ok(0)
-  expect Clock.now called once
+	let r <- api.GET("/events/last-day") by Visitor
+	expect r is Ok(0)
+	expect Clock.now called once
 }
 
 case "the last-hour tally reads a stubbed clock" {
-  stub Clock.now() returns Instant.fromEpochMillis(86400000)
-  let r <- api.GET("/events/last-hour") by Visitor
-  expect r is Ok(_)
-  expect Clock.now called once
+	stub Clock.now() returns Instant.fromEpochMillis(86400000)
+	let r <- api.GET("/events/last-hour") by Visitor
+	expect r is Ok(_)
+	expect Clock.now called once
 }
 
 case "a window read needs no clock" {
-  let n <- Activity("s").countSince(Instant.fromEpochMillis(0))
-  expect n == 0
-  expect Clock.now never called
+	let n <- Activity("s").countSince(Instant.fromEpochMillis(0))
+	expect n == 0
+	expect Clock.now never called
 }
 
 case "appended events are counted in the window" {
-  let _ <- Activity("s").add(Event { id: "e1", kind: "signup", who: "ann" })
-  let _ <- Activity("s").add(Event { id: "e2", kind: "login", who: "ann" })
-  let n <- Activity("s").countSince(Instant.fromEpochMillis(0))
-  expect n == 2
-  expect Clock.now called 2 times
+	let _ <- Activity("s").add(Event { id: "e1", kind: "signup", who: "ann" })
+	let _ <- Activity("s").add(Event { id: "e2", kind: "login", who: "ann" })
+	let n <- Activity("s").countSince(Instant.fromEpochMillis(0))
+	expect n == 2
+	expect Clock.now called 2 times
 }
 
 case "the last-day route counts posted events" {
-  let _ <- api.POST("/events", Event { id: "e1", kind: "signup", who: "ann" }) by Visitor
-  let _ <- api.POST("/events", Event { id: "e2", kind: "signup", who: "bob" }) by Visitor
-  let r <- api.GET("/events/last-day") by Visitor
-  expect r is Ok(2)
+	let _ <- api.POST("/events", Event { id: "e1", kind: "signup", who: "ann" }) by Visitor
+	let _ <- api.POST("/events", Event { id: "e2", kind: "signup", who: "bob" }) by Visitor
+	let r <- api.GET("/events/last-day") by Visitor
+	expect r is Ok(2)
 }

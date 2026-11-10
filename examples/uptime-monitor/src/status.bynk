@@ -5,7 +5,7 @@ The KV key for a target's status. Namespacing keeps these entries separate from
 anything else stored in the same namespace.
 ---
 fn statusKey(name: String) -> String {
-  "status:\(name)"
+	"status:\(name)"
 }
 
 ---
@@ -18,5 +18,5 @@ the platform `Response`/`FetchError` types and the stored `Status` record stay i
 the context that produces them.
 ---
 fn isHealthy(code: Int) -> Bool {
-  code >= 200 && code < 400
+	code >= 200 && code < 400
 }

@@ -30,29 +30,29 @@ consumes bynk { Random }
 consumes bynk.crypto { Crypto }
 
 service issue {
-  on call() -> Effect[String] given Random {
-    let raw <- Random.bytes(32)
-    Effect.pure(raw.toBase64Url())
-  }
+	on call() -> Effect[String] given Random {
+		let raw <- Random.bytes(32)
+		Effect.pure(raw.toBase64Url())
+	}
 }
 
 service digestOf {
-  on call(token: String) -> Effect[String] given Crypto {
-    let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(token))
-    Effect.pure(digest.toHex())
-  }
+	on call(token: String) -> Effect[String] given Crypto {
+		let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(token))
+		Effect.pure(digest.toHex())
+	}
 }
 
 service check {
-  on call(presented: String, storedHex: String) -> Effect[Bool] given Crypto {
-    match Bytes.fromHex(storedHex) {
-      None => Effect.pure(false)
-      Some(stored) => {
-        let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(presented))
-        Crypto.equal(digest, stored)
-      }
-    }
-  }
+	on call(presented: String, storedHex: String) -> Effect[Bool] given Crypto {
+		match Bytes.fromHex(storedHex) {
+			None => Effect.pure(false),
+			Some(stored) => {
+				let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(presented))
+				Crypto.equal(digest, stored)
+			},
+		}
+	}
 }
 ```
 
@@ -71,16 +71,21 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service verify {
-  on call(body: String, signatureHex: String) -> Effect[Bool] given Crypto, Secrets {
-    let secret <- Secrets.get("WEBHOOK_SECRET")
-    match secret {
-      None => Effect.pure(false)
-      Some(key) => match Bytes.fromHex(signatureHex) {
-        None => Effect.pure(false)
-        Some(mac) => Crypto.verifyHmac(Sha256, Bytes.fromUtf8(key), Bytes.fromUtf8(body), mac)
-      }
-    }
-  }
+	on call(body: String, signatureHex: String) -> Effect[Bool] given Crypto, Secrets {
+		let secret <- Secrets.get("WEBHOOK_SECRET")
+		match secret {
+			None => Effect.pure(false),
+			Some(key) => match Bytes.fromHex(signatureHex) {
+				None => Effect.pure(false),
+				Some(mac) => Crypto.verifyHmac(
+					Sha256,
+					Bytes.fromUtf8(key),
+					Bytes.fromUtf8(body),
+					mac
+				),
+			},
+		}
+	}
 }
 ```
 
@@ -99,25 +104,25 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service signLine {
-  on call(payload: String) -> Effect[Result[String, CryptoError]] given Crypto, Secrets {
-    let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
-    match stored {
-      None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set")))
-      Some(b64) => match Bytes.fromBase64(b64) {
-        None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't base64")))
-        Some(pkcs8) => {
-          let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
-          match imported {
-            Err(e) => Effect.pure(Err(e))
-            Ok(key) => {
-              let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
-              Effect.pure(Ok(signature.toBase64()))
-            }
-          }
-        }
-      }
-    }
-  }
+	on call(payload: String) -> Effect[Result[String, CryptoError]] given Crypto, Secrets {
+		let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
+		match stored {
+			None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set"))),
+			Some(b64) => match Bytes.fromBase64(b64) {
+				None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't base64"))),
+				Some(pkcs8) => {
+					let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
+					match imported {
+						Err(e) => Effect.pure(Err(e)),
+						Ok(key) => {
+							let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
+							Effect.pure(Ok(signature.toBase64()))
+						},
+					}
+				},
+			},
+		}
+	}
 }
 ```
 
