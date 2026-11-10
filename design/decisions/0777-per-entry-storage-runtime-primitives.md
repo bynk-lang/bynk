@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The runtime gains the per-entry storage primitives (batched, ranged and transactional storage, the key layout, a staged write-set and the wholesale split); nothing emitted uses them yet (per-entry storage, slice 1)
----
+# 0777 — The per-entry storage runtime: key layout, a staged write-set flushed in one transaction, and the wholesale split
 
-## ADR: per-entry-storage-runtime-primitives
-title: The per-entry storage runtime: key layout, a staged write-set flushed in one transaction, and the wholesale split
-summary: Key shapes, EntryOverlay with an atomic chunked flush through storage.transaction, splitWholesale, and an in-memory storage that enforces the 128-key batch and counts operations
+- **Status:** Accepted (v0.528)
 
 **Context.** The per-entry storage track (`design/tracks/per-entry-storage.md`, #3195, proposal #3189) moves `Map`/`Set`/`Cache`/`Log` entries and `@indexed` postings from the single `"state"` value to keys of their own. Its first slice is the runtime half: nothing emitted calls it yet, and the emitter is wired to it by the slice that changes the layout. The spike (recorded on the track doc, §5) established what the primitives may rely on: Cloudflare documents up to 128 keys per batched `get`, `put` and `delete`; each call is atomic; puts issued with no `await` between them coalesce atomically, but no size limit is promised for that; `transaction()` is still available on SQLite-backed objects although the documentation calls explicit transactions "no longer necessary"; and keys list in UTF-8 byte order.
 
