@@ -1808,6 +1808,9 @@ fn bad_signature_driver(actor: &str) -> Option<&'static str> {
         // #3052: an `Oidc` route's token for another issuer or audience.
         "WrongIssuer" => Some("wrongissuer"),
         "WrongAudience" => Some("wrongaudience"),
+        // #3225: a token under a refused algorithm, or with no usable `sub`.
+        "WrongAlgorithm" => Some("wrongalgorithm"),
+        "NoSubject" => Some("nosubject"),
         _ => None,
     }
 }
@@ -2417,6 +2420,22 @@ fn lower_method_call(
                 idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
             }
             "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
+            // #3224: on the bundle target a held `store Map[K, Connection]` is an
+            // ordinary in-memory map of `TestConnection`s (the Workers build
+            // persists connection ids instead and takes the held-map branch
+            // above), so `remove` must still honour the §2.9 contract that it
+            // removes *and closes*: close the connection the entry holds, then
+            // delete it, as the Workers lowering does.
+            "remove"
+                if cx
+                    .agent_store_map_value_ts(&id.name)
+                    .is_some_and(|v| v.starts_with("Connection<")) =>
+            {
+                format!(
+                    "(async () => {{ const __k = {0}; if (globalThis.Object.hasOwn({m}, __k)) {{ await {m}[__k].close(); delete {m}[__k]; }} return undefined; }})()",
+                    a[0]
+                )
+            }
             "remove" => format!("((delete {m}[{}]), undefined)", a[0]),
             "contains" => format!("globalThis.Object.hasOwn({m}, {})", a[0]),
             "size" => format!("globalThis.Object.keys({m}).length"),

@@ -1,0 +1,14 @@
+context ci.api
+
+type WorkloadId = String where NonEmpty
+
+actor Workload {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+	identity = WorkloadId
+}
+
+service api from http {
+	on GET("/who") () -> Effect[HttpResult[String]] by w: Workload {
+		Ok("who \(w.identity)")
+	}
+}

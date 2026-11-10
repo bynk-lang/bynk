@@ -1,0 +1,64 @@
+suite ci.api as system {
+	// #3225: the driver presents tokens the seam must refuse for their
+	// algorithm or their subject. `by WrongAlgorithm` presents two, `alg: none`
+	// and an HS256 token keyed with the JWKS public key; `by NoSubject`
+	// presents two, an empty `sub` and no `sub`. Each reads
+	// `Rejected(Unauthorized)` only if the seam refused every one of them; if
+	// it admits one, the case reads that outcome instead. The mutation test in
+	// `bynk-tests/tests/system/behaviour_fixtures.rs` turns each check off in
+	// the emitted verifier and expects exactly the matching cases to fail.
+
+	case "a valid token is admitted" {
+		let r <- api.GET("/who") by Workload("wid")
+		expect r is Ok("who wid")
+	}
+
+	case "alg none and an HS256 token keyed with the public key are refused" {
+		let r <- api.GET("/who") by WrongAlgorithm
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an empty sub and a missing sub are refused when the identity is refined" {
+		let r <- api.GET("/who") by NoSubject
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an empty sub and a missing sub are refused when the identity is any string" {
+		let ok <- api.GET("/anyone") by Anyone("someone")
+		let r <- api.GET("/anyone") by NoSubject
+		expect ok is Ok("anyone [someone]")
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a wrong-algorithm raw request is refused" {
+		let r <- api.POST("/release", Wire("\"v1\"")) by WrongAlgorithm
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a no-subject raw request is refused" {
+		let r <- api.POST("/release", Wire("\"v1\"")) by NoSubject
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "the trustFrom variable does not make either refusal go away" {
+		env { PINNED_OIDC_TRUST = "{\"issuer\":\"https://staging.example.com\",\"jwks\":\"https://staging.example.com/jwks\",\"audience\":\"staging-registry\"}" }
+		let ok <- api.GET("/pinned") by Pinned("pid")
+		let alg <- api.GET("/pinned") by WrongAlgorithm
+		let sub <- api.GET("/pinned") by NoSubject
+		expect ok is Ok("pinned pid")
+		expect alg is Rejected(Unauthorized)
+		expect sub is Rejected(Unauthorized)
+	}
+
+	// The expectations are inverted: the seam refused, so `Handled(_)` fails.
+	// They show the outcome is observed from the real response.
+	case "a wrong-algorithm token is not handled" {
+		let r <- api.GET("/who") by WrongAlgorithm
+		expect r is Handled(_)
+	}
+
+	case "a no-subject token is not handled" {
+		let r <- api.GET("/who") by NoSubject
+		expect r is Handled(_)
+	}
+}

@@ -213,6 +213,14 @@ pub const TYPESCRIPT_MAJOR_TESTED: u32 = 7;
 /// written into a generated `wrangler.toml`.
 pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 
+/// The storage layout this emitter writes an agent's state in (#3189, track
+/// `design/tracks/per-entry-storage.md`): 1 is the wholesale layout, with every
+/// collection inline in the one `"state"` record. `bynk deploy` records it in each
+/// version's facts so that `bynk deploy revert` can refuse a rollback to a build
+/// that writes an older layout over stored data. The slice that changes the layout
+/// raises this together with the emitter's writer.
+pub const STORAGE_LAYOUT: i64 = 1;
+
 /// State-migrations S4 (#2259): the call signature and the sweep route's
 /// names, for `bynk migrate sweep`, which signs as the runtime verifies.
 pub use bynk_check::wire_format;
