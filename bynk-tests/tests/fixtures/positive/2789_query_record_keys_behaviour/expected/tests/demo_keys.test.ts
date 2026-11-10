@@ -128,8 +128,8 @@ async function test_groupBy_a_record_key_merges_equal_keys() {
     await __makeLog("g").visit("c", Region.South, 1, 5, deps);
     const ts = await __makeLog("g").totals(deps);
     if (!((ts).length === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:35:10", 941, 957, "expect ts.length() == 2\n  expected: ts.length() == 2\n  actual:   " + __bynkShow(((ts).length)) + " == " + __bynkShow((2))); }
-    if (!((ts).reduce((__s: number, __x: Tally) => __s + ((t) => t.total)(__x), 0) === 35)) { throw __bynkExpectFailure("tests/demo/keys.bynk:36:10", 967, 995, "expect ts.sum((t) => t.total) == 35\n  expected: ts.sum((t) => t.total) == 35\n  actual:   " + __bynkShow(((ts).reduce((__s: number, __x: Tally) => __s + ((t) => t.total)(__x), 0))) + " == " + __bynkShow((35))); }
-    if (!((ts).some((__x: Tally) => ((t) => t.total === 30)(__x)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:37:10", 1005, 1033, "expect ts.any((t) => t.total == 30)"); }
+    if (!((ts).reduce((__s: number, __x: Tally) => __s + ((t: Tally) => t.total)(__x), 0) === 35)) { throw __bynkExpectFailure("tests/demo/keys.bynk:36:10", 967, 995, "expect ts.sum((t) => t.total) == 35\n  expected: ts.sum((t) => t.total) == 35\n  actual:   " + __bynkShow(((ts).reduce((__s: number, __x: Tally) => __s + ((t: Tally) => t.total)(__x), 0))) + " == " + __bynkShow((35))); }
+    if (!((ts).some((__x: Tally) => ((t: Tally) => t.total === 30)(__x)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:37:10", 1005, 1033, "expect ts.any((t) => t.total == 30)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

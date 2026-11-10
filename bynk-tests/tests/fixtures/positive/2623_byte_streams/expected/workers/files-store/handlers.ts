@@ -15,7 +15,7 @@ export type Receipt = __CommonsReceipt & { readonly __ctxBrand?: "files.store" }
 export type Shelf = __CommonsShelf & { readonly __ctxBrand?: "files.store" };
 
 export function join(parts: readonly globalThis.Uint8Array[]): globalThis.Uint8Array {
-  return ((__xs: readonly globalThis.Uint8Array[], __acc: globalThis.Uint8Array, __f: (acc: globalThis.Uint8Array, x: globalThis.Uint8Array) => globalThis.Uint8Array) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(parts, new globalThis.TextEncoder().encode(""), (acc, b) => __bynkBytesConcat(acc, b));
+  return ((__xs: readonly globalThis.Uint8Array[], __acc: globalThis.Uint8Array, __f: (acc: globalThis.Uint8Array, x: globalThis.Uint8Array) => globalThis.Uint8Array) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(parts, new globalThis.TextEncoder().encode(""), (acc: globalThis.Uint8Array, b: globalThis.Uint8Array) => __bynkBytesConcat(acc, b));
 }
 
 export interface Blobs {
@@ -71,7 +71,7 @@ export const api = {
   },
   async http_GET_shelves_Param_name(name: string, deps: { Blobs: Blobs }): globalThis.Promise<HttpResult<void>> {
     const s = await deps.Blobs.shelf(name);
-    return (name === "empty" ? HttpResult.NotFound : HttpResult.RawStreamed((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; for await (const __e of __s) { yield ((b) => b)(__e); } })(s.latest.body), s.latest.contentType));
+    return (name === "empty" ? HttpResult.NotFound : HttpResult.RawStreamed((async function* (__s) { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; for await (const __e of __s) { yield ((b: globalThis.Uint8Array) => b)(__e); } })(s.latest.body), s.latest.contentType));
   },
 };
 

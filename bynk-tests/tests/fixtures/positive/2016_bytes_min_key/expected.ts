@@ -6,5 +6,5 @@ import { __bynkCmpBytes } from "./__bynk_runtime/compare.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function smallest(xs: readonly globalThis.Uint8Array[]): Option<globalThis.Uint8Array> {
-  return ((__xs: readonly globalThis.Uint8Array[]) => { if (__xs.length === 0) return None; let __m = ((b) => b)(__xs[0]); for (const __x of __xs) { const __k = ((b) => b)(__x); if (__bynkCmpBytes(__k, __m) < 0) __m = __k; } return Some(__m); })(xs);
+  return ((__xs: readonly globalThis.Uint8Array[]) => { if (__xs.length === 0) return None; let __m = ((b: globalThis.Uint8Array) => b)(__xs[0]); for (const __x of __xs) { const __k = ((b: globalThis.Uint8Array) => b)(__x); if (__bynkCmpBytes(__k, __m) < 0) __m = __k; } return Some(__m); })(xs);
 }

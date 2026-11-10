@@ -93,7 +93,7 @@ async function test_an_Effect_function_that_awaits_before_a_million_self_tail_ca
     const deps = __makeTestDeps();
     const { Chain, adders, collatz, count, countE, countEnsured, countdown, down, downE, drain, fibLoop, firstDiff, isDrain, isEven, isOdd, lastOf, lastOr, nest, nestTail, nestedDrain, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    await repeat(1000000, async (i) => globalThis.Promise.resolve(undefined));
+    await repeat(1000000, async (i: number) => globalThis.Promise.resolve(undefined));
     if (!(true)) { throw __bynkExpectFailure("tests/demo/tco.bynk:23:10", 609, 613, "expect true"); }
     return { pass: true };
   } catch (e) {
@@ -180,7 +180,7 @@ async function test_each_iteration_s_closure_keeps_its_own_binding() {
     const { Chain, adders, collatz, count, countE, countEnsured, countdown, down, downE, drain, fibLoop, firstDiff, isDrain, isEven, isOdd, lastOf, lastOr, nest, nestTail, nestedDrain, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     const fs = adders(3, []);
-    if (!(__bynkEq((fs).map((__x: (a0: number) => number) => ((f) => f(10))(__x)), [13, 12, 11]))) { throw __bynkExpectFailure("tests/demo/tco.bynk:49:10", 1262, 1298, "expect fs.map((f) => f(10)) == [13, 12, 11]\n  expected: fs.map((f) => f(10)) == [13, 12, 11]\n  actual:   " + __bynkShow(((fs).map((__x: (a0: number) => number) => ((f) => f(10))(__x)))) + " == " + __bynkShow(([13, 12, 11]))); }
+    if (!(__bynkEq((fs).map((__x: (a0: number) => number) => ((f: (a0: number) => number) => f(10))(__x)), [13, 12, 11]))) { throw __bynkExpectFailure("tests/demo/tco.bynk:49:10", 1262, 1298, "expect fs.map((f) => f(10)) == [13, 12, 11]\n  expected: fs.map((f) => f(10)) == [13, 12, 11]\n  actual:   " + __bynkShow(((fs).map((__x: (a0: number) => number) => ((f: (a0: number) => number) => f(10))(__x)))) + " == " + __bynkShow(([13, 12, 11]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

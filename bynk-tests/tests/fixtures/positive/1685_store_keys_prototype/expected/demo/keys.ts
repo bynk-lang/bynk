@@ -147,7 +147,7 @@ export class Bag {
   async bump(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = k; globalThis.Object.defineProperty(__state.items, __k, { value: ((n) => n + 1)(globalThis.Object.hasOwn(__state.items, __k) ? __state.items[__k] : (0)), writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (() => { const __k = k; globalThis.Object.defineProperty(__state.items, __k, { value: ((n: number) => n + 1)(globalThis.Object.hasOwn(__state.items, __k) ? __state.items[__k] : (0)), writable: true, enumerable: true, configurable: true }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -157,7 +157,7 @@ export class Bag {
   async add10(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = k; if (!globalThis.Object.hasOwn(__state.items, __k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items[__k] = ((n) => n + 10)(__state.items[__k]); return undefined; })();
+      const __r0 = await (() => { const __k = k; if (!globalThis.Object.hasOwn(__state.items, __k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items[__k] = ((n: number) => n + 10)(__state.items[__k]); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -386,7 +386,7 @@ export class Memo {
   async add10(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); const __k = k; if (!(globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } __state.c[__k] = { v: ((n) => n + 10)(__state.c[__k].v), exp: __now + 300000 }; return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); const __k = k; if (!(globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } __state.c[__k] = { v: ((n: number) => n + 10)(__state.c[__k].v), exp: __now + 300000 }; return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -460,7 +460,7 @@ export class Ledger {
   async retag(id: string, tag: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(id); if (!globalThis.Object.hasOwn(__state.entries, __k)) { throw new globalThis.Error("Map.update: key absent"); } const __o = __state.entries[__k]; { const __ik = String((__o).tag); const __ia = globalThis.Object.hasOwn(__state.entries__idx_tag, __ik) ? __state.entries__idx_tag[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.entries__idx_tag[__ik]; } } const __v = ((e) => ({ ...e, tag: tag }))(__o); __state.entries[__k] = __v; { const __ik = String((__v).tag); if (!globalThis.Object.hasOwn(__state.entries__idx_tag, __ik)) globalThis.Object.defineProperty(__state.entries__idx_tag, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.entries__idx_tag[__ik].push(__k); } return undefined; })();
+      const __r0 = await (() => { const __k = String(id); if (!globalThis.Object.hasOwn(__state.entries, __k)) { throw new globalThis.Error("Map.update: key absent"); } const __o = __state.entries[__k]; { const __ik = String((__o).tag); const __ia = globalThis.Object.hasOwn(__state.entries__idx_tag, __ik) ? __state.entries__idx_tag[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.entries__idx_tag[__ik]; } } const __v = ((e: Entry) => ({ ...e, tag: tag }))(__o); __state.entries[__k] = __v; { const __ik = String((__v).tag); if (!globalThis.Object.hasOwn(__state.entries__idx_tag, __ik)) globalThis.Object.defineProperty(__state.entries__idx_tag, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.entries__idx_tag[__ik].push(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -540,12 +540,12 @@ export class Sales {
 
   async totals(deps: {}): globalThis.Promise<readonly Total[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of globalThis.Object.values(__state.lines)) { const __k = String(((l) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid, rows) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r) => r.qty)(__x), 0) }))(((l) => l.orderId)(__rows[0]), __rows); }); }))();
+    return ((() => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of globalThis.Object.values(__state.lines)) { const __k = String(((l: Line) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows); }); }))();
   }
 
   async joined(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.orders)))()) { const __k = String(((o) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.lines).flatMap((__t: Line) => { const __m = __h[String(((l) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l, o) => l.qty)(__t, __u)); }); }))().length;
+    return ((() => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.orders)))()) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.lines).flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l: Line, o: Order) => l.qty)(__t, __u)); }); }))().length;
   }
 
 }

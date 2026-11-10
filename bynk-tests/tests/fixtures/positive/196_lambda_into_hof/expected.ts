@@ -13,12 +13,12 @@ export function fold3(f: (a0: number, a1: number) => number, a: number, b: numbe
 }
 
 export function demo(): number {
-  const base = apply((n) => n * 2, 10);
-  return fold3((acc, t) => acc + t, base, 1, 2);
+  const base = apply((n: number) => n * 2, 10);
+  return fold3((acc: number, t: number) => acc + t, base, 1, 2);
 }
 
 export function blocky(): number {
-  return apply((n) => {
+  return apply((n: number) => {
     const doubled = n * 2;
     return doubled + 1;
   }, 4);

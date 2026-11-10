@@ -63,7 +63,7 @@ async function test_a_value_of_the_hidden_type_flows() {
     const { all, current, isDone } = __ns_t_lib;
     type Status = __ns_t_lib.Status;
     if (!(isDone(current()))) { throw __bynkExpectFailure("tests/t/web.bynk:9:12", 297, 314, "expect isDone(current())"); }
-    if (!(((all()).filter((__x: Status) => ((s) => isDone(s))(__x))).length === 1)) { throw __bynkExpectFailure("tests/t/web.bynk:10:12", 326, 370, "expect all().filter((s) => isDone(s)).length() == 1\n  expected: all().filter((s) => isDone(s)).length() == 1\n  actual:   " + __bynkShow((((all()).filter((__x: Status) => ((s) => isDone(s))(__x))).length)) + " == " + __bynkShow((1))); }
+    if (!(((all()).filter((__x: Status) => ((s: Status) => isDone(s))(__x))).length === 1)) { throw __bynkExpectFailure("tests/t/web.bynk:10:12", 326, 370, "expect all().filter((s) => isDone(s)).length() == 1\n  expected: all().filter((s) => isDone(s)).length() == 1\n  actual:   " + __bynkShow((((all()).filter((__x: Status) => ((s: Status) => isDone(s))(__x))).length)) + " == " + __bynkShow((1))); }
     if (!(countDone() === 1)) { throw __bynkExpectFailure("tests/t/web.bynk:11:12", 382, 398, "expect countDone() == 1\n  expected: countDone() == 1\n  actual:   " + __bynkShow((countDone())) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {

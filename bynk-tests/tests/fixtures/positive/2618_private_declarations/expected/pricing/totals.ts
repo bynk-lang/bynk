@@ -21,7 +21,7 @@ export const Item = {
 };
 
 export function total(items: readonly Item[]): number {
-  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(items, 0, (acc, i) => acc + lineTotal(i));
+  return ((__xs: readonly Item[], __acc: number, __f: (acc: number, x: Item) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(items, 0, (acc: number, i: Item) => acc + lineTotal(i));
 }
 
 export function summary(items: readonly Item[]): string {

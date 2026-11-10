@@ -65,17 +65,17 @@ export class Shelf {
 
   async bySize(deps: {}): globalThis.Promise<readonly Bucket[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of globalThis.Object.values(__state.rows)) { const __k = String(((r) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n, rs) => ({ size: n, rows: rs }))(((r) => (r).length)(__rows[0]), __rows); }); }))();
+    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of globalThis.Object.values(__state.rows)) { const __k = String(((r: readonly number[]) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n: number, rs: readonly (readonly number[])[]) => ({ size: n, rows: rs }))(((r: readonly number[]) => (r).length)(__rows[0]), __rows); }); }))();
   }
 
   async unique(deps: {}): globalThis.Promise<readonly (readonly number[])[]> {
     const __state = await this.loadState();
-    return ((() => (() => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of globalThis.Object.values(__state.rows)) { const __k = ((r) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
+    return ((() => (() => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of globalThis.Object.values(__state.rows)) { const __k = ((r: readonly number[]) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
   }
 
   async paired(deps: {}): globalThis.Promise<readonly Pair[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.spare)))()) { const __k = String(((r) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.rows).flatMap((__t: readonly number[]) => { const __m = __h[String(((l) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l, r) => ({ left: l, right: r }))(__t, __u)); }); }))();
+    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.spare)))()) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.rows).flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l: readonly number[], r: readonly number[]) => ({ left: l, right: r }))(__t, __u)); }); }))();
   }
 
 }

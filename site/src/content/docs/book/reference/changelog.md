@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.527.7** | The emitter annotates every lambda parameter with its checked type, so a lambda handed to a kernel method (`append`, `map`, `filter`, `flatMap`, `any`) no longer fails `tsc --strict` with an implicit `any` ([#3228](https://github.com/bynk-lang/bynk/issues/3228)) |
+| **v0.527.6** | A `system`-tier suite that names a declaration the parser skipped after a syntax error no longer reports it as unknown |
+| **v0.527.5** | An expression written as a statement gets `bynk.parse.bare_expression_statement`, with a machine-applicable `let _ <-` (effectful call) or `let _ =` fix that `bynk check --fix` and the editor apply, instead of "expected `}`" |
 | **v0.527.4** | An attached fn of a generic type resolves the receiver's type variables when its signature is lowered |
 | **v0.527.3** | "The emitter lowers a built-in method call by its typed `KernelOp`, not by the method's spelling, as the second slice of the typed built-in dispatch (#3164)" |
 | **v0.527.2** | "The checker's built-in method typing matches on the typed `KernelOp` exhaustively, so a method listed for completion without a typing rule, or the converse, no longer compiles, and the registry drift tests are retired (#3164)" |

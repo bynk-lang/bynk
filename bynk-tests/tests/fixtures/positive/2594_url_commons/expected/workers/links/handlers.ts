@@ -15,27 +15,27 @@ export type QueryParam = __CommonsQueryParam & { readonly __ctxBrand?: "links" }
 export type Url = __CommonsUrl & { readonly __ctxBrand?: "links" };
 
 export function hostOf(s: string): string {
-  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u) => u.host), "-");
+  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u: Url) => u.host), "-");
 }
 
 export function portOf(s: string): Option<number> {
-  return ((__o: Option<Url>, __f: (x: Url) => Option<number>) => __o.tag === "Some" ? __f(__o.value) : None)(parse(s), (u) => u.port);
+  return ((__o: Option<Url>, __f: (x: Url) => Option<number>) => __o.tag === "Some" ? __f(__o.value) : None)(parse(s), (u: Url) => u.port);
 }
 
 export function firstParam(s: string, name: string): Option<string> {
-  return ((__o: Option<Url>, __f: (x: Url) => Option<string>) => __o.tag === "Some" ? __f(__o.value) : None)(parse(s), (u) => param(u, name));
+  return ((__o: Option<Url>, __f: (x: Url) => Option<string>) => __o.tag === "Some" ? __f(__o.value) : None)(parse(s), (u: Url) => param(u, name));
 }
 
 export function allParams(s: string, name: string): readonly string[] {
-  return ((__o: Option<readonly string[]>, __d: readonly string[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => readonly string[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u) => params(u, name)), ([] as readonly string[]));
+  return ((__o: Option<readonly string[]>, __d: readonly string[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => readonly string[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u: Url) => params(u, name)), ([] as readonly string[]));
 }
 
 export function reformat(s: string): string {
-  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u) => format(u)), "-");
+  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u: Url) => format(u)), "-");
 }
 
 export function roundTrips(s: string): boolean {
-  return ((__o: Option<boolean>, __d: boolean) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u) => __bynkEq(parse(format(u)), Some(u))), false);
+  return ((__o: Option<boolean>, __d: boolean) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u: Url) => __bynkEq(parse(format(u)), Some(u))), false);
 }
 
 export function rejected(s: string): boolean {
@@ -43,11 +43,11 @@ export function rejected(s: string): boolean {
 }
 
 export function pathSegments(s: string): readonly string[] {
-  return ((__o: Option<readonly string[]>, __d: readonly string[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => readonly string[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u) => segments(u)), ([] as readonly string[]));
+  return ((__o: Option<readonly string[]>, __d: readonly string[]) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => readonly string[]) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u: Url) => segments(u)), ([] as readonly string[]));
 }
 
 export function edited(s: string): string {
-  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u) => format(withParam(withoutParam(u, "page"), "q", "a&b c"))), "-");
+  return ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Url>, __f: (x: Url) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(parse(s), (u: Url) => format(withParam(withoutParam(u, "page"), "q", "a&b c"))), "-");
 }
 
 export const search = {

@@ -15,9 +15,9 @@ export const Wrap = {
 };
 
 export function as_label(w: Wrap): string {
-  return Wrap.cast(w, (x) => "wrapped");
+  return Wrap.cast(w, (x: number) => "wrapped");
 }
 
 export function doubled(w: Wrap): number {
-  return Wrap.cast(w, (x) => x * 2);
+  return Wrap.cast(w, (x: number) => x * 2);
 }

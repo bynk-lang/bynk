@@ -21,7 +21,7 @@ export function label(): string {
 }
 
 export function countDone(): number {
-  return ((all()).filter((__x: import("./lib.js").Status) => ((s) => isDone(s))(__x))).length;
+  return ((all()).filter((__x: import("./lib.js").Status) => ((s: import("./lib.js").Status) => isDone(s))(__x))).length;
 }
 
 export const Status = {

@@ -90,7 +90,7 @@ fn collatz(n: Int, steps: Int) -> Int {
 
 // Covered: closures capture the iteration's own bindings.
 fn adders(n: Int, acc: List[Int -> Int]) -> List[Int -> Int] {
-  if n == 0 { acc } else { adders(n - 1, acc.append((x: Int) => x + n)) }
+  if n == 0 { acc } else { adders(n - 1, acc.append((x) => x + n)) }
 }
 
 // Covered: an instance method (by receiver) and a static one (by qualified name).

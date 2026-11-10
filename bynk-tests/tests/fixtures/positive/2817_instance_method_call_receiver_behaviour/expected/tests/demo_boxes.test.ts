@@ -59,7 +59,7 @@ async function test_a_call_result_as_the_receiver__the_argument_pins_the_paramet
     const deps = {};
     const { Box, boxed } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    if (!(Box.mapped<string, number>(boxed("a"), (s) => 7).value === 7)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:8:10", 221, 264, "expect boxed(\"a\").mapped[Int]((s) => 7).value == 7\n  expected: boxed(\"a\").mapped[Int]((s) => 7).value == 7\n  actual:   " + __bynkShow((Box.mapped<string, number>(boxed("a"), (s) => 7).value)) + " == " + __bynkShow((7))); }
+    if (!(Box.mapped<string, number>(boxed("a"), (s: string) => 7).value === 7)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:8:10", 221, 264, "expect boxed(\"a\").mapped[Int]((s) => 7).value == 7\n  expected: boxed(\"a\").mapped[Int]((s) => 7).value == 7\n  actual:   " + __bynkShow((Box.mapped<string, number>(boxed("a"), (s: string) => 7).value)) + " == " + __bynkShow((7))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -75,7 +75,7 @@ async function test_a_chained_call_result_as_the_receiver() {
     const deps = {};
     const { Box, boxed } = __ns_demo_boxes;
     type Box<T> = __ns_demo_boxes.Box<T>;
-    if (!(Box.mapped<number, string>(Box.mapped<string, number>(boxed("a"), (s) => 1), (n) => "n").value === "n")) { throw __bynkExpectFailure("tests/demo/boxes.bynk:12:10", 324, 396, "expect boxed(\"a\").mapped[Int]((s) => 1).mapped[String]((n) => \"n\").value == \"n\"\n  expected: boxed(\"a\").mapped[Int]((s) => 1).mapped[String]((n) => \"n\").value == \"n\"\n  actual:   " + __bynkShow((Box.mapped<number, string>(Box.mapped<string, number>(boxed("a"), (s) => 1), (n) => "n").value)) + " == " + __bynkShow(("n"))); }
+    if (!(Box.mapped<number, string>(Box.mapped<string, number>(boxed("a"), (s: string) => 1), (n: number) => "n").value === "n")) { throw __bynkExpectFailure("tests/demo/boxes.bynk:12:10", 324, 396, "expect boxed(\"a\").mapped[Int]((s) => 1).mapped[String]((n) => \"n\").value == \"n\"\n  expected: boxed(\"a\").mapped[Int]((s) => 1).mapped[String]((n) => \"n\").value == \"n\"\n  actual:   " + __bynkShow((Box.mapped<number, string>(Box.mapped<string, number>(boxed("a"), (s: string) => 1), (n: number) => "n").value)) + " == " + __bynkShow(("n"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
