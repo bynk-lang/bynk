@@ -282,7 +282,13 @@ the record encodes to (`application/x-www-form-urlencoded`), so the router decod
 ```bynk,fragment
 suite signup.api as system {
 	case "a typed form round-trips through the router" {
-		let r <- api.POST("/signup", SignupForm { email: "a@b.c", age: Some(41), plan: Pro, tags: ["x"], remember: true })
+		let r <- api.POST("/signup", SignupForm {
+			email: "a@b.c",
+			age: Some(41),
+			plan: Pro,
+			tags: ["x"],
+			remember: true,
+		})
 		expect r is Ok(_)
 	}
 }
