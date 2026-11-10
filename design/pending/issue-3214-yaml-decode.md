@@ -59,7 +59,7 @@ embedded and emitted per project), `deny.toml` covers Rust crates only, and the 
 a subset that refuses anchors, aliases, merge keys, tags and multiple documents.
 
 **Decision.** (a): `bynk-emit/runtime/src/yaml.ts`, a pure parser with no dependency, emitted
-only by a project that calls `Yaml.decode`. It is 14.8 KB minified (5.0 KB gzip), measured
+only by a project that calls `Yaml.decode`. It is 15.1 KB minified (5.1 KB gzip), measured
 with esbuild; the libraries measured the same way were `yaml@2.8.1` at 97 KB (30 KB gzip)
 and `js-yaml@4.1.0` at 40 KB (13 KB gzip), and `js-yaml` cannot refuse anchors by
 configuration. Correctness is held by tests, not by the parser's size: a conformance corpus
@@ -70,7 +70,7 @@ recorded kind) or `lenient` (an invalid case still accepted, a ratchet that may 
 shrink); a differential test against the `yaml` package, a dev dependency of the runtime
 package and never shipped; the refusal, resolution, position and limit tests; and a seeded
 mutation fuzz asserting that nothing throws or hangs. Anything outside the subset is refused
-rather than guessed.
+rather than guessed. Whitespace is a space or a tab only, scanned without regular expressions, so a long run of whitespace costs one pass and a quoted scalar folded over many lines costs time linear in its length (a review of #3275 measured and fixed a quadratic fold).
 
 **Consequences.** No third-party code ships in an emitted project and the runtime's
 no-runtime-dependency contract holds. The cost is ownership of a parser: an accepted
