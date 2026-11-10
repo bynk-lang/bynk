@@ -56,7 +56,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bynk_check::checker::{self, Callee, CheckedProgram, Ty, TyId, TypedCommons, Types};
+use bynk_check::checker::{self, Callee, CheckedProgram, TyId, TypedCommons, Types};
 use bynk_check::resolver::MethodTable;
 use bynk_syntax::ast::{
     ActorDecl, Block, CapRef, CapabilityDecl, CapabilityOp, CommonsItem, EventPattern,
@@ -892,29 +892,39 @@ fn lower_fn_sig_ir_from_types(
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
 ) -> FnSig {
-    let type_vars: HashSet<String> = f
-        .type_params
+    // An attached fn of a generic type names the *receiver's* type variables
+    // (`Bag.largest -> Option[A]`) as well as its own, so both are in scope.
+    let receiver_params = match &f.name {
+        FnName::Method { type_name, .. } => types
+            .get(&type_name.name)
+            .map(|d| d.type_params.as_slice())
+            .unwrap_or_default(),
+        FnName::Free(_) => &[],
+    };
+    let type_vars: HashSet<String> = receiver_params
         .iter()
+        .chain(&f.type_params)
         .map(|tp| tp.name.name.clone())
         .collect();
-    // Deliberately *not* an internal error, unlike the other signature readers
-    // here: a generic type's attached fn names the receiver's own type
-    // variables (`Bag[A].largest -> Option[A]`), which are not in `type_vars`,
-    // so a miss is reachable on a certified program. `FnSig`'s doc comment
-    // explains the contract; the `()` it yields is a known imprecision (#3166
-    // follow-up), not an invariant breach.
-    let unit_ty = || tys.intern(Ty::Unit);
+    let fn_name = f.name.display();
+    let resolve = |r: &bynk_syntax::ast::TypeRef, what: &str| {
+        checker::resolve_type_ref_in(r, types, &type_vars, tys).unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: fn `{fn_name}`, {what}: type `{}` does not resolve, but \
+                 the checker already accepted this declaration",
+                bynk_syntax::print::type_ref_to_string(r)
+            )
+        })
+    };
     let params: Vec<(String, TyId)> = f
         .params
         .iter()
         .map(|p| {
-            let ty = checker::resolve_type_ref_in(&p.type_ref, types, &type_vars, tys)
-                .unwrap_or_else(unit_ty);
+            let ty = resolve(&p.type_ref, &format!("parameter `{}`", p.name.name));
             (p.name.name.clone(), ty)
         })
         .collect();
-    let return_ty = checker::resolve_type_ref_in(&f.return_type, types, &type_vars, tys)
-        .unwrap_or_else(unit_ty);
+    let return_ty = resolve(&f.return_type, "return type");
     let name = match &f.name {
         FnName::Method { method_name, .. } => method_name.name.clone(),
         FnName::Free(id) => id.name.clone(),
@@ -1069,7 +1079,7 @@ pub fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bynk_check::checker::CheckedProgram;
+    use bynk_check::checker::{CheckedProgram, Ty};
     use bynk_check::hints::HintSink;
     use bynk_check::index::RefSink;
     use bynk_check::locals::LocalsSink;
@@ -1120,28 +1130,43 @@ mod tests {
     }
 
     /// An attached fn of a generic type names the receiver's own type
-    /// variables, which `lower_fn_sig_ir_from_types` cannot resolve; that
-    /// reader must stay total (#3213 tracks resolving them properly).
+    /// variables as well as its own; both resolve to type variables (#3213), so
+    /// the reader never meets an unresolved name on a certified program.
     #[test]
-    fn an_attached_fn_of_a_generic_type_still_lowers() {
+    fn an_attached_fn_of_a_generic_type_resolves_the_receivers_type_variables() {
         let program = checked_context_program(
             r#"
 context demo
 
 type Bag[A] = { items: List[A] }
 
+fn Bag.of(v: A) -> Bag[A] {
+  Bag { items: [v] }
+}
+
 fn Bag.largest(self) -> Option[A] {
   None
 }
+
+fn Bag.pair[B](self, other: B) -> Bag[A] {
+  self
+}
 "#,
         );
+        let commons = program.program();
         let sigs = lower_attached_fn_sig_ir_from_types(
-            &program.program().methods["Bag"],
-            &program.program().types,
-            &program.program().ty_intern,
+            &commons.methods["Bag"],
+            &commons.types,
+            &commons.ty_intern,
         );
-        assert_eq!(sigs.len(), 1);
-        assert_eq!(sigs[0].name, "largest");
+        assert_eq!(sigs.len(), 3);
+        let by_name = |n: &str| sigs.iter().find(|s| s.name == n).expect(n);
+        let var_a = commons.ty_intern.intern(Ty::Var("A".to_string()));
+        assert_eq!(by_name("of").params[0].1, var_a);
+        let unit = commons.ty_intern.intern(Ty::Unit);
+        assert_ne!(by_name("largest").return_ty, unit);
+        assert_ne!(by_name("pair").return_ty, unit);
+        assert_ne!(by_name("pair").params[0].1, unit);
     }
 
     /// #3166: a type reference the checker accepted but that does not resolve

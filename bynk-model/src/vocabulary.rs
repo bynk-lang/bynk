@@ -141,10 +141,10 @@ pub struct OpSig {
 /// only its signature will ever be rendered (`emit_attached_methods`'
 /// delegating forward at `bynk_emit::emitter::emit::emit_forwarded_methods`),
 /// never its body (P6.18). `bynk_model::lower_attached_fn_sig_ir_from_types`
-/// resolves `params`/`return_ty` in the scope the method's own `[T, …]` list
-/// names. A name that does not resolve there degrades to `Ty::Unit`: today
-/// that includes the *receiver's* type variables on a generic type's attached
-/// fn (`Bag.largest -> Option[A]`), a known imprecision tracked in #3213.
+/// resolves `params`/`return_ty` in the scope of the receiver type's own
+/// `[T, …]` list plus the method's, so a generic type's attached fn
+/// (`Bag.largest -> Option[A]`) resolves `A` to a type variable. A name that
+/// still does not resolve is an internal error (#3213).
 #[derive(Debug, Clone)]
 pub struct FnSig {
     pub name: String,
