@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -28,6 +29,8 @@ export interface SessionsState {
 const __SessionsRegistry = new __StateRegistry();
 function __zeroOfSessionsState(): SessionsState { return { live: {} }; }
 
+const __entryFieldsOfSessions = [{ name: "live", kind: "cache" }] as const;
+
 function __rehydrateSessionsState(s: SessionsState, stored: SessionsState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "live")) for (const __e of globalThis.Object.values(s.live)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
 }
@@ -46,15 +49,16 @@ export class Sessions {
     const stored = await this.state.storage.get<SessionsState>("state");
     if (stored === undefined) return __zeroOfSessionsState();
     __checkStoredLayout("Sessions", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfSessions);
     const __zero = __zeroOfSessionsState();
-    __reportUnknownStoredKeys("Sessions", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateSessionsState(__merged, stored);
+    __reportUnknownStoredKeys("Sessions", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateSessionsState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: SessionsState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeSessionsState(s));
+    await __commitStored(this, this.state.storage, __encodeSessionsState(s), __entryFieldsOfSessions);
   }
 
   async put(token: string, userId: number, deps: { Clock: Clock }): globalThis.Promise<void> {

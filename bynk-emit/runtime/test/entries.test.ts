@@ -482,3 +482,14 @@ test("codec: a log keeps its order and prunes its oldest", async () => {
   st = await load(self, s);
   assert.deepEqual(st.audit.map((e: any) => e.v), ["b", "c", "d"]);
 });
+
+test("codec: a value a handler mutates in place is written, not hidden by the base", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { users: { a: { n: 1 } } }, FIELDS);
+  const st = await load(self, s);
+  st.users.a.n = 2; // in place, as a handler's lowered update does
+  await commitStored(self, s as never, st, FIELDS);
+  assert.deepEqual((await load({}, s)).users, { a: { n: 2 } });
+});

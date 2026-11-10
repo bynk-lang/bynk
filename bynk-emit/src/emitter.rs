@@ -4042,6 +4042,10 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             // Per-entry storage slice 0 (#3189): faults on a `__layout` marker
             // a later build wrote.
             parts.push("__checkStoredLayout");
+            // Per-entry storage (#3189): the codec between the stored record
+            // and the wholesale-shaped state a handler reads.
+            parts.push("__readStored");
+            parts.push("__commitStored");
         }
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),

@@ -1,0 +1,25 @@
+---
+level: minor
+changelog: An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2)
+---
+
+## ADR: per-entry-storage-layout
+title: Collection entries are stored per entry, in a layout frozen for 1.0
+summary: Each Map, Set, Cache and Log entry and each index posting is its own Durable Object key; the state record keeps the Cells and a `__layout: 2` marker; an older record is upgraded on its next load and every handler commits only the entries it changed
+
+**Context.** An agent's whole state was one value under the key `state`, so a handler that touched one entry of a large `Map` read and wrote all of it, and the value hit the platform's 8 MB limit. The per-entry storage track (`design/tracks/per-entry-storage.md`, #3195, proposal #3189) moves each collection entry to its own key. The slices before this one added the forward-compatibility guard (a build faults on a layout it does not know), the handler serialisation that makes a load-modify-commit cycle safe, the runtime primitives, and the sweep and revert reporting. This slice writes the layout. It has to land before the stored-state freeze at 1.0 (ADR 0538), so the stored bytes it settles are the ones every later build keeps reading.
+
+**Decision.** From this build an agent's stored state is:
+
+- `state`: the `Cell` fields, `__v` when the agent has a schema lock, and `__layout: 2`. No collection is in it.
+- `m/<field>/<key>`: a `Map` entry `{ i, v }`; a `Cache` entry `{ v, exp, i }`. `s/<field>/<key>`: a `Set` element `{ i }`. `l/<field>/<time>-<seq>`: a `Log` entry `{ t, v }`.
+- `i/<field>/<index>/<by>/<primaryKey>`: one `@indexed` posting, value `1`. `x/<field>/<exp>/<key>`: a `Cache` expiry entry, value `1`, so a later slice can reap by range.
+- `c/<field>`: `{ size, seq }`, the field's entry count and the next insertion sequence (a `Log`'s next `<seq>`). Written once a field has an entry.
+
+Key parts are escaped reversibly (`%` to `%25`, `/` to `%2F`), numbers are fixed width, and keys sort as UTF-8 bytes. `i` is the entry's insertion sequence: a new key takes the field's next `seq`, an overwrite keeps its `i`, a key removed and inserted again takes a new one. A read sorts by `i`, so a `Map` reads back in insertion order whatever the keys' byte order, and a posting list reads in its entries' `i` order. The `Map`/`Set`/`Cache` stay `Record`s in memory, and a `Record` enumerates integer-like keys (`"10"`) first, in numeric order, so an in-memory iteration of such keys is not insertion order; the stored order is, and a reload restores it. That residual difference lies in how the collections are lowered, not in storage, and is reported separately.
+
+`loadState` reads the record and, for a per-entry one, lists the entries and joins them back into the wholesale-shaped record, so a migration step and the rehydration gate see what they always saw. A record with no `__layout` (the wholesale layout) is upgraded on that load: its entries are split out and the marker written in one transaction, so a crash leaves either the old record or the new layout, never a mix. `commitState` encodes the state, diffs it against the entries the handler read (kept per instance, replaced only once the write has landed), and writes the changed entries, the deleted ones and the `state` record in one transaction. A handler that faults before its commit writes nothing, and its base is untouched. The instance serialises its handlers (#3217), so the base cannot be stale. A write is batched at the platform's 128 keys. `bynk migrate sweep` wakes each instance, which upgrades it on load and commits a record that has no marker. `bynk_emit::STORAGE_LAYOUT` is 2, so each version's deploy facts record it and `bynk deploy revert` refuses a rollback across it while instances hold data.
+
+**What a later slice may not change.** This slice reads every entry of a collection eagerly. A later slice teaches handlers to read one entry, or one index range, lazily. It needs nothing that is not stored here: the insertion sequence and the count and next-sequence record are already in the frozen layout, and so are the postings and the expiry entries. That slice therefore changes no stored byte, and a build from before it reads and writes the same layout.
+
+**Consequences.** Every agent's state record carries `__layout: 2` after its first load and commit, including an agent with no collection. A rollback to a build that predates the layout faults `NewerLayout` and `bynk deploy revert` refuses it, as the forward-compatibility guard and the revert preflight were built to. A migration step that removes a collection leaves that collection's entries in storage, unread; reaping them is a follow-up. Reading all of a collection still lists every key, so the saving is in writes and in values held, not yet in reads; the lazy-read slice is what removes the rest. Hover, completion, semantic tokens and signature help are unchanged, because no syntax, name or signature changes.

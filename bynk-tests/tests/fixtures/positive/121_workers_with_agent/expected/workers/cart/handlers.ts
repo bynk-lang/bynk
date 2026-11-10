@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -25,6 +26,8 @@ export interface CartEntityState {
 const __CartEntityRegistry = new __StateRegistry();
 function __zeroOfCartEntityState(): CartEntityState { return { items: 0 }; }
 
+const __entryFieldsOfCartEntity = [] as const;
+
 function __rehydrateCartEntityState(s: CartEntityState, stored: CartEntityState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("CartEntity", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).items = __r.value as unknown as (typeof s)["items"]; }
 }
@@ -43,15 +46,16 @@ export class CartEntity {
     const stored = await this.state.storage.get<CartEntityState>("state");
     if (stored === undefined) return __zeroOfCartEntityState();
     __checkStoredLayout("CartEntity", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfCartEntity);
     const __zero = __zeroOfCartEntityState();
-    __reportUnknownStoredKeys("CartEntity", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateCartEntityState(__merged, stored);
+    __reportUnknownStoredKeys("CartEntity", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateCartEntityState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: CartEntityState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeCartEntityState(s));
+    await __commitStored(this, this.state.storage, __encodeCartEntityState(s), __entryFieldsOfCartEntity);
   }
 
   async total(deps: {}): globalThis.Promise<number> {

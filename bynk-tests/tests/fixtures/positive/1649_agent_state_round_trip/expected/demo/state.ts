@@ -6,6 +6,7 @@ import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkByt
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -70,6 +71,8 @@ export interface LampState {
 const __LampRegistry = new __StateRegistry();
 function __zeroOfLampState(): LampState { return { light: Light.Red }; }
 
+const __entryFieldsOfLamp = [] as const;
+
 function __rehydrateLampState(s: LampState, stored: LampState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) { const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light"); if (__r.tag === "Err") throw __rehydrationViolation("Lamp", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"]; }
 }
@@ -88,15 +91,16 @@ export class Lamp {
     const stored = await this.state.storage.get<LampState>("state");
     if (stored === undefined) return __zeroOfLampState();
     __checkStoredLayout("Lamp", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLamp);
     const __zero = __zeroOfLampState();
-    __reportUnknownStoredKeys("Lamp", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateLampState(__merged, stored);
+    __reportUnknownStoredKeys("Lamp", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateLampState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: LampState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeLampState(s));
+    await __commitStored(this, this.state.storage, __encodeLampState(s), __entryFieldsOfLamp);
   }
 
   async set(l: Light, deps: {}): globalThis.Promise<void> {
@@ -127,6 +131,8 @@ export interface ReadingState {
 const __ReadingRegistry = new __StateRegistry();
 function __zeroOfReadingState(): ReadingState { return { n: None }; }
 
+const __entryFieldsOfReading = [] as const;
+
 function __rehydrateReadingState(s: ReadingState, stored: ReadingState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) { const __r = __deserialise_Option_Int((s.n as unknown as __JsonValue), "n"); if (__r.tag === "Err") throw __rehydrationViolation("Reading", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"]; }
 }
@@ -145,15 +151,16 @@ export class Reading {
     const stored = await this.state.storage.get<ReadingState>("state");
     if (stored === undefined) return __zeroOfReadingState();
     __checkStoredLayout("Reading", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfReading);
     const __zero = __zeroOfReadingState();
-    __reportUnknownStoredKeys("Reading", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateReadingState(__merged, stored);
+    __reportUnknownStoredKeys("Reading", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateReadingState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ReadingState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeReadingState(s));
+    await __commitStored(this, this.state.storage, __encodeReadingState(s), __entryFieldsOfReading);
   }
 
   async set(v: number, deps: {}): globalThis.Promise<void> {
@@ -184,6 +191,8 @@ export interface FigureState {
 const __FigureRegistry = new __StateRegistry();
 function __zeroOfFigureState(): FigureState { return { shape: Shape.Square(1) }; }
 
+const __entryFieldsOfFigure = [] as const;
+
 function __rehydrateFigureState(s: FigureState, stored: FigureState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "shape")) { const __r = __deserialise_Shape((s.shape as unknown as __JsonValue), "shape"); if (__r.tag === "Err") throw __rehydrationViolation("Figure", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).shape = __r.value as unknown as (typeof s)["shape"]; }
 }
@@ -202,15 +211,16 @@ export class Figure {
     const stored = await this.state.storage.get<FigureState>("state");
     if (stored === undefined) return __zeroOfFigureState();
     __checkStoredLayout("Figure", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfFigure);
     const __zero = __zeroOfFigureState();
-    __reportUnknownStoredKeys("Figure", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateFigureState(__merged, stored);
+    __reportUnknownStoredKeys("Figure", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateFigureState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: FigureState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeFigureState(s));
+    await __commitStored(this, this.state.storage, __encodeFigureState(s), __entryFieldsOfFigure);
   }
 
   async set(s: Shape, deps: {}): globalThis.Promise<void> {
@@ -241,6 +251,8 @@ export interface OutcomeState {
 const __OutcomeRegistry = new __StateRegistry();
 function __zeroOfOutcomeState(): OutcomeState { return { r: Err("unset") }; }
 
+const __entryFieldsOfOutcome = [] as const;
+
 function __rehydrateOutcomeState(s: OutcomeState, stored: OutcomeState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "r")) { const __r = __deserialise_Result_Int_String((s.r as unknown as __JsonValue), "r"); if (__r.tag === "Err") throw __rehydrationViolation("Outcome", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).r = __r.value as unknown as (typeof s)["r"]; }
 }
@@ -259,15 +271,16 @@ export class Outcome {
     const stored = await this.state.storage.get<OutcomeState>("state");
     if (stored === undefined) return __zeroOfOutcomeState();
     __checkStoredLayout("Outcome", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfOutcome);
     const __zero = __zeroOfOutcomeState();
-    __reportUnknownStoredKeys("Outcome", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateOutcomeState(__merged, stored);
+    __reportUnknownStoredKeys("Outcome", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateOutcomeState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: OutcomeState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeOutcomeState(s));
+    await __commitStored(this, this.state.storage, __encodeOutcomeState(s), __entryFieldsOfOutcome);
   }
 
   async set(v: number, deps: {}): globalThis.Promise<void> {
@@ -298,6 +311,8 @@ export interface NoteState {
 const __NoteRegistry = new __StateRegistry();
 function __zeroOfNoteState(): NoteState { return { rec: { label: "zero", n: None } }; }
 
+const __entryFieldsOfNote = [] as const;
+
 function __rehydrateNoteState(s: NoteState, stored: NoteState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rec")) { const __r = __deserialise_Labelled((s.rec as unknown as __JsonValue), "rec"); if (__r.tag === "Err") throw __rehydrationViolation("Note", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).rec = __r.value as unknown as (typeof s)["rec"]; }
 }
@@ -316,15 +331,16 @@ export class Note {
     const stored = await this.state.storage.get<NoteState>("state");
     if (stored === undefined) return __zeroOfNoteState();
     __checkStoredLayout("Note", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfNote);
     const __zero = __zeroOfNoteState();
-    __reportUnknownStoredKeys("Note", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateNoteState(__merged, stored);
+    __reportUnknownStoredKeys("Note", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateNoteState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: NoteState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeNoteState(s));
+    await __commitStored(this, this.state.storage, __encodeNoteState(s), __entryFieldsOfNote);
   }
 
   async set(l: Labelled, deps: {}): globalThis.Promise<void> {
@@ -355,6 +371,8 @@ export interface StoreState {
 const __StoreRegistry = new __StateRegistry();
 function __zeroOfStoreState(): StoreState { return { blob: { label: "zero", data: new globalThis.Uint8Array() } }; }
 
+const __entryFieldsOfStore = [] as const;
+
 function __rehydrateStoreState(s: StoreState, stored: StoreState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "blob")) { const __r = __deserialise_Blob((s.blob as unknown as __JsonValue), "blob"); if (__r.tag === "Err") throw __rehydrationViolation("Store", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).blob = __r.value as unknown as (typeof s)["blob"]; }
 }
@@ -373,15 +391,16 @@ export class Store {
     const stored = await this.state.storage.get<StoreState>("state");
     if (stored === undefined) return __zeroOfStoreState();
     __checkStoredLayout("Store", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfStore);
     const __zero = __zeroOfStoreState();
-    __reportUnknownStoredKeys("Store", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateStoreState(__merged, stored);
+    __reportUnknownStoredKeys("Store", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateStoreState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: StoreState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeStoreState(s));
+    await __commitStored(this, this.state.storage, __encodeStoreState(s), __entryFieldsOfStore);
   }
 
   async set(s: string, deps: {}): globalThis.Promise<void> {
@@ -412,6 +431,8 @@ export interface LightsState {
 const __LightsRegistry = new __StateRegistry();
 function __zeroOfLightsState(): LightsState { return { seq: [] }; }
 
+const __entryFieldsOfLights = [] as const;
+
 function __rehydrateLightsState(s: LightsState, stored: LightsState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seq")) { const __r = __deserialise_List_Light((s.seq as unknown as __JsonValue), "seq"); if (__r.tag === "Err") throw __rehydrationViolation("Lights", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seq = __r.value as unknown as (typeof s)["seq"]; }
 }
@@ -430,15 +451,16 @@ export class Lights {
     const stored = await this.state.storage.get<LightsState>("state");
     if (stored === undefined) return __zeroOfLightsState();
     __checkStoredLayout("Lights", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLights);
     const __zero = __zeroOfLightsState();
-    __reportUnknownStoredKeys("Lights", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateLightsState(__merged, stored);
+    __reportUnknownStoredKeys("Lights", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateLightsState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: LightsState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeLightsState(s));
+    await __commitStored(this, this.state.storage, __encodeLightsState(s), __entryFieldsOfLights);
   }
 
   async set(ls: readonly Light[], deps: {}): globalThis.Promise<void> {
@@ -469,6 +491,8 @@ export interface BoardState {
 const __BoardRegistry = new __StateRegistry();
 function __zeroOfBoardState(): BoardState { return { lights: {} }; }
 
+const __entryFieldsOfBoard = [{ name: "lights", kind: "map" }] as const;
+
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) for (const __k of globalThis.Object.keys(s.lights)) { const __r = __deserialise_Light((s.lights[__k] as unknown as __JsonValue), "lights"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); s.lights[__k] = __r.value as unknown as (typeof s.lights)[string]; }
   for (const __k of globalThis.Object.keys(s.lights)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lights", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
@@ -488,15 +512,16 @@ export class Board {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
     __checkStoredLayout("Board", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBoard);
     const __zero = __zeroOfBoardState();
-    __reportUnknownStoredKeys("Board", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBoardState(__merged, stored);
+    __reportUnknownStoredKeys("Board", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBoardState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BoardState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBoardState(s));
+    await __commitStored(this, this.state.storage, __encodeBoardState(s), __entryFieldsOfBoard);
   }
 
   async set(k: string, l: Light, deps: {}): globalThis.Promise<void> {
@@ -528,6 +553,8 @@ export interface MemoState {
 const __MemoRegistry = new __StateRegistry();
 function __zeroOfMemoState(): MemoState { return { c: {} }; }
 
+const __entryFieldsOfMemo = [{ name: "c", kind: "cache" }] as const;
+
 function __rehydrateMemoState(s: MemoState, stored: MemoState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) for (const __e of globalThis.Object.values(s.c)) { const __r = __deserialise_Option_Int((__e.v as unknown as __JsonValue), "c"); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
 }
@@ -546,15 +573,16 @@ export class Memo {
     const stored = await this.state.storage.get<MemoState>("state");
     if (stored === undefined) return __zeroOfMemoState();
     __checkStoredLayout("Memo", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfMemo);
     const __zero = __zeroOfMemoState();
-    __reportUnknownStoredKeys("Memo", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateMemoState(__merged, stored);
+    __reportUnknownStoredKeys("Memo", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateMemoState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: MemoState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeMemoState(s));
+    await __commitStored(this, this.state.storage, __encodeMemoState(s), __entryFieldsOfMemo);
   }
 
   async set(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
@@ -586,6 +614,8 @@ export interface HistoryState {
 const __HistoryRegistry = new __StateRegistry();
 function __zeroOfHistoryState(): HistoryState { return { l: [] }; }
 
+const __entryFieldsOfHistory = [{ name: "l", kind: "log" }] as const;
+
 function __rehydrateHistoryState(s: HistoryState, stored: HistoryState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) for (const __e of s.l) { const __r = __deserialise_Shape((__e.v as unknown as __JsonValue), "l"); if (__r.tag === "Err") throw __rehydrationViolation("History", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
 }
@@ -604,15 +634,16 @@ export class History {
     const stored = await this.state.storage.get<HistoryState>("state");
     if (stored === undefined) return __zeroOfHistoryState();
     __checkStoredLayout("History", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfHistory);
     const __zero = __zeroOfHistoryState();
-    __reportUnknownStoredKeys("History", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateHistoryState(__merged, stored);
+    __reportUnknownStoredKeys("History", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateHistoryState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: HistoryState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeHistoryState(s));
+    await __commitStored(this, this.state.storage, __encodeHistoryState(s), __entryFieldsOfHistory);
   }
 
   async add(s: Shape, deps: { Clock: Clock }): globalThis.Promise<void> {
@@ -644,6 +675,8 @@ export interface PanelState {
 const __PanelRegistry = new __StateRegistry();
 function __zeroOfPanelState(): PanelState { return { level: 0, light: Light.Red }; }
 
+const __entryFieldsOfPanel = [] as const;
+
 function __rehydratePanelState(s: PanelState, stored: PanelState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.level as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) { const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light"); if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"]; }
@@ -663,15 +696,16 @@ export class Panel {
     const stored = await this.state.storage.get<PanelState>("state");
     if (stored === undefined) return __zeroOfPanelState();
     __checkStoredLayout("Panel", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfPanel);
     const __zero = __zeroOfPanelState();
-    __reportUnknownStoredKeys("Panel", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydratePanelState(__merged, stored);
+    __reportUnknownStoredKeys("Panel", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydratePanelState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: PanelState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodePanelState(s));
+    await __commitStored(this, this.state.storage, __encodePanelState(s), __entryFieldsOfPanel);
   }
 
   async setLevel(n: number, deps: {}): globalThis.Promise<void> {
@@ -702,6 +736,8 @@ export interface GateState {
 const __GateRegistry = new __StateRegistry();
 function __zeroOfGateState(): GateState { return { light: Light.Red }; }
 
+const __entryFieldsOfGate = [] as const;
+
 function __rehydrateGateState(s: GateState, stored: GateState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "light")) { const __r = __deserialise_Light((s.light as unknown as __JsonValue), "light"); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).light = __r.value as unknown as (typeof s)["light"]; }
 }
@@ -720,10 +756,11 @@ export class Gate {
     const stored = await this.state.storage.get<GateState>("state");
     if (stored === undefined) return __zeroOfGateState();
     __checkStoredLayout("Gate", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfGate);
     const __zero = __zeroOfGateState();
-    __reportUnknownStoredKeys("Gate", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateGateState(__merged, stored);
+    __reportUnknownStoredKeys("Gate", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateGateState(__merged, __wholesale);
     return __merged;
   }
 
@@ -738,7 +775,7 @@ export class Gate {
         throw __invariantViolation("Gate", "old_is_a_light", "transition", "src/demo/state.bynk:130:14");
       }
     }
-    await this.state.storage.put("state", __encodeGateState(s));
+    await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate);
   }
 
   async set(l: Light, deps: {}): globalThis.Promise<void> {

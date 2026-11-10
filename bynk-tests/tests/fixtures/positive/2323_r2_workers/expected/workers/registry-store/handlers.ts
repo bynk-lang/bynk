@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -48,6 +49,8 @@ export interface ProjectionState {
 const __ProjectionRegistry = new __StateRegistry();
 function __zeroOfProjectionState(): ProjectionState { return { stamps: {} }; }
 
+const __entryFieldsOfProjection = [{ name: "stamps", kind: "map" }] as const;
+
 function __rehydrateProjectionState(s: ProjectionState, stored: ProjectionState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const __k of globalThis.Object.keys(s.stamps)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.stamps[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); s.stamps[__k] = __r.value as unknown as (typeof s.stamps)[string]; }
   for (const __k of globalThis.Object.keys(s.stamps)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); }
@@ -69,15 +72,16 @@ export class Projection {
     const stored = await this.state.storage.get<ProjectionState>("state");
     if (stored === undefined) return __zeroOfProjectionState();
     __checkStoredLayout("Projection", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfProjection);
     const __zero = __zeroOfProjectionState();
-    __reportUnknownStoredKeys("Projection", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateProjectionState(__merged, stored);
+    __reportUnknownStoredKeys("Projection", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateProjectionState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ProjectionState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeProjectionState(s));
+    await __commitStored(this, this.state.storage, __encodeProjectionState(s), __entryFieldsOfProjection);
   }
 
   async touch(deps: { Indexes: Indexes }): globalThis.Promise<Option<R2Object>> {

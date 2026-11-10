@@ -113,12 +113,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> {
-        return m.get(key);
-      },
-      async put(key: string, value: unknown): Promise<void> {
-        m.set(key, value);
-      },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -193,8 +192,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -231,6 +233,100 @@ try {
 }
 assert(threw, "update on an absent key throws");
 assert((await c.count({})) === 1, "atomic revert: the faulting update left the map unchanged");
+
+console.log("ALL OK");
+"#;
+
+const PER_ENTRY_SOURCE: &str = "context shop\n\
+\n\
+agent Cart {\n\
+\x20 key id: String\n\
+\x20 store items: Map[String, Int]\n\
+\n\
+\x20 on call add(k: String, n: Int) -> Effect[()] {\n\
+\x20   let _ <- items.put(k, n)\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+\x20 on call fetch(k: String) -> Effect[Option[Int]] {\n\
+\x20   let r <- items.get(k)\n\
+\x20   Effect.pure(r)\n\
+\x20 }\n\
+\x20 on call inc(k: String) -> Effect[()] {\n\
+\x20   let _ <- items.upsert(k, 0, (x) => x + 1)\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+\x20 on call drop(k: String) -> Effect[()] {\n\
+\x20   let _ <- items.remove(k)\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+\x20 on call putThenFail(k: String) -> Effect[()] {\n\
+\x20   let _ <- items.put(k, 1)\n\
+\x20   let _ <- items.update(\"missing\", (x) => x + 1)\n\
+\x20   Effect.pure(())\n\
+\x20 }\n\
+}\n";
+
+const PER_ENTRY_DRIVER_TS: &str = r#"
+import { Cart } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+// A fake Durable Object storage that counts the keys each call writes.
+const m = new Map<string, unknown>();
+let written = 0;
+const storage = {
+  async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+  async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") { written++; m.set(a, structuredClone(v)); } else for (const [k, x] of Object.entries(a)) { written++; m.set(k, structuredClone(x)); } },
+  async delete(a: any): Promise<any> { if (typeof a === "string") { written++; return m.delete(a); } let n = 0; for (const k of a as string[]) { written++; if (m.delete(k)) n++; } return n; },
+  async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+  async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
+};
+const c = new Cart({ storage } as never);
+
+const order = () => [...m.entries()].filter(([k]) => k.startsWith("m/items/")).sort((a: any, b: any) => a[1].i - b[1].i).map(([k]) => k.slice("m/items/".length));
+const snapshot = () => JSON.stringify([...m.entries()].sort());
+
+// Each entry is its own key, and the state record carries the marker, not the map.
+await c.add("10", 1, {});
+await c.add("b", 2, {});
+await c.add("a", 3, {});
+const state = m.get("state") as Record<string, unknown>;
+assert(state.__layout === 2 && !("items" in state), "the state record carries the marker and no collection");
+assert(m.has("m/items/10") && m.has("m/items/b") && m.has("m/items/a"), "each entry is its own key");
+assert(order().join(",") === "10,b,a", `insertion order is stored, integer-like key included: ${order().join(",")}`);
+
+// An overwrite keeps its place; a removed key inserted again goes to the end.
+await c.add("10", 9, {});
+assert(order().join(",") === "10,b,a", "an overwrite keeps its place");
+await c.drop("b", {});
+await c.add("b", 5, {});
+assert(order().join(",") === "10,a,b", "a key removed and inserted again goes to the end");
+const r = await c.fetch("b", {});
+assert(r.tag === "Some" && r.value === 5, "and reads back");
+
+// A handler touches one entry of a large map: it writes a bounded number of keys.
+for (let i = 0; i < 50; i++) await c.add(`k${i}`, i, {});
+written = 0;
+await c.inc("k7", {});
+assert(written <= 3, `one entry updated writes at most the entry, the count and the record: wrote ${written}`);
+
+// A handler that faults after writing leaves the stored entries unchanged.
+const before = snapshot();
+let threw = false;
+try {
+  await c.putThenFail("zz", {});
+} catch (e) {
+  threw = String((e as { message?: string }).message ?? e).includes("Map.update: key absent");
+}
+assert(threw, "the faulting handler throws");
+assert(snapshot() === before, "a handler that faults leaves every stored entry and the record unchanged");
+// And its in-memory base is unchanged: the next handler still diffs correctly.
+await c.add("after", 1, {});
+assert(order().includes("after") && !order().includes("zz"), "the next handler commits against the stored entries");
 
 console.log("ALL OK");
 "#;
@@ -272,8 +368,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -333,8 +432,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -387,8 +489,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -466,8 +571,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -571,8 +679,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -660,8 +771,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -747,8 +861,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -1069,8 +1186,11 @@ function fakeState() {
   const sockets = new Map<string, FakeWs>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
     acceptWebSocket(ws: FakeWs, tags?: string[]): void {
       for (const t of tags ?? []) sockets.set(t, ws);
@@ -1157,6 +1277,11 @@ fn store_map_agent_runtime_semantics() {
 }
 
 #[test]
+fn per_entry_storage_runtime_semantics() {
+    verify("per_entry", PER_ENTRY_SOURCE, PER_ENTRY_DRIVER_TS);
+}
+
+#[test]
 fn store_set_agent_runtime_semantics() {
     verify("set", SET_SOURCE, SET_DRIVER_TS);
 }
@@ -1219,8 +1344,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -1303,8 +1431,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -1405,8 +1536,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -1418,9 +1552,11 @@ function fakeState() {
 const st = fakeState();
 await new Lamp(st as never).setAll({});
 const raw = (await st.storage.get("state")) as Record<string, unknown>;
-assert("reading" in raw && "board" in raw, "a commit stores every declared field");
+assert("reading" in raw, "a commit stores every declared cell");
+assert(!("board" in raw) && raw.__layout === 2, "a collection is stored per entry, not in the state record");
 delete raw.reading;
-delete raw.board;
+// An older deployment that lacked `board` left no entries of it.
+await st.storage.delete([...(await st.storage.list({ prefix: "m/board/" })).keys(), "c/board"]);
 raw.legacy = 42;
 await st.storage.put("state", raw);
 
@@ -1435,7 +1571,7 @@ assert((await lamp.boardSize({})) === 0, "an absent Map field keeps its zero (em
 await lamp.touch({});
 const after = (await st.storage.get("state")) as Record<string, unknown>;
 assert(after.legacy === 42, "an undeclared stored key survives a load and a commit");
-assert("reading" in after && "board" in after, "the commit writes the defaulted fields");
+assert("reading" in after && !("board" in after), "the commit writes the defaulted cell, and no collection inline");
 
 // 3) The rewritten record loads again.
 assert(await lamp.isGreen({}), "the record reloads after the commit");
@@ -1507,8 +1643,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -1598,8 +1737,11 @@ function fakeState() {
   const m = new Map<string, unknown>();
   return {
     storage: {
-      async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
     },
   };
 }
@@ -1715,8 +1857,11 @@ function fakeState(seed?: Record<string, unknown>) {
     m,
     state: {
       storage: {
-        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+        async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
       },
     },
   };
@@ -1816,8 +1961,11 @@ function fakeState(initial?: unknown) {
     m,
     state: {
       storage: {
-        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+        async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
       },
     },
   };
@@ -1836,7 +1984,7 @@ async function faultKind(run: () => Promise<unknown>): Promise<string> {
 const quiet = console.error;
 console.error = () => {};
 
-for (const marker of [2, 99, "x", null]) {
+for (const marker of [3, 99, "x", null]) {
   const record = { count: 3, label: "a", __layout: marker };
   const f = fakeState(record);
   const c = new Counter(f.state as never);
@@ -1852,7 +2000,7 @@ for (const marker of [2, 99, "x", null]) {
 }
 
 // The layout check runs before the schema-version check.
-const both = fakeState({ count: 3, __v: 99, __layout: 2 });
+const both = fakeState({ count: 3, __v: 99, __layout: 3 });
 assert(
   (await faultKind(() => new Counter(both.state as never).get({}))) === "NewerLayout",
   "__layout wins over a newer __v",
@@ -1868,6 +2016,9 @@ console.error = quiet;
 // The layout this build reads: no marker.
 const ok = fakeState({ count: 4, label: "a" });
 assert((await new Counter(ok.state as never).get({})) === 4, "a record without a layout marker loads");
+// And the per-entry layout this build writes.
+const perEntry = fakeState({ count: 5, label: "a", __layout: 2 });
+assert((await new Counter(perEntry.state as never).get({})) === 5, "a record in the per-entry layout loads");
 
 console.log("ALL OK");
 "#;
@@ -1934,8 +2085,11 @@ function assert(cond: boolean, msg: string): void {
 const m = new Map<string, unknown>();
 const state = {
   storage: {
-    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+    async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
   },
 };
 const stored = () => m.get("state") as Record<string, unknown>;
@@ -1970,8 +2124,11 @@ assert(JSON.stringify(stored()) === written, "the newer record is left untouched
 const own = new Map<string, unknown>();
 const ownState = {
   storage: {
-    async get(key: string): Promise<unknown> { return structuredClone(own.get(key)); },
-    async put(key: string, value: unknown): Promise<void> { own.set(key, structuredClone(value)); },
+    async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(own.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (own.has(k)) out.set(k, structuredClone(own.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") own.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) own.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return own.delete(a); let n = 0; for (const k of a as string[]) if (own.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...own.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(own.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(own); try { return await f(this); } catch (e) { own.clear(); for (const [k, x] of before) own.set(k, x); throw e; } },
   },
 };
 const o2 = new Older(ownState as never);
@@ -2127,8 +2284,11 @@ function assert(cond: boolean, msg: string): void {
 const m = new Map<string, unknown>([["state", { count: 3, __v: 9 }]]);
 const state = {
   storage: {
-    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+    async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
   },
 };
 const c = new Counter(state as never);
@@ -2244,8 +2404,11 @@ function fakeState(seed: Record<string, unknown>) {
     m,
     state: {
       storage: {
-        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+        async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
       },
     },
   };
@@ -2384,8 +2547,11 @@ function fakeState(initial?: Record<string, unknown>) {
     m,
     state: {
       storage: {
-        async get(key: string): Promise<unknown> { return m.get(key); },
-        async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
+        async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
       },
     },
   };
@@ -2469,8 +2635,11 @@ function assert(cond: boolean, msg: string): void {
 const m = new Map<string, unknown>([["state", { prices: [["a", 1], ["b", 2]] }]]);
 const state = {
   storage: {
-    async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
-    async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+    async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
   },
 };
 const n = await new Cart(state as never).count({});

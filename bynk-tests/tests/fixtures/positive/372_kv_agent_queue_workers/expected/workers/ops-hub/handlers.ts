@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { QueueResult } from "../../__bynk_runtime/queue.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
@@ -36,6 +37,8 @@ export interface JobLedgerState {
 const __JobLedgerRegistry = new __StateRegistry();
 function __zeroOfJobLedgerState(): JobLedgerState { return { seen: 0 }; }
 
+const __entryFieldsOfJobLedger = [] as const;
+
 function __rehydrateJobLedgerState(s: JobLedgerState, stored: JobLedgerState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.seen as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("JobLedger", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"]; }
 }
@@ -54,15 +57,16 @@ export class JobLedger {
     const stored = await this.state.storage.get<JobLedgerState>("state");
     if (stored === undefined) return __zeroOfJobLedgerState();
     __checkStoredLayout("JobLedger", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfJobLedger);
     const __zero = __zeroOfJobLedgerState();
-    __reportUnknownStoredKeys("JobLedger", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateJobLedgerState(__merged, stored);
+    __reportUnknownStoredKeys("JobLedger", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateJobLedgerState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: JobLedgerState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeJobLedgerState(s));
+    await __commitStored(this, this.state.storage, __encodeJobLedgerState(s), __entryFieldsOfJobLedger);
   }
 
   async total(deps: {}): globalThis.Promise<number> {

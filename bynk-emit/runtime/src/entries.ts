@@ -399,6 +399,10 @@ function indexLike(k: string): boolean {
   return /^(0|[1-9][0-9]*)$/.test(k) && Number(k) < 4294967295;
 }
 
+function copyStored<T>(v: T): T {
+  return globalThis.structuredClone(v);
+}
+
 const ENTRY_PREFIXES = ["m/", "s/", "l/", "i/", "x/", "c/"];
 
 function isEntryKey(k: string): boolean {
@@ -418,25 +422,26 @@ const orderOf = (v: unknown): number => (v as Seq).i;
  * collections needs no upgrade. `self` keys the base the next `commitStored` diffs
  * against.
  */
-export async function readStored(
+export async function readStored<S extends object>(
   self: object,
   storage: DurableObjectStorage,
-  stored: Readonly<Record<string, unknown>>,
+  storedState: S,
   fields: readonly EntryField[],
-): Promise<Record<string, unknown>> {
+): Promise<S> {
+  const stored = storedState as Readonly<Record<string, unknown>>;
   if ((stored as { __layout?: unknown }).__layout === undefined) {
     // The wholesale layout: upgrade it if it holds anything to split.
     const holds = fields.some((f) => stored[f.name] !== undefined && stored[f.name] !== null);
     bases.set(self, { entries: new Map() });
-    if (!holds) return { ...stored };
+    if (!holds) return { ...stored } as S;
     await writeEntries(self, storage, stored, fields);
-    return { ...stored };
+    return { ...stored } as S;
   }
   const all = await storage.list<unknown>();
   const entries = new Map<string, unknown>();
   for (const [k, v] of all) if (isEntryKey(k)) entries.set(k, v);
   bases.set(self, { entries });
-  return joinStored(stored, fields, entries);
+  return joinStored(stored, fields, entries) as S;
 }
 
 function joinStored(
@@ -450,7 +455,7 @@ function joinStored(
     const own = [...entries].filter(([k]) => k.startsWith(f.kind === "set" ? setPrefix(f.name) : f.kind === "log" ? logPrefix(f.name) : mapPrefix(f.name)));
     if (f.kind === "log") {
       own.sort(([a], [b]) => utf8Compare(a, b));
-      out[f.name] = own.map(([, v]) => v);
+      out[f.name] = own.map(([, v]) => copyStored(v));
       continue;
     }
     const prefix = f.kind === "set" ? setPrefix(f.name) : mapPrefix(f.name);
@@ -464,7 +469,7 @@ function joinStored(
       // A `Map` entry is `{ i, v }` and reads back as `v`; a `Cache` entry is
       // `{ v, exp, i }` and reads back as `{ v, exp }`; a `Set` element is `true`.
       Object.defineProperty(record, k, {
-        value: f.kind === "set" ? true : f.kind === "map" ? rest.v : rest,
+        value: f.kind === "set" ? true : copyStored(f.kind === "map" ? rest.v : rest),
         enumerable: true,
         writable: true,
         configurable: true,
@@ -483,7 +488,7 @@ function joinStored(
       const buckets: Record<string, string[]> = {};
       for (const [by, pk] of members) {
         Object.defineProperty(buckets, by, {
-          value: [...((buckets[by] as string[] | undefined) ?? []), pk],
+          value: [...(globalThis.Object.hasOwn(buckets, by) ? (buckets[by] as string[]) : []), pk],
           enumerable: true,
           writable: true,
           configurable: true,
@@ -601,7 +606,12 @@ async function writeEntries(
   for (const [k, v] of Object.entries(puts)) overlay.put(k, v);
   for (const k of deletes) overlay.delete(k);
   await overlay.flush({ state: record });
-  bases.set(self, { entries: new Map(Object.entries(entries)) });
+  // The base keeps its own copies: a handler mutates the values it was given in place, and
+  // that must show up as a difference from the base, not change it too.
+  const next = new Map(base);
+  for (const k of deletes) next.delete(k);
+  for (const [k, v] of Object.entries(puts)) next.set(k, copyStored(v));
+  bases.set(self, { entries: next });
 }
 
 /**
@@ -613,8 +623,8 @@ async function writeEntries(
 export async function commitStored(
   self: object,
   storage: DurableObjectStorage,
-  encoded: Readonly<Record<string, unknown>>,
+  encoded: object,
   fields: readonly EntryField[],
 ): Promise<void> {
-  await writeEntries(self, storage, encoded, fields);
+  await writeEntries(self, storage, encoded as Readonly<Record<string, unknown>>, fields);
 }

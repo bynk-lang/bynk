@@ -314,7 +314,7 @@ test("rehydrationViolation: logs the agent, path and kind, never the value", () 
 // Per-entry storage slice 0 (#3189): an absent `__layout` is the wholesale layout
 // this build reads; any marker present was written by a later build and faults
 // before anything is decoded or written back.
-test("checkStoredLayout: passes an absent marker, faults NewerLayout on any other", () => {
+test("checkStoredLayout: passes an absent marker and the layouts this build knows, faults NewerLayout on any other", () => {
   const quiet = globalThis.console.error;
   const logged: unknown[][] = [];
   globalThis.console.error = (...args: unknown[]) => {
@@ -334,7 +334,8 @@ test("checkStoredLayout: passes an absent marker, faults NewerLayout on any othe
   try {
     assert.deepEqual(outcome({}), { kind: "ok" });
     assert.deepEqual(outcome({ __v: 7, items: {} }), { kind: "ok" });
-    assert.deepEqual(outcome({ __layout: 2 }), { kind: "NewerLayout", stored: 2 });
+    assert.deepEqual(outcome({ __layout: 2 }), { kind: "ok" });
+    assert.deepEqual(outcome({ __layout: 3 }), { kind: "NewerLayout", stored: 3 });
     for (const bad of ["2", 0, -1, 1.5, null, Number.NaN]) {
       assert.deepEqual(outcome({ __layout: bad }), { kind: "NewerLayout", stored: null }, String(bad));
     }
@@ -344,7 +345,7 @@ test("checkStoredLayout: passes an absent marker, faults NewerLayout on any othe
   // The log line carries the marker number, never the record.
   assert.deepEqual(logged[0], [
     "RehydrationViolation Cart",
-    { agent: "Cart", path: "<root>", kind: "NewerLayout", stored: 2 },
+    { agent: "Cart", path: "<root>", kind: "NewerLayout", stored: 3 },
   ]);
 });
 

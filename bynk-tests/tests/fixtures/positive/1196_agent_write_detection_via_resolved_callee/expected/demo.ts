@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -24,6 +25,8 @@ export interface WidgetState {
 const __WidgetRegistry = new __StateRegistry();
 function __zeroOfWidgetState(): WidgetState { return { items: {} }; }
 
+const __entryFieldsOfWidget = [{ name: "items", kind: "map" }] as const;
+
 function __rehydrateWidgetState(s: WidgetState, stored: WidgetState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Widget", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
   for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Widget", __r.error); }
@@ -43,15 +46,16 @@ export class Widget {
     const stored = await this.state.storage.get<WidgetState>("state");
     if (stored === undefined) return __zeroOfWidgetState();
     __checkStoredLayout("Widget", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfWidget);
     const __zero = __zeroOfWidgetState();
-    __reportUnknownStoredKeys("Widget", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateWidgetState(__merged, stored);
+    __reportUnknownStoredKeys("Widget", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateWidgetState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: WidgetState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeWidgetState(s));
+    await __commitStored(this, this.state.storage, __encodeWidgetState(s), __entryFieldsOfWidget);
   }
 
   async shadowedName(items: Box, x: number, deps: {}): globalThis.Promise<void> {

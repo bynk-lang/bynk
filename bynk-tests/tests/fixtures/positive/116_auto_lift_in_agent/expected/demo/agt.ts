@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -38,6 +39,8 @@ export interface BoxState {
 const __BoxRegistry = new __StateRegistry();
 function __zeroOfBoxState(): BoxState { return { placed: false }; }
 
+const __entryFieldsOfBox = [] as const;
+
 function __rehydrateBoxState(s: BoxState, stored: BoxState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.placed as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"]; }
 }
@@ -56,15 +59,16 @@ export class Box {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
     __checkStoredLayout("Box", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBox);
     const __zero = __zeroOfBoxState();
-    __reportUnknownStoredKeys("Box", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBoxState(__merged, stored);
+    __reportUnknownStoredKeys("Box", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBoxState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BoxState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBoxState(s));
+    await __commitStored(this, this.state.storage, __encodeBoxState(s), __entryFieldsOfBox);
   }
 
   async place(amount: number, deps: {}): globalThis.Promise<Result<void, OrderError>> {

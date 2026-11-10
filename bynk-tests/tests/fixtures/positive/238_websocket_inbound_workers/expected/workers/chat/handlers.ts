@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkSettleAll } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection } from "../../__bynk_runtime/connection.js";
@@ -56,6 +57,8 @@ export interface RoomState {
 const __RoomRegistry = new __StateRegistry();
 function __zeroOfRoomState(): RoomState { return { conns: {}, members: {} }; }
 
+const __entryFieldsOfRoom = [{ name: "members", kind: "set" }] as const;
+
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
   for (const __k of globalThis.Object.keys(s.conns)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
   for (const __k of globalThis.Object.keys(s.members)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
@@ -77,15 +80,16 @@ export class Room {
     const stored = await this.state.storage.get<RoomState>("state");
     if (stored === undefined) return __zeroOfRoomState();
     __checkStoredLayout("Room", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfRoom);
     const __zero = __zeroOfRoomState();
-    __reportUnknownStoredKeys("Room", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateRoomState(__merged, stored);
+    __reportUnknownStoredKeys("Room", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateRoomState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: RoomState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeRoomState(s));
+    await __commitStored(this, this.state.storage, __encodeRoomState(s), __entryFieldsOfRoom);
   }
 
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
