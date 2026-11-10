@@ -3825,12 +3825,37 @@ pub fn polymorphic_recursion_edges(
     found
         .into_iter()
         .filter(|(callee, args, _)| {
-            type_reaches(&callee.name, &decl.name.name, types)
-                && !(args.len() == decl.type_params.len()
+            if !type_reaches(&callee.name, &decl.name.name, types) {
+                return false;
+            }
+            if callee.name == decl.name.name {
+                // A self-reference passes the parameters through unchanged.
+                return !(args.len() == decl.type_params.len()
                     && args
                         .iter()
                         .zip(&decl.type_params)
-                        .all(|(a, p)| matches!(a, TypeRef::Named(id) if id.name == p.name.name)))
+                        .all(|(a, p)| matches!(a, TypeRef::Named(id) if id.name == p.name.name)));
+            }
+            // A mutually recursive partner (of any arity) may be applied to the
+            // declaration's own parameters or to types that mention none: each
+            // argument then comes from a finite set, so only finitely many
+            // instantiations are reachable. Anything that wraps a parameter
+            // (`List[T]`) grows without bound.
+            !args.iter().all(|a| {
+                let mut names = Vec::new();
+                heads(a, &mut names);
+                match a {
+                    TypeRef::Named(id) => {
+                        decl.type_params.iter().any(|p| p.name.name == id.name)
+                            || !names
+                                .iter()
+                                .any(|n| decl.type_params.iter().any(|p| &p.name.name == n))
+                    }
+                    _ => !names
+                        .iter()
+                        .any(|n| decl.type_params.iter().any(|p| &p.name.name == n)),
+                }
+            })
         })
         .map(|(callee, _, span)| (callee.name.clone(), span))
         .collect()

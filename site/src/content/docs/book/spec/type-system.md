@@ -449,9 +449,10 @@ type that only *contains* a recursive generic is itself refused where it appears
 in a handler signature, an agent `store` field or key, an event field, an actor
 identity type, a `Json.encode`/`Json.decode` target or a `Codable` witness, and
 the diagnostic names the field path it is reached through. Recursion of a
-generic type MUST be *uniform*: each recursive edge, including through a
-mutually recursive partner, passes the declaration's own type parameters
-unchanged and in order. Any other recursive edge is polymorphic recursion and is
+generic type MUST be *uniform*: a self-reference passes the declaration's own
+type parameters unchanged and in order, and a mutually recursive partner (of
+any arity) is applied only to the declaration's own type parameters or to types
+that mention none. Any other recursive edge is polymorphic recursion and is
 a declaration error (`bynk.generics.polymorphic_recursion`), because it yields an
 unbounded set of instantiations.
 

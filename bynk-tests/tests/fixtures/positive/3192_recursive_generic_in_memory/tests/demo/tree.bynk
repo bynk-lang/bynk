@@ -20,3 +20,8 @@ case "mutually recursive generics declare and build" {
 	let r = Rose { value: 1, children: Forest { trees: [Rose { value: 2, children: Forest { trees: [] } }] } }
 	expect size(r) == 2
 }
+
+case "mutually recursive generics of different arity declare and build" {
+	let e: Expr[Int] = Let(Binding { name: "x", body: Lit(1) })
+	expect litCount(e) == 1
+}

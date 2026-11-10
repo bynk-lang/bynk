@@ -1769,6 +1769,15 @@ fn check_polymorphic_recursion(
             .map(|p| p.name.name.as_str())
             .collect::<Vec<_>>()
             .join(", ");
+        let note = if callee == *name {
+            format!(
+                "a recursive generic type must pass its parameters through unchanged, as `{callee}[{params}]`"
+            )
+        } else {
+            format!(
+                "a mutually recursive generic may be applied only to `{name}`'s own type parameters ({params}) or to types that mention none; wrapping a parameter (`List[T]`) makes the set of instantiations unbounded"
+            )
+        };
         errors.push(
             CompileError::new(
                 "bynk.generics.polymorphic_recursion",
@@ -1777,9 +1786,7 @@ fn check_polymorphic_recursion(
                     "`{name}` refers to `{callee}` with arguments other than its own type parameters — polymorphic recursion generates an unbounded set of instantiations"
                 ),
             )
-            .with_note(format!(
-                "a recursive generic type must pass its parameters through unchanged, as `{callee}[{params}]`"
-            )),
+            .with_note(note),
         );
     }
 }

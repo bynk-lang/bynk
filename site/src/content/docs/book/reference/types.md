@@ -864,10 +864,11 @@ positions, so a type that merely *contains* a recursive generic is refused where
 *it* is used, and the note names the field path it is reached through
 (`Holder.t`). The refusal fires once per use, not once per self-reference.
 
-Recursion must be **uniform**: every recursive edge passes the declaration's own
+Recursion must be **uniform**: a self-reference passes the declaration's own
 type parameters through unchanged and in order (`Node[T]` inside `Node[T]`,
-including through `Option`, `List`, `Map`, sum payloads and mutually recursive
-generics). **Polymorphic** recursion
+including through `Option`, `List`, `Map` and sum payloads), and a mutually
+recursive partner, of any arity, is applied only to the declaration's own
+parameters or to types that mention none (`Binding[A, String]` inside `Expr[A]`). **Polymorphic** recursion
 (`type Weird[T] = { next: Option[Weird[List[T]]] }`, or `Pair[B, A]` inside
 `Pair[A, B]`) generates an unbounded set of instantiations and is refused at the
 declaration with `bynk.generics.polymorphic_recursion`. (A *non-generic*

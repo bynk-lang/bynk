@@ -29,11 +29,13 @@ refuses a type that merely contains a recursive generic where that type is used,
 and names the field path. (C) The diagnostic keeps its code
 `bynk.generics.recursive_generic_at_boundary`, fires once per use, and takes the
 noun (`record` or `sum`) from the declaration. (D) Recursion is admitted when it
-is uniform: each recursive edge, including through a mutually recursive partner,
-passes the declaration's own parameters unchanged and in order. Any other
-recursive edge is refused at the declaration with the new
-`bynk.generics.polymorphic_recursion`; this is conservative (it also refuses
-`Pair[B, A]` inside `Pair[A, B]`) and may be relaxed later. (E) A codec for a
+is uniform: a self-reference passes the declaration's own parameters unchanged
+and in order, and a mutually recursive partner, of any arity, is applied only to
+the declaration's own parameters or to types that mention none (so each argument
+comes from a finite set). Any other recursive edge is refused at the declaration
+with the new `bynk.generics.polymorphic_recursion`; a self-reference is
+conservative (it also refuses `Pair[B, A]` inside `Pair[A, B]`) and may be
+relaxed later. (E) A codec for a
 recursive generic is a separate, later increment, and codec factories are out of
 scope here. This partly supersedes ADR 0197 C, and the premise of ADR 0756 G
 ("a recursive generic record is already refused in a record field") no longer

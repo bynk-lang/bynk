@@ -40,7 +40,9 @@ function __makeTestDeps() {
 async function test_a_recursive_generic_sum_builds_and_folds() {
   try {
     const deps = __makeTestDeps();
-    const { Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, probe, size, sum } = __ns_demo_tree;
+    const { Binding, Expr, Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, litCount, probe, size, sum } = __ns_demo_tree;
+    type Binding<A, N> = __ns_demo_tree.Binding<A, N>;
+    type Expr<A> = __ns_demo_tree.Expr<A>;
     type Forest<A> = __ns_demo_tree.Forest<A>;
     type Holder = __ns_demo_tree.Holder;
     type Link<T> = __ns_demo_tree.Link<T>;
@@ -62,7 +64,9 @@ async function test_a_recursive_generic_sum_builds_and_folds() {
 async function test_a_recursive_generic_record_chains_through_Option() {
   try {
     const deps = __makeTestDeps();
-    const { Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, probe, size, sum } = __ns_demo_tree;
+    const { Binding, Expr, Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, litCount, probe, size, sum } = __ns_demo_tree;
+    type Binding<A, N> = __ns_demo_tree.Binding<A, N>;
+    type Expr<A> = __ns_demo_tree.Expr<A>;
     type Forest<A> = __ns_demo_tree.Forest<A>;
     type Holder = __ns_demo_tree.Holder;
     type Link<T> = __ns_demo_tree.Link<T>;
@@ -83,7 +87,9 @@ async function test_a_recursive_generic_record_chains_through_Option() {
 async function test_the_same_generic_function_works_at_another_element_type() {
   try {
     const deps = __makeTestDeps();
-    const { Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, probe, size, sum } = __ns_demo_tree;
+    const { Binding, Expr, Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, litCount, probe, size, sum } = __ns_demo_tree;
+    type Binding<A, N> = __ns_demo_tree.Binding<A, N>;
+    type Expr<A> = __ns_demo_tree.Expr<A>;
     type Forest<A> = __ns_demo_tree.Forest<A>;
     type Holder = __ns_demo_tree.Holder;
     type Link<T> = __ns_demo_tree.Link<T>;
@@ -104,7 +110,9 @@ async function test_the_same_generic_function_works_at_another_element_type() {
 async function test_mutually_recursive_generics_declare_and_build() {
   try {
     const deps = __makeTestDeps();
-    const { Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, probe, size, sum } = __ns_demo_tree;
+    const { Binding, Expr, Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, litCount, probe, size, sum } = __ns_demo_tree;
+    type Binding<A, N> = __ns_demo_tree.Binding<A, N>;
+    type Expr<A> = __ns_demo_tree.Expr<A>;
     type Forest<A> = __ns_demo_tree.Forest<A>;
     type Holder = __ns_demo_tree.Holder;
     type Link<T> = __ns_demo_tree.Link<T>;
@@ -112,6 +120,29 @@ async function test_mutually_recursive_generics_declare_and_build() {
     type Tree<A> = __ns_demo_tree.Tree<A>;
     const r = { value: 1, children: { trees: [{ value: 2, children: { trees: [] } }] } };
     if (!(size(r) === 2)) { throw __bynkExpectFailure("tests/demo/tree.bynk:21:9", 621, 633, "expect size(r) == 2\n  expected: size(r) == 2\n  actual:   " + __bynkShow((size(r))) + " == " + __bynkShow((2))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_mutually_recursive_generics_of_different_arity_declare_and_build() {
+  try {
+    const deps = __makeTestDeps();
+    const { Binding, Expr, Forest, Holder, Link, Rose, Tree, build, chainLength, depth, insert, litCount, probe, size, sum } = __ns_demo_tree;
+    type Binding<A, N> = __ns_demo_tree.Binding<A, N>;
+    type Expr<A> = __ns_demo_tree.Expr<A>;
+    type Forest<A> = __ns_demo_tree.Forest<A>;
+    type Holder = __ns_demo_tree.Holder;
+    type Link<T> = __ns_demo_tree.Link<T>;
+    type Rose<A> = __ns_demo_tree.Rose<A>;
+    type Tree<A> = __ns_demo_tree.Tree<A>;
+    const e: Expr<number> = Expr.Let({ name: "x", body: Expr.Lit(1) });
+    if (!(litCount(e) === 1)) { throw __bynkExpectFailure("tests/demo/tree.bynk:26:9", 780, 796, "expect litCount(e) == 1\n  expected: litCount(e) == 1\n  actual:   " + __bynkShow((litCount(e))) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -135,7 +166,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a recursive generic sum builds and folds", "a recursive generic record chains through Option", "the same generic function works at another element type", "mutually recursive generics declare and build"];
+export const __bynkCases: readonly string[] = ["a recursive generic sum builds and folds", "a recursive generic record chains through Option", "the same generic function works at another element type", "mutually recursive generics declare and build", "mutually recursive generics of different arity declare and build"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -161,6 +192,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("mutually recursive generics declare and build")) {
     const started = __bynkCaseNow();
     const r = { name: "mutually recursive generics declare and build", ...(await test_mutually_recursive_generics_declare_and_build()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("mutually recursive generics of different arity declare and build")) {
+    const started = __bynkCaseNow();
+    const r = { name: "mutually recursive generics of different arity declare and build", ...(await test_mutually_recursive_generics_of_different_arity_declare_and_build()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

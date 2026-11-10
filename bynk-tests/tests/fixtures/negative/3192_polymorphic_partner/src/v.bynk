@@ -1,0 +1,5 @@
+context v
+
+// A partner applied to a wrapped parameter generates unbounded instantiations.
+type Outer[T] = { inner: Option[Inner[List[T]]] }
+type Inner[U] = { back: Option[Outer[U]] }

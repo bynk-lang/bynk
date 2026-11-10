@@ -36,6 +36,23 @@ export interface Rose<A> {
 export const Rose = {
 };
 
+export type Expr<A> =
+    { readonly tag: "Lit"; readonly v: A }
+  | { readonly tag: "Let"; readonly b: Binding<A, string> };
+
+export const Expr = {
+  Lit: <A>(v: A): Expr<A> => ({ tag: "Lit", v }),
+  Let: <A>(b: Binding<A, string>): Expr<A> => ({ tag: "Let", b }),
+};
+
+export interface Binding<A, N> {
+  readonly name: N;
+  readonly body: Expr<A>;
+}
+
+export const Binding = {
+};
+
 export interface Holder {
   readonly tree: Tree<number>;
 }
@@ -108,6 +125,19 @@ export function build(): Holder {
 
 export function size<A>(r: Rose<A>): number {
   return 1 + (r.children.trees).length;
+}
+
+export function litCount<A>(e: Expr<A>): number {
+  switch (e.tag) {
+    case "Lit": {
+      return 1;
+    }
+    case "Let": {
+      const b = e.b;
+      return litCount(b.body);
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
 }
 
 export const probe = {

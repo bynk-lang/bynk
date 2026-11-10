@@ -12,6 +12,10 @@ type Link[T] = { value: T, next: Option[Link[T]] }
 type Forest[A] = { trees: List[Rose[A]] }
 type Rose[A] = { value: A, children: Forest[A] }
 
+// A partner of a different arity, applied to own parameters or closed types.
+type Expr[A] = | Lit(v: A) | Let(b: Binding[A, String])
+type Binding[A, N] = { name: N, body: Expr[A] }
+
 type Holder = { tree: Tree[Int] }
 
 fn insert(t: Tree[Int], x: Int) -> Tree[Int] {
@@ -62,4 +66,11 @@ service probe {
 
 fn size[A](r: Rose[A]) -> Int {
 	1 + r.children.trees.length()
+}
+
+fn litCount[A](e: Expr[A]) -> Int {
+	match e {
+		Lit(_) => 1
+		Let(b) => litCount(b.body)
+	}
 }
