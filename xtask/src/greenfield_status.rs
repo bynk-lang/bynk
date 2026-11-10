@@ -3032,7 +3032,9 @@ fn count_files_named_walk(dir: &Path, filename: &str, count: &mut usize) {
 /// Phase 8's own trend-only probe (`design/bynk-compiler-trajectory.md` §3,
 /// "keystroke-to-diagnostic latency by query level") — settled (Q3/Q5, ADR 0414;
 /// `design/tracks/incrementality.md` §5) as staying **"not measured" for this whole
-/// phase's lifetime**: R3.15's scheduler decision defers whole (no memo table, salsa or
+/// phase's lifetime** (superseded by #3168: it now reads the committed per-release
+/// benchmark, `design/benchmarks/`, and the row below is the measured number):
+/// R3.15's scheduler decision defers whole (no memo table, salsa or
 /// otherwise, ships in phase 8), and the literal latency number presupposes query
 /// levels attributing latency to — levels [`incremental_query_types`] itself proves
 /// exist, but attributing real latency to them needs a scheduler this phase
@@ -3040,12 +3042,20 @@ fn count_files_named_walk(dir: &Path, filename: &str, count: &mut usize) {
 /// exists, so the trajectory's own §3.0 baseline table carries a live, CI-computed row
 /// instead of a static doc claim — the same "instrument even a number that won't move
 /// yet" precedent `test_density`/`fixture_kinds` already set for this module.
-fn keystroke_latency(_root: &Path) -> Probe {
+fn keystroke_latency(root: &Path) -> Probe {
+    // #3168: no longer "not measured". `cargo xtask bench --record` writes one
+    // result per release under `design/benchmarks/`; the probe reads the newest
+    // back, so the figure is committed data (deterministic here, never timed by
+    // this probe) and the row stays a trend, not a gate.
+    let reads = crate::bench::latest_record(root)
+        .and_then(|(v, record)| crate::bench::reading(v, &record))
+        .unwrap_or_else(|| {
+            "not measured — no recorded benchmark (`cargo xtask bench --record`, #3168)".to_string()
+        });
     Probe {
         name: "keystroke_latency",
         gated: false,
-        reads: "not measured — no scheduler exists yet (R3.15, deferred whole this phase)"
-            .to_string(),
+        reads,
     }
 }
 

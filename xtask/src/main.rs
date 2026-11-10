@@ -3,6 +3,8 @@
 //! - `check-pending` (Slice 0) validates the files under `design/pending/`.
 //! - `stamp` (Slice 1) assigns the version(s) + ADR number(s) for the pending
 //!   files and materialises them; dry-run by default, `--apply` to write.
+//! - `bench` (#3168) measures compile time and editor latency on a synthetic
+//!   project; `--record` writes `design/benchmarks/v<version>.json`.
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
@@ -52,6 +54,7 @@ fn main() -> ExitCode {
             }
             stamp(args.iter().any(|a| a == "--apply"))
         }
+        Some("bench") => bench(&args[1..]),
         Some("manifest-schema") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--check") {
                 eprintln!("xtask manifest-schema: unknown argument {bad:?}");
@@ -570,9 +573,83 @@ fn have_nextest(root: &Path) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
+/// `bench`: see [`xtask::bench`]. Local only; results are recorded per release,
+/// never gated in CI (shared runners are too noisy for a threshold).
+fn bench(args: &[String]) -> ExitCode {
+    let mut opts = xtask::bench::Options::default();
+    let mut record = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value = |what: &str| -> Option<String> {
+            let v = it.next().cloned();
+            if v.is_none() {
+                eprintln!("xtask bench: {what} needs a value");
+            }
+            v
+        };
+        match a.as_str() {
+            "--record" => record = true,
+            "--sizes" => {
+                let Some(v) = value("--sizes") else {
+                    return ExitCode::from(2);
+                };
+                let sizes: Option<Vec<usize>> = v.split(',').map(|n| n.parse().ok()).collect();
+                match sizes {
+                    Some(s) if !s.is_empty() && s.iter().all(|n| *n > 0) => opts.sizes = s,
+                    _ => {
+                        eprintln!("xtask bench: --sizes takes positive integers, e.g. 10,50,200");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
+            "--runs" | "--edits" => {
+                let Some(v) = value(a) else {
+                    return ExitCode::from(2);
+                };
+                let Some(n) = v.parse::<usize>().ok().filter(|n| *n > 0) else {
+                    eprintln!("xtask bench: {a} takes a positive integer");
+                    return ExitCode::from(2);
+                };
+                if a == "--runs" {
+                    opts.runs = n;
+                } else {
+                    opts.edits = n;
+                }
+            }
+            bad => {
+                eprintln!("xtask bench: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let root = repo_root();
+    let result = match xtask::bench::run(&root, &opts, &|m| eprintln!("bench: {m}")) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("bench: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let text = serde_json::to_string_pretty(&result).expect("serialises") + "\n";
+    if record {
+        let version = result["version"].as_str().unwrap_or("unknown");
+        let path = xtask::bench::record_path(&root, version);
+        if let Err(e) = std::fs::create_dir_all(path.parent().expect("has parent"))
+            .and_then(|()| std::fs::write(&path, &text))
+        {
+            eprintln!("bench: cannot write {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+        eprintln!("bench: recorded {}", path.display());
+    }
+    print!("{text}");
+    ExitCode::SUCCESS
+}
+
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | bench [--sizes N,N,…] [--runs N] [--edits N] [--record] | tier-probe>"
     );
 }
 
