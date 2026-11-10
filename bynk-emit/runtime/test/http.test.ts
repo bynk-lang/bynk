@@ -26,6 +26,9 @@ import {
   requestHeaderPairs,
   requestQuery,
   requestQuerySearch,
+  formMediaTypeMatches,
+  formObject,
+  formString,
   queryObject,
   queryString,
   renderRejection,
@@ -899,6 +902,111 @@ test("queryObject: a repeated key on a single-valued field is refused", () => {
       actual: "2 values",
     });
   }
+});
+
+// #3276: a `@form` body — the query reader's leaf table, plus a browser's two quirks.
+const F = (name: string, kind: "string" | "int" | "bool" | "enum", list = false, option = false) =>
+  ({ name, kind, list, option }) as const;
+
+test("formObject: reads each declared field, ignoring unknown keys", () => {
+  const r = formObject("email=a%40b.c&age=41&plan=Pro&tags=x&tags=y+z&flag=on&utm=1", [
+    F("email", "string"),
+    F("age", "int", false, true),
+    F("plan", "enum"),
+    F("tags", "string", true),
+    F("flag", "bool"),
+  ]);
+  assert.deepEqual(r, {
+    ok: true,
+    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
+  });
+});
+
+test("formObject: a Bool reads true/on and false/off; anything else passes on as text", () => {
+  const f = [F("a", "bool"), F("b", "bool"), F("c", "bool"), F("d", "bool")];
+  assert.deepEqual(formObject("a=true&b=on&c=false&d=off", f), { ok: true, value: { a: true, b: true, c: false, d: false } });
+  assert.deepEqual(formObject("a=yes", [F("a", "bool")]), { ok: true, value: { a: "yes" } });
+  // The query reader keeps `true`/`false` only.
+  assert.deepEqual(queryObject(queryRequest("?a=on"), [F("a", "bool")]), { ok: true, value: { a: "on" } });
+});
+
+test("formObject: an unchecked checkbox sends nothing, so the field is absent", () => {
+  assert.deepEqual(formObject("name=x", [F("remember", "bool")]), { ok: true, value: {} });
+});
+
+test("formObject: an empty value is absent for an Option and a non-String leaf, but \"\" for a String", () => {
+  const r = formObject("age=&note=&title=&n=", [
+    F("age", "int", false, true),
+    F("note", "string", false, true),
+    F("title", "string"),
+    F("n", "int"),
+  ]);
+  assert.deepEqual(r, { ok: true, value: { title: "" } });
+});
+
+test("formObject: a value that is not its field's type passes on as text; no trimming, no locale", () => {
+  const r = formObject("age=%2041&price=1%2C5&big=9007199254740993&plus=%2B3", [
+    F("age", "int"),
+    F("price", "int"),
+    F("big", "int"),
+    F("plus", "int"),
+  ]);
+  assert.deepEqual(r, { ok: true, value: { age: " 41", price: "1,5", big: "9007199254740993", plus: "+3" } });
+});
+
+test("formObject: a repeated key on a single-valued field names body.<field>", () => {
+  const r = formObject("age=1&age=2", [F("age", "int")]);
+  assert.deepEqual(r, {
+    ok: false,
+    error: { kind: "StructuralMismatch", path: "body.age", expected: "a single value", actual: "2 values" },
+  });
+});
+
+test("formObject: a key matches literally, so `tags[]` is not `tags`", () => {
+  assert.deepEqual(formObject("tags[]=a", [F("tags", "string", true)]), { ok: true, value: {} });
+});
+
+test("formObject: percent-decoding that is not UTF-8 becomes U+FFFD (WHATWG), not an error", () => {
+  assert.deepEqual(formObject("a=%FF", [F("a", "string")]), { ok: true, value: { a: "\uFFFD" } });
+});
+
+test("formMediaTypeMatches: the media type, case-insensitive, with a UTF-8 charset or none", () => {
+  const req = (ct: string | null) =>
+    new Request("https://x.test/", { method: "POST", headers: ct === null ? {} : { "content-type": ct } });
+  const ok = "application/x-www-form-urlencoded";
+  assert.equal(formMediaTypeMatches(req(ok)), true);
+  assert.equal(formMediaTypeMatches(req("Application/X-WWW-Form-Urlencoded; Charset=UTF-8")), true);
+  assert.equal(formMediaTypeMatches(req(`${ok}; charset="utf-8"`)), true);
+  assert.equal(formMediaTypeMatches(req(`${ok}; charset=iso-8859-1`)), false);
+  assert.equal(formMediaTypeMatches(req("application/json")), false);
+  assert.equal(formMediaTypeMatches(req("multipart/form-data; boundary=x")), false);
+  assert.equal(formMediaTypeMatches(req(null)), false);
+});
+
+test("formString: the record's wire form as a body; formObject reads it back", () => {
+  const wire = {
+    email: "a@b.c",
+    age: { kind: "Some", value: 41 },
+    note: { kind: "None" },
+    plan: { kind: "Pro" },
+    tags: ["x", "y z"],
+    flag: true,
+  } as unknown as JsonValue;
+  const text = formString(wire);
+  assert.equal(text, "email=a%40b.c&age=41&plan=Pro&tags=x&tags=y+z&flag=true");
+  assert.equal(formString({} as JsonValue), "");
+  const back = formObject(text, [
+    F("email", "string"),
+    F("age", "int", false, true),
+    F("note", "string", false, true),
+    F("plan", "enum"),
+    F("tags", "string", true),
+    F("flag", "bool"),
+  ]);
+  assert.deepEqual(back, {
+    ok: true,
+    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
+  });
 });
 
 test("requestQuery: get, all and params read the raw string", () => {

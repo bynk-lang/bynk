@@ -764,13 +764,40 @@ export function queryObject(
   request: Request,
   fields: readonly QueryField[],
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
-  const search = new URL(request.url).searchParams;
+  return fieldsObject(new URL(request.url).searchParams, fields, "query", false);
+}
+
+/** #3276 (decisions B-D): decode a form body (`application/x-www-form-urlencoded`)
+ *  into the JSON object a record's codec reads. The same reader as
+ *  [`queryObject`] — one table of leaf rules — with the two differences a
+ *  browser's form needs: a `Bool` also reads `on`/`off` (a checkbox's default
+ *  value), and an empty value (`name=`, what an unfilled input sends) is absent
+ *  for an `Option` and for every leaf but a plain `String`, which keeps `""` so a
+ *  `NonEmpty` refinement still fires. Errors name `body.<field>`. */
+export function formObject(
+  text: string,
+  fields: readonly QueryField[],
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
+  return fieldsObject(new URLSearchParams(text), fields, "body", true);
+}
+
+function fieldsObject(
+  search: URLSearchParams,
+  fields: readonly QueryField[],
+  prefix: string,
+  form: boolean,
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const out: Record<string, JsonValue> = {};
   const leaf = (kind: QueryField["kind"], raw: string): JsonValue => {
     switch (kind) {
       case "int":
         return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
       case "bool":
+        if (form) {
+          if (raw === "true" || raw === "on") return true;
+          if (raw === "false" || raw === "off") return false;
+          return raw;
+        }
         return raw === "true" ? true : raw === "false" ? false : raw;
       case "enum":
         return { kind: raw };
@@ -779,7 +806,10 @@ export function queryObject(
     }
   };
   for (const f of fields) {
-    const values = search.getAll(f.name);
+    // A browser sends an unfilled input as `name=`: absent, except for a plain
+    // `String`, whose `""` the field's own refinements judge.
+    const skipEmpty = form && (f.option || f.kind !== "string");
+    const values = search.getAll(f.name).filter((v) => !(skipEmpty && v === ""));
     if (values.length === 0) continue;
     if (f.list) {
       out[f.name] = values.map((v) => leaf(f.kind, v));
@@ -788,7 +818,7 @@ export function queryObject(
         ok: false,
         error: {
           kind: "StructuralMismatch",
-          path: `query.${f.name}`,
+          path: `${prefix}.${f.name}`,
           expected: "a single value",
           actual: `${values.length} values`,
         },
@@ -799,6 +829,35 @@ export function queryObject(
     }
   }
   return { ok: true, value: out };
+}
+
+/** #3276 (decision H): whether `request`'s `Content-Type` is a form's. The media
+ *  type must be `application/x-www-form-urlencoded` (parameters stripped, case
+ *  insensitive) and a `charset` parameter, when present, must be UTF-8: the
+ *  decoder reads UTF-8 and nothing else, so another charset is a `415` rather
+ *  than silently mis-decoded text. */
+export function formMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  if (given === null) return false;
+  const [media, ...params] = given.split(";");
+  if (media.trim().toLowerCase() !== "application/x-www-form-urlencoded") return false;
+  for (const p of params) {
+    const eq = p.indexOf("=");
+    if (eq < 0 || p.slice(0, eq).trim().toLowerCase() !== "charset") continue;
+    const charset = p.slice(eq + 1).trim().replace(/^"(.*)"$/, "$1").toLowerCase();
+    if (charset !== "utf-8" && charset !== "utf8") return false;
+  }
+  return true;
+}
+
+/** #3276: a record's wire form (what the record's `serialise_*` makes) as a
+ *  form body — `a=1&b=x&b=y`, `""` when every field is absent. A list repeats its
+ *  key, an `Option` is its value or nothing, and an enum is its variant's name.
+ *  `Form.encode` and the test drivers use it; `queryString` is the same text
+ *  behind a `?`. */
+export function formString(wire: JsonValue): string {
+  const text = queryString(wire);
+  return text === "" ? "" : text.slice(1);
 }
 
 export async function responseToHttpOutcome<T>(

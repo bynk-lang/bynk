@@ -1,0 +1,57 @@
+context signup.api
+
+type Email = String where Matches("^[^@]+@[^@]+$")
+type Age = Int where InRange(0, 150)
+type Plan = enum { Free, Pro }
+
+type SignupForm = {
+	email: Email,
+	age: Option[Age],
+	plan: Plan = Free,
+	tags: List[String] = [],
+	remember: Bool = false,
+	nickname: Option[String],
+	title: String = "",
+}
+
+type Search = {
+	q: String,
+}
+
+service api from http {
+	// A form post: decoded, defaulted and validated before the handler runs.
+	@form
+	on POST("/signup") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor {
+		let age = match body.age {
+			Some(a) => "\(a)"
+			None => "-"
+		}
+		let nick = match body.nickname {
+			Some(n) => n
+			None => "-"
+		}
+		let plan = match body.plan {
+			Free => "free"
+			Pro => "pro"
+		}
+		Ok("\(body.email) \(age) \(plan) \(body.tags.length()) \(body.remember) \(nick) [\(body.title)]")
+	}
+
+	// A path parameter beside the form body.
+	@form
+	on PUT("/profile/:owner") (owner: String, body: Search) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(owner) \(body.q)")
+	}
+
+	// A form on a capped route: the body is read through the counting reader.
+	@form
+	@limit(maxBody: 64)
+	on POST("/search") (body: Search) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.q)
+	}
+
+	// The JSON route beside it is untouched.
+	on POST("/json") (body: Search) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.q)
+	}
+}

@@ -154,7 +154,12 @@ declared `@raw(contentType:)` first has its `Content-Type` matched by
 `mediaTypeMatches` (parameters stripped, case-insensitive; `*/*` matches all), and
 a mismatch is a synthesised `415 UnsupportedMediaType` (`{ kind:
 "UnsupportedMediaType", details: … }`), stamped and ordered like the `413`. Its
-body is then the counted octets as a `Uint8Array`, with no decode.
+body is then the counted octets as a `Uint8Array`, with no decode. A route declared
+`@form` has its `Content-Type` matched by `formMediaTypeMatches` (the media type
+`application/x-www-form-urlencoded`, parameters stripped, case-insensitive, and a
+`charset` parameter, when present, UTF-8), a mismatch being the same `415`; its body is
+read as UTF-8 text and decoded by `formObject`, which reads the URL-standard key/value
+pairs into the record's JSON form by the rules of the static semantics.
 
 `QueueResult` (v0.44) is the analogous built-in for the queue protocol: a
 non-generic `tag`-discriminated sum with a constructor namespace, variants `Ack`

@@ -4887,6 +4887,22 @@ fn validate_http_handler(
         if is_query {
             validate_query_param(p, types, errors);
         }
+        // #3276: the `body` of a `@form` handler is a record of form leaves.
+        if is_body && handler.annotations.iter().any(|a| a.name.name == "form") {
+            validate_form_body(p, types, errors);
+            if let Some(by) = handler.by_clause.as_ref().filter(|b| b.is_sum()) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.http.form_on_sum_route",
+                        by.span,
+                        "a `@form` route cannot take a sum of actors",
+                    )
+                    .with_note(
+                        "a multi-actor route reads and verifies the body as JSON itself; name one actor, or split the route",
+                    ),
+                );
+            }
+        }
         if !is_path && !is_body && !is_headers && !is_query {
             errors.push(
                 CompileError::new(
@@ -5068,7 +5084,11 @@ fn validate_handler_annotations(
     let mut seen_cache = false;
     let mut seen_limit = false;
     let mut seen_raw = false;
+    let mut seen_form = false;
     let mut seen_json = false;
+    // #3276: `@raw` and `@form` each fix the body's one wire format, so a handler
+    // carries at most one of them.
+    let mut body_kind: Option<&str> = None;
     for ann in &handler.annotations {
         match ann.name.name.as_str() {
             "cache" => {
@@ -5131,6 +5151,11 @@ fn validate_handler_annotations(
                     continue;
                 }
                 seen_raw = true;
+                if let Some(other) = body_kind.filter(|k| *k != "raw") {
+                    errors.push(body_kind_conflict(ann, "raw", other));
+                    continue;
+                }
+                body_kind = Some("raw");
                 let body = handler.params.iter().find(|p| p.name.name == "body");
                 let Some(body) = body.filter(|_| is_body_method) else {
                     errors.push(
@@ -5173,6 +5198,48 @@ fn validate_handler_annotations(
                     );
                 }
             }
+            "form" => {
+                if seen_form {
+                    errors.push(CompileError::new(
+                        "bynk.http.form_duplicate",
+                        ann.span,
+                        "a handler carries at most one `@form` annotation",
+                    ));
+                    continue;
+                }
+                seen_form = true;
+                if let Some(other) = body_kind.filter(|k| *k != "form") {
+                    errors.push(body_kind_conflict(ann, "form", other));
+                    continue;
+                }
+                body_kind = Some("form");
+                let has_body = handler.params.iter().any(|p| p.name.name == "body");
+                if !is_body_method || !has_body {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.form_on_bodyless",
+                            ann.span,
+                            "`@form` is only valid on a POST/PUT/PATCH `on http` route with a `body` parameter",
+                        )
+                        .with_note(
+                            "a form body is the `body` parameter of a body-taking route, decoded from `application/x-www-form-urlencoded`",
+                        ),
+                    );
+                    continue;
+                }
+                if let Some(arg) = ann.args.first() {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.form_unknown_arg",
+                            arg.span,
+                            "`@form` takes no arguments",
+                        )
+                        .with_note(
+                            "write `@form`: the media type is fixed, and the caps are `@limit` and `limits { }`",
+                        ),
+                    );
+                }
+            }
             "json" => {
                 if seen_json {
                     errors.push(CompileError::new(
@@ -5202,12 +5269,91 @@ fn validate_handler_annotations(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw` and `@json`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form` and `@json`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),
                 );
             }
+        }
+    }
+}
+
+/// #3276: the diagnostic for a handler that declares two request-body wire formats
+/// (`@raw` with `@form`): each fixes how the one `body` is read, so they exclude
+/// each other.
+fn body_kind_conflict(ann: &Annotation, this: &str, other: &str) -> CompileError {
+    CompileError::new(
+        "bynk.http.body_kind_conflict",
+        ann.span,
+        format!("a handler cannot carry both `@{other}` and `@{this}`"),
+    )
+    .with_note("`@raw` and `@form` each fix the wire format of the one `body` parameter; use one")
+}
+
+/// #3276: the `body` of a `@form` handler is a record whose fields are each a
+/// form leaf: the typed `query` set (a `String`, `Int`, `Bool` or `Decimal`, a
+/// refined or opaque type over one, an enum), optionally in an `Option` or a
+/// `List` (a repeated key). A `Bool` that is neither optional, listed nor
+/// defaulted is a warning: an unchecked checkbox sends nothing.
+fn validate_form_body(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.form_body_not_record",
+                p.type_ref.span(),
+                format!(
+                    "the `body` of a `@form` handler must be a record type (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "a form body decodes into a record, one field per form key: `body: SignupForm`",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.form_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `@form` body record has type `{}`, which a form cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key); form keys are flat, so a nested record is not allowed",
+                ),
+            );
+        } else if f.init.is_none() && matches!(&f.type_ref, TypeRef::Base(BaseType::Bool, _)) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.form_bool_without_default",
+                    f.type_ref.span(),
+                    format!(
+                        "`Bool` field `{}` of a `@form` body has no default, so an unchecked checkbox is a `400`",
+                        f.name.name,
+                    ),
+                )
+                .with_note(
+                    "a browser sends nothing for an unchecked checkbox; give the field `= false`, or make it an `Option[Bool]`",
+                ),
+            );
         }
     }
 }

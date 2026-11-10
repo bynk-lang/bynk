@@ -534,6 +534,17 @@ pub(super) fn emit_system_http_support(
                     (sname.clone(), method.as_str().to_string(), path.clone()),
                     (idx, bp.type_ref.clone()),
                 );
+                // #3276: a `@form` route's typed body is written as a form.
+                if h.annotations.iter().any(|a| a.name.name == "form") {
+                    route_body.insert(
+                        (
+                            sname.clone(),
+                            method.as_str().to_string(),
+                            format!("{path}{}", emitter::FORM_ROUTE_SUFFIX),
+                        ),
+                        (idx, bp.type_ref.clone()),
+                    );
+                }
             }
             // The concrete URL: substitute each `:name` with its param.
             let concrete_path = {
@@ -710,7 +721,32 @@ pub(super) fn emit_system_http_support(
                     ct
                 }
             });
+            // #3276: a `@form` route takes its body as a urlencoded form, written from
+            // the typed record the way a browser would send it.
+            let is_form = h.annotations.iter().any(|a| a.name.name == "form");
             let (body_stmt, body_init): (Option<TsStmt>, &str) = match body_arg {
+                Some(p) if is_form => {
+                    runtime_use.note_query_string();
+                    let ser = bynk_ts::print_expr(
+                        &bynk_emit::emitter::serialisation::serialise_expr_via(
+                            &p.type_ref,
+                            &bynk_emit::emitter::ts_ident(&p.name.name),
+                            &type_ns,
+                            runtime_use,
+                        ),
+                    );
+                    let stmt = TsStmt::const_stmt(
+                        TsBindingName::Ident("__body".to_string()),
+                        None,
+                        method_call(
+                            call(ident("__queryString"), vec![ident(ser)]),
+                            "slice",
+                            vec![num_lit("1")],
+                        ),
+                        None,
+                    );
+                    (Some(stmt), "body: __body, ")
+                }
                 Some(p) if raw_type.is_some() => {
                     let stmt = TsStmt::const_stmt(
                         TsBindingName::Ident("__body".to_string()),
@@ -792,6 +828,9 @@ pub(super) fn emit_system_http_support(
                 .collect();
             let content_type = match (body_arg.is_some(), raw_type) {
                 (true, Some(ct)) => format!("\"content-type\": {ct:?}, "),
+                (true, None) if is_form => {
+                    "\"content-type\": \"application/x-www-form-urlencoded\", ".to_string()
+                }
                 (true, None) => "\"content-type\": \"application/json\", ".to_string(),
                 (false, _) => String::new(),
             };
