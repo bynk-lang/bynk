@@ -11,18 +11,21 @@ possibly-absent values are `Option[T]`.
 
 ```bynk
 commons demo {
-  fn ok(n: Int) -> Result[Int, String] {
-    Ok(n)
-  }
-  fn fail() -> Result[Int, String] {
-    Err("nope")
-  }
-  fn wrap(n: Int) -> Option[Int] {
-    Some(n)
-  }
-  fn empty() -> Option[Int] {
-    None
-  }
+	fn ok(n: Int) -> Result[Int, String] {
+		Ok(n)
+	}
+
+	fn fail() -> Result[Int, String] {
+		Err("nope")
+	}
+
+	fn wrap(n: Int) -> Option[Int] {
+		Some(n)
+	}
+
+	fn empty() -> Option[Int] {
+		None
+	}
 }
 ```
 
@@ -46,12 +49,12 @@ early on an `Err`:
 
 ```bynk
 commons demo {
-  type Reps = Int where InRange(1, 100)
+	type Reps = Int where InRange(1, 100)
 
-  fn doubled(n: Int) -> Result[Int, ValidationError] {
-    let r = Reps.of(n)?
-    Ok(r * 2)
-  }
+	fn doubled(n: Int) -> Result[Int, ValidationError] {
+		let r = Reps.of(n)?
+		Ok(r * 2)
+	}
 }
 ```
 
@@ -66,17 +69,17 @@ result in turn pushes every later step one level deeper:
 
 ```bynk
 commons demo {
-  type Problem = enum { NoAddress, NoRoute }
+	type Problem = enum { NoAddress, NoRoute }
 
-  fn quote(address: Option[String], km: Result[Int, Problem]) -> Int {
-    match address {
-      None => 0,
-      Some(a) => match km {
-        Err(_) => 0,
-        Ok(d) => d * 2,
-      },
-    }
-  }
+	fn quote(address: Option[String], km: Result[Int, Problem]) -> Int {
+		match address {
+			None => 0,
+			Some(a) => match km {
+				Err(_) => 0,
+				Ok(d) => d * 2,
+			},
+		}
+	}
 }
 ```
 
@@ -88,13 +91,13 @@ does not, the `else` block is what the block produces instead:
 
 ```bynk
 commons demo {
-  type Problem = enum { NoAddress, NoRoute }
+	type Problem = enum { NoAddress, NoRoute }
 
-  fn quote(address: Option[String], km: Result[Int, Problem]) -> Int {
-    let Some(a) = address else { 0 }
-    let Ok(d) = km else { 0 }
-    d * 2
-  }
+	fn quote(address: Option[String], km: Result[Int, Problem]) -> Int {
+		let Some(a) = address else { 0 }
+		let Ok(d) = km else { 0 }
+		d * 2
+	}
 }
 ```
 
@@ -103,15 +106,15 @@ cases the pattern leaves:
 
 ```bynk
 commons demo {
-  type Problem = enum { NoAddress, NoRoute }
+	type Problem = enum { NoAddress, NoRoute }
 
-  fn quote(km: Result[Int, Problem]) -> Int {
-    let Ok(d) = km else match {
-      Err(NoAddress) => 0,
-      Err(NoRoute) => 10,
-    }
-    d * 2
-  }
+	fn quote(km: Result[Int, Problem]) -> Int {
+		let Ok(d) = km else match {
+			Err(NoAddress) => 0,
+			Err(NoRoute) => 10,
+		}
+		d * 2
+	}
 }
 ```
 

@@ -5,6 +5,8 @@
 //!   files and materialises them; dry-run by default, `--apply` to write.
 //! - `bench` (#3168) measures compile time and editor latency on a synthetic
 //!   project; `--record` writes `design/benchmarks/v<version>.json`.
+//! - `release-notes <tag>` (#3178) prints the release body's "Upgrading from
+//!   vPREV" section, assembled from the Book's `reference/upgrading.md`.
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
@@ -55,6 +57,7 @@ fn main() -> ExitCode {
             stamp(args.iter().any(|a| a == "--apply"))
         }
         Some("bench") => bench(&args[1..]),
+        Some("release-notes") => release_notes(&args[1..]),
         Some("manifest-schema") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--check") {
                 eprintln!("xtask manifest-schema: unknown argument {bad:?}");
@@ -519,6 +522,16 @@ type Step = (
 fn ci_steps(fast: bool, nextest: bool) -> Vec<Step> {
     let mut steps: Vec<Step> = vec![
         ("formatting", vec!["fmt", "--all", "--check"], vec![]),
+        // #3174: the examples are the corpus newcomers read, so they must be what
+        // `bynk fmt` produces. (CI enforces the same via xtask's
+        // `examples_fmt_clean` test.)
+        (
+            "examples formatting",
+            vec![
+                "run", "--locked", "-q", "-p", "bynk", "--", "fmt", "--check", "examples",
+            ],
+            vec![],
+        ),
         (
             "clippy",
             vec![
@@ -644,12 +657,53 @@ fn bench(args: &[String]) -> ExitCode {
         eprintln!("bench: recorded {}", path.display());
     }
     print!("{text}");
+
+/// `release-notes <tag>`: the "Upgrading from vPREV" section for `tag`, on
+/// stdout. The previous release is the greatest plain `v*` tag below `tag` in
+/// this clone (the release workflow checks out full history and tags).
+fn release_notes(args: &[String]) -> ExitCode {
+    let [tag] = args else {
+        eprintln!("xtask release-notes: expected exactly one argument, the release tag");
+        usage();
+        return ExitCode::from(2);
+    };
+    let Some(version) = xtask::release_notes::parse_release_tag(tag) else {
+        eprintln!("xtask release-notes: {tag:?} is not a `vX.Y.Z[-suffix]` tag");
+        return ExitCode::from(2);
+    };
+    let root = repo_root();
+    let page = match std::fs::read_to_string(root.join(xtask::release_notes::UPGRADING_PAGE)) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("release-notes: cannot read the upgrading page: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let tags = match Command::new("git")
+        .args(["tag", "--list", "v[0-9]*"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
+        _ => {
+            eprintln!("release-notes: `git tag --list` failed");
+            return ExitCode::FAILURE;
+        }
+    };
+    let prev = xtask::release_notes::previous_tag(&tags, version);
+    print!(
+        "{}",
+        xtask::release_notes::release_section(&page, prev, version)
+    );
     ExitCode::SUCCESS
 }
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | bench [--sizes N,N,…] [--runs N] [--edits N] [--record] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--runs N] [--edits N] [--record] | tier-probe>"
     );
 }
 
@@ -667,10 +721,13 @@ mod tests {
     #[test]
     fn fast_is_exactly_the_non_test_gates() {
         let steps = ci_steps(true, false);
-        assert_eq!(names(&steps), ["formatting", "clippy", "docs"]);
+        assert_eq!(
+            names(&steps),
+            ["formatting", "examples formatting", "clippy", "docs"]
+        );
         assert_eq!(steps[0].1[0], "fmt");
-        assert_eq!(steps[1].1[0], "clippy");
-        assert_eq!(steps[2].1[0], "doc");
+        assert_eq!(steps[2].1[0], "clippy");
+        assert_eq!(steps[3].1[0], "doc");
     }
 
     /// Matches CI's `API docs (cargo doc)` job, in both `--fast` and the full
@@ -705,7 +762,16 @@ mod tests {
     #[test]
     fn full_run_appends_the_suite_after_the_lints() {
         let steps = ci_steps(false, true);
-        assert_eq!(names(&steps), ["formatting", "clippy", "docs", "tests"]);
+        assert_eq!(
+            names(&steps),
+            [
+                "formatting",
+                "examples formatting",
+                "clippy",
+                "docs",
+                "tests"
+            ]
+        );
     }
 
     /// Both arms run the whole workspace and both pass `--locked`, so a local

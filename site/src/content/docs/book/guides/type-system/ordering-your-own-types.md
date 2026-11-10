@@ -16,9 +16,15 @@ commons guide.priorities
 
 type Priority = enum { Low, Medium, High } derives Ord
 
-type Task = { priority: Priority, due: Instant, title: String } derives Ord
+type Task = {
+	priority: Priority,
+	due: Instant,
+	title: String,
+} derives Ord
 
-fn moreUrgent(a: Task, b: Task) -> Bool { a > b }
+fn moreUrgent(a: Task, b: Task) -> Bool {
+	a > b
+}
 ```
 
 `derives Ord` goes after the type body. It requires every field and payload to be
@@ -58,13 +64,22 @@ uses bynk.list
 
 type Priority = enum { Low, Medium, High } derives Ord
 
-type Task = { priority: Priority, title: String } derives Ord
+type Task = {
+	priority: Priority,
+	title: String,
+} derives Ord
 
-fn ranked(ts: List[Task]) -> List[Task] { sort(ts) }
+fn ranked(ts: List[Task]) -> List[Task] {
+	sort(ts)
+}
 
-fn hottest(ts: List[Task]) -> Option[Task] { max(ts) }
+fn hottest(ts: List[Task]) -> Option[Task] {
+	max(ts)
+}
 
-fn byTitle(ts: List[Task]) -> List[Task] { ts.sortBy((t) => t.title) }
+fn byTitle(ts: List[Task]) -> List[Task] {
+	ts.sortBy((t) => t.title)
+}
 ```
 
 `min` and `max` return an `Option`, `None` for an empty list. The `sortBy`, `min`
@@ -97,10 +112,12 @@ commons guide.generic
 
 uses bynk.list
 
-fn top[T: Ord](xs: List[T]) -> Option[T] { max(xs) }
+fn top[T: Ord](xs: List[T]) -> Option[T] {
+	max(xs)
+}
 
 fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
-  if x < lo { lo } else if x > hi { hi } else { x }
+	if x < lo { lo } else if x > hi { hi } else { x }
 }
 ```
 

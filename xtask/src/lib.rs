@@ -22,6 +22,7 @@ pub mod editor_contract;
 pub mod grammar;
 pub mod greenfield_status;
 pub mod manifest_schema;
+pub mod release_notes;
 pub mod site_page;
 pub mod stamp;
 pub mod tiers;
@@ -82,6 +83,12 @@ pub struct Pending {
     /// merge order. Optional and usually empty. Each entry is checked against
     /// [`greenfield_status::GATED_PROBES`].
     pub probes: Vec<String>,
+    /// The increment's breaking-change note (#3178): one line of Markdown saying
+    /// what breaks, the diagnostic a user will see and the fix. Optional — absent
+    /// for the (vast majority of) increments that break nothing. The stamp
+    /// collects it into the Book's `reference/upgrading.md`, which the release
+    /// body's "Upgrading from vX" section is assembled from.
+    pub breaking: Option<String>,
 }
 
 /// The repo root, resolved from this crate's manifest dir so it's independent
@@ -188,10 +195,11 @@ pub fn validate(filename: &str, content: &str) -> Result<Pending, Vec<String>> {
         ));
     }
 
-    let (level, changelog, closes_rule, probes) = match parse_frontmatter(content, &mut errors) {
-        Some(fm) => fm,
-        None => return Err(errors),
-    };
+    let (level, changelog, closes_rule, probes, breaking) =
+        match parse_frontmatter(content, &mut errors) {
+            Some(fm) => fm,
+            None => return Err(errors),
+        };
     let adrs = parse_adrs(content, &mut errors);
 
     if errors.is_empty() {
@@ -201,6 +209,7 @@ pub fn validate(filename: &str, content: &str) -> Result<Pending, Vec<String>> {
             adrs,
             closes_rule,
             probes,
+            breaking,
         })
     } else {
         Err(errors)
@@ -208,8 +217,14 @@ pub fn validate(filename: &str, content: &str) -> Result<Pending, Vec<String>> {
 }
 
 /// The header fields [`parse_frontmatter`] recovers: `level`, `changelog`,
-/// `closes_rule`, `probes`.
-type Frontmatter = (Option<Level>, Option<String>, Vec<String>, Vec<String>);
+/// `closes_rule`, `probes`, `breaking`.
+type Frontmatter = (
+    Option<Level>,
+    Option<String>,
+    Vec<String>,
+    Vec<String>,
+    Option<String>,
+);
 
 /// Parse and validate the `---`-delimited header. Pushes errors; returns the
 /// fields when present and well-formed (`closes_rule` and `probes` default to
@@ -241,12 +256,14 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
     let mut changelog = None;
     let mut closes_rule = Vec::new();
     let mut probes = Vec::new();
+    let mut breaking = None;
     // Track key presence separately from a valid value: a key that is present
     // but malformed reports its own error and must not also be "missing".
     let mut saw_level = false;
     let mut saw_changelog = false;
     let mut saw_closes_rule = false;
     let mut saw_probes = false;
+    let mut saw_breaking = false;
     for raw in header {
         let line = raw.trim();
         if line.is_empty() {
@@ -349,6 +366,32 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
                     }
                 }
             }
+            "breaking" => {
+                if saw_breaking {
+                    errors.push("duplicate frontmatter key `breaking`".into());
+                }
+                saw_breaking = true;
+                if value.is_empty() {
+                    errors.push(
+                        "breaking must not be empty (omit the key entirely if nothing breaks)"
+                            .into(),
+                    );
+                } else if looks_like_version_prefix(value) {
+                    errors.push(format!(
+                        "breaking must not start with a version number (the stamp adds it): \
+                         {value:?}"
+                    ));
+                } else if let Some(dest) = relative_markdown_link_in(value) {
+                    errors.push(format!(
+                        "breaking reads as a Markdown link to the relative destination {dest:?} \
+                         — the note is inserted verbatim into the Book's upgrading page, so a \
+                         bare `x[T](y)` in prose becomes a link the docs site's link-checker \
+                         rejects. Wrap the code in backticks, or use an absolute URL."
+                    ));
+                } else {
+                    breaking = Some(value.to_string());
+                }
+            }
             other => errors.push(format!("unknown frontmatter key {other:?}")),
         }
     }
@@ -360,7 +403,7 @@ fn parse_frontmatter(content: &str, errors: &mut Vec<String>) -> Option<Frontmat
         errors.push("frontmatter is missing `changelog`".into());
     }
 
-    Some((level, changelog, closes_rule, probes))
+    Some((level, changelog, closes_rule, probes, breaking))
 }
 
 /// The gated probes acknowledged by every pending file under `root` — the union
@@ -1005,6 +1048,64 @@ mod tests {
             err("x.md", "---\nlevel: minor\nchangelog: x\nversion: 9\n---\n")
                 .iter()
                 .any(|e| e.contains("unknown frontmatter key"))
+        );
+    }
+
+    // --- breaking -------------------------------------------------------------
+
+    #[test]
+    fn breaking_is_optional_and_defaults_absent() {
+        // Backward-compatible: every pending file written before the key existed.
+        assert_eq!(
+            ok("x.md", "---\nlevel: patch\nchangelog: x\n---\n").breaking,
+            None
+        );
+    }
+
+    #[test]
+    fn breaking_parses_a_one_line_note() {
+        let p = ok(
+            "x.md",
+            "---\nlevel: minor\nchangelog: x\nbreaking: `old` is now `new`; `bynk check --fix` rewrites it\n---\n",
+        );
+        assert_eq!(
+            p.breaking.as_deref(),
+            Some("`old` is now `new`; `bynk check --fix` rewrites it")
+        );
+    }
+
+    #[test]
+    fn breaking_rejects_empty_duplicate_versioned_and_relative_link_notes() {
+        let e = err("x.md", "---\nlevel: patch\nchangelog: x\nbreaking:\n---\n");
+        assert!(
+            e.iter().any(|m| m.contains("breaking must not be empty")),
+            "{e:?}"
+        );
+        let e = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nbreaking: a\nbreaking: b\n---\n",
+        );
+        assert!(
+            e.iter()
+                .any(|m| m.contains("duplicate frontmatter key `breaking`")),
+            "{e:?}"
+        );
+        let e = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nbreaking: v0.9.0 removes it\n---\n",
+        );
+        assert!(
+            e.iter()
+                .any(|m| m.contains("must not start with a version")),
+            "{e:?}"
+        );
+        let e = err(
+            "x.md",
+            "---\nlevel: patch\nchangelog: x\nbreaking: use Events.emit[E](event)\n---\n",
+        );
+        assert!(
+            e.iter().any(|m| m.contains("relative destination")),
+            "{e:?}"
         );
     }
 

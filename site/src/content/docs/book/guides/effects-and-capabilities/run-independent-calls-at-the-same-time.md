@@ -13,29 +13,33 @@ each has its own `<-`:
 context shop.dashboard
 
 capability Users {
-  fn get(id: Int) -> Effect[String]
+	fn get(id: Int) -> Effect[String]
 }
 
 capability Orders {
-  fn forUser(id: Int) -> Effect[Int]
+	fn forUser(id: Int) -> Effect[Int]
 }
 
 provides Users = FixedUsers {
-  fn get(id: Int) -> Effect[String] { "ada" }
+	fn get(id: Int) -> Effect[String] {
+		"ada"
+	}
 }
 
 provides Orders = FixedOrders {
-  fn forUser(id: Int) -> Effect[Int] { id }
+	fn forUser(id: Int) -> Effect[Int] {
+		id
+	}
 }
 
 service summary {
-  on call(id: Int) -> Effect[String] given Users, Orders {
-    par {
-      let user <- Users.get(id)
-      let orders <- Orders.forUser(id)
-    }
-    Effect.pure("\(user): \(orders)")
-  }
+	on call(id: Int) -> Effect[String] given Users, Orders {
+		par {
+			let user <- Users.get(id)
+			let orders <- Orders.forUser(id)
+		}
+		Effect.pure("\(user): \(orders)")
+	}
 }
 ```
 

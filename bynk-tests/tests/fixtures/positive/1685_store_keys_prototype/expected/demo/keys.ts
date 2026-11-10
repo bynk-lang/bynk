@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -94,6 +94,7 @@ export class Bag {
   private async loadState(): globalThis.Promise<BagState> {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
+    __checkStoredLayout("Bag", stored);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -194,6 +195,7 @@ export class Points {
   private async loadState(): globalThis.Promise<PointsState> {
     const stored = await this.state.storage.get<PointsState>("state");
     if (stored === undefined) return __zeroOfPointsState();
+    __checkStoredLayout("Points", stored);
     const __zero = __zeroOfPointsState();
     __reportUnknownStoredKeys("Points", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -257,6 +259,7 @@ export class Tags {
   private async loadState(): globalThis.Promise<TagsState> {
     const stored = await this.state.storage.get<TagsState>("state");
     if (stored === undefined) return __zeroOfTagsState();
+    __checkStoredLayout("Tags", stored);
     const __zero = __zeroOfTagsState();
     __reportUnknownStoredKeys("Tags", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -330,6 +333,7 @@ export class Memo {
   private async loadState(): globalThis.Promise<MemoState> {
     const stored = await this.state.storage.get<MemoState>("state");
     if (stored === undefined) return __zeroOfMemoState();
+    __checkStoredLayout("Memo", stored);
     const __zero = __zeroOfMemoState();
     __reportUnknownStoredKeys("Memo", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -421,6 +425,7 @@ export class Ledger {
   private async loadState(): globalThis.Promise<LedgerState> {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
+    __checkStoredLayout("Ledger", stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -501,6 +506,7 @@ export class Sales {
   private async loadState(): globalThis.Promise<SalesState> {
     const stored = await this.state.storage.get<SalesState>("state");
     if (stored === undefined) return __zeroOfSalesState();
+    __checkStoredLayout("Sales", stored);
     const __zero = __zeroOfSalesState();
     __reportUnknownStoredKeys("Sales", stored, __zero);
     const __merged = { ...__zero, ...stored };

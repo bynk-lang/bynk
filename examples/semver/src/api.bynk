@@ -11,17 +11,32 @@ type VersionText = String where MaxLength(64)
 
 type RangeText = String where MaxLength(256)
 
-type CompareRequest = { a: VersionText, b: VersionText }
+type CompareRequest = {
+	a: VersionText,
+	b: VersionText,
+}
 
-type CompareView = { order: Int }
+type CompareView = {
+	order: Int,
+}
 
-type SatisfiesRequest = { version: VersionText, range: RangeText }
+type SatisfiesRequest = {
+	version: VersionText,
+	range: RangeText,
+}
 
-type SatisfiesView = { satisfies: Bool }
+type SatisfiesView = {
+	satisfies: Bool,
+}
 
-type ResolveRequest = { versions: List[VersionText], range: RangeText }
+type ResolveRequest = {
+	versions: List[VersionText],
+	range: RangeText,
+}
 
-type ResolveView = { version: Option[String] }
+type ResolveView = {
+	version: Option[String],
+}
 
 service api from http {
 	// `-1`, `0` or `1`: how `a` orders against `b`.

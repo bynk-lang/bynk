@@ -15,59 +15,59 @@ recording handler declares `given Clock`. The time-window reads (`since`/
 answers from its own time index.
 ---
 agent Activity {
-  key stream: String
+	key stream: String
 
-  store history: Log[Event] @retain(30.days)
+	store history: Log[Event] @retain(30.days)
 
-  on call add(event: Event) -> Effect[()] given Clock {
-    let _ <- history.append(event)
-    Effect.pure(())
-  }
+	on call add(event: Event) -> Effect[()] given Clock {
+		let _ <- history.append(event)
+		Effect.pure(())
+	}
 
-  // the last `n` entries, newest first
-  on call recent(n: Int) -> Effect[List[Event]] {
-    history.recent(n).collect()
-  }
+	// the last `n` entries, newest first
+	on call recent(n: Int) -> Effect[List[Event]] {
+		history.recent(n).collect()
+	}
 
-  // every entry at or after a cutoff instant — a clock-free window read
-  on call since(t: Instant) -> Effect[List[Event]] {
-    history.since(t).collect()
-  }
+	// every entry at or after a cutoff instant — a clock-free window read
+	on call since(t: Instant) -> Effect[List[Event]] {
+		history.since(t).collect()
+	}
 
-  on call countSince(t: Instant) -> Effect[Int] {
-    history.since(t).count()
-  }
+	on call countSince(t: Instant) -> Effect[Int] {
+		history.since(t).count()
+	}
 
-  // a windowed tally: collect the window lazily, then shape it with the pure
-  // `summarise` helper from `commons digest`
-  on call breakdown(t: Instant) -> Effect[List[KindCount]] {
-    let window <- history.since(t).collect()
-    summarise(window)
-  }
+	// a windowed tally: collect the window lazily, then shape it with the pure
+	// `summarise` helper from `commons digest`
+	on call breakdown(t: Instant) -> Effect[List[KindCount]] {
+		let window <- history.since(t).collect()
+		summarise(window)
+	}
 }
 
 service api from http {
-  on POST("/events") (body: Event) -> Effect[HttpResult[Event]] by Visitor {
-    let _ <- Activity("main").add(body)
-    Created(body)
-  }
+	on POST("/events") (body: Event) -> Effect[HttpResult[Event]] by Visitor {
+		let _ <- Activity("main").add(body)
+		Created(body)
+	}
 
-  on GET("/events/recent") () -> Effect[HttpResult[List[Event]]] by Visitor {
-    let rows <- Activity("main").recent(20)
-    Ok(rows)
-  }
+	on GET("/events/recent") () -> Effect[HttpResult[List[Event]]] by Visitor {
+		let rows <- Activity("main").recent(20)
+		Ok(rows)
+	}
 
-  // "last hour": read the clock, retreat by a literal `Duration` (an Instant
-  // minus a Duration is an Instant), then run a clock-free window read.
-  on GET("/events/last-hour") () -> Effect[HttpResult[List[KindCount]]] by Visitor given Clock {
-    let now  <- Clock.now()
-    let rows <- Activity("main").breakdown(now - 1.hours)
-    Ok(rows)
-  }
+	// "last hour": read the clock, retreat by a literal `Duration` (an Instant
+	// minus a Duration is an Instant), then run a clock-free window read.
+	on GET("/events/last-hour") () -> Effect[HttpResult[List[KindCount]]] by Visitor given Clock {
+		let now <- Clock.now()
+		let rows <- Activity("main").breakdown(now - 1.hours)
+		Ok(rows)
+	}
 
-  on GET("/events/last-day") () -> Effect[HttpResult[Int]] by Visitor given Clock {
-    let now <- Clock.now()
-    let n   <- Activity("main").countSince(now - 24.hours)
-    Ok(n)
-  }
+	on GET("/events/last-day") () -> Effect[HttpResult[Int]] by Visitor given Clock {
+		let now <- Clock.now()
+		let n <- Activity("main").countSince(now - 24.hours)
+		Ok(n)
+	}
 }

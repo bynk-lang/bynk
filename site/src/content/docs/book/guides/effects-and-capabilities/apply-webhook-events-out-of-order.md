@@ -85,18 +85,18 @@ fn removeRequest(repo: String, number: Int, reviewer: String, at: String) -> Lis
 	[
 		SqlStatement {
 			sql: """sql
-				DELETE FROM review_requests
-				WHERE repo = ?1 AND number = ?2 AND reviewer = ?3
-				  AND (requested_at IS NULL OR requested_at <= ?4)
-				""",
+			DELETE FROM review_requests
+			WHERE repo = ?1 AND number = ?2 AND reviewer = ?3
+			  AND (requested_at IS NULL OR requested_at <= ?4)
+			""",
 			params: [Text(repo), Integer(number), Text(reviewer), Text(at)],
 		},
 		SqlStatement {
 			sql: """sql
-				INSERT INTO review_tombstones (repo, number, reviewer, at) VALUES (?1, ?2, ?3, ?4)
-				ON CONFLICT (repo, number, reviewer) DO UPDATE
-				  SET at = max(review_tombstones.at, excluded.at)
-				""",
+			INSERT INTO review_tombstones (repo, number, reviewer, at) VALUES (?1, ?2, ?3, ?4)
+			ON CONFLICT (repo, number, reviewer) DO UPDATE
+			  SET at = max(review_tombstones.at, excluded.at)
+			""",
 			params: [Text(repo), Integer(number), Text(reviewer), Text(at)],
 		},
 	]
@@ -126,14 +126,14 @@ fn addRequest(repo: String, number: Int, reviewer: String, at: String) -> List[S
 	[
 		SqlStatement {
 			sql: """sql
-				INSERT INTO review_requests (repo, number, reviewer, requested_at)
-				SELECT ?1, ?2, ?3, ?4
-				WHERE NOT EXISTS (SELECT 1 FROM review_tombstones t
-				                  WHERE t.repo = ?1 AND t.number = ?2 AND t.reviewer = ?3 AND t.at >= ?4)
-				  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?4)
-				ON CONFLICT (repo, number, reviewer) DO UPDATE
-				  SET requested_at = max(coalesce(review_requests.requested_at, ''), excluded.requested_at)
-				""",
+			INSERT INTO review_requests (repo, number, reviewer, requested_at)
+			SELECT ?1, ?2, ?3, ?4
+			WHERE NOT EXISTS (SELECT 1 FROM review_tombstones t
+			                  WHERE t.repo = ?1 AND t.number = ?2 AND t.reviewer = ?3 AND t.at >= ?4)
+			  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?4)
+			ON CONFLICT (repo, number, reviewer) DO UPDATE
+			  SET requested_at = max(coalesce(review_requests.requested_at, ''), excluded.requested_at)
+			""",
 			params: [Text(repo), Integer(number), Text(reviewer), Text(at)],
 		},
 	]
@@ -167,39 +167,40 @@ consumes bynk.cloudflare { D1 }
 
 capability Deliveries = D1
 
-fn replaceSet(repo: String, number: Int, updatedAt: String, reviewers: List[String]) -> List[SqlStatement] {
+fn replaceSet(
+	repo: String,
+	number: Int,
+	updatedAt: String,
+	reviewers: List[String]
+) -> List[SqlStatement] {
 	[
 		SqlStatement {
 			sql: """sql
-				DELETE FROM review_requests
-				WHERE repo = ?1 AND number = ?2
-				  AND (requested_at IS NULL OR requested_at <= ?3)
-				  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?3)
-				""",
+			DELETE FROM review_requests
+			WHERE repo = ?1 AND number = ?2
+			  AND (requested_at IS NULL OR requested_at <= ?3)
+			  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?3)
+			""",
 			params: [Text(repo), Integer(number), Text(updatedAt)],
 		},
 		SqlStatement {
 			sql: """sql
-				DELETE FROM review_tombstones
-				WHERE repo = ?1 AND number = ?2 AND at <= ?3
-				  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?3)
-				""",
+			DELETE FROM review_tombstones
+			WHERE repo = ?1 AND number = ?2 AND at <= ?3
+			  AND NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?3)
+			""",
 			params: [Text(repo), Integer(number), Text(updatedAt)],
 		},
-	].concat(
-		reviewers.map(
-			(r) => SqlStatement {
-				sql: """sql
-					INSERT OR IGNORE INTO review_requests (repo, number, reviewer, requested_at)
-					SELECT ?1, ?2, ?3, ?4
-					WHERE NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?4)
-					  AND NOT EXISTS (SELECT 1 FROM review_tombstones t
-					                  WHERE t.repo = ?1 AND t.number = ?2 AND t.reviewer = ?3 AND t.at > ?4)
-					""",
-					params: [Text(repo), Integer(number), Text(r), Text(updatedAt)],
-			}
-		)
-	)
+	].concat(reviewers.map((r) => SqlStatement {
+		sql: """sql
+		INSERT OR IGNORE INTO review_requests (repo, number, reviewer, requested_at)
+		SELECT ?1, ?2, ?3, ?4
+		WHERE NOT EXISTS (SELECT 1 FROM pulls WHERE repo = ?1 AND number = ?2 AND updated_at > ?4)
+		  AND NOT EXISTS (SELECT 1 FROM review_tombstones t
+		                  WHERE t.repo = ?1 AND t.number = ?2 AND t.reviewer = ?3 AND t.at > ?4)
+		""",
+		params: [Text(repo), Integer(number), Text(r), Text(updatedAt)],
+	}))
 }
 ```
 

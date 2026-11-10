@@ -13,31 +13,32 @@ directly. A valid literal compiles; an invalid one is a compile error
 
 ```bynk
 commons demo {
-  type Quantity = Int where InRange(1, 100)
+	type Quantity = Int where InRange(1, 100)
 
-  // return position
-  fn defaultQty() -> Quantity {
-    5
-  }
+	// return position
+	fn defaultQty() -> Quantity {
+		5
+	}
 
-  // let with a type annotation
-  fn sample() -> Quantity {
-    let q: Quantity = 10
-    q
-  }
+	// let with a type annotation
+	fn sample() -> Quantity {
+		let q: Quantity = 10
+		q
+	}
 
-  // Ok / Some / Err payloads
-  fn checked() -> Result[Quantity, ValidationError] {
-    Ok(50)
-  }
+	// Ok / Some / Err payloads
+	fn checked() -> Result[Quantity, ValidationError] {
+		Ok(50)
+	}
 
-  // a refined-typed call argument
-  fn clamp(q: Quantity) -> Quantity {
-    q
-  }
-  fn useClamp() -> Quantity {
-    clamp(10)
-  }
+	// a refined-typed call argument
+	fn clamp(q: Quantity) -> Quantity {
+		q
+	}
+
+	fn useClamp() -> Quantity {
+		clamp(10)
+	}
 }
 ```
 

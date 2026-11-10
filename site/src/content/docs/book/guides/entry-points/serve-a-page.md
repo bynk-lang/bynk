@@ -48,14 +48,14 @@ embed shell = "embeds/page.html"
 Escapes text for an HTML body or a double-quoted attribute.
 ---
 fn escape(s: String) -> String {
-  s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+	s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 }
 
 fn render(title: String, content: String) -> String {
-  shell
-    .replace("{{style}}", style.url)
-    .replace("{{title}}", escape(title))
-    .replace("{{content}}", content)
+	shell
+		.replace("{{style}}", style.url)
+		.replace("{{title}}", escape(title))
+		.replace("{{content}}", content)
 }
 ```
 
@@ -73,9 +73,9 @@ context app.web
 uses app.page
 
 service web from http {
-  on GET("/") () -> Effect[HttpResult[()]] by Visitor {
-    Raw(Bytes.fromUtf8(render("Home", "<p>Hello</p>")), "text/html; charset=utf-8")
-  }
+	on GET("/") () -> Effect[HttpResult[()]] by Visitor {
+		Raw(Bytes.fromUtf8(render("Home", "<p>Hello</p>")), "text/html; charset=utf-8")
+	}
 }
 ```
 
@@ -86,12 +86,12 @@ assert that the shell has its placeholders and that every one was filled:
 
 ```bynk,fragment
 suite app.web {
-  case "the page fills every placeholder" {
-    expect shell.contains("{{title}}")
-    let page = render("Home", "<p>Hello</p>")
-    expect page.contains("<title>Home</title>")
-    expect page.contains("{{") == false
-  }
+	case "the page fills every placeholder" {
+		expect shell.contains("{{title}}")
+		let page = render("Home", "<p>Hello</p>")
+		expect page.contains("<title>Home</title>")
+		expect page.contains("{{") == false
+	}
 }
 ```
 

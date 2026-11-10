@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
 
@@ -34,6 +34,7 @@ export class Calls {
   private async loadState(): globalThis.Promise<CallsState> {
     const stored = await this.state.storage.get<CallsState>("state");
     if (stored === undefined) return __zeroOfCallsState();
+    __checkStoredLayout("Calls", stored);
     const __zero = __zeroOfCallsState();
     __reportUnknownStoredKeys("Calls", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -103,6 +104,7 @@ export class Acc {
   private async loadState(): globalThis.Promise<AccState> {
     const stored = await this.state.storage.get<AccState>("state");
     if (stored === undefined) return __zeroOfAccState();
+    __checkStoredLayout("Acc", stored);
     const __zero = __zeroOfAccState();
     __reportUnknownStoredKeys("Acc", stored, __zero);
     const __merged = { ...__zero, ...stored };

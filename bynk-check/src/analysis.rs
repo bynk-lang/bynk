@@ -835,6 +835,7 @@ pub fn analyse_project_with_policy(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_uses,
+        &broken,
         &mut test_errors,
         &mut refs,
         &mut locals,

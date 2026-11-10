@@ -6,24 +6,24 @@ suite relay
 // the network — a case that forwards stubs `Fetch.send`.
 
 case "an unconfigured relay target is a server error" {
-  let r <- api.POST("/hooks/event", Event { id: "evt_1", kind: "order.created" }) by Webhook
-  expect r is ServerError(_)
-  expect Fetch.send never called
+	let r <- api.POST("/hooks/event", Event { id: "evt_1", kind: "order.created" }) by Webhook
+	expect r is ServerError(_)
+	expect Fetch.send never called
 }
 
 case "a configured target forwards the event and logs it" {
-  stub Secrets.get("RELAY_TARGET_URL") returns Some("https://upstream.test/hook")
-  stub Fetch.send(_) returns Ok(Response { status: 202, headers: Map.empty(), body: "" })
-  let r <- api.POST("/hooks/event", Event { id: "evt_1", kind: "order.created" }) by Webhook
-  expect r is Ok(_)
-  expect Fetch.send called once with req.url == "https://upstream.test/hook"
-  expect Logger.info called once with msg == "relayed event evt_1 (order.created) -> 202"
+	stub Secrets.get("RELAY_TARGET_URL") returns Some("https://upstream.test/hook")
+	stub Fetch.send(_) returns Ok(Response { status: 202, headers: Map.empty(), body: "" })
+	let r <- api.POST("/hooks/event", Event { id: "evt_1", kind: "order.created" }) by Webhook
+	expect r is Ok(_)
+	expect Fetch.send called once with req.url == "https://upstream.test/hook"
+	expect Logger.info called once with msg == "relayed event evt_1 (order.created) -> 202"
 }
 
 case "an upstream failure is a server error" {
-  stub Secrets.get(_) returns Some("https://upstream.test/hook")
-  stub Fetch.send(_) returns Err(Timeout)
-  let r <- api.POST("/hooks/event", Event { id: "evt_2", kind: "order.created" }) by Webhook
-  expect r is ServerError(_)
-  expect Logger.info never called
+	stub Secrets.get(_) returns Some("https://upstream.test/hook")
+	stub Fetch.send(_) returns Err(Timeout)
+	let r <- api.POST("/hooks/event", Event { id: "evt_2", kind: "order.created" }) by Webhook
+	expect r is ServerError(_)
+	expect Logger.info never called
 }

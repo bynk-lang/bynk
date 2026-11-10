@@ -1,4 +1,5 @@
 suite semver
+
 // Everything here is pure, so it is tested directly: no context, no platform.
 
 case "parse reads the three components and the tag" {

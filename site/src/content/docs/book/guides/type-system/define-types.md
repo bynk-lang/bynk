@@ -53,20 +53,23 @@ an `OrderId` is expected, which is the point.
 
 ```bynk
 commons shop {
-  type OrderId = opaque String
+	type OrderId = opaque String
 
-  type Status =
-    | Pending
-    | Shipped(tracking: String)
+	type Status =
+		| Pending
+		| Shipped(tracking: String)
 
-  type Order = {
-    id: OrderId,
-    status: Status,
-  }
+	type Order = {
+		id: OrderId,
+		status: Status,
+	}
 
-  fn newOrder(id: OrderId) -> Order {
-    Order { id: id, status: Pending }
-  }
+	fn newOrder(id: OrderId) -> Order {
+		Order {
+			id: id,
+			status: Pending,
+		}
+	}
 }
 ```
 

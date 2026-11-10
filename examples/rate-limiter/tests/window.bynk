@@ -4,25 +4,25 @@ suite window
 // clock, no platform. Each case pins one rule of the limiter.
 
 case "the first request in a window is allowed and counted" {
-  let d = decide(0, 0, 1000, 60000, 10)
-  expect d.allowed == true
-  expect d.remaining == 9
-  expect d.count == 1
+	let d = decide(0, 0, 1000, 60000, 10)
+	expect d.allowed == true
+	expect d.remaining == 9
+	expect d.count == 1
 }
 
 case "an over-limit request is denied and not counted" {
-  // already at the limit (count == 10); the request is rejected and the count
-  // does not climb past the limit.
-  let d = decide(0, 10, 5000, 60000, 10)
-  expect d.allowed == false
-  expect d.remaining == 0
-  expect d.count == 10
+	// already at the limit (count == 10); the request is rejected and the count
+	// does not climb past the limit.
+	let d = decide(0, 10, 5000, 60000, 10)
+	expect d.allowed == false
+	expect d.remaining == 0
+	expect d.count == 10
 }
 
 case "a request after the window lapses opens a fresh window" {
-  // previous window started at 0; `now` is a full window later, so it resets.
-  let d = decide(0, 7, 60000, 60000, 10)
-  expect d.allowed == true
-  expect d.count == 1
-  expect d.windowStart == 60000
+	// previous window started at 0; `now` is a full window later, so it resets.
+	let d = decide(0, 7, 60000, 60000, 10)
+	expect d.allowed == true
+	expect d.count == 1
+	expect d.windowStart == 60000
 }

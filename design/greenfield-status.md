@@ -4,7 +4,7 @@
 
 # Greenfield status
 
-Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_origins`/`verbatim_sites` added by P7.5 (#1307); `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976). Eighteen probes are gated — a disagreement between this file and a fresh run fails `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). Five are trend probes, reported only.
+Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_origins`/`verbatim_sites` added by P7.5 (#1307); `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163. Nineteen probes are gated — a disagreement between this file and a fresh run fails `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). Five are trend probes, reported only.
 
 | Probe | Gated | Reads |
 |---|---|---|
@@ -13,11 +13,11 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `options_sources` | yes | present |
 | `hoist_sinks` | yes | 0 |
 | `span_keyed_maps` | yes | 6 |
-| `emit_diagnostics` | yes | bynk-emit=3/3, bynk-driver=11/16, bynk-check=641/696 (true/naive) |
+| `emit_diagnostics` | yes | bynk-emit=3/3, bynk-driver=13/19, bynk-check=641/696 (true/naive) |
 | `ide_emit_edge` | yes | absent |
-| `ast_importers` | yes | 8 |
+| `ast_importers` | yes | 9 |
 | `emit_abi_shapes` | yes | 41 (bynk-cloudflare.ts:negotiateLocale, bynk-cloudflare.ts:byteStreamBody, bynk-cloudflare.ts:claimStream, bynk-node.ts:byteStreamBody, bynk-node.ts:claimStream, cloudflare.binding.ts:Analytics, cloudflare.binding.ts:D1, cloudflare.binding.ts:DataPoint, cloudflare.binding.ts:EdgeCache, cloudflare.binding.ts:KvEntry, cloudflare.binding.ts:KvExpiration, cloudflare.binding.ts:KvGet, cloudflare.binding.ts:KvKey, cloudflare.binding.ts:KvList, cloudflare.binding.ts:KvListing, cloudflare.binding.ts:KvPut, cloudflare.binding.ts:Queue, cloudflare.binding.ts:QueueSend, cloudflare.binding.ts:R2, cloudflare.binding.ts:R2Body, cloudflare.binding.ts:R2Listing, cloudflare.binding.ts:R2Object, cloudflare.binding.ts:R2Part, cloudflare.binding.ts:R2Put, cloudflare.binding.ts:R2Upload, cloudflare.binding.ts:R2UploadOptions, cloudflare.binding.ts:RateLimit, cloudflare.binding.ts:SqlError, cloudflare.binding.ts:SqlRun, cloudflare.binding.ts:SqlStatement, cloudflare.binding.ts:SqlValue, cloudflare.binding.ts:claimStream, cloudflare.binding.ts:AnalyticsDataset, cloudflare.binding.ts:D1Database, cloudflare.binding.ts:D1PreparedStatement, cloudflare.binding.ts:D1Result, cloudflare.binding.ts:QueueProducer, cloudflare.binding.ts:R2Bucket, cloudflare.binding.ts:R2MultipartUpload, cloudflare.binding.ts:R2ObjectMeta, cloudflare.binding.ts:RateLimiter) |
-| `ts_writes` | yes | 1250 |
+| `ts_writes` | yes | 1263 |
 | `ts_any` | yes | 30 |
 | `verbatim_origins` | yes | 2 |
 | `verbatim_sites` | yes | 13 |
@@ -26,6 +26,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `diagnostic_coverage` | yes | unasserted=9 (asserted 772/781) |
 | `model_readers_beyond_emit` | yes | 7 (bynk-model::EntryHandler, bynk-model::EntryParam, bynk-model::EntryShape, bynk-model::IrHandlerKind, bynk-model::IrHttpMethod, bynk-model::entry_handlers, bynk-model::lower_handler_kind_ir) |
 | `unused_deps` | yes | 0 |
+| `explained_codes` | yes | explained=18 (of 781) |
 | `wildcard_arms` | no (trend) | 356 |
 | `keep_in_sync` | no (trend) | 202 |
 | `test_density` | no (trend) | bynk=16.0%, bynk-check=14.2%, bynk-driver=24.3%, bynk-emit=12.9%, bynk-fmt=17.1%, bynk-grammar=33.2%, bynk-ide=41.8%, bynk-ir=0.0%, bynk-lower=66.1%, bynk-lsp=38.4%, bynk-project=36.6%, bynk-render=45.2%, bynk-std=49.7%, bynk-strip=55.9%, bynk-syntax=15.3%, bynk-testkit=0.0%, bynk-ts=53.7%, bynk-wasm=45.6%, bynkc=0.0%, xtask=40.0% |

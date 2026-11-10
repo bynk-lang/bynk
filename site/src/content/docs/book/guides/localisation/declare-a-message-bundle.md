@@ -15,8 +15,8 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.empty" => "Your basket is empty."
-  "cart.greeting" => "Hello, {name}!"
+	"cart.empty" => "Your basket is empty."
+	"cart.greeting" => "Hello, {name}!"
 }
 ```
 
@@ -48,13 +48,13 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.empty" => "Your basket is empty."
-  "cart.greeting" => "Hello, {name}!"
+	"cart.empty" => "Your basket is empty."
+	"cart.greeting" => "Hello, {name}!"
 }
 
 messages "fr" {
-  "cart.empty" => "Votre panier est vide."
-  "cart.greeting" => "Bonjour, {name} !"
+	"cart.empty" => "Votre panier est vide."
+	"cart.greeting" => "Bonjour, {name} !"
 }
 ```
 
@@ -83,11 +83,11 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.empty" => "Your basket is empty."
+	"cart.empty" => "Your basket is empty."
 }
 
 messages "pt-BR" {
-  "cart.empty" => "A sua cesta está vazia."
+	"cart.empty" => "A sua cesta está vazia."
 }
 ```
 
@@ -118,18 +118,18 @@ uses bynk.locale
 uses bynk.locale.types
 
 messages "en" @reference {
-  "cart.greeting" => "Hello, {name}!"
+	"cart.greeting" => "Hello, {name}!"
 }
 
 messages "fr" {
-  "cart.greeting" => "Bonjour, {name} !"
+	"cart.greeting" => "Bonjour, {name} !"
 }
 
 ---
 Renders `code` for `tag`, substituting `name`.
 ---
 fn greet(tag: LocaleTag, code: String, name: String) -> String {
-  render(tag, withText(message(code), "name", name))
+	render(tag, withText(message(code), "name", name))
 }
 ```
 
@@ -147,14 +147,13 @@ context shop.web
 
 uses bynk.locale.types
 uses shop.messages
-
 consumes bynk { Locale }
 
 service api from http {
-  on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] given Locale {
-    let tag <- Locale.current()
-    Ok(greet(tag, "cart.greeting", name))
-  }
+	on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] given Locale {
+		let tag <- Locale.current()
+		Ok(greet(tag, "cart.greeting", name))
+	}
 }
 ```
 

@@ -16,7 +16,9 @@ call site can supply the codec.
 ```bynk,fail=bynk.generics.missing_codable_bound
 commons demo.missing.codable.bound
 
-fn show[T](v: T) -> String { Json.encode(v) }
+fn show[T](v: T) -> String {
+	Json.encode(v)
+}
 ```
 
 ## Fix

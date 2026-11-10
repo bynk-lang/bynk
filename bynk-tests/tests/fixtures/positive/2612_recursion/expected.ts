@@ -53,10 +53,19 @@ export function len<A>(xs: readonly A[]): number {
 }
 
 export async function repeat(n: number, step: (a0: number) => globalThis.Promise<void>): globalThis.Promise<void> {
-  if (n <= 0) {
-    return undefined;
-  } else {
-    await step(n);
-    return repeat(n - 1, step);
+  let __tco0 = n, __tco1 = step;
+  __tco: while (true) {
+    const n = __tco0;
+    const step = __tco1;
+    if (n <= 0) {
+      return undefined;
+    } else {
+      await step(n);
+      const __r0 = n - 1;
+      const __r1 = step;
+      __tco0 = __r0;
+      __tco1 = __r1;
+      continue __tco;
+    }
   }
 }

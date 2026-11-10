@@ -17,21 +17,24 @@ parameter (v0.18).
 
 ```bynk,fragment
 adapter tokens {
-  binding "./tokens.binding.ts" requires { "jose": "^5" }
-  consumes bynk { Secrets }
+	binding "./tokens.binding.ts" requires { "jose": "^5" }
+	consumes bynk { Secrets }
+	exports capability { Jwt }
+	exports transparent { Claims, JwtError }
 
-  exports capability  { Jwt }
-  exports transparent { Claims, JwtError }
+	type Claims = {
+		sub: String,
+		exp: Int,
+	}
 
-  type Claims   = { sub: String, exp: Int }
-  type JwtError = enum { Invalid, Expired }
+	type JwtError = enum { Invalid, Expired }
 
-  capability Jwt {
-    fn sign(claims: Claims) -> Effect[String]
-    fn verify(token: String) -> Effect[Result[Claims, JwtError]]
-  }
+	capability Jwt {
+		fn sign(claims: Claims) -> Effect[String]
+		fn verify(token: String) -> Effect[Result[Claims, JwtError]]
+	}
 
-  provides Jwt = JoseJwt given Secrets
+	provides Jwt = JoseJwt given Secrets
 }
 ```
 
@@ -95,14 +98,14 @@ mapping the typed `Response` to a `Result`.
 
 ```bynk,fragment
 context auth.sessions {
-  consumes tokens { Jwt }      // flatten `Jwt` into the local namespace
+	consumes tokens { Jwt }  // flatten `Jwt` into the local namespace
 
-  service login {
-    on call() -> Effect[String] given Jwt {
-      let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
-      token
-    }
-  }
+	service login {
+		on call() -> Effect[String] given Jwt {
+			let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
+			token
+		}
+	}
 }
 ```
 
@@ -121,8 +124,9 @@ it. List it in the binding clause:
 
 ```bynk,fragment
 adapter math {
-  binding "./math.binding.ts" includes ["./adder.wasm"]
-  // …
+	binding "./math.binding.ts" includes ["./adder.wasm"]
+
+	// …
 }
 ```
 

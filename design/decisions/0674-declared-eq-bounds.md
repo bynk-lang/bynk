@@ -5,7 +5,7 @@
 **Context.** ADR 0028 left generics without bounds, and ADR 0430 closed the gap
 for equality by *inferring* which type parameters a generic compares, then
 checking each call against that inferred set. The constrained-generics track
-(`design/tracks/constrained-generics.md`, Q3 (b) and Q8) adopted declared bounds
+(`design/archive/retired-tracks.md`, Q3 (b) and Q8) adopted declared bounds
 instead, because the other constraints (`Ord`, `Key`, `Codable`) will have to be
 declared, a requirement a caller must meet should be readable from the callee's
 signature, and the language should not keep two spellings of one requirement.

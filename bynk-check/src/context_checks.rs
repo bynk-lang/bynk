@@ -4013,7 +4013,7 @@ fn check_agent_decls(
                     hints,
                     locals,
                 );
-            } else if checker::zero_value_ts(elem, None, &typed.types).is_none() {
+            } else if !checker::is_zeroable(elem, None, &typed.types) {
                 errors.push(
                     CompileError::new(
                         "bynk.agents.non_zeroable_state_field",
@@ -5806,20 +5806,21 @@ pub fn reject_fn_types(
         // direct self-edge, not recursion through an `Option`/`List` wrapper).
         TypeRef::App { name, args, span } => {
             if generic_record_is_recursive(&name.name, types) {
+                let kind = bynk_syntax::ast::generic_kind_word(&name.name, types);
                 errors.push(
                     CompileError::new(
                         "bynk.generics.recursive_generic_at_boundary",
                         *span,
                         format!(
-                            "recursive generic record `{}` cannot appear in {what} — it has no finite monomorphised codec",
+                            "recursive generic {kind} `{}` cannot appear in {what} — it has no finite monomorphised codec",
                             name.name
                         ),
                     )
-                    .with_note(
-                        "a generic record that transitively contains itself is not yet \
+                    .with_note(format!(
+                        "a generic {kind} that transitively contains itself is not yet \
                          boundary-serialisable; use a concrete (non-generic) recursive type, \
-                         or break the cycle",
-                    ),
+                         or break the cycle"
+                    )),
                 );
             }
             for a in args {

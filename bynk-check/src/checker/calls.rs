@@ -1070,7 +1070,7 @@ pub(crate) fn check_call(
             span,
             format!("unknown function `{}`", name.name),
         )
-        .with_note("only functions declared in this commons are callable"),
+        .with_note(crate::resolver::unknown_function_note(&name.name)),
     );
     None
 }
@@ -2714,7 +2714,9 @@ pub(crate) fn check_store_log_op(
             Some(tys.intern(query()))
         }
         // The general query vocabulary over the entry values.
-        name if is_query_op(name) => check_query_kernel_method(method, args, elem, span, ctx),
+        name if is_query_op(name) => {
+            check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx)
+        }
         other => {
             ctx.errors.push(
                 CompileError::new(
@@ -2933,6 +2935,34 @@ fn reject_method_type_args(method: &Ident, args: &[Expr], span: Span, ctx: &mut 
     for a in args {
         let _ = type_of(a, None, ctx);
     }
+}
+
+/// Record a built-in method call's resolved [`KernelOp`] and pass the checker's
+/// result through. `op` is `None` for a spelling the receiver's kernel does not
+/// have, which the kernel checker has then rejected (`method_not_found`), so no
+/// callee is recorded; an *accepted* call with no op is a gap between the
+/// checker's dispatch and [`crate::kernel_op`], a compiler bug.
+fn record_kernel(
+    ctx: &mut Ctx,
+    expr_id: ExprId,
+    recv: TyId,
+    op: Option<KernelOp>,
+    method: &Ident,
+    result: Option<TyId>,
+) -> Option<TyId> {
+    match op {
+        Some(op) => {
+            ctx.callees.insert(expr_id, Callee::Kernel { recv, op });
+        }
+        // A debug assertion, not a hard one: this runs in the language server
+        // on every edit, where a gap should not be a panic.
+        None => debug_assert!(
+            result.is_none(),
+            "bynk internal error (#3164): kernel method `{}` was accepted but has no `KernelOp`",
+            method.name
+        ),
+    }
+    result
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3298,81 +3328,60 @@ pub(crate) fn check_method_call(
     // the deferral bites only on declared methods (ADR 0037).
     match &*tys.get(recv_ty) {
         Ty::List(elem) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_list_kernel_method(method, args, *elem, span, ctx);
+            let kop = ListOp::from_name(&method.name);
+            let r = check_list_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::List), method, r);
         }
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_query_kernel_method(method, args, *elem, span, ctx);
+            let kop = QueryOp::from_name(&method.name);
+            let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }
         // v0.100: a chained builder/terminal on a `Stream[T]`.
         Ty::Stream(elem) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_stream_kernel_method(method, args, *elem, span, ctx);
+            let kop = StreamOp::from_name(&method.name);
+            let r = check_stream_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Stream), method, r);
         }
         // v0.102: the held-resource operations on a `Connection[F]` — `send(f)`
         // (non-consuming) and `close()` (consuming). The linearity pass tracks
         // the ownership transitions; this types the operations.
         Ty::Connection(frame) => {
-            ctx.callees.insert(
+            let kop = ConnectionOp::from_name(&method.name);
+            let r = check_connection_method(method, kop, args, *frame, span, ctx);
+            return record_kernel(
+                ctx,
                 expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
+                recv_ty,
+                kop.map(KernelOp::Connection),
+                method,
+                r,
             );
-            return check_connection_method(method, args, *frame, span, ctx);
         }
         // #3051: a case's recording `TestConnection[F]`.
         Ty::TestConnection(frame) => {
-            ctx.callees.insert(
+            let kop = TestConnectionOp::from_name(&method.name);
+            let r = check_test_connection_method(method, kop, args, *frame, span, ctx);
+            return record_kernel(
+                ctx,
                 expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
+                recv_ty,
+                kop.map(KernelOp::TestConnection),
+                method,
+                r,
             );
-            return check_test_connection_method(method, args, *frame, span, ctx);
         }
         Ty::Map(key, val) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_map_kernel_method(method, args, *key, *val, span, ctx);
+            let kop = MapOp::from_name(&method.name);
+            let r = check_map_kernel_method(method, kop, args, *key, *val, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Map), method, r);
         }
         // K6a (#2596): the `Set` kernel.
         Ty::Set(elem) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_set_kernel_method(method, args, *elem, span, ctx);
+            let kop = SetOp::from_name(&method.name);
+            let r = check_set_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Set), method, r);
         }
         // v0.21: the numeric kernel — conversions as value methods on the
         // bare base types. A refined value reaches these too, but via the
@@ -3382,124 +3391,100 @@ pub(crate) fn check_method_call(
         // opaque type it exposes no `.unsafe` (that is opaque-only, confined
         // to the defining commons).
         Ty::Base(base @ (BaseType::Int | BaseType::Float)) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_numeric_kernel_method(method, args, *base, span, ctx);
+            let op = match *base {
+                BaseType::Int => IntOp::from_name(&method.name).map(KernelOp::Int),
+                _ => FloatOp::from_name(&method.name).map(KernelOp::Float),
+            };
+            let r = check_numeric_kernel_method(method, op, args, *base, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
         }
         // v0.86 (ADR 0112): the `Duration` kernel — `toMillis`/`toString`.
         Ty::Base(BaseType::Duration) => {
-            ctx.callees.insert(
+            let kop = DurationOp::from_name(&method.name);
+            let r = check_duration_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
                 expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
+                recv_ty,
+                kop.map(KernelOp::Duration),
+                method,
+                r,
             );
-            return check_duration_kernel_method(method, args, span, ctx);
         }
         // v0.90 (ADR 0114): the `Instant` kernel — `toEpochMillis`/`toString`.
         Ty::Base(BaseType::Instant) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_instant_kernel_method(method, args, span, ctx);
+            let kop = InstantOp::from_name(&method.name);
+            let r = check_instant_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Instant), method, r);
         }
         // #2341 (decision A): an HTTP handler's `headers` — `get`, `bearer`,
         // `clientIp`.
         Ty::RequestHeaders => {
-            ctx.callees.insert(
+            let kop = RequestHeadersOp::from_name(&method.name);
+            let r = check_request_headers_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
                 expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
+                recv_ty,
+                kop.map(KernelOp::RequestHeaders),
+                method,
+                r,
             );
-            return check_request_headers_method(method, args, span, ctx);
         }
         // #2854 (decision B): an HTTP handler's `query` — `get`, `all`, `params`.
         Ty::RequestQuery => {
-            ctx.callees.insert(
+            let kop = RequestQueryOp::from_name(&method.name);
+            let r = check_request_query_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
                 expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
+                recv_ty,
+                kop.map(KernelOp::RequestQuery),
+                method,
+                r,
             );
-            return check_request_query_method(method, args, span, ctx);
         }
         // #2380 (L5): an `Oidc` binder's claims — `get`, `has`.
         Ty::TokenClaims => {
-            ctx.callees.insert(
+            let kop = TokenClaimsOp::from_name(&method.name);
+            let r = check_token_claims_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
                 expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
+                recv_ty,
+                kop.map(KernelOp::TokenClaims),
+                method,
+                r,
             );
-            return check_token_claims_method(method, args, span, ctx);
         }
         // v0.110 (ADR 0142): the `Bytes` kernel — `length`/`toBase64`/`decodeUtf8`.
         Ty::Base(BaseType::Bytes) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_bytes_kernel_method(method, args, span, ctx);
+            let kop = BytesOp::from_name(&method.name);
+            let r = check_bytes_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Bytes), method, r);
         }
         // #2622: the `Decimal` kernel.
         Ty::Base(BaseType::Decimal) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_decimal_kernel_method(method, args, span, ctx);
+            let kop = DecimalOp::from_name(&method.name);
+            let r = check_decimal_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Decimal), method, r);
         }
         // v0.22a: the string kernel (ADR 0046).
         Ty::Base(BaseType::String) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_string_kernel_method(method, args, span, ctx);
+            let kop = StringOp::from_name(&method.name);
+            let r = check_string_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::String), method, r);
         }
         // v0.22a: the Option/Result combinators as kernel methods (ADR 0048).
         Ty::Option(inner) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_option_kernel_method(method, args, *inner, span, ctx);
+            let kop = OptionOp::from_name(&method.name);
+            let r = check_option_kernel_method(method, kop, args, *inner, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Option), method, r);
         }
         Ty::Result(ok, err) => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::Kernel {
-                    recv: recv_ty,
-                    op: method.name.clone(),
-                },
-            );
-            return check_result_kernel_method(method, args, *ok, *err, span, ctx);
+            let kop = ResultOp::from_name(&method.name);
+            let r = check_result_kernel_method(method, kop, args, *ok, *err, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Result), method, r);
         }
         // The `Effect[Result[T, E]]` combinators (§2.8.3): `mapOk`/`mapErr`/
         // `flatMapOk`/`flatMapErr` on the universal cross-context shape. Only an
@@ -3510,35 +3495,27 @@ pub(crate) fn check_method_call(
             // `Effect[Result]` combinators (it is not one of them), so
             // `Effect[Result[T, E]].within(d)` is the plain nested case.
             if method.name == "within" {
-                ctx.callees.insert(
-                    expr_id,
-                    Callee::Kernel {
-                        recv: recv_ty,
-                        op: method.name.clone(),
-                    },
-                );
-                return check_effect_within_method(method, args, *inner, span, ctx);
+                let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
+                let r = check_effect_within_method(method, args, *inner, span, ctx);
+                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
             // #2711: `race` is on every `Effect[T]` too.
             if method.name == "race" {
-                ctx.callees.insert(
-                    expr_id,
-                    Callee::Kernel {
-                        recv: recv_ty,
-                        op: method.name.clone(),
-                    },
-                );
-                return check_effect_race_method(args, *inner, span, ctx);
+                let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
+                let r = check_effect_race_method(args, *inner, span, ctx);
+                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
             if let Ty::Result(ok, err) = &*tys.get(*inner) {
-                ctx.callees.insert(
+                let kop = EffectResultOp::from_name(&method.name);
+                let r = check_effect_result_kernel_method(method, kop, args, *ok, *err, span, ctx);
+                return record_kernel(
+                    ctx,
                     expr_id,
-                    Callee::Kernel {
-                        recv: recv_ty,
-                        op: method.name.clone(),
-                    },
+                    recv_ty,
+                    kop.map(KernelOp::EffectResult),
+                    method,
+                    r,
                 );
-                return check_effect_result_kernel_method(method, args, *ok, *err, span, ctx);
             }
         }
         _ => {}
@@ -3655,25 +3632,51 @@ pub(crate) fn check_method_call(
             ..
         } = &*tys.get(recv_ty)
         {
-            if !matches!(base, BaseType::Bool) {
-                ctx.callees.insert(
-                    expr_id,
-                    Callee::Kernel {
-                        recv: recv_ty,
-                        op: method.name.clone(),
-                    },
-                );
-            }
-            match base {
+            let op = KernelOp::for_base(*base, &method.name);
+            let r = match base {
                 BaseType::Int | BaseType::Float => {
-                    return check_numeric_kernel_method(method, args, *base, span, ctx);
+                    check_numeric_kernel_method(method, op, args, *base, span, ctx)
                 }
-                BaseType::String => return check_string_kernel_method(method, args, span, ctx),
-                BaseType::Duration => return check_duration_kernel_method(method, args, span, ctx),
-                BaseType::Instant => return check_instant_kernel_method(method, args, span, ctx),
-                BaseType::Bytes => return check_bytes_kernel_method(method, args, span, ctx),
-                BaseType::Decimal => return check_decimal_kernel_method(method, args, span, ctx),
-                BaseType::Bool => {}
+                BaseType::String => check_string_kernel_method(
+                    method,
+                    StringOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Duration => check_duration_kernel_method(
+                    method,
+                    DurationOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Instant => check_instant_kernel_method(
+                    method,
+                    InstantOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Bytes => check_bytes_kernel_method(
+                    method,
+                    BytesOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Decimal => check_decimal_kernel_method(
+                    method,
+                    DecimalOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                // `Bool` has no kernel: fall through to `method_not_found`.
+                BaseType::Bool => None,
+            };
+            if !matches!(base, BaseType::Bool) {
+                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
         }
         ctx.errors.push(CompileError::new(

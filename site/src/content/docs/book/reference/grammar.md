@@ -260,18 +260,18 @@ tooling).
 **Example.**
 ```bynk
 commons shop {
-  type Status =
-    | Pending
-    | Shipped(tracking: String)
-    | Cancelled(reason: String)
+	type Status =
+		| Pending
+		| Shipped(tracking: String)
+		| Cancelled(reason: String)
 
-  fn describe(s: Status) -> String {
-    match s {
-      Pending => "awaiting shipment"
-      Shipped(tracking: t) => t
-      Cancelled(reason: r) => r
-    }
-  }
+	fn describe(s: Status) -> String {
+		match s {
+			Pending => "awaiting shipment",
+			Shipped(tracking: t) => t,
+			Cancelled(reason: r) => r,
+		}
+	}
 }
 ```
 
@@ -310,9 +310,9 @@ capabilities, isolated behind its boundary.
 context reaper
 
 service sweeper from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
-    Ok(())
-  }
+	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		Ok(())
+	}
 }
 ```
 
@@ -332,14 +332,20 @@ and external (bodiless) providers. The only place host code may enter a program.
 **Example.**
 ```bynk,fragment
 adapter tokens {
-  binding "./tokens.binding.ts" requires { "jose": "^5" }
-  exports capability  { Jwt }
-  exports transparent { Claims }
-  type Claims = { sub: String, exp: Int }
-  capability Jwt {
-    fn sign(claims: Claims, secret: String) -> Effect[String]
-  }
-  provides Jwt = JoseJwt
+	binding "./tokens.binding.ts" requires { "jose": "^5" }
+	exports capability { Jwt }
+	exports transparent { Claims }
+
+	type Claims = {
+		sub: String,
+		exp: Int,
+	}
+
+	capability Jwt {
+		fn sign(claims: Claims, secret: String) -> Effect[String]
+	}
+
+	provides Jwt = JoseJwt
 }
 ```
 
@@ -732,16 +738,22 @@ block body.
 **Example.**
 ```bynk
 commons demo {
-  type Id = Int
+	type Id = Int
 
-  fn add(a: Int, b: Int) -> Int {
-    a + b
-  }
+	fn add(a: Int, b: Int) -> Int {
+		a + b
+	}
 }
 ```
 
 **Static semantics.**
 {{#grammar-semantics fn_decl}}
+
+A function may call itself. A direct self call in tail position runs as a loop,
+in constant stack, for pure and `Effect` functions alike; mutual recursion,
+non-tail recursion and a function with an `ensures` clause keep direct recursion,
+bounded by the host's stack. See
+[Recursion and iteration](/book/guides/type-system/recursion-and-iteration/).
 
 **See also.** [Operators & built-ins](/book/reference/operators/).
 
@@ -756,9 +768,9 @@ A type parameter of a `fn`, `type` or capability operation, with optional bounds
 **Example.**
 ```bynk
 commons demo {
-  fn same[T: Eq](a: T, b: T) -> Bool {
-    a == b
-  }
+	fn same[T: Eq](a: T, b: T) -> Bool {
+		a == b
+	}
 }
 ```
 
@@ -803,7 +815,9 @@ A function **postcondition** (v0.115): `ensures <name>: <predicate>`. A pure
 awaited element for an `Effect`). Checked at every call in the dev/test build and
 generated against by the runner (a contract is a property that is always on). A
 `case`/`property` that merely restates it is flagged
-(`bynk.contract.restated_by_test`).
+(`bynk.contract.restated_by_test`). A function with an `ensures` clause is not
+rewritten into a loop when it calls itself in tail position (a loop has one frame
+to check), so it keeps direct recursion and the host's stack limit.
 
 **See also.** [Contracts](/book/reference/testing/#contracts).
 
@@ -844,20 +858,25 @@ A capability: an interface of effectful operations a context can depend on.
 ```bynk
 context demo
 
-capability Logger  { fn info(message: String) -> Effect[()] }
-capability Greeter { fn greet() -> Effect[()] }
+capability Logger {
+	fn info(message: String) -> Effect[()]
+}
+
+capability Greeter {
+	fn greet() -> Effect[()]
+}
 
 provides Logger = ConsoleLogger {
-  fn info(message: String) -> Effect[()] {
-    Effect.pure(())
-  }
+	fn info(message: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 provides Greeter = PoliteGreeter given Logger {
-  fn greet() -> Effect[()] {
-    let _ <- Logger.info("hello")
-    Effect.pure(())
-  }
+	fn greet() -> Effect[()] {
+		let _ <- Logger.info("hello")
+		Effect.pure(())
+	}
 }
 ```
 
@@ -1080,13 +1099,13 @@ own `by` (or `given`) overrides the default outright; it does not merge.
 context notes
 
 service api from http by Visitor {
-  on GET("/ping") () -> Effect[HttpResult[String]] {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] {
+		Ok("pong")
+	}
 
-  on GET("/notes/:id") (id: String) -> Effect[HttpResult[String]] {
-    NotFound
-  }
+	on GET("/notes/:id") (id: String) -> Effect[HttpResult[String]] {
+		NotFound
+	}
 }
 ```
 
@@ -1166,15 +1185,15 @@ header position before the handlers. `cors` is a contextual keyword (like
 context api
 
 service api from http {
-  cors {
-    origins: ["https://app.example.com"],
-    credentials: false,
-    maxAge: 1.hours,
-  }
+	cors {
+		origins: ["https://app.example.com"],
+		credentials: false,
+		maxAge: 1.hours,
+	}
 
-  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("pong")
+	}
 }
 ```
 
@@ -1202,14 +1221,14 @@ ordinary identifier elsewhere.
 context api
 
 service api from http {
-  security {
-    hsts:    180.days,
-    nosniff: true,
-  }
+	security {
+		hsts: 180.days,
+		nosniff: true,
+	}
 
-  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("pong")
+	}
 }
 ```
 
@@ -1237,13 +1256,13 @@ stays an ordinary identifier elsewhere.
 context api
 
 service api from http {
-  limits {
-    maxBody: 1_048_576,
-  }
+	limits {
+		maxBody: 1_048_576,
+	}
 
-  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("pong")
+	}
 }
 ```
 
@@ -1269,13 +1288,13 @@ identifier elsewhere.
 context api
 
 service api from http {
-  json {
-    options: plain,
-  }
+	json {
+		options: plain,
+	}
 
-  on GET("/ping") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
-    Ok(None)
-  }
+	on GET("/ping") () -> Effect[HttpResult[Option[String]]] by v: Visitor {
+		Ok(None)
+	}
 }
 ```
 
@@ -1406,19 +1425,19 @@ context counters
 type CounterId = opaque String
 
 agent Counter {
-  key id: CounterId
+	key id: CounterId
 
-  store count: Cell[Int]
+	store count: Cell[Int]
 
-  on call current() -> Effect[Int] {
-    count
-  }
+	on call current() -> Effect[Int] {
+		count
+	}
 
-  on call increment() -> Effect[Int] {
-    let next = count + 1
-    count := next
-    next
-  }
+	on call increment() -> Effect[Int] {
+		let next = count + 1
+		count := next
+		next
+	}
 }
 ```
 

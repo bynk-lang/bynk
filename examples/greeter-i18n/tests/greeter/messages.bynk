@@ -1,21 +1,21 @@
 suite greeter.messages {
-  case "greets in the reference locale" {
-    expect greet("en", "greeting", "Ada") == "Hello, Ada!"
-  }
+	case "greets in the reference locale" {
+		expect greet("en", "greeting", "Ada") == "Hello, Ada!"
+	}
 
-  case "greets in a declared second locale" {
-    expect greet("fr", "greeting", "Ada") == "Bonjour, Ada !"
-  }
+	case "greets in a declared second locale" {
+		expect greet("fr", "greeting", "Ada") == "Bonjour, Ada !"
+	}
 
-  case "greets in a declared third locale" {
-    expect greet("es", "greeting", "Ada") == "¡Hola, Ada!"
-  }
+	case "greets in a declared third locale" {
+		expect greet("es", "greeting", "Ada") == "¡Hola, Ada!"
+	}
 
-  case "falls back to the reference for an undeclared locale" {
-    expect greet("de", "greeting", "Ada") == "Hello, Ada!"
-  }
+	case "falls back to the reference for an undeclared locale" {
+		expect greet("de", "greeting", "Ada") == "Hello, Ada!"
+	}
 
-  case "farewells too, not just greetings" {
-    expect greet("fr", "farewell", "Ada") == "Au revoir, Ada !"
-  }
+	case "farewells too, not just greetings" {
+		expect greet("fr", "farewell", "Ada") == "Au revoir, Ada !"
+	}
 }

@@ -16,18 +16,18 @@ context counters
 type CounterId = opaque String
 
 agent Counter {
-  key id: CounterId
+	key id: CounterId
 
-  store count: Cell[Int]
+	store count: Cell[Int]
 
-  on call current() -> Effect[Int] {
-    count
-  }
+	on call current() -> Effect[Int] {
+		count
+	}
 
-  on call increment() -> Effect[Int] {
-    let _ <- count.update((c) => c + 1)
-    count
-  }
+	on call increment() -> Effect[Int] {
+		let _ <- count.update((c) => c + 1)
+		count
+	}
 }
 ```
 
@@ -169,6 +169,24 @@ on call all() -> Effect[List[TodoItem]] {
 
 To route an equality filter through a maintained index, annotate the map with
 [`@indexed`](/book/reference/agents/#indexed-routing).
+
+### Keep an agent's state small
+
+An agent's whole state, every entry of every `Map`, `Set`, `Cache` and `Log` and
+their `@indexed` posting lists included, is persisted as **one stored value** of
+about 8 MB at most, and each handler call reads and rewrites all of it. So a handler
+costs in proportion to the whole state, not to what it touches, and a collection
+that keeps growing will eventually stop persisting ([#3159](https://github.com/bynk-lang/bynk/issues/3159) tracks the planned fix).
+Keep the collections an agent holds small and bounded:
+
+- key agents finely: one per customer, order or channel, not one per system;
+- bound a `Log` with `@retain(...)`; a `Cache`'s `@ttl(...)` hides expired entries
+  but does not delete them, so keep its key space bounded or `remove` keys you are
+  done with;
+- keep a large or unbounded table in D1 rather than in a `Map`.
+
+The [reference](/book/reference/agents/#size-and-cost-of-an-agents-state) has the
+detail.
 
 ## Change stored state safely
 
