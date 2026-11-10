@@ -6379,11 +6379,18 @@ fn emit_agent_load_commit_state(
 /// What the rest of an agent's emission refers to by name once its state's
 /// validation and migration functions are declared (#3167).
 struct AgentPersistFns {
+    /// The rehydration check `loadState` runs on a stored record.
     rehydrate_fn: String,
+    /// The wire-format encoder `commitState` writes through.
     encode_fn: String,
+    /// The migration dispatcher `loadState` calls for an older stored layout.
     migrate_fn: String,
+    /// Whether the agent's state needs the rehydration check and the encoder
+    /// at all; when it does not, `commitState` stores the record as it is.
     has_rehydrate: bool,
+    /// The migration steps from each older schema version, in order.
     step_plans: Vec<bynk_check::schema_registry::MigrationStep>,
+    /// The agent's declared schema versions, if it has any.
     agent_versions: Option<bynk_check::schema_registry::AgentVersions>,
 }
 
