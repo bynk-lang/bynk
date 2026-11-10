@@ -27,19 +27,18 @@ binding, never passed by callers.
 
 ```bynk,fragment
 adapter workers_ai {
-  binding "./workers_ai.binding.ts"
-  consumes bynk { Fetch, Secrets }
+	binding "./workers_ai.binding.ts"
+	consumes bynk { Fetch, Secrets }
+	exports capability { Ai }
+	exports transparent { AiError }
 
-  exports capability  { Ai }
-  exports transparent { AiError }
+	type AiError = enum { Unavailable, BadReply, InvalidModel }
 
-  type AiError = enum { Unavailable, BadReply, InvalidModel }
+	capability Ai {
+		fn complete(model: String, prompt: String) -> Effect[Result[String, AiError]]
+	}
 
-  capability Ai {
-    fn complete(model: String, prompt: String) -> Effect[Result[String, AiError]]
-  }
-
-  provides Ai = WorkersAi given Fetch, Secrets
+	provides Ai = WorkersAi given Fetch, Secrets
 }
 ```
 
@@ -108,17 +107,17 @@ like any other external value.
 
 ```bynk,fragment
 context assistant {
-  consumes workers_ai { Ai, AiError }
+	consumes workers_ai { Ai, AiError }
 
-  service summarise {
-    on call(text: String) -> Effect[String] given Ai {
-      let reply <- Ai.complete("@cf/meta/llama-3.1-8b-instruct", "Summarise: \(text)")
-      match reply {
-        Ok(summary) => summary
-        Err(_) => "(no summary available)"
-      }
-    }
-  }
+	service summarise {
+		on call(text: String) -> Effect[String] given Ai {
+			let reply <- Ai.complete("@cf/meta/llama-3.1-8b-instruct", "Summarise: \(text)")
+			match reply {
+				Ok(summary) => summary,
+				Err(_) => "(no summary available)",
+			}
+		}
+	}
 }
 ```
 
@@ -143,36 +142,40 @@ context assistant.ai
 consumes bynk { Fetch, Secrets }
 
 capability Ai {
-  fn run(model: String, body: String) -> Effect[Result[String, String]]
+	fn run(model: String, body: String) -> Effect[Result[String, String]]
 }
 
 provides Ai = CloudflareAi given Fetch, Secrets {
-  fn run(model: String, body: String) -> Effect[Result[String, String]] {
-    let account <- Secrets.get("CF_ACCOUNT_ID")
-    let token <- Secrets.get("CF_API_TOKEN")
-    match account {
-      None => Effect.pure(Err("missing CF_ACCOUNT_ID"))
-      Some(a) => match token {
-        None => Effect.pure(Err("missing CF_API_TOKEN"))
-        Some(t) => if !model.matchesRegex("@(cf|hf)/[a-z0-9_-]+/[a-z0-9_-][a-z0-9._-]*") {
-          Effect.pure(Err("invalid model id"))
-        } else {
-          let res <- Fetch.send(Request {
-            method: Post,
-            url: "https://api.cloudflare.com/client/v4/accounts/\(a)/ai/run/\(model)",
-            contentType: Some("application/json"),
-            authorization: Some("Bearer \(t)"),
-            headers: Map.empty(),
-            body: Some(body)
-          })
-          match res {
-            Ok(r) => if r.status == 200 { Effect.pure(Ok(r.body)) } else { Effect.pure(Err("HTTP \(r.status)")) }
-            Err(_) => Effect.pure(Err("request failed"))
-          }
-        }
-      }
-    }
-  }
+	fn run(model: String, body: String) -> Effect[Result[String, String]] {
+		let account <- Secrets.get("CF_ACCOUNT_ID")
+		let token <- Secrets.get("CF_API_TOKEN")
+		match account {
+			None => Effect.pure(Err("missing CF_ACCOUNT_ID")),
+			Some(a) => match token {
+				None => Effect.pure(Err("missing CF_API_TOKEN")),
+				Some(t) => if !model.matchesRegex("@(cf|hf)/[a-z0-9_-]+/[a-z0-9_-][a-z0-9._-]*") {
+					Effect.pure(Err("invalid model id"))
+				} else {
+					let res <- Fetch.send(Request {
+						method: Post,
+						url: "https://api.cloudflare.com/client/v4/accounts/\(a)/ai/run/\(model)",
+						contentType: Some("application/json"),
+						authorization: Some("Bearer \(t)"),
+						headers: Map.empty(),
+						body: Some(body),
+					})
+					match res {
+						Ok(r) => if r.status == 200 {
+							Effect.pure(Ok(r.body))
+						} else {
+							Effect.pure(Err("HTTP \(r.status)"))
+						},
+						Err(_) => Effect.pure(Err("request failed")),
+					}
+				},
+			},
+		}
+	}
 }
 ```
 

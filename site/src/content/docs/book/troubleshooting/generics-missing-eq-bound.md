@@ -16,7 +16,9 @@ constraint will be.
 ```bynk,fail=bynk.generics.missing_eq_bound
 commons demo.missing
 
-fn same[T](a: T, b: T) -> Bool { a == b }
+fn same[T](a: T, b: T) -> Bool {
+	a == b
+}
 ```
 
 ## Fix

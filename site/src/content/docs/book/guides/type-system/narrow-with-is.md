@@ -11,9 +11,9 @@ An `is` expression tests a value against a variant pattern and evaluates to a
 
 ```bynk
 commons test {
-  fn isOk(r: Result[Int, String]) -> Bool {
-    r is Ok(_)
-  }
+	fn isOk(r: Result[Int, String]) -> Bool {
+		r is Ok(_)
+	}
 }
 ```
 
@@ -27,13 +27,9 @@ then-branch:
 
 ```bynk
 commons test {
-  fn useValue(r: Result[Int, String]) -> Int {
-    if r is Ok(n) {
-      n
-    } else {
-      0
-    }
-  }
+	fn useValue(r: Result[Int, String]) -> Int {
+		if r is Ok(n) { n } else { 0 }
+	}
 }
 ```
 
@@ -42,13 +38,13 @@ only when the left matched, and the `else` of a negated test:
 
 ```bynk
 commons test {
-  fn positive(o: Option[Int]) -> Bool {
-    o is Some(v) && v > 0
-  }
+	fn positive(o: Option[Int]) -> Bool {
+		o is Some(v) && v > 0
+	}
 
-  fn orZero(o: Option[Int]) -> Int {
-    if !(o is Some(v)) { 0 } else { v }
-  }
+	fn orZero(o: Option[Int]) -> Int {
+		if !(o is Some(v)) { 0 } else { v }
+	}
 }
 ```
 
@@ -90,18 +86,14 @@ readability but not required:
 
 ```bynk
 commons booking {
-  type State =
-    | Held(guest: String, room: Int)
-    | Confirmed(who: String, room: Int)
-    | Cancelled(reason: String)
+	type State =
+		| Held(guest: String, room: Int)
+		| Confirmed(who: String, room: Int)
+		| Cancelled(reason: String)
 
-  fn roomOf(s: State) -> String {
-    if s is (Held(_, r) | Confirmed(_, r)) {
-      "room \(r)"
-    } else {
-      "no room"
-    }
-  }
+	fn roomOf(s: State) -> String {
+		if s is Held(_, r) | Confirmed(_, r) { "room \(r)" } else { "no room" }
+	}
 }
 ```
 

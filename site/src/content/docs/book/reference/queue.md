@@ -52,14 +52,14 @@ with `HttpResult`.
 context mailer
 
 type EmailJob = {
-  to:      String,
-  subject: String,
+	to: String,
+	subject: String,
 }
 
 service outbox from queue("outbound-email") {
-  on message(message: EmailJob) -> Effect[QueueResult] {
-    Ack
-  }
+	on message(message: EmailJob) -> Effect[QueueResult] {
+		Ack
+	}
 }
 ```
 

@@ -13,16 +13,16 @@ recompute and compare it. A `Signature` actor makes the compiler emit that check
 ```bynk
 context hooks
 
-type Event = { id: String }
-
-actor Webhook {
-  auth = Signature(secret = "WEBHOOK_SECRET", header = "X-Signature")
+type Event = {
+	id: String,
 }
 
+actor Webhook { auth = Signature(secret = "WEBHOOK_SECRET", header = "X-Signature") }
+
 service api from http {
-  on POST("/hooks/event") (body: Event) -> Effect[HttpResult[String]] by Webhook {
-    Ok("received")
-  }
+	on POST("/hooks/event") (body: Event) -> Effect[HttpResult[String]] by Webhook {
+		Ok("received")
+	}
 }
 ```
 
@@ -49,21 +49,23 @@ timestamp, configure a `timestamp` header and a `tolerance` (in seconds):
 ```bynk
 context hooks
 
-type Event = { id: String }
+type Event = {
+	id: String,
+}
 
 actor Webhook {
-  auth = Signature(
-    secret = "WEBHOOK_SECRET",
-    header = "X-Signature",
-    timestamp = "X-Timestamp",
-    tolerance = 300
-  )
+	auth = Signature(
+		secret = "WEBHOOK_SECRET",
+		header = "X-Signature",
+		timestamp = "X-Timestamp",
+		tolerance = 300
+	)
 }
 
 service api from http {
-  on POST("/hooks/event") (body: Event) -> Effect[HttpResult[String]] by Webhook {
-    Ok("received")
-  }
+	on POST("/hooks/event") (body: Event) -> Effect[HttpResult[String]] by Webhook {
+		Ok("received")
+	}
 }
 ```
 

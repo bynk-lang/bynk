@@ -15,14 +15,14 @@ has no upper end and `..hi` no lower end:
 
 ```bynk
 commons shop {
-  fn bucket(age: Int) -> String {
-    match age {
-      ..-1 => "invalid"
-      0..12 => "child"
-      13..17 => "teen"
-      18.. => "adult"
-    }
-  }
+	fn bucket(age: Int) -> String {
+		match age {
+			..-1 => "invalid",
+			0..12 => "child",
+			13..17 => "teen",
+			18.. => "adult",
+		}
+	}
 }
 ```
 
@@ -48,30 +48,33 @@ records, lists, and or-patterns:
 
 ```bynk
 commons shop {
-  type Reading = { value: Int, unit: String }
+	type Reading = {
+		value: Int,
+		unit: String,
+	}
 
-  fn edge(reading: Option[Int]) -> String {
-    match reading {
-      Some(0..9 | 90..99) => "edge"
-      Some(n) => "ok"
-      None => "missing"
-    }
-  }
+	fn edge(reading: Option[Int]) -> String {
+		match reading {
+			Some(0..9 | 90..99) => "edge",
+			Some(n) => "ok",
+			None => "missing",
+		}
+	}
 
-  fn warm(r: Reading) -> Bool {
-    match r {
-      Reading { value: 20..30, .. } => true
-      _ => false
-    }
-  }
+	fn warm(r: Reading) -> Bool {
+		match r {
+			Reading { value: 20..30, .. } => true,
+			_ => false,
+		}
+	}
 
-  fn small(xs: List[Int]) -> String {
-    match xs {
-      [] => "empty"
-      [..9] => "one, at most nine"
-      [_, ..] => "other"
-    }
-  }
+	fn small(xs: List[Int]) -> String {
+		match xs {
+			[] => "empty",
+			[..9] => "one, at most nine",
+			[_, ..] => "other",
+		}
+	}
 }
 ```
 

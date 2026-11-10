@@ -12,14 +12,17 @@ total, with a helper for a single line:
 ```bynk
 commons pricing
 
-type Item = { price: Int, qty: Int }
+type Item = {
+	price: Int,
+	qty: Int,
+}
 
 fn total(items: List[Item]) -> Int {
-  items.fold(0, (acc, i) => acc + lineTotal(i))
+	items.fold(0, (acc, i) => acc + lineTotal(i))
 }
 
 private fn lineTotal(i: Item) -> Int {
-  i.price * i.qty
+	i.price * i.qty
 }
 ```
 
@@ -72,17 +75,26 @@ or make the declaration that mentions it private too:
 ```bynk
 commons pricing
 
-type Item = { price: Int, qty: Int }
+type Item = {
+	price: Int,
+	qty: Int,
+}
 
-private type Tally = { lines: Int, sum: Int }
+private type Tally = {
+	lines: Int,
+	sum: Int,
+}
 
 private fn tally(items: List[Item]) -> Tally {
-  Tally { lines: items.length(), sum: items.fold(0, (acc, i) => acc + i.price * i.qty) }
+	Tally {
+		lines: items.length(),
+		sum: items.fold(0, (acc, i) => acc + i.price * i.qty),
+	}
 }
 
 fn summary(items: List[Item]) -> String {
-  let t = tally(items)
-  "\(t.lines) lines, \(t.sum) in total"
+	let t = tally(items)
+	"\(t.lines) lines, \(t.sum) in total"
 }
 ```
 
@@ -95,9 +107,9 @@ helper directly:
 
 ```bynk,fragment
 suite pricing {
-  case "a line's total" {
-    expect lineTotal(Item { price: 3, qty: 4 }) == 12
-  }
+	case "a line's total" {
+		expect lineTotal(Item { price: 3, qty: 4 }) == 12
+	}
 }
 ```
 

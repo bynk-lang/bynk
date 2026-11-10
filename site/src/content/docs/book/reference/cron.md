@@ -46,9 +46,9 @@ stays visible in the handler body.
 context reaper
 
 service sweeper from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
-    Ok(())
-  }
+	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+		Ok(())
+	}
 }
 ```
 

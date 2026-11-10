@@ -42,11 +42,11 @@ form, and no `Float` or `Int` literal is ever a `Decimal`.
 commons guide.decimal
 
 fn total(unit: Decimal, qty: Int) -> Decimal {
-  unit * Decimal.fromInt(qty)
+	unit * Decimal.fromInt(qty)
 }
 
 fn halves(d: Decimal) -> Bool {
-  d + d == d * 2d
+	d + d == d * 2d
 }
 ```
 
@@ -554,12 +554,21 @@ route writes ([JSON for non-Bynk clients](/book/reference/http/#json-for-non-byn
 ```bynk
 commons comments
 
-type NewComment = { body: String, reply_to: Option[Int] }
+type NewComment = {
+	body: String,
+	reply_to: Option[Int],
+}
 
-fn tagged(c: NewComment) -> String { Json.encode(c) }
+fn tagged(c: NewComment) -> String {
+	Json.encode(c)
+}
+
 // {"body":"LGTM","reply_to":{"kind":"None"}}
 
-fn plain(c: NewComment) -> String { Json.encodePlain(c) }
+fn plain(c: NewComment) -> String {
+	Json.encodePlain(c)
+}
+
 // {"body":"LGTM","reply_to":null}
 ```
 
@@ -1039,11 +1048,14 @@ inserted, in insertion order. `Key` implies `Eq`.
 ```bynk
 commons demo.keys
 
-type OrderId = { region: String, n: Int }
+type OrderId = {
+	region: String,
+	n: Int,
+}
 
 fn tally(ids: List[OrderId]) -> Int {
-  let seen: Set[OrderId] = Set.of(ids)
-  seen.length()
+	let seen: Set[OrderId] = Set.of(ids)
+	seen.length()
 }
 ```
 
@@ -1063,14 +1075,20 @@ commons demo.ordering
 
 type Priority = enum { Low, Medium, High } derives Ord
 
-type Task = { priority: Priority, due: Instant, title: String } derives Ord
+type Task = {
+	priority: Priority,
+	due: Instant,
+	title: String,
+} derives Ord
 
 type Maybe[T] =
-  | Missing
-  | Present(item: T)
-  derives Ord
+	| Missing
+	| Present(item: T)
+	derives Ord
 
-fn urgent(a: Task, b: Task) -> Bool { a.priority > b.priority }
+fn urgent(a: Task, b: Task) -> Bool {
+	a.priority > b.priority
+}
 ```
 
 `derives` is a contextual word that only means something after a type body, so it

@@ -14,14 +14,14 @@ your program as a value that already satisfies its type's invariants — the
 
 ```bynk
 commons orders {
-  type Order = {
-    id: String,
-    qty: Int,
-  }
+	type Order = {
+		id: String,
+		qty: Int,
+	}
 
-  fn parse(raw: String) -> Result[Order, JsonError] {
-    Json.decode[Order](raw)
-  }
+	fn parse(raw: String) -> Result[Order, JsonError] {
+		Json.decode[Order](raw)
+	}
 }
 ```
 
@@ -36,14 +36,14 @@ gives the bare value, and `decode` accepts all three:
 
 ```bynk
 commons registry {
-  type Repo = {
-    repo: String,
-    description: Option[String],
-  }
+	type Repo = {
+		repo: String,
+		description: Option[String],
+	}
 
-  fn parse(raw: String) -> Result[Repo, JsonError] {
-    Json.decode[Repo](raw)
-  }
+	fn parse(raw: String) -> Result[Repo, JsonError] {
+		Json.decode[Repo](raw)
+	}
 }
 ```
 
@@ -66,16 +66,22 @@ and the record decodes as it stands:
 
 ```bynk
 commons hooks {
-  type Account = { login: String, type: String }
+	type Account = {
+		login: String,
+		type: String,
+	}
 
-  type Installation = { action: String, account: Account }
+	type Installation = {
+		action: String,
+		account: Account,
+	}
 
-  fn isOrganisation(raw: String) -> Bool {
-    match Json.decode[Installation](raw) {
-      Ok(i) => i.account.type == "Organization"
-      Err(_) => false
-    }
-  }
+	fn isOrganisation(raw: String) -> Bool {
+		match Json.decode[Installation](raw) {
+			Ok(i) => i.account.type == "Organization",
+			Err(_) => false,
+		}
+	}
 }
 ```
 
@@ -91,17 +97,18 @@ enforced as part of decoding — no separate `.of` step:
 
 ```bynk
 commons orders {
-  type OrderId = String where NonEmpty
-  type Quantity = Int where InRange(1, 1000)
+	type OrderId = String where NonEmpty
 
-  type Order = {
-    id: OrderId,
-    qty: Quantity,
-  }
+	type Quantity = Int where InRange(1, 1000)
 
-  fn parse(raw: String) -> Result[Order, JsonError] {
-    Json.decode[Order](raw)
-  }
+	type Order = {
+		id: OrderId,
+		qty: Quantity,
+	}
+
+	fn parse(raw: String) -> Result[Order, JsonError] {
+		Json.decode[Order](raw)
+	}
 }
 ```
 
@@ -116,12 +123,15 @@ propagate with `?`, or branch with `match`:
 
 ```bynk
 commons orders {
-  type Order = { id: String, qty: Int }
+	type Order = {
+		id: String,
+		qty: Int,
+	}
 
-  fn quantityOf(raw: String) -> Result[Int, JsonError] {
-    let order = Json.decode[Order](raw)?
-    Ok(order.qty)
-  }
+	fn quantityOf(raw: String) -> Result[Int, JsonError] {
+		let order = Json.decode[Order](raw)?
+		Ok(order.qty)
+	}
 }
 ```
 
@@ -134,14 +144,17 @@ interpolate the fields:
 
 ```bynk
 commons orders {
-  type Order = { id: String, qty: Int }
+	type Order = {
+		id: String,
+		qty: Int,
+	}
 
-  fn describe(raw: String) -> String {
-    match Json.decode[Order](raw) {
-      Ok(order) => "decoded \(order.id)",
-      Err(e) => "order did not decode: \(e.kind) at \(e.path): \(e.message)",
-    }
-  }
+	fn describe(raw: String) -> String {
+		match Json.decode[Order](raw) {
+			Ok(order) => "decoded \(order.id)",
+			Err(e) => "order did not decode: \(e.kind) at \(e.path): \(e.message)",
+		}
+	}
 }
 ```
 
@@ -162,11 +175,14 @@ fields:
 
 ```bynk
 commons orders {
-  type Order = { id: String, qty: Int }
+	type Order = {
+		id: String,
+		qty: Int,
+	}
 
-  fn render(o: Order) -> String {
-    Json.encode(o)
-  }
+	fn render(o: Order) -> String {
+		Json.encode(o)
+	}
 }
 ```
 

@@ -55,7 +55,7 @@ commons currency
 uses rounding
 
 fn double(c: Int) -> Int {
-  half(c) * 4
+	half(c) * 4
 }
 ```
 
@@ -84,7 +84,7 @@ commons pricing
 uses money.currency
 
 fn total(n: Int) -> Int {
-  double(n)
+	double(n)
 }
 ```
 
@@ -97,10 +97,10 @@ context auth.sessions
 consumes money.tokens
 
 service login {
-  on call(secret: String) -> Effect[String] given money.tokens.Jwt {
-    let token <- money.tokens.Jwt.sign("u1", secret)
-    token
-  }
+	on call(secret: String) -> Effect[String] given money.tokens.Jwt {
+		let token <- money.tokens.Jwt.sign("u1", secret)
+		token
+	}
 }
 ```
 
@@ -156,7 +156,7 @@ fx = { package = "acme/fixtures", path = "../fixtures" }
 suite fx.sample
 
 case "three is three" {
-  expect three() == 3
+	expect three() == 3
 }
 ```
 
@@ -185,7 +185,7 @@ A package's adapter can wrap an npm library, exactly as your own can:
 
 ```bynk,fragment
 adapter tokens {
-  binding "./tokens.binding.ts" requires { "jose": "^5.2.0" }
+	binding "./tokens.binding.ts" requires { "jose": "^5.2.0" }
 }
 ```
 

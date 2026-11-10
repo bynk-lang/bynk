@@ -18,7 +18,7 @@ The page shell.
 embed shell = "embeds/page.html"
 
 fn page(title: String, content: String) -> String {
-  shell.replace("{{title}}", title).replace("{{content}}", content)
+	shell.replace("{{title}}", title).replace("{{content}}", content)
 }
 ```
 
