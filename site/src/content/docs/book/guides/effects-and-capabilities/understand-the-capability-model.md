@@ -115,20 +115,20 @@ implementation, and a handler granted it:
 context greeting
 
 capability Logger {
-  fn info(message: String) -> Effect[()]
+	fn info(message: String) -> Effect[()]
 }
 
 provides Logger = ConsoleLogger {
-  fn info(message: String) -> Effect[()] {
-    Effect.pure(())
-  }
+	fn info(message: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 service hello {
-  on call() -> Effect[String] given Logger {
-    let _ <- Logger.info("hi")
-    "ok"
-  }
+	on call() -> Effect[String] given Logger {
+		let _ <- Logger.info("hi")
+		"ok"
+	}
 }
 ```
 

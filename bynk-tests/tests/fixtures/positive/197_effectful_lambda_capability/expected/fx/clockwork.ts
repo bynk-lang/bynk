@@ -25,7 +25,7 @@ export const __FixedClockProvider = { token: __ClockToken, factory: () => new Fi
 
 export const stamper = {
   async call(offset: number, deps: { Clock: Clock }): globalThis.Promise<number> {
-    const stamped = await run(async (n) => {
+    const stamped = await run(async (n: number) => {
     const t = await deps.Clock.now();
     return t + n;
   }, offset);

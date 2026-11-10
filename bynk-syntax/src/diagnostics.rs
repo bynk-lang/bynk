@@ -111,6 +111,50 @@ impl Explain {
 /// enforced by `tests/diagnostics_registry.rs`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.cell.self_reference",
+        blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
+                it is writing. Computing the new value from the old one is a hidden \
+                read-modify-write; Bynk asks for `.update(fn)` instead, so the \
+                dependency on the prior value is written down where a reader (and a \
+                retry) can see it. A `:=` is for a value that does not depend on what \
+                the cell held.",
+        example: "count := count + 1                       // ✗ reads `count` while writing it\n\n\
+                  count.update((c) => c + 1)                // ✓ awaited, as an effect; the combiner gets the old value",
+        page: "/book/reference/agents",
+        anchor: "reading-and-writing-state",
+    },
+    Explain {
+        code: "bynk.generics.polymorphic_recursion",
+        blurb: "A generic type may refer to itself only uniformly: the self-reference must pass \
+                the declaration's own type parameters through unchanged and in order, as \
+                `Weird[T]` inside `Weird[T]`. Anything else is polymorphic recursion, such as \
+                `Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`, and it \
+                generates an unbounded set of instantiations, so it is refused at the \
+                declaration. The same holds for mutually recursive generics: a partner may be \
+                applied only to the declaration's own parameters or to types that mention none, \
+                never to a type that wraps one of them.",
+        example: "type Weird[T] = { value: T, next: Option[Weird[List[T]]] }   // ✗ a different instantiation\n\n\
+                  type Weird[T] = { value: T, next: Option[Weird[T]] }         // ✓ parameters passed through",
+        page: "/book/guides/type-system/recursive-generic-types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.generics.recursive_generic_at_boundary",
+        blurb: "A recursive generic type, a record or sum that contains itself, declares and works \
+                inside a context, but it has no codec yet. So it is refused wherever a codec is \
+                required: a service or agent handler signature, an agent `store` field or key, an \
+                event field, an actor identity type, a `Json.encode` or `Json.decode` target, or a \
+                `Codable` witness. The error fires once per use, and when the type is reached \
+                through another type, its note names the field path. To cross a boundary today, \
+                use a concrete recursive type, or keep the generic one inside the context.",
+        example: "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\n\
+                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\n\
+                  type IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\n\
+                  service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
+        page: "/book/guides/type-system/recursive-generic-types",
+        anchor: "where-it-cannot-go-yet",
+    },
+    Explain {
         code: "bynk.given.undeclared_capability",
         blurb: "A handler may only use a capability it has itself declared with \
                 `given`. Effects in Bynk are explicit: the `given` clause is the \
@@ -167,6 +211,40 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.parse.bare_expression_statement",
+        blurb: "A block has no expression statements: each statement is a `let`, `do`, \
+                `~>`, `expect`, `:=` and so on, and the last expression is the block's \
+                value. An expression written on its own line with more of the block after \
+                it would have its value thrown away, so the compiler asks you to say what \
+                happens to it. Bind it: `let _ = expr` when you only want to discard a \
+                value, or `let _ <- expr` when it is an effect to run and await (a call \
+                through a capability or an agent, or a cell's `.update`). The parser \
+                cannot see types, so it picks the `<-` form for a call that looks like an \
+                effect and the `=` form otherwise, and its note names the other. The fix \
+                is machine-applicable, so `bynk check --fix` applies it.",
+        example: "on call bump() -> Effect[Result[Int, String]] {\n    \
+                    count.update((c) => c + 1)            // ✗ an expression standing alone\n    \
+                    Ok(count)\n}\n\n\
+                  on call bump() -> Effect[Result[Int, String]] {\n    \
+                    let _ <- count.update((c) => c + 1)   // ✓ the effect is bound\n    \
+                    Ok(count)\n}\n\n\
+                  let _ = a + b                           // ✓ a plain value you mean to discard",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.record_pattern_without_rest",
+        blurb: "Every record pattern ends with `..`. Record patterns are always open: they \
+                name the fields they care about and ignore the rest, so adding a field \
+                to the record later never breaks a pattern that was already written. \
+                The `..` makes that openness visible at the pattern. The compiler offers \
+                the fix: it adds `..` after the last field.",
+        example: "match o {\n    Order { total } => total          // ✗ no trailing `..`\n}\n\n\
+                  match o {\n    Order { total, .. } => total      // ✓ open: other fields ignored\n}",
+        page: "/book/reference/types",
+        anchor: "record-patterns",
+    },
+    Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
         blurb: "A provider calls an agent handler, and the handler needs a capability \
                 the provider's `given` does not list. A handler's `given` is \
@@ -186,6 +264,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                     fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
         page: "/book/guides/effects-and-capabilities/compose-a-provider",
         anchor: "the-rules",
+    },
+    Explain {
+        code: "bynk.refine.literal_violates",
+        blurb: "A literal written where a refined type is expected is checked at compile \
+                time, and this one does not satisfy the type's predicate. A refined \
+                type is a base type plus a rule (`InRange`, `NonEmpty`, …), and a \
+                literal that breaks the rule can never be a valid value, so the \
+                compiler rejects it instead of admitting it. Use a value that \
+                satisfies the predicate, or loosen the type. A value known only at \
+                run time goes through `.of`, which returns a `Result`.",
+        example: "type Age = Int where InRange(0, 150)\n\n\
+                  fn limit() -> Age { 200 }   // ✗ 200 is outside InRange(0, 150)\n\
+                  fn limit() -> Age { 150 }   // ✓ admitted at compile time",
+        page: "/book/reference/refined-types",
+        anchor: "literal-admission",
     },
     Explain {
         code: "bynk.registry.withdrawn",
@@ -283,6 +376,52 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let repo = w.claims.get(\"repository\")            // ✓ keep the String",
         page: "/book/reference/actors",
         anchor: "reading-claims",
+    },
+    Explain {
+        code: "bynk.types.no_numeric_coercion",
+        blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
+                a comparison or an `InRange` bound. Each conversion can lose or invent \
+                precision, so Bynk makes you write it: `.toFloat()` on an `Int`, \
+                `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, \
+                `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same \
+                code covers a `Duration` or `Instant` used with an operand it does not \
+                support.",
+        example: "fn total(count: Int, price: Float) -> Float {\n    count * price                    // ✗ `Int` and `Float` in one operator\n}\n\n\
+                  fn total(count: Int, price: Float) -> Float {\n    count.toFloat() * price          // ✓ explicit conversion\n}",
+        page: "/book/reference/operators",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.non_exhaustive_match",
+        blurb: "A `match` must cover every value its subject can take, so it can never \
+                fall off its end. The compiler names a case that no arm covers: add an \
+                arm for it, or end the `match` with a wildcard `_` arm. Listing every \
+                variant a type has today is not a substitute for `_` where the compiler \
+                says one is needed, and where a `match` is too complex for it to prove \
+                exhaustive it asks for `_` too.",
+        example: "type Status = enum { Pending, Active, Done }\n\n\
+                  match s {\n    Pending => \"p\"\n    Active => \"a\"       // ✗ `Done` is not covered\n}\n\n\
+                  match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.return_mismatch",
+        blurb: "The value a function or handler body ends with does not have the declared \
+                return type, and the compiler compares the two exactly. Either change the \
+                body so it produces the declared type, or change the declared return type \
+                to match what the body produces. A refined type is the same rule with one extra step: an \
+                `Int` is not an `Age`, because `Age` carries a rule the `Int` has not been \
+                checked against. Build the refined value with `.of`, which checks the \
+                predicate and returns a `Result`, and declare that `Result` as the return \
+                type.",
+        example: "fn count() -> Int { \"three\" }       // ✗ a `String` where an `Int` is declared\n\n\
+                  fn count() -> Int { 3 }              // ✓ the body has the declared type\n\n\
+                  type Age = Int where InRange(0, 150)\n\n\
+                  fn parse(n: Int) -> Age { n }                           // ✗ an `Int` is not an `Age`\n\n\
+                  fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
 ];
 
@@ -1298,8 +1437,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["fn_decl"],
     ),
     dg(
+        "bynk.generics.polymorphic_recursion",
+        "A generic type refers to itself with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`), or to a mutually recursive partner with an argument that wraps one of its own parameters (`Inner[List[T]]` inside `Outer[T]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a self-reference that passes the parameters through unchanged, and a partner applied to the declaration's own parameters or to types that mention none (of any arity), are accepted (#3192).",
+        &[],
+    ),
+    dg(
         "bynk.generics.recursive_generic_at_boundary",
-        "A recursive generic record or sum (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197).",
+        "A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197).",
         &[],
     ),
     warn(dg(
@@ -1918,6 +2062,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
         &["par_stmt"],
     )),
+    dg(
+        "bynk.parse.bare_expression_statement",
+        "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`.",
+        &["block"],
+    ),
     d(
         "bynk.parse.clause_after_statement",
         "A `stub` or `env` clause came after a statement in a test case; they lead the case body.",

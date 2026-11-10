@@ -29,7 +29,7 @@ export function version(s: string): Option<readonly Option<string>[]> {
 }
 
 export function numbers(s: string): readonly string[] {
-  return (([...(s).matchAll(new globalThis.RegExp("\\d+", "g"))].map((__m: globalThis.RegExpMatchArray): Option<string>[] => [...__m].map((__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g))) as readonly (readonly Option<string>[])[])).map((__x: readonly Option<string>[]) => ((m) => ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<string>) => __o.tag === "Some" ? __f(__o.value) : None)(((__xs: readonly Option<string>[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as Option<string>) : None)(m, 0), (g) => g), "?"))(__x));
+  return (([...(s).matchAll(new globalThis.RegExp("\\d+", "g"))].map((__m: globalThis.RegExpMatchArray): Option<string>[] => [...__m].map((__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g))) as readonly (readonly Option<string>[])[])).map((__x: readonly Option<string>[]) => ((m: readonly Option<string>[]) => ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<string>) => __o.tag === "Some" ? __f(__o.value) : None)(((__xs: readonly Option<string>[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as Option<string>) : None)(m, 0), (g: Option<string>) => g), "?"))(__x));
 }
 
 export function tidy(s: string): string {

@@ -281,7 +281,9 @@ name of its own, and a `let` binding is not in scope in its own initialiser, so
 `let f = (x) => f(x)` is rejected (`bynk.resolve.unknown_function`): a lambda
 cannot call itself. Termination is not checked: a well-formed program may recurse without
 bound, and what happens at run time is specified in
-[§7.3.2](/book/spec/emission/#732-expressions).
+[§7.3.2](/book/spec/emission/#732-expressions): a direct self call in tail
+position runs in constant stack, and any other recursion is bounded by the
+host's stack.
 
 A free function cannot name a capability ([§5.5](#55-effects-capabilities--providers)),
 so it cannot perform an effect of its own accord. It can perform the effects of
@@ -290,20 +292,21 @@ capability calls on behalf of the handler that passed it one:
 
 ```bynk
 commons loops {
-  fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
-    if n <= 0 {
-      Effect.pure(())
-    } else {
-      do step(n)
-      repeat(n - 1, step)
-    }
-  }
+	fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+		if n <= 0 {
+			Effect.pure(())
+		} else {
+			do step(n)
+			repeat(n - 1, step)
+		}
+	}
 }
 ```
 
 Iteration over a collection is the kernel's (`fold`, `forEach`, the traverse
 family, [§5.10](#510-collections)), which needs no recursion and has no depth
-limit; recursion is for structures and loops the kernel does not cover.
+limit; recursion is for structures and loops the kernel does not cover, and a loop
+written as a self tail call (an accumulator) has no depth limit either.
 
 **Numeric operators** (v0.21). The arithmetic operators `+ - * /` are
 defined on `Int` operands (yielding `Int`) and on `Float` operands
@@ -585,13 +588,13 @@ itself needs an expected type (a bare `Ok`/`Err`/`None`/`[]`) annotates a
 
 ```bynk
 commons checkout {
-  fn parseQty(s: String) -> Int {
-    Int.parse(s.trim()).map((n) => n.clamp(1, 99)).getOrElse(1)
-  }
+	fn parseQty(s: String) -> Int {
+		Int.parse(s.trim()).map((n) => n.clamp(1, 99)).getOrElse(1)
+	}
 
-  fn label(name: Option[String]) -> Result[String, String] {
-    name.map((n) => n.toUpper()).okOr("missing name")
-  }
+	fn label(name: Option[String]) -> Result[String, String] {
+		name.map((n) => n.toUpper()).okOr("missing name")
+	}
 }
 ```
 
@@ -683,26 +686,26 @@ reserved, deprecated spelling of the same type, and a use of it is the warning
 
 ```bynk
 commons store {
-  type Item = {
-    sku: String,
-    price: Float,
-    qty: Int,
-  }
+	type Item = {
+		sku: String,
+		price: Float,
+		qty: Int,
+	}
 
-  fn snapshot(i: Item) -> String {
-    Json.encode(i)
-  }
+	fn snapshot(i: Item) -> String {
+		Json.encode(i)
+	}
 
-  fn restore(s: String) -> Result[Item, DecodeError] {
-    Json.decode[Item](s)
-  }
+	fn restore(s: String) -> Result[Item, DecodeError] {
+		Json.decode[Item](s)
+	}
 
-  fn restoreError(s: String) -> String {
-    match Json.decode[Item](s) {
-      Ok(i) => i.sku
-      Err(e) => e.kind.concat(" at ").concat(e.path)
-    }
-  }
+	fn restoreError(s: String) -> String {
+		match Json.decode[Item](s) {
+			Ok(i) => i.sku,
+			Err(e) => e.kind.concat(" at ").concat(e.path),
+		}
+	}
 }
 ```
 
@@ -1104,6 +1107,24 @@ decoded or written back. A build without the lock emits none of this and carries
 stored marker through unchanged. A stored key the current definition does not
 declare, other than `__v`, is reported once per isolate by name, never by value, and
 is still carried through.
+
+**Handler serialisation.** An agent instance executes at most one handler at a time:
+a handler that reaches an instance, whatever it reads or writes, begins only after
+every handler that reached the instance before it has finished, in arrival order, and
+the instance's state is loaded after it begins. A call to another handler of the same
+agent made on the agent itself is part of the running handler. A handler that reaches
+its own instance again through calls to other agents MUST fault
+(`ReentrantAgentCall`) rather than wait on itself; a call that has waited longer than the
+implementation's limit (30 seconds) behind the handlers ahead of it MUST fault
+(`AgentBusy`). Neither fault runs the called handler, and neither affects the handler
+already running.
+
+**The layout marker.** `__layout` is a second reserved key in the stored record,
+beside `__v`, naming how the record is laid out in storage. An absent `__layout` is the
+layout described above, the only one a build can yet read or write. A load checks
+`__layout` on the raw stored record first, whether or not the project has the lock, and
+any marker present faults, `RehydrationViolation` with detail `NewerLayout` (a later
+build wrote the record). The faulting record is never decoded, merged or written back.
 
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.
@@ -2921,8 +2942,7 @@ provides Clock = FixedClock {
 }
 
 service stamps {
-	on call(names: List[String]) -> Effect[Result[List[Int], ()]]
-			given Clock {
+	on call(names: List[String]) -> Effect[Result[List[Int], ()]] given Clock {
 		let stamped <- traverse(names, (name) => Clock.now())
 		Ok(stamped)
 	}

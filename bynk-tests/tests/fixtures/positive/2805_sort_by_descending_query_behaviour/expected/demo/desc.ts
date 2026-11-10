@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkCmpFloat, __bynkCmpSum } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -61,6 +61,7 @@ export class Board {
   private async loadState(): globalThis.Promise<BoardState> {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
+    __checkStoredLayout("Board", stored);
     const __zero = __zeroOfBoardState();
     __reportUnknownStoredKeys("Board", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -84,27 +85,27 @@ export class Board {
 
   async byPriority(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __c(((j) => j.priority)(__b), ((j) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __c(((j: Job) => j.priority)(__b), ((j: Job) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().map((__x) => ((j: Job) => j.name)(__x))))();
   }
 
   async byDue(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j) => j.due)(__a), __kb = ((j) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().map((__x) => ((j: Job) => j.name)(__x))))();
   }
 
   async byDueAscending(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j) => j.due)(__a), __kb = ((j) => j.due)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().map((__x) => ((j: Job) => j.name)(__x))))();
   }
 
   async byScore(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __bynkCmpFloat(((j) => j.score / j.div)(__b), ((j) => j.score / j.div)(__a)))))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__b), ((j: Job) => j.score / j.div)(__a)))))().map((__x) => ((j: Job) => j.name)(__x))))();
   }
 
   async topTwo(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j) => j.due)(__a), __kb = ((j) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().slice(0, globalThis.Math.max(0, 2))))().map((__x) => ((j) => j.name)(__x))))();
+    return ((() => ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().slice(0, globalThis.Math.max(0, 2))))().map((__x) => ((j: Job) => j.name)(__x))))();
   }
 
 }

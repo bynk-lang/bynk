@@ -14,19 +14,20 @@ context shop.cart
 consumes bynk.cloudflare { Kv }
 
 capability Sessions = Kv
+
 capability PriceCache = Kv
 
 service remember {
-  on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
-    let _ <- Sessions.put(k, v)
-    Sessions.get(k)
-  }
+	on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
+		let _ <- Sessions.put(k, v)
+		Sessions.get(k)
+	}
 }
 
 service peek {
-  on call(k: String) -> Effect[Option[String]] given PriceCache {
-    PriceCache.get(k)
-  }
+	on call(k: String) -> Effect[Option[String]] given PriceCache {
+		PriceCache.get(k)
+	}
 }
 ```
 

@@ -1,0 +1,11 @@
+context v
+
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+type Holder = { t: Tree[Int] }
+
+fn read(s: String) -> Result[Holder, DecodeError] {
+	Json.decode[Holder](s)
+}

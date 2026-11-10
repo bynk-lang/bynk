@@ -119,9 +119,9 @@ async function test_a_static_with_its_own_type_parameter() {
     type Packed<T> = __ns_demo_boxes.Packed<T>;
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const m = Box.mapped(3, (n) => n + 1);
+    const m = Box.mapped(3, (n: number) => n + 1);
     if (!(m.value === 4)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:22:10", 437, 449, "expect m.value == 4\n  expected: m.value == 4\n  actual:   " + __bynkShow((m.value)) + " == " + __bynkShow((4))); }
-    const e = Box.mapped<number, string>(3, (n) => "n");
+    const e = Box.mapped<number, string>(3, (n: number) => "n");
     if (!(e.value === "n")) { throw __bynkExpectFailure("tests/demo/boxes.bynk:24:10", 508, 522, "expect e.value == \"n\"\n  expected: e.value == \"n\"\n  actual:   " + __bynkShow((e.value)) + " == " + __bynkShow(("n"))); }
     return { pass: true };
   } catch (e) {
@@ -267,7 +267,7 @@ async function test_the_expected_type_grounds_T_before_a_lambda_argument_needs_i
     type Packed<T> = __ns_demo_boxes.Packed<T>;
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const b: Option<number> = pick((n) => n > 1);
+    const b: Option<number> = pick((n: number) => n > 1);
     if (!(__bynkEq(b, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:68:10", 1573, 1582, "expect b == None\n  expected: b == None\n  actual:   " + __bynkShow((b)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
@@ -289,7 +289,7 @@ async function test_a_static_s_lambda_argument_uses_a_T_the_expected_type_ground
     type Packed<T> = __ns_demo_boxes.Packed<T>;
     type Sorted<T> = __ns_demo_boxes.Sorted<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const b: Box<Option<number>> = Box.probe((n) => n > 1);
+    const b: Box<Option<number>> = Box.probe((n: number) => n > 1);
     if (!(__bynkEq(b.value, None))) { throw __bynkExpectFailure("tests/demo/boxes.bynk:73:10", 1718, 1733, "expect b.value == None\n  expected: b.value == None\n  actual:   " + __bynkShow((b.value)) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {

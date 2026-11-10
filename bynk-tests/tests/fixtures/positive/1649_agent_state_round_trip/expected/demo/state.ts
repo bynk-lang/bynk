@@ -6,7 +6,7 @@ import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkByt
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -87,6 +87,7 @@ export class Lamp {
   private async loadState(): globalThis.Promise<LampState> {
     const stored = await this.state.storage.get<LampState>("state");
     if (stored === undefined) return __zeroOfLampState();
+    __checkStoredLayout("Lamp", stored);
     const __zero = __zeroOfLampState();
     __reportUnknownStoredKeys("Lamp", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -143,6 +144,7 @@ export class Reading {
   private async loadState(): globalThis.Promise<ReadingState> {
     const stored = await this.state.storage.get<ReadingState>("state");
     if (stored === undefined) return __zeroOfReadingState();
+    __checkStoredLayout("Reading", stored);
     const __zero = __zeroOfReadingState();
     __reportUnknownStoredKeys("Reading", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -199,6 +201,7 @@ export class Figure {
   private async loadState(): globalThis.Promise<FigureState> {
     const stored = await this.state.storage.get<FigureState>("state");
     if (stored === undefined) return __zeroOfFigureState();
+    __checkStoredLayout("Figure", stored);
     const __zero = __zeroOfFigureState();
     __reportUnknownStoredKeys("Figure", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -255,6 +258,7 @@ export class Outcome {
   private async loadState(): globalThis.Promise<OutcomeState> {
     const stored = await this.state.storage.get<OutcomeState>("state");
     if (stored === undefined) return __zeroOfOutcomeState();
+    __checkStoredLayout("Outcome", stored);
     const __zero = __zeroOfOutcomeState();
     __reportUnknownStoredKeys("Outcome", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -311,6 +315,7 @@ export class Note {
   private async loadState(): globalThis.Promise<NoteState> {
     const stored = await this.state.storage.get<NoteState>("state");
     if (stored === undefined) return __zeroOfNoteState();
+    __checkStoredLayout("Note", stored);
     const __zero = __zeroOfNoteState();
     __reportUnknownStoredKeys("Note", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -367,6 +372,7 @@ export class Store {
   private async loadState(): globalThis.Promise<StoreState> {
     const stored = await this.state.storage.get<StoreState>("state");
     if (stored === undefined) return __zeroOfStoreState();
+    __checkStoredLayout("Store", stored);
     const __zero = __zeroOfStoreState();
     __reportUnknownStoredKeys("Store", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -423,6 +429,7 @@ export class Lights {
   private async loadState(): globalThis.Promise<LightsState> {
     const stored = await this.state.storage.get<LightsState>("state");
     if (stored === undefined) return __zeroOfLightsState();
+    __checkStoredLayout("Lights", stored);
     const __zero = __zeroOfLightsState();
     __reportUnknownStoredKeys("Lights", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -480,6 +487,7 @@ export class Board {
   private async loadState(): globalThis.Promise<BoardState> {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
+    __checkStoredLayout("Board", stored);
     const __zero = __zeroOfBoardState();
     __reportUnknownStoredKeys("Board", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -537,6 +545,7 @@ export class Memo {
   private async loadState(): globalThis.Promise<MemoState> {
     const stored = await this.state.storage.get<MemoState>("state");
     if (stored === undefined) return __zeroOfMemoState();
+    __checkStoredLayout("Memo", stored);
     const __zero = __zeroOfMemoState();
     __reportUnknownStoredKeys("Memo", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -594,6 +603,7 @@ export class History {
   private async loadState(): globalThis.Promise<HistoryState> {
     const stored = await this.state.storage.get<HistoryState>("state");
     if (stored === undefined) return __zeroOfHistoryState();
+    __checkStoredLayout("History", stored);
     const __zero = __zeroOfHistoryState();
     __reportUnknownStoredKeys("History", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -652,6 +662,7 @@ export class Panel {
   private async loadState(): globalThis.Promise<PanelState> {
     const stored = await this.state.storage.get<PanelState>("state");
     if (stored === undefined) return __zeroOfPanelState();
+    __checkStoredLayout("Panel", stored);
     const __zero = __zeroOfPanelState();
     __reportUnknownStoredKeys("Panel", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -708,6 +719,7 @@ export class Gate {
   private async loadState(): globalThis.Promise<GateState> {
     const stored = await this.state.storage.get<GateState>("state");
     if (stored === undefined) return __zeroOfGateState();
+    __checkStoredLayout("Gate", stored);
     const __zero = __zeroOfGateState();
     __reportUnknownStoredKeys("Gate", stored, __zero);
     const __merged = { ...__zero, ...stored };

@@ -7,29 +7,29 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 import { all, any, filter, find, map } from "../bynk/list.js";
 
 export function doubled(xs: readonly number[]): readonly number[] {
-  return map(xs, (x) => x * 2);
+  return map(xs, (x: number) => x * 2);
 }
 
 export function bigOnly(xs: readonly number[]): readonly number[] {
-  return filter(xs, (x) => x > 10);
+  return filter(xs, (x: number) => x > 10);
 }
 
 export function firstBig(xs: readonly number[]): Option<number> {
-  return find(xs, (x) => x > 10);
+  return find(xs, (x: number) => x > 10);
 }
 
 export function anyBig(xs: readonly number[]): boolean {
-  return any(xs, (x) => x > 10);
+  return any(xs, (x: number) => x > 10);
 }
 
 export function allBig(xs: readonly number[]): boolean {
-  return all(xs, (x) => x > 10);
+  return all(xs, (x: number) => x > 10);
 }
 
 export function sumBy<A>(xs: readonly A[], f: (a0: A) => number): number {
-  return ((__xs: readonly A[], __acc: number, __f: (acc: number, x: A) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (acc, x) => acc + f(x));
+  return ((__xs: readonly A[], __acc: number, __f: (acc: number, x: A) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (acc: number, x: A) => acc + f(x));
 }
 
 export function total(xs: readonly number[]): number {
-  return sumBy(doubled(xs), (x) => x);
+  return sumBy(doubled(xs), (x: number) => x);
 }

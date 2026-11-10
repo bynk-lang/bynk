@@ -4013,7 +4013,7 @@ fn check_agent_decls(
                     hints,
                     locals,
                 );
-            } else if checker::zero_value_ts(elem, None, &typed.types).is_none() {
+            } else if !checker::is_zeroable(elem, None, &typed.types) {
                 errors.push(
                     CompileError::new(
                         "bynk.agents.non_zeroable_state_field",
@@ -5798,30 +5798,25 @@ pub fn reject_fn_types(
         // application itself is admitted, and the rule instead looks *through* it
         // into the type arguments. A non-serialisable argument (a function, a
         // `Query`, …) is rejected there, with the argument's own boundary error.
-        // (ADR 0183 Decision C's blanket `generic_record_at_boundary` rejection
-        // was the previous behaviour.) A *recursive* generic record — one that
-        // transitively contains itself, through any wrapper or generic argument —
-        // has no finite set of monomorphised codecs, so it is still rejected
-        // here (the resolver's `recursive_record_field` guard only catches a
-        // direct self-edge, not recursion through an `Option`/`List` wrapper).
+        // #3192: a *recursive* generic (one that transitively contains itself)
+        // has no codec yet, but declares and works in memory, so — as for a
+        // stream (K-streams, #2623) — a record field, a sum payload and a
+        // capability signature pass it, and it is refused where it is used at
+        // a position that serialises, naming the field path when it is reached
+        // through another type (the resolver's `recursive_record_field` guard
+        // only catches a direct self-edge in a non-generic record).
         TypeRef::App { name, args, span } => {
-            if generic_record_is_recursive(&name.name, types) {
-                let kind = bynk_syntax::ast::generic_kind_word(&name.name, types);
-                errors.push(
-                    CompileError::new(
-                        "bynk.generics.recursive_generic_at_boundary",
-                        *span,
-                        format!(
-                            "recursive generic {kind} `{}` cannot appear in {what} — it has no finite monomorphised codec",
-                            name.name
-                        ),
-                    )
-                    .with_note(format!(
-                        "a generic {kind} that transitively contains itself is not yet \
-                         boundary-serialisable; use a concrete (non-generic) recursive type, \
-                         or break the cycle"
-                    )),
-                );
+            if !stream_passes(what)
+                && let Some(rg) = bynk_syntax::ast::recursive_generic_path(
+                    &TypeRef::App {
+                        name: name.clone(),
+                        args: Vec::new(),
+                        span: *span,
+                    },
+                    types,
+                )
+            {
+                errors.push(recursive_generic_at_boundary(&rg, *span, what));
             }
             for a in args {
                 reject_fn_types(a, what, types, errors);
@@ -5888,6 +5883,10 @@ pub fn reject_fn_types(
             if let Some(path) = bynk_syntax::ast::stream_path(r, types) {
                 errors.push(stream_carrying_at_boundary(&id.name, &path, id.span, what));
             }
+            // #3192: a type that merely contains a recursive generic.
+            if let Some(rg) = bynk_syntax::ast::recursive_generic_path(r, types) {
+                errors.push(recursive_generic_at_boundary(&rg, id.span, what));
+            }
         }
         TypeRef::Base(..)
         | TypeRef::Named(_)
@@ -5904,6 +5903,40 @@ pub fn reject_fn_types(
 /// stream-carrying, which is then checked where the type is used.
 fn stream_passes(what: &str) -> bool {
     [CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD].contains(&what)
+}
+
+/// #3192: `bynk.generics.recursive_generic_at_boundary` for a recursive generic
+/// type at a position that serialises. The noun comes from the declaration
+/// (`record` or `sum`); a type that only contains the generic names the field
+/// chain it is reached through.
+pub(crate) fn recursive_generic_at_boundary(
+    rg: &bynk_syntax::ast::RecursiveGenericPath,
+    span: Span,
+    what: &str,
+) -> CompileError {
+    let err = CompileError::new(
+        "bynk.generics.recursive_generic_at_boundary",
+        span,
+        format!(
+            "recursive generic {} `{}` cannot appear in {what} — it has no codec yet",
+            rg.noun, rg.name
+        ),
+    );
+    let chain = rg
+        .path
+        .iter()
+        .map(|f| format!("`{f}`"))
+        .collect::<Vec<_>>()
+        .join(", then ");
+    let reach = if rg.path.is_empty() {
+        String::new()
+    } else {
+        format!(" (it is reached through {chain})")
+    };
+    err.with_note(format!(
+        "a recursive generic type declares and works inside a context, but has no codec yet{reach}; \
+         use a concrete recursive type, or keep it inside the context"
+    ))
 }
 
 /// K-streams (#2623): `bynk.types.stream_at_boundary` for a type that carries

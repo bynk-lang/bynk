@@ -1,6 +1,6 @@
 //! Which types are `Codable`, and the checks that need it. Constrained generics
 //! slice 3 (#2715; the model is the track's Q4/Q7 in
-//! `design/tracks/constrained-generics.md`).
+//! `design/archive/retired-tracks.md`).
 //!
 //! `Codable` is automatic, never derived, and its meaning is one predicate: the
 //! domain `Json.decode` accepts , which `Json.encode`,
@@ -193,11 +193,8 @@ pub(crate) fn check_codable(ctx: &mut Ctx, ty: TyId, span: Span, site: &CodableS
     };
     let clause = format!("{what} requires `{param}: Codable`");
     if let Some(rec) = super::kernels::first_recursive_generic(ty, &ctx.input.types, tys) {
-        ctx.errors.push(super::kernels::recursive_generic_error(
-            &rec,
-            &ctx.input.types,
-            span,
-        ));
+        ctx.errors
+            .push(super::kernels::recursive_generic_error(&rec, span));
         return false;
     }
     if super::d1::carries_statement(ty, &ctx.input.types, tys) {

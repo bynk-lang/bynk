@@ -1888,6 +1888,8 @@ fn check_unit_files(
     indices: &[usize],
     parsed: &[ParsedFile],
     unit_info: &BTreeMap<String, UnitInfo>,
+    // #3229: the project's cross-context views, built once across all units.
+    views: &check_pipeline::CrossContextViewsCache,
     combined_types: &HashMap<String, Arc<TypeDecl>>,
     combined_fns: &HashMap<String, Arc<FnDecl>>,
     combined_methods: &HashMap<String, ResolverMethodTable>,
@@ -1957,6 +1959,7 @@ fn check_unit_files(
         kind,
         broken,
         unit_info,
+        views,
         combined_types,
         imported_from_kind,
         reached_types,
@@ -2837,6 +2840,8 @@ fn run_checks(
     } else {
         HashSet::new()
     };
+    // #3229: one set of cross-context views for the whole project, not one per unit.
+    let views = check_pipeline::CrossContextViewsCache::default();
     for name in bynk_check::project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -2938,6 +2943,7 @@ fn run_checks(
             indices,
             &parsed,
             &unit_info,
+            &views,
             &combined_types,
             &combined_fns,
             &combined_methods,
@@ -3069,6 +3075,7 @@ fn run_checks(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_uses,
+        &broken,
         &unit_flattened,
         &groups,
         import_ext,
@@ -3129,6 +3136,7 @@ fn run_checks(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_uses,
+        &broken,
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
@@ -5043,6 +5051,162 @@ mod tests {
             "compile_project must still bail before the test-body check runs \
              (documents why check_project is a separate entry point): {failure_categories:?}"
         );
+    }
+
+    // -- #3162: a suite naming a declaration recovery skipped ----------------
+
+    /// Check a project whose `src/` file has a syntax error and whose suite
+    /// uses the names that file declares; the categories reported, in order.
+    fn categories_for_broken_target(tag: &str, src: &str, suite: &str) -> Vec<String> {
+        let root = scratch_project(
+            tag,
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                ("src/m.bynk", src),
+                ("tests/m_test.bynk", suite),
+            ],
+        );
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let check = check_project(&options);
+        check
+            .errors
+            .iter()
+            .map(|ae| ae.error.category.to_string())
+            .collect()
+    }
+
+    /// The report: a syntax error in an agent's handler (here a dangling
+    /// operator; the report's own `by` parameter name is legal since #3191)
+    /// drops the whole agent, and the suite constructing it used to add an
+    /// `unknown_function` per use.
+    #[test]
+    fn a_suite_constructing_an_agent_whose_body_failed_to_parse_reports_only_the_syntax_error() {
+        let cats = categories_for_broken_target(
+            "broken_agent_keyword",
+            "context m\n\nagent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
+             on call bump(amount: Int) -> Effect[Int] {\n    n +\n  }\n}\n",
+            "suite m\n\ncase \"bump\" {\n  let a <- Counter(\"x\").bump(2)\n  \
+             expect a == 2\n}\n",
+        );
+        assert_eq!(cats, ["bynk.parse.expected_expression"], "{cats:?}");
+    }
+
+    /// The same, from an unrelated syntax error (a missing `->` type), and for
+    /// a function rather than an agent, so the fix is not tied to the repro.
+    #[test]
+    fn a_suite_calling_a_function_that_failed_to_parse_reports_only_the_syntax_error() {
+        let cats = categories_for_broken_target(
+            "broken_fn_other_error",
+            "commons m\n\nfn double(n: Int) -> Int { n * }\n",
+            "suite m\n\ncase \"d\" {\n  expect double(2) == 4\n}\n",
+        );
+        // Exactly one syntax error, and no resolve echo of the skipped `double`.
+        assert_eq!(cats.len(), 1, "{cats:?}");
+        assert!(cats[0].starts_with("bynk.parse."), "{cats:?}");
+    }
+
+    /// A suite may `use` a commons its target does not; that commons' skipped
+    /// declarations are as visible to the suite as the target's own.
+    #[test]
+    fn a_suite_using_a_commons_with_a_skipped_function_reports_only_the_syntax_error() {
+        let root = scratch_project(
+            "suite_uses_broken_commons",
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                ("src/m.bynk", "commons m\n\nfn one() -> Int { 1 }\n"),
+                (
+                    "src/util.bynk",
+                    "commons util\n\nfn helper(n: Int) -> Int { n * }\n",
+                ),
+                (
+                    "tests/m_test.bynk",
+                    "suite m\n\nuses util\n\ncase \"h\" {\n  expect helper(2) == one()\n}\n",
+                ),
+            ],
+        );
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let cats: Vec<String> = check_project(&options)
+            .errors
+            .iter()
+            .map(|ae| ae.error.category.to_string())
+            .collect();
+        assert_eq!(cats.len(), 1, "{cats:?}");
+        assert!(cats[0].starts_with("bynk.parse."), "{cats:?}");
+    }
+
+    /// The suppression is only for names recovery skipped: a mistyped agent is
+    /// still unknown, and its note no longer talks of a commons.
+    #[test]
+    fn a_suite_naming_an_undeclared_agent_still_gets_unknown_function() {
+        let root = scratch_project(
+            "undeclared_agent_note",
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                (
+                    "src/m.bynk",
+                    "context m\n\nagent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
+                     on call bump(amount: Int) -> Effect[Int] {\n    n\n  }\n}\n",
+                ),
+                (
+                    "tests/m_test.bynk",
+                    "suite m\n\ncase \"bump\" {\n  let a <- Cunter(\"x\").bump(2)\n  \
+                     expect a == 2\n}\n",
+                ),
+            ],
+        );
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let check = check_project(&options);
+        let e = check
+            .errors
+            .iter()
+            .find(|ae| ae.error.category == "bynk.resolve.unknown_function")
+            .unwrap_or_else(|| panic!("expected unknown_function"));
+        let notes = format!("{:?}", e.error.notes);
+        assert!(notes.contains("constructs an agent"), "{notes}");
+        assert!(!notes.contains("this commons"), "{notes}");
+    }
+
+    /// #3162, integration suites: a `system`-tier suite that constructs an
+    /// agent the parser skipped (a dangling operator in its handler) gets the
+    /// syntax error alone, as a unit suite does.
+    #[test]
+    fn a_system_suite_naming_a_skipped_agent_reports_only_the_syntax_error() {
+        let root = scratch_project(
+            "system_suite_skipped_agent",
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                (
+                    "src/m.bynk",
+                    "context m\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n\n\
+                     agent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
+                     on call bump(amount: Int) -> Effect[Int] {\n    n +\n  }\n}\n",
+                ),
+                (
+                    "tests/m_test.bynk",
+                    "suite m as system {\n  case \"bump\" {\n    let a <- Counter(\"x\").bump(2)\n    \
+                     expect a == 2\n  }\n}\n",
+                ),
+            ],
+        );
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let cats: Vec<String> = check_project(&options)
+            .errors
+            .iter()
+            .map(|ae| ae.error.category.to_string())
+            .collect();
+        assert_eq!(cats, ["bynk.parse.expected_expression"], "{cats:?}");
     }
 
     // -- Slice 0: file identity is not the unit-validation path ---------------

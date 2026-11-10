@@ -927,6 +927,21 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
     }
 }
 
+/// #3162: the note on `bynk.resolve.unknown_function`. A capitalised name in
+/// call position is an agent construction (`Counter("x")`), which is not a
+/// function and may sit in a suite rather than a commons, so it is not told
+/// that only functions of "this commons" are callable.
+pub(crate) fn unknown_function_note(name: &str) -> String {
+    if name.starts_with(|c: char| c.is_uppercase()) {
+        format!(
+            "`{name}(...)` constructs an agent, but no agent named `{name}` is declared in \
+             this unit or one it uses"
+        )
+    } else {
+        "only functions declared in this commons are callable".to_string()
+    }
+}
+
 /// #1663 (Decision B): split resolve errors into those to report and those
 /// that only echo a declaration the parser had to skip.
 ///
@@ -3536,7 +3551,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                                 name.span,
                                 format!("unknown function `{}`", name.name),
                             )
-                            .with_note("only functions declared in this commons are callable"),
+                            .with_note(unknown_function_note(&name.name)),
                         );
                     }
                 }

@@ -1762,7 +1762,6 @@ pub fn is_reserved_keyword(kind: TokenKind) -> bool {
             | Stub
             | Service
             | Actor
-            | By
             | Expect
             | Suite
             | Case
@@ -3123,6 +3122,117 @@ mod tests {
         parse_str(&src).expect_err(&format!("expected a parse error for {body:?}"))
     }
 
+    // ---- #3191: `by` is a contextual keyword ----
+
+    /// The body of `fn f() -> Int { <body> }`, parsed.
+    fn body_of(body: &str) -> Block {
+        let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+        let c = parse_str(&src).unwrap_or_else(|e| panic!("parse failed for {body:?}: {e:?}"));
+        let CommonsItem::Fn(f) = &c.items[0] else {
+            panic!("expected fn, got {:?}", c.items[0]);
+        };
+        f.body.clone()
+    }
+
+    fn effect_let_principal(stmt: &Statement) -> Option<&CallSiteActor> {
+        match stmt {
+            Statement::EffectLet(l) => l.principal.as_ref(),
+            other => panic!("expected an effect-let, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn by_is_an_ordinary_name_in_every_identifier_position() {
+        // A parameter, a lambda parameter, a `let`, a bare reference, field
+        // shorthand, a record pattern and an annotation label all take `by`.
+        for src in [
+            "commons x\n\nfn f(by: Int) -> Int { by }\n",
+            "commons x\n\nfn f(xs: List[Int], by: Int) -> List[Int] { xs.map((x) => x + by) }\n",
+            "commons x\n\nfn f() -> Int { let by = 1 by }\n",
+            "commons x\n\ntype S = { by: Int }\n\nfn f() -> S { let by = 1 S { by } }\n",
+            "commons x\n\ntype S = { by: Int }\n\nfn f(s: S) -> Int { let S { by, .. } = s by }\n",
+            "commons x\n\nfn f() -> Int { let g = (by: Int) => by g(1) }\n",
+        ] {
+            parse_str(src).unwrap_or_else(|e| panic!("{src:?}: {e:?}"));
+        }
+        // An agent operation and a `store` field named `by` (ADR: decision E).
+        let agent = "context x\n\nagent A {\n  key id: String\n  store by: Cell[Int]\n  on call by(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+        let (_, errors) = parse_recover_str(agent);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn by_still_starts_a_call_site_actor_clause_on_the_values_line() {
+        let block = body_of("let r <- g() by User(\"bob\")\n  1");
+        let actor = effect_let_principal(&block.statements[0]).expect("a clause");
+        assert_eq!(actor.actor.name, "User");
+        // Without an identity too.
+        let block = body_of("let r <- g() by Nobody\n  1");
+        assert_eq!(
+            effect_let_principal(&block.statements[0])
+                .unwrap()
+                .actor
+                .name,
+            "Nobody"
+        );
+    }
+
+    #[test]
+    fn a_by_on_the_next_line_after_an_effect_let_is_a_statement_not_a_clause() {
+        let block = body_of("let a <- g()\n  by");
+        assert!(effect_let_principal(&block.statements[0]).is_none());
+        assert!(matches!(&block.tail.kind, ExprKind::Ident(i) if i.name == "by"));
+        // Even with an identifier after it: the line break ends the value.
+        let src = "commons x\n\nfn f() -> Int {\n  let a <- g()\n  by\n  User\n}\n";
+        let c = parse_str(src);
+        // `by` then `User` is two expressions in a row — the generic report,
+        // never a silently-read clause.
+        assert!(c.is_err(), "{c:?}");
+    }
+
+    #[test]
+    fn a_by_not_followed_by_an_identifier_is_a_tail_even_on_the_values_line() {
+        let src = "commons x\n\nfn f() -> Effect[Int] { let by = 1 let a <- g() by }\n";
+        let c = parse_str(src).unwrap_or_else(|e| panic!("{e:?}"));
+        let CommonsItem::Fn(f) = &c.items[0] else {
+            panic!("expected fn")
+        };
+        assert!(effect_let_principal(&f.body.statements[1]).is_none());
+        assert!(matches!(&f.body.tail.kind, ExprKind::Ident(i) if i.name == "by"));
+    }
+
+    #[test]
+    fn advance_still_reads_its_by_and_admits_a_variable_amount() {
+        for stmt in ["advance Clock by 15.minutes", "advance Clock by by"] {
+            let src = format!("suite x\n\ncase \"c\" {{\n  let by = 1.minutes\n  {stmt}\n}}\n");
+            let toks = tokenize(&src).unwrap();
+            let unit = parse_unit_with_recovery(&toks, &src);
+            assert!(unit.1.is_empty(), "{stmt}: {:?}", unit.1);
+        }
+    }
+
+    #[test]
+    fn a_handler_actor_clause_still_follows_the_return_type() {
+        let src = "context x\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let (unit, errors) = parse_recover_str(src);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert!(unit.is_some());
+        // The clause word is also a legal name for the binder and the actor.
+        let src = "context x\n\nservice api from http {\n  on GET(\"/\") (by: Int) -> Effect[HttpResult[String]] by by: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let (_, errors) = parse_recover_str(src);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn another_keyword_is_still_refused_as_a_field_shorthand() {
+        // `by` left the keyword shorthand diagnostic; the hard keywords did not.
+        let errs = parse_str(
+            "commons x\n\ntype S = { type: Int }\n\nfn f() -> S { let type = 1 S { type } }\n",
+        )
+        .expect_err("`type` is reserved");
+        assert!(!errs.is_empty());
+    }
+
     // ---- #2641: record patterns ----
 
     /// Apply a parse error's first suggestion to `src`.
@@ -3139,6 +3249,113 @@ mod tests {
             out.replace_range(span.start..span.end, &text);
         }
         out
+    }
+
+    // ---- #3161: a bare expression statement ----
+
+    const BARE: &str = "bynk.parse.bare_expression_statement";
+
+    #[test]
+    fn a_bare_effectful_call_suggests_let_arrow() {
+        let src = "commons x\n\nfn f() -> Int {\n  Logger.info(\"hi\")\n  1\n}\n";
+        let errs = parse_str(src).expect_err("bare call");
+        assert_eq!(errs[0].category, BARE, "{errs:?}");
+        assert_eq!(
+            apply_fix(src, &errs[0]),
+            "commons x\n\nfn f() -> Int {\n  let _ <- Logger.info(\"hi\")\n  1\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_bare_cell_update_and_agent_call_suggest_let_arrow() {
+        for call in ["n.update((v) => v + 1)", "Counter(\"a\").bump(1)"] {
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {call}\n  n\n}}\n");
+            let errs = parse_str(&src).expect_err(call);
+            assert_eq!(errs[0].category, BARE, "{call}: {errs:?}");
+            assert!(apply_fix(&src, &errs[0]).contains(&format!("let _ <- {call}")));
+        }
+    }
+
+    #[test]
+    fn a_bare_pure_static_call_suggests_let_equals() {
+        // A capitalised root is not always a capability: these namespaces
+        // are pure, so `<-` would be the wrong guess.
+        for call in [
+            "Json.encode(x)",
+            "Set.of(xs)",
+            "List.empty()",
+            "Bytes.fromUtf8(s).toHex()",
+            "Map.empty()",
+        ] {
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {call}\n  1\n}}\n");
+            let errs = parse_str(&src).expect_err(call);
+            assert_eq!(errs[0].category, BARE, "{call}: {errs:?}");
+            let fixed = apply_fix(&src, &errs[0]);
+            assert!(
+                fixed.contains(&format!("let _ = {call}")),
+                "{call}: {fixed}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bare_pure_expression_suggests_let_equals() {
+        let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  let y = 2\n  y\n}\n";
+        let errs = parse_str(src).expect_err("bare call");
+        assert_eq!(errs[0].category, BARE, "{errs:?}");
+        assert_eq!(
+            apply_fix(src, &errs[0]),
+            "commons x\n\nfn f() -> Int {\n  let _ = g(1)\n  let y = 2\n  y\n}\n"
+        );
+    }
+
+    #[test]
+    fn parsing_continues_after_a_bare_expression() {
+        // The second error, in the same block, is still reported; the bare
+        // statement itself is kept (as `let _ = …`) in the recovered AST.
+        let src =
+            "commons x\n\nfn f() -> Int {\n  g(1)\n  let = 2\n  3\n}\n\nfn h() -> Int { 4 }\n";
+        let (unit, errors) = parse_recover_str(src);
+        let cats: Vec<_> = errors.iter().map(|e| e.category).collect();
+        assert_eq!(cats[0], BARE, "{cats:?}");
+        assert!(cats.len() >= 2, "a later error is still reported: {cats:?}");
+        let Some(SourceUnit::Commons(c)) = unit else {
+            panic!("expected commons")
+        };
+        assert!(
+            c.items
+                .iter()
+                .any(|i| matches!(i, CommonsItem::Fn(f) if f.name.ident().name == "h")),
+            "`fn h` after the broken block still parses"
+        );
+    }
+
+    #[test]
+    fn a_bare_expression_alone_in_the_recovered_ast_keeps_the_function() {
+        let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  2\n}\n";
+        let (unit, errors) = parse_recover_str(src);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].category, BARE);
+        let Some(SourceUnit::Commons(c)) = unit else {
+            panic!("expected commons")
+        };
+        assert!(c.items.iter().any(|i| matches!(i, CommonsItem::Fn(_))));
+    }
+
+    #[test]
+    fn a_stray_token_after_a_tail_keeps_the_generic_report() {
+        // `)` cannot start a statement, so this is not a bare expression.
+        let errs = body_err("1\n  )");
+        assert_eq!(errs[0].category, "bynk.parse.expected_token", "{errs:?}");
+        // Nor is a tail followed on the same line.
+        let errs = body_err("1 2");
+        assert_ne!(errs[0].category, BARE, "{errs:?}");
+    }
+
+    #[test]
+    fn a_second_match_keeps_its_own_report() {
+        let errs = body_err("match 1 {\n    _ => 1\n  }\n  match 2 {\n    _ => 2\n  }");
+        assert_eq!(errs[0].category, "bynk.parse.match_ends_block", "{errs:?}");
     }
 
     // ---- #2680: list patterns ----

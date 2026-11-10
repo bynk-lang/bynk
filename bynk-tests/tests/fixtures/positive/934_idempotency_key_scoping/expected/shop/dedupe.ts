@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 import * as bynk from "../bynk.js";
@@ -33,6 +33,7 @@ export class Ledger {
   private async loadState(): globalThis.Promise<LedgerState> {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
+    __checkStoredLayout("Ledger", stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -47,7 +48,7 @@ export class Ledger {
   async bump(deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<string> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.total = ((n) => n + 1)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((n: number) => n + 1)(__state.total); return undefined; })();
       const cached = await deps.Idempotency.dedup<string>(`shop.dedupe.Ledger.bump::${"same-key"}`);
       switch (cached.tag) {
         case "Some": {

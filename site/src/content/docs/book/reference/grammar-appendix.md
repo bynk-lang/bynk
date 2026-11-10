@@ -96,7 +96,7 @@ key_decl ::= "key" identifier ":" type_ref
 store_field ::= "store" identifier ":" store_kind store_annotation* ("=" expression)?
 store_kind ::= identifier ("[" type_ref ("," type_ref)* "]")?
 store_annotation ::= "@" identifier ("(" (annotation_arg ("," annotation_arg)*)? ","? ")")?
-annotation_arg ::= (identifier ":")? expression
+annotation_arg ::= ((identifier | contextual_identifier) ":")? expression
 handler ::= call_handler | http_handler | cron_handler | queue_handler | ws_open_handler | ws_close_handler | event_handler | rejected_handler
 rejected_handler ::= "on" "rejected" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 event_handler ::= "on" "event" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
@@ -168,7 +168,7 @@ is_expr ::= expression "is" is_pattern
 binary_expr ::= expression "implies" expression | expression "||" expression | expression "&&" expression | expression ("==" | "!=") expression | expression ("<" | "<=" | ">" | ">=") expression | expression ("+" | "-") expression | expression ("*" | "/") expression
 unary_expr ::= ("!" | "-") expression
 primary ::= lambda_expr | paren_expr | method_call | field_access | call | record_construction | record_spread | question_expr | ok_expr | err_expr | some_expr | none_expr | effect_pure_expr | val_expr | wire_expr | trace_expr | list_literal | block | number_literal | float_literal | decimal_literal | string_literal | boolean_literal | unit_literal | self_expr | identifier | contextual_identifier
-contextual_identifier ::= "trace" | "advance" | "par"
+contextual_identifier ::= "trace" | "advance" | "par" | "by"
 lambda_expr ::= "(" (lambda_param ("," lambda_param)*)? ")" "=>" (expression | block)
 lambda_param ::= (identifier | contextual_identifier | "_") (":" type_ref)? | lambda_record_pattern
 lambda_record_pattern ::= identifier "{" (lambda_record_field ",")* ".." "}"

@@ -1,0 +1,32 @@
+---
+#3191: the name `by` works as an ordinary identifier, next to the call-site
+actor clause's own `by`.
+---
+suite demo.step
+
+case "an agent operation takes a parameter named by" {
+  let a <- Counter("k").bump(2)
+  let b <- Counter("k").bump(3)
+  expect a == 2
+  expect b == 5
+}
+
+case "a store field named by" {
+  do Ledger("k").set(7)
+  let v <- Ledger("k").get()
+  expect v == 7
+}
+
+case "a function takes a parameter named by" {
+  expect shift([1, 2], 10) == [11, 12]
+}
+
+case "a binding and record shorthand named by" {
+  let s = step_of(4)
+  expect s.by == 8
+  expect amount(s) == 8
+}
+
+case "a lambda parameter named by" {
+  expect through(step_of(1)) == 3
+}

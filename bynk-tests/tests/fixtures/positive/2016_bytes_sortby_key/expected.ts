@@ -6,5 +6,5 @@ import { __bynkCmpBytes } from "./__bynk_runtime/compare.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function sorted(xs: readonly globalThis.Uint8Array[]): readonly globalThis.Uint8Array[] {
-  return [...xs].sort((__a: globalThis.Uint8Array, __b: globalThis.Uint8Array) => __bynkCmpBytes(((b) => b)(__a), ((b) => b)(__b)));
+  return [...xs].sort((__a: globalThis.Uint8Array, __b: globalThis.Uint8Array) => __bynkCmpBytes(((b: globalThis.Uint8Array) => b)(__a), ((b: globalThis.Uint8Array) => b)(__b)));
 }

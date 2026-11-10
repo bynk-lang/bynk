@@ -154,7 +154,7 @@ export const strange = {
 
 export const stock = {
   async call(items: readonly Item[], deps: { Flags: Flags }): globalThis.Promise<Result<number, SqlError>> {
-    const ran = await deps.Flags.batch((items).map((__x: Item) => ((i) => ({ sql: "INSERT INTO flags (id, active, qty) VALUES (?1, 0, ?2)", params: [SqlValue.Text(i.id), SqlValue.Integer(i.qty)] }))(__x)));
+    const ran = await deps.Flags.batch((items).map((__x: Item) => ((i: Item) => ({ sql: "INSERT INTO flags (id, active, qty) VALUES (?1, 0, ?2)", params: [SqlValue.Text(i.id), SqlValue.Integer(i.qty)] }))(__x)));
     switch (ran.tag) {
       case "Ok": {
         const runs = ran.value;

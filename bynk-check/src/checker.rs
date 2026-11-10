@@ -22,6 +22,11 @@ use crate::builtin_names::methods::*;
 use crate::builtin_names::types::*;
 use crate::hints::HintSink;
 use crate::index::{RefSink, SymbolKind};
+use crate::kernel_op::{
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp,
+    IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp,
+    SetOp, StreamOp, StringOp, TestConnectionOp, TokenClaimsOp,
+};
 use crate::locals::LocalsSink;
 use crate::requirements::{
     Materialize, Requirement, RequirementSink, RequirementSource, StoreKind,
@@ -41,7 +46,7 @@ pub use bynk_syntax::ast::ExprId;
 mod calls;
 pub mod codable;
 mod d1;
-pub use d1::{D1DecodeSite, D1SqlSite, RowLink};
+pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
@@ -83,7 +88,7 @@ pub use calls::{
 };
 pub use d1::row_bool_fields;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
-pub use refinements::{locale_tag_accepts, locale_tag_pattern, zero_value_ts};
+pub use refinements::{ZeroValue, is_zeroable, locale_tag_accepts, locale_tag_pattern, zero_value};
 
 // ==== Type representation ====
 
@@ -612,9 +617,10 @@ pub enum Callee {
     /// A built-in method on a value — the collection/query/stream/
     /// connection/numeric/duration/instant/bytes/string/option/result/
     /// effect kernels, including the refined-receiver fallback (ADR 0168).
-    /// `recv` is the receiver's own checked type; no `KernelOp` enum exists
-    /// yet in this crate (R6.11), so the operation is named, not typed.
-    Kernel { recv: TyId, op: String },
+    /// `recv` is the receiver's own checked type; `op` is the resolved
+    /// operation on it (#3164), so a consumer matches on the enum rather than
+    /// on the method's spelling.
+    Kernel { recv: TyId, op: KernelOp },
     /// A built-in static constructor with no declaring type — `List.empty`,
     /// `Map.empty`, `Int.parse`/`Float.parse`, `Duration.millis`,
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
@@ -5241,7 +5247,14 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                     ty: tys.intern(Ty::Query(v)),
                                 },
                             );
-                            let result = check_query_kernel_method(method, args, v, expr.span, ctx);
+                            let result = check_query_kernel_method(
+                                method,
+                                QueryOp::from_name(&method.name),
+                                args,
+                                v,
+                                expr.span,
+                                ctx,
+                            );
                             // P6.2 (#1143, R6.12): role is read back from
                             // this call's own resolved type where possible —
                             // `is_query_op` above only decides "lift or

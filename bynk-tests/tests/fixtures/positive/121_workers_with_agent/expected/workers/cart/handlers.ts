@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
 export type CartId = string & { readonly __brand: "cart.CartId" };
@@ -42,6 +42,7 @@ export class CartEntity {
   private async loadState(): globalThis.Promise<CartEntityState> {
     const stored = await this.state.storage.get<CartEntityState>("state");
     if (stored === undefined) return __zeroOfCartEntityState();
+    __checkStoredLayout("CartEntity", stored);
     const __zero = __zeroOfCartEntityState();
     __reportUnknownStoredKeys("CartEntity", stored, __zero);
     const __merged = { ...__zero, ...stored };

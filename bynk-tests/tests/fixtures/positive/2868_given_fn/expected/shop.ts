@@ -15,16 +15,22 @@ export async function countOr<T>(sku: string, fallback: T, pick: (a0: number) =>
 }
 
 export async function warnAll(items: readonly string[], deps: { Logger: Logger }): globalThis.Promise<void> {
-  const __r0 = await (async (__xs: readonly string[]) => { for (const __x of __xs) { await (async (i) => deps.Logger.error(i))(__x); } })(items);
+  const __r0 = await (async (__xs: readonly string[]) => { for (const __x of __xs) { await (async (i: string) => deps.Logger.error(i))(__x); } })(items);
   return undefined;
 }
 
 export async function countdown(n: number, deps: { Logger: Logger }): globalThis.Promise<number> {
-  if (n <= 0) {
-    return 0;
-  } else {
-    const __r0 = await warn("tick", deps);
-    return countdown(n - 1, deps);
+  let __tco0 = n;
+  __tco: while (true) {
+    const n = __tco0;
+    if (n <= 0) {
+      return 0;
+    } else {
+      const __r0 = await warn("tick", deps);
+      const __r1 = n - 1;
+      __tco0 = __r1;
+      continue __tco;
+    }
   }
 }
 
@@ -66,7 +72,7 @@ export const __FixedOrdersProvider = { token: __OrdersToken, factory: () => new 
 
 export const api = {
   async call(sku: string, deps: { Logger: Logger; Orders: Orders }): globalThis.Promise<number> {
-    const n = await countOr(sku, 0, (c) => c * 2, deps);
+    const n = await countOr(sku, 0, (c: number) => c * 2, deps);
     const __r0 = await warnAll(["a", "b"], deps);
     const __r1 = await countdown(2, deps);
     const p = await ping(3, deps);

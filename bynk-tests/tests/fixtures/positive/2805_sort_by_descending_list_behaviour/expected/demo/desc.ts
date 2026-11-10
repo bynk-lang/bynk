@@ -43,27 +43,27 @@ export function item(name: string, score: number, tier: number): Item {
 }
 
 export function names(xs: readonly Item[]): readonly string[] {
-  return (xs).map((__x: Item) => ((i) => i.name)(__x));
+  return (xs).map((__x: Item) => ((i: Item) => i.name)(__x));
 }
 
 export function byTier(xs: readonly Item[]): readonly Item[] {
-  return [...xs].sort((__a: Item, __b: Item) => { const __ka = ((i) => i.tier)(__a), __kb = ((i) => i.tier)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; });
+  return [...xs].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.tier)(__a), __kb = ((i: Item) => i.tier)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; });
 }
 
 export function byTierReversed(xs: readonly Item[]): readonly Item[] {
-  return reverse([...xs].sort((__a: Item, __b: Item) => { const __ka = ((i) => i.tier)(__a), __kb = ((i) => i.tier)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }));
+  return reverse([...xs].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.tier)(__a), __kb = ((i: Item) => i.tier)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }));
 }
 
 export function byScore(xs: readonly Item[]): readonly Item[] {
-  return [...xs].sort((__a: Item, __b: Item) => __bynkCmpFloat(((i) => i.score)(__b), ((i) => i.score)(__a)));
+  return [...xs].sort((__a: Item, __b: Item) => __bynkCmpFloat(((i: Item) => i.score)(__b), ((i: Item) => i.score)(__a)));
 }
 
 export function byName(xs: readonly Item[]): readonly Item[] {
-  return [...xs].sort((__a: Item, __b: Item) => { const __ka = ((i) => i.name)(__a), __kb = ((i) => i.name)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; });
+  return [...xs].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.name)(__a), __kb = ((i: Item) => i.name)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; });
 }
 
 export function byRank(xs: readonly Item[]): readonly Item[] {
-  return ((__c, __r: readonly Item[]) => [...__r].sort((__a: Item, __b: Item) => __c(((i) => ({ score: i.score, tier: i.tier }))(__b), ((i) => ({ score: i.score, tier: i.tier }))(__a))))(__bynkCmpRecord([["score", __bynkCmpFloat], ["tier", __bynkCmpInt]]), xs);
+  return ((__c, __r: readonly Item[]) => [...__r].sort((__a: Item, __b: Item) => __c(((i: Item) => ({ score: i.score, tier: i.tier }))(__b), ((i: Item) => ({ score: i.score, tier: i.tier }))(__a))))(__bynkCmpRecord([["score", __bynkCmpFloat], ["tier", __bynkCmpInt]]), xs);
 }
 
 export function floatsLargestFirst(xs: readonly number[]): readonly number[] {
@@ -71,5 +71,5 @@ export function floatsLargestFirst(xs: readonly number[]): readonly number[] {
 }
 
 export function largestFirst<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): readonly T[] {
-  return [...xs].sort((__a: T, __b: T) => __cmp_T(((x) => x)(__b), ((x) => x)(__a)));
+  return [...xs].sort((__a: T, __b: T) => __cmp_T(((x: T) => x)(__b), ((x: T) => x)(__a)));
 }

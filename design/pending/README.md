@@ -72,6 +72,16 @@ summary: How a case addresses a handler and names its principal
   `cargo xtask greenfield-status --apply` and commit the table as before.
   Trend probes aren't gated, so they're never named here.
 
+- **`breaking`** — a one-line Markdown note for an increment that breaks
+  existing programs: what breaks, the diagnostic a user will see, and the fix
+  (`bynk check --fix` where it is machine-applicable). Omit it when nothing
+  breaks. The stamp writes it under the increment's version into the Book's
+  `reference/upgrading.md` (the canonical record, newest first), and the release
+  workflow assembles each release's **Upgrading from vX** section from that page
+  with `cargo xtask release-notes <tag>`. Like `changelog`, it must not start
+  with a version number and must not contain a relative Markdown link. Pending
+  files without it stamp exactly as before.
+
 No other keys are permitted — a typo like `levl:` is rejected rather than
 silently ignored.
 
@@ -107,7 +117,8 @@ filename order) and the next ADR number(s), and — with `--apply` — runs
 `scripts/bump-version.sh`, prepends the changelog row(s), writes the ADR file(s)
 and index row(s), and **deletes** the consumed pending file(s). Without
 `--apply` it prints the plan and changes nothing. Deleting what it consumes is
-what makes a re-run a no-op.
+what makes a re-run a no-op. An increment with `breaking:` also gets an entry on
+the Book's upgrading page.
 
 ## Lifecycle
 

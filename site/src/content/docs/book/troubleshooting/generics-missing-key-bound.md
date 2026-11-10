@@ -17,8 +17,8 @@ written in the signature.
 commons demo.missing.key.bound
 
 fn single[K](k: K) -> Map[K, Int] {
-  let m: Map[K, Int] = Map.empty()
-  m.insert(k, 1)
+	let m: Map[K, Int] = Map.empty()
+	m.insert(k, 1)
 }
 ```
 

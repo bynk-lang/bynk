@@ -14,35 +14,36 @@ with an initialiser:
 context orders
 
 type OrderStatus = enum { Pending, Placed, Cancelled }
-type OrderError  = enum { AlreadyPlaced, AlreadyCancelled }
+
+type OrderError = enum { AlreadyPlaced, AlreadyCancelled }
 
 agent Order {
-  key id: String
+	key id: String
 
-  store status: Cell[OrderStatus] = Pending   // the state machine; starts Pending
-  store items:  Cell[Int]                      // extended state; implicit zero 0
+	store status: Cell[OrderStatus] = Pending  // the state machine; starts Pending
+	store items: Cell[Int]  // extended state; implicit zero 0
 
-  on call place() -> Effect[Result[(), OrderError]] {
-    match status {
-      Pending => {
-        status := Placed
-        Ok(())
-      }
-      Placed    => Err(AlreadyPlaced)
-      Cancelled => Err(AlreadyCancelled)
-    }
-  }
+	on call place() -> Effect[Result[(), OrderError]] {
+		match status {
+			Pending => {
+				status := Placed
+				Ok(())
+			},
+			Placed => Err(AlreadyPlaced),
+			Cancelled => Err(AlreadyCancelled),
+		}
+	}
 
-  on call cancel() -> Effect[Result[(), OrderError]] {
-    match status {
-      Pending => {
-        status := Cancelled
-        Ok(())
-      }
-      Placed    => Err(AlreadyPlaced)
-      Cancelled => Err(AlreadyCancelled)
-    }
-  }
+	on call cancel() -> Effect[Result[(), OrderError]] {
+		match status {
+			Pending => {
+				status := Cancelled
+				Ok(())
+			},
+			Placed => Err(AlreadyPlaced),
+			Cancelled => Err(AlreadyCancelled),
+		}
+	}
 }
 ```
 

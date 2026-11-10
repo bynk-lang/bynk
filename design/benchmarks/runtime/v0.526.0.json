@@ -1,0 +1,466 @@
+{
+  "schema": 1,
+  "bynkVersion": "0.526.0",
+  "recordedAt": "2026-11-10",
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "logicalCpus": 4,
+    "memoryGiB": 15.7,
+    "os": "linux 6.18.44-fc-v338",
+    "node": "v22.23.4"
+  },
+  "tools": {
+    "miniflare": "4.20260730.0",
+    "workerd": "1.20260730.1",
+    "esbuild": "0.28.2"
+  },
+  "parameters": {
+    "runs": 5,
+    "requestsPerRoute": 1000,
+    "warmupRequests": 200,
+    "startupSamples": 15
+  },
+  "examples": {
+    "hello-world": {
+      "bynk": {
+        "bundled": 22604,
+        "minified": 11327,
+        "minifiedGzip": 4249,
+        "emittedTypeScriptLines": 3918,
+        "runtimeTypeScriptLines": 2233,
+        "startupMs": {
+          "median": 83.791,
+          "min": 74.64,
+          "max": 115.26
+        },
+        "routes": [
+          {
+            "route": "GET /",
+            "p50Ms": {
+              "median": 1.466,
+              "min": 1.373,
+              "max": 1.836
+            },
+            "p99Ms": {
+              "median": 5.019,
+              "min": 4.606,
+              "max": 5.945
+            }
+          },
+          {
+            "route": "GET /hello/:name",
+            "p50Ms": {
+              "median": 1.446,
+              "min": 1.4,
+              "max": 1.645
+            },
+            "p99Ms": {
+              "median": 5.179,
+              "min": 4.858,
+              "max": 5.742
+            }
+          },
+          {
+            "route": "GET /hello/:name (rejected: 41 characters)",
+            "p50Ms": {
+              "median": 1.553,
+              "min": 1.441,
+              "max": 1.592
+            },
+            "p99Ms": {
+              "median": 5.74,
+              "min": 5.206,
+              "max": 5.891
+            }
+          }
+        ]
+      },
+      "twin": {
+        "bundled": 1191,
+        "minified": 712,
+        "minifiedGzip": 431,
+        "sourceLines": 48,
+        "startupMs": {
+          "median": 75.151,
+          "min": 70.558,
+          "max": 88.014
+        },
+        "routes": [
+          {
+            "route": "GET /",
+            "p50Ms": {
+              "median": 1.427,
+              "min": 1.356,
+              "max": 1.575
+            },
+            "p99Ms": {
+              "median": 4.848,
+              "min": 4.787,
+              "max": 5.518
+            }
+          },
+          {
+            "route": "GET /hello/:name",
+            "p50Ms": {
+              "median": 1.4,
+              "min": 1.399,
+              "max": 1.468
+            },
+            "p99Ms": {
+              "median": 5.144,
+              "min": 4.992,
+              "max": 5.327
+            }
+          },
+          {
+            "route": "GET /hello/:name (rejected: 41 characters)",
+            "p50Ms": {
+              "median": 1.453,
+              "min": 1.426,
+              "max": 1.477
+            },
+            "p99Ms": {
+              "median": 6.039,
+              "min": 5.828,
+              "max": 6.383
+            }
+          }
+        ]
+      },
+      "emptyWorkerStartupMs": {
+        "median": 74.811,
+        "min": 64.404,
+        "max": 107.145
+      }
+    },
+    "orders": {
+      "bynk": {
+        "bundled": 52224,
+        "minified": 28706,
+        "minifiedGzip": 7950,
+        "emittedTypeScriptLines": 3755,
+        "runtimeTypeScriptLines": 3156,
+        "startupMs": {
+          "median": 87.457,
+          "min": 83.992,
+          "max": 103.381
+        },
+        "routes": [
+          {
+            "route": "GET /orders/:id/lines (5 lines, indexed)",
+            "p50Ms": {
+              "median": 2.482,
+              "min": 2.362,
+              "max": 2.514
+            },
+            "p99Ms": {
+              "median": 6.792,
+              "min": 6.328,
+              "max": 6.995
+            }
+          },
+          {
+            "route": "GET /totals (group 500 lines)",
+            "p50Ms": {
+              "median": 2.552,
+              "min": 2.44,
+              "max": 2.672
+            },
+            "p99Ms": {
+              "median": 6.529,
+              "min": 5.711,
+              "max": 6.589
+            }
+          },
+          {
+            "route": "GET /sales (join 500 lines to 100 orders)",
+            "p50Ms": {
+              "median": 2.785,
+              "min": 2.694,
+              "max": 3.03
+            },
+            "p99Ms": {
+              "median": 6.557,
+              "min": 5.959,
+              "max": 7.857
+            }
+          },
+          {
+            "route": "POST /lines (accepted)",
+            "p50Ms": {
+              "median": 5.309,
+              "min": 5.248,
+              "max": 5.796
+            },
+            "p99Ms": {
+              "median": 11.144,
+              "min": 10.427,
+              "max": 11.746
+            }
+          },
+          {
+            "route": "POST /lines (rejected: qty 0)",
+            "p50Ms": {
+              "median": 1.739,
+              "min": 1.694,
+              "max": 1.821
+            },
+            "p99Ms": {
+              "median": 5.189,
+              "min": 4.978,
+              "max": 6.287
+            }
+          }
+        ]
+      },
+      "twin": {
+        "bundled": 3883,
+        "minified": 2443,
+        "minifiedGzip": 1066,
+        "sourceLines": 151,
+        "startupMs": {
+          "median": 84.445,
+          "min": 75.991,
+          "max": 92.534
+        },
+        "routes": [
+          {
+            "route": "GET /orders/:id/lines (5 lines, indexed)",
+            "p50Ms": {
+              "median": 1.747,
+              "min": 1.723,
+              "max": 1.803
+            },
+            "p99Ms": {
+              "median": 5.485,
+              "min": 5.281,
+              "max": 6.47
+            }
+          },
+          {
+            "route": "GET /totals (group 500 lines)",
+            "p50Ms": {
+              "median": 2.474,
+              "min": 2.391,
+              "max": 2.56
+            },
+            "p99Ms": {
+              "median": 6.294,
+              "min": 5.978,
+              "max": 7.682
+            }
+          },
+          {
+            "route": "GET /sales (join 500 lines to 100 orders)",
+            "p50Ms": {
+              "median": 2.93,
+              "min": 2.79,
+              "max": 3.165
+            },
+            "p99Ms": {
+              "median": 7.716,
+              "min": 6.859,
+              "max": 8.919
+            }
+          },
+          {
+            "route": "POST /lines (accepted)",
+            "p50Ms": {
+              "median": 2.621,
+              "min": 2.491,
+              "max": 2.721
+            },
+            "p99Ms": {
+              "median": 6.89,
+              "min": 6.298,
+              "max": 7.473
+            }
+          },
+          {
+            "route": "POST /lines (rejected: qty 0)",
+            "p50Ms": {
+              "median": 1.77,
+              "min": 1.649,
+              "max": 1.797
+            },
+            "p99Ms": {
+              "median": 5.248,
+              "min": 4.968,
+              "max": 6.194
+            }
+          }
+        ]
+      },
+      "emptyWorkerStartupMs": {
+        "median": 75.445,
+        "min": 69.579,
+        "max": 103.498
+      }
+    },
+    "rate-limiter": {
+      "bynk": {
+        "bundled": 38621,
+        "minified": 21193,
+        "minifiedGzip": 6860,
+        "emittedTypeScriptLines": 5247,
+        "runtimeTypeScriptLines": 3349,
+        "startupMs": {
+          "median": 92.921,
+          "min": 84.257,
+          "max": 110.142
+        },
+        "routes": [
+          {
+            "route": "GET /check/:client (120 clients in rotation, all allowed)",
+            "p50Ms": {
+              "median": 2.945,
+              "min": 2.737,
+              "max": 3.027
+            },
+            "p99Ms": {
+              "median": 7.021,
+              "min": 6.587,
+              "max": 7.909
+            }
+          },
+          {
+            "route": "GET /check/:client (one client, limited)",
+            "p50Ms": {
+              "median": 1.933,
+              "min": 1.9,
+              "max": 2.036
+            },
+            "p99Ms": {
+              "median": 6.865,
+              "min": 6.271,
+              "max": 7.037
+            }
+          }
+        ]
+      },
+      "twin": {
+        "bundled": 1607,
+        "minified": 973,
+        "minifiedGzip": 614,
+        "sourceLines": 63,
+        "startupMs": {
+          "median": 88.826,
+          "min": 69.298,
+          "max": 104.796
+        },
+        "routes": [
+          {
+            "route": "GET /check/:client (120 clients in rotation, all allowed)",
+            "p50Ms": {
+              "median": 2.751,
+              "min": 2.574,
+              "max": 2.764
+            },
+            "p99Ms": {
+              "median": 6.661,
+              "min": 6.117,
+              "max": 7.109
+            }
+          },
+          {
+            "route": "GET /check/:client (one client, limited)",
+            "p50Ms": {
+              "median": 1.849,
+              "min": 1.761,
+              "max": 1.98
+            },
+            "p99Ms": {
+              "median": 6.028,
+              "min": 5.878,
+              "max": 6.281
+            }
+          }
+        ]
+      },
+      "emptyWorkerStartupMs": {
+        "median": 73.804,
+        "min": 66.879,
+        "max": 85.658
+      }
+    }
+  },
+  "growth": [
+    {
+      "groups": 1,
+      "bundled": 34813,
+      "minified": 18854,
+      "minifiedGzip": 6376
+    },
+    {
+      "groups": 5,
+      "bundled": 64633,
+      "minified": 37111,
+      "minifiedGzip": 7262
+    },
+    {
+      "groups": 10,
+      "bundled": 101917,
+      "minified": 59906,
+      "minifiedGzip": 8362
+    },
+    {
+      "groups": 25,
+      "bundled": 214462,
+      "minified": 128543,
+      "minifiedGzip": 11186
+    }
+  ],
+  "writeScaling": [
+    {
+      "lines": 0,
+      "bynk": {
+        "p50Ms": {
+          "median": 3.901,
+          "min": 3.748,
+          "max": 3.931
+        }
+      },
+      "twin": {
+        "p50Ms": {
+          "median": 3.032,
+          "min": 2.998,
+          "max": 3.404
+        }
+      }
+    },
+    {
+      "lines": 500,
+      "bynk": {
+        "p50Ms": {
+          "median": 4.961,
+          "min": 4.42,
+          "max": 5.056
+        }
+      },
+      "twin": {
+        "p50Ms": {
+          "median": 2.967,
+          "min": 2.874,
+          "max": 3.024
+        }
+      }
+    },
+    {
+      "lines": 2000,
+      "bynk": {
+        "p50Ms": {
+          "median": 7.465,
+          "min": 7.147,
+          "max": 7.945
+        }
+      },
+      "twin": {
+        "p50Ms": {
+          "median": 2.67,
+          "min": 2.566,
+          "max": 2.815
+        }
+      }
+    }
+  ]
+}

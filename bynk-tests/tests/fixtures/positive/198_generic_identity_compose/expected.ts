@@ -18,6 +18,6 @@ export function map_one<A, B>(f: (a0: A) => B, x: A): B {
 
 export function demo(): number {
   const a = identity(5);
-  const b = map_one((n) => n + 1, a);
-  return compose((n: number) => n * 2, (n) => n + 3, b);
+  const b = map_one((n: number) => n + 1, a);
+  return compose((n: number) => n * 2, (n: number) => n + 3, b);
 }

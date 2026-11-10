@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface Item {
@@ -40,6 +40,7 @@ export class Cart {
   private async loadState(): globalThis.Promise<CartState> {
     const stored = await this.state.storage.get<CartState>("state");
     if (stored === undefined) return __zeroOfCartState();
+    __checkStoredLayout("Cart", stored);
     const __zero = __zeroOfCartState();
     __reportUnknownStoredKeys("Cart", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -70,7 +71,7 @@ export class Cart {
   async bump(sku: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = sku; if (!globalThis.Object.hasOwn(__state.items, __k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items[__k] = ((i) => ({ ...i, qty: i.qty + 1 }))(__state.items[__k]); return undefined; })();
+      const __r0 = await (() => { const __k = sku; if (!globalThis.Object.hasOwn(__state.items, __k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items[__k] = ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__state.items[__k]); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

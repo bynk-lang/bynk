@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -38,6 +38,7 @@ export class Tally {
   private async loadState(): globalThis.Promise<TallyState> {
     const stored = await this.state.storage.get<TallyState>("state");
     if (stored === undefined) return __zeroOfTallyState();
+    __checkStoredLayout("Tally", stored);
     const __zero = __zeroOfTallyState();
     __reportUnknownStoredKeys("Tally", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -52,7 +53,7 @@ export class Tally {
   async bump(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.seen = ((v) => v + 1)(__state.seen); return undefined; })();
+      const __r0 = await (() => { __state.seen = ((v: number) => v + 1)(__state.seen); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

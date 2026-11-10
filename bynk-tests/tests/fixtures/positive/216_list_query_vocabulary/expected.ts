@@ -5,11 +5,11 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function bigDoubled(xs: readonly number[]): readonly number[] {
-  return ((xs).filter((__x: number) => ((x) => x > 2)(__x))).map((__x: number) => ((x) => x * 2)(__x));
+  return ((xs).filter((__x: number) => ((x: number) => x > 2)(__x))).map((__x: number) => ((x: number) => x * 2)(__x));
 }
 
 export function fanOut(xs: readonly number[]): readonly number[] {
-  return (xs).flatMap((__x: number) => ((x) => [x, x])(__x));
+  return (xs).flatMap((__x: number) => ((x: number) => [x, x])(__x));
 }
 
 export function window(xs: readonly number[]): readonly number[] {
@@ -17,15 +17,15 @@ export function window(xs: readonly number[]): readonly number[] {
 }
 
 export function howMany(xs: readonly number[]): number {
-  return ((xs).filter((__x: number) => ((x) => x > 0)(__x))).length;
+  return ((xs).filter((__x: number) => ((x: number) => x > 0)(__x))).length;
 }
 
 export function anyPositive(xs: readonly number[]): boolean {
-  return (xs).some((__x: number) => ((x) => x > 0)(__x));
+  return (xs).some((__x: number) => ((x: number) => x > 0)(__x));
 }
 
 export function allPositive(xs: readonly number[]): boolean {
-  return (xs).every((__x: number) => ((x) => x > 0)(__x));
+  return (xs).every((__x: number) => ((x: number) => x > 0)(__x));
 }
 
 export function head(xs: readonly number[]): Option<number> {

@@ -12,9 +12,13 @@ Add `: Eq` to the parameter:
 ```bynk
 commons guide.same
 
-fn same[T: Eq](a: T, b: T) -> Bool { a == b }
+fn same[T: Eq](a: T, b: T) -> Bool {
+	a == b
+}
 
-fn twice[U: Eq](a: U, b: U) -> Bool { same(a, b) }
+fn twice[U: Eq](a: U, b: U) -> Bool {
+	same(a, b)
+}
 ```
 
 `twice` never writes `==` itself, but it hands `U` to `same`, whose `T` is `Eq`,
@@ -28,9 +32,13 @@ it with a `where` clause after the return type:
 ```bynk
 commons guide.boxes
 
-type Box[A] = { value: A }
+type Box[A] = {
+	value: A,
+}
 
-fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }
+fn Box.has(self, x: A) -> Bool where A: Eq {
+	self.value == x
+}
 ```
 
 ## Let the editor do it

@@ -145,7 +145,10 @@ mod tests {
         for e in diagnostics::EXPLANATIONS {
             let w = explanation_for(e.code).expect("curated");
             assert_eq!(w.href, e.href());
-            assert!(!w.markdown.contains('<'), "no raw HTML: {}", e.code);
+            // Prose only: the example is fenced code, and an inline code span
+            // may hold `<-`, neither of which a client renders as HTML.
+            let prose: String = e.blurb.split('`').step_by(2).collect::<Vec<_>>().join(" ");
+            assert!(!prose.contains('<'), "no raw HTML: {}", e.code);
         }
     }
 

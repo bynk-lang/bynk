@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Level =
@@ -51,6 +51,7 @@ export class Dial {
   private async loadState(): globalThis.Promise<DialState> {
     const stored = await this.state.storage.get<DialState>("state");
     if (stored === undefined) return __zeroOfDialState();
+    __checkStoredLayout("Dial", stored);
     const __zero = __zeroOfDialState();
     __reportUnknownStoredKeys("Dial", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -75,7 +76,7 @@ export class Dial {
   async turn(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.level = ((l) => l)(__state.level); return undefined; })();
+      const __r0 = await (() => { __state.level = ((l: Level) => l)(__state.level); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -112,6 +113,7 @@ export class Plant {
   private async loadState(): globalThis.Promise<PlantState> {
     const stored = await this.state.storage.get<PlantState>("state");
     if (stored === undefined) return __zeroOfPlantState();
+    __checkStoredLayout("Plant", stored);
     const __zero = __zeroOfPlantState();
     __reportUnknownStoredKeys("Plant", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -175,6 +177,7 @@ export class Counter {
   private async loadState(): globalThis.Promise<CounterState> {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
+    __checkStoredLayout("Counter", stored);
     const __zero = __zeroOfCounterState();
     __reportUnknownStoredKeys("Counter", stored, __zero);
     const __merged = { ...__zero, ...stored };

@@ -80,6 +80,8 @@ pub(crate) fn process_tests(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
+    // #3162: the declarations recovery skipped, per unit.
+    broken: &bynk_check::project_model::BrokenDeclNames,
     // v0.17 (Locale capability track, slice 1, #844): capability name -> owning
     // unit, per target, for capabilities flattened in via `consumes U { Cap }`
     // (this never includes anything a target declares itself). Needed so
@@ -132,6 +134,7 @@ pub(crate) fn process_tests(
         unit_consumes,
         unit_consumes_aliases,
         unit_uses,
+        broken,
         errors,
         refs,
         &mut bynk_check::locals::LocalsSink::new(),
@@ -255,6 +258,8 @@ pub(crate) fn process_integration_tests(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
+    // #3162: the declarations recovery skipped, per unit.
+    broken: &bynk_check::project_model::BrokenDeclNames,
     // v0.132: production unit name -> its `parsed` file indices (see `process_tests`).
     groups: &BTreeMap<String, Vec<usize>>,
     // v0.132: barrel-path dedup set shared with the unit-test pass.
@@ -285,6 +290,7 @@ pub(crate) fn process_integration_tests(
         unit_consumes,
         unit_consumes_aliases,
         unit_uses,
+        broken,
         errors,
         refs,
         tys,

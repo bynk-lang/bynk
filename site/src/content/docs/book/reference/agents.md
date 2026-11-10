@@ -147,8 +147,37 @@ collection persists as a JSON object keyed by the key's string form, so a compos
 store key is not supported yet. A store collection is keyed by the key's
 string form, so a record has no stable key: key by one of its id fields instead.
 
+Every kind counts towards the [size ceiling](#size-and-cost-of-an-agents-state)
+of the agent's single stored value.
+
 Reads over a `store Map`/`Log` are a lazy [`Query`](/book/reference/types/#query) — the same
 combinator vocabulary the eager `List` carries, dispatched by provenance.
+
+## Size and cost of an agent's state
+
+An agent's **whole state is persisted as one stored value**: every `Cell`, and
+every entry of every `Map`, `Set`, `Cache` and `Log` together with the posting
+lists of any [`@indexed`](#indexed-routing) field, is written under a single
+Durable Object storage key. On the SQLite-backed Durable Objects Bynk emits, one
+value is limited to about **8 MB** (key and value combined; see
+Cloudflare's [Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)), and an agent whose state outgrows that fails to
+persist. Each handler call also reads and rewrites that whole value, so the cost of a
+handler grows with the size of the agent's entire state, not with the entries it
+touches. This is how persistence works today; [#3159](https://github.com/bynk-lang/bynk/issues/3159) tracks the planned change.
+
+Design for it:
+
+- **Key agents finely.** One agent per customer, order or channel, not one per
+  system: a collection that grows with your data belongs *across* agent instances,
+  not inside one.
+- **Bound a `Log` with `@retain`**, which prunes old entries as you append. `@ttl`
+  on a `Cache` only *hides* an expired entry from reads; it does not delete it, so
+  an expired entry still counts towards the ceiling until the same key is written
+  again or you `remove` it. Keep a `Cache`'s key space bounded, or `remove` keys
+  you are finished with.
+- **Use D1 for a large or unbounded table.** A `Map` is the right home for a
+  small, bounded collection owned by one agent; a table of every order, event or
+  user is a database's job (see [`D1`](/book/reference/capabilities/)).
 
 ## Storage annotations
 
@@ -229,7 +258,10 @@ Two consequences follow:
   `bynk.schema.lock`, written in the same commit. A record written by a *newer*
   build (after a rollback) faults on load as `RehydrationViolation` with detail
   `NewerSchema` and is never written back; a malformed marker faults with
-  `NoMigrationPath`. A stored field the current definition no longer declares is
+  `NoMigrationPath`. A record carrying a `__layout` marker, which a build reserves for
+  a later storage layout, faults on load as `RehydrationViolation` with detail
+  `NewerLayout` and is never written back; no released build writes one yet. A stored
+  field the current definition no longer declares is
   logged once, by name only, as
   `bynk: agent <Agent> has stored field "<name>" the current definition does not declare; it is kept, not read`.
 
@@ -246,15 +278,19 @@ on its own when every record already stored still reads. That covers adding a
 ```bynk
 context shop
 
-type Prefs = { theme: String, size: Int = 12 }   // `size` added since the last deploy
+type Prefs = {
+	theme: String,
+	size: Int = 12,
+}  // `size` added since the last deploy
 
 agent Profile {
-  key id: String
-  store prefs: Cell[Prefs] = Prefs { theme: "light" }
+	key id: String
 
-  on call size() -> Effect[Int] {
-    prefs.size
-  }
+	store prefs: Cell[Prefs] = Prefs { theme: "light" }
+
+	on call size() -> Effect[Int] {
+		prefs.size
+	}
 }
 ```
 
@@ -380,6 +416,39 @@ let n <- c.increment()
 
 The same form works from a service handler or from another agent's handler. There
 is no separate agent-reference type to declare.
+
+### One handler at a time
+
+An agent instance runs one handler at a time: every handler that reaches an instance,
+read-only ones included, waits for the handlers ahead of it, so a handler's load, body
+and commit are never interleaved with another's on the same instance. Instances with
+different keys run independently, and a handler that calls another handler on its own
+agent through `this` is part of the same handler, not a second call. This is what makes
+"persisted atomically when the handler returns" true when a handler awaits another
+agent or a capability partway through.
+
+Two faults keep the queue from hanging, and they are different faults:
+
+- **`ReentrantAgentCall`**: a handler reached its own instance again, directly (an
+  agent calling itself by key) or through other agents (`X` calls `Y`, which calls `X`).
+  The call would wait on itself, so it faults at once, naming the agent. A call that
+  leaves the Worker through a Service Binding and comes back is not seen by this check;
+  it ends as `AgentBusy`.
+- **`AgentBusy`**: a call waited 30 seconds behind the handlers ahead of it and gave up
+  (`agent X busy: waited 30 s behind N queued calls`). The wait is the only thing timed;
+  a handler may run for as long as the platform lets it. A hot instance can reach this with
+  no cycle at all, which is why it is not reported as re-entrancy. The limit is not
+  configurable yet.
+
+Two agents that call each other from separate roots (`A`'s handler calls `B` while `B`'s
+handler calls `A`) wait on each other until both fault `AgentBusy`; the chain only sees a
+call that is part of one chain. A handler that emits events gives its place up when it
+hands the events to the fan-out, after its state is committed, so a subscriber that calls
+the publisher back is served rather than queued behind it.
+
+In the in-memory bundle target (`bynk test` without a Workers runtime) calls are queued
+the same way, but a cycle is only caught by the wait limit, not named as
+`ReentrantAgentCall`.
 
 ## Capabilities a handler needs
 

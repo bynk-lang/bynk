@@ -9,7 +9,7 @@ sorted only through a key function. An order needs a definition per type (varian
 order, field order, how `Float`'s `NaN` sorts), and under erasure the runtime
 cannot recover it: a nullary variant is a bare `{ tag }` with no position and
 object key order is not declaration order. Only the compiler knows the
-declaration. The constrained-generics track (`design/tracks/constrained-generics.md`)
+declaration. The constrained-generics track (`design/archive/retired-tracks.md`)
 settled the model: a closed constraint set (Q1), `Ord` declared and not
 structural (Q2 (c)), witness passing for bounded parameters (Q4 (b)) and the
 meaning of `Ord` (Q5). This is slice 1 (#2660), which builds on slice 0's bounds

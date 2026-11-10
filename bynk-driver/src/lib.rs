@@ -116,7 +116,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
             contracts_lock::lock_path(input).display()
         ))
     })?;
-    Ok(match project_sources(input)? {
+    Ok(match project_sources(input, Projects::Separate)? {
         (Some(paths), sources) => {
             let workers = project::try_read_workers_config_with(input, &manifest_overlay(input))?;
             CompileOptions::split(input.to_path_buf(), paths)
@@ -144,10 +144,33 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
 /// directory argument through this, so `fmt --check <dir>` and
 /// `check <dir>` cover the same files.
 pub fn project_source_files(input: &Path) -> Result<Vec<PathBuf>, ProjectOptionsError> {
-    let (_, sources) = project_sources(input)?;
+    let (_, sources) = project_sources(input, Projects::Separate)?;
     let mut files: Vec<PathBuf> = sources.into_keys().collect();
     files.sort();
     Ok(files)
+}
+
+/// [`project_source_files`] for `fmt`: a directory of projects with no manifest
+/// of its own is formatted as one tree (#3242). Formatting reads no fixtures or
+/// migrations and takes each file's `[fmt]` settings from its own project, so
+/// walking through a project boundary is harmless, unlike compiling across it.
+fn fmt_source_files(input: &Path) -> Result<Vec<PathBuf>, ProjectOptionsError> {
+    let (_, sources) = project_sources(input, Projects::AsOneTree)?;
+    let mut files: Vec<PathBuf> = sources.into_keys().collect();
+    files.sort();
+    Ok(files)
+}
+
+/// #3242: how [`project_sources`] treats a directory with no manifest of its own
+/// that holds other projects.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Projects {
+    /// What compiling needs: a nested `bynk.toml` marks another project, so it
+    /// is not walked, and a directory that is no project and holds several is
+    /// refused ([`ProjectOptionsError::NestedProjects`]).
+    Separate,
+    /// What formatting can do: one tree, nested projects and all.
+    AsOneTree,
 }
 
 /// [`try_project_options`]' rooting and walk, shared with
@@ -157,6 +180,7 @@ pub fn project_source_files(input: &Path) -> Result<Vec<PathBuf>, ProjectOptions
 /// a single tree and the layout is `None`.
 fn project_sources(
     input: &Path,
+    projects: Projects,
 ) -> Result<(Option<project::ProjectPaths>, HashMap<PathBuf, String>), ProjectOptionsError> {
     if input.join("bynk.toml").exists() || input.join("src").is_dir() {
         let overlay = manifest_overlay(input);
@@ -169,11 +193,82 @@ fn project_sources(
             return Err(ProjectPathsError::WorkspaceRoot.into());
         }
         let paths = try_read_project_paths_with(input, &overlay)?;
-        let sources = split_sources(input, &paths)?;
+        let sources = split_sources(input, &paths, projects)?;
+        if projects == Projects::Separate {
+            note_skipped_projects(
+                input,
+                &project::Roots::Split {
+                    project_root: input.to_path_buf(),
+                    paths: paths.clone(),
+                },
+            );
+        }
         Ok((Some(paths), sources))
+    } else if projects == Projects::AsOneTree {
+        Ok((None, discovery::read_bynk_tree_across_projects(input)?))
     } else {
-        Ok((None, discovery::read_bynk_tree_single(input)?))
+        // #3242: no manifest here. If none is above either, this directory is
+        // not a project, and a tree of projects would compile as one program
+        // against the wrong roots (fixtures, migrations, `[paths]`, `[check]`).
+        // Say so rather than produce errors that don't name the cause.
+        let nested = bynk_project::nested_projects(input, &[]);
+        if !nested.is_empty() && !has_manifest_above(input) {
+            return Err(ProjectOptionsError::NestedProjects {
+                root: input.to_path_buf(),
+                projects: nested,
+            });
+        }
+        let sources = discovery::read_bynk_tree_single(input)?;
+        note_skipped_nested_projects(input, &nested);
+        Ok((None, sources))
     }
+}
+
+/// Whether a `bynk.toml` sits above `dir` (not in it): `dir` is then inside a
+/// project, even if it has no manifest of its own.
+fn has_manifest_above(dir: &Path) -> bool {
+    let Ok(abs) = dir.canonicalize() else {
+        return false;
+    };
+    abs.ancestors()
+        .skip(1)
+        .any(|a| a.join("bynk.toml").is_file())
+}
+
+/// #3242: the one-line note for a nested project discovery stepped over, once
+/// per project per process, so a command that reads a tree twice says it once.
+fn note_skipped_nested_projects(root: &Path, nested: &[PathBuf]) {
+    static SAID: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> =
+        std::sync::Mutex::new(None);
+    for project in nested {
+        if !bynk_project::holds_bynk_source(project) {
+            continue;
+        }
+        let first = SAID
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(project.clone());
+        if first {
+            eprintln!(
+                "bynk: note: skipped `{}`: it has its own bynk.toml, so it is a separate project; run the command inside it",
+                shown(project.strip_prefix(root).map_or(project.as_path(), |p| p))
+            );
+        }
+    }
+}
+
+/// [`note_skipped_nested_projects`] for a manifest-backed project: the projects
+/// nested under any of its `include` trees.
+fn note_skipped_projects(root: &Path, roots: &project::Roots) {
+    let excludes = roots.excludes();
+    let mut nested: Vec<PathBuf> = Vec::new();
+    for (tree, _) in roots.trees() {
+        nested.extend(bynk_project::nested_projects(&tree, &excludes));
+    }
+    nested.sort();
+    nested.dedup();
+    note_skipped_nested_projects(root, &nested);
 }
 
 /// `bynk.toml`'s own content, keyed exactly as [`try_read_project_paths_with`]
@@ -204,7 +299,7 @@ fn options_for_split(
     input: &Path,
     paths: project::ProjectPaths,
 ) -> Result<CompileOptions, discovery::DiscoveryError> {
-    let sources = split_sources(input, &paths)?;
+    let sources = split_sources(input, &paths, Projects::Separate)?;
     Ok(CompileOptions::split(input.to_path_buf(), paths).sources(sources))
 }
 
@@ -217,12 +312,16 @@ fn options_for_split(
 fn split_sources(
     input: &Path,
     paths: &project::ProjectPaths,
+    projects: Projects,
 ) -> Result<HashMap<PathBuf, String>, discovery::DiscoveryError> {
     let roots = project::Roots::Split {
         project_root: input.to_path_buf(),
         paths: paths.clone(),
     };
-    discovery::sources_for_roots(&roots)
+    match projects {
+        Projects::Separate => discovery::sources_for_roots(&roots),
+        Projects::AsOneTree => discovery::sources_for_roots_across_projects(&roots),
+    }
 }
 
 /// Why [`try_project_options`] could not produce a usable [`CompileOptions`]:
@@ -235,6 +334,12 @@ pub enum ProjectOptionsError {
     Discovery(discovery::DiscoveryError),
     /// #2554: `bynk.contracts.lock` exists but could not be read.
     ContractsLock(String),
+    /// #3242: the directory has no `bynk.toml`, nor does any above it, but
+    /// projects with their own manifests are nested below.
+    NestedProjects {
+        root: PathBuf,
+        projects: Vec<PathBuf>,
+    },
 }
 
 impl std::fmt::Display for ProjectOptionsError {
@@ -243,6 +348,37 @@ impl std::fmt::Display for ProjectOptionsError {
             Self::Paths(e) => write!(f, "{e}"),
             Self::Discovery(e) => write!(f, "{e}"),
             Self::ContractsLock(e) => write!(f, "{e}"),
+            Self::NestedProjects { root, projects } => {
+                const SHOWN: usize = 5;
+                let names: Vec<String> = projects
+                    .iter()
+                    .take(SHOWN)
+                    .map(|p| format!("`{}`", shown(p.strip_prefix(root).unwrap_or(p))))
+                    .collect();
+                let more = projects.len().saturating_sub(SHOWN);
+                write!(
+                    f,
+                    "`{}` is not a project (no `bynk.toml` here or above) but holds {} that have their own: {}{}.\n\
+                     Run the command inside one of them, or add a `bynk.toml` here with\n\
+                     \n    [workspace]\n    members = [\"*\"]\n\n\
+                     to run it over each",
+                    match shown(root) {
+                        s if s.is_empty() => ".".to_string(),
+                        s => s,
+                    },
+                    if projects.len() == 1 {
+                        "a project".to_string()
+                    } else {
+                        format!("{} projects", projects.len())
+                    },
+                    names.join(", "),
+                    if more > 0 {
+                        format!(" and {more} more")
+                    } else {
+                        String::new()
+                    }
+                )
+            }
         }
     }
 }
@@ -252,7 +388,7 @@ impl std::error::Error for ProjectOptionsError {
         match self {
             // `ProjectPathsError` doesn't itself implement `Error` (no
             // further cause to chain to — it's already a leaf).
-            Self::Paths(_) | Self::ContractsLock(_) => None,
+            Self::Paths(_) | Self::ContractsLock(_) | Self::NestedProjects { .. } => None,
             Self::Discovery(e) => Some(e),
         }
     }
@@ -936,8 +1072,8 @@ fn expand_fmt_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
             let workspace = workspace.map_err(|e| format!("`{}`: {e}", input.display()))?;
             for member in &workspace.members {
                 let member = member_dir(input, member);
-                let files = project_source_files(&member)
-                    .map_err(|e| format!("`{}`: {e}", shown(&member)))?;
+                let files =
+                    fmt_source_files(&member).map_err(|e| format!("`{}`: {e}", shown(&member)))?;
                 for file in files {
                     let key = std::fs::canonicalize(&file).unwrap_or_else(|_| file.clone());
                     if seen.insert(key) {
@@ -949,7 +1085,7 @@ fn expand_fmt_inputs(inputs: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
         }
         let files = if input.as_os_str() != "-" && input.is_dir() {
             let files =
-                project_source_files(input).map_err(|e| format!("`{}`: {e}", input.display()))?;
+                fmt_source_files(input).map_err(|e| format!("`{}`: {e}", input.display()))?;
             if files.is_empty() {
                 return Err(format!("no `.bynk` files under `{}`", input.display()));
             }

@@ -21,7 +21,10 @@ becomes a Cloudflare Durable Object, where the key selects the object instance.
 State lives in `store` fields: a handler reads a field by its bare name and writes
 it with `:=`. The writes are [committed](/book/reference/glossary/#term-commit)
 atomically when the handler returns — never persisted mid-flight, and never at all
-if the handler faults — which keeps each handler's effect on state explicit.
+if the handler faults — which keeps each handler's effect on state explicit. An instance also runs one handler at
+a time, so a handler that awaits another agent partway through is not interleaved with a
+second handler on the same instance; see
+[one handler at a time](/book/reference/agents/#one-handler-at-a-time).
 
 ```mermaid
 flowchart TD
@@ -45,6 +48,11 @@ instance for that key (a Durable Object on the `workers` target, an entry in the
 never seen before — the zero value. The handler reads its `store` fields, writes
 new values with `:=`, and the runtime commits them for that key when the handler
 returns. Different keys (`a`, `b`) are wholly independent instances.
+
+Because an instance's whole state is persisted as one stored value (about 8 MB at
+most, read and rewritten by every handler call), the key is also your scaling
+lever: spread a growing collection across many keys rather than into one agent. See
+[the size and cost of an agent's state](/book/reference/agents/#size-and-cost-of-an-agents-state).
 
 ## Why state must be zeroable
 

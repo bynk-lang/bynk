@@ -7,7 +7,7 @@
 to `bynkc`. ADR 0101 linked the compiler in-process, so the second binary and its
 skew check no longer protect anything. Meanwhile the `bynk-lsp` crate built a
 binary named `bynkc-lsp`, so `cargo install bynk-lsp` installed a different name.
-The crate-hygiene track (#2775, `design/tracks/crate-hygiene.md` §9 E4, §11 Q-E2,
+The crate-hygiene track (#2775, `design/archive/retired-tracks.md` §9 E4, §11 Q-E2,
 §13) settles the end state.
 
 **Decision.** `bynk`, plus optionally `bynk-lsp`, are the only release binaries,

@@ -4,9 +4,11 @@ title: Bynk compared to the alternatives
 The fair question is rarely "Bynk versus another new language" — almost no team
 is choosing between fledgling languages. The honest comparisons are against what
 you would *actually* reach for to build a typed service today: a backend
-framework that puts infrastructure in code, or the assemble-it-yourself stack of
-TypeScript, a validation library, and team discipline. This page argues both, and
-is candid about where Bynk is younger and where it is not yet finished. (For the
+framework that puts infrastructure in code; the assemble-it-yourself stack of
+TypeScript, a validation library and team discipline; a typed-effects library
+such as Effect; a mature language that reaches Workers, such as Rust; or the
+Cloudflare primitives by hand. This page takes each in turn, and is candid about
+where Bynk is younger and where it is not yet finished. (For the
 language-level comparison with plain TypeScript, see
 [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/).)
 
@@ -89,6 +91,210 @@ adoption. Bynk's bet pays off when the discipline is *expensive* — large syste
 many hands, correctness that matters — and you would rather the compiler hold the
 line than a wiki page.
 
+## Bynk vs Effect
+
+[Effect](https://effect.website/) is a TypeScript library, installed from npm, and
+the nearest relative of Bynk's effect story. Its `Effect<Success, Error,
+Requirements>` type tracks expected errors and required services in the type, and
+its [Schema](https://effect.website/docs/schema/introduction/) module validates
+and transforms data at the boundary. Bynk's
+[`Effect`](/book/reference/glossary/#term-effect), `given` clauses and
+[`Result`](/book/reference/glossary/#term-result-option) cover similar ground
+(typed failure, declared dependencies), so the two read as cousins.
+
+The difference is **library versus language**:
+
+- **Built in, not opted into.** In Effect the discipline holds for the code you
+  write in its style, inside a language that still has exceptions, `any` and
+  unchecked boundaries; Effect itself distinguishes expected errors, which it
+  tracks in the type, from unexpected defects, which it does
+  [not](https://effect.website/docs/error-management/two-error-types/). In
+  Bynk the tracked effect, the declared capability and the boundary are part of
+  the language, so the escape hatches are the ones the language chooses to leave.
+- **Architecture, not only effects.** Bynk also makes the bounded context, the
+  service/agent split and single-owner agent state language constructs. Effect
+  is a general-purpose library, not organised around those; you would arrange them
+  yourself.
+
+Where Effect is ahead: it is a library in a language your team probably already
+uses, so adopting it is incremental and needs no new toolchain, and it sits
+beside the whole npm ecosystem. It is also a more established project than a
+pre-1.0 language. (How well it runs on Workers is a question for its own
+documentation; this page makes no claim either way.)
+
+## Bynk vs Rust on Workers
+
+[`workers-rs`](https://github.com/cloudflare/workers-rs) lets you write a
+Cloudflare Worker in Rust, compiled to WebAssembly, with
+[bindings](https://developers.cloudflare.com/workers/languages/rust/) for
+Durable Objects, KV, R2, D1, queues and more. Rust is a statically typed language
+with real sum types, `Result`, and a mature compiler, on the same platform Bynk
+targets.
+
+What Rust leaves to you, and Bynk does not:
+
+- **The service shape.** Rust gives you excellent types, but nothing in it knows
+  about a bounded context, an agent keyed to a Durable Object, or a capability a
+  handler must declare. You build those conventions; Bynk checks them.
+- **Boundary validation.** In Rust you write or derive the decoding and check
+  the invariants yourself; a Bynk
+  [refined type](/book/reference/glossary/#term-refined-type) makes the
+  invariant part of the type, and the unvalidated value cannot be built.
+
+Where Rust is ahead, and it is a long list: a general-purpose language with a
+huge ecosystem, real performance and memory control, portability well beyond
+Cloudflare, and years of production use and available engineers. On Workers
+specifically, the `workers-rs` README itself says to expect some rough edges and
+unimplemented APIs, and marks some bindings as beta or alpha, so check the
+current state before depending on a binding. If you want Rust everywhere, or
+need its performance, that is a good reason to choose it.
+
+## Bynk vs Gleam
+
+[Gleam](https://gleam.run/) is a small, friendly, typed functional language that
+compiles to Erlang or to JavaScript. Its stance is close to Bynk's: it has
+[no exceptions and no `null`](https://tour.gleam.run/everything/), and
+fallible functions return a `Result`.
+
+Gleam is a general-purpose language, so it stops at the language. It has no
+built-in notion of Cloudflare Workers or Durable Objects, so contexts, agents and
+capabilities are not in the language, and nothing in it checks that a handler's
+effects are declared. Bynk gives up
+generality to make those part of the type system and to compile to a Worker
+directly.
+
+Where Gleam is ahead: it is general-purpose, it also targets the Erlang VM, and
+it has an existing community and package ecosystem that Bynk does not. If you
+want a small typed functional language across several runtimes, Gleam fits; if
+the Cloudflare architecture itself is what you want checked, that is Bynk's
+niche.
+
+## Bynk vs Durable Objects, Workflows and the Agents SDK, by hand
+
+Bynk is not a replacement for these Cloudflare products so much as a typed way
+to use the first of them. An [`agent`](/book/guides/agents-and-state/the-agent-model/)
+compiles to a Durable Object on the Workers target. Written by hand, a
+[Durable Object](https://developers.cloudflare.com/durable-objects/) is
+"a special kind of Cloudflare Worker which uniquely combines compute with
+storage", and you design its state, its input and output handling and its
+addressing yourself. Bynk turns the common shape into the language: a keyed
+agent, `store` fields written with `:=` and committed atomically when the handler
+returns, and cross-context calls checked against a contract.
+
+What hand-written Durable Objects give you, and Bynk does not: full access to
+every platform feature as it ships, with no compiler in between, and the freedom
+to structure state however you like.
+
+The other two are different jobs:
+
+- [Workflows](https://developers.cloudflare.com/workflows/) are for durable,
+  multi-step applications. Bynk has no equivalent yet: sagas and compensation
+  are designed but deferred until after 1.0
+  ([#3185](https://github.com/bynk-lang/bynk/issues/3185)). If you need durable
+  multi-step orchestration today, use Workflows directly.
+- The [Agents SDK](https://developers.cloudflare.com/agents/) builds and hosts AI
+  agents on Cloudflare, with each agent running in a Durable Object and with
+  state, WebSockets, scheduling and tool integrations. The name overlaps with
+  Bynk's `agent`, but the goal differs: Bynk's agent is a unit of keyed, typed
+  state, not an AI-agent framework.
+
+## What Bynk costs at run time
+
+The sections above argue correctness. This one is the cost side, measured against
+hand-written TypeScript doing the same job, because "what does it weigh and how
+fast is it" is the other half of the question.
+
+For each of three examples (`hello-world`, `orders`, `rate-limiter`) the
+repository holds a hand-written TypeScript *twin*: the Worker a careful author
+would write for the same behaviour, with no libraries. Routing, validation and
+JSON handling are written by hand, and the Durable Objects store state the way a
+hand-written one usually does. Before measuring, the harness checks that the twin
+answers each route the way the Bynk build does, and stops if it does not. A real
+project would often add a validation library, which would make a twin larger, so
+the twin sizes below are a floor. What the twin leaves out, Bynk includes:
+structured boundary errors, a security-header policy, `HEAD` handling, fault
+reporting, and the cross-context and migration endpoints.
+
+Everything ran locally under workerd (through Miniflare) on one 4-vCPU Xeon
+container at 2.1 GHz, with Node 22, on `bynk 0.526.0`. Nothing was deployed.
+Bundle sizes are exact. Start-up and latency are medians of several runs, shown
+with their range, and differences of a few tenths of a millisecond are noise.
+
+**Bundle size.** The worker's entry point, bundled and minified with esbuild, and
+that gzipped:
+
+| Example | Bynk, minified | Bynk, gzipped | Twin, minified | Twin, gzipped |
+|---|---|---|---|---|
+| `hello-world` | 11.1 KiB | 4.1 KiB | 0.7 KiB | 0.4 KiB |
+| `orders` | 28.0 KiB | 7.8 KiB | 2.4 KiB | 1.0 KiB |
+| `rate-limiter` | 20.7 KiB | 6.7 KiB | 1.0 KiB | 0.6 KiB |
+
+That is roughly 10 to 26 KiB of extra minified code, or 4 to 7 KiB gzipped. Most
+of it is a fixed cost, the shared runtime (HTTP, boundary and agent-storage
+support), rather than the program, and it grows slowly with the program: a
+synthetic context with one group of a refined type, a record, an agent and a
+route bundles to 18.4 KiB (6.2 KiB gzipped), and 25 such groups to 125.5 KiB
+(10.9 KiB gzipped), about 4.5 KiB minified and 0.2 KiB gzipped per group.
+
+**Start-up.** Time from creating a fresh instance to its first answered request,
+which includes starting workerd. An empty worker is the floor.
+
+| Example | Bynk | Twin | Empty worker |
+|---|---|---|---|
+| `hello-world` | 84 ms | 75 ms | 75 ms |
+| `orders` | 87 ms | 84 ms | 75 ms |
+| `rate-limiter` | 93 ms | 89 ms | 74 ms |
+
+Each is the median of 15 instances. Individual instances ranged from about 64 ms
+to 115 ms, so the ranges overlap; read this as "a few milliseconds more than the
+twin", not as a precise figure.
+
+**Request latency.** One request at a time, after a warm-up, five independent
+runs of 1,000 requests per route. Medians of the per-run p50 and p99, in
+milliseconds (Bynk / twin):
+
+| Route | p50 | p99 |
+|---|---|---|
+| `hello-world` `GET /` | 1.47 / 1.43 | 5.0 / 4.8 |
+| `hello-world` `GET /hello/:name` | 1.45 / 1.40 | 5.2 / 5.1 |
+| `hello-world` rejected name | 1.55 / 1.45 | 5.7 / 6.0 |
+| `orders` `GET /orders/:id/lines` (indexed) | 2.48 / 1.75 | 6.8 / 5.5 |
+| `orders` `GET /totals` (group 500 lines) | 2.55 / 2.47 | 6.5 / 6.3 |
+| `orders` `GET /sales` (join 500 lines to 100 orders) | 2.79 / 2.93 | 6.6 / 7.7 |
+| `orders` `POST /lines` | 5.31 / 2.62 | 11.1 / 6.9 |
+| `orders` `POST /lines` rejected (`qty` 0) | 1.74 / 1.77 | 5.2 / 5.2 |
+| `rate-limiter` `GET /check/:client` (120 clients, all allowed) | 2.95 / 2.75 | 7.0 / 6.7 |
+| `rate-limiter` `GET /check/:client` (one client, limited) | 1.93 / 1.85 | 6.9 / 6.0 |
+
+The harness checks that every timed request gets the status the row names, so
+the rate-limited row times the 429 path and the allowed row does not. The figures
+include Miniflare's own proxying, about a millisecond and a half even for the
+smallest route, which is the same for both, so compare the columns rather than
+reading the absolute numbers as a deployed Worker's.
+
+For stateless routes, and for validation and rejection, Bynk is within a tenth or
+so of a millisecond of the hand-written Worker. The visible cost is in the agent.
+A Bynk agent loads and commits its whole state on every call, whereas the
+hand-written Durable Object reads and writes the records it needs, so reads
+through an index and above all writes cost more, and the gap grows with the
+state. `POST /lines` against an `orders` book holding 0, 500 and 2,000 lines took
+3.9, 5.0 and 7.5 ms at p50 for Bynk, against 3.0, 3.0 and 2.7 ms for the twin (the
+medians of three runs, which agreed to within about 0.8 ms). This is a known
+property of the current storage layout
+([#3159](https://github.com/bynk-lang/bynk/issues/3159)), and the accepted
+per-entry storage work ([#3189](https://github.com/bynk-lang/bynk/issues/3189))
+is expected to change it, so the agent rows here will be re-measured when it
+lands.
+
+Not measured: deployed latency, network time, cold isolates on Cloudflare's
+fleet, or CPU and memory use. The twins, the harness and the recorded results are
+in the repository under
+[`benchmarks/runtime/`](https://github.com/bynk-lang/bynk/tree/main/benchmarks/runtime),
+and `cargo xtask bench-runtime --record` writes the figures for each release to
+`design/benchmarks/runtime/`, so a change that adds weight shows up as a diff.
+Bundle sizes are tracked per release in that record; there is no size threshold
+or CI gate yet.
+
 ## The honest summary
 
 - Against **Encore**: Bynk trades a mature, deploy-ready framework for
@@ -97,6 +303,17 @@ line than a wiki page.
 - Against **TS + Zod + discipline**: Bynk trades ecosystem breadth and flexibility
   for the same good shape made *inexpressible to violate*, so it holds by
   construction rather than by vigilance.
+- Against **Effect**: Bynk trades a library you can adopt a file at a time, in a
+  language you already use, for guarantees the language itself enforces.
+- Against **Rust on Workers** and **Gleam**: Bynk trades a general-purpose
+  language and its ecosystem and portability for a Cloudflare architecture that is
+  checked rather than conventional.
+- On **cost**: Bynk's bundles are larger (about 10 to 26 KiB minified more than a
+  library-free hand-written Worker) and its agents write more than a hand-written
+  object does; its stateless request path matches hand-written code.
+- Against **hand-written Durable Objects, Workflows and the Agents SDK**: Bynk
+  gives the Durable Object shape a typed form, and does not yet cover what
+  Workflows does.
 
 Bynk is worth adopting when the value of *guaranteed* architecture and correctness
 outweighs the cost of a younger, smaller, Cloudflare-focused language — and when

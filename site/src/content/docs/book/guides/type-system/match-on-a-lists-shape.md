@@ -14,15 +14,18 @@ every length.
 
 ```bynk
 commons shop {
-  type Item = { sku: String, qty: Int }
+	type Item = {
+		sku: String,
+		qty: Int,
+	}
 
-  fn describe(items: List[Item]) -> String {
-    match items {
-      [] => "empty"
-      [only] => only.sku
-      [first, _, ..] => first.sku
-    }
-  }
+	fn describe(items: List[Item]) -> String {
+		match items {
+			[] => "empty",
+			[only] => only.sku,
+			[first, _, ..] => first.sku,
+		}
+	}
 }
 ```
 
@@ -39,12 +42,12 @@ non-exhaustive `match` on `List[Item]` — `[_, _, ..]` is not covered
 
 ```bynk
 commons shop {
-  fn sum(xs: List[Int]) -> Int {
-    match xs {
-      [] => 0
-      [x, ..rest] => x + sum(rest)
-    }
-  }
+	fn sum(xs: List[Int]) -> Int {
+		match xs {
+			[] => 0,
+			[x, ..rest] => x + sum(rest),
+		}
+	}
 }
 ```
 
@@ -55,7 +58,9 @@ whole list.
 > each match costs time in proportion to the list's length, and the recursive
 > `sum` above is quadratic. Reach for `..rest` to peel off a few elements; to
 > add up or transform every element, use a fold such as `xs.fold(0, (a, x) => a + x)`.
-> A bare `..` (`[first, ..]`) copies nothing.
+> A bare `..` (`[first, ..]`) copies nothing. See
+> [Recursion and iteration](/book/guides/type-system/recursion-and-iteration/) for
+> when recursion is the right tool.
 
 ## Look inside the elements
 
@@ -64,19 +69,21 @@ patterns work:
 
 ```bynk
 commons shop {
-  type Segment = { name: String }
+	type Segment = {
+		name: String,
+	}
 
-  fn isApi(path: List[Segment]) -> Bool {
-    path is [Segment { name: "api", .. }, ..]
-  }
+	fn isApi(path: List[Segment]) -> Bool {
+		path is [Segment { name: "api", .. }, ..]
+	}
 
-  fn firstValue(xs: List[Option[Int]]) -> Int {
-    match xs {
-      [Some(n), ..] => n
-      [None, ..] => -1
-      [] => 0
-    }
-  }
+	fn firstValue(xs: List[Option[Int]]) -> Int {
+		match xs {
+			[Some(n), ..] => n,
+			[None, ..] => -1,
+			[] => 0,
+		}
+	}
 }
 ```
 
@@ -89,10 +96,10 @@ the pattern:
 
 ```bynk
 commons shop {
-  fn firstOrZero(jobs: List[Int]) -> Int {
-    let [head, ..] = jobs else { 0 }
-    head
-  }
+	fn firstOrZero(jobs: List[Int]) -> Int {
+		let [head, ..] = jobs else { 0 }
+		head
+	}
 }
 ```
 

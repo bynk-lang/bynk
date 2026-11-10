@@ -10,7 +10,7 @@ Each language increment (`v0.X`) starts as a written specification, is then
 implemented behind a growing fixture suite, and only then is considered done.
 Increments are deliberately small: a slice of grammar, a refinement to the type
 checker, a new emission detail. This is why the version number moves in fine
-steps (the book is written against v0.525) rather than in large releases.
+steps (the book is written against v0.532) rather than in large releases.
 
 The discipline that keeps it honest is the fixture suite: a large body of
 positive examples (which must compile to the expected TypeScript) and negative
@@ -92,11 +92,12 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   (`fn same[T: Eq](a: T, b: T)`, or `where A: Eq` on a method for its receiver
   type's parameter); static methods on generic types shipped with it. Introducing
   bounds was a breaking change with a machine-applicable fix; see
-  [Generics and bounds](/book/reference/generics/). Deferred: `Codable` in
+  [Generics and bounds](/book/reference/generics/). Not currently planned: `Codable` in
   capability operation return types
   ([#2791](https://github.com/bynk-lang/bynk/issues/2791)) and composite keys for
   an agent's `store` `Map`, `Set` and `Cache`
-  ([#2788](https://github.com/bynk-lang/bynk/issues/2788)). A `Show` bound was
+  ([#2788](https://github.com/bynk-lang/bynk/issues/2788)); both issues are closed
+  and would be reopened by a new need. A `Show` bound was
   considered and not adopted.
 - **Editor tooling.** Deepening the `bynk-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its

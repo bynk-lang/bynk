@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export interface Reservation {
@@ -43,6 +43,7 @@ export class Inventory {
   private async loadState(): globalThis.Promise<InventoryState> {
     const stored = await this.state.storage.get<InventoryState>("state");
     if (stored === undefined) return __zeroOfInventoryState();
+    __checkStoredLayout("Inventory", stored);
     const __zero = __zeroOfInventoryState();
     __reportUnknownStoredKeys("Inventory", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -67,7 +68,7 @@ export class Inventory {
   async retag(rid: string, oid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(rid); if (!globalThis.Object.hasOwn(__state.reservations, __k)) { throw new globalThis.Error("Map.update: key absent"); } const __o = __state.reservations[__k]; { const __ik = String((__o).orderId); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik) ? __state.reservations__idx_orderId[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_orderId[__ik]; } } { const __ik = String((__o).id); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_id, __ik) ? __state.reservations__idx_id[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_id[__ik]; } } const __v = ((r) => ({ ...r, orderId: oid }))(__o); __state.reservations[__k] = __v; { const __ik = String((__v).orderId); if (!globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_orderId, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_orderId[__ik].push(__k); } { const __ik = String((__v).id); if (!globalThis.Object.hasOwn(__state.reservations__idx_id, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_id, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_id[__ik].push(__k); } return undefined; })();
+      const __r0 = await (() => { const __k = String(rid); if (!globalThis.Object.hasOwn(__state.reservations, __k)) { throw new globalThis.Error("Map.update: key absent"); } const __o = __state.reservations[__k]; { const __ik = String((__o).orderId); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik) ? __state.reservations__idx_orderId[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_orderId[__ik]; } } { const __ik = String((__o).id); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_id, __ik) ? __state.reservations__idx_id[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_id[__ik]; } } const __v = ((r: Reservation) => ({ ...r, orderId: oid }))(__o); __state.reservations[__k] = __v; { const __ik = String((__v).orderId); if (!globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_orderId, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_orderId[__ik].push(__k); } { const __ik = String((__v).id); if (!globalThis.Object.hasOwn(__state.reservations__idx_id, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_id, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_id[__ik].push(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -91,7 +92,7 @@ export class Inventory {
 
   async qtyForOrder(oid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __s = String(oid); const __ia = __state.reservations__idx_orderId; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => __state.reservations[__pk]); }))().reduce((__s: number, __x) => __s + ((r) => r.qty)(__x), 0);
+    return ((() => { const __s = String(oid); const __ia = __state.reservations__idx_orderId; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => __state.reservations[__pk]); }))().reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0);
   }
 
   async countById(rid: string, deps: {}): globalThis.Promise<number> {

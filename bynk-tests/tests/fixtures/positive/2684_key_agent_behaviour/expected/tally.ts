@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __BynkKeyMap, __bynkMapInsert } from "./__bynk_runtime/keys.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface OrderId {
@@ -40,6 +40,7 @@ export class Registry {
   private async loadState(): globalThis.Promise<RegistryState> {
     const stored = await this.state.storage.get<RegistryState>("state");
     if (stored === undefined) return __zeroOfRegistryState();
+    __checkStoredLayout("Registry", stored);
     const __zero = __zeroOfRegistryState();
     __reportUnknownStoredKeys("Registry", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -67,7 +68,7 @@ export class Registry {
     }
     throw new globalThis.Error("non-exhaustive match");
   })(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(cur, order));
-      const __r0 = await (() => { __state.totals = ((m) => __bynkMapInsert<OrderId, number>(m, order, next))(__state.totals); return undefined; })();
+      const __r0 = await (() => { __state.totals = ((m: ReadonlyMap<OrderId, number>) => __bynkMapInsert<OrderId, number>(m, order, next))(__state.totals); return undefined; })();
       return next;
     })();
     await this.commitState(__state);

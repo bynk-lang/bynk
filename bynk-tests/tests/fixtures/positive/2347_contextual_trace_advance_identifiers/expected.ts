@@ -30,7 +30,7 @@ export function calls(s: string): number {
 }
 
 export function lambdas(xs: readonly number[]): readonly number[] {
-  return (xs).map((__x: number) => ((advance) => advance + 1)(__x));
+  return (xs).map((__x: number) => ((advance: number) => advance + 1)(__x));
 }
 
 export function patterns(o: Option<string>): string {

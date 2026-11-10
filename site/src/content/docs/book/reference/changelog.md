@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.525**.
+written against **v0.532**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,35 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.532.2** | "`bynk check`, `bynk test` and `bynk compile` treat a subdirectory with its own `bynk.toml` as a separate project, skipping it with a note, and refuse a directory that is no project but holds one or more, naming them and suggesting a `[workspace]` root (#3242)" |
+| **v0.532.1** | '`bynk explain` gains written explanations for `bynk.generics.polymorphic_recursion` and `bynk.generics.recursive_generic_at_boundary`' |
+| **v0.532.0** | An agent instance runs one handler at a time, so a handler that awaits another agent is no longer interleaved with a second handler and no longer loses updates; re-entrant calls fault `ReentrantAgentCall`, long waits fault `AgentBusy` |
+| **v0.531.3** | '`bynk dev` honours an explicit `--inspect-port` for a single context, gives a lone worker a free inspector port so sessions started together no longer collide on 9229, and reports a taken inspector port itself' |
+| **v0.531.2** | "`cargo xtask bench-runtime` measures compiled Bynk against hand-written TypeScript twins (bundle size, start-up, request latency) under workerd, and records the results per release" |
+| **v0.531.1** | "The emitter builds an agent's state record in `emit_agent_state_record` and writes its `loadState` and `commitState` methods together in `emit_agent_load_commit_state`, as part of splitting `emit_agent` (#3167)" |
+| **v0.531.0** | "`by` is a contextual keyword: an ordinary name (a parameter, a binding, a field) everywhere except its clause positions, so `on call bump(by: Int)` parses" |
+| **v0.530.1** | `bynk check` and the language server build the cross-context views once per project instead of once per context, so checking is roughly linear in project size (500 contexts: 7.5 s to 0.47 s per edit) |
+| **v0.530.0** | A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`) |
+| **v0.529.0** | `bynk migrate sweep` reports storage-layout progress once a deployed Worker writes a layout beyond the original one (per-entry storage, slice 5a) |
+| **v0.528.4** | '`bynk explain` gains a written explanation for `bynk.parse.bare_expression_statement`' |
+| **v0.528.3** | '`bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229' |
+| **v0.528.2** | `cargo xtask bench` measures `bynk check` and the language server's edit-to-diagnostics time on a synthetic project, recorded per release in `design/benchmarks/` |
+| **v0.528.1** | "The emitter classifies an agent's `store` fields once, in a named `AgentStoreLayout`, as the first step of splitting `emit_agent` (#3167)" |
+| **v0.528.0** | The runtime gains the per-entry storage primitives (batched, ranged and transactional storage, the key layout, a staged write-set and the wholesale split); nothing emitted uses them yet (per-entry storage, slice 1) |
+| **v0.527.7** | The emitter annotates every lambda parameter with its checked type, so a lambda handed to a kernel method (`append`, `map`, `filter`, `flatMap`, `any`) no longer fails `tsc --strict` with an implicit `any` ([#3228](https://github.com/bynk-lang/bynk/issues/3228)) |
+| **v0.527.6** | A `system`-tier suite that names a declaration the parser skipped after a syntax error no longer reports it as unknown |
+| **v0.527.5** | An expression written as a statement gets `bynk.parse.bare_expression_statement`, with a machine-applicable `let _ <-` (effectful call) or `let _ =` fix that `bynk check --fix` and the editor apply, instead of "expected `}`" |
+| **v0.527.4** | An attached fn of a generic type resolves the receiver's type variables when its signature is lowered |
+| **v0.527.3** | "The emitter lowers a built-in method call by its typed `KernelOp`, not by the method's spelling, as the second slice of the typed built-in dispatch (#3164)" |
+| **v0.527.2** | "The checker's built-in method typing matches on the typed `KernelOp` exhaustively, so a method listed for completion without a typing rule, or the converse, no longer compiles, and the registry drift tests are retired (#3164)" |
+| **v0.527.1** | '`bynk explain` gains written explanations for six common newcomer diagnostics' |
+| **v0.527.0** | A direct self tail call runs in constant stack, emitted as a loop, for pure and `Effect` functions alike; `requires` is re-checked on each iteration, a function with `ensures` is not rewritten, and mutual and non-tail recursion keep a host-defined depth ([#3193](https://github.com/bynk-lang/bynk/issues/3193), [#3176](https://github.com/bynk-lang/bynk/issues/3176)) |
+| **v0.526.3** | An increment can declare `breaking:` in its pending file; the stamp collects it into the Book's upgrading page and each release body gains an "Upgrading from vX" section |
+| **v0.526.2** | "`bynk check` prepares a literal D1 `batch`'s statements in order, each against the schema the earlier statements leave, so a batch that drops then recreates a table, or creates a table and then uses it, is no longer refused (#3197)" |
+| **v0.526.1** | An unresolved type in lowering now stops with an internal error instead of becoming `()` |
+| **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |
+| **v0.525.26** | A suite that names a declaration the parser skipped after a syntax error no longer reports it as an unknown function; an unknown agent construction's note no longer talks of a commons |
+| **v0.525.25** | "The checker resolves a built-in method call to a typed `KernelOp`, and the editor's completion tables are generated from it, as the first slice of the typed built-in dispatch (#3164)" |
 | **v0.525.24** | The Book's types reference now documents generic sums, and `bynk.generics.recursive_generic_at_boundary` names a recursive generic sum as a sum rather than a record |
 | **v0.525.23** | A gated `explained_codes` probe ratchets `bynk explain` coverage upwards, and the increment checklist asks a new error code to ship with an explanation |
 | **v0.525.22** | "The test D1's parameter scanner treats non-ASCII characters as part of a named parameter, as SQLite does, so `:café` and `:cafè` count as two parameters (#3157)" |

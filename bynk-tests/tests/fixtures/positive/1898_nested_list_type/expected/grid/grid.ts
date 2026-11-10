@@ -29,11 +29,11 @@ export const Lopsided = {
 };
 
 export function transposeFirst(rows: readonly (readonly number[])[]): readonly (readonly number[])[] {
-  return (rows).map((__x: readonly number[]) => ((row) => (row).slice(0, globalThis.Math.max(0, 1)))(__x));
+  return (rows).map((__x: readonly number[]) => ((row: readonly number[]) => (row).slice(0, globalThis.Math.max(0, 1)))(__x));
 }
 
 export function total(rows: readonly (readonly number[])[]): number {
-  return ((__xs: readonly (readonly number[])[], __acc: number, __f: (acc: number, x: readonly number[]) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(rows, 0, (acc, row) => acc + ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(row, 0, (a, x) => a + x));
+  return ((__xs: readonly (readonly number[])[], __acc: number, __f: (acc: number, x: readonly number[]) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(rows, 0, (acc: number, row: readonly number[]) => acc + ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(row, 0, (a: number, x: number) => a + x));
 }
 
 export function firstRow(rows: readonly (readonly number[])[]): readonly number[] {
@@ -59,31 +59,31 @@ export function noRows(): readonly (readonly number[])[] {
 }
 
 export function adders(): readonly ((a0: number) => number)[] {
-  return [(x) => x + 1, (x) => x * 2];
+  return [(x: number) => x + 1, (x: number) => x * 2];
 }
 
 export function bySize(rows: readonly (readonly number[])[]): readonly Bucket[] {
-  return (() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of rows) { const __k = String(((r) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n, rs) => ({ size: n, rows: rs }))(((r) => (r).length)(__rows[0]), __rows); }); })();
+  return (() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of rows) { const __k = String(((r: readonly number[]) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n: number, rs: readonly (readonly number[])[]) => ({ size: n, rows: rs }))(((r: readonly number[]) => (r).length)(__rows[0]), __rows); }); })();
 }
 
 export function uniqueBySize(rows: readonly (readonly number[])[]): readonly (readonly number[])[] {
-  return ((__xs: readonly (readonly number[])[]) => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of __xs) { const __k = ((r) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })(rows);
+  return ((__xs: readonly (readonly number[])[]) => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of __xs) { const __k = ((r: readonly number[]) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })(rows);
 }
 
 export function pairBySize(a: readonly (readonly number[])[], b: readonly (readonly number[])[]): readonly Pair[] {
-  return (() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of b) { const __k = String(((r) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return (a).flatMap((__t: readonly number[]) => { const __m = __h[String(((l) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l, r) => ({ left: l, right: r }))(__t, __u)); }); })();
+  return (() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of b) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return (a).flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l: readonly number[], r: readonly number[]) => ({ left: l, right: r }))(__t, __u)); }); })();
 }
 
 export function pairOrNot(a: readonly (readonly number[])[], b: readonly (readonly number[])[]): readonly Lopsided[] {
-  return (() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of b) { const __k = String(((r) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return (a).flatMap((__t: readonly number[]) => { const __m = __h[String(((l) => (l).length)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: readonly number[]) => ((l, r) => ({ left: l, right: r }))(__t, Some(__u))) : [((l, r) => ({ left: l, right: r }))(__t, None)]; }); })();
+  return (() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of b) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return (a).flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: readonly number[]) => ((l: readonly number[], r: Option<readonly number[]>) => ({ left: l, right: r }))(__t, Some(__u))) : [((l: readonly number[], r: Option<readonly number[]>) => ({ left: l, right: r }))(__t, None)]; }); })();
 }
 
 export function longest(rows: readonly (readonly number[])[]): Option<number> {
-  return ((__xs: readonly (readonly number[])[]) => { if (__xs.length === 0) return None; let __m = ((r) => (r).length)(__xs[0]); for (const __x of __xs) { const __k = ((r) => (r).length)(__x); if (__k > __m) __m = __k; } return Some(__m); })(rows);
+  return ((__xs: readonly (readonly number[])[]) => { if (__xs.length === 0) return None; let __m = ((r: readonly number[]) => (r).length)(__xs[0]); for (const __x of __xs) { const __k = ((r: readonly number[]) => (r).length)(__x); if (__k > __m) __m = __k; } return Some(__m); })(rows);
 }
 
 export function shortest(rows: readonly (readonly number[])[]): Option<number> {
-  return ((__xs: readonly (readonly number[])[]) => { if (__xs.length === 0) return None; let __m = ((r) => (r).length)(__xs[0]); for (const __x of __xs) { const __k = ((r) => (r).length)(__x); if (__k < __m) __m = __k; } return Some(__m); })(rows);
+  return ((__xs: readonly (readonly number[])[]) => { if (__xs.length === 0) return None; let __m = ((r: readonly number[]) => (r).length)(__xs[0]); for (const __x of __xs) { const __k = ((r: readonly number[]) => (r).length)(__x); if (__k < __m) __m = __k; } return Some(__m); })(rows);
 }
 
 export function headOrEmpty(rows: readonly (readonly number[])[]): readonly number[] {

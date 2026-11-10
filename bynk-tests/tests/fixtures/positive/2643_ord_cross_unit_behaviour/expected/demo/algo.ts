@@ -14,7 +14,7 @@ export function smaller<T>(a: T, b: T, __cmp_T: (a: T, b: T) => number): T {
 }
 
 export function rankOf<T>(x: T, xs: readonly T[], __cmp_T: (a: T, b: T) => number): number {
-  return ((xs).filter((__x: T) => ((y) => __cmp_T(y, x) < 0)(__x))).length;
+  return ((xs).filter((__x: T) => ((y: T) => __cmp_T(y, x) < 0)(__x))).length;
 }
 
 export function twiceSmaller<T>(a: T, b: T, c: T, __cmp_T: (a: T, b: T) => number): T {

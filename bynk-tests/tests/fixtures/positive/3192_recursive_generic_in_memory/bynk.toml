@@ -1,0 +1,6 @@
+[project]
+name = "recursive-generic-in-memory"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

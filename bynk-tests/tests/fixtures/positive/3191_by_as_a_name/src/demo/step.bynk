@@ -1,0 +1,45 @@
+---
+#3191: `by` is a clause word only in its clause positions (a handler's actor
+clause, a call's actor clause, `advance Clock by …`). Everywhere else it is an
+ordinary name: a parameter, a binding, a lambda parameter, a record field with
+shorthand, a pattern binding and a `store` field.
+---
+context demo.step
+
+type Step = { by: Int }
+
+agent Counter {
+  key name: String
+  store total: Cell[Int]
+  on call bump(by: Int) -> Effect[Int] {
+    let _ <- total.update((n) => n + by)
+    Effect.pure(total)
+  }
+}
+
+// A store field named `by`, written with `:=` and read by its bare name.
+agent Ledger {
+  key name: String
+  store by: Cell[Int]
+  on call set(amount: Int) -> Effect[()] { by := amount }
+  on call get() -> Effect[Int] { by }
+}
+
+fn shift(xs: List[Int], by: Int) -> List[Int] {
+  xs.map((x) => x + by)
+}
+
+fn step_of(n: Int) -> Step {
+  let by = n * 2
+  Step { by }
+}
+
+fn amount(s: Step) -> Int {
+  let Step { by, .. } = s
+  by
+}
+
+fn through(s: Step) -> Int {
+  let apply = (by: Int) => by + 1
+  apply(s.by)
+}

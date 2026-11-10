@@ -3,6 +3,10 @@
 //! - `check-pending` (Slice 0) validates the files under `design/pending/`.
 //! - `stamp` (Slice 1) assigns the version(s) + ADR number(s) for the pending
 //!   files and materialises them; dry-run by default, `--apply` to write.
+//! - `bench` (#3168) measures compile time and editor latency on a synthetic
+//!   project; `--record` writes `design/benchmarks/v<version>.json`.
+//! - `release-notes <tag>` (#3178) prints the release body's "Upgrading from
+//!   vPREV" section, assembled from the Book's `reference/upgrading.md`.
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
@@ -12,6 +16,9 @@
 //!   checks itself against (reserved keywords, semantic-token legend);
 //!   `--check` fails when the committed snapshot is stale, `--tag T --out F`
 //!   writes the release asset.
+//! - `bench-runtime` (#3177) measures the run-time cost of compiled Bynk against
+//!   hand-written TypeScript twins (bundle size, start-up, request latency),
+//!   locally under workerd; `--record` writes `design/benchmarks/runtime/v<version>.json`.
 //! - `tier-probe` (C4b, #2940) fails when a test is in no test tier, or in two.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
 //!   `--fast` stops before the test suite (fmt, clippy, rustdoc).
@@ -52,6 +59,8 @@ fn main() -> ExitCode {
             }
             stamp(args.iter().any(|a| a == "--apply"))
         }
+        Some("bench") => bench(&args[1..]),
+        Some("release-notes") => release_notes(&args[1..]),
         Some("manifest-schema") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--check") {
                 eprintln!("xtask manifest-schema: unknown argument {bad:?}");
@@ -78,6 +87,7 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("bench-runtime") => bench_runtime(&args[1..]),
         Some("ci") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--fast") {
                 eprintln!("xtask ci: unknown argument {bad:?}");
@@ -124,6 +134,93 @@ fn manifest_schema(check: bool) -> ExitCode {
         }
         Err(e) => {
             eprintln!("manifest-schema: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// #3177: run-time benchmarks of compiled Bynk against hand-written TypeScript
+/// twins (`benchmarks/runtime/`). Builds a release `bynk`, installs the
+/// harness's pinned npm dependencies (no lockfile, nothing committed), and runs
+/// `bench.mjs`. `--sizes-only` skips workerd and is deterministic; `--record`
+/// writes `design/benchmarks/runtime/v<version>.json`; `--runs`, `--requests`
+/// and `--startups` set the sample sizes.
+fn bench_runtime(args: &[String]) -> ExitCode {
+    let mut pass = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--sizes-only" => pass.push("--sizes-only".to_string()),
+            "--record" => {
+                pass.push("--record".to_string());
+                pass.push("design/benchmarks/runtime".to_string());
+            }
+            "--runs" | "--requests" | "--startups" => {
+                let Some(value) = it.next().filter(|v| v.parse::<u32>().is_ok_and(|n| n > 0))
+                else {
+                    eprintln!("xtask bench-runtime: {a} needs a positive whole number");
+                    usage();
+                    return ExitCode::from(2);
+                };
+                pass.push(a.clone());
+                pass.push(value.clone());
+            }
+            other => {
+                eprintln!("xtask bench-runtime: unknown argument {other:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    if pass.iter().any(|a| a == "--sizes-only") && pass.iter().any(|a| a == "--record") {
+        eprintln!(
+            "xtask bench-runtime: --sizes-only cannot be recorded (it would replace the full record with a partial one)"
+        );
+        usage();
+        return ExitCode::from(2);
+    }
+    let root = repo_root();
+    let dir = root.join("benchmarks/runtime");
+    let steps: [(&str, Command); 2] = [
+        ("cargo build --release -p bynk", {
+            let mut c = Command::new("cargo");
+            c.args(["build", "--release", "-p", "bynk"])
+                .current_dir(&root);
+            c
+        }),
+        ("npm install", {
+            let mut c = Command::new("npm");
+            c.args(["install", "--no-package-lock", "--no-audit", "--no-fund"])
+                .current_dir(&dir);
+            c
+        }),
+    ];
+    for (label, mut cmd) in steps {
+        match cmd.status() {
+            Ok(status) if status.success() => {}
+            Ok(status) => {
+                eprintln!("xtask bench-runtime: `{label}` failed ({status})");
+                return ExitCode::FAILURE;
+            }
+            Err(e) => {
+                eprintln!("xtask bench-runtime: could not run `{label}`: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let status = Command::new("node")
+        .arg("bench.mjs")
+        .args(&pass)
+        .current_dir(&dir)
+        .status();
+    match status {
+        Ok(status) if status.success() => ExitCode::SUCCESS,
+        Ok(status) => {
+            eprintln!("xtask bench-runtime: bench.mjs failed ({status})");
+            ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("xtask bench-runtime: could not run node: {e}");
             ExitCode::FAILURE
         }
     }
@@ -580,9 +677,126 @@ fn have_nextest(root: &Path) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
+/// `bench`: see [`xtask::bench`]. Local only; results are recorded per release,
+/// never gated in CI (shared runners are too noisy for a threshold).
+fn bench(args: &[String]) -> ExitCode {
+    let mut opts = xtask::bench::Options::default();
+    let mut record = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value = |what: &str| -> Option<String> {
+            let v = it.next().cloned();
+            if v.is_none() {
+                eprintln!("xtask bench: {what} needs a value");
+            }
+            v
+        };
+        match a.as_str() {
+            "--record" => record = true,
+            "--sizes" => {
+                let Some(v) = value("--sizes") else {
+                    return ExitCode::from(2);
+                };
+                let sizes: Option<Vec<usize>> = v.split(',').map(|n| n.parse().ok()).collect();
+                match sizes {
+                    Some(s) if !s.is_empty() && s.iter().all(|n| *n > 0) => opts.sizes = s,
+                    _ => {
+                        eprintln!("xtask bench: --sizes takes positive integers, e.g. 10,50,200");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
+            "--runs" | "--edits" => {
+                let Some(v) = value(a) else {
+                    return ExitCode::from(2);
+                };
+                let Some(n) = v.parse::<usize>().ok().filter(|n| *n > 0) else {
+                    eprintln!("xtask bench: {a} takes a positive integer");
+                    return ExitCode::from(2);
+                };
+                if a == "--runs" {
+                    opts.runs = n;
+                } else {
+                    opts.edits = n;
+                }
+            }
+            bad => {
+                eprintln!("xtask bench: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let root = repo_root();
+    let result = match xtask::bench::run(&root, &opts, &|m| eprintln!("bench: {m}")) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("bench: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let text = serde_json::to_string_pretty(&result).expect("serialises") + "\n";
+    if record {
+        let version = result["version"].as_str().unwrap_or("unknown");
+        let path = xtask::bench::record_path(&root, version);
+        if let Err(e) = std::fs::create_dir_all(path.parent().expect("has parent"))
+            .and_then(|()| std::fs::write(&path, &text))
+        {
+            eprintln!("bench: cannot write {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+        eprintln!("bench: recorded {}", path.display());
+    }
+    print!("{text}");
+    ExitCode::SUCCESS
+}
+
+/// `release-notes <tag>`: the "Upgrading from vPREV" section for `tag`, on
+/// stdout. The previous release is the greatest plain `v*` tag below `tag` in
+/// this clone (the release workflow checks out full history and tags).
+fn release_notes(args: &[String]) -> ExitCode {
+    let [tag] = args else {
+        eprintln!("xtask release-notes: expected exactly one argument, the release tag");
+        usage();
+        return ExitCode::from(2);
+    };
+    let Some(version) = xtask::release_notes::parse_release_tag(tag) else {
+        eprintln!("xtask release-notes: {tag:?} is not a `vX.Y.Z[-suffix]` tag");
+        return ExitCode::from(2);
+    };
+    let root = repo_root();
+    let page = match std::fs::read_to_string(root.join(xtask::release_notes::UPGRADING_PAGE)) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("release-notes: cannot read the upgrading page: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let tags = match Command::new("git")
+        .args(["tag", "--list", "v[0-9]*"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
+        _ => {
+            eprintln!("release-notes: `git tag --list` failed");
+            return ExitCode::FAILURE;
+        }
+    };
+    let prev = xtask::release_notes::previous_tag(&tags, version);
+    print!(
+        "{}",
+        xtask::release_notes::release_section(&page, prev, version)
+    );
+    ExitCode::SUCCESS
+}
+
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

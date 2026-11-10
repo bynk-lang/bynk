@@ -8,425 +8,75 @@
 //! completion: per-kernel `(name, signature)` tables and a [`methods_for`]
 //! mapping from a receiver [`Ty`] to its methods.
 //!
+//! The tables are generated from the typed operations in [`crate::kernel_op`]
+//! (#3164), where each method is declared once with its spelling and signature;
+//! the checker resolves a call to that enum and carries it in
+//! [`crate::checker::Callee::Kernel`].
+//!
 //! The signatures are human-readable Bynk-surface display strings (generic in
 //! the element/key/value type), for completion `detail` — not the checker's
-//! `Ty`-typed signatures. A drift test (`kernel_registry_pins_dispatch`)
-//! drives every listed method through the real checker and asserts none is
-//! rejected as `method_not_found`, so the table can't list a phantom method.
+//! `Ty`-typed signatures. The checker matches on the typed operations
+//! exhaustively, so the table can neither list a method the checker rejects nor
+//! omit one it accepts.
 
 use crate::checker::{NamedKind, Ty, TyId, Types};
 use bynk_syntax::ast::BaseType;
 
-/// One built-in kernel method: its name and a display signature.
-#[derive(Debug, Clone, Copy)]
-pub struct KernelMethod {
-    pub name: &'static str,
-    pub signature: &'static str,
-}
-
-const fn m(name: &'static str, signature: &'static str) -> KernelMethod {
-    KernelMethod { name, signature }
-}
+pub use crate::kernel_op::KernelMethod;
+use crate::kernel_op::{
+    BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp, IntOp, ListOp,
+    MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp, SetOp, StringOp,
+    TestConnectionOp, TokenClaimsOp,
+};
 
 /// `List[T]` (v0.20b; v0.88 adds the ADR 0116 query/collection vocabulary).
-pub const LIST_METHODS: &[KernelMethod] = &[
-    m("length", "length() -> Int"),
-    m("get", "get(index: Int) -> Option[T]"),
-    m("prepend", "prepend(item: T) -> List[T]"),
-    // #1889: the end-of-list counterparts of `prepend`.
-    m("append", "append(item: T) -> List[T]"),
-    m("concat", "concat(other: List[T]) -> List[T]"),
-    m("fold", "fold(init: U, step: (U, T) -> U) -> U"),
-    m(
-        "foldEff",
-        "foldEff(init: U, step: (U, T) -> Effect[U]) -> Effect[U]",
-    ),
-    // v0.146 (ADR 0170): run an effectful step for each element, in order.
-    m("forEach", "forEach(f: T -> Effect[()]) -> Effect[()]"),
-    // v0.147 (ADR 0171): run an effectful step for every element concurrently.
-    m(
-        "parTraverse",
-        "parTraverse(f: T -> Effect[()]) -> Effect[()]",
-    ),
-    // v0.148 (ADR 0172): collect every outcome (no short-circuit), sequential
-    // and concurrent.
-    m(
-        "traverseAll",
-        "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]",
-    ),
-    m(
-        "parTraverseAll",
-        "parTraverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]",
-    ),
-    // v0.150 (ADR 0174): short-circuit collect — stop at the first `Err`.
-    m(
-        "traverseTry",
-        "traverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]",
-    ),
-    m(
-        "parTraverseTry",
-        "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]",
-    ),
-    // #2806: pure `Result` accumulation over a `List[Result[T, E]]` receiver.
-    m("sequenceAll", "sequenceAll() -> Result[List[T], List[E]]"),
-    m("sequenceTry", "sequenceTry() -> Result[List[T], E]"),
-    // v0.88 (ADR 0116): eager in-memory builders + terminals.
-    m("map", "map(f: T -> U) -> List[U]"),
-    m("filter", "filter(p: T -> Bool) -> List[T]"),
-    m("flatMap", "flatMap(f: T -> List[U]) -> List[U]"),
-    m("sortBy", "sortBy(key: T -> K) -> List[T]"),
-    m(
-        "sortByDescending",
-        "sortByDescending(key: T -> K) -> List[T]",
-    ),
-    m("take", "take(n: Int) -> List[T]"),
-    m("skip", "skip(n: Int) -> List[T]"),
-    m("distinct", "distinct() -> List[T]"),
-    m("distinctBy", "distinctBy(key: T -> K) -> List[T]"),
-    m("count", "count() -> Int"),
-    m("any", "any(p: T -> Bool) -> Bool"),
-    m("all", "all(p: T -> Bool) -> Bool"),
-    m("first", "first() -> Option[T]"),
-    m("firstOrElse", "firstOrElse(default: T) -> T"),
-    m("sum", "sum(key: T -> K) -> K"),
-    m("min", "min(key: T -> K) -> Option[K]"),
-    m("max", "max(key: T -> K) -> Option[K]"),
-    m("average", "average(key: T -> K) -> Option[Float]"),
-    // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
-    // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
-    m(
-        "joinOn",
-        "joinOn(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]",
-    ),
-    m(
-        "leftJoin",
-        "leftJoin(other: List[U], on: (T, U) -> Bool, into: (T, Option[U]) -> V) -> List[V]",
-    ),
-    m(
-        "join",
-        "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]",
-    ),
-    m(
-        "groupBy",
-        "groupBy(key: T -> K, into: (K, List[T]) -> V) -> List[V]",
-    ),
-];
-
-/// `Map[K, V]` (v0.20b).
+pub const LIST_METHODS: &[KernelMethod] = ListOp::TABLE;
 /// The `Set` kernel (K6a, #2596): what Bynk cannot write over a list. The
 /// combinators (`union`, `intersect`, …) are the `bynk.set` commons.
-pub const SET_METHODS: &[KernelMethod] = &[
-    m("length", "length() -> Int"),
-    m("contains", "contains(item: T) -> Bool"),
-    m("insert", "insert(item: T) -> Set[T]"),
-    m("remove", "remove(item: T) -> Set[T]"),
-    m("toList", "toList() -> List[T]"),
-];
-
-pub const MAP_METHODS: &[KernelMethod] = &[
-    m("length", "length() -> Int"),
-    m("keys", "keys() -> List[K]"),
-    m("values", "values() -> List[V]"),
-    m("get", "get(key: K) -> Option[V]"),
-    m("insert", "insert(key: K, value: V) -> Map[K, V]"),
-];
-
-/// `Query[T]` (v0.91, ADR 0115; joins/grouping v0.94, ADR 0116/0120) — the lazy
-/// storage-query vocabulary a `store` collection lifts into (a `store Map`'s
-/// `.entries`/`.keys`/`.values`, a `store Log`'s time-window roots, or a bare
-/// `store Map` used as a value). Builders stay lazy (`Query[U]`); terminals
-/// fold into the agent's storage capability (`Effect[T]`). Mirrors
-/// [`LIST_METHODS`]'s eager vocabulary; dispatched in
-/// `crate::checker::kernels::check_query_kernel_method`, which this table pins
-/// (`kernel_registry_pins_dispatch`).
-pub const QUERY_METHODS: &[KernelMethod] = &[
-    m("map", "map(f: T -> U) -> Query[U]"),
-    m("filter", "filter(p: T -> Bool) -> Query[T]"),
-    m("flatMap", "flatMap(f: T -> Query[U]) -> Query[U]"),
-    m("sortBy", "sortBy(key: T -> K) -> Query[T]"),
-    m(
-        "sortByDescending",
-        "sortByDescending(key: T -> K) -> Query[T]",
-    ),
-    m("take", "take(n: Int) -> Query[T]"),
-    m("skip", "skip(n: Int) -> Query[T]"),
-    m("distinct", "distinct() -> Query[T]"),
-    m("distinctBy", "distinctBy(key: T -> K) -> Query[T]"),
-    m(
-        "joinOn",
-        "joinOn(other: Query[U], on: (T, U) -> Bool, into: (T, U) -> V) -> Query[V]",
-    ),
-    m(
-        "leftJoin",
-        "leftJoin(other: Query[U], on: (T, U) -> Bool, into: (T, Option[U]) -> V) -> Query[V]",
-    ),
-    m(
-        "join",
-        "join(other: Query[U], on: (T, U) -> Bool, into: (T, U) -> V) -> Query[V]",
-    ),
-    m(
-        "groupBy",
-        "groupBy(key: T -> K, into: (K, Query[T]) -> V) -> Query[V]",
-    ),
-    m("collect", "collect() -> Effect[List[T]]"),
-    m("first", "first() -> Effect[Option[T]]"),
-    m("firstOrElse", "firstOrElse(default: T) -> Effect[T]"),
-    m("count", "count() -> Effect[Int]"),
-    m("fold", "fold(init: U, step: (U, T) -> U) -> Effect[U]"),
-    m("any", "any(p: T -> Bool) -> Effect[Bool]"),
-    m("all", "all(p: T -> Bool) -> Effect[Bool]"),
-    m("sum", "sum(key: T -> K) -> Effect[K]"),
-    m("min", "min(key: T -> K) -> Effect[Option[K]]"),
-    m("max", "max(key: T -> K) -> Effect[Option[K]]"),
-    m("average", "average(key: T -> K) -> Effect[Option[Float]]"),
-    m("forEach", "forEach(f: T -> Effect[()]) -> Effect[()]"),
-    m(
-        "parTraverse",
-        "parTraverse(f: T -> Effect[()]) -> Effect[()]",
-    ),
-    m(
-        "traverseAll",
-        "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]",
-    ),
-    m(
-        "parTraverseAll",
-        "parTraverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]",
-    ),
-    m(
-        "traverseTry",
-        "traverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]",
-    ),
-    m(
-        "parTraverseTry",
-        "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]",
-    ),
-];
-
+pub const SET_METHODS: &[KernelMethod] = SetOp::TABLE;
+/// `Map[K, V]` (v0.20b).
+pub const MAP_METHODS: &[KernelMethod] = MapOp::TABLE;
+/// `Query[T]` (v0.91, ADR 0115; joins/grouping v0.94, ADR 0116/0120): the lazy
+/// storage-query vocabulary a `store` collection lifts into.
+pub const QUERY_METHODS: &[KernelMethod] = QueryOp::TABLE;
 /// `Option[T]` combinators (v0.22a).
-pub const OPTION_METHODS: &[KernelMethod] = &[
-    m("map", "map(f: T -> U) -> Option[U]"),
-    m("andThen", "andThen(f: T -> Option[U]) -> Option[U]"),
-    m("getOrElse", "getOrElse(default: T) -> T"),
-    m("isSome", "isSome() -> Bool"),
-    m("okOr", "okOr(err: E) -> Result[T, E]"),
-    m("isNone", "isNone() -> Bool"),
-    m("orElse", "orElse(f: () -> Option[T]) -> Option[T]"),
-    m("filter", "filter(p: T -> Bool) -> Option[T]"),
-];
-
+pub const OPTION_METHODS: &[KernelMethod] = OptionOp::TABLE;
 /// `Result[T, E]` combinators (v0.22a).
-pub const RESULT_METHODS: &[KernelMethod] = &[
-    m("map", "map(f: T -> U) -> Result[U, E]"),
-    m("andThen", "andThen(f: T -> Result[U, E]) -> Result[U, E]"),
-    m("mapErr", "mapErr(f: E -> F) -> Result[T, F]"),
-    m("getOrElse", "getOrElse(default: T) -> T"),
-    m("isOk", "isOk() -> Bool"),
-    m("isErr", "isErr() -> Bool"),
-    m("ok", "ok() -> Option[T]"),
-];
-/// #2683: `e.within(d)`, on every `Effect[T]`. It races `e` against a deadline
-/// and hands the abandoned effect to the execution context's `waitUntil`; it is
-/// never cancelled, so a `TimedOut` does not mean the work did not happen.
-const WITHIN: KernelMethod = m(
-    "within",
-    "within(d: Duration) -> Effect[Result[T, TimedOut]]",
-);
-
-/// #2711: `a.race(b)`, on every `Effect[T]`. The first side to succeed wins; the
-/// other is handed, uncancelled, to the execution context's `waitUntil`, so its
-/// side effects still happen. Meant for idempotent work.
-const RACE: KernelMethod = m("race", "race(other: Effect[T]) -> Effect[T]");
-
+pub const RESULT_METHODS: &[KernelMethod] = ResultOp::TABLE;
 /// The methods of every `Effect[T]` (#2683, #2711): `within` and `race`.
-pub const EFFECT_METHODS: &[KernelMethod] = &[WITHIN, RACE];
-
-/// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176 — design doc
-/// §2.8.3): the compiler-synthesised methods on the universal cross-context
-/// shape. `mapOk`/`mapErr` transform the success/error value; `flatMapOk`
-/// chains a further effectful-fallible step; `flatMapErr` attempts an effectful
-/// recovery.
+pub const EFFECT_METHODS: &[KernelMethod] = EffectOp::TABLE;
+/// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176): `within` and
+/// `race` (on every `Effect`) alongside the compiler-synthesised combinators.
 pub const EFFECT_RESULT_METHODS: &[KernelMethod] = &[
-    // #2683: `within` is on every `Effect[T]` (see [`EFFECT_METHODS`]), so an
-    // `Effect[Result]` offers it, and `race` (#2711), alongside the combinators.
-    WITHIN,
-    RACE,
-    m("mapOk", "mapOk(f: T -> U) -> Effect[Result[U, E]]"),
-    m("mapErr", "mapErr(f: E -> F) -> Effect[Result[T, F]]"),
-    m(
-        "flatMapOk",
-        "flatMapOk(f: T -> Effect[Result[U, E]]) -> Effect[Result[U, E]]",
-    ),
-    m(
-        "flatMapErr",
-        "flatMapErr(f: E -> Effect[Result[T, F]]) -> Effect[Result[T, F]]",
-    ),
+    EffectOp::TABLE[0],
+    EffectOp::TABLE[1],
+    EffectResultOp::TABLE[0],
+    EffectResultOp::TABLE[1],
+    EffectResultOp::TABLE[2],
+    EffectResultOp::TABLE[3],
 ];
-
 /// The `String` kernel (v0.22a; UTF-16 code units, except `chars`).
-pub const STRING_METHODS: &[KernelMethod] = &[
-    m("length", "length() -> Int"),
-    m("split", "split(sep: String) -> List[String]"),
-    m("trim", "trim() -> String"),
-    m("toUpper", "toUpper() -> String"),
-    m("toLower", "toLower() -> String"),
-    m("contains", "contains(s: String) -> Bool"),
-    m("startsWith", "startsWith(s: String) -> Bool"),
-    m("endsWith", "endsWith(s: String) -> Bool"),
-    m("replace", "replace(from: String, to: String) -> String"),
-    m("slice", "slice(start: Int, end: Int) -> String"),
-    m("indexOf", "indexOf(s: String) -> Option[Int]"),
-    m("chars", "chars() -> List[String]"),
-    m("concat", "concat(s: String) -> String"),
-    // K2 (#2594): RFC 3986 percent-encoding over the UTF-8 bytes.
-    m("percentEncode", "percentEncode() -> String"),
-    m("percentDecode", "percentDecode() -> Option[String]"),
-    // K6c (#2600): regex methods over a string-literal pattern.
-    m("matchesRegex", "matchesRegex(pattern: String) -> Bool"),
-    m("containsRegex", "containsRegex(pattern: String) -> Bool"),
-    m(
-        "findRegex",
-        "findRegex(pattern: String) -> Option[List[Option[String]]]",
-    ),
-    m(
-        "findAllRegex",
-        "findAllRegex(pattern: String) -> List[List[Option[String]]]",
-    ),
-    m(
-        "replaceRegex",
-        "replaceRegex(pattern: String, with: String) -> String",
-    ),
-    m("splitRegex", "splitRegex(pattern: String) -> List[String]"),
-];
-
-/// The `Int` numeric kernel (v0.21).
-pub const INT_METHODS: &[KernelMethod] = &[
-    m("toFloat", "toFloat() -> Float"),
-    m("toString", "toString() -> String"),
-    m("abs", "abs() -> Int"),
-    m("min", "min(other: Int) -> Int"),
-    m("max", "max(other: Int) -> Int"),
-    m("clamp", "clamp(lo: Int, hi: Int) -> Int"),
-    // K6b (#2598): division companions (fault on zero) and an exact power.
-    m("div", "div(other: Int) -> Int"),
-    m("rem", "rem(other: Int) -> Int"),
-    m("mod", "mod(other: Int) -> Int"),
-    m("pow", "pow(exp: Int) -> Int"),
-    // #2621: bitwise operations over the whole safe-integer range, faulting
-    // on a negative operand or a shift count outside 0..52.
-    m("and", "and(other: Int) -> Int"),
-    m("or", "or(other: Int) -> Int"),
-    m("xor", "xor(other: Int) -> Int"),
-    m("andNot", "andNot(mask: Int) -> Int"),
-    m("shl", "shl(count: Int) -> Int"),
-    m("shr", "shr(count: Int) -> Int"),
-];
-
-/// The `Float` numeric kernel (v0.21).
-pub const FLOAT_METHODS: &[KernelMethod] = &[
-    m("round", "round() -> Int"),
-    m("floor", "floor() -> Int"),
-    m("ceil", "ceil() -> Int"),
-    m("truncate", "truncate() -> Int"),
-    m("toString", "toString() -> String"),
-    m("abs", "abs() -> Float"),
-    m("min", "min(other: Float) -> Float"),
-    m("max", "max(other: Float) -> Float"),
-    m("clamp", "clamp(lo: Float, hi: Float) -> Float"),
-    m("isNaN", "isNaN() -> Bool"),
-    m("isFinite", "isFinite() -> Bool"),
-    // K6b (#2598): `Math` functions, host-defined outside their domains.
-    m("sqrt", "sqrt() -> Float"),
-    m("pow", "pow(exp: Float) -> Float"),
-    m("exp", "exp() -> Float"),
-    m("ln", "ln() -> Float"),
-    m("log10", "log10() -> Float"),
-    m("log2", "log2() -> Float"),
-    m("sin", "sin() -> Float"),
-    m("cos", "cos() -> Float"),
-    m("tan", "tan() -> Float"),
-    m("asin", "asin() -> Float"),
-    m("acos", "acos() -> Float"),
-    m("atan", "atan() -> Float"),
-    m("atan2", "atan2(x: Float) -> Float"),
-];
-
-/// The `Duration` kernel (v0.86, ADR 0112). Comparison/arithmetic are operators
-/// (D3/D4); the kernel is the explicit escape to raw milliseconds (D5).
-pub const DURATION_METHODS: &[KernelMethod] = &[
-    m("toMillis", "toMillis() -> Int"),
-    m("toString", "toString() -> String"),
-];
-
-/// The `Instant` kernel (v0.90, ADR 0114). Comparison/arithmetic are operators
-/// (D3); the kernel is the explicit escape to raw epoch milliseconds (D6).
-pub const INSTANT_METHODS: &[KernelMethod] = &[
-    m("toEpochMillis", "toEpochMillis() -> Int"),
-    m("toString", "toString() -> String"),
-    // K3 (#2592): RFC 3339 in UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`.
-    m("toIso", "toIso() -> String"),
-];
-
-/// The `Bytes` kernel (v0.110, ADR 0142). Equality is an operator (D4, content
-/// compare); the kernel is length plus the String-interop bridge (D3). #2016
-/// (standard-library K1) adds `concat`, `slice`, `compare` (a method: `Bytes`
-/// stays unorderable), hex and base64url.
-pub const BYTES_METHODS: &[KernelMethod] = &[
-    m("length", "length() -> Int"),
-    m("concat", "concat(other: Bytes) -> Bytes"),
-    m("slice", "slice(start: Int, end: Int) -> Bytes"),
-    m("compare", "compare(other: Bytes) -> Int"),
-    m("toHex", "toHex() -> String"),
-    m("toBase64", "toBase64() -> String"),
-    m("toBase64Url", "toBase64Url() -> String"),
-    m("decodeUtf8", "decodeUtf8() -> Option[String]"),
-];
-
-/// The `Decimal` kernel (#2622). `round` and `div` take a `RoundingMode`
-/// (`RoundingMode.HalfEven`), read syntactically at that argument.
-pub const DECIMAL_METHODS: &[KernelMethod] = &[
-    m("scale", "scale() -> Int"),
-    m("toString", "toString() -> String"),
-    m("round", "round(scale: Int, mode: RoundingMode) -> Decimal"),
-    m(
-        "div",
-        "div(other: Decimal, scale: Int, mode: RoundingMode) -> Decimal",
-    ),
-    m("abs", "abs() -> Decimal"),
-    m("min", "min(other: Decimal) -> Decimal"),
-    m("max", "max(other: Decimal) -> Decimal"),
-    m("toInt", "toInt() -> Option[Int]"),
-    m("toFloat", "toFloat() -> Float"),
-];
-
-/// `RequestHeaders` (#2341, L4): an HTTP handler's read-only view of the
-/// request's headers.
-pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = &[
-    m("get", "get(name: String) -> Option[String]"),
-    m("bearer", "bearer() -> Option[String]"),
-    m("clientIp", "clientIp() -> Option[String]"),
-];
-
-/// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
-/// query string.
-pub const REQUEST_QUERY_METHODS: &[KernelMethod] = &[
-    m("get", "get(name: String) -> Option[String]"),
-    m("all", "all(name: String) -> List[String]"),
-    m("params", "params() -> Map[String, List[String]]"),
-];
-
-/// `TokenClaims` (#2380, L5): an `Oidc` actor's verified token claims.
-pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = &[
-    m("get", "get(name: String) -> Option[String]"),
-    m("has", "has(name: String) -> Bool"),
-];
-
-/// `TestConnection[F]` (#3051): a case's recording handle for a `from
-/// websocket` connection; a test body only.
-pub const TEST_CONNECTION_METHODS: &[KernelMethod] = &[
-    m("sent", "sent() -> List[F]"),
-    m("closed", "closed() -> Bool"),
-    m("connection", "connection() -> Connection[F]"),
-];
+pub const STRING_METHODS: &[KernelMethod] = StringOp::TABLE;
+/// The `Int` kernel.
+pub const INT_METHODS: &[KernelMethod] = IntOp::TABLE;
+/// The `Float` kernel.
+pub const FLOAT_METHODS: &[KernelMethod] = FloatOp::TABLE;
+/// The `Duration` kernel (v0.86, ADR 0112).
+pub const DURATION_METHODS: &[KernelMethod] = DurationOp::TABLE;
+/// The `Instant` kernel (v0.90, ADR 0114).
+pub const INSTANT_METHODS: &[KernelMethod] = InstantOp::TABLE;
+/// The `Bytes` kernel (v0.110, ADR 0142).
+pub const BYTES_METHODS: &[KernelMethod] = BytesOp::TABLE;
+/// The `Decimal` kernel (#2622).
+pub const DECIMAL_METHODS: &[KernelMethod] = DecimalOp::TABLE;
+/// An HTTP handler's `headers` (#2341).
+pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = RequestHeadersOp::TABLE;
+/// An HTTP handler's `query` (#2854).
+pub const REQUEST_QUERY_METHODS: &[KernelMethod] = RequestQueryOp::TABLE;
+/// An `Oidc` binder's claims (#2380).
+pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = TokenClaimsOp::TABLE;
+/// A case's recording `TestConnection[F]` (#3051).
+pub const TEST_CONNECTION_METHODS: &[KernelMethod] = TestConnectionOp::TABLE;
 
 /// Every method table above, by the type a user writes. The one enumerable
 /// registry (read by the wasm `bynk_reference`); a test pins it against the

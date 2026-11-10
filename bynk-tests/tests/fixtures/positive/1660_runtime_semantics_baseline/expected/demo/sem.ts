@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -82,6 +82,7 @@ export class Gauge {
   private async loadState(): globalThis.Promise<GaugeState> {
     const stored = await this.state.storage.get<GaugeState>("state");
     if (stored === undefined) return __zeroOfGaugeState();
+    __checkStoredLayout("Gauge", stored);
     const __zero = __zeroOfGaugeState();
     __reportUnknownStoredKeys("Gauge", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -138,6 +139,7 @@ export class Lamp {
   private async loadState(): globalThis.Promise<LampState> {
     const stored = await this.state.storage.get<LampState>("state");
     if (stored === undefined) return __zeroOfLampState();
+    __checkStoredLayout("Lamp", stored);
     const __zero = __zeroOfLampState();
     __reportUnknownStoredKeys("Lamp", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -194,6 +196,7 @@ export class Meter {
   private async loadState(): globalThis.Promise<MeterState> {
     const stored = await this.state.storage.get<MeterState>("state");
     if (stored === undefined) return __zeroOfMeterState();
+    __checkStoredLayout("Meter", stored);
     const __zero = __zeroOfMeterState();
     __reportUnknownStoredKeys("Meter", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -261,6 +264,7 @@ export class Panel {
   private async loadState(): globalThis.Promise<PanelState> {
     const stored = await this.state.storage.get<PanelState>("state");
     if (stored === undefined) return __zeroOfPanelState();
+    __checkStoredLayout("Panel", stored);
     const __zero = __zeroOfPanelState();
     __reportUnknownStoredKeys("Panel", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -318,6 +322,7 @@ export class Bag {
   private async loadState(): globalThis.Promise<BagState> {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
+    __checkStoredLayout("Bag", stored);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", stored, __zero);
     const __merged = { ...__zero, ...stored };

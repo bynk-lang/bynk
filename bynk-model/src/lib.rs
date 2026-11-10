@@ -21,7 +21,7 @@
 //!   host such as the playground (until crate-hygiene B3, #2999,
 //!   `bynk_check::entry_signature`).
 //!
-//! The system-model ADR (crate-hygiene track §6, `design/tracks/crate-hygiene.md`)
+//! The system-model ADR (crate-hygiene track §6, `design/archive/retired-tracks.md`)
 //! records the scope, the requirements every item is held to (M-1 one source
 //! per fact, M-2 total over certified programs, M-3 a reader outside the model,
 //! M-4 no new AST embedding) and what the model is not: not an expression IR,

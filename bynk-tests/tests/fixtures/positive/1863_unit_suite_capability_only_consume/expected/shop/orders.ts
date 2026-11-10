@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 import * as bynk from "../bynk.js";
@@ -64,6 +64,7 @@ export class Till {
   private async loadState(): globalThis.Promise<TillState> {
     const stored = await this.state.storage.get<TillState>("state");
     if (stored === undefined) return __zeroOfTillState();
+    __checkStoredLayout("Till", stored);
     const __zero = __zeroOfTillState();
     __reportUnknownStoredKeys("Till", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -79,7 +80,7 @@ export class Till {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const t = await deps.Tax.tax();
-      const __r0 = await (() => { __state.total = ((n) => n + t)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((n: number) => n + t)(__state.total); return undefined; })();
       return __state.total;
     })();
     await this.commitState(__state);

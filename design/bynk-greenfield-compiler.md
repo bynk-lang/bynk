@@ -2220,7 +2220,7 @@ the batch path paying for the incremental path on the deploy-critical route.
 **A typed expression IR between the checker and the string-emitting lowerer.**
 *Status:* the **declaration-level IR is adopted** (`bynk-ir`'s shapes, read through `bynk-lower`'s
 helpers — R6.13 at the level phase 6 retired it); the **expression-level IR is refused**. The adopted
-half grows as the **system model** (`design/tracks/crate-hygiene.md` §6; the
+half grows as the **system model** (`design/archive/retired-tracks.md` §6; the
 system-model-scope-and-placement ADR): every tool that needs declaration-level facts reads them from
 the model, and `bynk-ir` plus `bynk-lower` become `bynk-model`. That growth doesn't touch this entry's
 claim or trigger, which stay as written.

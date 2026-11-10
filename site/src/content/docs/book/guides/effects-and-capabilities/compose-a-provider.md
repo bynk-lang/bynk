@@ -12,24 +12,36 @@ provider's bodies can then call the listed capabilities:
 ```bynk
 context payment
 
-capability Logger { fn info(message: String) -> Effect[()] }
-capability Http   { fn post(path: String) -> Effect[()] }
-capability Charge { fn run() -> Effect[()] }
+capability Logger {
+	fn info(message: String) -> Effect[()]
+}
+
+capability Http {
+	fn post(path: String) -> Effect[()]
+}
+
+capability Charge {
+	fn run() -> Effect[()]
+}
 
 provides Logger = ConsoleLogger {
-  fn info(message: String) -> Effect[()] { Effect.pure(()) }
+	fn info(message: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 provides Http = FetchHttp {
-  fn post(path: String) -> Effect[()] { Effect.pure(()) }
+	fn post(path: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 provides Charge = HttpCharge given Http, Logger {
-  fn run() -> Effect[()] {
-    let _ <- Logger.info("charging")
-    let _ <- Http.post("/charge")
-    Effect.pure(())
-  }
+	fn run() -> Effect[()] {
+		let _ <- Logger.info("charging")
+		let _ <- Http.post("/charge")
+		Effect.pure(())
+	}
 }
 ```
 

@@ -96,17 +96,17 @@ of other contexts to subscribe to with `from Events(E)`:
 ```bynk
 context commerce.order
 
-exports transparent { PaymentConfirmed }
 consumes bynk { Events }
+exports transparent { PaymentConfirmed }
 
 event PaymentConfirmed = {
-  orderId: String,
+	orderId: String,
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
-    Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
-  }
+	on call(orderId: String) -> Effect[()] given Events {
+		Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
+	}
 }
 ```
 
@@ -1085,11 +1085,11 @@ context greeter
 consumes bynk { Clock, Logger }
 
 service api from http {
-  on GET("/now") () -> Effect[HttpResult[Int]] by Visitor given Clock, Logger {
-    let t <- Clock.now()
-    let _ <- Logger.info("checked the clock")
-    Ok(t.toEpochMillis())
-  }
+	on GET("/now") () -> Effect[HttpResult[Int]] by Visitor given Clock, Logger {
+		let t <- Clock.now()
+		let _ <- Logger.info("checked the clock")
+		Ok(t.toEpochMillis())
+	}
 }
 ```
 
@@ -1135,12 +1135,19 @@ consumes bynk { Fetch }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {
-		let res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
+		let res <- Fetch.send(Request {
+			method: Get,
+			url: url,
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		})
 		match res {
-			Ok(r) => Effect.pure("ok")
-			Err(Network) => Effect.pure("network")
-			Err(Timeout) => Effect.pure("timeout")
-			Err(InvalidHeader) => Effect.pure("header")
+			Ok(r) => Effect.pure("ok"),
+			Err(Network) => Effect.pure("network"),
+			Err(Timeout) => Effect.pure("timeout"),
+			Err(InvalidHeader) => Effect.pure("header"),
 		}
 	}
 }
@@ -1156,11 +1163,18 @@ consumes bynk { Fetch }
 
 service probe {
 	on call(url: String) -> Effect[String] given Fetch {
-		let res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
+		let res <- Fetch.send(Request {
+			method: Get,
+			url: url,
+			contentType: None,
+			authorization: None,
+			headers: Map.empty(),
+			body: None,
+		})
 		match res {
-			Ok(r) => Effect.pure("ok")
-			Err(Timeout) => Effect.pure("retry later")
-			Err(_) => Effect.pure("failed")
+			Ok(r) => Effect.pure("ok"),
+			Err(Timeout) => Effect.pure("retry later"),
+			Err(_) => Effect.pure("failed"),
 		}
 	}
 }
@@ -1195,11 +1209,18 @@ uses bynk.list
 
 type Priority = enum { Low, Medium, High } derives Ord
 
-type Task = { priority: Priority, title: String } derives Ord
+type Task = {
+	priority: Priority,
+	title: String,
+} derives Ord
 
-fn ranked(ts: List[Task]) -> List[Task] { sort(ts) }
+fn ranked(ts: List[Task]) -> List[Task] {
+	sort(ts)
+}
 
-fn hottest(ts: List[Task]) -> Option[Task] { max(ts) }
+fn hottest(ts: List[Task]) -> Option[Task] {
+	max(ts)
+}
 ```
 
 On `Float` they use the total order (`NaN` last).

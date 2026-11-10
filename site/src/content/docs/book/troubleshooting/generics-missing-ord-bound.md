@@ -16,7 +16,9 @@ in the signature.
 ```bynk,fail=bynk.generics.missing_ord_bound
 commons demo.missing.ord.bound
 
-fn bigger[T](a: T, b: T) -> Bool { a > b }
+fn bigger[T](a: T, b: T) -> Bool {
+	a > b
+}
 ```
 
 ## Fix

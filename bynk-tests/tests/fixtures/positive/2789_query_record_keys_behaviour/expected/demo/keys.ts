@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkDistinct, __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkLeftJoin } from "../__bynk_runtime/keys.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -101,6 +101,7 @@ export class Log {
   private async loadState(): globalThis.Promise<LogState> {
     const stored = await this.state.storage.get<LogState>("state");
     if (stored === undefined) return __zeroOfLogState();
+    __checkStoredLayout("Log", stored);
     const __zero = __zeroOfLogState();
     __reportUnknownStoredKeys("Log", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -144,7 +145,7 @@ export class Log {
 
   async distinctSites(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinct(((() => globalThis.Object.values(__state.visits).map((__x) => ((v) => v.site)(__x))))())))().length;
+    return ((() => __bynkDistinct(((() => globalThis.Object.values(__state.visits).map((__x) => ((v: Visit) => v.site)(__x))))())))().length;
   }
 
   async distinctRegions(deps: {}): globalThis.Promise<number> {
@@ -154,22 +155,22 @@ export class Log {
 
   async firstSeen(deps: {}): globalThis.Promise<readonly Visit[]> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinctBy(globalThis.Object.values(__state.visits), (v) => v.site)))();
+    return ((() => __bynkDistinctBy(globalThis.Object.values(__state.visits), (v: Visit) => v.site)))();
   }
 
   async totals(deps: {}): globalThis.Promise<readonly Tally[]> {
     const __state = await this.loadState();
-    return ((() => __bynkGroupBy(globalThis.Object.values(__state.visits), (v) => v.site, (s, rows) => ({ site: s, total: (rows).reduce((__s: number, __x: Visit) => __s + ((r) => r.n)(__x), 0) }))))();
+    return ((() => __bynkGroupBy(globalThis.Object.values(__state.visits), (v: Visit) => v.site, (s: Site, rows: readonly Visit[]) => ({ site: s, total: (rows).reduce((__s: number, __x: Visit) => __s + ((r: Visit) => r.n)(__x), 0) }))))();
   }
 
   async joined(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkJoinOn(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v) => v.site, (l) => l.site, (v, l) => v.n)))().reduce((__s: number, __x) => __s + ((x) => x)(__x), 0);
+    return ((() => __bynkJoinOn(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Label) => v.n)))().reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0);
   }
 
   async matchedTotal(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkLeftJoin(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v) => v.site, (l) => l.site, (v, l) => ((__d) => {
+    return ((() => __bynkLeftJoin(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Option<Label>) => ((__d) => {
     switch (__d.tag) {
       case "Some": {
         return v.n;
@@ -179,7 +180,7 @@ export class Log {
       }
     }
     throw new globalThis.Error("non-exhaustive match");
-  })(l))))().reduce((__s: number, __x) => __s + ((x) => x)(__x), 0);
+  })(l))))().reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0);
   }
 
   async logSite(region: Region, code: number, deps: { Clock: Clock }): globalThis.Promise<void> {
@@ -194,7 +195,7 @@ export class Log {
 
   async distinctLogged(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinctBy(((() => __state.trail.slice(globalThis.Math.max(0, __state.trail.length - globalThis.Math.max(0, 10))).reverse().map((__e) => __e.v)))(), (s) => s)))().length;
+    return ((() => __bynkDistinctBy(((() => __state.trail.slice(globalThis.Math.max(0, __state.trail.length - globalThis.Math.max(0, 10))).reverse().map((__e) => __e.v)))(), (s: Site) => s)))().length;
   }
 
 }

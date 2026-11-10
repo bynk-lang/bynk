@@ -13,9 +13,9 @@ its parameters, and returns `Effect[HttpResult[T]]`.
 context notes
 
 service api from http {
-  on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("pong")
+	}
 }
 ```
 
@@ -149,9 +149,9 @@ Events (`text/event-stream`); each stream element is one `data:` event.
 context feed
 
 service Feed from http {
-  on GET("/ticks") () -> Effect[HttpResult[()]] by Visitor {
-    Streaming(Stream.of(["tick-1", "tick-2", "tick-3"]).take(3))
-  }
+	on GET("/ticks") () -> Effect[HttpResult[()]] by Visitor {
+		Streaming(Stream.of(["tick-1", "tick-2", "tick-3"]).take(3))
+	}
 }
 ```
 
@@ -190,10 +190,10 @@ it with a matching `content-type`.
 context site
 
 service Site from http {
-  on GET("/sitemap.xml") () -> Effect[HttpResult[()]] by Visitor {
-    let xml = "<?xml version=\"1.0\"?><urlset></urlset>"
-    Raw(Bytes.fromUtf8(xml), "application/xml")
-  }
+	on GET("/sitemap.xml") () -> Effect[HttpResult[()]] by Visitor {
+		let xml = "<?xml version=\"1.0\"?><urlset></urlset>"
+		Raw(Bytes.fromUtf8(xml), "application/xml")
+	}
 }
 ```
 
@@ -226,13 +226,13 @@ service body and list the origins that may call it:
 context api
 
 service api from http {
-  cors {
-    origins: ["https://app.example.com"],
-  }
+	cors {
+		origins: ["https://app.example.com"],
+	}
 
-  on GET("/items/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
-    Ok(id)
-  }
+	on GET("/items/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(id)
+	}
 }
 ```
 
@@ -277,13 +277,13 @@ a browser has cached it. So you turn it on deliberately, with `hsts`:
 context api
 
 service api from http {
-  security {
-    hsts: 180.days,
-  }
+	security {
+		hsts: 180.days,
+	}
 
-  on GET("/items/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
-    Ok(id)
-  }
+	on GET("/items/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(id)
+	}
 }
 ```
 

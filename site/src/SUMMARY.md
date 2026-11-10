@@ -34,6 +34,7 @@
     - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
     - [Destructure a record with `let`](guides/type-system/destructure-a-record-with-let.md)
     - [Match on a list's shape](guides/type-system/match-on-a-lists-shape.md)
+    - [Recursion and iteration](guides/type-system/recursion-and-iteration.md)
     - [Match on a range of numbers](guides/type-system/match-on-a-range-of-numbers.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
     - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
@@ -58,6 +59,7 @@
     - [Compose a provider from other capabilities](guides/effects-and-capabilities/compose-a-provider.md)
     - [Share a capability across contexts](guides/effects-and-capabilities/share-across-contexts.md)
     - [Wrap a library as an adapter](guides/effects-and-capabilities/wrap-a-library.md)
+    - [Call Workers AI through an adapter](guides/effects-and-capabilities/call-workers-ai-through-an-adapter.md)
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
@@ -138,6 +140,7 @@
   - [TypeScript client](reference/typescript-client.md)
   - [Diagnostic index](reference/diagnostics.md)
   - [Version compatibility & changelog](reference/changelog.md)
+  - [Upgrading](reference/upgrading.md)
 
 # Specification
 

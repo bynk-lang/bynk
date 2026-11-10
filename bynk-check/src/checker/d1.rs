@@ -52,6 +52,21 @@ pub struct D1SqlSite {
     /// literal), so an error offset in `text` maps back into the literal. `None`
     /// when `text` is the literal itself.
     pub literal: Option<(String, isize)>,
+    /// #3197: for a statement written inline in a `batch` list literal, the
+    /// batch (the list's start offset, which is unique per call) and the
+    /// statement's position in the list. A batch's statements are checked in
+    /// order, each against the schema the earlier ones leave. `None` for any
+    /// other call.
+    pub batch: Option<BatchPosition>,
+}
+
+/// #3197: where a statement sits in its `batch` list literal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BatchPosition {
+    /// The list literal's start offset: identifies the batch call.
+    pub group: usize,
+    /// The statement's zero-based position in the list.
+    pub index: usize,
 }
 
 /// #3139: which value a name holds, on the way from a literal D1 read to the
@@ -284,6 +299,7 @@ pub(crate) fn check_sql_argument(
                     row: None,
                     passed: literal_list_len(args.get(1), ctx),
                     literal: None,
+                    batch: None,
                 }),
             );
         } else {
@@ -308,7 +324,8 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
     else {
         return;
     };
-    for item in items {
+    let group = list.map_or(0, |l| l.span.start);
+    for (index, item) in items.iter().enumerate() {
         let ExprKind::RecordConstruction {
             type_name, fields, ..
         } = &item.kind
@@ -339,6 +356,7 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 row: None,
                 passed,
                 literal: None,
+                batch: Some(BatchPosition { group, index }),
             }),
         );
     }
@@ -633,6 +651,7 @@ pub(crate) fn check_typed_read(
                 )),
                 passed: literal_list_len(args.get(1), ctx),
                 literal: select_literal,
+                batch: None,
             }),
         );
     }

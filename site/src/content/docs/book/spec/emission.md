@@ -221,25 +221,52 @@ to `Promise.resolve(x)` in a synchronous or tail position. The `<-` bind is
 therefore `await` and needs no runtime support.
 
 **Recursion** ([§5.2](/book/spec/static-semantics/#52-well-typedness)) lowers to
-direct recursion in TypeScript: a recursive call is an ordinary call, and no
-tail-call elimination is performed or guaranteed, so a call in tail position
-uses a stack frame like any other. The depth a program can reach is
-host-defined, as `Float` arithmetic is (ADR 0042): it depends on the platform's
-stack size and on how far the host has optimised the function, so it is not a
-fixed number, and this specification states no limit. Exceeding it
-raises the host's stack-overflow error, which is a **fault**
-([§5.9e](/book/spec/static-semantics/#59e-fault-claim)): a handler that faults this
-way commits no `store` writes, as any fault does (ADR 0109), and a test case
-that hits it fails.
+direct recursion in TypeScript: a recursive call is an ordinary call, except a
+**direct self tail call**, which an emitter MUST lower so that it consumes no
+stack in proportion to the number of calls (below). The depth a program can
+reach through any other recursion is host-defined, as `Float` arithmetic is
+(ADR 0042): it depends on the platform's stack size and on how far the host has
+optimised the function, so it is not a fixed number, and this specification
+states no limit. Exceeding it raises the host's stack-overflow error, which is a
+**fault** ([§5.9e](/book/spec/static-semantics/#59e-fault-claim)): a handler that
+faults this way commits no `store` writes, as any fault does (ADR 0109), and a
+test case that hits it fails.
+
+A **self tail call** is a call whose callee is the enclosing function itself (a
+free function by name, a method by receiver or qualified name), at the
+function's own type arguments, in **tail position**. Tail position is the
+function body's final expression, propagated through the branches of an `if`,
+the arms of a `match` (guarded arms included) and the final expression of a
+block. A call is **not** in tail position when it is an argument or a receiver,
+operand of `?`, inside a lambda or a `par`, `within` or `race`, bound by a
+`let`, or wrapped (`Some(f(x))`, `Effect.pure(f(x))`). Such a call is lowered as
+a loop: the body runs inside a labelled `while (true)`, and the call evaluates
+all of its new arguments, then rebinds the parameters and continues the loop.
+The guarantee holds for `Effect`-returning functions too: the `await`s ahead of
+the call are unchanged, the call does not extend a chain of promises, and the
+order of effects is that of the unrewritten program.
+
+Three properties of the rewrite are normative. **Bindings are per iteration**: a
+lambda created in one iteration captures that iteration's parameters, not the
+next's. **`requires` is checked on every iteration**, against the arguments of
+the call that began it, so a contract violation is reported for the iteration
+whose arguments violate it. A function with an **`ensures` clause is not
+rewritten**, in any profile: a loop has one frame, so a postcondition could be
+checked only for the outermost call, and the function keeps direct recursion
+(host-defined depth).
+
+Nothing else changes: mutual recursion, a call through a function value, a
+non-tail self call, and a self call at a different instantiation of a generic
+function are ordinary calls, with host-defined depth. The guarantee is on the
+shape of the emitted program, not on a depth, so it names no number.
 
 An effectful function's body is an `async` function, so the host's stack is
-not the limit when each level **awaits before it recurses**. In the `repeat`
-example of §5.2,
-`do step(n)` awaits, and the recursive call then runs from a fresh job with an
-empty stack, so the depth is bounded by memory and the platform's CPU-time
-limit instead. A recursive call made **before** the body's first await (for
-example `let r <- repeat(n - 1, step)` as its first statement) still descends
-on one stack and is limited as synchronous recursion is.
+not the limit when each level **awaits before it recurses**, even where the
+recursive call is not a self tail call. In the `repeat` example of §5.2, `do
+step(n)` awaits and the call is a tail call, so it is a loop. A non-tail
+recursive call made **before** the body's first await (for example `let r <-
+repeat(n - 1, step)` as its first statement) still descends on one stack and is
+limited as synchronous recursion is.
 
 A **`par` block** (§4.8.7b) lowers to one `await` of the join over a **thunk** per
 binding. The join calls the thunks in source order, so each effect is issued before

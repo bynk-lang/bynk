@@ -58,11 +58,13 @@ pub struct DevOptions {
     /// JavaScript debugger can attach; breakpoints in `.bynk` resolve through the
     /// emitted source maps composed into the worker bundle.
     pub inspect: bool,
-    /// Base inspector port (default 9229); allocated per context exactly as
-    /// `base_port` is. Used under `--inspect`, and whenever several contexts
-    /// are served: wrangler's inspector is always on, so N wranglers left on
-    /// its default would all race for 9229 (#1954).
-    pub inspect_port: u16,
+    /// `--inspect-port N` — the base inspector port, allocated per context
+    /// exactly as `base_port` is. `None` means it was not given: the base is
+    /// 9229 under `--inspect` or with several contexts, and a lone worker
+    /// without `--inspect` is given a free port of its own
+    /// ([`assign_free_inspector`]). wrangler's inspector is always on, so left
+    /// on its default every session would race for 9229 (#1954, #3237).
+    pub inspect_port: Option<u16>,
     /// `--env NAME` (default `"default"`) — which `bynk.deploy.lock` section
     /// `--remote` reads the KV id from. `dev` never provisions and never
     /// writes the ledger (unchanged); this only selects which of `deploy`'s
@@ -399,6 +401,10 @@ pub fn stand_in_report(plans: &[(String, Vec<StandIn>)]) -> String {
 /// lands where a single-context one always has.
 const DEFAULT_BASE_PORT: u16 = 8787;
 
+/// wrangler's own default inspector port, the base of the per-context inspector
+/// allocation when `--inspect-port` is not given.
+const DEFAULT_INSPECT_PORT: u16 = 9229;
+
 /// One worker to serve: its dasherised context dir, its HTTP port (`None` = let
 /// wrangler choose, the lone-worker default), its inspector port, and whether
 /// the inspector was asked for (`--inspect`) rather than only allocated so the
@@ -495,7 +501,20 @@ pub fn run(
             return ExitCode::FAILURE;
         }
     };
-    let serving = allocate(&workers, opts.base_port, opts);
+    let mut serving = allocate(&workers, opts.base_port, opts);
+    // #3237: a lone worker would otherwise take wrangler's default inspector,
+    // 9229, which two sessions starting together both claim. Not when the
+    // caller put `--inspector-port` in the `--` passthrough: that is theirs.
+    if !passthrough_has(&opts.wrangler_args, "--inspector-port") {
+        assign_free_inspector(&mut serving, free_local_port());
+    }
+    if let Some(port) = inspector_port_in_use(&serving) {
+        eprintln!(
+            "bynk: inspector port {port} is already in use — another `bynk dev` or debugger \
+             holds it. Pass a different `--inspect-port`, or stop the process using it."
+        );
+        return ExitCode::FAILURE;
+    }
     // I2 (#1971): over every built Worker, not only the served ones, so a
     // context served here alone still admits a caller served by another
     // `bynk dev --context` session.
@@ -1496,22 +1515,25 @@ pub fn preflight_failure_message(report: &Report) -> String {
 /// wrangler error, not last-wins.
 ///
 /// Inspector ports follow the same shape, from `--inspect-port`. They are
-/// allocated under `--inspect`, and also whenever more than one worker is
-/// served (#1954): `wrangler dev` always starts its inspector, on 9229 unless
-/// told otherwise, so N wranglers started together all bind 9229 and every one
-/// but the first dies with `Address already in use`. A lone worker without
-/// `--inspect` gets none, keeping its invocation byte-for-byte as before.
+/// allocated under `--inspect`, whenever `--inspect-port` is given (#3237: an
+/// explicit port is always honoured, for one worker too), and whenever more than
+/// one worker is served (#1954): `wrangler dev` always starts its inspector, on
+/// 9229 unless told otherwise, so N wranglers started together all bind 9229 and
+/// every one but the first dies with `Address already in use`. A lone worker
+/// with none of those gets none here; [`assign_free_inspector`] gives it a free
+/// port of its own.
 pub fn allocate(workers: &[String], base_port: Option<u16>, opts: &DevOptions) -> Vec<Serving> {
     let lone = workers.len() == 1 && base_port.is_none();
     let base = base_port.unwrap_or(DEFAULT_BASE_PORT);
-    let inspectors = opts.inspect || workers.len() > 1;
+    let inspectors = opts.inspect || workers.len() > 1 || opts.inspect_port.is_some();
+    let inspect_base = opts.inspect_port.unwrap_or(DEFAULT_INSPECT_PORT);
     workers
         .iter()
         .enumerate()
         .map(|(i, worker)| Serving {
             worker: worker.clone(),
             port: (!lone).then(|| base.saturating_add(i as u16)),
-            inspector_port: inspectors.then(|| opts.inspect_port.saturating_add(i as u16)),
+            inspector_port: inspectors.then(|| inspect_base.saturating_add(i as u16)),
             inspect: opts.inspect,
         })
         .collect()
@@ -1524,6 +1546,44 @@ fn port_clash(serving: &[Serving]) -> Option<u16> {
         .iter()
         .filter_map(|s| s.port)
         .find(|p| serving.iter().any(|s| s.inspector_port == Some(*p)))
+}
+
+/// #3237: a lone worker with no `--inspect` and no `--inspect-port` has no
+/// inspector port of its own, so `wrangler dev` takes 9229 — and two sessions
+/// started together both see it free and both bind it, one dying with `Address
+/// already in use`. Give it the free port the OS hands out instead. `free` is
+/// `None` when no port could be found, or when the `--` passthrough already
+/// carries `--inspector-port` (wrangler rejects it twice, and the caller chose
+/// it); the worker then keeps wrangler's own default, as before.
+pub fn assign_free_inspector(serving: &mut [Serving], free: Option<u16>) {
+    if let [only] = serving
+        && only.inspector_port.is_none()
+    {
+        only.inspector_port = free;
+    }
+}
+
+/// A free localhost port, as the OS reports it right now. The listener is
+/// dropped before wrangler binds the port, so another process could still take
+/// it in between; that window is milliseconds, against the seconds in which two
+/// sessions starting together both saw 9229 free.
+fn free_local_port() -> Option<u16> {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .ok()
+}
+
+/// The first inspector port in the allocation that something is already
+/// listening on, so `bynk dev` can say so instead of leaving it to wrangler's
+/// `Address already in use`.
+fn inspector_port_in_use(serving: &[Serving]) -> Option<u16> {
+    serving.iter().filter_map(|s| s.inspector_port).find(|p| {
+        matches!(
+            std::net::TcpListener::bind(("127.0.0.1", *p)),
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse
+        )
+    })
 }
 
 /// #1957: whether to install wrangler once before spawning the contexts. Only
@@ -1704,7 +1764,7 @@ mod tests {
 
         let on = DevOptions {
             inspect: true,
-            inspect_port: 9229,
+            inspect_port: Some(9229),
             ..Default::default()
         };
         let lone = allocate(&names(&["links"]), None, &on);
@@ -1712,6 +1772,77 @@ mod tests {
             serve_args(&lone[0], &[]),
             names(&["--inspector-port", "9229"])
         );
+    }
+
+    // ---- #3237: inspector ports for a lone worker -------------------------
+
+    #[test]
+    fn an_explicit_inspect_port_is_honoured_for_a_lone_worker() {
+        let given = DevOptions {
+            inspect_port: Some(9300),
+            ..Default::default()
+        };
+        let lone = allocate(&names(&["links"]), None, &given);
+        assert_eq!(lone[0].inspector_port, Some(9300));
+        assert!(!lone[0].inspect, "an explicit port is not a debug session");
+        assert_eq!(
+            serve_args(&lone[0], &[]),
+            names(&["--inspector-port", "9300"])
+        );
+        // Several contexts still count up from it.
+        let two = allocate(&names(&["a", "b"]), None, &given);
+        assert_eq!(
+            two.iter().map(|s| s.inspector_port).collect::<Vec<_>>(),
+            vec![Some(9300), Some(9301)]
+        );
+    }
+
+    #[test]
+    fn a_lone_worker_with_no_inspector_flags_is_given_a_free_port() {
+        let mut lone = allocate(&names(&["links"]), None, &DevOptions::default());
+        assert_eq!(lone[0].inspector_port, None);
+        assign_free_inspector(&mut lone, Some(40123));
+        assert_eq!(lone[0].inspector_port, Some(40123));
+        assert_eq!(
+            serve_args(&lone[0], &[]),
+            names(&["--inspector-port", "40123"])
+        );
+        // No free port found (or `--inspector-port` passed through): unchanged.
+        let mut none = allocate(&names(&["links"]), None, &DevOptions::default());
+        assign_free_inspector(&mut none, None);
+        assert_eq!(none[0].inspector_port, None);
+    }
+
+    #[test]
+    fn a_free_inspector_never_overrides_an_allocated_one() {
+        let given = DevOptions {
+            inspect_port: Some(9300),
+            ..Default::default()
+        };
+        let mut lone = allocate(&names(&["links"]), None, &given);
+        assign_free_inspector(&mut lone, Some(40123));
+        assert_eq!(lone[0].inspector_port, Some(9300));
+        let mut two = allocate(&names(&["a", "b"]), None, &DevOptions::default());
+        assign_free_inspector(&mut two, Some(40123));
+        assert_eq!(two[0].inspector_port, Some(9229));
+    }
+
+    #[test]
+    fn a_taken_inspector_port_is_found() {
+        let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let taken = held.local_addr().unwrap().port();
+        let given = DevOptions {
+            inspect_port: Some(taken),
+            ..Default::default()
+        };
+        let lone = allocate(&names(&["links"]), None, &given);
+        assert_eq!(inspector_port_in_use(&lone), Some(taken));
+        drop(held);
+        assert_eq!(inspector_port_in_use(&lone), None);
+        // A worker with no inspector port has nothing to find.
+        let plain = allocate(&names(&["links"]), None, &DevOptions::default());
+        assert_eq!(inspector_port_in_use(&plain), None);
+        assert!(free_local_port().is_some());
     }
 
     // ---- #552: multi-context selection ------------------------------------
@@ -1763,7 +1894,7 @@ mod tests {
     fn ports_are_allocated_per_context_from_the_base() {
         let opts = DevOptions {
             inspect: true,
-            inspect_port: 9229,
+            inspect_port: Some(9229),
             ..Default::default()
         };
         let serving = allocate(&names(&["api", "worker"]), None, &opts);
@@ -1809,7 +1940,7 @@ mod tests {
         // #1954: wrangler's inspector is always on, so two wranglers left on
         // its default both bind 9229 and the second dies at boot.
         let plain = DevOptions {
-            inspect_port: 9229, // the CLI default
+            inspect_port: Some(9229), // the CLI default
             ..Default::default()
         };
         let serving = allocate(&names(&["api", "worker"]), None, &plain);
@@ -1823,7 +1954,7 @@ mod tests {
         );
         // `--inspect-port` moves that allocation even without `--inspect`…
         let moved = DevOptions {
-            inspect_port: 9300,
+            inspect_port: Some(9300),
             ..Default::default()
         };
         let serving = allocate(&names(&["api", "worker"]), None, &moved);
@@ -1849,7 +1980,7 @@ mod tests {
     #[test]
     fn overlapping_http_and_inspector_ranges_are_caught() {
         let opts = DevOptions {
-            inspect_port: 9229,
+            inspect_port: Some(9229),
             ..Default::default()
         };
         let two = names(&["api", "worker"]);
@@ -1979,7 +2110,7 @@ mod tests {
             &names(&["commerce-orders", "commerce-payment"]),
             None,
             &DevOptions {
-                inspect_port: 9229,
+                inspect_port: Some(9229),
                 ..Default::default()
             },
         );

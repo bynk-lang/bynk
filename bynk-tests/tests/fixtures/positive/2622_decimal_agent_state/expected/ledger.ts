@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkDecimalAdd, __bynkDecimalParseWire, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export type Price = { readonly coefficient: bigint; readonly scale: number } & { readonly __brand: "ledger.Price" };
@@ -48,6 +48,7 @@ export class Account {
   private async loadState(): globalThis.Promise<AccountState> {
     const stored = await this.state.storage.get<AccountState>("state");
     if (stored === undefined) return __zeroOfAccountState();
+    __checkStoredLayout("Account", stored);
     const __zero = __zeroOfAccountState();
     __reportUnknownStoredKeys("Account", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -62,7 +63,7 @@ export class Account {
   async deposit(amount: { readonly coefficient: bigint; readonly scale: number }, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (() => { __state.balance = ((b) => __bynkDecimalAdd(b, amount))(__state.balance); return undefined; })();
+      return (() => { __state.balance = ((b: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalAdd(b, amount))(__state.balance); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;

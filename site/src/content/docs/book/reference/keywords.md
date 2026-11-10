@@ -16,7 +16,7 @@ A keyword is never a parameter, a `let` or lambda binding or a bare reference, s
 
 ## Hard keywords
 
-Reserved everywhere — these **62** words can never be used as an identifier.
+Reserved everywhere — these **61** words can never be used as an identifier.
 
 | Keyword | Meaning |
 |---|---|
@@ -43,7 +43,6 @@ Reserved everywhere — these **62** words can never be used as an identifier.
 | `agent` | Declare a stateful, keyed agent inside a context. |
 | `as` | Alias a consumed context (`consumes X as Y`) or a consumed type (`consumes U { T as Y }`). |
 | `binding` | Name an adapter's TypeScript binding module (`binding "<module>"`). |
-| `by` | Name the actor a handler consumes, after the return type — or a service-level default on the header (`… -> T by <name>: <Actor>`). |
 | `capability` | Declare a capability (a dependency interface) in a context, or a distinct instance of a platform resource (`capability Sessions = Kv`). |
 | `commons` | Declare a pure, stateless module of types and functions. |
 | `consumes` | Declare a dependency on another context's services. |
@@ -105,6 +104,7 @@ Not lexer keywords: the lexer treats these as ordinary identifiers, and they car
 | Word | Meaning |
 |---|---|
 | `advance` | Move the test harness's clock forward in a `case` (`advance Clock by 15.minutes`). |
+| `by` | A clause word only in its positions — naming the actor a handler consumes after the return type or on a service header (`… -> T by <name>: <Actor>`), the actor of a call (`let r <- f() by User("bob")`), and the amount of `advance Clock by <Duration>`; an ordinary name (a parameter, a binding, a field) everywhere else. |
 | `derives` | After a type declaration's body, opts the type into a constraint (`type Priority = enum { Low, High } derives Ord`): the type is then ordered by declaration order. |
 | `drop` | Inside a `migrate` step, discard a stored field's value on purpose (`drop owner`). |
 | `fixture` | In a suite, declares a project file's text as a `String` constant for its cases (`fixture issue = "fixtures/issue.json"`): test-only, read from the `fixtures/` folder and never deployed. |
