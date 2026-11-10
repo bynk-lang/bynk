@@ -57,7 +57,7 @@ export class Shelf {
     const stored = await this.state.storage.get<ShelfState>("state");
     if (stored === undefined) return __zeroOfShelfState();
     __checkStoredLayout("Shelf", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfShelf);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfShelfState();
     __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -57,7 +57,7 @@ export class Slot {
     const stored = await this.state.storage.get<SlotState>("state");
     if (stored === undefined) return __zeroOfSlotState();
     __checkStoredLayout("Slot", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfSlot);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSlotState();
     __reportUnknownStoredKeys("Slot", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

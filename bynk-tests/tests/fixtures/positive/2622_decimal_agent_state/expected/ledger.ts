@@ -52,7 +52,7 @@ export class Account {
     const stored = await this.state.storage.get<AccountState>("state");
     if (stored === undefined) return __zeroOfAccountState();
     __checkStoredLayout("Account", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfAccount);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAccountState();
     __reportUnknownStoredKeys("Account", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

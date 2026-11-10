@@ -44,7 +44,7 @@ export class Cart {
     const stored = await this.state.storage.get<CartState>("state");
     if (stored === undefined) return __zeroOfCartState();
     __checkStoredLayout("Cart", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfCart);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCartState();
     __reportUnknownStoredKeys("Cart", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

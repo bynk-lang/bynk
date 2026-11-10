@@ -55,7 +55,7 @@ export class Ticket {
     const stored = await this.state.storage.get<TicketState>("state");
     if (stored === undefined) return __zeroOfTicketState();
     __checkStoredLayout("Ticket", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTicket);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTicketState();
     __reportUnknownStoredKeys("Ticket", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -146,7 +146,7 @@ export class Gate {
     const stored = await this.state.storage.get<GateState>("state");
     if (stored === undefined) return __zeroOfGateState();
     __checkStoredLayout("Gate", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfGate);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfGateState();
     __reportUnknownStoredKeys("Gate", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

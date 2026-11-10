@@ -44,7 +44,7 @@ export class Registry {
     const stored = await this.state.storage.get<RegistryState>("state");
     if (stored === undefined) return __zeroOfRegistryState();
     __checkStoredLayout("Registry", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfRegistry);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfRegistryState();
     __reportUnknownStoredKeys("Registry", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -55,7 +55,7 @@ export class Dial {
     const stored = await this.state.storage.get<DialState>("state");
     if (stored === undefined) return __zeroOfDialState();
     __checkStoredLayout("Dial", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfDial);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfDialState();
     __reportUnknownStoredKeys("Dial", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -120,7 +120,7 @@ export class Plant {
     const stored = await this.state.storage.get<PlantState>("state");
     if (stored === undefined) return __zeroOfPlantState();
     __checkStoredLayout("Plant", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfPlant);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfPlantState();
     __reportUnknownStoredKeys("Plant", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -187,7 +187,7 @@ export class Counter {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
     __checkStoredLayout("Counter", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfCounter);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCounterState();
     __reportUnknownStoredKeys("Counter", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

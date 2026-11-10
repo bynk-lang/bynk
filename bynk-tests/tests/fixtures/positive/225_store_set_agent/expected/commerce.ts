@@ -35,7 +35,7 @@ export class Audience {
     const stored = await this.state.storage.get<AudienceState>("state");
     if (stored === undefined) return __zeroOfAudienceState();
     __checkStoredLayout("Audience", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfAudience);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAudienceState();
     __reportUnknownStoredKeys("Audience", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

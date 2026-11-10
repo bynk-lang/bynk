@@ -49,7 +49,7 @@ export class Index {
     const stored = await this.state.storage.get<IndexState>("state");
     if (stored === undefined) return __zeroOfIndexState();
     __checkStoredLayout("Index", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfIndex);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfIndexState();
     __reportUnknownStoredKeys("Index", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -100,7 +100,7 @@ export class Front {
     const stored = await this.state.storage.get<FrontState>("state");
     if (stored === undefined) return __zeroOfFrontState();
     __checkStoredLayout("Front", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfFront);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfFrontState();
     __reportUnknownStoredKeys("Front", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

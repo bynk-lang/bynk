@@ -417,24 +417,22 @@ const orderOf = (v: unknown): number => (v as Seq).i;
 /**
  * The agent's stored state as a wholesale-shaped record, whatever layout it is in.
  * A record in the per-entry layout has its entries read and joined back, in
- * insertion order. A wholesale record that holds collections is upgraded in place,
- * in one transaction, and returned as it is. A record with no `__layout` and no
- * collections needs no upgrade. `self` keys the base the next `commitStored` diffs
- * against.
+ * insertion order. A wholesale record is returned as it is and not written: its
+ * first `commitStored` splits it, in one transaction. `self` keys the base the next
+ * `commitStored` diffs against.
  */
 export async function readStored<S extends object>(
   self: object,
   storage: DurableObjectStorage,
   storedState: S,
-  fields: readonly EntryField[],
 ): Promise<S> {
   const stored = storedState as Readonly<Record<string, unknown>>;
   if ((stored as { __layout?: unknown }).__layout === undefined) {
-    // The wholesale layout: upgrade it if it holds anything to split.
-    const holds = fields.some((f) => stored[f.name] !== undefined && stored[f.name] !== null);
+    // The wholesale layout. Nothing is written on load: the record is handed back as it
+    // is, for any migration step to read, and the first commit splits the migrated state
+    // (diffed against an empty base, so every entry is written) with the marker in one
+    // transaction. A handler that only reads, or faults, leaves the record untouched.
     bases.set(self, { entries: new Map() });
-    if (!holds) return { ...stored } as S;
-    await writeEntries(self, storage, stored, fields);
     return { ...stored } as S;
   }
   const all = await storage.list<unknown>();
@@ -589,14 +587,19 @@ function planEntries(
       own.slice(pruned).forEach(([k, v]) => {
         entries[k] = v;
       });
+      // A key's time never goes backwards: an entry appended with an earlier `t` than the
+      // last (the clock stepped back, or isolates disagree) takes the last key's time, so
+      // keys sort in append order. The entry keeps its own `t`.
+      const last = own.length > 0 ? own[own.length - 1]![0] : undefined;
+      let keyTime = last === undefined ? 0 : Number(last.slice(logPrefix(f.name).length, logPrefix(f.name).length + TIME_WIDTH));
       log.slice(kept).forEach((e) => {
-        entries[logKey(f.name, e.t, seq)] = e;
+        keyTime = Math.max(keyTime, e.t);
+        entries[logKey(f.name, keyTime, seq)] = e;
         seq += 1;
       });
       if (log.length > 0 || meta !== undefined) entries[metaKey(f.name)] = { size: log.length, seq };
       continue;
     }
-    const prefix = f.kind === "set" ? setPrefix(f.name) : mapPrefix(f.name);
     const keyOf = f.kind === "set" ? setKey : mapKey;
     let maxSeen = -1;
     for (const [k, v] of Object.entries(inline as Record<string, unknown>)) {
@@ -627,7 +630,6 @@ function planEntries(
         for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
       }
     }
-    void prefix;
     const size = Object.keys(inline as object).length;
     if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
   }

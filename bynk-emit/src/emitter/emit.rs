@@ -5982,9 +5982,10 @@ fn emit_agent_load_commit_state(
             ));
         }
         // Per-entry storage (#3189): join the entries a per-entry record keeps
-        // outside `"state"` back into the wholesale-shaped record, or upgrade a
-        // wholesale one in place. Everything below reads the joined record, so a
-        // migration step and the rehydration gate see what they always saw.
+        // outside `"state"` back into the wholesale-shaped record (a wholesale one
+        // is returned as it is, and split by its first commit). Everything below
+        // reads the joined record, so a migration step and the rehydration gate
+        // see what they always saw.
         stmts.push(bynk_ts::TsStmt::const_stmt(
             bynk_ts::TsBindingName::Ident("__wholesale".to_string()),
             None,
@@ -5994,7 +5995,6 @@ fn emit_agent_load_commit_state(
                     bynk_ts::TsExpr::Ident("this".to_string()),
                     bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
                     bynk_ts::TsExpr::Ident("stored".to_string()),
-                    bynk_ts::TsExpr::Ident(fields_const.clone()),
                 ],
             })),
             None,
@@ -8357,7 +8357,7 @@ pub(crate) fn emit_agent(
         let s_decl = "let";
         writeln!(
             out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check} __s = await __readStored(__inst, __inst.state.storage, __s, {fields_const});{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
+            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check} __s = await __readStored(__inst, __inst.state.storage, __s);{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
             agent_name = a.name.name
         )
         .unwrap();

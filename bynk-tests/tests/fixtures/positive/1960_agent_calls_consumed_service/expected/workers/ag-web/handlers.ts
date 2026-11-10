@@ -38,7 +38,7 @@ export class Calls {
     const stored = await this.state.storage.get<CallsState>("state");
     if (stored === undefined) return __zeroOfCallsState();
     __checkStoredLayout("Calls", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfCalls);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCallsState();
     __reportUnknownStoredKeys("Calls", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -111,7 +111,7 @@ export class Acc {
     const stored = await this.state.storage.get<AccState>("state");
     if (stored === undefined) return __zeroOfAccState();
     __checkStoredLayout("Acc", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfAcc);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAccState();
     __reportUnknownStoredKeys("Acc", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

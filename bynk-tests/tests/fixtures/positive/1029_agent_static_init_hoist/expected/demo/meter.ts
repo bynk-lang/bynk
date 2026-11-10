@@ -87,7 +87,7 @@ export class Meter {
     const stored = await this.state.storage.get<MeterState>("state");
     if (stored === undefined) return __zeroOfMeterState();
     __checkStoredLayout("Meter", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfMeter);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfMeterState();
     __reportUnknownStoredKeys("Meter", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

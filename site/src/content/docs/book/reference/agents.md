@@ -262,7 +262,7 @@ Two consequences follow:
   (a later build wrote it) faults on load as `RehydrationViolation` with detail
   `NewerLayout` and is never written back. The build writes layout 2, which stores each
   entry of a `Map`, `Set`, `Cache` and `Log`, and each index posting, under its own key; an
-  older record is upgraded on its next load, and `bynk migrate sweep` does that for every
+  older record is split by its next commit, and `bynk migrate sweep` does that for every
   instance. A stored
   field the current definition no longer declares is
   logged once, by name only, as

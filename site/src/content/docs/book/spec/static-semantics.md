@@ -1123,7 +1123,7 @@ and `__layout`, and each entry of a `Map`, `Set`, `Cache` and `Log`, and each `@
 posting, is stored under a key of its own. An entry of a `Map` or `Set` carries its
 insertion sequence, so a `Map` is read back in insertion order: an overwrite keeps its
 place, and a key removed and inserted again goes to the end. A record with no `__layout`
-is the earlier layout, with every collection inline in `"state"`; the next load upgrades
+is the earlier layout, with every collection inline in `"state"`; its next commit splits
 it, in one transaction, and a record is never left half upgraded. A handler commits only
 the entries it changed. A load checks `__layout` on the raw stored record first, whether
 or not the project has the lock, and a marker this build does not know faults,

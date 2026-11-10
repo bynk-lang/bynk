@@ -38,7 +38,7 @@ export class Bin {
     const stored = await this.state.storage.get<BinState>("state");
     if (stored === undefined) return __zeroOfBinState();
     __checkStoredLayout("Bin", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBin);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBinState();
     __reportUnknownStoredKeys("Bin", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

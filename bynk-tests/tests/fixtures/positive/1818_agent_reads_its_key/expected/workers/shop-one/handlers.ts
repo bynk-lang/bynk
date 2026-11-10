@@ -55,7 +55,7 @@ export class Order {
     const stored = await this.state.storage.get<OrderState>("state");
     if (stored === undefined) return __zeroOfOrderState();
     __checkStoredLayout("Order", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfOrder);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfOrderState();
     __reportUnknownStoredKeys("Order", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -124,7 +124,7 @@ export class Label {
     const stored = await this.state.storage.get<LabelState>("state");
     if (stored === undefined) return __zeroOfLabelState();
     __checkStoredLayout("Label", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLabel);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLabelState();
     __reportUnknownStoredKeys("Label", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -193,7 +193,7 @@ export class Tally {
     const stored = await this.state.storage.get<TallyState>("state");
     if (stored === undefined) return __zeroOfTallyState();
     __checkStoredLayout("Tally", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTally);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTallyState();
     __reportUnknownStoredKeys("Tally", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -262,7 +262,7 @@ export class Grid {
     const stored = await this.state.storage.get<GridState>("state");
     if (stored === undefined) return __zeroOfGridState();
     __checkStoredLayout("Grid", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfGrid);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfGridState();
     __reportUnknownStoredKeys("Grid", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

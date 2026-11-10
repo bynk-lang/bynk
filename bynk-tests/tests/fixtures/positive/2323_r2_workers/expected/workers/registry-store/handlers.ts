@@ -72,7 +72,7 @@ export class Projection {
     const stored = await this.state.storage.get<ProjectionState>("state");
     if (stored === undefined) return __zeroOfProjectionState();
     __checkStoredLayout("Projection", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfProjection);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfProjectionState();
     __reportUnknownStoredKeys("Projection", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -44,7 +44,7 @@ export class Orders {
     const stored = await this.state.storage.get<OrdersState>("state");
     if (stored === undefined) return __zeroOfOrdersState();
     __checkStoredLayout("Orders", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfOrders);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfOrdersState();
     __reportUnknownStoredKeys("Orders", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -45,7 +45,7 @@ export class Counter {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
     __checkStoredLayout("Counter", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfCounter);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCounterState();
     __reportUnknownStoredKeys("Counter", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -76,7 +76,7 @@ export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectName
 export async function __bynkDriveHistory_Counter(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown }>> {
   __CounterRegistry.reset();
   const __inst = __makeCounter("") as any;
-  const __load = async (): globalThis.Promise<CounterState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfCounterState(); __checkStoredLayout("Counter", __s); __s = await __readStored(__inst, __inst.state.storage, __s, __entryFieldsOfCounter); const __m = { ...__zeroOfCounterState(), ...__s }; __rehydrateCounterState(__m, __s); return __m; };
+  const __load = async (): globalThis.Promise<CounterState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfCounterState(); __checkStoredLayout("Counter", __s); __s = await __readStored(__inst, __inst.state.storage, __s); const __m = { ...__zeroOfCounterState(), ...__s }; __rehydrateCounterState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
   const __steps: globalThis.Array<{ call: any, accepted: boolean, old: CounterState, new: CounterState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;

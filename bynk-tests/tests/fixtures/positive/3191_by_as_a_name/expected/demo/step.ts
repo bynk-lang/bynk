@@ -69,7 +69,7 @@ export class Counter {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
     __checkStoredLayout("Counter", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfCounter);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCounterState();
     __reportUnknownStoredKeys("Counter", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -124,7 +124,7 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLedger);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

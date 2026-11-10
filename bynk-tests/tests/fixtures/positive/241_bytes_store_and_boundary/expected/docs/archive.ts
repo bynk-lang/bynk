@@ -48,7 +48,7 @@ export class Vault {
     const stored = await this.state.storage.get<VaultState>("state");
     if (stored === undefined) return __zeroOfVaultState();
     __checkStoredLayout("Vault", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfVault);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfVaultState();
     __reportUnknownStoredKeys("Vault", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

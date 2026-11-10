@@ -83,7 +83,7 @@ export class Room {
     const stored = await this.state.storage.get<RoomState>("state");
     if (stored === undefined) return __zeroOfRoomState();
     __checkStoredLayout("Room", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfRoom);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfRoomState();
     __reportUnknownStoredKeys("Room", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

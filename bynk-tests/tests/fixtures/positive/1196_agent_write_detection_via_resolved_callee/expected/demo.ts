@@ -46,7 +46,7 @@ export class Widget {
     const stored = await this.state.storage.get<WidgetState>("state");
     if (stored === undefined) return __zeroOfWidgetState();
     __checkStoredLayout("Widget", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfWidget);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfWidgetState();
     __reportUnknownStoredKeys("Widget", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

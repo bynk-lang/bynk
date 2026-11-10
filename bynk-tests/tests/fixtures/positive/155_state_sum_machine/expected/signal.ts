@@ -45,7 +45,7 @@ export class Signal {
     const stored = await this.state.storage.get<SignalState>("state");
     if (stored === undefined) return __zeroOfSignalState();
     __checkStoredLayout("Signal", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfSignal);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSignalState();
     __reportUnknownStoredKeys("Signal", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

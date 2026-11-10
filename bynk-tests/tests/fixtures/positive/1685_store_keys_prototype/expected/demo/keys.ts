@@ -98,7 +98,7 @@ export class Bag {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
     __checkStoredLayout("Bag", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBag);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -202,7 +202,7 @@ export class Points {
     const stored = await this.state.storage.get<PointsState>("state");
     if (stored === undefined) return __zeroOfPointsState();
     __checkStoredLayout("Points", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfPoints);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfPointsState();
     __reportUnknownStoredKeys("Points", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -269,7 +269,7 @@ export class Tags {
     const stored = await this.state.storage.get<TagsState>("state");
     if (stored === undefined) return __zeroOfTagsState();
     __checkStoredLayout("Tags", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTags);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTagsState();
     __reportUnknownStoredKeys("Tags", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -346,7 +346,7 @@ export class Memo {
     const stored = await this.state.storage.get<MemoState>("state");
     if (stored === undefined) return __zeroOfMemoState();
     __checkStoredLayout("Memo", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfMemo);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfMemoState();
     __reportUnknownStoredKeys("Memo", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -441,7 +441,7 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLedger);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -525,7 +525,7 @@ export class Sales {
     const stored = await this.state.storage.get<SalesState>("state");
     if (stored === undefined) return __zeroOfSalesState();
     __checkStoredLayout("Sales", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfSales);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSalesState();
     __reportUnknownStoredKeys("Sales", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

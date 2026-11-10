@@ -49,7 +49,7 @@ export class Gauge {
     const stored = await this.state.storage.get<GaugeState>("state");
     if (stored === undefined) return __zeroOfGaugeState();
     __checkStoredLayout("Gauge", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfGauge);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfGaugeState();
     __reportUnknownStoredKeys("Gauge", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

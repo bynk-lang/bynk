@@ -54,7 +54,7 @@ export class Wallet {
     const stored = await this.state.storage.get<WalletState>("state");
     if (stored === undefined) return __zeroOfWalletState();
     __checkStoredLayout("Wallet", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfWallet);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfWalletState();
     __reportUnknownStoredKeys("Wallet", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

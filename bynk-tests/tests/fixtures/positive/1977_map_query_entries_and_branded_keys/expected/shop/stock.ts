@@ -56,7 +56,7 @@ export class Box {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
     __checkStoredLayout("Box", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBox);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBoxState();
     __reportUnknownStoredKeys("Box", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -123,7 +123,7 @@ export class ByKey {
     const stored = await this.state.storage.get<ByKeyState>("state");
     if (stored === undefined) return __zeroOfByKeyState();
     __checkStoredLayout("ByKey", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfByKey);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfByKeyState();
     __reportUnknownStoredKeys("ByKey", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -203,7 +203,7 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLedger);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

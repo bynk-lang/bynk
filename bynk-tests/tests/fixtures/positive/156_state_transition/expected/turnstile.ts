@@ -44,7 +44,7 @@ export class Turnstile {
     const stored = await this.state.storage.get<TurnstileState>("state");
     if (stored === undefined) return __zeroOfTurnstileState();
     __checkStoredLayout("Turnstile", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTurnstile);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTurnstileState();
     __reportUnknownStoredKeys("Turnstile", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -131,7 +131,7 @@ export class Basket {
     const stored = await this.state.storage.get<BasketState>("state");
     if (stored === undefined) return __zeroOfBasketState();
     __checkStoredLayout("Basket", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBasket);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBasketState();
     __reportUnknownStoredKeys("Basket", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

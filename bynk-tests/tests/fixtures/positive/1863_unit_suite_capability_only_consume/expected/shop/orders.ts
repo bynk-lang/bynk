@@ -68,7 +68,7 @@ export class Till {
     const stored = await this.state.storage.get<TillState>("state");
     if (stored === undefined) return __zeroOfTillState();
     __checkStoredLayout("Till", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTill);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTillState();
     __reportUnknownStoredKeys("Till", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -443,7 +443,7 @@ export class Bag {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
     __checkStoredLayout("Bag", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBag);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

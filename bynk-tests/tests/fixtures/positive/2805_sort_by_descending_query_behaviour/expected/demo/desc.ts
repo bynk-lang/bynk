@@ -65,7 +65,7 @@ export class Board {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
     __checkStoredLayout("Board", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBoard);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBoardState();
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

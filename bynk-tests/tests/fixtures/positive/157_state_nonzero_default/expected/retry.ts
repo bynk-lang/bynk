@@ -37,7 +37,7 @@ export class Task {
     const stored = await this.state.storage.get<TaskState>("state");
     if (stored === undefined) return __zeroOfTaskState();
     __checkStoredLayout("Task", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTask);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTaskState();
     __reportUnknownStoredKeys("Task", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

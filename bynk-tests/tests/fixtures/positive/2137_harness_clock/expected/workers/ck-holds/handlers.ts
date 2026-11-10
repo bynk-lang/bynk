@@ -41,7 +41,7 @@ export class Hold {
     const stored = await this.state.storage.get<HoldState>("state");
     if (stored === undefined) return __zeroOfHoldState();
     __checkStoredLayout("Hold", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfHold);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfHoldState();
     __reportUnknownStoredKeys("Hold", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

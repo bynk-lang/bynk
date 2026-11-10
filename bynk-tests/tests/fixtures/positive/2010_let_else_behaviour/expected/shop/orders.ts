@@ -102,7 +102,7 @@ export class Order {
     const stored = await this.state.storage.get<OrderState>("state");
     if (stored === undefined) return __zeroOfOrderState();
     __checkStoredLayout("Order", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfOrder);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfOrderState();
     __reportUnknownStoredKeys("Order", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -186,7 +186,7 @@ export class Stock {
     const stored = await this.state.storage.get<StockState>("state");
     if (stored === undefined) return __zeroOfStockState();
     __checkStoredLayout("Stock", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfStock);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfStockState();
     __reportUnknownStoredKeys("Stock", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

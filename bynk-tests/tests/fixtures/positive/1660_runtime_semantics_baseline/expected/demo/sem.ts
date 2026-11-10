@@ -86,7 +86,7 @@ export class Gauge {
     const stored = await this.state.storage.get<GaugeState>("state");
     if (stored === undefined) return __zeroOfGaugeState();
     __checkStoredLayout("Gauge", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfGauge);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfGaugeState();
     __reportUnknownStoredKeys("Gauge", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -146,7 +146,7 @@ export class Lamp {
     const stored = await this.state.storage.get<LampState>("state");
     if (stored === undefined) return __zeroOfLampState();
     __checkStoredLayout("Lamp", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfLamp);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLampState();
     __reportUnknownStoredKeys("Lamp", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -206,7 +206,7 @@ export class Meter {
     const stored = await this.state.storage.get<MeterState>("state");
     if (stored === undefined) return __zeroOfMeterState();
     __checkStoredLayout("Meter", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfMeter);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfMeterState();
     __reportUnknownStoredKeys("Meter", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -277,7 +277,7 @@ export class Panel {
     const stored = await this.state.storage.get<PanelState>("state");
     if (stored === undefined) return __zeroOfPanelState();
     __checkStoredLayout("Panel", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfPanel);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfPanelState();
     __reportUnknownStoredKeys("Panel", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
@@ -338,7 +338,7 @@ export class Bag {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
     __checkStoredLayout("Bag", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfBag);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

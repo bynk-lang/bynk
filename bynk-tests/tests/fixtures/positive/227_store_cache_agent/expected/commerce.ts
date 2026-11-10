@@ -49,7 +49,7 @@ export class Sessions {
     const stored = await this.state.storage.get<SessionsState>("state");
     if (stored === undefined) return __zeroOfSessionsState();
     __checkStoredLayout("Sessions", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfSessions);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSessionsState();
     __reportUnknownStoredKeys("Sessions", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

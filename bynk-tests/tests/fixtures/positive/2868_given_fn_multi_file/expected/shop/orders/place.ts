@@ -54,7 +54,7 @@ export class Tally {
     const stored = await this.state.storage.get<TallyState>("state");
     if (stored === undefined) return __zeroOfTallyState();
     __checkStoredLayout("Tally", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfTally);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTallyState();
     __reportUnknownStoredKeys("Tally", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

@@ -387,7 +387,7 @@ const FIELDS: EntryField[] = [
 
 async function load(self: object, s: InMemoryStorage): Promise<Record<string, any>> {
   const stored = ((await s.get("state")) ?? {}) as Record<string, unknown>;
-  return (await readStored(self, s as never, stored, FIELDS)) as Record<string, any>;
+  return (await readStored(self, s as never, stored)) as Record<string, any>;
 }
 
 test("codec: a state commits per entry and reads back in insertion order, integer-like keys included", async () => {
@@ -446,13 +446,50 @@ test("codec: a commit writes only the entries that changed", async () => {
   assert.ok(s.stats.keysWritten <= 3, `keys written: ${s.stats.keysWritten}`);
 });
 
-test("codec: a wholesale record is upgraded on read and still reads back the same", async () => {
+test("codec: a wholesale record is not written on read; its first commit splits it and it reads back the same", async () => {
   const s = new InMemoryStorage();
   await s.put("state", { __v: 1, users: { b: 1, a: 2 }, audit: [{ t: 1, v: "x" }] });
-  const st = await load({}, s);
+  const self = {};
+  const st = await load(self, s);
   assert.deepEqual(Object.keys(st.users), ["b", "a"]);
+  assert.equal(((await s.get("state")) as any).__layout, undefined, "a read writes nothing");
+  assert.equal(s.size, 1);
+  await commitStored(self, s as never, st, FIELDS);
   assert.equal(((await s.get("state")) as any).__layout, LAYOUT_PER_ENTRY);
-  assert.deepEqual((await load({}, s)).audit, [{ t: 1, v: "x" }]);
+  const back = await load({}, s);
+  assert.deepEqual(Object.keys(back.users), ["b", "a"]);
+  assert.deepEqual(back.audit, [{ t: 1, v: "x" }]);
+});
+
+test("codec: a wholesale record whose step re-kinds a Map is never split by the old kind, however it is read first", async () => {
+  const s = new InMemoryStorage();
+  await s.put("state", { __v: 1, users: { a: 1, b: 2 } });
+  const asLog: EntryField[] = [{ name: "users", kind: "log" }];
+  const self = {};
+  const st = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  assert.deepEqual(st.users, { a: 1, b: 2 }); // the step reads the Map as stored
+  // a read-only handler, then a reload: the record is as it was
+  assert.deepEqual((await s.get("state")) as object, { __v: 1, users: { a: 1, b: 2 } });
+  st.users = [{ t: 1, v: "a" }]; // what the step produces
+  await commitStored(self, s as never, st, asLog);
+  assert.deepEqual((await load({}, s)).users, [{ t: 1, v: "a" }]);
+});
+
+test("codec: a log entry appended with an earlier time keeps append order on reload", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { audit: [{ t: 10, v: "a" }] }, FIELDS);
+  let st = await load(self, s);
+  st.audit = [...st.audit, { t: 5, v: "b" }, { t: 20, v: "c" }];
+  await commitStored(self, s as never, st, FIELDS);
+  st = await load(self, s);
+  assert.deepEqual(st.audit.map((e: any) => e.v), ["a", "b", "c"]);
+  assert.deepEqual(st.audit.map((e: any) => e.t), [10, 5, 20]);
+  st.audit = [...st.audit, { t: 1, v: "d" }];
+  s.resetStats();
+  await commitStored(self, s as never, st, FIELDS);
+  assert.ok(s.stats.keysWritten <= 3, `an append writes only the new entry: ${s.stats.keysWritten}`);
 });
 
 test("codec: a write that throws leaves storage and the base as they were", async () => {
@@ -500,7 +537,7 @@ test("codec: a collection the current fields do not list is joined as it was sto
   await load(self, s);
   await commitStored(self, s as never, { users: { a: 1 }, hits: { k: { v: 1, exp: 9 } }, tags: { z: true } }, FIELDS);
   // A later version has none of these fields; a migration step reads them.
-  const st = (await readStored({}, s as never, ((await s.get("state")) ?? {}) as object, [])) as Record<string, any>;
+  const st = (await readStored({}, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
   assert.deepEqual(st.users, { a: 1 });
   assert.deepEqual(st.hits, { k: { v: 1, exp: 9 } });
   assert.deepEqual(st.tags, { z: true });
@@ -510,7 +547,7 @@ test("codec: a collection the current fields do not list is joined as it was sto
 test("codec: a Cell re-kinded to a collection keeps its inline value for a step to read", async () => {
   const s = new InMemoryStorage();
   await s.put("state", { __layout: 2, users: 42 });
-  const st = (await readStored({}, s as never, ((await s.get("state")) ?? {}) as object, FIELDS)) as Record<string, any>;
+  const st = (await readStored({}, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
   assert.equal(st.users, 42);
 });
 
@@ -520,10 +557,10 @@ test("codec: a field re-kinded from a Map to a Set is joined as the Map it was, 
   await load(self, s);
   await commitStored(self, s as never, { users: { a: 1, b: 2 } }, FIELDS);
   const asSet: EntryField[] = [{ name: "users", kind: "set" }];
-  const st = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object, asSet)) as Record<string, any>;
+  const st = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
   assert.deepEqual(st.users, { a: 1, b: 2 }); // what the step reads
   st.users = { a: true, b: true }; // what the step produces
   await commitStored(self, s as never, st, asSet);
   assert.deepEqual([...(await s.list({ prefix: "m/users/" })).keys()], []);
-  assert.deepEqual(Object.keys(((await readStored({}, s as never, ((await s.get("state")) ?? {}) as object, asSet)) as Record<string, any>).users), ["a", "b"]);
+  assert.deepEqual(Object.keys(((await readStored({}, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>).users), ["a", "b"]);
 });

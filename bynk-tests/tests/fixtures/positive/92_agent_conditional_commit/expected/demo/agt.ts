@@ -52,7 +52,7 @@ export class Toggle {
     const stored = await this.state.storage.get<ToggleState>("state");
     if (stored === undefined) return __zeroOfToggleState();
     __checkStoredLayout("Toggle", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfToggle);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfToggleState();
     __reportUnknownStoredKeys("Toggle", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };

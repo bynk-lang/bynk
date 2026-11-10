@@ -35,7 +35,7 @@ export class PackageIndex {
     const stored = await this.state.storage.get<PackageIndexState>("state");
     if (stored === undefined) return __zeroOfPackageIndexState();
     __checkStoredLayout("PackageIndex", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored, __entryFieldsOfPackageIndex);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfPackageIndexState();
     __reportUnknownStoredKeys("PackageIndex", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
