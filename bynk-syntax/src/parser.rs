@@ -3180,7 +3180,8 @@ mod tests {
     fn parsing_continues_after_a_bare_expression() {
         // The second error, in the same block, is still reported; the bare
         // statement itself is kept (as `let _ = …`) in the recovered AST.
-        let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  let = 2\n  3\n}\n\nfn h() -> Int { 4 }\n";
+        let src =
+            "commons x\n\nfn f() -> Int {\n  g(1)\n  let = 2\n  3\n}\n\nfn h() -> Int { 4 }\n";
         let (unit, errors) = parse_recover_str(src);
         let cats: Vec<_> = errors.iter().map(|e| e.category).collect();
         assert_eq!(cats[0], BARE, "{cats:?}");
@@ -3189,7 +3190,9 @@ mod tests {
             panic!("expected commons")
         };
         assert!(
-            c.items.iter().any(|i| matches!(i, CommonsItem::Fn(f) if f.name.ident().name == "h")),
+            c.items
+                .iter()
+                .any(|i| matches!(i, CommonsItem::Fn(f) if f.name.ident().name == "h")),
             "`fn h` after the broken block still parses"
         );
     }

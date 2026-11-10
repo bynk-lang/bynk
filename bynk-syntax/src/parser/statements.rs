@@ -185,9 +185,8 @@ impl<'a> Parser<'a> {
             },
         ));
         if effectful {
-            err = err.with_note(
-                "`do <call>` is the shorter form for a call that returns `Effect[()]`",
-            );
+            err = err
+                .with_note("`do <call>` is the shorter form for a call that returns `Effect[()]`");
         }
         Some(err.with_suggestion(
             format!("bind the value with `{}`", binder.trim_end()),
@@ -367,43 +366,42 @@ impl<'a> Parser<'a> {
         // ordinary type mismatch. `implicit_tail` records the synthesis so the
         // formatter omits the `()` (Bynk has no statement terminator, so a
         // printed `()` would re-attach to the last statement on re-parse).
-        let (tail, close, implicit_tail) = if parsed_tail.is_none()
-            && self.peek_kind() == Some(TokenKind::RBrace)
-        {
-            let close = self.expect(TokenKind::RBrace, "to close the block")?;
-            let tail = Expr {
-                id: self.alloc_expr_id(),
-                kind: ExprKind::UnitLit,
-                span: close.span,
-            };
-            (tail, close.span, true)
-        } else {
-            let tail = match parsed_tail {
-                Some(t) => t,
-                None => self.parse_expr()?,
-            };
-            self.check_staircase(&tail);
-            // #2838: a block has no expression statements, so a `match` ends
-            // it. A second `match` straight after is the common slip; say why
-            // it cannot follow rather than only that a `}` was expected.
-            if matches!(tail.kind, ExprKind::Match { .. })
-                && self.peek_kind() == Some(TokenKind::Match)
-            {
-                let next = self.peek().unwrap().span;
-                return Err(CompileError::new(
-                    "bynk.parse.match_ends_block",
-                    next,
-                    "a `match` ends the block it is in, so another `match` cannot follow it",
-                )
-                .with_label(tail.span, "this `match` is the block's final value")
-                .with_note(
-                    "bind the first with `let _ = match …`, or flatten a chain of fallible \
+        let (tail, close, implicit_tail) =
+            if parsed_tail.is_none() && self.peek_kind() == Some(TokenKind::RBrace) {
+                let close = self.expect(TokenKind::RBrace, "to close the block")?;
+                let tail = Expr {
+                    id: self.alloc_expr_id(),
+                    kind: ExprKind::UnitLit,
+                    span: close.span,
+                };
+                (tail, close.span, true)
+            } else {
+                let tail = match parsed_tail {
+                    Some(t) => t,
+                    None => self.parse_expr()?,
+                };
+                self.check_staircase(&tail);
+                // #2838: a block has no expression statements, so a `match` ends
+                // it. A second `match` straight after is the common slip; say why
+                // it cannot follow rather than only that a `}` was expected.
+                if matches!(tail.kind, ExprKind::Match { .. })
+                    && self.peek_kind() == Some(TokenKind::Match)
+                {
+                    let next = self.peek().unwrap().span;
+                    return Err(CompileError::new(
+                        "bynk.parse.match_ends_block",
+                        next,
+                        "a `match` ends the block it is in, so another `match` cannot follow it",
+                    )
+                    .with_label(tail.span, "this `match` is the block's final value")
+                    .with_note(
+                        "bind the first with `let _ = match …`, or flatten a chain of fallible \
                      steps with `let … else`",
-                ));
-            }
-            let close = self.expect(TokenKind::RBrace, "to close the block")?;
-            (tail, close.span, false)
-        };
+                    ));
+                }
+                let close = self.expect(TokenKind::RBrace, "to close the block")?;
+                (tail, close.span, false)
+            };
         let mut block = Block {
             statements,
             tail: Box::new(tail),

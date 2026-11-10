@@ -244,7 +244,15 @@ mod tests {
             .iter()
             .filter(|d| d.error.category == "bynk.parse.bare_expression_statement")
             .collect();
-        assert_eq!(bare.len(), 2, "{:?}", diagnostics.iter().map(|d| d.error.category).collect::<Vec<_>>());
+        assert_eq!(
+            bare.len(),
+            2,
+            "{:?}",
+            diagnostics
+                .iter()
+                .map(|d| d.error.category)
+                .collect::<Vec<_>>()
+        );
         let out = fixed(text);
         assert!(out.contains("let _ <- Logger.info(\"hi\")"), "{out}");
         assert!(out.contains("let _ = g(1)"), "{out}");
