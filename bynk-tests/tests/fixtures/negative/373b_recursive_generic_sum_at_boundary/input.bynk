@@ -1,12 +1,9 @@
 commons bad
 
 // #3171: the recursive-generic diagnostic names the type's kind. `Tree` is a
-// generic *sum* that contains itself through a `List[Tree[T]]` payload, so the
-// message says "sum", not "record".
+// generic *sum* that contains itself through a `List[Tree[T]]` payload. The
+// payload is itself a boundary position, so the declaration alone is rejected
+// (no use site is needed) and the message says "sum", not "record".
 type Tree[T] =
   | Leaf(value: T)
   | Branch(children: List[Tree[T]])
-
-type Holder = {
-  root: Tree[Int],
-}
