@@ -56,6 +56,7 @@ pub mod kernel_op;
 pub mod locals;
 pub mod narrowing;
 pub mod packages;
+pub mod phase_timing;
 pub mod project_model;
 pub mod recovery;
 pub mod requirements;

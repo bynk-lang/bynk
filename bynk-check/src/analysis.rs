@@ -375,6 +375,7 @@ pub fn analyse_project_with_policy(
     let mut exprs = ExprTypeSink::new();
     let mut snapshots: Vec<(PathBuf, String)> = Vec::new();
 
+    crate::phase_timing::begin(crate::phase_timing::Level::File);
     // -- 1. Discovery. --
     let file_lists = match project_model::phase_discovery(&trees, &excludes, &mut errors) {
         Ok(files) => files,
@@ -392,6 +393,7 @@ pub fn analyse_project_with_policy(
             Err(()) => return bailed(errors, snapshots, hints, locals, exprs, requirements, tys),
         };
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Unit);
     // -- 2a. #2223: fold the project's path dependencies in. --
     if packages {
         crate::packages::apply_graph(
@@ -526,6 +528,7 @@ pub fn analyse_project_with_policy(
         &mut errors,
     );
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- 5c. `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
 
@@ -689,6 +692,7 @@ pub fn analyse_project_with_policy(
     // `Mode::Analyse` — independent unit groups resolve/check past another
     // group's errors).
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Unit);
     // -- 7. Per-unit file index. --
     let unit_file_index = project_model::phase_file_index(&groups, &parsed);
 
@@ -774,6 +778,7 @@ pub fn analyse_project_with_policy(
         );
         ctx.d1_sql = d1_sql.clone();
 
+        crate::phase_timing::mark(crate::phase_timing::Level::Definition);
         let mut checked: Vec<crate::checker::TypedCommons> = Vec::new();
         for &i in indices {
             let pf = &parsed[i];
@@ -811,6 +816,7 @@ pub fn analyse_project_with_policy(
                 checked.push(typed);
             }
         }
+        crate::phase_timing::mark(crate::phase_timing::Level::Unit);
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().collect::<Vec<_>>());
@@ -830,6 +836,7 @@ pub fn analyse_project_with_policy(
     // ...)`), matching `run_checks`'s own `#696`-noted gap (attributing them
     // means threading a file through many internal push sites — out of scope
     // here, same as there).
+    crate::phase_timing::mark(crate::phase_timing::Level::Definition);
     let mut test_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
     let _ready_tests = crate::test_suites::phase_test_bodies(
         &test_groups,
@@ -898,6 +905,7 @@ pub fn analyse_project_with_policy(
         );
     }
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- Assemble the `ProjectAnalysis`. Mirrored the now-deleted
     //    `analyse_project_with`'s own `RunChecks::Checked` arm exactly. --
     let index = assemble_index(
@@ -975,6 +983,7 @@ pub fn analyse_project_with_policy(
         doc_scope.insert(name.clone(), scope);
     }
 
+    crate::phase_timing::finish();
     ProjectAnalysis {
         snapshots,
         errors: errors.into_all(),
