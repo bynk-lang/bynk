@@ -406,7 +406,7 @@ pub fn check_file_core(
     let local_fns = local_table.map(|t| &t.fns).unwrap_or(&empty_fns);
 
     let resolved = ResolvedCommons::new(
-        synthetic_commons,
+        Arc::new(synthetic_commons),
         combined_types.clone(),
         local_types,
         combined_fns.clone(),

@@ -944,7 +944,13 @@ pub fn analyse_project_with_policy(
             &unit_tables,
         );
         cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        let agents: HashMap<String, AgentDecl> = table.agents.clone();
+        // `ContextSequenceInfo` owns plain `AgentDecl`s (it is read across crates);
+        // the checker's `Arc`-shared table is unwrapped here, once per context.
+        let agents: HashMap<String, AgentDecl> = table
+            .agents
+            .iter()
+            .map(|(k, v)| (k.clone(), AgentDecl::clone(v)))
+            .collect();
         sequence_info.insert(
             name.clone(),
             ContextSequenceInfo {

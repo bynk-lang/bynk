@@ -297,7 +297,7 @@ pub(super) fn integration_typed_commons(
         ..
     } = view.clone();
     checker::TypedCommons {
-        commons: Commons {
+        commons: Arc::new(Commons {
             name: QualifiedName {
                 parts: vec![Ident {
                     name: HARNESS_CALLER.to_string(),
@@ -312,7 +312,7 @@ pub(super) fn integration_typed_commons(
             span: Span::default(),
             trivia: Trivia::default(),
             trailing_comments: Vec::new(),
-        },
+        }),
         types,
         fns,
         methods,

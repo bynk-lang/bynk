@@ -6888,6 +6888,310 @@ fn emit_agent_state_persistence(
     }
 }
 
+/// An agent class's handler methods (#3167): one per `on` handler, each lowered
+/// to a class method and written onto `out`, in declaration order.
+fn emit_agent_handlers(
+    out: &mut String,
+    a: &AgentDecl,
+    layout: &AgentStoreLayout,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    class_smb: &RefCell<SourceMapBuilder>,
+) {
+    let source_map = Some(class_smb);
+    let is_store_agent = true;
+    let class_depth = 0;
+    let AgentStoreLayout {
+        effective_fields,
+        held_maps_ts,
+        map_names,
+        map_value_ts,
+        store_map_indexes,
+        set_names,
+        cache_ttls,
+        log_retains,
+        log_value_ts,
+        ..
+    } = layout;
+    // 3) Handlers.
+    let cell_names: HashSet<String> = effective_fields
+        .iter()
+        .map(|f| f.name.name.clone())
+        .collect();
+    for h in &a.handlers {
+        // Arc C, slice 23 (#1375): closes step (9)'s own fourth sub-slice —
+        // each handler converts to a real `bynk_ts::TsClassMethod` fragment,
+        // the same "params/return-type real, whole body one opaque
+        // `TsStmt::Raw`, two-level offset merge" shape `emit_service`
+        // (#1361) already established for its own near-identical prologue/
+        // body/epilogue wrapping — printed through `print_class_method`
+        // (#1359) instead of `print_object_entry`, since a handler here is
+        // a CLASS method, not an object-literal entry. The old standalone
+        // `emit_doc_block` call is removed — `doc` on the method now
+        // carries it, the same doc-duplication bug #1361's own review
+        // caught fixed proactively here rather than rediscovered.
+        let mut params: Vec<bynk_ts::TsParam> = h
+            .params
+            .iter()
+            .map(|p| bynk_ts::TsParam {
+                name: ts_ident(&p.name.name),
+                ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
+                optional: false,
+            })
+            .collect();
+        // Lower body into a buffer so we can detect cross-context usage and
+        // shape the deps type accordingly.
+        let mut body_out = String::new();
+        // v0.70: per-statement maps for the spliced handler body (see emit_service).
+        let body_smb = RefCell::new(SourceMapBuilder::new());
+        // v0.81: a store-agent handler reads/writes cells over a mutable working
+        // record `__state`; a state-record handler uses `currentState`/`self.state`.
+        // A store handler that performs any `:=` wraps its body in a closure so an
+        // implicit commit runs at handler end on every (success) return path.
+        // #1196/R6.5: write detection reads the checker's own resolved
+        // `Callee::Store` classification (`bynk_model::body_writes_state`)
+        // rather than matching a bare-identifier receiver name against this
+        // agent's own field-name sets — a locally-shadowed field name (a
+        // handler param, say) can no longer false-positive into an
+        // unnecessary implicit-commit wrapper the way the deleted
+        // `block_writes_state` could (`1196_agent_write_detection_via_
+        // resolved_callee`'s own fixture pins the fix). A held `Map[K,
+        // Connection]`'s own `put`/`remove` still triggers the commit flush
+        // (v0.105, slice 3b-ii) with no extra name-set union needed here —
+        // a held map is an ordinary `store Map` field as far as the checker's
+        // own `Callee::Store` resolution is concerned, "held" being purely
+        // this emitter's own downstream connection-resolution concern.
+        let writes_state = is_store_agent && body_writes_state(&h.body, commons);
+        let store = is_store_agent.then(|| {
+            Box::new(AgentStoreState {
+                state: ("__state".to_string(), cell_names.clone()),
+                maps: map_names.clone(),
+                sets: set_names.clone(),
+                caches: cache_ttls.clone(),
+                logs: log_retains.clone(),
+                indexes: store_map_indexes.clone(),
+                held_maps: held_maps_ts.clone(),
+                map_values: map_value_ts.clone(),
+                log_values: log_value_ts.clone(),
+            })
+        });
+        // #934: mirrors the `method` name resolved below (all non-`method_name`
+        // agent handler kinds resolve to `"call"`), computed here so it's
+        // available before the body lowers.
+        let scope_method = h
+            .method_name
+            .as_ref()
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| "call".to_string());
+        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+        module.in_bynk_unit = ctx.commons_name == "bynk";
+        // #1960: the body lowers for the build target, as a service body
+        // does, so a cross-context call reads the Service Binding its `deps`
+        // type names.
+        module.target = ctx.target;
+        module.agent_method_givens = ctx.agent_method_givens.clone();
+        module.agent_called_contexts = ctx.agent_called_contexts.clone();
+        module.event_schema_versions = ctx.event_schema_versions.clone();
+        module.consumed_type_ns = consumed_type_ns(ctx);
+        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
+        module.consumed_context_types = ctx.consumed_context_types();
+        let mut cx = LowerCtx::new(
+            module,
+            BodyMode::AgentHandler {
+                handler: HandlerShared {
+                    capabilities: bynk_model::lower_handler_given_ir(h)
+                        .into_iter()
+                        .map(|c| c.name)
+                        .collect::<HashSet<_>>(),
+                    handler_scope: Some(format!(
+                        "{}.{}.{}",
+                        ctx.commons_name, a.name.name, scope_method
+                    )),
+                    owning_context: ctx.commons_name.clone(),
+                    ..HandlerShared::default()
+                },
+                in_agent_handler: true,
+                agent_key_field: Some(a.key_name.name.clone()),
+                store,
+            },
+        )
+        .with_source_map(Some(&body_smb));
+        cx.local_agents = ctx.local_agents.clone();
+        // A handler param is emitted at its natural `ts_ident` name (above), so
+        // it must be declared into scope the same way: otherwise a param that
+        // shares a name with a `store Map`/`Set`/`Cache`/`Log` field is
+        // invisible to `LowerCtx::is_local`, and the store-field dispatch
+        // below silently wins over the parameter.
+        for p in &h.params {
+            cx.declare_binder(&p.name.name);
+        }
+        // P6.54 (design/tracks/the-ir.md §6b): computed once, not twice —
+        // `async_kw` below used to call `is_effectful_return(&h.return_type)`
+        // again for the identical value.
+        let effectful = is_effectful_return(&h.return_type);
+        let async_tail = effectful;
+        // A writing store handler's body sits one level deeper, inside the
+        // implicit-commit closure.
+        let body_indent = if writes_state {
+            INDENT_STEP * 3
+        } else {
+            INDENT_STEP * 2
+        };
+        emit_block_as_function_body_with_return(
+            &mut body_out,
+            &h.body,
+            &mut cx,
+            body_indent,
+            async_tail,
+            Some(&h.return_type),
+        );
+        let mut deps_members = build_deps_object_ty_with_surface(
+            &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
+            &cx,
+            &ctx.cross_context,
+            ctx.target,
+        );
+        // Events track, slice 0 (spine #936): see the matching field on the
+        // service path (`emit_service`) — an agent handler that emits, or
+        // that calls another local agent method which itself emits, gets
+        // the same compose-supplied `__eventsDispatch` callback.
+        let needs_events_dispatch = cx.is_first_party_events()
+            && (bynk_model::block_uses_emit(&h.body, &commons.callees)
+                || cx
+                    .agent_given_caps_used()
+                    .is_some_and(|m| m.contains_key("Events")));
+        if needs_events_dispatch {
+            // Arc F, slice 4 (#1463): stays opaque `Named` text — the same
+            // `TsType::Fn`-has-no-named-params gap `emit_service`'s own
+            // identical field already names.
+            append_deps_field(
+                &mut deps_members,
+                "__eventsDispatch",
+                bynk_ts::TsType::named(format!(
+                    "(events: globalThis.Array<{}>) => globalThis.Promise<void>",
+                    crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
+                )),
+            );
+        }
+        params.push(bynk_ts::TsParam {
+            name: "deps".to_string(),
+            ty: Some(bynk_ts::TsType::Object(deps_members)),
+            optional: false,
+        });
+        let ret = ts_type_ref_to_ts_type(&h.return_type, None);
+        let method = h
+            .method_name
+            .as_ref()
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| match lower_handler_kind_ir(&h.kind) {
+                IrHandlerKind::Call => "call".to_string(),
+                // HTTP/cron/queue/open handlers are service-only (rejected in
+                // agents by the parser); these arms are defensive and unreachable
+                // here.
+                IrHandlerKind::Http { .. }
+                | IrHandlerKind::Cron { .. }
+                | IrHandlerKind::Message
+                | IrHandlerKind::Open
+                | IrHandlerKind::Close
+                | IrHandlerKind::Event
+                | IrHandlerKind::Rejected => "call".to_string(),
+            });
+        // Load state at entry. A state-record handler binds `currentState` and
+        // commits explicitly via `commit`. A store handler binds a mutable
+        // working record `__state`; reads/writes go through it, and (if it writes)
+        // the body is wrapped so `commitState` runs once at handler end — the
+        // implicit, atomic commit (ADR 0109). A fault before that flush persists
+        // nothing; the invariant gate inside `commitState` runs before the write.
+        //
+        // The whole prologue+body+epilogue is captured into one local
+        // `raw_body` buffer instead of `out` directly — the same
+        // restructuring #1361 (`emit_service`) already made for its own
+        // near-identical events-IIFE wrapping, needed here because the
+        // method's own params/return-type/doc now print through
+        // `print_class_method` as one fragment, which can no longer be
+        // interleaved with direct `writeln!`s into `out` the way the
+        // pre-conversion code was.
+        let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
+        let events_decl = format!(
+            "    const __events: globalThis.Array<{}> = [];",
+            crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
+        );
+        let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
+        let mut raw_body = String::new();
+        let body_out_offset_in_raw;
+        if is_store_agent {
+            if writes_state {
+                writeln!(
+                    raw_body,
+                    "    const __state = {{ ...(await this.loadState()) }};"
+                )
+                .unwrap();
+                if body_emits_directly {
+                    writeln!(raw_body, "{events_decl}").unwrap();
+                }
+                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
+                body_out_offset_in_raw = raw_body.len();
+                raw_body.push_str(&body_out);
+                writeln!(raw_body, "    }})();").unwrap();
+                writeln!(raw_body, "    await this.commitState(__state);").unwrap();
+                if body_emits_directly {
+                    writeln!(raw_body, "{flush}").unwrap();
+                }
+                writeln!(raw_body, "    return __result;").unwrap();
+            } else if body_emits_directly {
+                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
+                writeln!(raw_body, "{events_decl}").unwrap();
+                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
+                body_out_offset_in_raw = raw_body.len();
+                raw_body.push_str(&body_out);
+                writeln!(raw_body, "    }})();").unwrap();
+                writeln!(raw_body, "{flush}").unwrap();
+                writeln!(raw_body, "    return __result;").unwrap();
+            } else {
+                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
+                body_out_offset_in_raw = raw_body.len();
+                raw_body.push_str(&body_out);
+            }
+        } else if body_emits_directly {
+            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
+            writeln!(raw_body, "{events_decl}").unwrap();
+            writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
+            body_out_offset_in_raw = raw_body.len();
+            raw_body.push_str(&body_out);
+            writeln!(raw_body, "    }})();").unwrap();
+            writeln!(raw_body, "{flush}").unwrap();
+            writeln!(raw_body, "    return __result;").unwrap();
+        } else {
+            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
+            body_out_offset_in_raw = raw_body.len();
+            raw_body.push_str(&body_out);
+        }
+        let handler_method = bynk_ts::TsClassMethod {
+            name: method,
+            private: false,
+            is_async: effectful,
+            params,
+            return_type: Some(ret),
+            doc: h.documentation.as_deref().map(str::to_owned),
+            body: vec![bynk_ts::TsStmt::raw(raw_body.clone(), None)],
+        };
+        // #2270: anchor the method header and prologue to the handler's own
+        // `on call` line. Without this they inherit the previous checkpoint,
+        // so an uncalled handler's header leaked onto the preceding body's
+        // last line in coverage.
+        class_smb.borrow_mut().record(out.len(), h.span);
+        emit_class_method_and_merge_source_map(
+            out,
+            &handler_method,
+            class_depth,
+            RawBody::nested(&raw_body, &body_out, body_out_offset_in_raw),
+            &body_smb,
+            source_map,
+        );
+        writeln!(out).unwrap();
+    }
+}
+
 /// The names of an agent's state registry and fresh-state factory.
 struct AgentStateNames {
     /// The per-agent state registry (`__agentStates…`).
@@ -7308,20 +7612,7 @@ pub(crate) fn emit_agent(
         step_plans,
         agent_versions,
     } = emit_agent_state_persistence(a, &layout, &zero_fn, commons, ctx, &mut stmts);
-    let AgentStoreLayout {
-        effective_fields,
-        is_workers,
-        held_maps_ts,
-        map_names,
-        map_value_ts,
-        store_map_indexes,
-        set_names,
-        cache_ttls,
-        log_retains,
-        log_value_ts,
-        ..
-    } = layout;
-    let is_store_agent = true;
+    let is_workers = layout.is_workers;
     // 2) Durable Object class.
     //
     // #1482: local buffer/map pair, replacing this function's own former
@@ -7402,7 +7693,7 @@ pub(crate) fn emit_agent(
     emit_agent_load_commit_state(
         &mut out,
         a,
-        &effective_fields,
+        &layout.effective_fields,
         &AgentLoadFns {
             zero_fn: &zero_fn,
             rehydrate_fn: &rehydrate_fn,
@@ -7416,284 +7707,7 @@ pub(crate) fn emit_agent(
         ctx,
         source_text,
     );
-    let class_depth = 0;
-    // 3) Handlers.
-    let cell_names: HashSet<String> = effective_fields
-        .iter()
-        .map(|f| f.name.name.clone())
-        .collect();
-    for h in &a.handlers {
-        // Arc C, slice 23 (#1375): closes step (9)'s own fourth sub-slice —
-        // each handler converts to a real `bynk_ts::TsClassMethod` fragment,
-        // the same "params/return-type real, whole body one opaque
-        // `TsStmt::Raw`, two-level offset merge" shape `emit_service`
-        // (#1361) already established for its own near-identical prologue/
-        // body/epilogue wrapping — printed through `print_class_method`
-        // (#1359) instead of `print_object_entry`, since a handler here is
-        // a CLASS method, not an object-literal entry. The old standalone
-        // `emit_doc_block` call is removed — `doc` on the method now
-        // carries it, the same doc-duplication bug #1361's own review
-        // caught fixed proactively here rather than rediscovered.
-        let mut params: Vec<bynk_ts::TsParam> = h
-            .params
-            .iter()
-            .map(|p| bynk_ts::TsParam {
-                name: ts_ident(&p.name.name),
-                ty: Some(ts_type_ref_to_ts_type(&p.type_ref, None)),
-                optional: false,
-            })
-            .collect();
-        // Lower body into a buffer so we can detect cross-context usage and
-        // shape the deps type accordingly.
-        let mut body_out = String::new();
-        // v0.70: per-statement maps for the spliced handler body (see emit_service).
-        let body_smb = RefCell::new(SourceMapBuilder::new());
-        // v0.81: a store-agent handler reads/writes cells over a mutable working
-        // record `__state`; a state-record handler uses `currentState`/`self.state`.
-        // A store handler that performs any `:=` wraps its body in a closure so an
-        // implicit commit runs at handler end on every (success) return path.
-        // #1196/R6.5: write detection reads the checker's own resolved
-        // `Callee::Store` classification (`bynk_model::body_writes_state`)
-        // rather than matching a bare-identifier receiver name against this
-        // agent's own field-name sets — a locally-shadowed field name (a
-        // handler param, say) can no longer false-positive into an
-        // unnecessary implicit-commit wrapper the way the deleted
-        // `block_writes_state` could (`1196_agent_write_detection_via_
-        // resolved_callee`'s own fixture pins the fix). A held `Map[K,
-        // Connection]`'s own `put`/`remove` still triggers the commit flush
-        // (v0.105, slice 3b-ii) with no extra name-set union needed here —
-        // a held map is an ordinary `store Map` field as far as the checker's
-        // own `Callee::Store` resolution is concerned, "held" being purely
-        // this emitter's own downstream connection-resolution concern.
-        let writes_state = is_store_agent && body_writes_state(&h.body, commons);
-        let store = is_store_agent.then(|| {
-            Box::new(AgentStoreState {
-                state: ("__state".to_string(), cell_names.clone()),
-                maps: map_names.clone(),
-                sets: set_names.clone(),
-                caches: cache_ttls.clone(),
-                logs: log_retains.clone(),
-                indexes: store_map_indexes.clone(),
-                held_maps: held_maps_ts.clone(),
-                map_values: map_value_ts.clone(),
-                log_values: log_value_ts.clone(),
-            })
-        });
-        // #934: mirrors the `method` name resolved below (all non-`method_name`
-        // agent handler kinds resolve to `"call"`), computed here so it's
-        // available before the body lowers.
-        let scope_method = h
-            .method_name
-            .as_ref()
-            .map(|m| m.name.clone())
-            .unwrap_or_else(|| "call".to_string());
-        let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-        module.in_bynk_unit = ctx.commons_name == "bynk";
-        // #1960: the body lowers for the build target, as a service body
-        // does, so a cross-context call reads the Service Binding its `deps`
-        // type names.
-        module.target = ctx.target;
-        module.agent_method_givens = ctx.agent_method_givens.clone();
-        module.agent_called_contexts = ctx.agent_called_contexts.clone();
-        module.event_schema_versions = ctx.event_schema_versions.clone();
-        module.consumed_type_ns = consumed_type_ns(ctx);
-        module.consumed_type_declared = ctx.consumed_type_aliases.clone();
-        module.consumed_context_types = ctx.consumed_context_types();
-        let mut cx = LowerCtx::new(
-            module,
-            BodyMode::AgentHandler {
-                handler: HandlerShared {
-                    capabilities: bynk_model::lower_handler_given_ir(h)
-                        .into_iter()
-                        .map(|c| c.name)
-                        .collect::<HashSet<_>>(),
-                    handler_scope: Some(format!(
-                        "{}.{}.{}",
-                        ctx.commons_name, a.name.name, scope_method
-                    )),
-                    owning_context: ctx.commons_name.clone(),
-                    ..HandlerShared::default()
-                },
-                in_agent_handler: true,
-                agent_key_field: Some(a.key_name.name.clone()),
-                store,
-            },
-        )
-        .with_source_map(Some(&body_smb));
-        cx.local_agents = ctx.local_agents.clone();
-        // A handler param is emitted at its natural `ts_ident` name (above), so
-        // it must be declared into scope the same way: otherwise a param that
-        // shares a name with a `store Map`/`Set`/`Cache`/`Log` field is
-        // invisible to `LowerCtx::is_local`, and the store-field dispatch
-        // below silently wins over the parameter.
-        for p in &h.params {
-            cx.declare_binder(&p.name.name);
-        }
-        // P6.54 (design/tracks/the-ir.md §6b): computed once, not twice —
-        // `async_kw` below used to call `is_effectful_return(&h.return_type)`
-        // again for the identical value.
-        let effectful = is_effectful_return(&h.return_type);
-        let async_tail = effectful;
-        // A writing store handler's body sits one level deeper, inside the
-        // implicit-commit closure.
-        let body_indent = if writes_state {
-            INDENT_STEP * 3
-        } else {
-            INDENT_STEP * 2
-        };
-        emit_block_as_function_body_with_return(
-            &mut body_out,
-            &h.body,
-            &mut cx,
-            body_indent,
-            async_tail,
-            Some(&h.return_type),
-        );
-        let mut deps_members = build_deps_object_ty_with_surface(
-            &effective_given(&bynk_model::lower_handler_given_ir(h), &cx),
-            &cx,
-            &ctx.cross_context,
-            ctx.target,
-        );
-        // Events track, slice 0 (spine #936): see the matching field on the
-        // service path (`emit_service`) — an agent handler that emits, or
-        // that calls another local agent method which itself emits, gets
-        // the same compose-supplied `__eventsDispatch` callback.
-        let needs_events_dispatch = cx.is_first_party_events()
-            && (bynk_model::block_uses_emit(&h.body, &commons.callees)
-                || cx
-                    .agent_given_caps_used()
-                    .is_some_and(|m| m.contains_key("Events")));
-        if needs_events_dispatch {
-            // Arc F, slice 4 (#1463): stays opaque `Named` text — the same
-            // `TsType::Fn`-has-no-named-params gap `emit_service`'s own
-            // identical field already names.
-            append_deps_field(
-                &mut deps_members,
-                "__eventsDispatch",
-                bynk_ts::TsType::named(format!(
-                    "(events: globalThis.Array<{}>) => globalThis.Promise<void>",
-                    crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
-                )),
-            );
-        }
-        params.push(bynk_ts::TsParam {
-            name: "deps".to_string(),
-            ty: Some(bynk_ts::TsType::Object(deps_members)),
-            optional: false,
-        });
-        let ret = ts_type_ref_to_ts_type(&h.return_type, None);
-        let method = h
-            .method_name
-            .as_ref()
-            .map(|m| m.name.clone())
-            .unwrap_or_else(|| match lower_handler_kind_ir(&h.kind) {
-                IrHandlerKind::Call => "call".to_string(),
-                // HTTP/cron/queue/open handlers are service-only (rejected in
-                // agents by the parser); these arms are defensive and unreachable
-                // here.
-                IrHandlerKind::Http { .. }
-                | IrHandlerKind::Cron { .. }
-                | IrHandlerKind::Message
-                | IrHandlerKind::Open
-                | IrHandlerKind::Close
-                | IrHandlerKind::Event
-                | IrHandlerKind::Rejected => "call".to_string(),
-            });
-        // Load state at entry. A state-record handler binds `currentState` and
-        // commits explicitly via `commit`. A store handler binds a mutable
-        // working record `__state`; reads/writes go through it, and (if it writes)
-        // the body is wrapped so `commitState` runs once at handler end — the
-        // implicit, atomic commit (ADR 0109). A fault before that flush persists
-        // nothing; the invariant gate inside `commitState` runs before the write.
-        //
-        // The whole prologue+body+epilogue is captured into one local
-        // `raw_body` buffer instead of `out` directly — the same
-        // restructuring #1361 (`emit_service`) already made for its own
-        // near-identical events-IIFE wrapping, needed here because the
-        // method's own params/return-type/doc now print through
-        // `print_class_method` as one fragment, which can no longer be
-        // interleaved with direct `writeln!`s into `out` the way the
-        // pre-conversion code was.
-        let body_emits_directly = bynk_model::block_uses_emit(&h.body, &commons.callees);
-        let events_decl = format!(
-            "    const __events: globalThis.Array<{}> = [];",
-            crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE
-        );
-        let flush = "    if (__events.length > 0) { await deps.__eventsDispatch(__events); }";
-        let mut raw_body = String::new();
-        let body_out_offset_in_raw;
-        if is_store_agent {
-            if writes_state {
-                writeln!(
-                    raw_body,
-                    "    const __state = {{ ...(await this.loadState()) }};"
-                )
-                .unwrap();
-                if body_emits_directly {
-                    writeln!(raw_body, "{events_decl}").unwrap();
-                }
-                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-                writeln!(raw_body, "    }})();").unwrap();
-                writeln!(raw_body, "    await this.commitState(__state);").unwrap();
-                if body_emits_directly {
-                    writeln!(raw_body, "{flush}").unwrap();
-                }
-                writeln!(raw_body, "    return __result;").unwrap();
-            } else if body_emits_directly {
-                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
-                writeln!(raw_body, "{events_decl}").unwrap();
-                writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-                writeln!(raw_body, "    }})();").unwrap();
-                writeln!(raw_body, "{flush}").unwrap();
-                writeln!(raw_body, "    return __result;").unwrap();
-            } else {
-                writeln!(raw_body, "    const __state = await this.loadState();").unwrap();
-                body_out_offset_in_raw = raw_body.len();
-                raw_body.push_str(&body_out);
-            }
-        } else if body_emits_directly {
-            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
-            writeln!(raw_body, "{events_decl}").unwrap();
-            writeln!(raw_body, "    const __result = await (async () => {{").unwrap();
-            body_out_offset_in_raw = raw_body.len();
-            raw_body.push_str(&body_out);
-            writeln!(raw_body, "    }})();").unwrap();
-            writeln!(raw_body, "{flush}").unwrap();
-            writeln!(raw_body, "    return __result;").unwrap();
-        } else {
-            writeln!(raw_body, "    const currentState = await this.loadState();").unwrap();
-            body_out_offset_in_raw = raw_body.len();
-            raw_body.push_str(&body_out);
-        }
-        let handler_method = bynk_ts::TsClassMethod {
-            name: method,
-            private: false,
-            is_async: effectful,
-            params,
-            return_type: Some(ret),
-            doc: h.documentation.as_deref().map(str::to_owned),
-            body: vec![bynk_ts::TsStmt::raw(raw_body.clone(), None)],
-        };
-        // #2270: anchor the method header and prologue to the handler's own
-        // `on call` line. Without this they inherit the previous checkpoint,
-        // so an uncalled handler's header leaked onto the preceding body's
-        // last line in coverage.
-        class_smb.borrow_mut().record(out.len(), h.span);
-        emit_class_method_and_merge_source_map(
-            &mut out,
-            &handler_method,
-            class_depth,
-            RawBody::nested(&raw_body, &body_out, body_out_offset_in_raw),
-            &body_smb,
-            source_map,
-        );
-        writeln!(out).unwrap();
-    }
+    emit_agent_handlers(&mut out, a, &layout, commons, ctx, &class_smb);
     // #2270: what follows the handlers (the rest of the class and the
     // agent's module-level factory code) belongs to the agent, not to the last
     // handler's final body line, which it would otherwise inherit.

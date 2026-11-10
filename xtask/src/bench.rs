@@ -539,6 +539,35 @@ pub fn latest_record(root: &Path) -> Option<(Version, Value)> {
     ))
 }
 
+/// The accepted editor-latency budget (#3168, accepted by the maintainer):
+/// the language server's edit-to-diagnostics **p95** stays under this many
+/// milliseconds on the [`BUDGET_CONTEXTS`]-context synthetic project. It is
+/// checked against each release record, not gated in CI; a record that breaches
+/// it is the trigger for the incremental-scheduler decision (#1523).
+pub const BUDGET_P95_MS: f64 = 100.0;
+
+/// The project size the budget is stated for.
+pub const BUDGET_CONTEXTS: u64 = 50;
+
+/// The budget's verdict on a record: `Some(p95)` of the [`BUDGET_CONTEXTS`]-context
+/// size, or `None` when the record did not measure that size.
+fn budget_p95(record: &Value) -> Option<f64> {
+    record["sizes"]
+        .as_array()?
+        .iter()
+        .find(|s| s["contexts"].as_u64() == Some(BUDGET_CONTEXTS))?["lsp_edit"]["p95_ms"]
+        .as_f64()
+}
+
+/// A warning for `cargo xtask bench` to print when `record` breaches the
+/// budget; `None` when it is met or the size was not measured.
+pub fn budget_warning(record: &Value) -> Option<String> {
+    let p95 = budget_p95(record).filter(|p| *p >= BUDGET_P95_MS)?;
+    Some(format!(
+        "edit-to-diagnostics p95 is {p95} ms at {BUDGET_CONTEXTS} contexts, over the {BUDGET_P95_MS} ms budget: this record is the trigger for the incremental-scheduler decision (#1523)"
+    ))
+}
+
 /// One-line reading of a record, for the `keystroke_latency` probe: the
 /// edit-to-diagnostics median at each measured size, smallest first.
 pub fn reading(version: Version, record: &Value) -> Option<String> {
@@ -555,8 +584,19 @@ pub fn reading(version: Version, record: &Value) -> Option<String> {
         })
         .collect();
     let cells = cells.filter(|c| !c.is_empty())?;
+    let budget = match budget_p95(record) {
+        Some(p) if p < BUDGET_P95_MS => {
+            format!("; budget p95 < {BUDGET_P95_MS} ms at {BUDGET_CONTEXTS} contexts: met ({p} ms)")
+        }
+        Some(p) => format!(
+            "; budget p95 < {BUDGET_P95_MS} ms at {BUDGET_CONTEXTS} contexts: BREACHED ({p} ms)"
+        ),
+        None => {
+            format!("; budget p95 < {BUDGET_P95_MS} ms at {BUDGET_CONTEXTS} contexts: not measured")
+        }
+    };
     Some(format!(
-        "edit-to-diagnostics median: {}; debounce excluded (v{version}, {RECORD_DIR}/v{version}.json)",
+        "edit-to-diagnostics median: {}; debounce excluded{budget} (v{version}, {RECORD_DIR}/v{version}.json)",
         cells.join(", ")
     ))
 }
@@ -611,6 +651,35 @@ mod tests {
         assert_eq!(m["file"], json!(2.0));
         assert_eq!(m["definition"], json!(200.0));
         assert_eq!(level_medians(&[]), Value::Null);
+    }
+
+    #[test]
+    fn the_budget_is_read_from_the_50_context_p95() {
+        let rec = |p95: f64| {
+            json!({"sizes": [
+                {"contexts": 10, "lsp_edit": {"median_ms": 1.0, "p95_ms": 500.0}},
+                {"contexts": 50, "lsp_edit": {"median_ms": 40.0, "p95_ms": p95}},
+            ]})
+        };
+        // Only the 50-context size counts; a slow 10-context p95 does not breach.
+        assert_eq!(budget_warning(&rec(54.5)), None);
+        assert!(
+            budget_warning(&rec(100.0))
+                .unwrap()
+                .contains("over the 100 ms budget")
+        );
+        assert!(budget_warning(&rec(250.0)).unwrap().contains("#1523"));
+        // A record that did not measure 50 contexts says nothing, and reads "not measured".
+        let none = json!({"sizes": [{"contexts": 10, "source_lines": 1, "lsp_edit": {"median_ms": 1.0, "p95_ms": 1.0}}]});
+        assert_eq!(budget_warning(&none), None);
+        let v = Version::parse("0.1.0").unwrap();
+        assert!(reading(v, &none).unwrap().contains("not measured"));
+        assert!(reading(v, &rec(54.5)).unwrap().contains("met (54.5 ms)"));
+        assert!(
+            reading(v, &rec(120.0))
+                .unwrap()
+                .contains("BREACHED (120 ms)")
+        );
     }
 
     #[test]

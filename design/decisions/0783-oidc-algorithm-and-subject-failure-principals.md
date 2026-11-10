@@ -36,9 +36,16 @@ NonEmpty`). A suite could not show the seam refuses them (#3225).
   (`alg` outside `RS256`/`ES256` is `unsupported alg`, before any key is tried;
   an empty or absent `sub` is `missing sub`, before the handler and so before the
   identity type's refinement is consulted). This was confirmed by driving the
-  real seam, not by reading it, and a mutation test turns each of the two checks
-  off in turn and expects exactly the matching cases to fail. The production
-  Worker is byte-identical; only generated test modules change.
+  real seam, not by reading it. A mutation test removes each of the two
+  refusals from the emitted verifier in turn (the `return Err("unsupported alg")`
+  and the `return Err("missing sub")` statements) and expects exactly the
+  matching cases to fail and the others to stay green, so each case is sensitive
+  to the one refusal it relies on. It does not model a lax verifier that admits
+  the token: with the algorithm refusal removed the verifier goes on to read
+  `params.kty` of a `null`, so that mutant fails on a thrown error, not on a
+  token it let through. A mutant that makes the confusion token genuinely verify
+  would test more and is not part of this decision. The production Worker is
+  byte-identical; only generated test modules change.
 - **Added.** The reserved names `WrongAlgorithm` and `NoSubject` (completion and
   hover), and the diagnostics `bynk.test.wrong_algorithm_needs_oidc_route` and
   `bynk.test.no_subject_needs_oidc_route`.

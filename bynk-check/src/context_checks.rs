@@ -884,7 +884,7 @@ pub fn check_context_declarations(
 /// single rename, or a removal.
 fn check_class_declarations(table: &UnitTable, errors: &mut Vec<CompileError>) {
     let mut fates: HashMap<&str, Span> = HashMap::new();
-    let mut agents: Vec<&AgentDecl> = table.agents.values().collect();
+    let mut agents: Vec<&AgentDecl> = table.agents.values().map(|a| &**a).collect();
     agents.sort_by_key(|a| a.span.start);
     for a in agents {
         let Some(old) = &a.replaces else { continue };

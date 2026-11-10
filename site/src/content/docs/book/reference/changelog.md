@@ -28,6 +28,10 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.534.4** | The checker shares a unit's parsed declarations and agents by reference instead of deep-cloning them for every agent and handler, so a project check is up to a third faster (500 contexts: a language-server edit 521 ms to 344 ms) |
+| **v0.534.3** | The editor-latency budget (language-server edit-to-diagnostics p95 under 100 ms on the 50-context project) is stated in the benchmark README and the `keystroke_latency` row, and `cargo xtask bench` warns when a record breaches it |
+| **v0.534.2** | `cargo xtask check-pending` rejects a pending file whose `changelog` is wrapped in quotes, which the stamp would have copied into the changelog row |
+| **v0.534.1** | "The emitter lowers an agent class's handler methods in `emit_agent_handlers`, as part of splitting `emit_agent` (#3167)" |
 | **v0.534.0** | `bynk deploy revert` refuses a rollback to a build that writes an older storage layout over stored data (per-entry storage, slice 5b) |
 | **v0.533.0** | A `system` case can drive an `Oidc` route as `by WrongAlgorithm` (an `alg: none` token and an HS256 token keyed with the public key) and `by NoSubject` (an empty and a missing `sub`), each expected to read `Rejected(Unauthorized)` |
 | **v0.532.4** | Under `bynk test`, `remove` on a held `Map[K, Connection]` now closes the connection the entry held before deleting it, as the Workers build does, so a case can observe the close with `TestConnection.closed()` ([#3224](https://github.com/bynk-lang/bynk/issues/3224)) |
@@ -35,7 +39,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 | **v0.532.2** | "`bynk check`, `bynk test` and `bynk compile` treat a subdirectory with its own `bynk.toml` as a separate project, skipping it with a note, and refuse a directory that is no project but holds one or more, naming them and suggesting a `[workspace]` root (#3242)" |
 | **v0.532.1** | '`bynk explain` gains written explanations for `bynk.generics.polymorphic_recursion` and `bynk.generics.recursive_generic_at_boundary`' |
 | **v0.532.0** | An agent instance runs one handler at a time, so a handler that awaits another agent is no longer interleaved with a second handler and no longer loses updates; re-entrant calls fault `ReentrantAgentCall`, long waits fault `AgentBusy` |
-| **v0.531.3** | '`bynk dev` honours an explicit `--inspect-port` for a single context, gives a lone worker a free inspector port so sessions started together no longer collide on 9229, and reports a taken inspector port itself' |
+| **v0.531.3** | `bynk dev` honours an explicit `--inspect-port` for a single context, gives a lone worker a free inspector port so sessions started together no longer collide on 9229, and reports a taken inspector port itself |
 | **v0.531.2** | "`cargo xtask bench-runtime` measures compiled Bynk against hand-written TypeScript twins (bundle size, start-up, request latency) under workerd, and records the results per release" |
 | **v0.531.1** | "The emitter builds an agent's state record in `emit_agent_state_record` and writes its `loadState` and `commitState` methods together in `emit_agent_load_commit_state`, as part of splitting `emit_agent` (#3167)" |
 | **v0.531.0** | "`by` is a contextual keyword: an ordinary name (a parameter, a binding, a field) everywhere except its clause positions, so `on call bump(by: Int)` parses" |
@@ -43,7 +47,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 | **v0.530.0** | A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`) |
 | **v0.529.0** | `bynk migrate sweep` reports storage-layout progress once a deployed Worker writes a layout beyond the original one (per-entry storage, slice 5a) |
 | **v0.528.4** | '`bynk explain` gains a written explanation for `bynk.parse.bare_expression_statement`' |
-| **v0.528.3** | '`bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229' |
+| **v0.528.3** | `bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229 |
 | **v0.528.2** | `cargo xtask bench` measures `bynk check` and the language server's edit-to-diagnostics time on a synthetic project, recorded per release in `design/benchmarks/` |
 | **v0.528.1** | "The emitter classifies an agent's `store` fields once, in a named `AgentStoreLayout`, as the first step of splitting `emit_agent` (#3167)" |
 | **v0.528.0** | The runtime gains the per-entry storage primitives (batched, ranged and transactional storage, the key layout, a staged write-set and the wholesale split); nothing emitted uses them yet (per-entry storage, slice 1) |
