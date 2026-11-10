@@ -169,8 +169,11 @@ Design for it:
 - **Key agents finely.** One agent per customer, order or channel, not one per
   system: a collection that grows with your data belongs *across* agent instances,
   not inside one.
-- **Bound a `Log` with `@retain`** and **a `Cache` with `@ttl`**, so neither grows
-  without limit (a `Cache` already requires `@ttl`).
+- **Bound a `Log` with `@retain`**, which prunes old entries as you append. `@ttl`
+  on a `Cache` only *hides* an expired entry from reads; it does not delete it, so
+  an expired entry still counts towards the ceiling until the same key is written
+  again or you `remove` it. Keep a `Cache`'s key space bounded, or `remove` keys
+  you are finished with.
 - **Use D1 for a large or unbounded table.** A `Map` is the right home for a
   small, bounded collection owned by one agent; a table of every order, event or
   user is a database's job (see [`D1`](/book/reference/capabilities/)).

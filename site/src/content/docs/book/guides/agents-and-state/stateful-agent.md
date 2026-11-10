@@ -180,7 +180,9 @@ that keeps growing will eventually stop persisting ([#3159](https://github.com/b
 Keep the collections an agent holds small and bounded:
 
 - key agents finely: one per customer, order or channel, not one per system;
-- bound a `Log` with `@retain(...)` and a `Cache` with `@ttl(...)`;
+- bound a `Log` with `@retain(...)`; a `Cache`'s `@ttl(...)` hides expired entries
+  but does not delete them, so keep its key space bounded or `remove` keys you are
+  done with;
 - keep a large or unbounded table in D1 rather than in a `Map`.
 
 The [reference](/book/reference/agents/#size-and-cost-of-an-agents-state) has the
