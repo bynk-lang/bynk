@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.537**.
+written against **v0.538**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.538.0** | A `Yaml.decode[T](text)` static reads a safe YAML 1.2 subset through the same typed decode as `Json.decode`, with positioned refusals and `DecodeError` paths |
 | **v0.537.0** | On a held `Map[K, Connection]`, `put` over a key that already holds a connection now closes the displaced connection first, as `remove` does, on both Workers and `bynk test`; putting back the connection the key already holds closes nothing ([#3261](https://github.com/bynk-lang/bynk/issues/3261)) |
 | **v0.536.1** | `BYNK_PHASE_TIMING=1` makes an analysis round report its time by R3.13 query level (file, unit, definition, project), and `cargo xtask bench` records it per release from the language server |
 | **v0.536.0** | The decode error type is renamed from `JsonError` to `DecodeError`; `JsonError` stays as a deprecated alias with an auto-fix |
