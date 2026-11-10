@@ -13,9 +13,9 @@ and say what you mean:
 
 ```bynk
 commons totals {
-  fn total(xs: List[Int]) -> Int {
-    xs.fold(0, (acc, x) => acc + x)
-  }
+	fn total(xs: List[Int]) -> Int {
+		xs.fold(0, (acc, x) => acc + x)
+	}
 }
 ```
 
@@ -32,9 +32,9 @@ You carry the running result in an accumulator parameter:
 
 ```bynk
 commons loops {
-  fn count(n: Int, acc: Int) -> Int {
-    if n == 0 { acc } else { count(n - 1, acc + 1) }
-  }
+	fn count(n: Int, acc: Int) -> Int {
+		if n == 0 { acc } else { count(n - 1, acc + 1) }
+	}
 }
 ```
 
@@ -47,14 +47,14 @@ constant stack, and no chain of pending promises grows behind it:
 
 ```bynk
 commons loops {
-  fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
-    if n <= 0 {
-      Effect.pure(())
-    } else {
-      do step(n)
-      repeat(n - 1, step)
-    }
-  }
+	fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+		if n <= 0 {
+			Effect.pure(())
+		} else {
+			do step(n)
+			repeat(n - 1, step)
+		}
+	}
 }
 ```
 
@@ -110,9 +110,9 @@ would across separate calls:
 
 ```bynk
 commons loops {
-  fn adders(n: Int, acc: List[Int -> Int]) -> List[Int -> Int] {
-    if n == 0 { acc } else { adders(n - 1, acc.append((x: Int) => x + n)) }
-  }
+	fn adders(n: Int, acc: List[Int -> Int]) -> List[Int -> Int] {
+		if n == 0 { acc } else { adders(n - 1, acc.append((x: Int) => x + n)) }
+	}
 }
 ```
 
