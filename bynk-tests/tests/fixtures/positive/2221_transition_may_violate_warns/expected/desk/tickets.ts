@@ -164,7 +164,7 @@ export class Gate {
   async ping(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.hits = ((n) => n + 1)(__state.hits); return undefined; })();
+      const __r0 = await (() => { __state.hits = ((n: number) => n + 1)(__state.hits); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

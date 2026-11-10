@@ -63,7 +63,7 @@ export class Counter {
     const __state = { ...(await this.loadState()) };
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((v) => v + 1)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((v: number) => v + 1)(__state.n); return undefined; })();
       return (async () => { __events.push({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1 } }); })();
     })();
     await this.commitState(__state);

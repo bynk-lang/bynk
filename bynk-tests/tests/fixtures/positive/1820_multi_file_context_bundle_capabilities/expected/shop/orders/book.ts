@@ -55,7 +55,7 @@ export class Book {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const s = await deps.Stamp.next();
-      const __r0 = await (() => { __state.total = ((t) => t + m)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((t: number) => t + m)(__state.total); return undefined; })();
       return __state.total + s;
     })();
     await this.commitState(__state);

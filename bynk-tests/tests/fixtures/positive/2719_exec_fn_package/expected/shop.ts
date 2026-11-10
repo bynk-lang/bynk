@@ -22,7 +22,7 @@ export const __NoAuditProvider = { token: __AuditToken, factory: () => new NoAud
 
 export const api = {
   async call(n: number, deps: { Audit: Audit; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    const r = await announce(async (x) => deps.Audit.note(x), n, deps.__exec);
+    const r = await announce(async (x: number) => deps.Audit.note(x), n, deps.__exec);
     return r;
   },
 };

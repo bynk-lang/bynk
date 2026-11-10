@@ -68,7 +68,7 @@ export class Registry {
     }
     throw new globalThis.Error("non-exhaustive match");
   })(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(cur, order));
-      const __r0 = await (() => { __state.totals = ((m) => __bynkMapInsert<OrderId, number>(m, order, next))(__state.totals); return undefined; })();
+      const __r0 = await (() => { __state.totals = ((m: ReadonlyMap<OrderId, number>) => __bynkMapInsert<OrderId, number>(m, order, next))(__state.totals); return undefined; })();
       return next;
     })();
     await this.commitState(__state);

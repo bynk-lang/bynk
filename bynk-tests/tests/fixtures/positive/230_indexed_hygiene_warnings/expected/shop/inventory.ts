@@ -57,7 +57,7 @@ export class Inventory {
 
   async inRegion(rg: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r) => r.region === rg)(__x))))().length;
+    return ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.region === rg)(__x))))().length;
   }
 
 }

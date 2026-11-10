@@ -70,7 +70,7 @@ export const bounded = {
 
 export const many = {
   async call(skus: readonly number[], deps: { Prices: Prices; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    const ps = await (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (sku) => __bynkWithin(__bynkRace([deps.Prices.get("east", sku), deps.Prices.get("west", sku)], deps.__exec), 9000, deps.__exec))(__x))))(skus);
+    const ps = await (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (sku: number) => __bynkWithin(__bynkRace([deps.Prices.get("east", sku), deps.Prices.get("west", sku)], deps.__exec), 9000, deps.__exec))(__x))))(skus);
     return (ps).length;
   },
 };

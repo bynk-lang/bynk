@@ -91,7 +91,7 @@ export const read = {
       case "Some": {
         const o = found.value;
         const parts = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(o.body);
-        return __bynkBytesDecodeUtf8(((__xs: readonly globalThis.Uint8Array[], __acc: globalThis.Uint8Array, __f: (acc: globalThis.Uint8Array, x: globalThis.Uint8Array) => globalThis.Uint8Array) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(parts, new globalThis.TextEncoder().encode(""), (acc, b) => __bynkBytesConcat(acc, b)));
+        return __bynkBytesDecodeUtf8(((__xs: readonly globalThis.Uint8Array[], __acc: globalThis.Uint8Array, __f: (acc: globalThis.Uint8Array, x: globalThis.Uint8Array) => globalThis.Uint8Array) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(parts, new globalThis.TextEncoder().encode(""), (acc: globalThis.Uint8Array, b: globalThis.Uint8Array) => __bynkBytesConcat(acc, b)));
       }
       case "None": {
         return None;

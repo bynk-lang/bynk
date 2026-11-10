@@ -15,7 +15,7 @@ export type Run = __CommonsRun & { readonly __ctxBrand?: "board.api" };
 
 export function listed(): readonly string[] {
   const runs = [{ repo: ("a" as Repo) }, { repo: ("b" as Repo) }, { repo: ("a" as Repo) }];
-  return [...new globalThis.Set(((runs).map((__x: Run) => ((r) => r.repo)(__x))).map((__x: Repo) => ((n) => n)(__x)))];
+  return [...new globalThis.Set(((runs).map((__x: Run) => ((r: Run) => r.repo)(__x))).map((__x: Repo) => ((n: Repo) => n)(__x)))];
 }
 
 export const api = {

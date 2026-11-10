@@ -46,7 +46,7 @@ export function largest(xs: readonly number[]): Option<number> {
 }
 
 export function sortedBy(xs: readonly number[]): readonly number[] {
-  return [...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x) => x)(__a), ((x) => x)(__b)));
+  return [...xs].sort((__a: number, __b: number) => __bynkCmpFloat(((x: number) => x)(__a), ((x: number) => x)(__b)));
 }
 
 export function readings(xs: readonly Reading[]): readonly Reading[] {

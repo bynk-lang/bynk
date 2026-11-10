@@ -49,7 +49,7 @@ export const ttlListed = {
   async call(deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<boolean> {
     const __r0 = await deps.Kv.putTtl("t:1", "v", 120);
     const page = await deps.Kv.listPage({ prefix: Some("t:"), cursor: None, limit: None });
-    return (page.keys).length === 1 && (page.keys).every((__x: KvKey) => ((k) => (k.expiration.tag === "Some"))(__x));
+    return (page.keys).length === 1 && (page.keys).every((__x: KvKey) => ((k: KvKey) => (k.expiration.tag === "Some"))(__x));
   },
 };
 

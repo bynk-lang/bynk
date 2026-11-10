@@ -17,7 +17,7 @@ export type Page<T> = __CommonsPage<T> & { readonly __ctxBrand?: "t.pay" };
 
 export const paged = {
   async call(page: Page<Cents>, deps: { identity: string }): globalThis.Promise<number> {
-    return ((__xs: readonly Cents[], __acc: number, __f: (acc: number, x: Cents) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(page.items, page.size, (acc, v) => acc + v);
+    return ((__xs: readonly Cents[], __acc: number, __f: (acc: number, x: Cents) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(page.items, page.size, (acc: number, v: Cents) => acc + v);
   },
 };
 

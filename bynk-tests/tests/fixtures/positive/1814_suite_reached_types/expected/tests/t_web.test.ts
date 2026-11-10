@@ -50,7 +50,7 @@ async function test_a_suite_maps_a_reached_refined_field() {
     type Repo = __ns_t_core.Repo;
     type Status = __ns_t_core.Status;
     const runs = [{ repo: ("a" as any), status: Status.Pending }, { repo: ("b" as any), status: Status.Done }];
-    if (!(__bynkEq(((runs).map((__x: Run) => ((r) => r.repo)(__x))).map((__x: Repo) => ((n) => Repo.shout(n))(__x)), ["a!", "b!"]))) { throw __bynkExpectFailure("tests/t/web.bynk:9:10", 303, 364, "expect runs.map((r) => r.repo).map((n) => n.shout()) == [\"a!\", \"b!\"]\n  expected: runs.map((r) => r.repo).map((n) => n.shout()) == [\"a!\", \"b!\"]\n  actual:   " + __bynkShow((((runs).map((__x: Run) => ((r) => r.repo)(__x))).map((__x: Repo) => ((n) => Repo.shout(n))(__x)))) + " == " + __bynkShow((["a!", "b!"]))); }
+    if (!(__bynkEq(((runs).map((__x: Run) => ((r: Run) => r.repo)(__x))).map((__x: Repo) => ((n: Repo) => Repo.shout(n))(__x)), ["a!", "b!"]))) { throw __bynkExpectFailure("tests/t/web.bynk:9:10", 303, 364, "expect runs.map((r) => r.repo).map((n) => n.shout()) == [\"a!\", \"b!\"]\n  expected: runs.map((r) => r.repo).map((n) => n.shout()) == [\"a!\", \"b!\"]\n  actual:   " + __bynkShow((((runs).map((__x: Run) => ((r: Run) => r.repo)(__x))).map((__x: Repo) => ((n: Repo) => Repo.shout(n))(__x)))) + " == " + __bynkShow((["a!", "b!"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -71,7 +71,7 @@ async function test_a_suite_reads_a_reached_field_through_an_imported_fn() {
     type Repo = __ns_t_core.Repo;
     type Status = __ns_t_core.Status;
     const r = first([{ repo: ("x" as any), status: Status.Done }]);
-    if (!(__bynkEq(((__o: Option<Repo>, __f: (x: Repo) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(r, (n) => Repo.shout(n)), Some("x!")))) { throw __bynkExpectFailure("tests/t/web.bynk:14:10", 490, 527, "expect r.map((n) => n.shout()) == Some(\"x!\")\n  expected: r.map((n) => n.shout()) == Some(\"x!\")\n  actual:   " + __bynkShow((((__o: Option<Repo>, __f: (x: Repo) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(r, (n) => Repo.shout(n)))) + " == " + __bynkShow((Some("x!")))); }
+    if (!(__bynkEq(((__o: Option<Repo>, __f: (x: Repo) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(r, (n: Repo) => Repo.shout(n)), Some("x!")))) { throw __bynkExpectFailure("tests/t/web.bynk:14:10", 490, 527, "expect r.map((n) => n.shout()) == Some(\"x!\")\n  expected: r.map((n) => n.shout()) == Some(\"x!\")\n  actual:   " + __bynkShow((((__o: Option<Repo>, __f: (x: Repo) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(r, (n: Repo) => Repo.shout(n)))) + " == " + __bynkShow((Some("x!")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

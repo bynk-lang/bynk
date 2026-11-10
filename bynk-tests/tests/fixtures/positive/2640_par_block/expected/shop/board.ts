@@ -93,7 +93,7 @@ export const branch = {
 
 export const shadow = {
   async call(id: number, deps: { Users: Users; Orders: Orders }): globalThis.Promise<number> {
-    const [user, n, m] = await __bynkSettleAll([() => deps.Users.get(id), () => deps.Orders.forUser((([1, 2]).map((__x: number) => ((user) => user + 1)(__x))).length), () => deps.Orders.forUser(((__d) => {
+    const [user, n, m] = await __bynkSettleAll([() => deps.Users.get(id), () => deps.Orders.forUser((([1, 2]).map((__x: number) => ((user: number) => user + 1)(__x))).length), () => deps.Orders.forUser(((__d) => {
     switch (__d.tag) {
       case "Some": {
         const user = __d.value;

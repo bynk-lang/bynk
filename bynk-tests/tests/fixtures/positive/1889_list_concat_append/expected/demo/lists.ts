@@ -12,22 +12,22 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export function appendAll(xs: readonly number[]): readonly number[] {
   const none: readonly number[] = [];
-  return ((__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => readonly number[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc, x) => [...acc, x]);
+  return ((__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => readonly number[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc: readonly number[], x: number) => [...acc, x]);
 }
 
 export function concatPairs(xs: readonly number[]): readonly number[] {
   const none: readonly number[] = [];
-  return ((__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => readonly number[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc, x) => [...acc, ...[x, x + 1]]);
+  return ((__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => readonly number[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc: readonly number[], x: number) => [...acc, ...[x, x + 1]]);
 }
 
 export async function concatAllEff(xs: readonly number[]): globalThis.Promise<readonly number[]> {
   const none: readonly number[] = [];
-  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, none, async (acc, x) => globalThis.Promise.resolve([...acc, ...[x * 10]]));
+  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, none, async (acc: readonly number[], x: number) => globalThis.Promise.resolve([...acc, ...[x * 10]]));
 }
 
 export async function appendAllEff(xs: readonly number[]): globalThis.Promise<readonly number[]> {
   const none: readonly number[] = [];
-  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, none, async (acc, x) => globalThis.Promise.resolve([...acc, x * 100]));
+  return (async (__xs: readonly number[], __acc: readonly number[], __f: (acc: readonly number[], x: number) => globalThis.Promise<readonly number[]>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(xs, none, async (acc: readonly number[], x: number) => globalThis.Promise.resolve([...acc, x * 100]));
 }
 
 export function appendToEmpty(): readonly number[] {
@@ -58,7 +58,7 @@ export function receiverUnchanged(xs: readonly number[]): boolean {
 
 export function appendRows(xs: readonly number[]): readonly (readonly number[])[] {
   const none: readonly (readonly number[])[] = [];
-  return ((__xs: readonly number[], __acc: readonly (readonly number[])[], __f: (acc: readonly (readonly number[])[], x: number) => readonly (readonly number[])[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc, x) => [...acc, [x, x * x]]);
+  return ((__xs: readonly number[], __acc: readonly (readonly number[])[], __f: (acc: readonly (readonly number[])[], x: number) => readonly (readonly number[])[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, none, (acc: readonly (readonly number[])[], x: number) => [...acc, [x, x * x]]);
 }
 
 export function concatRows(a: readonly (readonly number[])[], b: readonly (readonly number[])[]): readonly (readonly number[])[] {
@@ -67,5 +67,5 @@ export function concatRows(a: readonly (readonly number[])[], b: readonly (reado
 
 export function appendEmptyRows(n: number): readonly (readonly number[])[] {
   const none: readonly (readonly number[])[] = [];
-  return ((__xs: readonly number[], __acc: readonly (readonly number[])[], __f: (acc: readonly (readonly number[])[], x: number) => readonly (readonly number[])[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(([1, 2, 3]).slice(0, globalThis.Math.max(0, n)), none, (acc, x) => [...acc, []]);
+  return ((__xs: readonly number[], __acc: readonly (readonly number[])[], __f: (acc: readonly (readonly number[])[], x: number) => readonly (readonly number[])[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(([1, 2, 3]).slice(0, globalThis.Math.max(0, n)), none, (acc: readonly (readonly number[])[], x: number) => [...acc, []]);
 }

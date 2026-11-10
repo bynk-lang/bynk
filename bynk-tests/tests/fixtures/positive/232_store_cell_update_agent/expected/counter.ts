@@ -46,7 +46,7 @@ export class Counter {
   async increment(deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((c) => c + 1)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((c: number) => c + 1)(__state.n); return undefined; })();
       return __state.n;
     })();
     await this.commitState(__state);

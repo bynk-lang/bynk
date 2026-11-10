@@ -207,15 +207,15 @@ export function decodeLine(json: string): Option<Line> {
 }
 
 export function total(prices: readonly { readonly coefficient: bigint; readonly scale: number }[]): { readonly coefficient: bigint; readonly scale: number } {
-  return (prices).reduce((__s: { readonly coefficient: bigint; readonly scale: number }, __x: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalAdd(__s, ((p) => p)(__x)), { coefficient: 0n, scale: 0 });
+  return (prices).reduce((__s: { readonly coefficient: bigint; readonly scale: number }, __x: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalAdd(__s, ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__x)), { coefficient: 0n, scale: 0 });
 }
 
 export function cheapest(prices: readonly { readonly coefficient: bigint; readonly scale: number }[]): Option<{ readonly coefficient: bigint; readonly scale: number }> {
-  return ((__xs: readonly { readonly coefficient: bigint; readonly scale: number }[]) => { if (__xs.length === 0) return None; let __m = ((p) => p)(__xs[0]); for (const __x of __xs) { const __k = ((p) => p)(__x); if (__bynkCmpDecimal(__k, __m) < 0) __m = __k; } return Some(__m); })(prices);
+  return ((__xs: readonly { readonly coefficient: bigint; readonly scale: number }[]) => { if (__xs.length === 0) return None; let __m = ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__xs[0]); for (const __x of __xs) { const __k = ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__x); if (__bynkCmpDecimal(__k, __m) < 0) __m = __k; } return Some(__m); })(prices);
 }
 
 export function sorted(prices: readonly { readonly coefficient: bigint; readonly scale: number }[]): readonly { readonly coefficient: bigint; readonly scale: number }[] {
-  return [...prices].sort((__a: { readonly coefficient: bigint; readonly scale: number }, __b: { readonly coefficient: bigint; readonly scale: number }) => __bynkCmpDecimal(((p) => p)(__a), ((p) => p)(__b)));
+  return [...prices].sort((__a: { readonly coefficient: bigint; readonly scale: number }, __b: { readonly coefficient: bigint; readonly scale: number }) => __bynkCmpDecimal(((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__a), ((p: { readonly coefficient: bigint; readonly scale: number }) => p)(__b)));
 }
 
 export function distinctCount(prices: readonly { readonly coefficient: bigint; readonly scale: number }[]): number {

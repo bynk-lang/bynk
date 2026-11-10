@@ -71,7 +71,7 @@ export class Cart {
   async bump(sku: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = sku; if (!globalThis.Object.hasOwn(__state.items, __k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items[__k] = ((i) => ({ ...i, qty: i.qty + 1 }))(__state.items[__k]); return undefined; })();
+      const __r0 = await (() => { const __k = sku; if (!globalThis.Object.hasOwn(__state.items, __k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items[__k] = ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__state.items[__k]); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

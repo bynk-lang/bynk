@@ -61,7 +61,7 @@ export class Book {
       const f = await deps.Fees.fee();
       const s = await deps.Stamp.next();
       __state.last = Some(line);
-      const __r0 = await (() => { __state.count = ((c) => c + line.qty)(__state.count); return undefined; })();
+      const __r0 = await (() => { __state.count = ((c: number) => c + line.qty)(__state.count); return undefined; })();
       return __state.count + s + f;
     })();
     await this.commitState(__state);
