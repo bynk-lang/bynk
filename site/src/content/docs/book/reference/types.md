@@ -814,20 +814,20 @@ fn items_of(page: Paginated[User]) -> List[User] {
 - **Access** fields with the argument substituted in: `page.items` has type
   `List[User]`.
 
-Only a record body may be generic — a refined, opaque, or sum type cannot take
-type parameters (`bynk.generics.generic_non_record`). A generic type must be
-applied to exactly its declared number of arguments
+Only a record or [sum](#generic-sums) body may be generic — a refined or opaque
+type cannot take type parameters (`bynk.generics.generic_non_record`). A generic
+type must be applied to exactly its declared number of arguments
 (`bynk.generics.type_arg_count`).
 
 Generic records emit an **erased** TypeScript generic interface — `type
 Paginated[T]` becomes `export interface Paginated<T>` — exactly as a generic
 function erases to `function f<A>(…)`.
 
-### Generic records at the boundary (v0.174)
+### Generic records and sums at the boundary (v0.174)
 
-A generic-record instantiation is **serialisable** — it may appear in a field of
-another record, a sum payload, a service or agent handler signature, agent
-state, or a `Json.encode`/`Json.decode` target — exactly when its type arguments
+A generic-record or [generic-sum](#generic-sums) instantiation is
+**serialisable** — it may appear in a field of another record, a sum payload, a
+service or agent handler signature, agent state, or a `Json.encode`/`Json.decode` target — exactly when its type arguments
 are. The compiler generates a **monomorphised codec** per instantiation: a
 `Paginated[User]` boundary emits `__serialise_Paginated_User` /
 `__deserialise_Paginated_User`, specialised to the concrete arguments and
@@ -851,14 +851,15 @@ A **non-serialisable argument** is still rejected, at the argument: a function,
 (`bynk.types.function_at_boundary`, …), and an uncodable `Json` target draws
 `bynk.types.json_uncodable`.
 
-A **recursive** generic record — one that transitively contains itself, whether
-directly, through another record, or through an `Option`/`List` wrapper
-(`type Node[T] = { value: T, next: Option[Node[T]] }`) — has no finite set of
+A **recursive** generic record or sum — one that transitively contains itself,
+whether directly, through another type, or through an `Option`/`List` wrapper
+(`type Node[T] = { value: T, next: Option[Node[T]] }`, or a `Tree[T]` sum whose
+`Branch` variant holds a `List[Tree[T]]`) — has no finite set of
 monomorphised codecs, so it is rejected with
 `bynk.generics.recursive_generic_at_boundary`. Because a record field is itself a
-boundary position, the self-referential field makes such a type **undeclarable**,
+boundary position, the self-referential field makes such a record **undeclarable**,
 not merely unusable at a boundary — the error fires at the declaration. (A
-*non-generic* recursive record is unaffected: its single codec is
+*non-generic* recursive record or sum is unaffected: its single codec is
 self-referential and terminates on the data, so it declares and serialises as
 before; only the per-instantiation generic form is deferred.) Use a concrete
 recursive type, or break the cycle.
@@ -962,6 +963,31 @@ substitutes the arguments into each arm's payload binding (`Loaded(v)` binds `v 
 User`). Emission is **erased** TypeScript generics — one
 `export type ApiResult<T>` discriminated union, with each payload constructor a
 generic arrow (`Loaded: <T>(value: T): ApiResult<T> => …`).
+
+A generic sum is declared, constructed and matched like any other, with the
+arguments substituted into each arm:
+
+```bynk
+type Opt[A] =
+  | Nope
+  | Have(value: A)
+
+type User = { id: Int, name: String }
+
+fn name_of(found: Opt[User]) -> String {
+  match found {
+    Nope => "nobody"
+    Have(user) => user.name
+  }
+}
+
+fn find(users: List[User]) -> Opt[User] {
+  match users.first() {
+    Some(u) => Have(u)
+    None => Nope
+  }
+}
+```
 
 Like a generic record, a generic-sum instantiation is **serialisable** exactly
 when its type arguments are, through a monomorphised codec per instantiation

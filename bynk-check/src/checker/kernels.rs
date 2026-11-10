@@ -2822,18 +2822,23 @@ fn check_effect_result_fn_arg(
 /// v0.174 (#592): the shared diagnostic for a recursive generic record reaching
 /// a boundary — a `Json.encode`/`decode` target here, a serialised position in
 /// the emit-side boundary pass.
-pub(crate) fn recursive_generic_error(name: &str, span: bynk_syntax::span::Span) -> CompileError {
+pub(crate) fn recursive_generic_error(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    span: bynk_syntax::span::Span,
+) -> CompileError {
+    let kind = bynk_syntax::ast::generic_kind_word(name, types);
     CompileError::new(
         "bynk.generics.recursive_generic_at_boundary",
         span,
         format!(
-            "recursive generic record `{name}` cannot cross a boundary — it has no finite monomorphised codec"
+            "recursive generic {kind} `{name}` cannot cross a boundary — it has no finite monomorphised codec"
         ),
     )
-    .with_note(
-        "a generic record that transitively contains itself is not yet boundary-serialisable; \
-         use a concrete (non-generic) recursive type, or break the cycle",
-    )
+    .with_note(format!(
+        "a generic {kind} that transitively contains itself is not yet boundary-serialisable; \
+         use a concrete (non-generic) recursive type, or break the cycle"
+    ))
 }
 
 /// v0.174 (#592): the name of a recursive generic-record instantiation reachable
@@ -2925,7 +2930,11 @@ pub(crate) fn check_json_static(
             }
             let t = type_of(&args[0], None, ctx)?;
             if let Some(rec) = first_recursive_generic(t, &ctx.input.types, tys) {
-                ctx.errors.push(recursive_generic_error(&rec, args[0].span));
+                ctx.errors.push(recursive_generic_error(
+                    &rec,
+                    &ctx.input.types,
+                    args[0].span,
+                ));
                 return None;
             }
             if super::d1::carries_statement(t, &ctx.input.types, tys) {
@@ -3048,7 +3057,8 @@ pub(crate) fn check_json_static(
                 }
             };
             if let Some(rec) = first_recursive_generic(t, &ctx.input.types, tys) {
-                ctx.errors.push(recursive_generic_error(&rec, span));
+                ctx.errors
+                    .push(recursive_generic_error(&rec, &ctx.input.types, span));
                 return None;
             }
             if super::d1::carries_statement(t, &ctx.input.types, tys) {

@@ -193,8 +193,11 @@ pub(crate) fn check_codable(ctx: &mut Ctx, ty: TyId, span: Span, site: &CodableS
     };
     let clause = format!("{what} requires `{param}: Codable`");
     if let Some(rec) = super::kernels::first_recursive_generic(ty, &ctx.input.types, tys) {
-        ctx.errors
-            .push(super::kernels::recursive_generic_error(&rec, span));
+        ctx.errors.push(super::kernels::recursive_generic_error(
+            &rec,
+            &ctx.input.types,
+            span,
+        ));
         return false;
     }
     if super::d1::carries_statement(ty, &ctx.input.types, tys) {
