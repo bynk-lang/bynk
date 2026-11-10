@@ -107,7 +107,7 @@ export class Room {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (globalThis.Object.defineProperty(__state.members, u, { value: true, writable: true, enumerable: true, configurable: true }), undefined);
-      const __r1 = await (globalThis.Object.defineProperty(__state.conns, u, { value: conn, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r1 = await (async () => { const __k = u; const __new = conn; if (globalThis.Object.hasOwn(__state.conns, __k) && __state.conns[__k] !== __new) { await __state.conns[__k].close(); } globalThis.Object.defineProperty(__state.conns, __k, { value: __new, writable: true, enumerable: true, configurable: true }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

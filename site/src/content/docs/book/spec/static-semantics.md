@@ -1025,7 +1025,9 @@ enforces (ADR 0130):
 A held value is **non-boundary and not value-comparable** (§6.5,
 `bynk.types.held_at_boundary` / `bynk.types.held_not_comparable`). It may be stored
 **only** in `Cell[Option[Connection]]` or `Map[K, Connection]` — a `put` consumes
-the value and a `remove` removes-and-closes it — and a `Set`/`Log`/`Cache` rejects
+the value and a `remove` removes-and-closes it; a `put` over a key that already holds
+a connection closes the displaced connection first, unless it is the connection being
+put ([§7.3.10](/book/spec/emission/#7310-streams-and-websockets-v0100-v0102)) — and a `Set`/`Log`/`Cache` rejects
 it (`bynk.held.unsupported_storage`); a held `Map` rejects the transforming
 `update`/`upsert` ops (`bynk.held.unsupported_map_op`). On an abnormal exit a
 connection owned within a handler is implicitly closed by the runtime, and a stored
