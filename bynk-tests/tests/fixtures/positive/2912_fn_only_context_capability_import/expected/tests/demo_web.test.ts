@@ -45,11 +45,12 @@ class __Stub_Fetch {
   }
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
     const { probe } = __ns_demo_web;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -117,11 +118,12 @@ async function test_inline() {
   try {
     const deps = __makeTestDeps("inline");
     const { probe } = __ns_demo_web;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;

@@ -1,0 +1,82 @@
+suite upload.api {
+	case "a multipart body reaches the handler as a record" {
+		match Bytes.fromBase64("UE5H") {
+			Some(png) => {
+				let photo = File { filename: Some("a.png"), contentType: "image/png", bytes: png }
+				let r <- api.POST("/upload", Upload { title: "Hi", caption: None, age: None, tags: [], photo: photo, cover: None, extras: [] })
+				expect r is Ok("Hi - a.png image/png 3 - 0 0")
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+}
+
+suite upload.api as system {
+	case "a typed multipart body round-trips through the router" {
+		match Bytes.fromBase64("UE5HREFUQQ==") {
+			Some(png) => {
+				match Bytes.fromBase64("eA==") {
+					Some(x) => {
+						let photo = File { filename: Some("a b.png"), contentType: "image/png", bytes: png }
+						let extra = File { filename: Some("x.txt"), contentType: "text/plain", bytes: x }
+						let r <- api.POST("/upload", Upload { title: "Hi", caption: Some("sunset"), age: Some(3), tags: ["a", "b"], photo: photo, cover: Some(extra), extras: [extra, extra] })
+						expect r is Ok("Hi sunset a b.png image/png 7 1 2 2")
+					}
+					None => {
+						expect false
+					}
+				}
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "text and file parts in the wire form" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"p.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nabc\r\n--bynk-boundary--\r\n"))
+		expect r is Handled(Ok("Hello - p.bin application/octet-stream 3 - 0 0"))
+	}
+
+	case "an unchosen optional file input is None" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"p.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nabc\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"cover\"; filename=\"\"\r\nContent-Type: application/octet-stream\r\n\r\n\r\n--bynk-boundary--\r\n"))
+		expect r is Handled(Ok("Hello - p.bin application/octet-stream 3 - 0 0"))
+	}
+
+	case "a missing required file is refused before the handler" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary--\r\n"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a refinement on a text part is checked" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\n\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"p.bin\"\r\n\r\nabc\r\n--bynk-boundary--\r\n"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a text part for a file field is a structural mismatch" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"\r\n\r\nnot a file\r\n--bynk-boundary--\r\n"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a body that is not multipart is a MalformedForm" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello"))
+		expect r is Rejected(MalformedForm(_))
+	}
+
+	case "a file over maxFile is a 413" {
+		let r <- api.POST("/upload", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"p.bin\"\r\n\r\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\n--bynk-boundary--\r\n"))
+		expect r is Rejected(PayloadTooLarge(_))
+	}
+
+	case "a route's own @limit tightens the file cap" {
+		let r <- api.POST("/tiny", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"p.bin\"\r\n\r\n12345\r\n--bynk-boundary--\r\n"))
+		expect r is Rejected(PayloadTooLarge(_))
+	}
+
+	case "more parts than maxParts is a 413" {
+		let r <- api.POST("/tiny", Wire("--bynk-boundary\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nHello\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"tags\"\r\n\r\na\r\n--bynk-boundary\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"p.bin\"\r\n\r\n12\r\n--bynk-boundary--\r\n"))
+		expect r is Rejected(PayloadTooLarge(_))
+	}
+}

@@ -236,6 +236,22 @@ a `workers` cross-context signature is diagnosed as not-yet-supported — put it
 inside a record, whose typed codec base64-encodes it, or build with `--target
 bundle`.)
 
+
+### File {#file}
+
+`File` is the record a [`@multipart`](/book/reference/http/#multipart-bodies) body
+names an uploaded file part with. It is exported by `bynk` (`consumes bynk { File }`):
+
+```text
+File = { filename: Option[String], contentType: String, bytes: Bytes }
+```
+
+`filename` is the client's name for the file, `None` for a part with no `filename`;
+`contentType` is the type the client claimed; `bytes` is the whole part, and its size is
+`bytes.length()`. The name and the type are client-controlled, so neither is a storage key
+or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
+`Option` or in a `List`; a test builds one with a record literal.
+
 ## Built-in generic types
 
 | Type | Variants | Purpose |

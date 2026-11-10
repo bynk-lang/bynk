@@ -9,6 +9,7 @@ adapter bynk {
 		Response,
 		BytesResponse,
 		StreamResponse,
+		File,
 		FetchOptions,
 		Redirect,
 		TimedOut,
@@ -126,6 +127,21 @@ adapter bynk {
 		status: Int,
 		headers: Map[String, String],
 		body: Bytes,
+	}
+
+	---
+	A file part of a `@multipart` request body: what the browser sent for one
+	`<input type=file>`. `filename` is the client's name for the file (`None` for
+	a part with no `filename`), `contentType` the type the client claimed
+	(`application/octet-stream` when it claimed none), and `bytes` the whole part.
+	Both are client-controlled: never use `filename` as a storage key or path, and
+	do not trust `contentType`. The size is `bytes.length()`. A `File` is only a
+	field of a `@multipart` body record, and is not a JSON boundary type.
+	---
+	type File = {
+		filename: Option[String],
+		contentType: String,
+		bytes: Bytes,
 	}
 
 	---

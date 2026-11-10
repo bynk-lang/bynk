@@ -1,0 +1,12 @@
+context api
+
+consumes bynk { File }
+
+type Up = { photo: File }
+
+service api from http {
+  @multipart
+  on POST("/up") (body: Up) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

@@ -1,0 +1,48 @@
+context upload.api
+
+consumes bynk { File }
+
+type Title = String where NonEmpty && MaxLength(40)
+
+type Upload = {
+	title: Title,
+	caption: Option[String],
+	age: Option[Int],
+	tags: List[String] = [],
+	photo: File,
+	cover: Option[File],
+	extras: List[File] = [],
+}
+
+service api from http {
+	limits { maxBody: 4096, maxFile: 64, maxParts: 12 }
+
+	@multipart
+	on POST("/upload") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+		let name = match body.photo.filename {
+			Some(n) => n
+			None => "-"
+		}
+		let cover = match body.cover {
+			Some(c) => "\(c.bytes.length())"
+			None => "-"
+		}
+		let caption = match body.caption {
+			Some(c) => c
+			None => "-"
+		}
+		Ok("\(body.title) \(caption) \(name) \(body.photo.contentType) \(body.photo.bytes.length()) \(cover) \(body.extras.length()) \(body.tags.length())")
+	}
+
+	// A route that tightens the file and part caps for itself.
+	@multipart
+	@limit(maxBody: 4096, maxFile: 4, maxParts: 2)
+	on POST("/tiny") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(body.photo.bytes.length())")
+	}
+
+	// The JSON route beside it is untouched.
+	on POST("/json") (body: Title) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("json")
+	}
+}

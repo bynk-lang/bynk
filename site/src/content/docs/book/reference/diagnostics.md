@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **794** codes in total.
+There are **798** codes in total.
 
 ## Agents
 
@@ -215,7 +215,7 @@ There are **794** codes in total.
 | `bynk.http.form_bool_without_default` | A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | `bynk.http.form_duplicate` | A handler carries more than one `@form` annotation. |  | — |
 | `bynk.http.form_field_not_stringy` | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.form_on_bodyless` | A `@form` annotation is placed on a handler that takes no body. |  | — |
+| `bynk.http.form_on_bodyless` | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.form_on_sum_route` | A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself. |  | — |
 | `bynk.http.form_unknown_arg` | A `@form` annotation is given an argument; it takes none. |  | — |
 | `bynk.http.header_question_not_found` | `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`). |  | Warning |
@@ -229,12 +229,16 @@ There are **794** codes in total.
 | `bynk.http.json_unknown_arg` | A `@json` annotation has an argument outside the closed set (`options`). |  | — |
 | `bynk.http.json_unknown_field` | A `json { }` policy declares a field outside the closed set (`options`). |  | — |
 | `bynk.http.limit_bad_max_body` | A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal. |  | — |
+| `bynk.http.limit_bad_max_file` | A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal. |  | — |
 | `bynk.http.limit_duplicate` | A handler carries more than one `@limit` annotation. |  | — |
 | `bynk.http.limit_on_bodyless` | A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE). |  | — |
+| `bynk.http.limit_on_non_multipart` | A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`. |  | — |
 | `bynk.http.limit_unknown_arg` | A `@limit` annotation has an argument outside the closed set (`maxBody`). |  | — |
 | `bynk.http.limits_invalid_field` | A `limits` policy field (`maxBody`) has the wrong value shape. |  | — |
 | `bynk.http.limits_not_http` | A `limits { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.limits_unknown_field` | A `limits { }` policy declares a field outside the closed set. |  | — |
+| `bynk.http.multipart_body_unbounded` | A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`). |  | — |
+| `bynk.http.multipart_large_cap` | A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning). |  | Warning |
 | `bynk.http.path_param_not_stringy` | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.query_field_not_stringy` | A field of an HTTP handler's `query` record has a type a query string cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.query_not_http` | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |

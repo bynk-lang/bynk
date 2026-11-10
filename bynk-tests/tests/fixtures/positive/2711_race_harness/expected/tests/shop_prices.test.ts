@@ -244,11 +244,12 @@ class __Stub_Audit {
     return true;
   }
   async note(sku: number): globalThis.Promise<void> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -278,11 +279,12 @@ class __Stub_Prices {
     return true;
   }
   async get(region: string, sku: number): globalThis.Promise<number> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -596,11 +598,12 @@ async function test_the_faster_mirror_wins() {
   try {
     const deps = __makeTestDeps("the faster mirror wins");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -625,11 +628,12 @@ async function test_the_receiver_wins_when_it_is_faster() {
   try {
     const deps = __makeTestDeps("the receiver wins when it is faster");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -654,11 +658,12 @@ async function test_a_fast_fault_loses_to_a_slower_success() {
   try {
     const deps = __makeTestDeps("a fast fault loses to a slower success");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -683,11 +688,12 @@ async function test_a_fast_fault_in_the_receiver_loses_to_a_slower_success_too()
   try {
     const deps = __makeTestDeps("a fast fault in the receiver loses to a slower success too");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -712,11 +718,12 @@ async function test_when_every_side_faults__the_call_faults() {
   try {
     const deps = __makeTestDeps("when every side faults, the call faults");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -740,11 +747,12 @@ async function test_a_same_instant_tie_goes_to_the_receiver() {
   try {
     const deps = __makeTestDeps("a same-instant tie goes to the receiver");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -769,11 +777,12 @@ async function test_a_same_instant_tie_in_a_chain_goes_to_the_earliest_side() {
   try {
     const deps = __makeTestDeps("a same-instant tie in a chain goes to the earliest side");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -798,11 +807,12 @@ async function test_the_third_of_a_chain_can_win() {
   try {
     const deps = __makeTestDeps("the third of a chain can win");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -828,11 +838,12 @@ async function test_the_loser_is_still_recorded() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("the loser is still recorded"), { Audit: ["note"], Prices: ["get"] }, __obs);
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -860,11 +871,12 @@ async function test_both_writes_of_a_raced_pair_happen() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("both writes of a raced pair happen"), { Audit: ["note"], Prices: ["get"] }, __obs);
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -890,11 +902,12 @@ async function test_race_then_within__the_race_wins_inside_the_deadline() {
   try {
     const deps = __makeTestDeps("race then within: the race wins inside the deadline");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -919,11 +932,12 @@ async function test_race_then_within_times_out_when_both_sides_never_finish() {
   try {
     const deps = __makeTestDeps("race then within times out when both sides never finish");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -949,11 +963,12 @@ async function test_a_lambda_in_the_handler_races_each_element_alone() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a lambda in the handler races each element alone"), { Audit: ["note"], Prices: ["get"] }, __obs);
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -979,11 +994,12 @@ async function test_a_real_provider_answers() {
   try {
     const deps = __makeTestDeps();
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
@@ -1008,11 +1024,12 @@ async function test_a_latency_stub_decides_the_race_at_integration() {
   try {
     const deps = __makeTestDeps("a latency stub decides the race at integration");
     const { audited, bounded, many, prices, three } = __ns_shop_prices;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;

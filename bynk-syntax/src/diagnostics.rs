@@ -1652,7 +1652,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.form_on_bodyless",
-        "A `@form` annotation is placed on a handler that takes no body.",
+        "A `@form` or `@multipart` annotation is placed on a handler that takes no body.",
     ),
     d(
         "bynk.http.form_on_sum_route",
@@ -1709,12 +1709,20 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal.",
     ),
     d(
+        "bynk.http.limit_bad_max_file",
+        "A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal.",
+    ),
+    d(
         "bynk.http.limit_duplicate",
         "A handler carries more than one `@limit` annotation.",
     ),
     d(
         "bynk.http.limit_on_bodyless",
         "A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE).",
+    ),
+    d(
+        "bynk.http.limit_on_non_multipart",
+        "A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`.",
     ),
     d(
         "bynk.http.limit_unknown_arg",
@@ -1732,6 +1740,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.limits_unknown_field",
         "A `limits { }` policy declares a field outside the closed set.",
     ),
+    d(
+        "bynk.http.multipart_body_unbounded",
+        "A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).",
+    ),
+    warn(d(
+        "bynk.http.multipart_large_cap",
+        "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).",
+    )),
     dg(
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not constructible from a string.",

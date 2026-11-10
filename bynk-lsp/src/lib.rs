@@ -5546,23 +5546,32 @@ fn raw_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem>
     Vec::new()
 }
 
-/// #3276: the `@form` annotation snippet, at a service-body item start. `@form`
-/// takes no arguments, so there is no argument position to complete.
+/// #3276: the `@form` and `@multipart` annotation snippets, at a service-body item
+/// start. Neither takes arguments, so there is no argument position to complete.
 fn form_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
     if !completion::in_service_body_item_position(text, offset, line) {
         return Vec::new();
     }
-    vec![CompletionItem {
-        label: "@form".to_string(),
-        kind: Some(CompletionItemKind::SNIPPET),
-        detail: Some(
-            "decode `body: T` from an `application/x-www-form-urlencoded` form — a `415` for any other content type"
-                .to_string(),
+    [
+        (
+            "@form",
+            "decode `body: T` from an `application/x-www-form-urlencoded` form — a `415` for any other content type",
         ),
-        insert_text: Some("@form".to_string()),
+        (
+            "@multipart",
+            "decode `body: T` from a `multipart/form-data` body, with `File` parts — a `415` for any other content type; needs a body cap",
+        ),
+    ]
+    .into_iter()
+    .map(|(label, detail)| CompletionItem {
+        label: label.to_string(),
+        kind: Some(CompletionItemKind::SNIPPET),
+        detail: Some(detail.to_string()),
+        insert_text: Some(label.to_string()),
         insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
         ..Default::default()
-    }]
+    })
+    .collect()
 }
 
 fn contract_param_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {

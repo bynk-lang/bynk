@@ -1932,6 +1932,22 @@ absent for an `Option` and for every leaf but `String`. The record's codec then
 applies refinements and defaults and a failure is a `400` whose `path` is rooted at
 `body`. See the HTTP reference.
 
+**`@multipart`.** A handler annotation, `@multipart`, marks a handler's `body` as a
+`multipart/form-data` upload. Its placement rules are `@form`'s, and it likewise excludes
+`@raw` and `@form` (`bynk.http.body_kind_conflict`). The `body` MUST be a record whose
+fields are form leaves, or `File` (the record `bynk` exports), or an `Option` or `List` of
+one. The route MUST have an effective `maxBody` (`bynk.http.multipart_body_unbounded`),
+and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
+`maxParts` are positive `Int` fields of `limits { }` and arguments of `@limit`
+(`bynk.http.limits_invalid_field`, `bynk.http.limit_bad_max_file`); in `@limit` they are legal
+only on a `@multipart` handler (`bynk.http.limit_on_non_multipart`). The router answers a
+`Content-Type` that is not `multipart/form-data` with the `415`, reads the body under the
+cap, and parses its parts: a part with a filename is a file, the rest are text parts read as
+a `@form` body's fields. A body that is not multipart is a `400` of kind `MalformedForm`; a
+part count over `maxParts`, or a file over `maxFile`, is a `413` of kind `PayloadTooLarge`;
+a part of the wrong kind for its field, or two files for a single `File`, is a
+`StructuralMismatch` at `body.<field>`.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
@@ -2443,7 +2459,8 @@ for has type `Effect[HttpOutcome[T]]` instead, where the handler returns
 Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
-PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String)`. Neither
+PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
+MalformedForm(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 
