@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk check --each` and `bynk test --each` run each project directly inside a directory with no `bynk.toml`, as a workspace root runs its members
----
+# 0790 — An opt-in implicit workspace for a manifest-less directory of projects
 
-## ADR: each-implicit-workspace
-title: An opt-in implicit workspace for a manifest-less directory of projects
-summary: `--each` on `check` and `test` runs the immediate-subdirectory projects as a synthesised `members = ["*"]` workspace
+- **Status:** Accepted (v0.539)
 
 **Context.** After #3248, `bynk check`, `test` and `compile` refuse a directory that has no `bynk.toml` at or above it but holds projects below it. The only way to run such a directory (bynk-lang/showcase, about 27 independent projects, is the motivating case) was to add a root `[workspace]` manifest the repository may not want. #3258 asked whether the directory could be an implicit workspace instead, and the proposal (#3274) settled the forks; the maintainer accepted it as recommended.
 
