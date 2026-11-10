@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.525.25** | "The checker resolves a built-in method call to a typed `KernelOp`, and the editor's completion tables are generated from it, as the first slice of the typed built-in dispatch (#3164)" |
 | **v0.525.24** | The Book's types reference now documents generic sums, and `bynk.generics.recursive_generic_at_boundary` names a recursive generic sum as a sum rather than a record |
 | **v0.525.23** | A gated `explained_codes` probe ratchets `bynk explain` coverage upwards, and the increment checklist asks a new error code to ship with an explanation |
 | **v0.525.22** | "The test D1's parameter scanner treats non-ASCII characters as part of a named parameter, as SQLite does, so `:café` and `:cafè` count as two parameters (#3157)" |
