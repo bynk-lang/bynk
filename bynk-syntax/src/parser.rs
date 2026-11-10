@@ -3166,6 +3166,28 @@ mod tests {
     }
 
     #[test]
+    fn a_bare_pure_static_call_suggests_let_equals() {
+        // A capitalised root is not always a capability: these namespaces
+        // are pure, so `<-` would be the wrong guess.
+        for call in [
+            "Json.encode(x)",
+            "Set.of(xs)",
+            "List.empty()",
+            "Bytes.fromUtf8(s).toHex()",
+            "Map.empty()",
+        ] {
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {call}\n  1\n}}\n");
+            let errs = parse_str(&src).expect_err(call);
+            assert_eq!(errs[0].category, BARE, "{call}: {errs:?}");
+            let fixed = apply_fix(&src, &errs[0]);
+            assert!(
+                fixed.contains(&format!("let _ = {call}")),
+                "{call}: {fixed}"
+            );
+        }
+    }
+
+    #[test]
     fn a_bare_pure_expression_suggests_let_equals() {
         let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  let y = 2\n  y\n}\n";
         let errs = parse_str(src).expect_err("bare call");

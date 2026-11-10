@@ -197,6 +197,8 @@ impl<'a> Parser<'a> {
 
     /// Whether the source between `from` and `to` is only whitespace and line
     /// comments (`//`, or the legacy `--`), i.e. holds no skipped character.
+    /// Anything else (a block comment included) is treated as a skipped
+    /// character, which falls back to the generic report: the safe direction.
     fn gap_is_blank_or_comments(&self, from: usize, to: usize) -> bool {
         let Some(gap) = self.source.get(from..to) else {
             return false;
@@ -1378,17 +1380,33 @@ fn starts_statement_or_expression(kind: TokenKind) -> bool {
     )
 }
 
+/// The built-in types and stdlib namespaces whose static calls are pure
+/// (`Json.encode(x)`, `Set.of(xs)`, `Bytes.fromUtf8(s)`), so a capitalised
+/// root of one of these is not a capability.
+const PURE_NAMESPACES: &[&str] = &[
+    "Bool", "Bytes", "Decimal", "Duration", "Float", "Instant", "Int", "Json", "List", "Map",
+    "Option", "Result", "Set", "String",
+];
+
 /// #3161: does `expr` look like a call made for its effect? The parser has no
-/// types, so this is a syntactic guess: a call chain rooted at a capitalised
-/// name (a capability, `Logger.info(…)`, or an agent, `Counter("a").bump(1)`),
-/// or a `.update(…)` (a `Cell` write). Anything else is taken as pure.
+/// types, so this is a syntactic guess: a `.update(…)` (a `Cell` write), or a
+/// method-call chain rooted at an agent construction (`Counter("a").bump(1)`)
+/// or at a capitalised name that is not a built-in type or a pure stdlib
+/// namespace (a capability, `Logger.info(…)`). A user type's pure static call
+/// (`Money.zero()`) is indistinguishable from a capability here and is guessed
+/// effectful; the note names the other form, and `bynk check --fix` writes
+/// nothing if the result would still fail.
 fn looks_effectful(expr: &Expr) -> bool {
-    fn rooted_at_type_name(e: &Expr) -> bool {
+    fn rooted_at_effect_source(e: &Expr) -> bool {
         match &e.kind {
-            ExprKind::Ident(id) => id.name.starts_with(|c: char| c.is_uppercase()),
+            ExprKind::Ident(id) => {
+                id.name.starts_with(|c: char| c.is_uppercase())
+                    && !PURE_NAMESPACES.contains(&id.name.as_str())
+                    && !crate::keywords::is_builtin_type_name(&id.name)
+            }
             ExprKind::Call { name, .. } => name.name.starts_with(|c: char| c.is_uppercase()),
             ExprKind::MethodCall { receiver, .. } | ExprKind::FieldAccess { receiver, .. } => {
-                rooted_at_type_name(receiver)
+                rooted_at_effect_source(receiver)
             }
             _ => false,
         }
@@ -1396,7 +1414,7 @@ fn looks_effectful(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::MethodCall {
             receiver, method, ..
-        } => method.name == "update" || rooted_at_type_name(receiver),
+        } => method.name == "update" || rooted_at_effect_source(receiver),
         _ => false,
     }
 }
