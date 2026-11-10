@@ -3,22 +3,12 @@
 //! The checker decides whether a type has a zero value; this module is the only
 //! place that knows how the target spells one (#3165).
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use bynk_check::checker::ZeroValue;
-use bynk_syntax::ast::{Refinement, TypeDecl, TypeRef};
 use bynk_ts::{TsExpr, TsLit};
 
-/// The TypeScript zero-value expression for `type_ref` (with an optional inline
-/// field refinement), or `None` if the type is not zeroable.
-pub(super) fn zero_value_ts(
-    type_ref: &TypeRef,
-    inline: Option<&Refinement>,
-    types: &HashMap<String, Arc<TypeDecl>>,
-) -> Option<String> {
-    bynk_check::checker::zero_value(type_ref, inline, types)
-        .map(|z| bynk_ts::print_expr(&zero_expr(&z)))
+/// The TypeScript text of a zero value.
+pub(super) fn render_zero_value(z: &ZeroValue) -> String {
+    bynk_ts::print_expr(&zero_expr(z))
 }
 
 fn zero_expr(z: &ZeroValue) -> TsExpr {

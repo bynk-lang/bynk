@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use super::zero_value::zero_value_ts;
+use super::zero_value::render_zero_value;
 use crate::emit_model::EmitProjectCtx;
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons, Types};
@@ -122,6 +122,16 @@ pub(crate) fn emit_type_in(
     }
     stmts.extend(shape_stmts);
     stmts
+}
+
+/// The TypeScript zero-value expression for a state field, or `None` if its
+/// type is not zeroable (#3165: the checker decides, `zero_value` renders).
+fn zero_value_ts(
+    type_ref: &TypeRef,
+    inline: Option<&Refinement>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Option<String> {
+    bynk_check::checker::zero_value(type_ref, inline, types).map(|z| render_zero_value(&z))
 }
 
 /// The runtime test a `via schema(...)` guard negates (events slice 4b, #990):
