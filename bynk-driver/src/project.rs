@@ -1888,6 +1888,8 @@ fn check_unit_files(
     indices: &[usize],
     parsed: &[ParsedFile],
     unit_info: &BTreeMap<String, UnitInfo>,
+    // #3229: the project's cross-context views, built once across all units.
+    views: &check_pipeline::CrossContextViewsCache,
     combined_types: &HashMap<String, Arc<TypeDecl>>,
     combined_fns: &HashMap<String, Arc<FnDecl>>,
     combined_methods: &HashMap<String, ResolverMethodTable>,
@@ -1957,6 +1959,7 @@ fn check_unit_files(
         kind,
         broken,
         unit_info,
+        views,
         combined_types,
         imported_from_kind,
         reached_types,
@@ -2837,6 +2840,8 @@ fn run_checks(
     } else {
         HashSet::new()
     };
+    // #3229: one set of cross-context views for the whole project, not one per unit.
+    let views = check_pipeline::CrossContextViewsCache::default();
     for name in bynk_check::project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -2938,6 +2943,7 @@ fn run_checks(
             indices,
             &parsed,
             &unit_info,
+            &views,
             &combined_types,
             &combined_fns,
             &combined_methods,

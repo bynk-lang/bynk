@@ -122,7 +122,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::capability_paths::FileCapabilityPaths;
-use crate::check_pipeline::{check_file_core, prepare_unit_check_ctx, record_analyse_types};
+use crate::check_pipeline::{
+    CrossContextViewsCache, check_file_core, prepare_unit_check_ctx, record_analyse_types,
+};
 use crate::checker::Types;
 use crate::expr_types::{ExprTypeSink, FileExprTypes};
 use crate::firstparty::Platform;
@@ -714,6 +716,8 @@ pub fn analyse_project_with_policy(
     crate::checker::reset_compared_cache();
     // #2719: the needs-context set, extended unit by unit in dependency order.
     let mut exec_plan = crate::exec_plan::ExecPlan::default();
+    // #3229: one set of cross-context views for the whole project, not one per unit.
+    let views = CrossContextViewsCache::default();
     for name in project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -762,6 +766,7 @@ pub fn analyse_project_with_policy(
             kind,
             &broken,
             &unit_info,
+            &views,
             &combined_types,
             &imported_from_kind,
             &reached_types,
