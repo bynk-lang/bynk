@@ -4430,6 +4430,10 @@ pub const QUERY_ROUTE_SUFFIX: &str = "?query";
 /// headers in a `__extraHeaders` slot (a route that declares no `headers:`).
 pub const EXTRA_HEADERS_ROUTE_SUFFIX: &str = "?extra-headers";
 
+/// #3276: marks a `@form` route in the system drivers' route-body map, so a typed
+/// body in a mixed typed-and-`Wire` call is written as a form (`a=1&b=x`), not JSON.
+pub const FORM_ROUTE_SUFFIX: &str = "?form";
+
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
 pub const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";

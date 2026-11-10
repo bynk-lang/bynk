@@ -1910,6 +1910,28 @@ body, a `@raw` body and a multi-actor route (whose wrapper returns `PayloadTooLa
 `maxBody` is an `Int` byte count in this version; a byte `Size` literal is a named
 follow-on.
 
+**`@form`.** A handler annotation, `@form`, marks a handler's `body` as a form post
+(`application/x-www-form-urlencoded`). It is legal only on a `POST`/`PUT`/`PATCH`
+handler with a `body` (`bynk.http.form_on_bodyless`), at most once
+(`bynk.http.form_duplicate`), with no arguments (`bynk.http.form_unknown_arg`), and
+not together with `@raw` (`bynk.http.body_kind_conflict`) or a `by` clause that is a
+sum of actors (`bynk.http.form_on_sum_route`). The `body` MUST be a record
+(`bynk.http.form_body_not_record`) whose fields are each a string-constructible leaf
+(`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one),
+an `Option` of one, or a `List` of one (`bynk.http.form_field_not_stringy`); a `Bool`
+field with no default is a warning (`bynk.http.form_bool_without_default`). The
+router answers a missing or different `Content-Type` (parameters stripped, compared
+case-insensitively; a `charset` other than UTF-8 included) with a synthesised
+**`415 UnsupportedMediaType`** ahead of the auth seam and the body read. It reads the
+body as UTF-8 text under the route's cap, splits it into key/value pairs as the URL
+standard's `application/x-www-form-urlencoded` parser does, and reads the pairs into
+the record's JSON form field by field: unknown keys are ignored; a repeated key fills
+a `List` and is otherwise `StructuralMismatch`; an `Int` reads `-?[0-9]+` within the
+safe-integer range; a `Bool` reads `true`/`on` and `false`/`off`; an empty value is
+absent for an `Option` and for every leaf but `String`. The record's codec then
+applies refinements and defaults and a failure is a `400` whose `path` is rooted at
+`body`. See the HTTP reference.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at

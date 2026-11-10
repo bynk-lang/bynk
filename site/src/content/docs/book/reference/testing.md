@@ -272,6 +272,51 @@ literal `Authorization` line is refused
 (`bynk.test.extra_headers_authorization`): the case's `by <Actor>` owns the
 credential the driver sends.
 
+### Sending a form {#sending-a-form}
+
+A handler marked [`@form`](/book/reference/http/#form-bodies) takes its `body` record
+as an ordinary argument. At the `unit` and `integration` tiers the record reaches the
+handler as it is, without the boundary. At `system` the driver sends it as the form
+the record encodes to (`application/x-www-form-urlencoded`), so the router decodes it:
+
+```bynk,fragment
+suite signup.api as system {
+	case "a typed form round-trips through the router" {
+		let r <- api.POST("/signup", SignupForm {
+			email: "a@b.c",
+			age: Some(41),
+			plan: Pro,
+			tags: ["x"],
+			remember: true,
+		})
+		expect r is Ok(_)
+	}
+}
+```
+
+A `Wire(…)` body is sent as a form too, so a case can probe the decoding rules with
+the text a browser sends, and observe the boundary's rejections:
+
+```bynk,fragment
+suite signup.api as system {
+	case "an empty age is absent" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&age="))
+		expect r is Handled(Ok(_))
+	}
+
+	case "a bad email is refused before the handler" {
+		let r <- api.POST("/signup", Wire("email=nope"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+}
+```
+
+On a `@form` route the driver's own `content-type` is the default: a trailing `RequestHeaders`
+with a `Content-Type` line replaces it, which is how a case probes the route's `415`:
+`api.POST("/signup", Wire("{}"), RequestHeaders.of(["Content-Type: application/json"]))`.
+(On a [`@raw`](/book/reference/http/#raw-request-bodies) route, a `Wire` body is sent as
+`text/plain` instead, which is how a case probes the `415`.)
+
 ### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
 
 A handler that declares a [`query`](/book/reference/http/#query-strings) takes it as

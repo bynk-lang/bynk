@@ -1555,6 +1555,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    d(
+        "bynk.http.body_kind_conflict",
+        "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.",
+    ),
     dg(
         "bynk.http.body_on_get_or_delete",
         "A GET or DELETE handler declares a `body` parameter.",
@@ -1626,6 +1630,37 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.extra_param",
         "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
         &["http_handler"],
+    ),
+    dg(
+        "bynk.http.form_body_not_record",
+        "The `body` of a `@form` handler is not a record type.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.form_bool_without_default",
+        "A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning).",
+        &["http_handler"],
+    )),
+    d(
+        "bynk.http.form_duplicate",
+        "A handler carries more than one `@form` annotation.",
+    ),
+    dg(
+        "bynk.http.form_field_not_stringy",
+        "A field of a `@form` body record has a type a form cannot carry.",
+        &["http_handler"],
+    ),
+    d(
+        "bynk.http.form_on_bodyless",
+        "A `@form` annotation is placed on a handler that takes no body.",
+    ),
+    d(
+        "bynk.http.form_on_sum_route",
+        "A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself.",
+    ),
+    d(
+        "bynk.http.form_unknown_arg",
+        "A `@form` annotation is given an argument; it takes none.",
     ),
     warn(d(
         "bynk.http.header_question_not_found",

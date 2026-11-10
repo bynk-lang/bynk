@@ -32,7 +32,8 @@ service <Name> from http {
 A `body` parameter is parsed from the request JSON and validated before the
 handler runs; an invalid body is rejected with `400` at the boundary — unless the
 handler is [`@raw`](#raw-request-bodies), which takes the request's octets as
-`Bytes` instead.
+`Bytes` instead, or [`@form`](#form-bodies), which decodes an HTML form post into
+the same kind of record.
 
 ## Request headers
 
@@ -263,7 +264,7 @@ variant, so there the same response reads as `Conflict(_)`.
 
 The router refuses some requests before any handler runs: a `400` for a body or
 path parameter that fails to parse or validate, a `405` for a method the path
-doesn't declare, a `413` for a body over its cap, a `415` for a `@raw` route's
+doesn't declare, a `413` for a body over its cap, a `415` for a `@raw` or `@form` route's
 other content type, and a `401` from a `Signature` seam. Each answers in Bynk's own
 shape, `{ "kind": …, "details": … }` or no body. A service whose contract says
 otherwise renders them itself with `on rejected`:
@@ -712,8 +713,9 @@ service registry from http {
   An unbounded binary upload is the denial of service
   [body limits](#request-body-limits) exist to stop.
 - **Buffered, not streamed.** The body is read whole, up to the cap, before the
-  handler runs. Streaming a request body into the handler, and multipart or form
-  decoding, are not part of this. A `@raw` handler can still take
+  handler runs. Streaming a request body into the handler is not part of this
+  ([#3180](https://github.com/bynk-lang/bynk/issues/3180)); a form post has its own
+  [`@form`](#form-bodies) decoding. A `@raw` handler can still take
   [`headers: RequestHeaders`](#request-headers) alongside its body, say to read
   a webhook's event-name header.
 - **Signatures.** A `Signature` actor on a `@raw` route computes its HMAC over the
@@ -726,6 +728,90 @@ without `body`), `raw_duplicate`, `raw_unknown_arg`, `raw_bad_content_type`,
 `raw_body_not_bytes` and `raw_body_unbounded`. In a `system` test, a typed call
 sends the `Bytes` raw under the declared type (`application/octet-stream` for
 `"*/*"`), and a `Wire` body is sent as `text/plain`, so it probes the `415`.
+
+## Form bodies
+
+`@form` marks a handler's `body` as an **HTML form post**
+(`application/x-www-form-urlencoded`) and decodes it into a record at the boundary,
+with the same field types, defaults, `Option`s and refinements as a typed
+[`query`](#typed-query) or a JSON body. It is the request-side counterpart of a
+`<form method="post">` in a page that [serves its own HTML](/book/guides/entry-points/serve-a-page/).
+
+```bynk,fragment
+type Email = String where Matches("^[^@]+@[^@]+$")
+type Age = Int where InRange(0, 150)
+type Plan = enum { Free, Pro }
+
+type SignupForm = {
+  email:    Email,
+  age:      Option[Age],         // absent or empty: None
+  plan:     Plan = Free,         // absent: the default
+  tags:     List[String] = [],   // a repeated key
+  remember: Bool = false,        // an unchecked checkbox sends nothing
+}
+```
+
+```bynk,fragment
+@form
+on POST("/signup") (body: SignupForm) -> Effect[HttpResult[()]] by v: Visitor {
+  SeeOther("/welcome")
+}
+```
+
+`email=a%40b.c&age=41&plan=Pro&tags=x&tags=y&remember=on` decodes to a `SignupForm`;
+`email=nope` is a `400` before the handler runs, with the `RefinementViolation`
+body a bad JSON `body` gets, its `path` naming the field (`body.email`).
+
+- **The annotation.** `@form` is legal only on a `POST`/`PUT`/`PATCH` handler with a
+  `body` (`bynk.http.form_on_bodyless`), at most once (`bynk.http.form_duplicate`),
+  and takes no arguments (`bynk.http.form_unknown_arg`). It excludes
+  [`@raw`](#raw-request-bodies) (`bynk.http.body_kind_conflict`): each fixes the
+  wire format of the one `body`. The `body` must be a record
+  (`bynk.http.form_body_not_record`), and a route whose `by` is a sum of actors
+  is refused (`bynk.http.form_on_sum_route`), since its wrapper reads the body as JSON.
+- **`415`.** A request whose `Content-Type` is not `application/x-www-form-urlencoded`
+  (parameters stripped, case-insensitive) is a synthesised `415`, as for `@raw`, ahead
+  of the auth seam and the body read. That includes JSON: a `@form` route answers one
+  media type. A `charset` parameter other than UTF-8 is a `415` too, because the
+  decoder reads UTF-8 and nothing else.
+- **Fields.** A field is a `String`, `Int`, `Bool` or `Decimal`, a refined or opaque
+  type over one of those, or an enum (a unit variant, by name), optionally in an
+  `Option` or a `List`. Anything else, a nested record included, is refused
+  (`bynk.http.form_field_not_stringy`): form keys are flat, with no `a[b]` nesting.
+  A key matches the field's name literally, so a `List` field `tags` reads `tags`, not
+  `tags[]`. Unknown keys are ignored.
+- **Repeated keys.** A key that repeats fills a `List` field in order. On any other
+  field it is a `400` (`StructuralMismatch`), never first-wins.
+- **Absent and empty.** An absent field takes its default; an `Option` is `None`;
+  otherwise the field is missing (`400`). A browser sends an unfilled input as
+  `name=`, so for a form an **empty value is absent** for an `Option` and for every
+  field except a plain `String`, which stays `""` so a `NonEmpty` refinement still
+  fires. (A typed `query` keeps `?limit=` as a value, and so a `400`; the browser's
+  empty inputs are why a form differs.)
+- **Checkboxes.** An unchecked checkbox sends nothing, and a checked one sends `on`
+  unless its markup sets a `value`. A `Bool` reads `true`/`on` as `true` and
+  `false`/`off` as `false`; anything else is a `400`. A `Bool` field with no default
+  and no `Option` is a warning (`bynk.http.form_bool_without_default`), since an
+  unchecked box would be a `400`; write `remember: Bool = false`.
+- **Numbers.** An `Int` reads `-?[0-9]+` within the safe-integer range; a `Decimal`
+  reads its own text form. There is no locale (`1,5`), no leading `+` and **no
+  whitespace trimming**: a refinement such as `Matches` is how a field is tightened.
+- **Charset and decoding.** The body is decoded as UTF-8, as the URL standard does:
+  `+` is a space, and a percent-sequence that is not valid UTF-8 reads as U+FFFD
+  rather than failing.
+- **Caps.** The body is buffered like a JSON one. A `@limit` or `limits { maxBody }`
+  applies, with the same `413`; unlike a [`@raw`](#raw-request-bodies) route, a
+  `@form` route needs no cap, but a public form should have one.
+- **CSRF.** A form post is a *simple request* in CORS terms, so a
+  [`cors { }`](#cors) policy does not stop a page on another origin submitting to the
+  route. Nothing here authenticates the submitter; use an
+  [actor](/book/reference/actors/), and do not rely on a cookie alone.
+
+In a `system` test a typed `body` is sent as the form its record encodes to, and a
+`Wire(…)` body is sent as a form too, so a case can probe the decoding rules with
+the text a browser would send (`Wire("email=nope")`). At the `unit` and
+`integration` tiers the record reaches the handler directly. See
+[Sending a form](/book/reference/testing/#sending-a-form).
 
 ## CORS
 
@@ -1030,7 +1116,7 @@ flowchart TD
   known -->|no| nf["404"]
   known -->|yes, OPTIONS| opt["204 + Allow"]
   known -->|yes, other| m405["405 + Allow"]
-  params --> ctype{"@raw route and Content-Type matches?"}
+  params --> ctype{"@raw or @form route and Content-Type matches?"}
   ctype -->|no| m415["415"]
   ctype -->|yes| body{"body valid?"}
   body -->|over the cap| m413["413"]
@@ -1048,7 +1134,7 @@ flowchart TD
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
 on method **and** path. On a match, path parameters are bound and a typed
-[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw` route's
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw` or `@form` route's
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an

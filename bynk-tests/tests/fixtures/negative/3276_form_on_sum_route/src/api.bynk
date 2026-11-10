@@ -1,0 +1,13 @@
+context api
+
+type UserId = String where NonEmpty
+type Q = { q: String }
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+  @form
+  on POST("/search") (body: Q) -> Effect[HttpResult[String]] by who: User | Visitor {
+    Ok(body.q)
+  }
+}

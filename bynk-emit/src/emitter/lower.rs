@@ -3357,6 +3357,15 @@ fn lower_method_call(
         } else {
             None
         };
+        // #3276: a `@form` route's typed body is written as a form, not JSON.
+        let form_route = is_raw
+            && cx
+                .system_http_route_body(&(
+                    id.name.clone(),
+                    verb.as_str().to_string(),
+                    format!("{path}{}", crate::emitter::FORM_ROUTE_SUFFIX),
+                ))
+                .is_some();
         let rest: Vec<String> = args[1..]
             .iter()
             .enumerate()
@@ -3418,6 +3427,20 @@ fn lower_method_call(
                     // the boundary (`bynk_ts::print_expr`), the same
                     // treatment cluster 4's own `lower.rs:2552` call site
                     // already established.
+                    Some((body_idx, ty)) if *body_idx == i && form_route => {
+                        cx.note_query_string();
+                        format!(
+                            "__queryString({}).slice(1)",
+                            bynk_ts::print_expr(
+                                &crate::emitter::serialisation::serialise_expr_via(
+                                    ty,
+                                    &format!("({lowered} as any)"),
+                                    cx.system_http_type_ns(),
+                                    cx.runtime_use()
+                                )
+                            )
+                        )
+                    }
                     Some((body_idx, ty)) if *body_idx == i => format!(
                         "globalThis.JSON.stringify({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(

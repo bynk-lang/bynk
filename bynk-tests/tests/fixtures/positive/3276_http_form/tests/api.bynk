@@ -1,0 +1,135 @@
+suite signup.api {
+	case "a form body reaches the handler as a record" {
+		let r <- api.POST("/signup", SignupForm { email: "a@b.c", age: Some(41), plan: Pro, tags: ["x", "y"], remember: true, nickname: None, title: "Dr" })
+		expect r is Ok("a@b.c 41 pro 2 true - [Dr]")
+	}
+}
+
+suite signup.api as system {
+	case "a typed form round-trips through the router" {
+		let r <- api.POST("/signup", SignupForm { email: "a@b.c", age: Some(41), plan: Pro, tags: ["x", "y z"], remember: true, nickname: Some("al"), title: "Dr" })
+		expect r is Ok("a@b.c 41 pro 2 true al [Dr]")
+	}
+
+	case "absent keys take None and their defaults" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c"))
+		expect r is Handled(Ok("a@b.c - free 0 false - []"))
+	}
+
+	case "a checked checkbox sends on" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&remember=on"))
+		expect r is Handled(Ok("a@b.c - free 0 true - []"))
+	}
+
+	case "a Bool also reads true and off" {
+		let t <- api.POST("/signup", Wire("email=a%40b.c&remember=true"))
+		expect t is Handled(Ok("a@b.c - free 0 true - []"))
+		let f <- api.POST("/signup", Wire("email=a%40b.c&remember=off"))
+		expect f is Handled(Ok("a@b.c - free 0 false - []"))
+	}
+
+	case "a Bool that is neither is a structural mismatch" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&remember=maybe"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "repeated keys fill a list" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&tags=a&tags=b&tags=c"))
+		expect r is Handled(Ok("a@b.c - free 3 false - []"))
+	}
+
+	case "an empty value is absent for an Option and a non-String, and empty for a String" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&age=&nickname=&title=&plan="))
+		expect r is Handled(Ok("a@b.c - free 0 false - []"))
+	}
+
+	case "unknown keys are ignored" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&utm_source=x&tags[]=y"))
+		expect r is Handled(Ok("a@b.c - free 0 false - []"))
+	}
+
+	case "a refinement violation is refused before the handler" {
+		let r <- api.POST("/signup", Wire("email=nope"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "an age out of range is refused" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&age=200"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "a non-numeric age is a structural mismatch" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&age=many"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a missing required field is a structural mismatch" {
+		let r <- api.POST("/signup", Wire("age=3"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a repeated key on a single-valued field is refused" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&age=1&age=2"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "an unknown enum variant is refused" {
+		let r <- api.POST("/signup", Wire("email=a%40b.c&plan=Gold"))
+		expect r is Rejected(_)
+	}
+
+	case "a path parameter and a form body together" {
+		let r <- api.PUT("/profile/:owner", "octo", Search { q: "hello world" })
+		expect r is Ok("octo hello world")
+	}
+
+	case "a capped form route reads its body through the counter" {
+		let r <- api.POST("/search", Search { q: "ok" })
+		expect r is Ok("ok")
+	}
+
+	case "a form body over the cap is a 413" {
+		let r <- api.POST("/search", Wire("q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+		expect r is Rejected(PayloadTooLarge(_))
+	}
+
+	case "an empty Decimal is absent and takes its default" {
+		let r <- api.POST("/priced", Wire("price=&subscribed=on"))
+		expect r is Handled(Ok("0.00 true"))
+	}
+
+	case "a filled Decimal reads as its text" {
+		let r <- api.POST("/priced", Wire("price=1.50&subscribed=off"))
+		expect r is Handled(Ok("1.50 false"))
+	}
+
+	case "a route answers 415 to another content type" {
+		let r <- api.POST("/search", Wire("{\"q\":\"x\"}"), RequestHeaders.of(["Content-Type: application/json"]))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a form with a non-UTF-8 charset is a 415" {
+		let r <- api.POST("/search", Wire("q=x"), RequestHeaders.of(["Content-Type: application/x-www-form-urlencoded; charset=iso-8859-1"]))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "no content type is a 415" {
+		let r <- api.POST("/search", Wire("q=x"), RequestHeaders.of(["Content-Type: text/plain"]))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a signed webhook form is verified, then decoded" {
+		let ok <- api.POST("/hook", Search { q: "go" })
+		let wire <- api.POST("/hook", Wire("q=wired"))
+		expect ok is Ok("hook go")
+		expect wire is Handled(Ok("hook wired"))
+	}
+
+	case "an unsigned or forged webhook form is refused" {
+		let n = Search { q: "go" }
+		let none <- api.POST("/hook", n) by Nobody
+		let forged <- api.POST("/hook", n) by Forged
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+	}
+}

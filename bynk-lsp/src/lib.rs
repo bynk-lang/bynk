@@ -3791,6 +3791,8 @@ impl LanguageServer for Backend {
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
+        // #3276: at a service-body item start, offer the `@form` snippet.
+        items.extend(form_completions(&text, offset, &line_prefix));
         // #2854: in an `on http` handler's parameter list, offer the special
         // parameter names (`query`, `headers`, `body`).
         items.extend(http_param_completions(&text, offset));
@@ -5542,6 +5544,25 @@ fn raw_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem>
         }];
     }
     Vec::new()
+}
+
+/// #3276: the `@form` annotation snippet, at a service-body item start. `@form`
+/// takes no arguments, so there is no argument position to complete.
+fn form_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if !completion::in_service_body_item_position(text, offset, line) {
+        return Vec::new();
+    }
+    vec![CompletionItem {
+        label: "@form".to_string(),
+        kind: Some(CompletionItemKind::SNIPPET),
+        detail: Some(
+            "decode `body: T` from an `application/x-www-form-urlencoded` form — a `415` for any other content type"
+                .to_string(),
+        ),
+        insert_text: Some("@form".to_string()),
+        insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+        ..Default::default()
+    }]
 }
 
 fn contract_param_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
