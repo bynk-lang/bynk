@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.534.4** | The checker shares a unit's parsed declarations and agents by reference instead of deep-cloning them for every agent and handler, so a project check is up to a third faster (500 contexts: a language-server edit 521 ms to 344 ms) |
 | **v0.534.3** | The editor-latency budget (language-server edit-to-diagnostics p95 under 100 ms on the 50-context project) is stated in the benchmark README and the `keystroke_latency` row, and `cargo xtask bench` warns when a record breaches it |
 | **v0.534.2** | `cargo xtask check-pending` rejects a pending file whose `changelog` is wrapped in quotes, which the stamp would have copied into the changelog row |
 | **v0.534.1** | "The emitter lowers an agent class's handler methods in `emit_agent_handlers`, as part of splitting `emit_agent` (#3167)" |
