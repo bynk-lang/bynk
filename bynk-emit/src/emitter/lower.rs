@@ -3413,11 +3413,6 @@ fn lower_method_call(
     pre.finish(call)
 }
 
-/// A built-in method call the checker resolved to a typed [`KernelOp`] (#3164):
-/// the one place the emitter turns a kernel operation into TypeScript, matching
-/// on the receiver kind and the operation. `None` when the operation has no
-/// inline lowering here, so the caller falls through to the UFCS lowering; any
-/// hoisted statements the attempt produced stay in `pre`.
 /// The persisted-store receivers of a method call: a `store` field of the
 /// current agent used as `<field>.<op>(…)`. Each kind has its own function, tried
 /// in order; `None` means the receiver is none of them.
@@ -3466,7 +3461,7 @@ fn lower_store_held_map_call(
     // dispatch as any other storage map — entry ops (`put`/`remove`/
     // `contains`/`size`/`get`) as `Callee::Store`, lifted query ops (e.g.
     // `parTraverse`) as `Callee::Query` — so both variants are matched here,
-    // mirroring the ordinary (non-held) Map branch's own guard just below.
+    // mirroring `lower_store_map_call`'s own guard.
     // `agent_held_map_frame` stays: it answers which *kind* of store field
     // this is (held vs ordinary), not the shadowing question `Callee`
     // already settles.
@@ -3624,8 +3619,7 @@ fn lower_store_map_call(
             "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
             // ordinary in-memory map of `TestConnection`s (the Workers build
-            // persists connection ids instead and takes the held-map branch
-            // above), so `remove` must still honour the §2.9 contract that it
+            // persists connection ids instead and takes `lower_store_held_map_call`), so `remove` must still honour the §2.9 contract that it
             // removes *and closes*: close the connection the entry holds, then
             // delete it, as the Workers lowering does.
             "remove"
@@ -3717,7 +3711,7 @@ fn lower_store_set_call(
     // `add`/`remove` mutate the working record, `contains`/`size` read it.
     //
     // P6.21 (partial, continued): reads `Callee::Store` (P6.0) instead of
-    // `!cx.is_local(&id.name)` — see the storage-`Map` branch above for the
+    // `!cx.is_local(&id.name)` — see `lower_store_map_call` for the
     // full reasoning. `Set` never gets `Callee::Query` (checker.rs's own
     // `StoreField::Set` arm records only `Store`), unlike `Map`/`Log`.
     if let ExprKind::Ident(id) = &receiver.kind
@@ -3756,7 +3750,7 @@ fn lower_store_cache_call(
     // `get`/`contains`/`size` treat an entry past `exp` as absent.
     //
     // P6.21 (partial, continued): reads `Callee::Store` instead of
-    // `!cx.is_local(&id.name)` — see the storage-`Map` branch above. `Cache`
+    // `!cx.is_local(&id.name)` — see `lower_store_map_call`. `Cache`
     // never gets `Callee::Query`, same as `Set`.
     if let ExprKind::Ident(id) = &receiver.kind
         && matches!(cx.commons().callee(e.id), Some(Callee::Store { .. }))
@@ -3946,6 +3940,11 @@ fn lower_store_cell_call(
     None
 }
 
+/// A built-in method call the checker resolved to a typed [`KernelOp`] (#3164):
+/// the one place the emitter turns a kernel operation into TypeScript, matching
+/// on the receiver kind and the operation. `None` when the operation has no
+/// inline lowering here, so the caller falls through to the UFCS lowering; any
+/// hoisted statements the attempt produced stay in `pre`.
 fn lower_kernel_method_call(
     e: &Expr,
     receiver: &Expr,
