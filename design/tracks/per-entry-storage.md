@@ -185,7 +185,9 @@ small-collection threshold only if it regresses measurably. Open.
 1. **Test storage and runtime primitives** (batched ops enforcing 128, ranges,
    the chosen atomic flush, op counting) and the `Cell`-record split.
 2. **`Map`/`Set` entries** per key, with the overlay flush and the lazy upgrade.
-   Carries the main ADR, including the interleaving decision (Q3).
+   Carries the main ADR, including the interleaving decision (Q3, now settled:
+   handlers are serialised per instance, #3202), and the `bynk deploy revert`
+   preflight refusal for a rollback across `__layout` (§8).
 3. **Indexes** as posting keys and the index-routed read.
 4. **`Cache` and `Log`** (expiry index, time-ordered keys, retention ranges).
 5. **Sweep reporting, docs, the ceiling note retired, live check on Cloudflare.**
@@ -221,6 +223,12 @@ Numbers are assigned at merge.
   of entry keys, beyond one 128-key batch), it is resumable and idempotent
   (`__layout: "upgrading"`). Which of the two holds is not settled until Q2's
   mechanism and Q4 are closed.
+- **Deploy-time backing (for the writer slice):** the revert preflight in
+  `bynk/src/deploy/revert.rs` refuses a rollback across a `__v` bump (`NewerSchema`)
+  but knows nothing about `__layout`. That is fine while no build writes the marker.
+  The slice that first writes it (slice 2) adds the matching preflight refusal, so the
+  loud runtime fault is backed by a refusal before the rollback is applied. Raised in
+  the review of #3209.
 - **Verification:** a fixture that presents an unknown layout and asserts a fault
   with nothing written; the refused-commit regression against the new flush; a live
   check on a real Worker before the flip.
