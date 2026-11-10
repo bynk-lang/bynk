@@ -61,8 +61,8 @@ The accepted editor-latency budget (#3168): the language server's
 the debounce excluded. It is checked against each release record, not gated in
 CI. `cargo xtask bench` prints a warning when the 50-context p95 reaches it, and
 the `keystroke_latency` row of `design/greenfield-status.md` states whether the
-newest record meets it. A record that breaches the budget is the trigger for the
-incremental-scheduler decision, [#1523](https://github.com/bynk-lang/bynk/issues/1523).
+newest record meets it. A record that breaches the budget is a latency
+regression to investigate.
 The 50-context size must be in a record for the budget to be checked, which the
 default `--sizes` includes.
 
@@ -91,13 +91,15 @@ each unit's prelude; *definition* is resolving and checking declaration bodies
 result. The marks sit at the pipeline's own phase boundaries, so this is an
 attribution, not a profile. It is the evidence #1523's trigger asks for.
 
-## The scheduler trigger
+## The scheduler yardstick
 
-The incremental-scheduler decision (S2 of
-[#3243](https://github.com/bynk-lang/bynk/issues/3243), the deferred
-[#1523](https://github.com/bynk-lang/bynk/issues/1523)) was deferred by the
-maintainer with this trigger: **edit-to-diagnostics p95 above 250 ms at 200
-contexts, on either shape, in a release record.** `cargo xtask bench` warns when a
-record reaches it, and the `keystroke_latency` row of
-`design/greenfield-status.md` says whether it is reached. The 200-context size
-must be in a record (the default `--sizes` includes it).
+The incremental scheduler (S2 of
+[#3243](https://github.com/bynk-lang/bynk/issues/3243), tracked by
+[#1523](https://github.com/bynk-lang/bynk/issues/1523)) was first deferred on this
+trigger: **edit-to-diagnostics p95 above 250 ms at 200 contexts, on either
+shape, in a release record.** The maintainer has since decided to build it, so
+the number is now the yardstick each slice is measured against rather than a
+gate on starting. `cargo xtask bench` warns when a record reaches it, and the
+`keystroke_latency` row of `design/greenfield-status.md` says whether it is
+reached. The 200-context size must be in a record (the default `--sizes`
+includes it). A record is only written (`--record`) when both shapes ran.

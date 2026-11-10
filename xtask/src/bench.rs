@@ -643,8 +643,8 @@ pub fn latest_record(root: &Path) -> Option<(Version, Value)> {
 /// The accepted editor-latency budget (#3168, accepted by the maintainer):
 /// the language server's edit-to-diagnostics **p95** stays under this many
 /// milliseconds on the [`BUDGET_CONTEXTS`]-context synthetic project. It is
-/// checked against each release record, not gated in CI; a record that breaches
-/// it is the trigger for the incremental-scheduler decision (#1523).
+/// checked against each release record, not gated in CI. (The scheduler's own
+/// trigger is separate: [`TRIGGER_P95_MS`].)
 pub const BUDGET_P95_MS: f64 = 100.0;
 
 /// The project size the budget is stated for.
@@ -653,8 +653,9 @@ pub const BUDGET_CONTEXTS: u64 = 50;
 /// The incremental-scheduler trigger (#1523, #3243): the scheduler decision is
 /// reopened when the language server's edit-to-diagnostics **p95** exceeds this
 /// many milliseconds at [`TRIGGER_CONTEXTS`] contexts, on **either** project
-/// shape, in a release record. The maintainer deferred the scheduler (S2) with
-/// this trigger intact.
+/// shape, in a release record. It was the trigger the scheduler (S2 of #3243)
+/// was first deferred on; the maintainer has since decided to build it, and this
+/// stays as the yardstick the slices are measured against.
 pub const TRIGGER_P95_MS: f64 = 250.0;
 
 /// The project size the scheduler trigger is stated for.
@@ -686,7 +687,7 @@ fn trigger_reading(record: &Value) -> Option<String> {
         .map(|(shape, p)| format!("{} {p} ms", shape.name()))
         .collect();
     Some(format!(
-        "scheduler trigger p95 > {TRIGGER_P95_MS} ms at {TRIGGER_CONTEXTS} contexts: {} ({})",
+        "scheduler yardstick p95 > {TRIGGER_P95_MS} ms at {TRIGGER_CONTEXTS} contexts: {} ({})",
         if reached { "REACHED" } else { "not reached" },
         shown.join(", ")
     ))
@@ -700,7 +701,7 @@ pub fn trigger_warning(record: &Value) -> Option<String> {
         .any(|shape| trigger_p95(record, shape).is_some_and(|p| p > TRIGGER_P95_MS));
     reached.then(|| {
         format!(
-            "{} — reopen the incremental-scheduler decision (#1523, #3243)",
+            "{} — latency is at the incremental-scheduler yardstick (#3243, #1523)",
             trigger_reading(record).unwrap_or_default()
         )
     })
@@ -721,7 +722,7 @@ fn budget_p95(record: &Value) -> Option<f64> {
 pub fn budget_warning(record: &Value) -> Option<String> {
     let p95 = budget_p95(record).filter(|p| *p >= BUDGET_P95_MS)?;
     Some(format!(
-        "edit-to-diagnostics p95 is {p95} ms at {BUDGET_CONTEXTS} contexts, over the {BUDGET_P95_MS} ms budget: this record is the trigger for the incremental-scheduler decision (#1523)"
+        "edit-to-diagnostics p95 is {p95} ms at {BUDGET_CONTEXTS} contexts, over the {BUDGET_P95_MS} ms budget (the accepted latency budget, #3168)"
     ))
 }
 
@@ -828,7 +829,7 @@ mod tests {
                 .unwrap()
                 .contains("over the 100 ms budget")
         );
-        assert!(budget_warning(&rec(250.0)).unwrap().contains("#1523"));
+        assert!(budget_warning(&rec(250.0)).unwrap().contains("#3168"));
         // A record that did not measure 50 contexts says nothing, and reads "not measured".
         let none = json!({"sizes": [{"contexts": 10, "source_lines": 1, "lsp_edit": {"median_ms": 1.0, "p95_ms": 1.0}}]});
         assert_eq!(budget_warning(&none), None);
@@ -882,7 +883,7 @@ mod tests {
         assert!(
             reading(v, &rec)
                 .unwrap()
-                .contains("scheduler trigger p95 > 250 ms at 200 contexts: not reached")
+                .contains("scheduler yardstick p95 > 250 ms at 200 contexts: not reached")
         );
     }
 

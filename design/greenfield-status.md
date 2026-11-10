@@ -31,7 +31,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `keep_in_sync` | no (trend) | 202 |
 | `test_density` | no (trend) | bynk=16.0%, bynk-check=14.2%, bynk-driver=24.3%, bynk-emit=12.9%, bynk-fmt=17.1%, bynk-grammar=33.2%, bynk-ide=41.8%, bynk-ir=0.0%, bynk-lower=66.1%, bynk-lsp=38.4%, bynk-project=36.6%, bynk-render=45.2%, bynk-std=49.7%, bynk-strip=55.9%, bynk-syntax=15.3%, bynk-testkit=0.0%, bynk-ts=53.7%, bynk-wasm=45.6%, bynkc=0.0%, xtask=40.0% |
 | `fixture_kinds` | no (trend) | contains=3, absent=2, diagnostics=14, error=690, warnings=7, run=125 |
-| `keystroke_latency` | no (trend) | edit-to-diagnostics median: 10 contexts 5.8 ms, 50 contexts 20 ms, 200 contexts 90.5 ms, 500 contexts 262.4 ms; debounce excluded; budget p95 < 100 ms at 50 contexts: met (24.4 ms); scheduler trigger p95 > 250 ms at 200 contexts: not reached (independent 103.1 ms, linked 220.3 ms) (v0.537.0, design/benchmarks/v0.537.0.json) |
+| `keystroke_latency` | no (trend) | edit-to-diagnostics median: 10 contexts 5.8 ms, 50 contexts 20 ms, 200 contexts 90.5 ms, 500 contexts 262.4 ms; debounce excluded; budget p95 < 100 ms at 50 contexts: met (24.4 ms); scheduler yardstick p95 > 250 ms at 200 contexts: not reached (independent 103.1 ms, linked 220.3 ms) (v0.537.0, design/benchmarks/v0.537.0.json) |
 
 ## Rules closed
 
