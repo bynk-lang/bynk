@@ -1070,7 +1070,7 @@ pub(crate) fn check_call(
             span,
             format!("unknown function `{}`", name.name),
         )
-        .with_note("only functions declared in this commons are callable"),
+        .with_note(crate::resolver::unknown_function_note(&name.name)),
     );
     None
 }
