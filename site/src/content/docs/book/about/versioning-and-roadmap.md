@@ -87,13 +87,17 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   be retired (S4). The track is complete and the gate is met: its live checks
   on Cloudflare are recorded on
   [#2188](https://github.com/bynk-lang/bynk/issues/2188).
-- **Constrained generics.** In progress. Slice 0 has shipped and is the 1.0
-  prerequisite: a type parameter may carry a declared bound, and `Eq` is the first
-  constraint (`fn same[T: Eq](a: T, b: T)`, or `where A: Eq` on a method for its
-  receiver type's parameter), replacing the equality requirement the compiler used
-  to infer. It is a breaking change with a machine-applicable fix; see
-  [Generics and bounds](/book/reference/generics/). Next: `Ord`, `Key` and
-  `Codable` as further constraints, then static methods on generic types.
+- **Constrained generics.** Shipped. A type parameter may carry a declared
+  bound, and the closed constraint set is `Eq`, `Ord`, `Key` and `Codable`
+  (`fn same[T: Eq](a: T, b: T)`, or `where A: Eq` on a method for its receiver
+  type's parameter); static methods on generic types shipped with it. Introducing
+  bounds was a breaking change with a machine-applicable fix; see
+  [Generics and bounds](/book/reference/generics/). Deferred: `Codable` in
+  capability operation return types
+  ([#2791](https://github.com/bynk-lang/bynk/issues/2791)) and composite keys for
+  an agent's `store` `Map`, `Set` and `Cache`
+  ([#2788](https://github.com/bynk-lang/bynk/issues/2788)). A `Show` bound was
+  considered and not adopted.
 - **Editor tooling.** Deepening the `bynk-lsp` experience — completion,
   navigation, and diagnostics — and the VS Code extension that surfaces it. Its
   model views (sequence diagram, documentation, architecture map, wire
@@ -118,7 +122,7 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   [approves them](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
   Next: the hosted first-party registry
   ([#843](https://github.com/bynk-lang/bynk/issues/843)).
-- **Concurrent effects.** In progress: a
+- **Concurrent effects.** Shipped: a
   [`par` block](/book/reference/capabilities/#par) issues independent effects
   together and waits for all of them, raising the first fault in source order.
   `parTraverse`, `parTraverseAll` and `parTraverseTry` now wait for every
@@ -132,6 +136,7 @@ the planning backlogs (`bynk-tooling-proposal-queue.md`,
   to `waitUntil` to finish, so it suits idempotent reads
   ([#2711](https://github.com/bynk-lang/bynk/issues/2711),
   [#2615](https://github.com/bynk-lang/bynk/issues/2615)).
+  Cancelling the work an effect gives up on is a non-goal of this track.
 - **Distribution.** Publishing the compiler, grammar, and extension through
   their registries as the project approaches a public 1.0.
 
@@ -146,6 +151,10 @@ are scheduled for later increments on the road to v1:
 - **Sagas** — coordinating multi-step workflows across contexts.
 - **Event replay** — re-delivering past events to a subscriber that joins late or
   recovers, with ordering across concurrent publishes.
+
+Sagas are tracked in [#3185](https://github.com/bynk-lang/bynk/issues/3185),
+deferred until after 1.0 as an additive minor; Cloudflare Workflows is a
+candidate substrate.
 
 Storage kinds, once on this list, have shipped: an agent's `store` fields are
 `Cell`, `Map`, `Set`, `Cache` or `Log` (see [Agents](/book/reference/agents/)).
