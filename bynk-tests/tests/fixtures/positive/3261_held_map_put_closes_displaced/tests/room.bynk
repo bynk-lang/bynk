@@ -1,0 +1,45 @@
+// #3261: a held connection displaced by `put` is closed; the same one put back is not.
+suite room {
+  case "a displaced connection is closed by put" {
+    let first = TestConnection[ServerFrame]()
+    let second = TestConnection[ServerFrame]()
+    let room = Room(RoomId.unsafe("lab"))
+    let _ <- room.join(UserId.unsafe("grace"), first.connection())
+    expect first.closed() == false
+    let _ <- room.join(UserId.unsafe("grace"), second.connection())
+    expect first.closed()
+    expect second.closed() == false
+    let n <- room.count()
+    expect n == 1
+  }
+
+  case "putting the same connection back under its own key leaves it open" {
+    let grace = TestConnection[ServerFrame]()
+    let room = Room(RoomId.unsafe("lab2"))
+    let _ <- room.join(UserId.unsafe("grace"), grace.connection())
+    let _ <- room.rejoin(UserId.unsafe("grace"))
+    expect grace.closed() == false
+    let n <- room.count()
+    expect n == 1
+  }
+
+  case "putting under a new key closes nothing" {
+    let grace = TestConnection[ServerFrame]()
+    let linus = TestConnection[ServerFrame]()
+    let room = Room(RoomId.unsafe("lab3"))
+    let _ <- room.join(UserId.unsafe("grace"), grace.connection())
+    let _ <- room.join(UserId.unsafe("linus"), linus.connection())
+    expect grace.closed() == false
+    expect linus.closed() == false
+    let n <- room.count()
+    expect n == 2
+  }
+
+  case "a removed member is still closed" {
+    let grace = TestConnection[ServerFrame]()
+    let room = Room(RoomId.unsafe("lab4"))
+    let _ <- room.join(UserId.unsafe("grace"), grace.connection())
+    let _ <- room.leave(UserId.unsafe("grace"))
+    expect grace.closed()
+  }
+}

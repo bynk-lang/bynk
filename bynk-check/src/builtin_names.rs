@@ -6,6 +6,8 @@
 /// Built-in type names (as they appear in source / qualified positions).
 pub mod types {
     pub const JSON: &str = "Json";
+    /// #3214: the YAML decoder, `Yaml.decode[T]`, beside `Json`.
+    pub const YAML: &str = "Yaml";
     pub const LIST: &str = "List";
     pub const MAP: &str = "Map";
     /// K6a (#2596): the built-in immutable set.
@@ -89,6 +91,7 @@ mod tests {
     #[test]
     fn constants_hold_expected_values() {
         assert_eq!(types::JSON, "Json");
+        assert_eq!(types::YAML, "Yaml");
         assert_eq!(types::HTTP_RESULT, "HttpResult");
         assert_eq!(methods::OF, "of");
         assert_eq!(methods::FOLD_EFF, "foldEff");

@@ -117,6 +117,25 @@ impl LocalsSink {
         });
     }
 
+    /// Fold in what `other` recorded (#3243 S2.3). A file already present keeps
+    /// its entries; `other`'s are appended and its merge index shifted to match.
+    pub fn absorb(&mut self, other: LocalsSink) {
+        let LocalsSink { files, index, .. } = other;
+        let mut offsets: HashMap<PathBuf, usize> = HashMap::new();
+        for (file, entries) in files {
+            let slot = self.files.entry(file.clone()).or_default();
+            offsets.insert(file, slot.len());
+            slot.extend(entries);
+        }
+        for ((file, name, span), positions) in index {
+            let base = offsets.get(&file).copied().unwrap_or(0);
+            self.index
+                .entry((file, name, span))
+                .or_default()
+                .extend(positions.into_iter().map(|p| p + base));
+        }
+    }
+
     /// Drain the recorded bindings, each file's entries ordered by def span.
     pub fn take_files(&mut self) -> FileLocals {
         self.index.clear();
@@ -171,6 +190,37 @@ mod tests {
             ty: "Int".to_string(),
             scope: Span::new(scope.0, scope.1),
         }
+    }
+
+    #[test]
+    fn absorb_rebases_the_merge_index_onto_a_file_already_present() {
+        let file = Path::new("a.bynk");
+        let record =
+            |sink: &mut LocalsSink, name: &str, ty: &str, def: usize, scope: (usize, usize)| {
+                sink.enter_file(file, false);
+                sink.record(
+                    name.to_string(),
+                    Span::new(def, def + 1),
+                    LocalKind::Let,
+                    ty.to_string(),
+                    Span::new(scope.0, scope.1),
+                );
+            };
+        let mut kept = LocalsSink::new();
+        record(&mut kept, "x", "Int", 1, (10, 20));
+        let mut other = LocalsSink::new();
+        record(&mut other, "y", "Int", 2, (10, 20));
+        kept.absorb(other);
+        // The same binding as the absorbed `y`, overlapping scope: it must merge
+        // into that entry (now at index 1), not duplicate it or touch `x`.
+        record(&mut kept, "y", "String", 2, (15, 30));
+        let files = kept.take_files();
+        let entries = &files[file];
+        assert_eq!(entries.len(), 2, "no duplicate entry: {entries:?}");
+        let x = entries.iter().find(|e| e.name == "x").unwrap();
+        let y = entries.iter().find(|e| e.name == "y").unwrap();
+        assert_eq!((x.ty.as_str(), x.scope), ("Int", Span::new(10, 20)));
+        assert_eq!((y.ty.as_str(), y.scope), ("String", Span::new(10, 30)));
     }
 
     #[test]

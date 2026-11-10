@@ -446,7 +446,7 @@ convention enforced by review and the emitted constructors' shapes, not by a
 recursive sum, or a record that recurses through an `Option`, a collection or a
 sum (§6.1.4, §6.1.5) — is an ordinary boundary-legal type. It MAY cross a
 context boundary, be a `store` field, be a field of an event payload, and pass
-through `Json.encode` and `Json.decode`; its codec is recursive. A **generic**
+through `Json.encode`, `Json.decode` and `Yaml.decode`; its codec is recursive. A **generic**
 recursive type (`type Node[T] = { value: T, next: Option[Node[T]] }`) is
 rejected where a codec is required (`bynk.generics.recursive_generic_at_boundary`):
 a generic type crosses through a codec monomorphised per instantiation (ADR 0197,
@@ -473,7 +473,7 @@ count starts again; such a type occurs only a fixed number of times on any path
 through a value, so the total nesting stays bounded. Decoding a value nested more deeply MUST fail as a
 `StructuralMismatch` at the path where the bound is crossed, with `expected`
 `a value nested at most 256 levels deep`, so a request body is refused with a
-`400` and `Json.decode` returns an `Err`, rather than the decoder exhausting the
+`400` and `Json.decode` and `Yaml.decode` return an `Err`, rather than the decoder exhausting the
 host's stack. Encoding such a value is a contract violation and MUST fault, as
 encoding a non-finite `Float` does
 ([§7.2](/book/spec/emission/#72-targets)), so a context never sends or stores a

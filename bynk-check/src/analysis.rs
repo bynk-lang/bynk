@@ -785,6 +785,17 @@ pub fn analyse_project_with_policy(
         let mut checked: Vec<crate::checker::TypedCommons> = Vec::new();
         for &i in indices {
             let pf = &parsed[i];
+            // #3243 S2.3: each file's check writes into its own scratch sinks,
+            // folded into the project's afterwards. That is the unit of output a
+            // later slice can keep from one round to the next; today every file
+            // is still checked every round, and the fold reproduces what one
+            // shared sink would have held.
+            let mut file_errors = ErrorSink::new();
+            let mut file_refs = RefSink::new();
+            let mut file_hints = HintSink::new();
+            let mut file_locals = LocalsSink::new();
+            let mut file_exprs = ExprTypeSink::new();
+            let mut file_requirements = RequirementSink::new();
             if let Some(crate::check_pipeline::FileCheckResult { typed, .. }) = check_file_core(
                 name,
                 kind,
@@ -798,12 +809,12 @@ pub fn analyse_project_with_policy(
                 &consumed_types,
                 &imported_from,
                 &ctx,
-                &mut errors,
-                &mut refs,
-                &mut hints,
-                &mut locals,
-                &mut exprs,
-                &mut requirements,
+                &mut file_errors,
+                &mut file_refs,
+                &mut file_hints,
+                &mut file_locals,
+                &mut file_exprs,
+                &mut file_requirements,
                 tys,
             ) {
                 // This entry point never emits — every clean file's exit is
@@ -811,13 +822,19 @@ pub fn analyse_project_with_policy(
                 // on to the next file). Mirrors `check_unit_files`'s own
                 // `mode == Mode::Analyse` clean-path branch.
                 record_analyse_types(
-                    &mut exprs,
+                    &mut file_exprs,
                     &pf.identity_path(),
                     pf.is_synthetic(),
                     &typed.expr_types,
                 );
                 checked.push(typed);
             }
+            errors.absorb(file_errors);
+            refs.absorb(file_refs);
+            hints.absorb(file_hints);
+            locals.absorb(file_locals);
+            exprs.absorb(file_exprs);
+            requirements.absorb(file_requirements);
         }
         crate::phase_timing::mark(crate::phase_timing::Level::Unit);
         // #2719: the unit's needs-context set, and the calls that would carry

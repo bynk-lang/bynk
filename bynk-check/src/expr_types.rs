@@ -71,6 +71,13 @@ impl ExprTypeSink {
         entry.extend(expr_types.values().map(|te| (te.span, te.ty)));
     }
 
+    /// Fold in what `other` recorded (#3243 S2.3), per file, in order.
+    pub fn absorb(&mut self, other: ExprTypeSink) {
+        for (file, entries) in other.files {
+            self.files.entry(file).or_default().extend(entries);
+        }
+    }
+
     /// Drain the recorded types, each file's entries ordered by span (start
     /// ascending, then **widest first** so a forward scan ends on the tightest
     /// containing span).

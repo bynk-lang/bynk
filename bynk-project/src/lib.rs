@@ -75,4 +75,7 @@ pub use paths::{
     worker_handlers_output_path, worker_handlers_source_path,
 };
 pub use roots::{Roots, SchemaLock, UnitKind};
-pub use workspace::{Workspace, find_parent_workspace, is_workspace_root, load_workspace};
+pub use workspace::{
+    ImplicitWorkspace, ImplicitWorkspaceError, Workspace, find_parent_workspace,
+    implicit_workspace, is_workspace_root, load_workspace,
+};

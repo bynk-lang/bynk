@@ -1,0 +1,40 @@
+context room
+
+type RoomId = opaque String
+type UserId = opaque String
+type ServerFrame = { text: String }
+
+// #3261: `put` over a key that already holds a connection closes the displaced
+// connection first, as `remove` does, on the bundle target `bynk test` builds and
+// on Workers, so a held connection cannot be dropped with its socket left open.
+// Putting the same connection back under its own key leaves it open.
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  // Read the held connection back and put it under its own key again.
+  on call rejoin(u: UserId) -> Effect[()] {
+    let held <- conns.get(u)
+    match held {
+      Some(c) => {
+        let _ <- conns.put(u, c)
+        ()
+      }
+      None => (),
+    }
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+
+  on call count() -> Effect[Int] {
+    conns.size()
+  }
+}

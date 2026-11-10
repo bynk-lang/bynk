@@ -93,6 +93,13 @@ impl HintSink {
             .push(Hint { span, label, kind });
     }
 
+    /// Fold in what `other` recorded (#3243 S2.3), per file, in order.
+    pub fn absorb(&mut self, other: HintSink) {
+        for (file, entries) in other.files {
+            self.files.entry(file).or_default().extend(entries);
+        }
+    }
+
     /// Drain the recorded hints, each file's entries ordered by span start.
     pub fn take_files(&mut self) -> FileHints {
         let mut files = std::mem::take(&mut self.files);

@@ -3009,8 +3009,8 @@ pub(crate) fn check_method_call(
         || ctx.root_ident_is_store_field(receiver)
         || flatten_ident_chain(receiver).is_none();
     let type_args_pending = !type_args.is_empty()
-        && !matches!(&receiver.kind, ExprKind::Ident(id) if id.name == JSON
-            && !ctx.input.types.contains_key(JSON))
+        && !matches!(&receiver.kind, ExprKind::Ident(id) if (id.name == JSON || id.name == YAML)
+            && !ctx.input.types.contains_key(id.name.as_str()))
         && !receiver_is_capability
         && !receiver_is_generic_static(receiver, method, ctx);
     if type_args_pending && !value_receiver {
@@ -3286,7 +3286,22 @@ pub(crate) fn check_method_call(
                 op: method.name.clone(),
             },
         );
-        return check_json_static(method, type_args, args, span, expected, ctx);
+        return check_json_static(JSON, method, type_args, args, span, expected, ctx);
+    }
+    // #3214: `Yaml.decode[T]`, the YAML front end of the same typed decode.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == YAML
+        && ctx.lookup(YAML).is_none()
+        && !ctx.input.types.contains_key(YAML)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: YAML,
+                op: method.name.clone(),
+            },
+        );
+        return check_json_static(YAML, method, type_args, args, span, expected, ctx);
     }
     // v0.100: the `Stream.of(xs)` static constructor (real-time track slice 0).
     if let ExprKind::Ident(id) = &receiver.kind

@@ -84,7 +84,12 @@ pruned from discovery. A subdirectory holding its own `bynk.toml` is another
 project and is pruned too: discovery MUST NOT cross a project boundary. A
 command that compiles (`check`, `test`, `compile`) given a directory that has no
 `bynk.toml` of its own, none above it, and projects nested below it MUST refuse,
-naming them, rather than compile them as one program.
+naming them, rather than compile them as one program. An implementation MAY
+offer, on an explicit request and for commands that already run across a
+workspace's members, to run such a directory as the workspace whose members are
+the projects directly inside it that hold a `bynk.toml`; it MUST NOT do so
+without being asked, and MUST NOT read a subdirectory that holds no `bynk.toml`
+as a project.
 
 **Legacy mode** — no manifest. A single `.bynk` file compiles as one standalone
 unit.
