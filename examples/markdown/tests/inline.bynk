@@ -1,4 +1,5 @@
 suite inline
+
 case "markup in the source is escaped" {
 	expect escape(
 		"<script>alert(\"x\") & more</script>"

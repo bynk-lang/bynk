@@ -2,7 +2,7 @@ context monitor
 
 uses status
 consumes bynk { Fetch, Logger }
-consumes bynk.cloudflare { Kv }   // locks this unit to Cloudflare
+consumes bynk.cloudflare { Kv }  // locks this unit to Cloudflare
 
 ---
 The last observed status of a monitored target. Stored as JSON in KV and read
@@ -13,18 +13,18 @@ defined where they are stored/served); the pure health policy that fills `ok`
 is `isHealthy` in `commons status`.
 ---
 type Status = {
-  name: String,
-  ok:   Bool,
-  code: Int,
-  at:   Int,
+	name: String,
+	ok: Bool,
+	code: Int,
+	at: Int,
 }
 
 ---
 One monitored target: a display name and the URL to probe.
 ---
 type Target = {
-  name: String,
-  url:  String,
+	name: String,
+	url: String,
 }
 
 ---
@@ -43,41 +43,55 @@ unit effect without a discard binder. The platform-typed `match` (over
 (from `commons status`) classifies it.
 ---
 service checks from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] given Fetch, Kv, Logger {
-    let targets = [
-      Target { name: "example",    url: "https://example.com" },
-      Target { name: "cloudflare", url: "https://www.cloudflare.com" },
-    ]
-    do targets.forEach((t: Target) => {
-      let res <- Fetch.send(Request {
-        method: Get, url: t.url,
-        contentType: None, authorization: None,
-        headers: Map.empty(), body: None,
-      })
-      let code = match res {
-        Ok(r)  => r.status
-        Err(_) => 0
-      }
-      let status = Status { name: t.name, ok: isHealthy(code), code: code, at: at }
-      do Kv.put(statusKey(t.name), Json.encode(status))
-      do Logger.info("checked \(t.name): \(status.code)")
-    })
-    Ok(())
-  }
+	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] given Fetch, Kv, Logger {
+		let targets = [
+			Target {
+				name: "example",
+				url: "https://example.com",
+			},
+			Target {
+				name: "cloudflare",
+				url: "https://www.cloudflare.com",
+			},
+		]
+		do targets.forEach((t: Target) => {
+			let res <- Fetch.send(Request {
+				method: Get,
+				url: t.url,
+				contentType: None,
+				authorization: None,
+				headers: Map.empty(),
+				body: None,
+			})
+			let code = match res {
+				Ok(r) => r.status,
+				Err(_) => 0,
+			}
+			let status = Status {
+				name: t.name,
+				ok: isHealthy(code),
+				code: code,
+				at: at,
+			}
+			do Kv.put(statusKey(t.name), Json.encode(status))
+			do Logger.info("checked \(t.name): \(status.code)")
+		})
+		Ok(())
+	}
 }
 
 ---
 Read the last recorded status for a target by name.
 ---
 service api from http {
-  on GET("/status/:name") (name: String) -> Effect[HttpResult[Status]] by Visitor given Kv {
-    let stored <- Kv.get(statusKey(name))
-    match stored {
-      None    => NotFound
-      Some(s) => match Json.decode[Status](s) {
-        Ok(st) => Ok(st)
-        Err(_) => ServerError("stored status is corrupt")
-      }
-    }
-  }
+	on GET("/status/:name") (name: String) -> Effect[HttpResult[Status]] by Visitor given Kv {
+		let stored <- Kv.get(statusKey(name))
+		match stored {
+			None => NotFound,
+			Some(s) => match Json.decode[Status](s) {
+				Ok(st) => Ok(st),
+				Err(_) => ServerError("stored status is corrupt"),
+			},
+		}
+	}
 }

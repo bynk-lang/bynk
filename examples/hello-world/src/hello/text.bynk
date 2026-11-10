@@ -12,5 +12,5 @@ type Subject = String where NonEmpty && MaxLength(40)
 The canonical greeting for a subject.
 ---
 fn greeting(subject: Subject) -> String {
-  "Hello, \(subject)!"
+	"Hello, \(subject)!"
 }

@@ -7,8 +7,8 @@ The webhook payload we accept. Parsed from the request body — but only *after*
 the signature is verified, from the exact bytes that were signed.
 ---
 type Event = {
-  id:   String,
-  kind: String,
+	id: String,
+	kind: String,
 }
 
 ---
@@ -21,38 +21,42 @@ A `Signature` actor attests authenticity, not a principal: it has no identity, s
 the binder is always omitted (`by Webhook`).
 ---
 actor Webhook {
-  auth = Signature(
-    secret    = "WEBHOOK_SECRET",
-    header    = "X-Signature",
-    timestamp = "X-Timestamp",
-    tolerance = 300
-  )
+	auth = Signature(
+		secret = "WEBHOOK_SECRET",
+		header = "X-Signature",
+		timestamp = "X-Timestamp",
+		tolerance = 300
+	)
 }
 
 service api from http {
-  // Verify the inbound webhook, then forward it to a configured upstream URL.
-  on POST("/hooks/event") (body: Event) -> Effect[HttpResult[String]] by Webhook given Fetch, Logger, Secrets {
-    let target <- Secrets.get("RELAY_TARGET_URL")
-    match target {
-      None => ServerError("relay target is not configured")
-      Some(url) => {
-        let req = Request {
-          method:        Post,
-          url:           url,
-          contentType:   Some("application/json"),
-          authorization: None,
-          headers:       Map.empty(),
-          body:          Some(Json.encode(body)),
-        }
-        let res <- Fetch.send(req)
-        match res {
-          Ok(r) => {
-            let _ <- Logger.info("relayed event \(body.id) (\(body.kind)) -> \(r.status)")
-            Ok("relayed")
-          }
-          Err(_) => ServerError("upstream relay failed")
-        }
-      }
-    }
-  }
+	// Verify the inbound webhook, then forward it to a configured upstream URL.
+	on POST("/hooks/event") (
+		body: Event
+	) -> Effect[HttpResult[String]] by Webhook given Fetch, Logger, Secrets {
+		let target <- Secrets.get("RELAY_TARGET_URL")
+		match target {
+			None => ServerError("relay target is not configured"),
+			Some(url) => {
+				let req = Request {
+					method: Post,
+					url: url,
+					contentType: Some("application/json"),
+					authorization: None,
+					headers: Map.empty(),
+					body: Some(Json.encode(body)),
+				}
+				let res <- Fetch.send(req)
+				match res {
+					Ok(r) => {
+						let _ <- Logger.info(
+							"relayed event \(body.id) (\(body.kind)) -> \(r.status)"
+						)
+						Ok("relayed")
+					},
+					Err(_) => ServerError("upstream relay failed"),
+				}
+			},
+		}
+	}
 }

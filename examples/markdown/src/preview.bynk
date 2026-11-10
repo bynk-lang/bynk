@@ -8,7 +8,9 @@ before the handler runs.
 ---
 type Source = String where MaxLength(100000)
 
-type RenderRequest = { markdown: Source }
+type RenderRequest = {
+	markdown: Source,
+}
 
 service api from http {
 	// Render Markdown to an HTML fragment. The body is `text/html`: the author
