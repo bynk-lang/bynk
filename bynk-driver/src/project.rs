@@ -5170,7 +5170,8 @@ mod tests {
     }
 
     /// #3162, integration suites: a `system`-tier suite that constructs an
-    /// agent the parser skipped gets the syntax error alone, as a unit suite does.
+    /// agent the parser skipped (a dangling operator in its handler) gets the
+    /// syntax error alone, as a unit suite does.
     #[test]
     fn a_system_suite_naming_a_skipped_agent_reports_only_the_syntax_error() {
         let root = scratch_project(
@@ -5181,7 +5182,7 @@ mod tests {
                     "src/m.bynk",
                     "context m\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n\n\
                      agent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
-                     on call bump(by: Int) -> Effect[Int] {\n    n\n  }\n}\n",
+                     on call bump(amount: Int) -> Effect[Int] {\n    n +\n  }\n}\n",
                 ),
                 (
                     "tests/m_test.bynk",
@@ -5199,7 +5200,7 @@ mod tests {
             .iter()
             .map(|ae| ae.error.category.to_string())
             .collect();
-        assert_eq!(cats, ["bynk.parse.reserved_keyword"], "{cats:?}");
+        assert_eq!(cats, ["bynk.parse.expected_expression"], "{cats:?}");
     }
 
     // -- Slice 0: file identity is not the unit-validation path ---------------
