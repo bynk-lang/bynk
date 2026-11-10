@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.526.1** | An unresolved type in lowering now stops with an internal error instead of becoming `()` |
 | **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |
 | **v0.525.26** | A suite that names a declaration the parser skipped after a syntax error no longer reports it as an unknown function; an unknown agent construction's note no longer talks of a commons |
 | **v0.525.25** | "The checker resolves a built-in method call to a typed `KernelOp`, and the editor's completion tables are generated from it, as the first slice of the typed built-in dispatch (#3164)" |
