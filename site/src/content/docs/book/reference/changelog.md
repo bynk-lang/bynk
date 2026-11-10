@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.526.2** | "`bynk check` prepares a literal D1 `batch`'s statements in order, each against the schema the earlier statements leave, so a batch that drops then recreates a table, or creates a table and then uses it, is no longer refused (#3197)" |
 | **v0.526.1** | An unresolved type in lowering now stops with an internal error instead of becoming `()` |
 | **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |
 | **v0.525.26** | A suite that names a declaration the parser skipped after a syntax error no longer reports it as an unknown function; an unknown agent construction's note no longer talks of a commons |
