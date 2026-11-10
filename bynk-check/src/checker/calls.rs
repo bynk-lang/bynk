@@ -2714,7 +2714,9 @@ pub(crate) fn check_store_log_op(
             Some(tys.intern(query()))
         }
         // The general query vocabulary over the entry values.
-        name if is_query_op(name) => check_query_kernel_method(method, args, elem, span, ctx),
+        name if is_query_op(name) => {
+            check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx)
+        }
         other => {
             ctx.errors.push(
                 CompileError::new(
@@ -3326,46 +3328,60 @@ pub(crate) fn check_method_call(
     // the deferral bites only on declared methods (ADR 0037).
     match &*tys.get(recv_ty) {
         Ty::List(elem) => {
-            let op = ListOp::from_name(&method.name).map(KernelOp::List);
-            let r = check_list_kernel_method(method, args, *elem, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = ListOp::from_name(&method.name);
+            let r = check_list_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::List), method, r);
         }
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
-            let op = QueryOp::from_name(&method.name).map(KernelOp::Query);
-            let r = check_query_kernel_method(method, args, *elem, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = QueryOp::from_name(&method.name);
+            let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }
         // v0.100: a chained builder/terminal on a `Stream[T]`.
         Ty::Stream(elem) => {
-            let op = StreamOp::from_name(&method.name).map(KernelOp::Stream);
-            let r = check_stream_kernel_method(method, args, *elem, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = StreamOp::from_name(&method.name);
+            let r = check_stream_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Stream), method, r);
         }
         // v0.102: the held-resource operations on a `Connection[F]` — `send(f)`
         // (non-consuming) and `close()` (consuming). The linearity pass tracks
         // the ownership transitions; this types the operations.
         Ty::Connection(frame) => {
-            let op = ConnectionOp::from_name(&method.name).map(KernelOp::Connection);
-            let r = check_connection_method(method, args, *frame, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = ConnectionOp::from_name(&method.name);
+            let r = check_connection_method(method, kop, args, *frame, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::Connection),
+                method,
+                r,
+            );
         }
         // #3051: a case's recording `TestConnection[F]`.
         Ty::TestConnection(frame) => {
-            let op = TestConnectionOp::from_name(&method.name).map(KernelOp::TestConnection);
-            let r = check_test_connection_method(method, args, *frame, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = TestConnectionOp::from_name(&method.name);
+            let r = check_test_connection_method(method, kop, args, *frame, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::TestConnection),
+                method,
+                r,
+            );
         }
         Ty::Map(key, val) => {
-            let op = MapOp::from_name(&method.name).map(KernelOp::Map);
-            let r = check_map_kernel_method(method, args, *key, *val, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = MapOp::from_name(&method.name);
+            let r = check_map_kernel_method(method, kop, args, *key, *val, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Map), method, r);
         }
         // K6a (#2596): the `Set` kernel.
         Ty::Set(elem) => {
-            let op = SetOp::from_name(&method.name).map(KernelOp::Set);
-            let r = check_set_kernel_method(method, args, *elem, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = SetOp::from_name(&method.name);
+            let r = check_set_kernel_method(method, kop, args, *elem, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Set), method, r);
         }
         // v0.21: the numeric kernel — conversions as value methods on the
         // bare base types. A refined value reaches these too, but via the
@@ -3379,68 +3395,96 @@ pub(crate) fn check_method_call(
                 BaseType::Int => IntOp::from_name(&method.name).map(KernelOp::Int),
                 _ => FloatOp::from_name(&method.name).map(KernelOp::Float),
             };
-            let r = check_numeric_kernel_method(method, args, *base, span, ctx);
+            let r = check_numeric_kernel_method(method, op, args, *base, span, ctx);
             return record_kernel(ctx, expr_id, recv_ty, op, method, r);
         }
         // v0.86 (ADR 0112): the `Duration` kernel — `toMillis`/`toString`.
         Ty::Base(BaseType::Duration) => {
-            let op = DurationOp::from_name(&method.name).map(KernelOp::Duration);
-            let r = check_duration_kernel_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = DurationOp::from_name(&method.name);
+            let r = check_duration_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::Duration),
+                method,
+                r,
+            );
         }
         // v0.90 (ADR 0114): the `Instant` kernel — `toEpochMillis`/`toString`.
         Ty::Base(BaseType::Instant) => {
-            let op = InstantOp::from_name(&method.name).map(KernelOp::Instant);
-            let r = check_instant_kernel_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = InstantOp::from_name(&method.name);
+            let r = check_instant_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Instant), method, r);
         }
         // #2341 (decision A): an HTTP handler's `headers` — `get`, `bearer`,
         // `clientIp`.
         Ty::RequestHeaders => {
-            let op = RequestHeadersOp::from_name(&method.name).map(KernelOp::RequestHeaders);
-            let r = check_request_headers_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = RequestHeadersOp::from_name(&method.name);
+            let r = check_request_headers_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::RequestHeaders),
+                method,
+                r,
+            );
         }
         // #2854 (decision B): an HTTP handler's `query` — `get`, `all`, `params`.
         Ty::RequestQuery => {
-            let op = RequestQueryOp::from_name(&method.name).map(KernelOp::RequestQuery);
-            let r = check_request_query_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = RequestQueryOp::from_name(&method.name);
+            let r = check_request_query_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::RequestQuery),
+                method,
+                r,
+            );
         }
         // #2380 (L5): an `Oidc` binder's claims — `get`, `has`.
         Ty::TokenClaims => {
-            let op = TokenClaimsOp::from_name(&method.name).map(KernelOp::TokenClaims);
-            let r = check_token_claims_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = TokenClaimsOp::from_name(&method.name);
+            let r = check_token_claims_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::TokenClaims),
+                method,
+                r,
+            );
         }
         // v0.110 (ADR 0142): the `Bytes` kernel — `length`/`toBase64`/`decodeUtf8`.
         Ty::Base(BaseType::Bytes) => {
-            let op = BytesOp::from_name(&method.name).map(KernelOp::Bytes);
-            let r = check_bytes_kernel_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = BytesOp::from_name(&method.name);
+            let r = check_bytes_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Bytes), method, r);
         }
         // #2622: the `Decimal` kernel.
         Ty::Base(BaseType::Decimal) => {
-            let op = DecimalOp::from_name(&method.name).map(KernelOp::Decimal);
-            let r = check_decimal_kernel_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = DecimalOp::from_name(&method.name);
+            let r = check_decimal_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Decimal), method, r);
         }
         // v0.22a: the string kernel (ADR 0046).
         Ty::Base(BaseType::String) => {
-            let op = StringOp::from_name(&method.name).map(KernelOp::String);
-            let r = check_string_kernel_method(method, args, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = StringOp::from_name(&method.name);
+            let r = check_string_kernel_method(method, kop, args, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::String), method, r);
         }
         // v0.22a: the Option/Result combinators as kernel methods (ADR 0048).
         Ty::Option(inner) => {
-            let op = OptionOp::from_name(&method.name).map(KernelOp::Option);
-            let r = check_option_kernel_method(method, args, *inner, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = OptionOp::from_name(&method.name);
+            let r = check_option_kernel_method(method, kop, args, *inner, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Option), method, r);
         }
         Ty::Result(ok, err) => {
-            let op = ResultOp::from_name(&method.name).map(KernelOp::Result);
-            let r = check_result_kernel_method(method, args, *ok, *err, span, ctx);
-            return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            let kop = ResultOp::from_name(&method.name);
+            let r = check_result_kernel_method(method, kop, args, *ok, *err, span, ctx);
+            return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Result), method, r);
         }
         // The `Effect[Result[T, E]]` combinators (§2.8.3): `mapOk`/`mapErr`/
         // `flatMapOk`/`flatMapErr` on the universal cross-context shape. Only an
@@ -3462,9 +3506,16 @@ pub(crate) fn check_method_call(
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
             if let Ty::Result(ok, err) = &*tys.get(*inner) {
-                let op = EffectResultOp::from_name(&method.name).map(KernelOp::EffectResult);
-                let r = check_effect_result_kernel_method(method, args, *ok, *err, span, ctx);
-                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+                let kop = EffectResultOp::from_name(&method.name);
+                let r = check_effect_result_kernel_method(method, kop, args, *ok, *err, span, ctx);
+                return record_kernel(
+                    ctx,
+                    expr_id,
+                    recv_ty,
+                    kop.map(KernelOp::EffectResult),
+                    method,
+                    r,
+                );
             }
         }
         _ => {}
@@ -3584,13 +3635,43 @@ pub(crate) fn check_method_call(
             let op = KernelOp::for_base(*base, &method.name);
             let r = match base {
                 BaseType::Int | BaseType::Float => {
-                    check_numeric_kernel_method(method, args, *base, span, ctx)
+                    check_numeric_kernel_method(method, op, args, *base, span, ctx)
                 }
-                BaseType::String => check_string_kernel_method(method, args, span, ctx),
-                BaseType::Duration => check_duration_kernel_method(method, args, span, ctx),
-                BaseType::Instant => check_instant_kernel_method(method, args, span, ctx),
-                BaseType::Bytes => check_bytes_kernel_method(method, args, span, ctx),
-                BaseType::Decimal => check_decimal_kernel_method(method, args, span, ctx),
+                BaseType::String => check_string_kernel_method(
+                    method,
+                    StringOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Duration => check_duration_kernel_method(
+                    method,
+                    DurationOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Instant => check_instant_kernel_method(
+                    method,
+                    InstantOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Bytes => check_bytes_kernel_method(
+                    method,
+                    BytesOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
+                BaseType::Decimal => check_decimal_kernel_method(
+                    method,
+                    DecimalOp::from_name(&method.name),
+                    args,
+                    span,
+                    ctx,
+                ),
                 // `Bool` has no kernel: fall through to `method_not_found`.
                 BaseType::Bool => None,
             };

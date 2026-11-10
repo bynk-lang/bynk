@@ -15,9 +15,9 @@
 //!
 //! The signatures are human-readable Bynk-surface display strings (generic in
 //! the element/key/value type), for completion `detail` — not the checker's
-//! `Ty`-typed signatures. A drift test (`kernel_registry_pins_dispatch`)
-//! drives every listed method through the real checker and asserts none is
-//! rejected as `method_not_found`, so the table can't list a phantom method.
+//! `Ty`-typed signatures. The checker matches on the typed operations
+//! exhaustively, so the table can neither list a method the checker rejects nor
+//! omit one it accepts.
 
 use crate::checker::{NamedKind, Ty, TyId, Types};
 use bynk_syntax::ast::BaseType;

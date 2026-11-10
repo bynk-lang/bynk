@@ -5247,7 +5247,14 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                     ty: tys.intern(Ty::Query(v)),
                                 },
                             );
-                            let result = check_query_kernel_method(method, args, v, expr.span, ctx);
+                            let result = check_query_kernel_method(
+                                method,
+                                QueryOp::from_name(&method.name),
+                                args,
+                                v,
+                                expr.span,
+                                ctx,
+                            );
                             // P6.2 (#1143, R6.12): role is read back from
                             // this call's own resolved type where possible —
                             // `is_query_op` above only decides "lift or
