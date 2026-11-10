@@ -373,3 +373,112 @@ test("sameStored compares plain data structurally, including key order", () => {
   assert.ok(!sameStored(null, {}));
   assert.ok(sameStored(null, null));
 });
+
+// The codec: the stored record read and written per entry (#3189, slice 2).
+import { commitStored, readStored } from "../src/entries.ts";
+import type { EntryField } from "../src/entries.ts";
+
+const FIELDS: EntryField[] = [
+  { name: "users", kind: "map", indexes: [{ index: "byTeam", recordField: "users__idx_byTeam" }] },
+  { name: "tags", kind: "set" },
+  { name: "hits", kind: "cache" },
+  { name: "audit", kind: "log" },
+];
+
+async function load(self: object, s: InMemoryStorage): Promise<Record<string, any>> {
+  const stored = ((await s.get("state")) ?? {}) as Record<string, unknown>;
+  return (await readStored(self, s as never, stored, FIELDS)) as Record<string, any>;
+}
+
+test("codec: a state commits per entry and reads back in insertion order, integer-like keys included", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, {
+    __v: 1, n: 3,
+    users: { b: { t: "x" }, "10": { t: "y" }, a: { t: "x" } },
+    users__idx_byTeam: { x: ["b", "a"], y: ["10"] },
+    tags: { z: true, y: true },
+    hits: { k: { v: 1, exp: 50 } },
+    audit: [{ t: 5, v: "p" }, { t: 5, v: "q" }],
+  }, FIELDS);
+  const state = (await s.get("state")) as Record<string, unknown>;
+  assert.equal(state.__layout, LAYOUT_PER_ENTRY);
+  assert.equal(state.users, undefined);
+  assert.equal(state.n, 3);
+  const back = await load({}, s);
+  assert.deepEqual(Object.keys(back.users), ["10", "b", "a"].sort((p, q) => (p === "10" ? -1 : q === "10" ? 1 : 0)));
+  // insertion order b, 10, a is kept in the stored `i`, so the postings read in it.
+  assert.deepEqual(back.users__idx_byTeam.x, ["b", "a"]);
+  assert.deepEqual(Object.keys(back.tags), ["z", "y"]);
+  assert.deepEqual(back.hits, { k: { v: 1, exp: 50 } });
+  assert.deepEqual(back.audit, [{ t: 5, v: "p" }, { t: 5, v: "q" }]);
+});
+
+test("codec: an overwrite keeps its place; a removed key inserted again goes to the end", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { users: { a: 1, b: 2, c: 3 } }, FIELDS);
+  let st = await load(self, s);
+  st.users.a = 10; // overwrite
+  await commitStored(self, s as never, st, FIELDS);
+  st = await load(self, s);
+  assert.deepEqual(Object.keys(st.users), ["a", "b", "c"]);
+  delete st.users.a; // remove, then a later handler inserts it again
+  await commitStored(self, s as never, st, FIELDS);
+  st = await load(self, s);
+  st.users.a = 11;
+  await commitStored(self, s as never, st, FIELDS);
+  st = await load(self, s);
+  assert.deepEqual(Object.keys(st.users), ["b", "c", "a"]);
+});
+
+test("codec: a commit writes only the entries that changed", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { users: { a: 1, b: 2, c: 3 } }, FIELDS);
+  const st = await load(self, s);
+  st.users.b = 9;
+  s.resetStats();
+  await commitStored(self, s as never, st, FIELDS);
+  assert.ok(s.stats.keysWritten <= 3, `keys written: ${s.stats.keysWritten}`);
+});
+
+test("codec: a wholesale record is upgraded on read and still reads back the same", async () => {
+  const s = new InMemoryStorage();
+  await s.put("state", { __v: 1, users: { b: 1, a: 2 }, audit: [{ t: 1, v: "x" }] });
+  const st = await load({}, s);
+  assert.deepEqual(Object.keys(st.users), ["b", "a"]);
+  assert.equal(((await s.get("state")) as any).__layout, LAYOUT_PER_ENTRY);
+  assert.deepEqual((await load({}, s)).audit, [{ t: 1, v: "x" }]);
+});
+
+test("codec: a write that throws leaves storage and the base as they were", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { users: { a: 1 } }, FIELDS);
+  const st = await load(self, s);
+  st.users.b = 2;
+  const real = s.transaction.bind(s);
+  (s as any).transaction = async () => { throw new Error("boom"); };
+  await assert.rejects(commitStored(self, s as never, st, FIELDS), /boom/);
+  (s as any).transaction = real;
+  assert.deepEqual(Object.keys((await load({}, s)).users), ["a"]);
+  await commitStored(self, s as never, st, FIELDS); // the base still says only `a` is stored
+  assert.deepEqual(Object.keys((await load({}, s)).users), ["a", "b"]);
+});
+
+test("codec: a log keeps its order and prunes its oldest", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { audit: [{ t: 1, v: "a" }, { t: 1, v: "b" }, { t: 2, v: "c" }] }, FIELDS);
+  let st = await load(self, s);
+  st.audit = [...st.audit.slice(1), { t: 3, v: "d" }];
+  await commitStored(self, s as never, st, FIELDS);
+  st = await load(self, s);
+  assert.deepEqual(st.audit.map((e: any) => e.v), ["b", "c", "d"]);
+});

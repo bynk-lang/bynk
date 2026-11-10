@@ -357,3 +357,264 @@ export function diffEntries(base: ReadonlyMap<string, unknown>, next: Readonly<R
   for (const k of base.keys()) if (!Object.hasOwn(next, k)) deletes.push(k);
   return { puts, deletes };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The per-entry layout as a codec around the stored record (#3189, slice 2).
+//
+// An agent's state is encoded and decoded as one wholesale-shaped record (each
+// `Map`/`Set`/`Cache` a `Record`, each `Log` an array, each index a `Record` of
+// posting lists), whatever the layout it is stored in. `readStored` turns what is
+// stored into that record; `commitStored` writes one back, per entry. The emitted
+// agent only passes a description of its collection fields.
+//
+// Frozen layout (layout 2; the stored bytes a later, lazy-reading slice must not
+// change):
+//  - `"state"`: the `Cell` fields, `__v` and `__layout: 2`. No collection is in it.
+//  - `m/<field>/<k>`: a `Map` entry `{ i, v }`; a `Cache` entry `{ v, exp, i }`.
+//  - `s/<field>/<k>`: a `Set` element `{ i }`.
+//  - `l/<field>/<t>-<seq>`: a `Log` entry `{ t, v }`.
+//  - `i/<field>/<index>/<by>/<pk>`: one index posting, value `1`.
+//  - `x/<field>/<exp>/<k>`: a `Cache` expiry entry, value `1`.
+//  - `c/<field>`: `{ size, seq }`: the entry count, and the next insertion sequence
+//    (a `Log`'s next `<seq>`).
+// `i` is the entry's insertion sequence: a new key takes the field's next `seq`, an
+// overwrite keeps its `i`, a key removed and inserted again takes a new one. Order
+// is `i`, so insertion order survives the keys' own byte order. A posting list's
+// order is its entries' `i` order.
+
+/** What a collection field holds, as the emitter describes it. */
+export type EntryField = WholesaleField;
+
+/** Every per-entry key an agent read, as stored, and each field's metadata. */
+interface EntryBase {
+  entries: Map<string, unknown>;
+}
+
+const bases = new WeakMap<object, EntryBase>();
+
+// A key a JS object enumerates before its other keys (an array index). Their order
+// in a Record is by value, not insertion, so a Record cannot show their insertion
+// order and one handler's reinsertion of them cannot be seen in it.
+function indexLike(k: string): boolean {
+  return /^(0|[1-9][0-9]*)$/.test(k) && Number(k) < 4294967295;
+}
+
+const ENTRY_PREFIXES = ["m/", "s/", "l/", "i/", "x/", "c/"];
+
+function isEntryKey(k: string): boolean {
+  return ENTRY_PREFIXES.some((p) => k.startsWith(p));
+}
+
+interface Seq {
+  readonly i: number;
+}
+const orderOf = (v: unknown): number => (v as Seq).i;
+
+/**
+ * The agent's stored state as a wholesale-shaped record, whatever layout it is in.
+ * A record in the per-entry layout has its entries read and joined back, in
+ * insertion order. A wholesale record that holds collections is upgraded in place,
+ * in one transaction, and returned as it is. A record with no `__layout` and no
+ * collections needs no upgrade. `self` keys the base the next `commitStored` diffs
+ * against.
+ */
+export async function readStored(
+  self: object,
+  storage: DurableObjectStorage,
+  stored: Readonly<Record<string, unknown>>,
+  fields: readonly EntryField[],
+): Promise<Record<string, unknown>> {
+  if ((stored as { __layout?: unknown }).__layout === undefined) {
+    // The wholesale layout: upgrade it if it holds anything to split.
+    const holds = fields.some((f) => stored[f.name] !== undefined && stored[f.name] !== null);
+    bases.set(self, { entries: new Map() });
+    if (!holds) return { ...stored };
+    await writeEntries(self, storage, stored, fields);
+    return { ...stored };
+  }
+  const all = await storage.list<unknown>();
+  const entries = new Map<string, unknown>();
+  for (const [k, v] of all) if (isEntryKey(k)) entries.set(k, v);
+  bases.set(self, { entries });
+  return joinStored(stored, fields, entries);
+}
+
+function joinStored(
+  stored: Readonly<Record<string, unknown>>,
+  fields: readonly EntryField[],
+  entries: ReadonlyMap<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...stored };
+  delete out[LAYOUT_KEY];
+  for (const f of fields) {
+    const own = [...entries].filter(([k]) => k.startsWith(f.kind === "set" ? setPrefix(f.name) : f.kind === "log" ? logPrefix(f.name) : mapPrefix(f.name)));
+    if (f.kind === "log") {
+      own.sort(([a], [b]) => utf8Compare(a, b));
+      out[f.name] = own.map(([, v]) => v);
+      continue;
+    }
+    const prefix = f.kind === "set" ? setPrefix(f.name) : mapPrefix(f.name);
+    own.sort(([, a], [, b]) => orderOf(a) - orderOf(b));
+    const record: Record<string, unknown> = {};
+    const order = new Map<string, number>();
+    for (const [key, env] of own) {
+      const k = entryKeyOf(prefix, key);
+      order.set(k, orderOf(env));
+      const { i: _i, ...rest } = env as Record<string, unknown>;
+      // A `Map` entry is `{ i, v }` and reads back as `v`; a `Cache` entry is
+      // `{ v, exp, i }` and reads back as `{ v, exp }`; a `Set` element is `true`.
+      Object.defineProperty(record, k, {
+        value: f.kind === "set" ? true : f.kind === "map" ? rest.v : rest,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    out[f.name] = record;
+    for (const ix of f.indexes ?? []) {
+      const prefixIx = postingPrefix(f.name, ix.index);
+      const members: Array<[string, string, number]> = [];
+      for (const key of entries.keys()) {
+        if (!key.startsWith(prefixIx)) continue;
+        const [by, pk] = key.slice(prefixIx.length).split("/").map(decodeKeyPart) as [string, string];
+        members.push([by, pk, order.get(pk) ?? Number.MAX_SAFE_INTEGER]);
+      }
+      members.sort((a, b) => a[2] - b[2]);
+      const buckets: Record<string, string[]> = {};
+      for (const [by, pk] of members) {
+        Object.defineProperty(buckets, by, {
+          value: [...((buckets[by] as string[] | undefined) ?? []), pk],
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+      out[ix.recordField] = buckets;
+    }
+  }
+  return out;
+}
+
+interface Planned {
+  /** The `"state"` record to write. */
+  record: Record<string, unknown>;
+  /** Every per-entry key the state now has. */
+  entries: Record<string, unknown>;
+}
+
+// Plan the per-entry form of an encoded (wholesale-shaped) state record, giving each
+// entry its insertion sequence against `base`.
+function planEntries(
+  encoded: Readonly<Record<string, unknown>>,
+  fields: readonly EntryField[],
+  base: ReadonlyMap<string, unknown>,
+): Planned {
+  const record: Record<string, unknown> = { ...encoded };
+  const entries: Record<string, unknown> = {};
+  for (const f of fields) {
+    const inline = record[f.name];
+    delete record[f.name];
+    const postingRecords = (f.indexes ?? []).map((ix) => {
+      const postings = record[ix.recordField];
+      delete record[ix.recordField];
+      return { ix, postings };
+    });
+    const meta = base.get(metaKey(f.name)) as { size?: number; seq?: number } | undefined;
+    let seq = meta?.seq ?? 0;
+    if (inline === undefined || inline === null) {
+      continue;
+    }
+    if (f.kind === "log") {
+      const log = inline as ReadonlyArray<{ t: number }>;
+      const own = [...base].filter(([k]) => k.startsWith(logPrefix(f.name))).sort(([a], [b]) => utf8Compare(a, b));
+      // A log only appends and prunes its oldest: the new array is a suffix of the stored
+      // one followed by new entries. Find how many were pruned; if it is not that, rewrite.
+      let pruned = -1;
+      for (let p = 0; p <= own.length; p += 1) {
+        const kept = own.length - p;
+        if (kept <= log.length && own.slice(p).every(([, v], j) => sameStored(v, log[j]))) {
+          pruned = p;
+          break;
+        }
+      }
+      if (pruned < 0) pruned = own.length; // nothing kept: every old key goes, every entry is new
+      const kept = own.length - pruned;
+      own.slice(pruned).forEach(([k, v]) => {
+        entries[k] = v;
+      });
+      log.slice(kept).forEach((e) => {
+        entries[logKey(f.name, e.t, seq)] = e;
+        seq += 1;
+      });
+      if (log.length > 0 || meta !== undefined) entries[metaKey(f.name)] = { size: log.length, seq };
+      continue;
+    }
+    const prefix = f.kind === "set" ? setPrefix(f.name) : mapPrefix(f.name);
+    const keyOf = f.kind === "set" ? setKey : mapKey;
+    let maxSeen = -1;
+    for (const [k, v] of Object.entries(inline as Record<string, unknown>)) {
+      const old = base.get(keyOf(f.name, k)) as Seq | undefined;
+      let i: number;
+      if (old === undefined) {
+        i = seq;
+        seq += 1;
+      } else if (!indexLike(k) && old.i < maxSeen) {
+        // Inserted again after later keys: it moved to the end of the record.
+        i = seq;
+        seq += 1;
+      } else {
+        i = old.i;
+      }
+      if (!indexLike(k)) maxSeen = Math.max(maxSeen, i);
+      if (f.kind === "set") entries[keyOf(f.name, k)] = { i };
+      else if (f.kind === "map") entries[keyOf(f.name, k)] = { i, v };
+      else {
+        const c = v as { v: unknown; exp: unknown };
+        entries[keyOf(f.name, k)] = { v: c.v, exp: c.exp, i };
+        if (typeof c.exp === "number") entries[expiryKey(f.name, c.exp, k)] = 1;
+      }
+    }
+    for (const { ix, postings } of postingRecords) {
+      if (postings === undefined || postings === null) continue;
+      for (const [by, pks] of Object.entries(postings as Record<string, readonly string[]>)) {
+        for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
+      }
+    }
+    void prefix;
+    const size = Object.keys(inline as object).length;
+    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
+  }
+  record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
+  return { record, entries };
+}
+
+async function writeEntries(
+  self: object,
+  storage: DurableObjectStorage,
+  encoded: Readonly<Record<string, unknown>>,
+  fields: readonly EntryField[],
+): Promise<void> {
+  const base = bases.get(self)?.entries ?? new Map<string, unknown>();
+  const { record, entries } = planEntries(encoded, fields, base);
+  const { puts, deletes } = diffEntries(base, entries);
+  const overlay = new EntryOverlay(storage);
+  for (const [k, v] of Object.entries(puts)) overlay.put(k, v);
+  for (const k of deletes) overlay.delete(k);
+  await overlay.flush({ state: record });
+  bases.set(self, { entries: new Map(Object.entries(entries)) });
+}
+
+/**
+ * Write an encoded (wholesale-shaped) state record in the per-entry layout: the `"state"`
+ * record, and only the entries that changed since `readStored`, in one transaction. The
+ * base is replaced only once the write has landed, so a write that throws leaves both
+ * storage and the base as they were.
+ */
+export async function commitStored(
+  self: object,
+  storage: DurableObjectStorage,
+  encoded: Readonly<Record<string, unknown>>,
+  fields: readonly EntryField[],
+): Promise<void> {
+  await writeEntries(self, storage, encoded, fields);
+}
