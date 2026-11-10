@@ -3,13 +3,12 @@
 What compiled Bynk costs at run time, against hand-written TypeScript doing the
 same work. The results are published on the book's
 [comparison page](../../site/src/content/docs/book/about/bynk-compared-to-the-alternatives.md)
-and recorded per release in [`design/benchmarks/`](../../design/benchmarks/) as
-`runtime-v<version>.json`. Compiler and editor speed are a separate matter (see
-`cargo xtask bench`).
+and recorded per release in [`design/benchmarks/runtime/`](../../design/benchmarks/runtime/) as
+`v<version>.json`. Compiler and editor speed are a separate matter (#3168).
 
 ```sh
 cargo xtask bench-runtime                 # measure; print, write nothing
-cargo xtask bench-runtime --record        # and write design/benchmarks/runtime-v<version>.json
+cargo xtask bench-runtime --record        # and write design/benchmarks/runtime/v<version>.json
 cargo xtask bench-runtime --sizes-only    # bundle sizes only: deterministic, no workerd
 ```
 

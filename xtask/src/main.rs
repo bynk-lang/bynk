@@ -14,7 +14,7 @@
 //!   writes the release asset.
 //! - `bench-runtime` (#3177) measures the run-time cost of compiled Bynk against
 //!   hand-written TypeScript twins (bundle size, start-up, request latency),
-//!   locally under workerd; `--record` writes `design/benchmarks/runtime-v<version>.json`.
+//!   locally under workerd; `--record` writes `design/benchmarks/runtime/v<version>.json`.
 //! - `tier-probe` (C4b, #2940) fails when a test is in no test tier, or in two.
 //! - `ci` runs the gates CI runs, locally, in CI's own cheapest-first order —
 //!   `--fast` stops before the test suite (fmt, clippy, rustdoc).
@@ -137,7 +137,7 @@ fn manifest_schema(check: bool) -> ExitCode {
 /// twins (`benchmarks/runtime/`). Builds a release `bynk`, installs the
 /// harness's pinned npm dependencies (no lockfile, nothing committed), and runs
 /// `bench.mjs`. `--sizes-only` skips workerd and is deterministic; `--record`
-/// writes `design/benchmarks/runtime-v<version>.json`; `--runs`, `--requests`
+/// writes `design/benchmarks/runtime/v<version>.json`; `--runs`, `--requests`
 /// and `--startups` set the sample sizes.
 fn bench_runtime(args: &[String]) -> ExitCode {
     let mut pass = Vec::new();
@@ -147,7 +147,7 @@ fn bench_runtime(args: &[String]) -> ExitCode {
             "--sizes-only" => pass.push("--sizes-only".to_string()),
             "--record" => {
                 pass.push("--record".to_string());
-                pass.push("design/benchmarks".to_string());
+                pass.push("design/benchmarks/runtime".to_string());
             }
             "--runs" | "--requests" | "--startups" => {
                 let Some(value) = it.next().filter(|v| v.parse::<u32>().is_ok_and(|n| n > 0))

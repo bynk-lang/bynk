@@ -289,7 +289,7 @@ fleet, or CPU and memory use. The twins, the harness and the recorded results ar
 in the repository under
 [`benchmarks/runtime/`](https://github.com/bynk-lang/bynk/tree/main/benchmarks/runtime),
 and `cargo xtask bench-runtime --record` writes the figures for each release to
-`design/benchmarks/`, so a change that adds weight shows up as a diff.
+`design/benchmarks/runtime/`, so a change that adds weight shows up as a diff.
 
 ## The honest summary
 

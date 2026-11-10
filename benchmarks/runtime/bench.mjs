@@ -30,7 +30,7 @@ function flag(name, fallback) {
   return i === -1 ? fallback : args[i + 1];
 }
 const BYNK = resolve(flag("bynk", join(REPO, "target/release/bynk")));
-const RECORD_DIR = flag("record", null); // writes <dir>/runtime-v<version>.json
+const RECORD_DIR = flag("record", null); // writes <dir>/v<version>.json
 let OUT = flag("out", null);
 const RUNS = Number(flag("runs", 5)); // independent Miniflare instances per variant
 const REQUESTS = Number(flag("requests", 1000)); // timed requests per route per run
@@ -342,7 +342,7 @@ async function conformance(name, ex, scripts) {
 // ---------------------------------------------------------------------- main
 
 const version = bynkVersion();
-if (RECORD_DIR) OUT = join(REPO, RECORD_DIR, `runtime-v${version}.json`);
+if (RECORD_DIR) OUT = join(REPO, RECORD_DIR, `v${version}.json`);
 const report = {
   schema: 1,
   bynkVersion: version,
