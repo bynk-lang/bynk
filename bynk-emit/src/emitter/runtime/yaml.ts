@@ -67,7 +67,33 @@ function utf8Length(s: string): number {
 }
 
 const isSpace = (c: string | undefined): boolean => c === " " || c === "\t";
-const isBlank = (l: Line): boolean => l.text.trim() === "";
+
+// YAML whitespace is a space or a tab; JS `trim` also strips NBSP, U+2028, the BOM and
+// others, which YAML treats as content. These are single linear scans with no regex, so
+// a long run of whitespace costs one pass.
+function trimStartWs(s: string): string {
+  let i = 0;
+  while (i < s.length && isSpace(s[i])) i++;
+  return i === 0 ? s : s.slice(i);
+}
+function trimEndWs(s: string): string {
+  let j = s.length;
+  while (j > 0 && isSpace(s[j - 1])) j--;
+  return j === s.length ? s : s.slice(0, j);
+}
+const trimWs = (s: string): string => trimStartWs(trimEndWs(s));
+function blankText(s: string): boolean {
+  for (let i = 0; i < s.length; i++) if (!isSpace(s[i])) return false;
+  return true;
+}
+/** Whether `t` holds a `:` followed by whitespace or the end (a mapping-value indicator). */
+function hasValueIndicator(t: string): boolean {
+  for (let j = t.indexOf(":"); j !== -1; j = t.indexOf(":", j + 1)) {
+    if (j + 1 === t.length || isSpace(t[j + 1])) return true;
+  }
+  return false;
+}
+const isBlank = (l: Line): boolean => blankText(l.text);
 
 /** A document marker: `---` or `...` at column 0, alone or before whitespace. */
 function marker(l: Line, m: "---" | "..."): boolean {
@@ -140,8 +166,8 @@ class Parser {
     }
     if (l !== undefined && marker(l, "---")) {
       const rest = l.text.slice(3);
-      const lead = rest.length - rest.trimStart().length;
-      const body = rest.trimStart();
+      const lead = rest.length - trimStartWs(rest).length;
+      const body = trimStartWs(rest);
       if (body === "" || body.startsWith("#")) this.i++;
       else {
         const virtual = { indent: 3 + lead, text: body, no: l.no };
@@ -155,7 +181,7 @@ class Parser {
     this.skip();
     l = this.lines[this.i];
     if (l !== undefined && marker(l, "...")) {
-      const after = l.text.slice(3).trim();
+      const after = trimWs(l.text.slice(3));
       if (after !== "" && !after.startsWith("#")) {
         fail("Malformed", "$", l, 3, "unexpected content after the document end marker `...`");
       }
@@ -225,7 +251,7 @@ class Parser {
       if (l.indent > indent) fail("Malformed", path, l, l.indent, "bad indentation of a sequence entry");
       if (!isSeqEntry(l.text)) break;
       const rest = l.text.slice(1);
-      const body = rest.trimStart();
+      const body = trimStartWs(rest);
       const here = `${path}[${items.length}]`;
       if (rest.slice(0, rest.length - body.length).includes("\t") && isSeqEntry(body)) {
         fail("Malformed", here, l, l.indent + 1, "a tab cannot separate a `-` from a nested sequence");
@@ -267,7 +293,7 @@ class Parser {
       if (seen.has(k.key)) fail("DuplicateKey", here, l, l.indent, `the key \`${k.key}\` appears twice`);
       seen.add(k.key);
       const rest = l.text.slice(k.end);
-      const body = rest.trimStart();
+      const body = trimStartWs(rest);
       let value: JsonValue;
       if (body === "" || body.startsWith("#")) {
         this.i++;
@@ -310,7 +336,7 @@ class Parser {
     for (let j = 0; j < t.length; j++) {
       const ch = t[j]!;
       if (ch === ":" && (j + 1 === t.length || isSpace(t[j + 1]))) {
-        const key = t.slice(0, j).trimEnd();
+        const key = trimEndWs(t.slice(0, j));
         if (key === "") fail("Malformed", "$", l, l.indent + j, "a mapping key is empty");
         return { key, end: j + 1, quoted: false };
       }
@@ -361,7 +387,7 @@ class Parser {
   /** After a flow or quoted node ends at (line, col): only a comment may follow. */
   private endOfNode(lineIdx: number, col: number, path: string): void {
     const l = this.lines[lineIdx]!;
-    const rest = l.text.slice(col).trim();
+    const rest = trimWs(l.text.slice(col));
     if (rest !== "" && !(rest.startsWith("#") && isSpace(l.text[col]))) {
       if (rest.startsWith(":")) {
         fail("UnsupportedSyntax", path, l, l.indent + col, "a collection or quoted value used as a mapping key is not supported");
@@ -385,8 +411,8 @@ class Parser {
           break;
         }
       }
-      t = t.trim();
-      if (/:(\s|$)/.test(t)) {
+      t = trimWs(t);
+      if (hasValueIndicator(t)) {
         fail("Malformed", path, l, l.indent, "a mapping value is not allowed here (a `key:` inside a plain value)");
       }
       if (parts.length > 0) parts.push(blanks > 0 ? "\n".repeat(blanks) : " ");
@@ -422,7 +448,7 @@ class Parser {
   private blockScalar(parentIndent: number, path: string): string {
     const head = this.lines[this.i]!;
     const literal = head.text[0] === "|";
-    const m = /^[|>]([1-9]?)([+-]?)([1-9]?)(\s+#.*)?$/.exec(head.text.replace(/\s+$/, ""));
+    const m = /^[|>]([1-9]?)([+-]?)([1-9]?)([ \t]+#.*)?$/.exec(trimEndWs(head.text));
     if (m === null || (m[1] !== "" && m[3] !== "")) {
       fail("Malformed", path, head, head.indent, "a block scalar header may hold only an indentation digit and a chomping sign");
     }
@@ -641,7 +667,7 @@ class Flow {
         if (ch === "#" && this.col > 0 && isSpace(t[this.col - 1])) break;
         this.col++;
       }
-      parts.push(t.slice(start, this.col).trim());
+      parts.push(trimWs(t.slice(start, this.col)));
       if (this.col < t.length) break;
       // The line ended inside the scalar: continue on the next non-blank line.
       let n = this.line + 1;
@@ -652,7 +678,7 @@ class Flow {
       }
       const next = this.lines[n];
       if (key || next === undefined) break;
-      const first = next.text.trimStart()[0]!;
+      const first = trimStartWs(next.text)[0]!;
       if (first === "#" || first === "," || first === "]" || first === "}" || first === ":") break;
       parts.push(blanks > 0 ? "\n".repeat(blanks) : " ");
       this.line = n;
@@ -678,7 +704,11 @@ class Flow {
     const q = this.text()[this.col]!;
     const double = q === '"';
     this.col++;
+    // `out` holds the lines already folded; `line` holds the current source line. A fold
+    // trims only `line`, so the work per line break depends on that line, not on how
+    // much of the scalar came before it.
     let out = "";
+    let line = "";
     // Whitespace written as an escape (`\t`) is content; only literal whitespace
     // before a line break is trimmed.
     let escaped = 0;
@@ -688,21 +718,24 @@ class Flow {
         const ch = t[this.col]!;
         if (ch === q) {
           if (!double && t[this.col + 1] === "'") {
-            out += "'";
+            line += "'";
             this.col += 2;
             continue;
           }
           this.col++;
-          return out;
+          return out + line;
         }
         if (double && ch === "\\") {
           const e = t[this.col + 1];
           if (e === undefined) {
-            // An escaped line break: join the next line with no space.
+            // An escaped line break: join the next line with no space, keeping what came before.
             if (this.line + 1 >= this.lines.length) this.err("Malformed", path, "a quoted value is not closed");
             this.line++;
             this.col = 0;
             this.noMarker();
+            out += line;
+            line = "";
+            escaped = 0;
             const nt = this.text();
             while (this.col < nt.length && isSpace(nt[this.col])) this.col++;
             continue;
@@ -717,23 +750,27 @@ class Flow {
             if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
               this.err("Malformed", path, "an escape is not a Unicode scalar value");
             }
-            out += String.fromCodePoint(cp);
-            escaped = out.length;
+            line += String.fromCodePoint(cp);
+            escaped = line.length;
             this.col += 2 + n;
             continue;
           }
           const mapped = ESCAPES[e];
           if (mapped === undefined) this.err("Malformed", path, `unknown escape \`\\${e}\``);
-          out += mapped;
-          escaped = out.length;
+          line += mapped;
+          escaped = line.length;
           this.col += 2;
           continue;
         }
-        out += ch;
+        line += ch;
         this.col++;
       }
-      // The line ended inside the scalar: fold the break.
-      out = out.slice(0, escaped) + out.slice(escaped).replace(/[ \t]+$/, "");
+      // The line ended inside the scalar: trim its literal trailing whitespace and fold the break.
+      let end = line.length;
+      while (end > escaped && isSpace(line[end - 1])) end--;
+      out += end === line.length ? line : line.slice(0, end);
+      line = "";
+      escaped = 0;
       let n = this.line + 1;
       let blanks = 0;
       while (n < this.lines.length && isBlank(this.lines[n]!)) {

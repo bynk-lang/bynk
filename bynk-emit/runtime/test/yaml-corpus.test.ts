@@ -102,6 +102,21 @@ test("pathological inputs finish quickly", () => {
     '"' + "\\u00e9".repeat(100000) + '"',
     "|\n" + "  x\n".repeat(100000),
     Array.from({ length: 50000 }, (_, i) => `k${i}: ${i}`).join("\n"),
+    // A quoted value folded over many lines (a regression for a quadratic fold, #3275).
+    'a: "' + "a\n".repeat(200000) + '"\n',
+    "a: '" + "a\n".repeat(200000) + "'\n",
+    // A long run of spaces, then text, then a line break, inside a quoted value.
+    'a: "' + " ".repeat(500000) + "x\n" + '"\n',
+    // Long whitespace runs elsewhere: a block-scalar header, a plain value, a flow scalar.
+    "a: |" + " ".repeat(500000) + "x\n  y\n",
+    "a: " + "x" + " ".repeat(500000) + "y\n",
+    "a: [" + "x".repeat(10) + " ".repeat(500000) + "y]\n",
+    // Many continuation lines of a plain, a folded and a flow scalar.
+    "a: " + "word\n  ".repeat(100000) + "end\n",
+    "a: >\n" + "  folded line\n".repeat(100000),
+    "a: [" + "x\n".repeat(100000) + "]\n",
+    // Many colons in one plain scalar.
+    "a: " + "b:".repeat(200000) + "\n",
   ];
   for (const text of cases) {
     const t = Date.now();

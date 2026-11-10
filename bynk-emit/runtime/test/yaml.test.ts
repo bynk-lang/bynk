@@ -259,3 +259,23 @@ test("the nesting limit is hit before the stack is", () => {
   const e = err("[".repeat(100000));
   assert.equal(e.kind, "LimitExceeded");
 });
+
+test("only a space or a tab is whitespace; other Unicode spaces are content", () => {
+  // JS `trim` would strip these; YAML keeps them.
+  assert.deepEqual(ok("a: x\u00a0\n"), { a: "x\u00a0" });
+  assert.deepEqual(ok("a: \u00a0x\n"), { a: "\u00a0x" });
+  assert.deepEqual(ok("a: x\u2028\n"), { a: "x\u2028" });
+  // A line holding only a no-break space is content, not a blank line.
+  assert.deepEqual(ok("a: |\n  x\n  \u00a0\n  y\n"), { a: "x\n\u00a0\ny\n" });
+  assert.deepEqual(ok('a: "x\u00a0\n  y"\n'), { a: "x\u00a0 y" });
+  // Literal whitespace before a fold is still trimmed; an escaped one is kept.
+  assert.deepEqual(ok('a: "x  \n  y"\n'), { a: "x y" });
+  assert.deepEqual(ok('a: "x\\t \n  y"\n'), { a: "x\t y" });
+});
+
+test("a folded quoted scalar keeps its content over many lines", () => {
+  const n = 1000;
+  const lines = Array.from({ length: n }, (_, i) => `w${i}`);
+  assert.deepEqual(ok(`a: "${lines.join("\n  ")}"\n`), { a: lines.join(" ") });
+  assert.deepEqual(ok(`a: '${lines.join("\n  ")}'\n`), { a: lines.join(" ") });
+});
