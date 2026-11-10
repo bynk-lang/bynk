@@ -56,7 +56,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bynk_check::checker::{self, Callee, CheckedProgram, TyId, TypedCommons, Types};
+use bynk_check::checker::{self, Callee, CheckedProgram, Ty, TyId, TypedCommons, Types};
 use bynk_check::resolver::MethodTable;
 use bynk_syntax::ast::{
     ActorDecl, Block, CapRef, CapabilityDecl, CapabilityOp, CommonsItem, EventPattern,
@@ -934,25 +934,24 @@ fn lower_fn_sig_ir_from_types(
         .iter()
         .map(|tp| tp.name.name.clone())
         .collect();
-    let fn_name = f.name.display();
-    let resolve = |r: &bynk_syntax::ast::TypeRef, what: &str| {
-        checker::resolve_type_ref_in(r, types, &type_vars, tys).unwrap_or_else(|| {
-            panic!(
-                "bynk internal error: fn `{fn_name}`, {what}: type `{}` does not resolve, but \
-                 the checker already accepted this declaration",
-                bynk_syntax::print::type_ref_to_string(r)
-            )
-        })
-    };
+    // Deliberately *not* an internal error, unlike the other signature readers
+    // here: a generic type's attached fn names the receiver's own type
+    // variables (`Bag[A].largest -> Option[A]`), which are not in `type_vars`,
+    // so a miss is reachable on a certified program. `FnSig`'s doc comment
+    // explains the contract; the `()` it yields is a known imprecision (#3166
+    // follow-up), not an invariant breach.
+    let unit_ty = || tys.intern(Ty::Unit);
     let params: Vec<(String, TyId)> = f
         .params
         .iter()
         .map(|p| {
-            let ty = resolve(&p.type_ref, &format!("parameter `{}`", p.name.name));
+            let ty = checker::resolve_type_ref_in(&p.type_ref, types, &type_vars, tys)
+                .unwrap_or_else(unit_ty);
             (p.name.name.clone(), ty)
         })
         .collect();
-    let return_ty = resolve(&f.return_type, "return type");
+    let return_ty = checker::resolve_type_ref_in(&f.return_type, types, &type_vars, tys)
+        .unwrap_or_else(unit_ty);
     let name = match &f.name {
         FnName::Method { method_name, .. } => method_name.name.clone(),
         FnName::Free(id) => id.name.clone(),
@@ -1107,7 +1106,7 @@ pub fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bynk_check::checker::{CheckedProgram, Ty};
+    use bynk_check::checker::CheckedProgram;
     use bynk_check::hints::HintSink;
     use bynk_check::index::RefSink;
     use bynk_check::locals::LocalsSink;
