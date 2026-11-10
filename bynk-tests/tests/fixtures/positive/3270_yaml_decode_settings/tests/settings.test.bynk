@@ -1,0 +1,131 @@
+// #3214: `Yaml.decode[T]` decodes YAML through the same typed path as
+// `Json.decode[T]`: field defaults, `Option`, refinements and `$.path` errors
+// are the same, and YAML's own refusals are distinct, positioned `DecodeError`s.
+suite settings {
+  case "decodes the settings file" {
+    let text = "# Which features the App runs here.\ntriage:\n  enabled: true\n  labels: [bug, enhancement]   # suggestions only\nnudges:\n  enabled: true\n  after_days: 7\n"
+    match load(text) {
+      Ok(s) => {
+        expect s.mode == "auto"
+        expect s.triage.labels == ["bug", "enhancement"]
+        expect s.nudges == Some(Nudges { enabled: true, after_days: 7 })
+      }
+      Err(_) => expect false
+    }
+  }
+
+  case "an absent Option key and an absent default take their defaults" {
+    match load("triage:\n  enabled: false\n  labels: []\n") {
+      Ok(s) => {
+        expect s.nudges == None
+        expect s.mode == "auto"
+      }
+      Err(_) => expect false
+    }
+  }
+
+  case "an empty mapping takes every default" {
+    match load("triage: {enabled: false, labels: []}\nnudges: {}\n") {
+      Ok(s) => expect s.nudges == Some(Nudges { enabled: false, after_days: 3 })
+      Err(_) => expect false
+    }
+  }
+
+  case "T is inferred from the expected result type" {
+    match loadInferred("triage: {enabled: true, labels: [x]}\nmode: manual\n") {
+      Ok(s) => expect s.mode == "manual"
+      Err(_) => expect false
+    }
+  }
+
+  case "a refinement violation names its path" {
+    let text = "triage:\n  enabled: true\n  labels: []\nnudges:\n  after_days: 31\n"
+    match load(text) {
+      Ok(_) => expect false
+      Err(e) => {
+        expect e.kind == "RefinementViolation"
+        expect e.path == "$.nudges.after_days"
+      }
+    }
+  }
+
+  case "a structural mismatch names its path" {
+    match load("triage:\n  enabled: yes\n  labels: []\n") {
+      Ok(_) => expect false
+      Err(e) => {
+        expect e.kind == "StructuralMismatch"
+        expect e.path == "$.triage.enabled"
+      }
+    }
+  }
+
+  case "a mismatch inside a sequence names its index" {
+    match loadList("- {enabled: true, labels: [a]}\n- {enabled: true, labels: [a, 2]}\n") {
+      Ok(_) => expect false
+      Err(e) => expect e.path == "$[1].labels[1]"
+    }
+  }
+
+  case "on, off, yes and no stay strings" {
+    match loadFlags("a: on\nb: off\nc: yes\nd: no\n") {
+      Ok(f) => {
+        expect f.a == "on"
+        expect f.b == "off"
+        expect f.c == "yes"
+        expect f.d == "no"
+      }
+      Err(_) => expect false
+    }
+  }
+
+  case "quoted scalars are strings, and a timestamp stays a string" {
+    match loadFlags("a: \"1\"\nb: '2'\nc: 2001-12-14\nd: x\n") {
+      Ok(f) => {
+        expect f.a == "1"
+        expect f.c == "2001-12-14"
+      }
+      Err(_) => expect false
+    }
+  }
+
+  case "plain numbers are not strings" {
+    match loadFlags("a: 1\nb: 2\nc: 3\nd: 4\n") {
+      Ok(_) => expect false
+      Err(e) => expect e.kind == "StructuralMismatch"
+    }
+  }
+
+  case "a syntax error is Malformed" {
+    match load("triage: [unclosed\n") {
+      Ok(_) => expect false
+      Err(e) => {
+        expect e.kind == "Malformed"
+        expect e.path == "$.triage"
+      }
+    }
+  }
+
+  case "anchors, aliases, merge keys, tags and extra documents are refused" {
+    expect describe(load("triage: &t\n  enabled: true\n  labels: []\n")) == "UnsupportedAnchor at $.triage"
+    expect describe(load("triage: *t\n")) == "UnsupportedAlias at $.triage"
+    expect describe(load("<<: {mode: x}\n")) == "UnsupportedMergeKey at $.<<"
+    expect describe(load("triage: !!map {}\n")) == "UnsupportedTag at $.triage"
+    expect describe(load("triage: {enabled: true, labels: []}\n---\nmode: x\n")) == "MultipleDocuments at $"
+    expect describe(load("mode: a\nmode: b\n")) == "DuplicateKey at $.mode"
+  }
+
+  case "a refusal says where" {
+    match load("triage:\n  enabled: true\n  labels: []\nmode: &m x\n") {
+      Ok(_) => expect false
+      Err(e) => expect e.message.contains("line 4, column 7")
+    }
+  }
+
+  case "a deeply nested document is refused, not unwound" {
+    let deep = "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["
+    match load(deep) {
+      Ok(_) => expect false
+      Err(e) => expect e.kind == "LimitExceeded"
+    }
+  }
+}

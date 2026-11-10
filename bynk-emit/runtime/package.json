@@ -12,7 +12,8 @@
     "verify": "npm run typecheck && npm run test && npm run check"
   },
   "devDependencies": {
+    "@types/node": "26.6.6",
     "typescript": "7.0.2",
-    "@types/node": "26.6.6"
+    "yaml": "2.8.1"
   }
 }

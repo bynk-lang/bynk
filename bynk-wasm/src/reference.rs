@@ -285,6 +285,7 @@ mod tests {
         member(find(&v, "types", "Duration"), "statics", "millis");
         member(find(&v, "types", "Bytes"), "statics", "fromUtf8");
         member(find(&v, "types", "Json"), "statics", "decode");
+        member(find(&v, "types", "Yaml"), "statics", "decode");
         // Statics merge with the type's methods rather than duplicating it.
         let n = v["types"]
             .as_array()

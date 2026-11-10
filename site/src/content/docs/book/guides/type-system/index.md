@@ -13,6 +13,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 **Do**
 - [Define and validate untrusted input](/book/guides/type-system/define-and-validate/)
 - [Decode untrusted JSON into a typed value](/book/guides/type-system/decode-json/)
+- [Read a YAML settings file into a typed value](/book/guides/type-system/decode-yaml/)
 - [Use a literal where a refined type is expected](/book/guides/type-system/use-a-literal/)
 - [Define sum, record, and opaque types](/book/guides/type-system/define-types/)
 - [Work with `Result` and optional values](/book/guides/type-system/result-and-optionals/)

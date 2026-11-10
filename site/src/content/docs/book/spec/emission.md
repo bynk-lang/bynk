@@ -1015,6 +1015,43 @@ module-local `__option_value_<U>(raw, at)` that rules 3 and 4 share. A bare valu
 that fails as a `StructuralMismatch` at the `Option`'s own path has its
 `expected` extended with every form the decoder accepts.
 
+### §7.3.9a The YAML decoder (#3214) {#739a-the-yaml-decoder}
+
+`Yaml.decode[T](s)` lowers to the typed IIFE of §7.3.9 with one change: the text is
+read by the runtime's `__bynkYamlParse` in place of `JSON.parse`. The parser returns the
+value as the same JSON-shaped tree, or a `DecodeError` of its own; on success the tree
+goes to `__deserialise_<T>` and the same error mapping as `Json.decode`. The runtime
+module (`yaml.ts`) is imported, and emitted, only by a module that calls `Yaml.decode`.
+
+**Grammar read.** YAML 1.2, one document, optionally opened by `---` and closed by
+`...`: block and flow mappings and sequences; plain, single-quoted and double-quoted
+scalars, which may span lines (a line break folds to one space, a blank line to a
+newline); literal `|` and folded `>` block scalars with a chomping indicator (`-`, `+`)
+and an indentation digit; comments; and scalar mapping keys. Indentation is spaces: a
+tab is content inside a scalar or a flow collection and is never block indentation.
+
+**Resolution.** A plain scalar resolves by shape under the core schema: the empty scalar
+and `~`, `null`, `Null`, `NULL` are `null`; `true`/`True`/`TRUE` and
+`false`/`False`/`FALSE` are booleans; `[-+]?[0-9]+`, `0o[0-7]+` and `0x[0-9a-fA-F]+` are
+integers; `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?` is a float, read as
+`Number` would read it; every other plain scalar is a string. A quoted scalar and a block
+scalar are strings. A mapping key is the text of the key. No tag, anchor or other
+property affects resolution, because none is accepted.
+
+**Refusal.** The parser MUST refuse, with a `DecodeError` and no value, each of: an
+anchor (`UnsupportedAnchor`), an alias (`UnsupportedAlias`), the unquoted key `<<`
+(`UnsupportedMergeKey`), a tag (`UnsupportedTag`), a second document
+(`MultipleDocuments`), a directive, a complex key `? …`, a collection used as a key
+(`UnsupportedSyntax`), `.inf` and `.nan` in any case (`UnsupportedValue`), a repeated key
+in one mapping (`DuplicateKey`), and any syntax error (`Malformed`). The error's `path` is
+the path (`$.a.b[2]`) of the value being read when it was found, `$` before any key, and
+its `message` ends `(line L, column C)`, both counted from 1.
+
+**Limits.** Input longer than 1,048,576 bytes of UTF-8 MUST be refused up front
+(`LimitExceeded`, path `$`), and a document with collections nested more than 256 levels
+deep (the bound of §6.5, counted over both block and flow collections) MUST be refused
+(`LimitExceeded`) while it is read. `Json.decode` has no size limit of its own.
+
 ### §7.3.10 Streams and WebSockets (v0.100, v0.102+)
 
 A **`Stream[T]`** lowers to a host **`AsyncIterable<T>`**, emitted **inline** as

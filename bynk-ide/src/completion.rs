@@ -2059,6 +2059,10 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
             ),
         ],
     ),
+    (
+        "Yaml",
+        &[("decode", "decode[T](s: String) -> Result[T, DecodeError]")],
+    ),
     ("List", &[("empty", "empty() -> List[T]")]),
     ("Map", &[("empty", "empty() -> Map[K, V]")]),
     (
@@ -4059,6 +4063,10 @@ fn Box.size(self) -> Int { 1 }
         let j = complete("  Json.", "context a.b\n", None);
         assert!(find(&j, "encode", CompletionKind::Member).is_some());
         assert!(find(&j, "decode", CompletionKind::Member).is_some());
+        // #3214: `Yaml.` offers its one static, `decode`, and no `encode`.
+        let y = complete("  Yaml.", "context a.b\n", None);
+        assert!(find(&y, "decode", CompletionKind::Member).is_some());
+        assert!(find(&y, "encode", CompletionKind::Member).is_none());
     }
 
     #[test]
