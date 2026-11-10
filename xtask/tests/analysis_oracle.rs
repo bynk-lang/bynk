@@ -97,6 +97,11 @@ fn check_round(
 /// every round. Run the suite on two builds and diff the files to show a
 /// refactor of the analysis changed nothing observable: the fresh-vs-memoised
 /// comparison above cannot, since both sides run the code under test.
+///
+/// The digest is only stable on one toolchain (`DefaultHasher`'s algorithm is
+/// not guaranteed across releases), so compare two builds with the same
+/// `rustc`. The file is appended to: delete it before each run, or an earlier
+/// run's rounds are mixed in.
 fn dump_digest(ctx: &str, report: &impl std::fmt::Debug) {
     use std::hash::{Hash, Hasher};
     use std::io::Write;
