@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: ts_writes
 changelog: A `Yaml.decode[T](text)` static reads a safe YAML 1.2 subset through the same typed decode as `Json.decode`, with positioned refusals and `DecodeError` paths
 ---
 
