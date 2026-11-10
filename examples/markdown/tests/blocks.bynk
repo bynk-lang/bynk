@@ -1,4 +1,5 @@
 suite blocks
+
 case "headings" {
 	expect render("# Title") == "<h1>Title</h1>\n"
 	expect render("### Smaller *one*") == "<h3>Smaller <em>one</em></h3>\n"

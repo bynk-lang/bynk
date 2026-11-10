@@ -56,7 +56,7 @@ export const quotes = {
 
 export const many = {
   async call(ids: readonly number[], deps: { Pricing: Pricing; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<readonly Result<number, TimedOut>[]> {
-    return (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (id) => __bynkWithin(deps.Pricing.quote(id), 1000, deps.__exec))(__x))))(ids);
+    return (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (id: number) => __bynkWithin(deps.Pricing.quote(id), 1000, deps.__exec))(__x))))(ids);
   },
 };
 

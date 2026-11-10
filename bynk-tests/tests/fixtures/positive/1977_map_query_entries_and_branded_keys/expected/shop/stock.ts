@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 import { Acct as __CommonsAcct, Sku as __CommonsSku, sku } from "./values.js";
@@ -52,6 +52,7 @@ export class Box {
   private async loadState(): globalThis.Promise<BoxState> {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
+    __checkStoredLayout("Box", stored);
     const __zero = __zeroOfBoxState();
     __reportUnknownStoredKeys("Box", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -75,13 +76,13 @@ export class Box {
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const all = await ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))();
-    return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n, e) => n + e.value);
+    return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: string; readonly value: number }) => n + e.value);
   }
 
   async totalEff(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const all = await ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))();
-    return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n, e) => globalThis.Promise.resolve(n + e.value));
+    return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
   }
 
 }
@@ -115,6 +116,7 @@ export class ByKey {
   private async loadState(): globalThis.Promise<ByKeyState> {
     const stored = await this.state.storage.get<ByKeyState>("state");
     if (stored === undefined) return __zeroOfByKeyState();
+    __checkStoredLayout("ByKey", stored);
     const __zero = __zeroOfByKeyState();
     __reportUnknownStoredKeys("ByKey", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -142,13 +144,13 @@ export class ByKey {
 
   async stale(deps: {}): globalThis.Promise<readonly Stale[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))().filter((__x) => ((e) => e.value > 1)(__x))))().map((__x) => ((e) => ({ sku: e.key, qty: e.value }))(__x))))();
+    return ((() => ((() => ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))().filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x))))().map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x))))();
   }
 
   async keyCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const ks = await ((() => globalThis.Object.keys(__state.items).map((__k) => (__k as Sku))))();
-    return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(ks, 0, (n, k) => n + 1);
+    return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(ks, 0, (n: number, k: Sku) => n + 1);
   }
 
   async has(k: string, deps: {}): globalThis.Promise<boolean> {
@@ -191,6 +193,7 @@ export class Ledger {
   private async loadState(): globalThis.Promise<LedgerState> {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
+    __checkStoredLayout("Ledger", stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -223,13 +226,13 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly Acct[]> {
     const __state = await this.loadState();
-    return ((() => [...((() => globalThis.Object.keys(__state.balances).map((__k) => (globalThis.Number(__k) as Acct))))()].sort((__a, __b) => { const __ka = ((k) => k)(__a), __kb = ((k) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
+    return ((() => [...((() => globalThis.Object.keys(__state.balances).map((__k) => (globalThis.Number(__k) as Acct))))()].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
   }
 
   async sum(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
     const all = await ((() => globalThis.Object.entries(__state.balances).map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v }))))();
-    return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n, e) => n + e.key + e.value);
+    return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
   }
 
 }

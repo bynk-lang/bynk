@@ -18,11 +18,11 @@ The board's stylesheet.
 asset style = "assets/board.css"
 
 fn link(a: Asset) -> String {
-  "<link rel=\"stylesheet\" href=\"\(a.url)\">"
+	"<link rel=\"stylesheet\" href=\"\(a.url)\">"
 }
 
 fn head() -> String {
-  link(style)
+	link(style)
 }
 ```
 
@@ -52,6 +52,7 @@ path with `at`:
 context compat.board
 
 asset favicon = "assets/favicon.ico" at "/favicon.ico"
+
 asset robots = "assets/robots.txt" at "/robots.txt"
 ```
 

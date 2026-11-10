@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Status =
@@ -40,6 +40,7 @@ export class Door {
   private async loadState(): globalThis.Promise<DoorState> {
     const stored = await this.state.storage.get<DoorState>("state");
     if (stored === undefined) return __zeroOfDoorState();
+    __checkStoredLayout("Door", stored);
     const __zero = __zeroOfDoorState();
     __reportUnknownStoredKeys("Door", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -80,7 +81,7 @@ export function __makeDoor(key: string, env?: { DOOR?: __DurableObjectNamespace 
 export async function __bynkDriveHistory_Door(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown }>> {
   __DoorRegistry.reset();
   const __inst = __makeDoor("") as any;
-  const __load = async (): globalThis.Promise<DoorState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfDoorState(); const __m = { ...__zeroOfDoorState(), ...__s }; __rehydrateDoorState(__m, __s); return __m; };
+  const __load = async (): globalThis.Promise<DoorState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfDoorState(); __checkStoredLayout("Door", __s); const __m = { ...__zeroOfDoorState(), ...__s }; __rehydrateDoorState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
   const __steps: globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;

@@ -13,11 +13,12 @@ suite github.events
 
 --- A delivery captured from the GitHub App's Advanced tab.
 fixture issueOpened = "fixtures/github/issues-opened.json"
-fixture pushToMain  = "fixtures/github/push.json"
+
+fixture pushToMain = "fixtures/github/push.json"
 
 case "a real issues delivery decodes" {
-  let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
-  expect r is Ok(_)
+	let r = read(Some("issues"), Some("d-1"), Bytes.fromUtf8(issueOpened))
+	expect r is Ok(_)
 }
 ```
 
@@ -52,17 +53,21 @@ file's text as that variable or secret, at every tier:
 
 ```bynk,fragment
 suite github.hooks as system {
-  fixture appKey = "fixtures/test-app-key.b64"
+	env {
+		APP_CLIENT_ID = "Iv1.testclient"
+		APP_PRIVATE_KEY = appKey
+	}
 
-  env {
-    APP_CLIENT_ID = "Iv1.testclient"
-    APP_PRIVATE_KEY = appKey
-  }
+	fixture appKey = "fixtures/test-app-key.b64"
 
-  case "the webhook signs in as the app" {
-    let r <- hooks.POST("/github", RequestHeaders.of(["X-GitHub-Event: ping"]), Bytes.fromUtf8("{}"))
-    expect r is Ok(_)
-  }
+	case "the webhook signs in as the app" {
+		let r <- hooks.POST(
+			"/github",
+			RequestHeaders.of(["X-GitHub-Event: ping"]),
+			Bytes.fromUtf8("{}")
+		)
+		expect r is Ok(_)
+	}
 }
 ```
 

@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../../__bynk_runtime/agent.js";
 
 import type { Stamp } from "./stamp.js";
@@ -39,6 +39,7 @@ export class Book {
   private async loadState(): globalThis.Promise<BookState> {
     const stored = await this.state.storage.get<BookState>("state");
     if (stored === undefined) return __zeroOfBookState();
+    __checkStoredLayout("Book", stored);
     const __zero = __zeroOfBookState();
     __reportUnknownStoredKeys("Book", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -54,7 +55,7 @@ export class Book {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const s = await deps.Stamp.next();
-      const __r0 = await (() => { __state.total = ((t) => t + m)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((t: number) => t + m)(__state.total); return undefined; })();
       return __state.total + s;
     })();
     await this.commitState(__state);

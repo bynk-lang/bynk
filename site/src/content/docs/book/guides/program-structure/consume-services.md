@@ -10,9 +10,9 @@ services. Suppose a `payment` context offers an `authorise` service:
 context payment
 
 service authorise {
-  on call(amount: Int) -> Effect[Result[Int, Int]] {
-    Ok(amount)
-  }
+	on call(amount: Int) -> Effect[Result[Int, Int]] {
+		Ok(amount)
+	}
 }
 ```
 
@@ -27,10 +27,10 @@ context orders
 consumes payment
 
 service placeOrder {
-  on call(total: Int) -> Effect[Result[Int, Int]] {
-    let _ <- payment.authorise(total)
-    Ok(total)
-  }
+	on call(total: Int) -> Effect[Result[Int, Int]] {
+		let _ <- payment.authorise(total)
+		Ok(total)
+	}
 }
 ```
 
@@ -44,10 +44,10 @@ context orders
 consumes payment as Pay
 
 service placeOrder {
-  on call(total: Int) -> Effect[Result[Int, Int]] {
-    let _ <- Pay.authorise(total)
-    Ok(total)
-  }
+	on call(total: Int) -> Effect[Result[Int, Int]] {
+		let _ <- Pay.authorise(total)
+		Ok(total)
+	}
 }
 ```
 
@@ -68,12 +68,14 @@ context app
 uses report
 consumes bynk.crypto { Crypto, Digest as CryptoDigest }
 
-fn empty() -> Digest { Digest { total: 0 } }
+fn empty() -> Digest {
+	Digest { total: 0 }
+}
 
 service hashing {
-  on call(token: String) -> Effect[Bytes] given Crypto {
-    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
-  }
+	on call(token: String) -> Effect[Bytes] given Crypto {
+		Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
+	}
 }
 ```
 
@@ -112,14 +114,14 @@ consumes inventory as Stock
 consumes payment as Pay
 
 service placeOrder {
-  on call(sku: String, total: Int) -> Effect[Result[Int, String]] {
-    let Ok(_) <- Stock.reserve(sku) else { Err("out of stock") }
-    let Ok(receipt) <- Pay.authorise(total) else {
-      let _ <- Stock.release(sku)
-      Err("payment declined")
-    }
-    Ok(receipt)
-  }
+	on call(sku: String, total: Int) -> Effect[Result[Int, String]] {
+		let Ok(_) <- Stock.reserve(sku) else { Err("out of stock") }
+		let Ok(receipt) <- Pay.authorise(total) else {
+			let _ <- Stock.release(sku)
+			Err("payment declined")
+		}
+		Ok(receipt)
+	}
 }
 ```
 

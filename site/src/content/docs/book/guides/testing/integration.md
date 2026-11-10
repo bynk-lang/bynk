@@ -151,20 +151,20 @@ exports transparent { PayError }
 type PayError = enum { Declined }
 
 capability Bank {
-  fn charge(cents: Int) -> Effect[Result[Int, PayError]]
+	fn charge(cents: Int) -> Effect[Result[Int, PayError]]
 }
 
 provides Bank = StubBank {
-  fn charge(cents: Int) -> Effect[Result[Int, PayError]] {
-    if cents > 10000 { Err(Declined) } else { Ok(cents) }
-  }
+	fn charge(cents: Int) -> Effect[Result[Int, PayError]] {
+		if cents > 10000 { Err(Declined) } else { Ok(cents) }
+	}
 }
 
 service authorise {
-  on call(cents: Int) -> Effect[Result[Int, PayError]] given Bank {
-    let r <- Bank.charge(cents)
-    r
-  }
+	on call(cents: Int) -> Effect[Result[Int, PayError]] given Bank {
+		let r <- Bank.charge(cents)
+		r
+	}
 }
 ```
 
@@ -172,19 +172,18 @@ service authorise {
 context shop.orders
 
 consumes shop.payment as Pay
-
 exports transparent { OrderError }
 
 type OrderError = enum { Rejected }
 
 service place {
-  on call(cents: Int) -> Effect[Result[Int, OrderError]] {
-    let a <- Pay.authorise(cents)
-    match a {
-      Ok(n)  => Ok(n)
-      Err(_) => Err(Rejected)
-    }
-  }
+	on call(cents: Int) -> Effect[Result[Int, OrderError]] {
+		let a <- Pay.authorise(cents)
+		match a {
+			Ok(n) => Ok(n),
+			Err(_) => Err(Rejected),
+		}
+	}
 }
 ```
 
@@ -194,15 +193,15 @@ nothing to wire by hand:
 
 ```bynk,fragment
 suite checkout as system {
-  case "small order authorises across the wire" {
-    let r <- shop.orders.place(100)
-    expect r is Ok(_)
-  }
+	case "small order authorises across the wire" {
+		let r <- shop.orders.place(100)
+		expect r is Ok(_)
+	}
 
-  case "large order is rejected end to end" {
-    let r <- shop.orders.place(50000)
-    expect r is Err(_)
-  }
+	case "large order is rejected end to end" {
+		let r <- shop.orders.place(50000)
+		expect r is Err(_)
+	}
 }
 ```
 

@@ -49,10 +49,7 @@ use bynk_ts::{
 
 use crate::emit_model::{EmitProjectCtx, ImportExt};
 use bynk_check::builtin_names::map_query;
-use bynk_check::builtin_names::methods::{
-    FOLD_EFF, FOR_EACH, PAR_TRAVERSE, PAR_TRAVERSE_ALL, PAR_TRAVERSE_TRY, RAW, TRAVERSE_ALL,
-    TRAVERSE_TRY,
-};
+use bynk_check::builtin_names::methods::RAW;
 use bynk_check::builtin_names::types::*;
 use bynk_check::checker::{CheckedProgram, ExprId, NamedKind, Ty, TyId, TypedCommons, Types};
 use bynk_check::project_model::BuildTarget;
@@ -91,6 +88,8 @@ mod cmp;
 mod codec;
 mod lower;
 pub(crate) mod runtime_use;
+mod tco;
+mod zero_value;
 pub use lower::*;
 pub use runtime_use::RuntimeUse;
 pub mod emit;
@@ -4040,6 +4039,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         // also checks its stored `__v` marker (Decision A: none without one).
         if has_agent {
             parts.push("__reportUnknownStoredKeys");
+            // Per-entry storage slice 0 (#3189): faults on a `__layout` marker
+            // a later build wrote.
+            parts.push("__checkStoredLayout");
         }
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
@@ -5088,6 +5090,8 @@ pub(crate) struct LowerCtx<'a> {
     /// the `?`'s own `return` still exits the enclosing function. Every arrow
     /// and function boundary resets it to `None` for its own body.
     pub(crate) tail_slot: Option<TailSlot>,
+    /// #3193: the self tail calls of the function being emitted as a loop.
+    pub(crate) tco: Option<std::rc::Rc<tco::TcoPlan>>,
     /// Constrained generics slice 1: the in-scope comparator witnesses of the
     /// function being emitted, by type-parameter name (`T` -> `__cmp_T`). Empty
     /// outside an `Ord`-bounded generic.
@@ -5183,6 +5187,7 @@ impl<'a> LowerCtx<'a> {
             emitted_early_return: false,
             lambda_depth: 0,
             tail_slot: None,
+            tco: None,
             cmp_scope: HashMap::new(),
             codec_scope: HashMap::new(),
         }

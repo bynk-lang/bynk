@@ -1792,6 +1792,96 @@ fn stored_state_is_stamped_and_checked_against_its_schema_version() {
     );
 }
 
+// Per-entry storage slice 0 (#3189): a stored record carrying a `__layout` marker
+// was written by a later build. Loading it faults `NewerLayout` as a
+// `RehydrationViolation` before anything is decoded. What the guard exists to stop
+// is a *writing* handler zero-merging the record and committing it back, so the
+// driver runs `set` as well as `get` and checks the stored record is untouched. A
+// locked agent with a newer `__v` as well as a `__layout` faults `NewerLayout`, not
+// `NewerSchema`: the layout check runs first. A record without the marker still
+// loads.
+const LAYOUT_GUARD_DRIVER_TS: &str = r#"
+import { Counter } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState(initial?: unknown) {
+  const m = new Map<string, unknown>();
+  if (initial !== undefined) m.set("state", structuredClone(initial));
+  return {
+    m,
+    state: {
+      storage: {
+        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      },
+    },
+  };
+}
+
+async function faultKind(run: () => Promise<unknown>): Promise<string> {
+  try {
+    await run();
+  } catch (e) {
+    const rv = (e as { rehydrationViolation?: { detail?: { kind?: string } } }).rehydrationViolation;
+    return rv?.detail?.kind ?? `other: ${String(e)}`;
+  }
+  return "none";
+}
+
+const quiet = console.error;
+console.error = () => {};
+
+for (const marker of [2, 99, "x", null]) {
+  const record = { count: 3, label: "a", __layout: marker };
+  const f = fakeState(record);
+  const c = new Counter(f.state as never);
+  assert((await faultKind(() => c.get({}))) === "NewerLayout", `a read of __layout ${String(marker)} faults NewerLayout`);
+  assert(
+    (await faultKind(() => c.set(9, {}))) === "NewerLayout",
+    `a write against __layout ${String(marker)} faults NewerLayout, not a commit`,
+  );
+  assert(
+    JSON.stringify(f.m.get("state")) === JSON.stringify(record),
+    "the record is exactly as found, never zero-merged and written back",
+  );
+}
+
+// The layout check runs before the schema-version check.
+const both = fakeState({ count: 3, __v: 99, __layout: 2 });
+assert(
+  (await faultKind(() => new Counter(both.state as never).get({}))) === "NewerLayout",
+  "__layout wins over a newer __v",
+);
+const schemaOnly = fakeState({ count: 3, __v: 99 });
+assert(
+  (await faultKind(() => new Counter(schemaOnly.state as never).get({}))) === "NewerSchema",
+  "without a layout marker a newer __v still faults NewerSchema",
+);
+
+console.error = quiet;
+
+// The layout this build reads: no marker.
+const ok = fakeState({ count: 4, label: "a" });
+assert((await new Counter(ok.state as never).get({})) === 4, "a record without a layout marker loads");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn newer_layout_marker_faults_and_a_writing_handler_does_not_commit() {
+    verify_with_lock(
+        "layout_guard",
+        VERSIONED_SOURCE,
+        LAYOUT_GUARD_DRIVER_TS,
+        Some(VERSIONED_LOCK_V1),
+    );
+}
+
 // #3113 (follow-up to #2691/#3057): a sum variant added inside stored state is
 // an additive schema change, so a rollback relies on the `__v` marker alone. The
 // newer build writes a value of the added variant; the older build, loading the

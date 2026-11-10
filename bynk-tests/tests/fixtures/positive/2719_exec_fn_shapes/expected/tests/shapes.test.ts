@@ -337,7 +337,7 @@ async function test_a_send_from_a_helper_runs_on_the_handler_s_context() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const n = await __bynkSettleVirtual(deps, twice(async (x) => globalThis.Promise.resolve(undefined), 5, deps.__exec));
+    const n = await __bynkSettleVirtual(deps, twice(async (x: number) => globalThis.Promise.resolve(undefined), 5, deps.__exec));
     if (!(n === 5)) { throw __bynkExpectFailure("tests/shapes.bynk:9:10", 220, 226, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {

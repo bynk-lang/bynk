@@ -75,7 +75,7 @@ async function test_max_over_Float_keys_holding_a_NaN() {
     await __makeShelf("n").add("y", None, 0.0, 0.0, 2, deps);
     await __makeShelf("n").add("z", None, 1.5, 1.0, 3, deps);
     const hi = await __makeShelf("n").maxScore(deps);
-    if (!(__bynkEq(((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f) => f !== f), Some(true)))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:16:10", 491, 526, "expect hi.map((f) => f != f) == Some(true)\n  expected: hi.map((f) => f != f) == Some(true)\n  actual:   " + __bynkShow((((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f) => f !== f))) + " == " + __bynkShow((Some(true)))); }
+    if (!(__bynkEq(((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f: number) => f !== f), Some(true)))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:16:10", 491, 526, "expect hi.map((f) => f != f) == Some(true)\n  expected: hi.map((f) => f != f) == Some(true)\n  actual:   " + __bynkShow((((__o: Option<number>, __f: (x: number) => boolean) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(hi, (f: number) => f !== f))) + " == " + __bynkShow((Some(true)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -142,8 +142,8 @@ async function test_a_T__Ord_generic_key_through_its_witness() {
     type Tag = __ns_demo_gaps.Tag;
     const a = { name: "a", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(2) };
     const b = { name: "b", rank: None, score: 1.0, div: 1.0, tag: Tag.unsafe(1) };
-    if (!(__bynkEq(keyed([a, b], (i) => i.tag, __bynkCmpInt), ["b", "a"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:38:10", 1237, 1278, "expect keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  expected: keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  actual:   " + __bynkShow((keyed([a, b], (i) => i.tag, __bynkCmpInt))) + " == " + __bynkShow((["b", "a"]))); }
-    if (!(__bynkEq(keyed([b, a], (i) => i.name, __bynkCmpString), ["a", "b"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:39:10", 1288, 1330, "expect keyed([b, a], (i) => i.name) == [\"a\", \"b\"]\n  expected: keyed([b, a], (i) => i.name) == [\"a\", \"b\"]\n  actual:   " + __bynkShow((keyed([b, a], (i) => i.name, __bynkCmpString))) + " == " + __bynkShow((["a", "b"]))); }
+    if (!(__bynkEq(keyed([a, b], (i: Item) => i.tag, __bynkCmpInt), ["b", "a"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:38:10", 1237, 1278, "expect keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  expected: keyed([a, b], (i) => i.tag) == [\"b\", \"a\"]\n  actual:   " + __bynkShow((keyed([a, b], (i: Item) => i.tag, __bynkCmpInt))) + " == " + __bynkShow((["b", "a"]))); }
+    if (!(__bynkEq(keyed([b, a], (i: Item) => i.name, __bynkCmpString), ["a", "b"]))) { throw __bynkExpectFailure("tests/demo/gaps.bynk:39:10", 1288, 1330, "expect keyed([b, a], (i) => i.name) == [\"a\", \"b\"]\n  expected: keyed([b, a], (i) => i.name) == [\"a\", \"b\"]\n  actual:   " + __bynkShow((keyed([b, a], (i: Item) => i.name, __bynkCmpString))) + " == " + __bynkShow((["a", "b"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface TaskState {
@@ -33,6 +33,7 @@ export class Task {
   private async loadState(): globalThis.Promise<TaskState> {
     const stored = await this.state.storage.get<TaskState>("state");
     if (stored === undefined) return __zeroOfTaskState();
+    __checkStoredLayout("Task", stored);
     const __zero = __zeroOfTaskState();
     __reportUnknownStoredKeys("Task", stored, __zero);
     const __merged = { ...__zero, ...stored };

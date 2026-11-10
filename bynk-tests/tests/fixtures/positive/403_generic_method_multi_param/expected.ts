@@ -26,7 +26,7 @@ export function flip(p: Pair<number, string>): Pair<string, number> {
 }
 
 export function relabel(p: Pair<number, string>): Pair<boolean, string> {
-  return Pair.mapFirst(p, (n) => true);
+  return Pair.mapFirst(p, (n: number) => true);
 }
 
 export function tag_of(p: Pair<number, string>): string {

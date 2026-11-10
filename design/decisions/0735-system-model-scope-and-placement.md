@@ -11,7 +11,7 @@ Only `bynk-emit` reads either crate. Every other tool that needs the same facts
 re-derives them from the AST. That includes the editor's sequence diagram, wire
 contract and hover; `bynk openapi`; and the smoke runner.
 
-The crate-hygiene track (`design/tracks/crate-hygiene.md` §6, spine #2775) settled
+The crate-hygiene track (`design/archive/retired-tracks.md` §6, spine #2775) settled
 where the model sits (Q1), whether `bynk-lower` stays separate (Q2), its name (Q3)
 and whether it is a public interface (Q4). Slice B1 (#2939) tests the result: it
 moves `bynk-ide` onto the model's handler kinds. This record carries those answers

@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export type Level = number & { readonly __brand: "gauge.Level" };
@@ -45,6 +45,7 @@ export class Gauge {
   private async loadState(): globalThis.Promise<GaugeState> {
     const stored = await this.state.storage.get<GaugeState>("state");
     if (stored === undefined) return __zeroOfGaugeState();
+    __checkStoredLayout("Gauge", stored);
     const __zero = __zeroOfGaugeState();
     __reportUnknownStoredKeys("Gauge", stored, __zero);
     const __merged = { ...__zero, ...stored };

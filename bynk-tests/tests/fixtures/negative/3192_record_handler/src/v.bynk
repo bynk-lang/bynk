@@ -1,0 +1,9 @@
+context v
+
+type Link[T] = { value: T, next: Option[Link[T]] }
+
+service s {
+	on call(l: Link[Int]) -> Effect[Int] {
+		Effect.pure(0)
+	}
+}

@@ -1,6 +1,6 @@
 //! Which types are `Codable`, and the checks that need it. Constrained generics
 //! slice 3 (#2715; the model is the track's Q4/Q7 in
-//! `design/tracks/constrained-generics.md`).
+//! `design/archive/retired-tracks.md`).
 //!
 //! `Codable` is automatic, never derived, and its meaning is one predicate: the
 //! domain `Json.decode` accepts , which `Json.encode`,

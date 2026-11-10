@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Phase =
@@ -51,6 +51,7 @@ export class Ticket {
   private async loadState(): globalThis.Promise<TicketState> {
     const stored = await this.state.storage.get<TicketState>("state");
     if (stored === undefined) return __zeroOfTicketState();
+    __checkStoredLayout("Ticket", stored);
     const __zero = __zeroOfTicketState();
     __reportUnknownStoredKeys("Ticket", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -138,6 +139,7 @@ export class Gate {
   private async loadState(): globalThis.Promise<GateState> {
     const stored = await this.state.storage.get<GateState>("state");
     if (stored === undefined) return __zeroOfGateState();
+    __checkStoredLayout("Gate", stored);
     const __zero = __zeroOfGateState();
     __reportUnknownStoredKeys("Gate", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -162,7 +164,7 @@ export class Gate {
   async ping(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.hits = ((n) => n + 1)(__state.hits); return undefined; })();
+      const __r0 = await (() => { __state.hits = ((n: number) => n + 1)(__state.hits); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

@@ -322,6 +322,10 @@ export async function sweepAgentInstances(
   binding: MigrationNamespace,
   body: string,
   current: number,
+  // The storage layout this build writes (#3189): 1 is the wholesale layout every
+  // build wrote before per-entry storage. Reported to the sweep, which uses it only
+  // to say how far the layout upgrade has got.
+  layout: number = 1,
 ): Promise<Response> {
   let ids: unknown;
   try {
@@ -353,7 +357,7 @@ export async function sweepAgentInstances(
       }
     }),
   );
-  return new Response(JSON.stringify({ current, results }), {
+  return new Response(JSON.stringify({ current, layout, results }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
@@ -371,6 +375,9 @@ export async function wakeForMigration<S>(
   current: number,
   load: () => Promise<S>,
   commit: (state: S) => Promise<void>,
+  // The storage layout this build writes. `load` upgrades an older record to it
+  // (the lazy upgrade), so a record that woke without a fault is in it afterwards.
+  layout: number = 1,
 ): Promise<Response> {
   const json = (value: object) =>
     new Response(JSON.stringify(value), {
@@ -381,12 +388,24 @@ export async function wakeForMigration<S>(
   const raw = typeof stored === "object" ? (stored as { readonly __v?: unknown }).__v : undefined;
   const marker = raw === undefined ? 1 : raw;
   const before = typeof marker === "number" ? marker : null;
+  // The layout marker, read as `layoutOf` reads it (an absent one is layout 1); null
+  // when it is not a positive integer.
+  const rawLayout =
+    typeof stored === "object" ? (stored as { readonly __layout?: unknown }).__layout : undefined;
+  const layoutBefore =
+    rawLayout === undefined
+      ? 1
+      : typeof rawLayout === "number" && Number.isInteger(rawLayout) && rawLayout >= 1
+        ? rawLayout
+        : null;
   try {
     const state = await load();
+    // A record in an older layout is written by `load` itself; a commit is still
+    // owed only when the schema version is older.
     if (before === null || before < current) await commit(state);
-    return json({ before, after: current });
+    return json({ before, after: current, layoutBefore, layoutAfter: layout });
   } catch (e) {
-    return json({ before, fault: migrationFaultKind(e) });
+    return json({ before, layoutBefore, fault: migrationFaultKind(e) });
   }
 }
 

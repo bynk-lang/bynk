@@ -11,18 +11,18 @@ its payload by naming the fields:
 
 ```bynk
 commons shop {
-  type Status =
-    | Pending
-    | Shipped(tracking: String)
-    | Cancelled(reason: String)
+	type Status =
+		| Pending
+		| Shipped(tracking: String)
+		| Cancelled(reason: String)
 
-  fn describe(s: Status) -> String {
-    match s {
-      Pending => "awaiting shipment"
-      Shipped(tracking: t) => t
-      Cancelled(reason: r) => r
-    }
-  }
+	fn describe(s: Status) -> String {
+		match s {
+			Pending => "awaiting shipment",
+			Shipped(tracking: t) => t,
+			Cancelled(reason: r) => r,
+		}
+	}
 }
 ```
 
@@ -51,41 +51,41 @@ up, `let … else` says the same thing flat:
 
 ```bynk
 commons demo {
-  type Problem = enum { MissingEvent, MissingDelivery, NotNumber }
+	type Problem = enum { MissingEvent, MissingDelivery, NotNumber }
 
-  fn read(
-    event: Option[String],
-    delivery: Option[String],
-    count: Result[Int, String]
-  ) -> Result[String, Problem] {
-    match event {
-      None => Err(MissingEvent),
-      Some(e) => match delivery {
-        None => Err(MissingDelivery),
-        Some(d) => match count {
-          Err(_) => Err(NotNumber),
-          Ok(n) => Ok("\(e)/\(d)/\(n)"),
-        },
-      },
-    }
-  }
+	fn read(
+		event: Option[String],
+		delivery: Option[String],
+		count: Result[Int, String]
+	) -> Result[String, Problem] {
+		match event {
+			None => Err(MissingEvent),
+			Some(e) => match delivery {
+				None => Err(MissingDelivery),
+				Some(d) => match count {
+					Err(_) => Err(NotNumber),
+					Ok(n) => Ok("\(e)/\(d)/\(n)"),
+				},
+			},
+		}
+	}
 }
 ```
 
 ```bynk
 commons demo {
-  type Problem = enum { MissingEvent, MissingDelivery, NotNumber }
+	type Problem = enum { MissingEvent, MissingDelivery, NotNumber }
 
-  fn read(
-    event: Option[String],
-    delivery: Option[String],
-    count: Result[Int, String]
-  ) -> Result[String, Problem] {
-    let Some(e) = event else { Err(MissingEvent) }
-    let Some(d) = delivery else { Err(MissingDelivery) }
-    let Ok(n) = count else { Err(NotNumber) }
-    Ok("\(e)/\(d)/\(n)")
-  }
+	fn read(
+		event: Option[String],
+		delivery: Option[String],
+		count: Result[Int, String]
+	) -> Result[String, Problem] {
+		let Some(e) = event else { Err(MissingEvent) }
+		let Some(d) = delivery else { Err(MissingDelivery) }
+		let Ok(n) = count else { Err(NotNumber) }
+		Ok("\(e)/\(d)/\(n)")
+	}
 }
 ```
 
@@ -171,23 +171,23 @@ or unwrap an `Option` of a `Result` in one flat `match` — no second, nested
 
 ```bynk
 commons monitor {
-  type FetchError = enum { PollClosed, UnknownChoice }
+	type FetchError = enum { PollClosed, UnknownChoice }
 
-  fn code(res: Result[Int, FetchError]) -> Int {
-    match res {
-      Ok(n)              => n
-      Err(PollClosed)    => 0
-      Err(UnknownChoice) => 400
-    }
-  }
+	fn code(res: Result[Int, FetchError]) -> Int {
+		match res {
+			Ok(n) => n,
+			Err(PollClosed) => 0,
+			Err(UnknownChoice) => 400,
+		}
+	}
 
-  fn inner(opt: Option[Result[Int, FetchError]]) -> Int {
-    match opt {
-      Some(Ok(n))  => n
-      Some(Err(_)) => -1
-      None         => -2
-    }
-  }
+	fn inner(opt: Option[Result[Int, FetchError]]) -> Int {
+		match opt {
+			Some(Ok(n)) => n,
+			Some(Err(_)) => -1,
+			None => -2,
+		}
+	}
 }
 ```
 
@@ -205,17 +205,17 @@ holds:
 
 ```bynk
 commons routing {
-  type Req =
-    | Get(path: String)
-    | Post(body: String)
+	type Req =
+		| Get(path: String)
+		| Post(body: String)
 
-  fn route(r: Req) -> String {
-    match r {
-      Get(path) if path == "/api" => "api"
-      Get(path)                   => path
-      Post(body)                  => body
-    }
-  }
+	fn route(r: Req) -> String {
+		match r {
+			Get(path) if path == "/api" => "api",
+			Get(path) => path,
+			Post(body) => body,
+		}
+	}
 }
 ```
 
@@ -247,18 +247,18 @@ regardless of which alternative matched:
 
 ```bynk
 commons booking {
-  type State =
-    | Held(guest: String, room: Int, days: Int, rsv: Int)
-    | Confirmed(who: String, room: Int, days: Int, rsv: Int)
-    | Cancelled(reason: String)
+	type State =
+		| Held(guest: String, room: Int, days: Int, rsv: Int)
+		| Confirmed(who: String, room: Int, days: Int, rsv: Int)
+		| Cancelled(reason: String)
 
-  fn roomOf(s: State) -> Int {
-    match s {
-      Held(_, r, _, rsv) | Confirmed(_, r, _, rsv) if rsv > 0 => r
-      Held(_, r, _, _)   | Confirmed(_, r, _, _)              => r
-      Cancelled(_)                                            => 0
-    }
-  }
+	fn roomOf(s: State) -> Int {
+		match s {
+			Held(_, r, _, rsv) | Confirmed(_, r, _, rsv) if rsv > 0 => r,
+			Held(_, r, _, _) | Confirmed(_, r, _, _) => r,
+			Cancelled(_) => 0,
+		}
+	}
 }
 ```
 

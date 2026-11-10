@@ -18,40 +18,40 @@ type Page = String where MinLength(1) && MaxLength(64)
 // A capability: the one outside-world effect this context needs. The interface
 // is declared here; the implementation is a provider.
 capability Clock {
-  fn now() -> Effect[Int]
+	fn now() -> Effect[Int]
 }
 
 provides Clock = SystemClock {
-  fn now() -> Effect[Int] {
-    0
-  }
+	fn now() -> Effect[Int] {
+		0
+	}
 }
 
 // A keyed, stateful agent: one independent counter per page. Store fields are
 // persisted between calls; a never-seen key starts from their zero values.
 agent Counter {
-  key page: Page
+	key page: Page
 
-  store hits:     Cell[Int]
-  store lastSeen: Cell[Int]
+	store hits: Cell[Int]
+	store lastSeen: Cell[Int]
 
-  on call bump(at: Int) -> Effect[Int] {
-    let next = hits + 1
-    hits := next
-    lastSeen := at
-    next
-  }
+	on call bump(at: Int) -> Effect[Int] {
+		let next = hits + 1
+		hits := next
+		lastSeen := at
+		next
+	}
 }
 
 // A service: the HTTP entry point. It asks for the `Clock` capability with
 // `given`, addresses the agent by key, and runs both as effects.
 service api from http {
-  on GET("/hits/:page") (page: Page) -> Effect[HttpResult[Int]] by Visitor given Clock {
-    let at <- Clock.now()
-    let counter = Counter(page)
-    let total <- counter.bump(at)
-    Ok(total)
-  }
+	on GET("/hits/:page") (page: Page) -> Effect[HttpResult[Int]] by Visitor given Clock {
+		let at <- Clock.now()
+		let counter = Counter(page)
+		let total <- counter.bump(at)
+		Ok(total)
+	}
 }
 ```
 

@@ -19,14 +19,15 @@ literal with a trailing `d`:
 commons guide.money
 
 type Price = Decimal where Positive
+
 type Rate = Decimal where InRange(0.00d, 1.00d)
 
 fn lineTotal(unit: Price, qty: Int) -> Decimal {
-  unit * Decimal.fromInt(qty)
+	unit * Decimal.fromInt(qty)
 }
 
 fn withTax(net: Decimal, rate: Rate) -> Decimal {
-  (net + net * rate).round(2, RoundingMode.HalfEven)
+	(net + net * rate).round(2, RoundingMode.HalfEven)
 }
 ```
 
@@ -43,7 +44,7 @@ silently. Division says how many digits to keep and how to round:
 commons guide.money.split
 
 fn share(total: Decimal, ways: Int) -> Decimal {
-  total.div(Decimal.fromInt(ways), 2, RoundingMode.Down)
+	total.div(Decimal.fromInt(ways), 2, RoundingMode.Down)
 }
 ```
 
@@ -65,13 +66,17 @@ commons guide.money.wire
 
 type Price = Decimal where Positive
 
-type Line = { sku: String, unit: Price, qty: Int }
+type Line = {
+	sku: String,
+	unit: Price,
+	qty: Int,
+}
 
 fn read(json: String) -> Option[Line] {
-  match Json.decode[Line](json) {
-    Ok(line) => Some(line)
-    Err(_) => None
-  }
+	match Json.decode[Line](json) {
+		Ok(line) => Some(line),
+		Err(_) => None,
+	}
 }
 ```
 

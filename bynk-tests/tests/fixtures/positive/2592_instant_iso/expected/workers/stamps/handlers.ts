@@ -12,7 +12,7 @@ export function stamp(ms: number): string {
 }
 
 export function epoch(text: string): Option<number> {
-  return ((__o: Option<number>, __f: (x: number) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(__bynkInstantFromIso(text), (i) => i);
+  return ((__o: Option<number>, __f: (x: number) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(__bynkInstantFromIso(text), (i: number) => i);
 }
 
 export function roundTrips(ms: number): boolean {

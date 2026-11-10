@@ -3521,6 +3521,97 @@ pub fn type_carries_stream(
     .is_some()
 }
 
+/// Every type name a type mentions (heads of applications and named types,
+/// descending through wrappers and generic arguments), pushed onto `out`.
+fn heads(t: &TypeRef, out: &mut Vec<String>) {
+    match t {
+        TypeRef::Named(id) => out.push(id.name.clone()),
+        TypeRef::App {
+            name: app_name,
+            args,
+            ..
+        } => {
+            out.push(app_name.name.clone());
+            for a in args {
+                heads(a, out);
+            }
+        }
+        TypeRef::Option(a, _)
+        | TypeRef::List(a, _)
+        | TypeRef::Set(a, _)
+        | TypeRef::Effect(a, _)
+        | TypeRef::HttpResult(a, _)
+        | TypeRef::Query(a, _)
+        | TypeRef::Stream(a, _)
+        | TypeRef::Connection(a, _)
+        | TypeRef::History(a, _) => heads(a, out),
+        TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+            heads(a, out);
+            heads(b, out);
+        }
+        TypeRef::Fn(ps, r, _) => {
+            for p in ps {
+                heads(p, out);
+            }
+            heads(r, out);
+        }
+        TypeRef::Base(..)
+        | TypeRef::QueueResult(_)
+        | TypeRef::Asset(_)
+        | TypeRef::RequestHeaders(_)
+        | TypeRef::RequestQuery(_)
+        | TypeRef::TokenClaims(_)
+        | TypeRef::BoundaryRejection(_)
+        | TypeRef::ValidationError(_)
+        | TypeRef::JsonError(_)
+        | TypeRef::Unit(_) => {}
+    }
+}
+fn body_heads(decl: &TypeDecl, out: &mut Vec<String>) {
+    match &decl.body {
+        TypeBody::Record(r) => {
+            for f in &r.fields {
+                heads(&f.type_ref, out);
+            }
+        }
+        TypeBody::Sum(s) => {
+            for v in &s.variants {
+                for p in &v.payload {
+                    heads(&p.type_ref, out);
+                }
+            }
+        }
+        TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
+    }
+}
+
+/// Whether type `to` is reachable from the body of type `from`, following every
+/// named / applied head. Terminates via a `visited` set.
+fn type_reaches(
+    from: &str,
+    to: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+) -> bool {
+    let Some(root) = types.get(from) else {
+        return false;
+    };
+    let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut stack: Vec<String> = Vec::new();
+    body_heads(root, &mut stack);
+    while let Some(n) = stack.pop() {
+        if n == to {
+            return true;
+        }
+        if !visited.insert(n.clone()) {
+            continue;
+        }
+        if let Some(decl) = types.get(&n) {
+            body_heads(decl, &mut stack);
+        }
+    }
+    false
+}
+
 /// v0.174 (#592): does the generic record type `name` transitively contain a
 /// reference to itself — through any field-type path, including collection and
 /// `Option` wrappers, sum-variant payloads, and generic type arguments? Such a
@@ -3528,8 +3619,12 @@ pub fn type_carries_stream(
 /// (`Node[T] = { next: Option[Node[T]] }`) would need a self-referential codec
 /// chain the per-instantiation model does not yet generate, and polymorphic
 /// recursion (`Weird[T] = { next: Option[Weird[List[T]]] }`) an unbounded set of
-/// instantiations. Both are rejected at a boundary
-/// (`bynk.generics.recursive_generic_at_boundary`).
+/// instantiations. A recursive generic declares and works in memory; it is
+/// refused only where a codec is required
+/// (`bynk.generics.recursive_generic_at_boundary`, found by
+/// [`recursive_generic_path`]), and polymorphic recursion is refused at its
+/// declaration (`bynk.generics.polymorphic_recursion`, found by
+/// [`polymorphic_recursion_edges`]).
 ///
 /// Detection is reachability over the type-containment graph: `name` is
 /// recursive iff it is reachable from its own body, following every named /
@@ -3539,17 +3634,141 @@ pub fn generic_record_is_recursive(
     name: &str,
     types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
 ) -> bool {
-    fn heads(t: &TypeRef, out: &mut Vec<String>) {
+    type_reaches(name, name, types)
+}
+
+/// #3192: a recursive generic type reached from some type, and how.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecursiveGenericPath {
+    /// The recursive generic declaration's name.
+    pub name: String,
+    /// `"record"` or `"sum"`, from the declaration.
+    pub noun: &'static str,
+    /// The field chain the generic is reached through from the type asked
+    /// about (`["Holder.t"]`); empty when the type is itself an application of
+    /// the recursive generic.
+    pub path: Vec<String>,
+}
+
+/// #3192: where `t` reaches an application of a recursive generic type
+/// ([`generic_record_is_recursive`]), as the field chain it is reached through.
+/// A recursive generic declares and works in memory but has no codec yet, so
+/// every position that serialises uses this walk. It follows named and applied
+/// types into their declarations, as [`stream_path`] does, so a record that
+/// merely *contains* `Tree[Int]` is found where the record is used. It does not
+/// enter a function type, which is refused at a boundary on its own. Terminates
+/// via the `visited` set.
+pub fn recursive_generic_path(
+    t: &TypeRef,
+    types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+) -> Option<RecursiveGenericPath> {
+    fn walk(
+        t: &TypeRef,
+        types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<RecursiveGenericPath> {
         match t {
-            TypeRef::Named(id) => out.push(id.name.clone()),
-            TypeRef::App {
-                name: app_name,
-                args,
-                ..
-            } => {
-                out.push(app_name.name.clone());
+            TypeRef::App { name, args, .. } => {
+                if types
+                    .get(&name.name)
+                    .is_some_and(|d| !d.type_params.is_empty())
+                    && generic_record_is_recursive(&name.name, types)
+                {
+                    return Some(RecursiveGenericPath {
+                        noun: match types.get(&name.name).map(|d| &d.body) {
+                            Some(TypeBody::Sum(_)) => "sum",
+                            _ => "record",
+                        },
+                        name: name.name.clone(),
+                        path: Vec::new(),
+                    });
+                }
+                named(&name.name, types, visited)
+                    .or_else(|| args.iter().find_map(|a| walk(a, types, visited)))
+            }
+            TypeRef::Named(id) => named(&id.name, types, visited),
+            TypeRef::Option(a, _)
+            | TypeRef::List(a, _)
+            | TypeRef::Set(a, _)
+            | TypeRef::Effect(a, _)
+            | TypeRef::HttpResult(a, _)
+            | TypeRef::Query(a, _)
+            | TypeRef::Connection(a, _)
+            | TypeRef::History(a, _) => walk(a, types, visited),
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                walk(a, types, visited).or_else(|| walk(b, types, visited))
+            }
+            TypeRef::Stream(..)
+            | TypeRef::Fn(..)
+            | TypeRef::Base(..)
+            | TypeRef::QueueResult(_)
+            | TypeRef::Asset(_)
+            | TypeRef::RequestHeaders(_)
+            | TypeRef::RequestQuery(_)
+            | TypeRef::TokenClaims(_)
+            | TypeRef::BoundaryRejection(_)
+            | TypeRef::ValidationError(_)
+            | TypeRef::JsonError(_)
+            | TypeRef::Unit(_) => None,
+        }
+    }
+    fn named(
+        name: &str,
+        types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<RecursiveGenericPath> {
+        if !visited.insert(name.to_string()) {
+            return None;
+        }
+        let decl = types.get(name)?;
+        let fields: Vec<(String, &TypeRef)> = match &decl.body {
+            TypeBody::Record(r) => r
+                .fields
+                .iter()
+                .map(|f| (format!("{name}.{}", f.name.name), &f.type_ref))
+                .collect(),
+            TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .flat_map(|v| {
+                    v.payload.iter().map(move |p| {
+                        (
+                            format!("{name}.{}.{}", v.name.name, p.name.name),
+                            &p.type_ref,
+                        )
+                    })
+                })
+                .collect(),
+            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => Vec::new(),
+        };
+        fields.into_iter().find_map(|(at, t)| {
+            walk(t, types, visited).map(|mut rest| {
+                rest.path.insert(0, at);
+                rest
+            })
+        })
+    }
+    walk(t, types, &mut std::collections::HashSet::new())
+}
+
+/// #3192: the recursive edges of generic type `decl` that are not *uniform*,
+/// as `(callee, span)`. A recursive edge is an application, in the body, of a
+/// generic that reaches `decl` again (`decl` itself, or a mutually recursive
+/// partner); it is uniform when its arguments are exactly `decl`'s own type
+/// parameters, in order. Anything else (`Weird[List[T]]` inside `Weird[T]`,
+/// `Pair[B, A]` inside `Pair[A, B]`) is polymorphic recursion, which generates
+/// an unbounded set of instantiations and is refused at the declaration
+/// (`bynk.generics.polymorphic_recursion`). Conservative by design.
+pub fn polymorphic_recursion_edges(
+    decl: &TypeDecl,
+    types: &std::collections::HashMap<String, std::sync::Arc<TypeDecl>>,
+) -> Vec<(String, Span)> {
+    fn apps<'a>(t: &'a TypeRef, out: &mut Vec<(&'a Ident, &'a [TypeRef], Span)>) {
+        match t {
+            TypeRef::App { name, args, span } => {
+                out.push((name, args, *span));
                 for a in args {
-                    heads(a, out);
+                    apps(a, out);
                 }
             }
             TypeRef::Option(a, _)
@@ -3560,18 +3779,19 @@ pub fn generic_record_is_recursive(
             | TypeRef::Query(a, _)
             | TypeRef::Stream(a, _)
             | TypeRef::Connection(a, _)
-            | TypeRef::History(a, _) => heads(a, out),
+            | TypeRef::History(a, _) => apps(a, out),
             TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
-                heads(a, out);
-                heads(b, out);
+                apps(a, out);
+                apps(b, out);
             }
             TypeRef::Fn(ps, r, _) => {
                 for p in ps {
-                    heads(p, out);
+                    apps(p, out);
                 }
-                heads(r, out);
+                apps(r, out);
             }
-            TypeRef::Base(..)
+            TypeRef::Named(_)
+            | TypeRef::Base(..)
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
@@ -3583,41 +3803,62 @@ pub fn generic_record_is_recursive(
             | TypeRef::Unit(_) => {}
         }
     }
-    fn body_heads(decl: &TypeDecl, out: &mut Vec<String>) {
-        match &decl.body {
-            TypeBody::Record(r) => {
-                for f in &r.fields {
-                    heads(&f.type_ref, out);
+    if decl.type_params.is_empty() || !generic_record_is_recursive(&decl.name.name, types) {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    match &decl.body {
+        TypeBody::Record(r) => {
+            for f in &r.fields {
+                apps(&f.type_ref, &mut found);
+            }
+        }
+        TypeBody::Sum(s) => {
+            for v in &s.variants {
+                for p in &v.payload {
+                    apps(&p.type_ref, &mut found);
                 }
             }
-            TypeBody::Sum(s) => {
-                for v in &s.variants {
-                    for p in &v.payload {
-                        heads(&p.type_ref, out);
+        }
+        TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
+    }
+    found
+        .into_iter()
+        .filter(|(callee, args, _)| {
+            if !type_reaches(&callee.name, &decl.name.name, types) {
+                return false;
+            }
+            if callee.name == decl.name.name {
+                // A self-reference passes the parameters through unchanged.
+                return !(args.len() == decl.type_params.len()
+                    && args
+                        .iter()
+                        .zip(&decl.type_params)
+                        .all(|(a, p)| matches!(a, TypeRef::Named(id) if id.name == p.name.name)));
+            }
+            // A mutually recursive partner (of any arity) may be applied to the
+            // declaration's own parameters or to types that mention none: each
+            // argument then comes from a finite set, so only finitely many
+            // instantiations are reachable. Anything that wraps a parameter
+            // (`List[T]`) grows without bound.
+            !args.iter().all(|a| {
+                let mut names = Vec::new();
+                heads(a, &mut names);
+                match a {
+                    TypeRef::Named(id) => {
+                        decl.type_params.iter().any(|p| p.name.name == id.name)
+                            || !names
+                                .iter()
+                                .any(|n| decl.type_params.iter().any(|p| &p.name.name == n))
                     }
+                    _ => !names
+                        .iter()
+                        .any(|n| decl.type_params.iter().any(|p| &p.name.name == n)),
                 }
-            }
-            TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
-        }
-    }
-    let Some(root) = types.get(name) else {
-        return false;
-    };
-    let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut stack: Vec<String> = Vec::new();
-    body_heads(root, &mut stack);
-    while let Some(n) = stack.pop() {
-        if n == name {
-            return true;
-        }
-        if !visited.insert(n.clone()) {
-            continue;
-        }
-        if let Some(decl) = types.get(&n) {
-            body_heads(decl, &mut stack);
-        }
-    }
-    false
+            })
+        })
+        .map(|(callee, _, span)| (callee.name.clone(), span))
+        .collect()
 }
 
 /// T3.4 (R2.4): a node's identity, independent of position — allocated once,

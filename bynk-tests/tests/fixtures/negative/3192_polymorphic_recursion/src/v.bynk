@@ -1,0 +1,4 @@
+context v
+
+// A recursive edge must pass the parameters through unchanged.
+type Weird[T] = { value: T, next: Option[Weird[List[T]]] }

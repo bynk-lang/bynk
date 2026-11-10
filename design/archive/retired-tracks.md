@@ -2237,8 +2237,8 @@ imposed; entries keep the order they were retired in.
 - **`post-trajectory-crate-hygiene.md`** — spine [#1533](https://github.com/bynk-lang/bynk/issues/1533):
   READMEs, crate-local unit tests, a comment rewrite, and module decomposition, proposed after the
   compiler trajectory closed (30 August 2026). **Withdrawn before it settled**: no slice was cut and
-  no ADR landed. It is superseded by [`crate-hygiene.md`](../tracks/crate-hygiene.md) (spine [#2775](https://github.com/bynk-lang/bynk/issues/2775)), which takes
-  the crate graph itself as its theme. That doc's §1.1 records what became of each workstream:
+  no ADR landed. It is superseded by the `crate-hygiene.md` entry below (spine [#2775](https://github.com/bynk-lang/bynk/issues/2775)), which takes
+  the crate graph itself as its theme. What became of each workstream:
   - **READMEs** are done. Every workspace crate has one.
   - **Unit tests** were not carried. The one structural finding, that `bynk-ir` depends on
     `bynk-check` only through `block_uses_emit`, moved to the successor's system-model question
@@ -2263,3 +2263,262 @@ imposed; entries keep the order they were retired in.
   - `ast_importers` misses named `use super::{…}` imports.
 
   The doc is removed. Withdrawn 2 November 2026.
+
+- **`constrained-generics.md`** — spine [#2614](https://github.com/bynk-lang/bynk/issues/2614):
+  declared bounds on type parameters, over a closed set of constraints (`Eq`, `Ord`, `Key`,
+  `Codable`). Settled in [#2630](https://github.com/bynk-lang/bynk/pull/2630) on 1 November 2026,
+  then sliced and shipped; the spine closed with every slice done or dropped.
+  - **The problem.** Generic code had no way to say what it needed of a type parameter. Equality was
+    inferred (ADR 0430), ordering was a five-base-type rule on `sortBy`, `Map` keys and `Set` members
+    were limited to `String` and `Int`, and a generic function could not require "`T` can cross the
+    boundary", so the standard library could not offer a typed `Queue.send[T]`.
+
+  **What shipped:**
+  - **Slice 0, bounds and `Eq`** ([#2639](https://github.com/bynk-lang/bynk/issues/2639),
+    [ADR 0674](../decisions/0674-declared-eq-bounds.md)). `fn same[T: Eq](a: T, b: T)`, or `where A:
+    Eq` on a method for its receiver type's parameter, replaces the inferred equality requirement. It
+    is a breaking change with a machine-applicable fix, and the one slice that had to land before the
+    1.0 freeze.
+  - **Slice 1, `Ord`** ([#2660](https://github.com/bynk-lang/bynk/issues/2660),
+    [ADR 0681](../decisions/0681-ord-derives-and-comparator-witnesses.md)). Ordering is declared with
+    `derives Ord` and bounded with `T: Ord`; a bounded generic takes hidden comparator witnesses. Every
+    `Float` ordering uses a total order (`NaN` last and equal to itself, `-0` equal to `0`) while the
+    comparison operators keep IEEE. The comparator is built where it is used, from the concrete type.
+  - **Slice 2, `Key`** ([#2684](https://github.com/bynk-lang/bynk/issues/2684),
+    [ADR 0690](../decisions/0690-key-structural-map-and-set-keys.md)). `Key` is automatic, needs no
+    witness, implies `Eq`, and excludes `Float` at any depth. `Map` keys and `Set` members may be
+    structural types, held under a canonical encoding; statically primitive-keyed sites emit
+    byte-identically. A type parameter in a key position must be declared `K: Key`.
+  - **Slice 3, `Codable`** ([#2715](https://github.com/bynk-lang/bynk/issues/2715),
+    [ADR 0696](../decisions/0696-codable-codec-witnesses-and-typed-capability-writes.md)). `Codable`
+    means exactly what `Json.decode` accepts. A `Codable` parameter takes a hidden codec witness, and a
+    capability operation may take `Codable` parameters, encoded whole at the call site, so the emit ABI
+    does not grow. `Queue.sendValue[T: Codable]` ships.
+  - **Slice 4, static methods on generic types** ([#2766](https://github.com/bynk-lang/bynk/issues/2766),
+    [ADR 0702](../decisions/0702-static-methods-on-generic-types.md)). A static is generic over its
+    type's parameters, then its own; the expected type becomes the last source of a generic call's type
+    arguments.
+  - **Slice 5, `Show`: not adopted** ([#2785](https://github.com/bynk-lang/bynk/issues/2785), decided
+    no-go on 2 November 2026). It would have overturned ADR 0075's scalar-only interpolation line for no
+    consumer, and widened a leak surface with no redaction story (ADR 0107 defers one). The constraint
+    set is final at `Eq`, `Ord`, `Key`, `Codable`; revisit only when a standard-library API needs a
+    renderer or a redaction convention exists, by a new proposal.
+  - **Follow-ons that shipped:** the boundary `Map` decoder rejects a repeated key
+    ([ADR 0701](../decisions/0701-map-decoder-rejects-duplicate-keys.md)); crypto keys are not `Codable`
+    ([ADR 0704](../decisions/0704-crypto-keys-are-not-codable.md)); a codec factory per generic
+    declaration ([ADR 0705](../decisions/0705-codec-factory-for-generic-types.md)); `Query` keys widen to
+    `Key` and `Ord` ([ADR 0706](../decisions/0706-query-keys-widen-to-key.md),
+    [ADR 0709](../decisions/0709-query-ord-keys.md)); explicit type arguments on instance methods
+    ([ADR 0707](../decisions/0707-instance-method-explicit-type-args.md)); typed delayed and batch queue
+    sends, with `Analytics.write` left non-generic
+    ([ADR 0708](../decisions/0708-queue-typed-send-variants.md)).
+
+  **Settled decisions** (the sections ADRs and code comments cite):
+  - **Q1, closed.** The set is compiler-known; users cannot declare constraints. User-declared traits
+    and higher-kinded types stay non-goals, and Q4's witness design leaves room for traits.
+  - **Q2, how a type satisfies a constraint.** Structurally for `Eq`, `Key` and `Codable`; by
+    declaration (`derives Ord`) for `Ord`, because structural ordering would make declaration order
+    semantic.
+  - **Q3, declared `Eq` with a codemod**, retiring the inference of ADR 0430; **Q8**, slice 0 therefore
+    lands before the 1.0 freeze and slices 1 to 5 are 1.x.
+  - **Q4, witnesses.** A constraint that needs run-time behaviour (`Ord`, `Codable`) takes a hidden
+    trailing witness argument, ordered by declaration order, comparator before codec.
+  - **Q5, `Ord`'s total order** for `Float`; **Q6, `Key`** as above; **Q7, `Codable`** and generic
+    capability operations as above.
+
+  **Named follow-ons** (each with an issue when the track closed). Closed as completed: `Query` `sortBy`,
+  `min`, `max` widened to `Ord` ([#2787](https://github.com/bynk-lang/bynk/issues/2787)), `Query` keys
+  widened to `Key` ([#2789](https://github.com/bynk-lang/bynk/issues/2789)), the opaque `StructuralOnly`
+  decode gap ([#2794](https://github.com/bynk-lang/bynk/issues/2794)), crypto keys satisfying `Codable`
+  ([#2784](https://github.com/bynk-lang/bynk/issues/2784)), reserved words as member names after `.`
+  ([#2778](https://github.com/bynk-lang/bynk/issues/2778)), and string interpolation accepting `Bytes`,
+  `Duration` and `Instant` beyond ADR 0075 ([#2799](https://github.com/bynk-lang/bynk/issues/2799)).
+  Closed as not planned for now, to be reopened by a new need: `Codable` in capability operation return
+  types such as `Kv.get[T]` ([#2791](https://github.com/bynk-lang/bynk/issues/2791)), composite keys for
+  store `Map`, `Set`, `Cache` and `@indexed`, which need a new frozen stored-key format
+  ([#2788](https://github.com/bynk-lang/bynk/issues/2788)), a `Map` or `Set` as a key
+  ([#2798](https://github.com/bynk-lang/bynk/issues/2798)), hoisting comparator construction out of hot
+  loops ([#2796](https://github.com/bynk-lang/bynk/issues/2796)), and a lint for reordering a
+  `derives Ord` type's fields ([#2797](https://github.com/bynk-lang/bynk/issues/2797)).
+
+  This track's doc, `design/tracks/constrained-generics.md`, is removed. Code comments and ADRs that
+  cited it now point here.
+
+- **`concurrent-effects.md`** — spine [#2615](https://github.com/bynk-lang/bynk/issues/2615):
+  composing different effects concurrently, with defined failure semantics: a join, a timeout and a
+  race. Settled in [#2635](https://github.com/bynk-lang/bynk/pull/2635) on 1 November 2026. Before it,
+  concurrency existed only over a homogeneous collection (`parTraverse` and its siblings), so two
+  different effects in a handler always ran one after the other.
+
+  **What shipped:**
+  - **Slice 0, the concurrent binding block** ([#2640](https://github.com/bynk-lang/bynk/issues/2640),
+    #2646, [ADR 0672](../decisions/0672-par-concurrent-binding-block.md)). A `par { … }` block issues
+    independent effects together and waits for all of them, settle-all, raising the first fault in source
+    order. The language gains no tuple type. An independence check forbids one binding depending on
+    another, and `store` writes are excluded.
+  - **Slice 0b, settle-all for the `parTraverse` family**
+    ([#2662](https://github.com/bynk-lang/bynk/issues/2662), #2669,
+    [ADR 0679](../decisions/0679-par-traverse-settle-all.md)). It changes behaviour only when an element
+    faults.
+  - **Slice 3, a general timeout** ([#2683](https://github.com/bynk-lang/bynk/issues/2683), #2693,
+    [ADR 0687](../decisions/0687-effect-within-timeout.md)). `e.within(d)` bounds an effect's time and
+    hands the abandoned work to `waitUntil`; tests drive it on virtual time. It is legal only in a
+    service handler body.
+  - **Slice 4, race** ([#2711](https://github.com/bynk-lang/bynk/issues/2711), #2713,
+    [ADR 0691](../decisions/0691-effect-race.md)). `a.race(b)` takes the first effect to succeed and
+    hands the loser to `waitUntil`, never cancelled.
+  - **Slice 1, `Result` and `?` in a join: dropped.** `?` takes a `Result`, not an effect, so a `Result`
+    bound in the block is unwrapped after it and Q2's source-order rule already holds. **Slice 2, agent
+    handlers: folded into slice 0**, because the workerd gate test found no new interleaving, so `par`
+    stays legal in agent handlers.
+
+  **Settled decisions** (the sections ADRs and code comments cite):
+  - **Q1, the join is a block**, not tuples or a record-shaped combinator, so no result carrier type is
+    added.
+  - **Q2 and Q3, source order and settle-all.** A join waits for every binding, then reports the first
+    `Err` and the first fault in source order, never completion order, so a failure does not depend on
+    timing. A fast `Err` therefore waits for a slow sibling.
+  - **Q4, agent handlers.** Joins are legal; handler atomicity (ADR 0109) is unaffected, and `store`
+    writes stay sequential.
+  - **Q5, observation.** The recorder keeps logging a call when it is made, and `expect A.op before
+    B.op` compares issue order, not completion order; a test that needs completion order is testing a
+    race.
+  - **Q6, timeouts and Q7, races.** Both hand abandoned or losing work to `waitUntil`, the one
+    deliberate exception to settle-all: a timed-out effect may still complete and commit.
+  - **Cancellation is a non-goal** (Q7 (c)): it would need an abort signal through every capability,
+    adapter and binding.
+
+  **Named follow-ons.** `within` in a `fn` is refused until `~>` in a function
+  ([#2682](https://github.com/bynk-lang/bynk/issues/2682)) is resolved; a general `ctx.waitUntil`
+  surface, background tasks beyond `~>` and the timeout handover, parallel CPU work and streams as a
+  concurrency primitive remain non-goals.
+
+  This track's doc, `design/tracks/concurrent-effects.md`, is removed. Code comments and the status
+  document that cited it now point here.
+
+- **`crate-hygiene.md`** — spine [#2775](https://github.com/bynk-lang/bynk/issues/2775): the crate
+  graph after the crate-decomposition track, with no change to emitted output, diagnostics or editor
+  behaviour. Settled in [#2776](https://github.com/bynk-lang/bynk/pull/2776) on 2 November 2026, and it
+  superseded `post-trajectory-crate-hygiene.md` (spine [#1533](https://github.com/bynk-lang/bynk/issues/1533)).
+  - **The problem.** Dependency edges carried almost nothing (`bynk-lsp` on `bynk-emit` for one
+    function, `bynk-check` on `bynk-fmt` for three calls), crate boundaries did not match their
+    consumers (`bynk_emit::project` was the orchestration API), the published set was wider than what
+    installs, and three installables did the work of one.
+
+  **What shipped** (every slice done; the spine closed 8 November 2026):
+  - **A1–A3, near-empty edges cut**
+    ([#2937](https://github.com/bynk-lang/bynk/issues/2937)): `bynk` no longer declares `bynk-render`,
+    `bynk-lsp` no longer depends on `bynk-emit` for one function, and the expression printer moved into
+    `bynk-syntax` so `bynk-check` no longer depends on `bynk-fmt`. **A4**
+    ([#2976](https://github.com/bynk-lang/bynk/issues/2976)) added the `unused_deps` probe.
+  - **C1–C3, the published set and test crate.** `bynk-grammar` unpublished and free of its
+    `preserve_order` leak ([#2938](https://github.com/bynk-lang/bynk/issues/2938)); the integration
+    corpus, `bynk-testkit` and `bynk-grammar` consolidated into one unpublished `bynk-tests` crate
+    ([#2979](https://github.com/bynk-lang/bynk/issues/2979)); published-set rule in
+    [ADR 0734](../decisions/0734-published-set.md). **C4, tiered CI**: measured first
+    ([#2940](https://github.com/bynk-lang/bynk/issues/2940)), every test classified into unit,
+    integration or system, and CI gates the tiers cheapest first without lengthening the green path
+    (the single-crate test move was deferred).
+  - **B1–B4, the system model.** `bynk-ir` became `bynk-model`, with `bynk-lower` merged in, after the
+    proof slice passed ([#2939](https://github.com/bynk-lang/bynk/issues/2939),
+    [ADR 0735](../decisions/0735-system-model-scope-and-placement.md)); OpenAPI, the smoke runner and
+    entry signatures moved onto it ([#2999](https://github.com/bynk-lang/bynk/issues/2999),
+    [ADR 0740](../decisions/0740-system-model-b2-b3.md)); B4 settled that it stays above the checker,
+    with the wire contract and architecture map left where they are
+    ([#3012](https://github.com/bynk-lang/bynk/issues/3012),
+    [ADR 0742](../decisions/0742-system-model-b4.md)).
+  - **D1–D2, boundaries.** The orchestration API moved into `bynk-driver`
+    ([#2982](https://github.com/bynk-lang/bynk/issues/2982)); `bynk-render` merged into it, with
+    diagnostic rendering guarded by a test instead of the crate graph
+    ([ADR 0743](../decisions/0743-render-module-guard.md)).
+  - **E1–E5, installables.** `bynk test` and `bynk compile` run in-process and the version-skew gate
+    is retired ([#2998](https://github.com/bynk-lang/bynk/issues/2998),
+    [ADR 0741](../decisions/0741-retire-bynkc-lookup-and-skew-gate.md)); `bynk` and `bynk-lsp` are the
+    only release binaries ([ADR 0736](../decisions/0736-installables.md)); `bynkc-lsp` became `bynk-lsp`
+    with one release of overlap and was then dropped ([#2936](https://github.com/bynk-lang/bynk/issues/2936),
+    [#3023](https://github.com/bynk-lang/bynk/pull/3023)); the `bynkc` binary retired and its assets
+    stopped shipping from v0.512.9 ([#3013](https://github.com/bynk-lang/bynk/issues/3013)); the emitted
+    `// Generated by` header changed as an isolated re-bless ([#3038](https://github.com/bynk-lang/bynk/pull/3038)).
+
+  **Settled decisions** (the sections ADRs and code comments cite):
+  - **§5, edges.** Q-A1 `pred_condition_and_message` lives in `bynk-ts`; Q-A2 the expression printer
+    lives in `bynk-syntax`; Q-A3 `unused_deps` is a gated probe at 0.
+  - **§6, the model.** It sits above `bynk-check`, `bynk-lower` merges in, and the name is `bynk-model`;
+    a public interface is deferred past 1.0 with a trigger.
+  - **§7, published set and CI.** `bynk-wasm` stays; CI runs three tiers, each gated on the one before.
+  - **§9 E4 and §11 Q-E2, installables.** `bynkc` was an `argv[0]` alias for one release, then dropped; `bynkc-lsp`
+    retired before 1.0.0.
+
+  **Named follow-on.** `EntryShape` and a public model interface were deferred past 1.0 by B4.
+
+  This track's doc, `design/tracks/crate-hygiene.md`, is removed. Code comments, ADRs and the
+  greenfield compiler document that cited it now point here.
+
+- **`standard-library.md`** — spine [#1936](https://github.com/bynk-lang/bynk/issues/1936): what the
+  standard library is, where it sits, what may join it, and the order in which the Workers surface is
+  admitted. Direction settled on 14 October 2026 (decisions D1–D9, all argued with the maintainer before
+  the spine opened), then sliced; the spine closed on 1 November 2026 with all 28 sub-issues done. The
+  track did not aim for a complete Workers surface; it built the mechanism and the first wave.
+  - **The problem.** The "standard library" was a miniature spread across four layers (the compiler
+    kernel, Bynk-written commons, the portable `adapter bynk` surface, and a `bynk.cloudflare` adapter
+    offering one fixed KV namespace), with no admission rules, no stability promise, and no way to name
+    more than one instance of a platform resource.
+
+  **What shipped:**
+  - **Prerequisites.** S0, the data-only `bynk-std` crate
+    ([#1940](https://github.com/bynk-lang/bynk/issues/1940),
+    [ADR 0463](../decisions/0463-bynk-std-owns-the-first-party-sources.md)); S1, one first-party unit
+    registry replacing seven hand-coded injection blocks, with the four layers and their admission
+    rules ([#1945](https://github.com/bynk-lang/bynk/issues/1945),
+    [ADR 0465](../decisions/0465-stdlib-layers-and-admission.md)); S2, a standalone binding test
+    scaffold ([#1952](https://github.com/bynk-lang/bynk/issues/1952)); S3, stable/experimental marking
+    with the `[unstable] allow` opt-in and extensible enums
+    ([#1963](https://github.com/bynk-lang/bynk/issues/1963),
+    [ADR 0468](../decisions/0468-stdlib-stability-tiers.md)).
+  - **Instances, S4.** Derived capabilities, `capability Sessions = Kv`, name context-owned platform
+    resources ([ADR 0469](../decisions/0469-derived-capabilities.md)): the language and build half
+    ([#1966](https://github.com/bynk-lang/bynk/issues/1966)) and the deploy half, a ledger keyed by
+    environment, Worker and instance, with one namespace provisioned per instance
+    ([#1967](https://github.com/bynk-lang/bynk/issues/1967)).
+  - **Core.** `Bytes` operations, hex and base64url (K1, [ADR 0497](../decisions/0497-bytes-operations.md));
+    `bynk.crypto`, effectful Web Crypto with non-storable key handles (K4,
+    [ADR 0588](../decisions/0588-bynk-crypto-effectful-web-crypto.md)); URLs and percent-encoding (K2);
+    ISO-8601 for `Instant` (K3); more `Method`s, `Fetch.sendWith` and `Logger` levels (K5a), `Bytes`
+    bodies (K5b) and streamed bodies (K5c); the built-in `Set[T]` (K6a), integer and `Float` maths
+    (K6b) and literal-pattern regex methods (K6c); byte streams across capability signatures
+    (K-streams).
+  - **Platform.** Complete KV (P1); Queue producers
+    ([P2, ADR 0652](../decisions/0652-queue-producer-derived-capability.md)); Rate Limiting (P3) and
+    Analytics Engine ([P3b, ADR 0653](../decisions/0653-analytics-engine-derived-capability.md)); D1
+    ([P4a, ADR 0662](../decisions/0662-d1-derived-capability.md)), its migrations (P4b), `Json.decodeSql`
+    (P4c) and graduation to stable
+    ([P4d, ADR 0673](../decisions/0673-d1-stable.md)); R2 (P5) with streamed bodies and multipart
+    uploads (P5b); and purgeable edge caching, filed by the first-party registry track
+    ([L7, ADR 0613](../decisions/0613-edge-cache.md)).
+
+  **Settled decisions** (the sections ADRs and code comments cite):
+  - **D1, owning crate:** a new data-only `bynk-std`, with the platform layer in its own subtree; **D9**
+    keeps the option of unbundling `bynk.cloudflare` open without renames.
+  - **D2, a tiered 1.0 promise:** items are stable or experimental, experimental items need an explicit
+    `[unstable] allow`, and error enums such as `FetchError` and `Method` are extensible (wildcard arm
+    required).
+  - **D3, instances:** a derived capability's meaning, implied provision, `@annotation` options, the
+    three-name `wrangler.toml` mapping, ownership and six checker rules.
+  - **D4, two-step decode:** a structured platform payload decodes in two steps (rows as JSON text, then
+    `Json.decode`).
+  - **D5, crypto is effectful** over Web Crypto, with a purity rule for the portable core (pure only if
+    synchronous on every platform without third-party code); **D6**, new capabilities are flat sibling
+    units.
+  - **D7, time zones deferred; D8, Workflows held for sagas** as a candidate post-1.0 substrate
+    (see [#3185](https://github.com/bynk-lang/bynk/issues/3185)).
+  - **§4, admission rules** and §2's four layers: L0–L2 portable, L3 Cloudflare-shaped.
+
+  **Named follow-ons.** Cloudflare bindings not yet admitted (Hyperdrive, Workers AI, Vectorize and
+  Email) are tracked in [#3184](https://github.com/bynk-lang/bynk/issues/3184). Routed out of the
+  track as language or runtime work: inbound `email` and `tail` handlers and Durable Object `alarm`,
+  `ctx.waitUntil`, `request.cf`, compile-time-checked SQL, and Workflows and sagas. The Cache API
+  beyond `EdgeCache`, TCP sockets and `HTMLRewriter` were listed as "later, case by case" and have no
+  issue.
+
+  This track's doc, `design/tracks/standard-library.md`, is removed. Code comments, ADRs and the
+  first-party registry track that cited it now point here.

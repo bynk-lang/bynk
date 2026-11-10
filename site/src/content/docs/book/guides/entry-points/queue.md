@@ -14,14 +14,14 @@ message as its single parameter and returns `Effect[QueueResult]`.
 context mailer
 
 type EmailJob = {
-  to:      String,
-  subject: String,
+	to: String,
+	subject: String,
 }
 
 service outbox from queue("outbound-email") {
-  on message(message: EmailJob) -> Effect[QueueResult] {
-    Ack
-  }
+	on message(message: EmailJob) -> Effect[QueueResult] {
+		Ack
+	}
 }
 ```
 
@@ -64,10 +64,10 @@ handler's `QueueResult`:
 
 ```bynk,fragment
 suite mailer as system {
-  case "an email job is acknowledged" {
-    let r <- outbox.message(EmailJob { to: "ada@example.com", subject: "Hi" })
-    expect r is Ack
-  }
+	case "an email job is acknowledged" {
+		let r <- outbox.message(EmailJob { to: "ada@example.com", subject: "Hi" })
+		expect r is Ack
+	}
 }
 ```
 

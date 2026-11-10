@@ -16,21 +16,24 @@ providers are **external** (bodiless).
 
 ```bynk,fragment
 adapter tokens {
-  binding "./tokens.binding.ts" requires { "jose": "^5" }
-  consumes bynk { Secrets }     // v0.18: adapter-to-adapter dependency
+	binding "./tokens.binding.ts" requires { "jose": "^5" }
+	consumes bynk { Secrets }  // v0.18: adapter-to-adapter dependency
+	exports capability { Jwt }
+	exports transparent { Claims, JwtError }
 
-  exports capability  { Jwt }
-  exports transparent { Claims, JwtError }
+	type Claims = {
+		sub: String,
+		exp: Int,
+	}
 
-  type Claims   = { sub: String, exp: Int }
-  type JwtError = enum { Invalid, Expired }
+	type JwtError = enum { Invalid, Expired }
 
-  capability Jwt {
-    fn sign(claims: Claims) -> Effect[String]
-    fn verify(token: String) -> Effect[Result[Claims, JwtError]]
-  }
+	capability Jwt {
+		fn sign(claims: Claims) -> Effect[String]
+		fn verify(token: String) -> Effect[Result[Claims, JwtError]]
+	}
 
-  provides Jwt = JoseJwt given Secrets   // external: no body; supplied by the binding
+	provides Jwt = JoseJwt given Secrets  // external: no body; supplied by the binding
 }
 ```
 
@@ -185,15 +188,15 @@ service cache {
 
 ```bynk
 context cache.store {
-  consumes bynk.cloudflare { Kv }   // locks this deployment unit to cloudflare
+	consumes bynk.cloudflare { Kv }  // locks this deployment unit to cloudflare
 
-  service cache {
-    on call(key: String, value: String) -> Effect[Option[String]] given Kv {
-      let previous <- Kv.get(key)
-      let _ <- Kv.put(key, value)
-      previous
-    }
-  }
+	service cache {
+		on call(key: String, value: String) -> Effect[Option[String]] given Kv {
+			let previous <- Kv.get(key)
+			let _ <- Kv.put(key, value)
+			previous
+		}
+	}
 }
 ```
 
@@ -220,16 +223,16 @@ capabilities can be flattened to bare names:
 
 ```bynk,fragment
 context auth.sessions {
-  consumes bynk   { Logger }   // portable
-  consumes tokens { Jwt }      // library adapter; bare `Jwt` in scope
+	consumes bynk { Logger }  // portable
+	consumes tokens { Jwt }  // library adapter; bare `Jwt` in scope
 
-  service login {
-    on call() -> Effect[String] given Jwt, Logger {
-      let _     <- Logger.info("issuing token")
-      let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
-      token
-    }
-  }
+	service login {
+		on call() -> Effect[String] given Jwt, Logger {
+			let _ <- Logger.info("issuing token")
+			let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
+			token
+		}
+	}
 }
 ```
 

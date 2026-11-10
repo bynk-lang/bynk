@@ -5,27 +5,27 @@ suite sessions
 // which is what makes expiry testable without waiting.
 
 case "a logged-in token resolves to its user" {
-  do Sessions("s").login("t1", "ann")
-  let who <- Sessions("s").whoami("t1")
-  expect who == Some("ann")
+	do Sessions("s").login("t1", "ann")
+	let who <- Sessions("s").whoami("t1")
+	expect who == Some("ann")
 }
 
 case "logout ends the session" {
-  do Sessions("s").login("t1", "ann")
-  do Sessions("s").logout("t1")
-  let n <- Sessions("s").active()
-  expect n == 0
+	do Sessions("s").login("t1", "ann")
+	do Sessions("s").logout("t1")
+	let n <- Sessions("s").active()
+	expect n == 0
 }
 
 case "a session expires after its 30-minute ttl" {
-  stub Clock.now() returns each [Instant.fromEpochMillis(0), Instant.fromEpochMillis(1860000)]
-  do Sessions("s").login("t1", "ann")
-  let who <- Sessions("s").whoami("t1")
-  expect who is None
+	stub Clock.now() returns each [Instant.fromEpochMillis(0), Instant.fromEpochMillis(1860000)]
+	do Sessions("s").login("t1", "ann")
+	let who <- Sessions("s").whoami("t1")
+	expect who is None
 }
 
 case "the http surface reports live sessions" {
-  let _ <- api.POST("/sessions", LoginRequest { token: "t1", user: "ann" }) by Visitor
-  let r <- api.GET("/sessions") by Visitor
-  expect r is Ok(1)
+	let _ <- api.POST("/sessions", LoginRequest { token: "t1", user: "ann" }) by Visitor
+	let r <- api.GET("/sessions") by Visitor
+	expect r is Ok(1)
 }

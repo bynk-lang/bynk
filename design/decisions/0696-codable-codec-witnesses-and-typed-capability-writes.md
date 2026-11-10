@@ -10,7 +10,7 @@ decode (standard-library D4: "every call site writes its own `Json.decode`"), an
 stdlib could not offer a typed `Queue.send[T]`, because ADR 0281 shipped generic
 capability operations with no codec story and Part 14 clause (iv) refused a
 compiler-synthesised argument. This is slice 3 (#2715) of the constrained-generics
-track (`design/tracks/constrained-generics.md`, Q4, Q7 and §8), after slice 0's
+track (`design/archive/retired-tracks.md`, Q4 and Q7), after slice 0's
 bounds and `Eq`, slice 1's `Ord` witnesses and slice 2's `Key`. The maintainer
 approved #2715 as written: decisions A to J as recommended, with J1 and H1.
 

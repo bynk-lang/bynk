@@ -52,6 +52,7 @@ pub mod hints;
 pub mod icu;
 pub mod index;
 pub mod kernel_methods;
+pub mod kernel_op;
 pub mod locals;
 pub mod narrowing;
 pub mod packages;

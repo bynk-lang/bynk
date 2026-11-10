@@ -1,0 +1,16 @@
+context v
+
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+type Inner = { t: Option[Tree[Int]] }
+type Outer = { inner: Inner }
+
+agent Index {
+	key id: String
+	store n: Cell[Int]
+	on call(o: Outer) -> Effect[Int] {
+		Effect.pure(0)
+	}
+}

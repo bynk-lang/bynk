@@ -15,17 +15,17 @@ context shop.quote
 consumes bynk
 
 capability Pricing {
-  fn quote(id: Int) -> Effect[Int]
+	fn quote(id: Int) -> Effect[Int]
 }
 
 service quotes {
-  on call(id: Int) -> Effect[String] given Pricing {
-    let r <- Pricing.quote(id).within(2.seconds)
-    match r {
-      Ok(q) => Effect.pure("quoted \(q)")
-      Err(TimedOut { after, .. }) => Effect.pure("the quote is taking too long")
-    }
-  }
+	on call(id: Int) -> Effect[String] given Pricing {
+		let r <- Pricing.quote(id).within(2.seconds)
+		match r {
+			Ok(q) => Effect.pure("quoted \(q)"),
+			Err(TimedOut { after, .. }) => Effect.pure("the quote is taking too long"),
+		}
+	}
 }
 ```
 
@@ -77,17 +77,17 @@ finish:
 
 ```bynk,fragment
 suite shop.quote {
-  case "a slow quote times out" {
-    stub Pricing.quote(_) returns 7 after 3.seconds
-    let r <- quotes.call(1)
-    expect r == "the quote is taking too long"
-  }
+	case "a slow quote times out" {
+		stub Pricing.quote(_) returns 7 after 3.seconds
+		let r <- quotes.call(1)
+		expect r == "the quote is taking too long"
+	}
 
-  case "a quote that never arrives times out" {
-    stub Pricing.quote(_) never
-    let r <- quotes.call(1)
-    expect r == "the quote is taking too long"
-  }
+	case "a quote that never arrives times out" {
+		stub Pricing.quote(_) never
+		let r <- quotes.call(1)
+		expect r == "the quote is taking too long"
+	}
 }
 ```
 

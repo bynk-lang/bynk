@@ -15,7 +15,7 @@ A minimal Bynk program declares a context and a type:
 
 ```bynk
 commons demo {
-  type Id = Int
+	type Id = Int
 }
 ```
 
@@ -25,9 +25,9 @@ A small HTTP service is not much larger:
 context greet
 
 service api from http {
-  on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
-    Ok("pong")
-  }
+	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("pong")
+	}
 }
 ```
 

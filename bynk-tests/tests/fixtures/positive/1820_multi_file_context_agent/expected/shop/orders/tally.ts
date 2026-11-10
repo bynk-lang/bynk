@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../../__bynk_runtime/agent.js";
 
 export interface TallyState {
@@ -31,6 +31,7 @@ export class Tally {
   private async loadState(): globalThis.Promise<TallyState> {
     const stored = await this.state.storage.get<TallyState>("state");
     if (stored === undefined) return __zeroOfTallyState();
+    __checkStoredLayout("Tally", stored);
     const __zero = __zeroOfTallyState();
     __reportUnknownStoredKeys("Tally", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -45,7 +46,7 @@ export class Tally {
   async hit(deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.hits = ((h) => h + 1)(__state.hits); return undefined; })();
+      const __r0 = await (() => { __state.hits = ((h: number) => h + 1)(__state.hits); return undefined; })();
       return __state.hits;
     })();
     await this.commitState(__state);

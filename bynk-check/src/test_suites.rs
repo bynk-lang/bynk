@@ -160,6 +160,10 @@ pub fn phase_test_bodies(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
+    // #3162: the declarations recovery skipped, per unit. A case that names
+    // one of its target's (or a used unit's) skipped declarations is not told
+    // the name is unknown: the syntax error already says why.
+    broken: &crate::project_model::BrokenDeclNames,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     locals: &mut LocalsSink,
@@ -294,8 +298,21 @@ pub fn phase_test_bodies(
             }
             None => bodies_errs,
         };
+        // #3162: as `prepare_unit_check_ctx` does for a unit's own files, the
+        // names visible to the suite are its target's and those of the units
+        // the target `uses` or `consumes`. The echoes still fail the target.
+        // The suite's own `uses` count too, as in the private-reference gate
+        // above: it may use a commons its target does not.
+        let visible_broken = visible_broken_names(
+            std::slice::from_ref(target_name),
+            indices,
+            parsed,
+            unit_uses,
+            unit_consumes,
+            broken,
+        );
         let bodies_failed = !bodies_errs.is_empty();
-        errors.extend(bodies_errs);
+        errors.extend(resolver::split_broken_decl_echoes(bodies_errs, &visible_broken).0);
 
         if bodies_failed {
             continue;
@@ -584,6 +601,8 @@ pub fn phase_integration_bodies(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_uses: &HashMap<String, Vec<String>>,
+    // #3162: the declarations recovery skipped, per unit.
+    broken: &crate::project_model::BrokenDeclNames,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     tys: &Arc<Types>,
@@ -1008,8 +1027,18 @@ pub fn phase_integration_bodies(
                 check_bad_signature_tier(case, case_effective_tier(case, d), &mut body_errs);
             }
         }
+        // #3162: a skipped declaration of any participant (or of what the
+        // participants and the suite use) is a known name, not an unknown one.
+        let visible_broken = visible_broken_names(
+            &participants,
+            indices,
+            parsed,
+            unit_uses,
+            unit_consumes,
+            broken,
+        );
         let bodies_failed = !body_errs.is_empty();
-        errors.extend(body_errs);
+        errors.extend(resolver::split_broken_decl_echoes(body_errs, &visible_broken).0);
         if bodies_failed {
             continue;
         }
@@ -1018,6 +1047,40 @@ pub fn phase_integration_bodies(
     }
 
     ready
+}
+
+/// #3162: the declarations recovery skipped in the units a suite can see: the
+/// `roots` (its target, or an integration suite's participants), the units
+/// they `use` or `consume`, and the units the suite's own files `use` (a suite
+/// may use a commons its target does not, as the private-reference gate also
+/// allows). A reference to one is a known name, so its unknown-name echo is not
+/// reported; the syntax error already says why.
+fn visible_broken_names(
+    roots: &[String],
+    suite_files: &[usize],
+    parsed: &[ParsedFile],
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    broken: &crate::project_model::BrokenDeclNames,
+) -> Vec<String> {
+    let suite_uses: Vec<String> = suite_files
+        .iter()
+        .flat_map(|&i| parsed[i].uses())
+        .map(|u| u.target.joined())
+        .collect();
+    roots
+        .iter()
+        .chain(
+            roots
+                .iter()
+                .flat_map(|r| unit_uses.get(r).into_iter().chain(unit_consumes.get(r)))
+                .flatten(),
+        )
+        .chain(suite_uses.iter())
+        .filter_map(|u| broken.get(u))
+        .flatten()
+        .cloned()
+        .collect()
 }
 
 /// Type-check one integration test case body. The body lives in a synthetic

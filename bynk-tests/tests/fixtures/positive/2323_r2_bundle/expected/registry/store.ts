@@ -35,7 +35,7 @@ export const fetch = {
 export const size = {
   async call(key: string, deps: { Archives: Archives }): globalThis.Promise<Option<number>> {
     const head = await deps.Archives.head(key);
-    return ((__o: Option<R2Object>, __f: (x: R2Object) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(head, (o) => o.size);
+    return ((__o: Option<R2Object>, __f: (x: R2Object) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(head, (o: R2Object) => o.size);
   },
 };
 
@@ -62,7 +62,7 @@ export const remove = {
 export const names = {
   async call(prefix: string, deps: { Archives: Archives }): globalThis.Promise<readonly string[]> {
     const page = await deps.Archives.list(Some(prefix), None);
-    return (page.keys).map((__x: R2Object) => ((o) => o.key)(__x));
+    return (page.keys).map((__x: R2Object) => ((o: R2Object) => o.key)(__x));
   },
 };
 

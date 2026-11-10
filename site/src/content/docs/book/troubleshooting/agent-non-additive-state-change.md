@@ -74,15 +74,22 @@ forward
 ```bynk,fragment
 context shop
 
-type Prefs = { theme: String, dark: Bool }   // `dark` has no default
+type Prefs = {
+	theme: String,
+	dark: Bool,
+}  // `dark` has no default
 
 agent Cart {
-  key id: String
-  store prefs: Cell[Prefs] = Prefs { theme: "light", dark: false }
+	key id: String
 
-  on call ping() -> Effect[Int] {
-    1
-  }
+	store prefs: Cell[Prefs] = Prefs {
+		theme: "light",
+		dark: false,
+	}
+
+	on call ping() -> Effect[Int] {
+		1
+	}
 }
 ```
 

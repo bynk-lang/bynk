@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
 
@@ -34,6 +34,7 @@ export class Calls {
   private async loadState(): globalThis.Promise<CallsState> {
     const stored = await this.state.storage.get<CallsState>("state");
     if (stored === undefined) return __zeroOfCallsState();
+    __checkStoredLayout("Calls", stored);
     const __zero = __zeroOfCallsState();
     __reportUnknownStoredKeys("Calls", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -48,7 +49,7 @@ export class Calls {
   async bump(deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((c) => c + 1)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((c: number) => c + 1)(__state.n); return undefined; })();
       return __state.n;
     })();
     await this.commitState(__state);
@@ -103,6 +104,7 @@ export class Acc {
   private async loadState(): globalThis.Promise<AccState> {
     const stored = await this.state.storage.get<AccState>("state");
     if (stored === undefined) return __zeroOfAccState();
+    __checkStoredLayout("Acc", stored);
     const __zero = __zeroOfAccState();
     __reportUnknownStoredKeys("Acc", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -118,7 +120,7 @@ export class Acc {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const d = await __callService(deps.env.AG_DOUBLER, "double", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "ag.web", "ba9949c18d7d9b5a", deps.env, "ag.doubler");
-      const __r0 = await (() => { __state.total = ((t) => t + d)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((t: number) => t + d)(__state.total); return undefined; })();
       const __r1 = await __makeCalls(this.__key, deps.env).bump(deps);
       return __state.total;
     })();

@@ -8,7 +8,7 @@ unit was a hand-written block in `phase_parse`. Each block had its own cache and
 `ExprId` base, and the dependencies between units were hand-written `||` cascades. One edge, the
 `bynk` adapter's own `uses bynk.locale.types`, was caught only because that adapter happened to be
 pushed into `parsed` before the `uses` scan ran. The standard-library track (spine #1936,
-`design/tracks/standard-library.md` §2, §4, §8 D5–D6) settled the layering and admission rules;
+`design/archive/retired-tracks.md` §2, §4, D5–D6) settled the layering and admission rules;
 slice S1 (#1945) makes admission a matter of data.
 
 **Decision.**

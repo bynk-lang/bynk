@@ -116,6 +116,10 @@
             "link": "/book/guides/type-system/match-on-a-lists-shape/"
           },
           {
+            "label": "Recursion and iteration",
+            "link": "/book/guides/type-system/recursion-and-iteration/"
+          },
+          {
             "label": "Match on a range of numbers",
             "link": "/book/guides/type-system/match-on-a-range-of-numbers/"
           },
@@ -220,6 +224,10 @@
           {
             "label": "Wrap a library as an adapter",
             "link": "/book/guides/effects-and-capabilities/wrap-a-library/"
+          },
+          {
+            "label": "Call Workers AI through an adapter",
+            "link": "/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/"
           },
           {
             "label": "Use more than one KV namespace",
@@ -575,6 +583,10 @@
       {
         "label": "Version compatibility & changelog",
         "link": "/book/reference/changelog/"
+      },
+      {
+        "label": "Upgrading",
+        "link": "/book/reference/upgrading/"
       }
     ]
   },

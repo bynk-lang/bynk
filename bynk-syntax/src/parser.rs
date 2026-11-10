@@ -2,8 +2,8 @@
 //!
 //! Token grammar in spec §4. The expression parser uses one function per
 //! precedence level (§4.4). Errors carry spans and short fix-oriented
-//! messages; the parser does not currently attempt synchronisation, which
-//! means at most one parse error is reported per compilation.
+//! messages. The parser recovers at declaration level, skipping a malformed
+//! declaration and carrying on, so several parse errors can be reported per file.
 
 use crate::ast::*;
 use crate::error::CompileError;
@@ -3138,6 +3138,113 @@ mod tests {
             out.replace_range(span.start..span.end, &text);
         }
         out
+    }
+
+    // ---- #3161: a bare expression statement ----
+
+    const BARE: &str = "bynk.parse.bare_expression_statement";
+
+    #[test]
+    fn a_bare_effectful_call_suggests_let_arrow() {
+        let src = "commons x\n\nfn f() -> Int {\n  Logger.info(\"hi\")\n  1\n}\n";
+        let errs = parse_str(src).expect_err("bare call");
+        assert_eq!(errs[0].category, BARE, "{errs:?}");
+        assert_eq!(
+            apply_fix(src, &errs[0]),
+            "commons x\n\nfn f() -> Int {\n  let _ <- Logger.info(\"hi\")\n  1\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_bare_cell_update_and_agent_call_suggest_let_arrow() {
+        for call in ["n.update((v) => v + 1)", "Counter(\"a\").bump(1)"] {
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {call}\n  n\n}}\n");
+            let errs = parse_str(&src).expect_err(call);
+            assert_eq!(errs[0].category, BARE, "{call}: {errs:?}");
+            assert!(apply_fix(&src, &errs[0]).contains(&format!("let _ <- {call}")));
+        }
+    }
+
+    #[test]
+    fn a_bare_pure_static_call_suggests_let_equals() {
+        // A capitalised root is not always a capability: these namespaces
+        // are pure, so `<-` would be the wrong guess.
+        for call in [
+            "Json.encode(x)",
+            "Set.of(xs)",
+            "List.empty()",
+            "Bytes.fromUtf8(s).toHex()",
+            "Map.empty()",
+        ] {
+            let src = format!("commons x\n\nfn f() -> Int {{\n  {call}\n  1\n}}\n");
+            let errs = parse_str(&src).expect_err(call);
+            assert_eq!(errs[0].category, BARE, "{call}: {errs:?}");
+            let fixed = apply_fix(&src, &errs[0]);
+            assert!(
+                fixed.contains(&format!("let _ = {call}")),
+                "{call}: {fixed}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bare_pure_expression_suggests_let_equals() {
+        let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  let y = 2\n  y\n}\n";
+        let errs = parse_str(src).expect_err("bare call");
+        assert_eq!(errs[0].category, BARE, "{errs:?}");
+        assert_eq!(
+            apply_fix(src, &errs[0]),
+            "commons x\n\nfn f() -> Int {\n  let _ = g(1)\n  let y = 2\n  y\n}\n"
+        );
+    }
+
+    #[test]
+    fn parsing_continues_after_a_bare_expression() {
+        // The second error, in the same block, is still reported; the bare
+        // statement itself is kept (as `let _ = …`) in the recovered AST.
+        let src =
+            "commons x\n\nfn f() -> Int {\n  g(1)\n  let = 2\n  3\n}\n\nfn h() -> Int { 4 }\n";
+        let (unit, errors) = parse_recover_str(src);
+        let cats: Vec<_> = errors.iter().map(|e| e.category).collect();
+        assert_eq!(cats[0], BARE, "{cats:?}");
+        assert!(cats.len() >= 2, "a later error is still reported: {cats:?}");
+        let Some(SourceUnit::Commons(c)) = unit else {
+            panic!("expected commons")
+        };
+        assert!(
+            c.items
+                .iter()
+                .any(|i| matches!(i, CommonsItem::Fn(f) if f.name.ident().name == "h")),
+            "`fn h` after the broken block still parses"
+        );
+    }
+
+    #[test]
+    fn a_bare_expression_alone_in_the_recovered_ast_keeps_the_function() {
+        let src = "commons x\n\nfn f() -> Int {\n  g(1)\n  2\n}\n";
+        let (unit, errors) = parse_recover_str(src);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].category, BARE);
+        let Some(SourceUnit::Commons(c)) = unit else {
+            panic!("expected commons")
+        };
+        assert!(c.items.iter().any(|i| matches!(i, CommonsItem::Fn(_))));
+    }
+
+    #[test]
+    fn a_stray_token_after_a_tail_keeps_the_generic_report() {
+        // `)` cannot start a statement, so this is not a bare expression.
+        let errs = body_err("1\n  )");
+        assert_eq!(errs[0].category, "bynk.parse.expected_token", "{errs:?}");
+        // Nor is a tail followed on the same line.
+        let errs = body_err("1 2");
+        assert_ne!(errs[0].category, BARE, "{errs:?}");
+    }
+
+    #[test]
+    fn a_second_match_keeps_its_own_report() {
+        let errs = body_err("match 1 {\n    _ => 1\n  }\n  match 2 {\n    _ => 2\n  }");
+        assert_eq!(errs[0].category, "bynk.parse.match_ends_block", "{errs:?}");
     }
 
     // ---- #2680: list patterns ----

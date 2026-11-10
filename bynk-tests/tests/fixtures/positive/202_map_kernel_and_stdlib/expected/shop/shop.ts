@@ -8,7 +8,7 @@ import { contains, getOr, values } from "../bynk/map.js";
 
 export function tally(names: readonly string[]): ReadonlyMap<string, number> {
   const init: ReadonlyMap<string, number> = new globalThis.Map<string, number>();
-  return ((__xs: readonly string[], __acc: ReadonlyMap<string, number>, __f: (acc: ReadonlyMap<string, number>, x: string) => ReadonlyMap<string, number>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(names, init, (acc, name) => new globalThis.Map(acc).set(name, getOr(acc, name, 0) + 1));
+  return ((__xs: readonly string[], __acc: ReadonlyMap<string, number>, __f: (acc: ReadonlyMap<string, number>, x: string) => ReadonlyMap<string, number>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(names, init, (acc: ReadonlyMap<string, number>, name: string) => new globalThis.Map(acc).set(name, getOr(acc, name, 0) + 1));
 }
 
 export function allValues(m: ReadonlyMap<string, number>): readonly number[] {

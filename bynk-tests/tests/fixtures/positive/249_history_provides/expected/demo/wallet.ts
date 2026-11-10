@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Amount = number & { readonly __brand: "demo.wallet.Amount" };
@@ -59,6 +59,7 @@ export class Wallet {
   private async loadState(): globalThis.Promise<WalletState> {
     const stored = await this.state.storage.get<WalletState>("state");
     if (stored === undefined) return __zeroOfWalletState();
+    __checkStoredLayout("Wallet", stored);
     const __zero = __zeroOfWalletState();
     __reportUnknownStoredKeys("Wallet", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -78,7 +79,7 @@ export class Wallet {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await deps.Ledger.note(amount);
-      return (() => { __state.balance = ((b) => b + amount)(__state.balance); return undefined; })();
+      return (() => { __state.balance = ((b: number) => b + amount)(__state.balance); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;
@@ -87,7 +88,7 @@ export class Wallet {
   async spend(amount: Amount, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (() => { __state.balance = ((b) => b - amount)(__state.balance); return undefined; })();
+      return (() => { __state.balance = ((b: number) => b - amount)(__state.balance); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;
@@ -102,7 +103,7 @@ export function __makeWallet(key: string, env?: { WALLET?: __DurableObjectNamesp
 export async function __bynkDriveHistory_Wallet(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown }>> {
   __WalletRegistry.reset();
   const __inst = __makeWallet("") as any;
-  const __load = async (): globalThis.Promise<WalletState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfWalletState(); const __m = { ...__zeroOfWalletState(), ...__s }; __rehydrateWalletState(__m, __s); return __m; };
+  const __load = async (): globalThis.Promise<WalletState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfWalletState(); __checkStoredLayout("Wallet", __s); const __m = { ...__zeroOfWalletState(), ...__s }; __rehydrateWalletState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
   const __steps: globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;

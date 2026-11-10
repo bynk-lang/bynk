@@ -18,7 +18,7 @@ export type Run = __CommonsRun & { readonly __ctxBrand?: "t.web" };
 
 export function listed(): readonly string[] {
   const runs = [{ repo: ("a" as Repo) }, { repo: ("b" as Repo) }, { repo: ("a" as Repo) }];
-  return [...new globalThis.Set((runs).map((__x: Run) => ((r) => r.repo)(__x)))];
+  return [...new globalThis.Set((runs).map((__x: Run) => ((r: Run) => r.repo)(__x)))];
 }
 
 export function loud(r: Run): string {

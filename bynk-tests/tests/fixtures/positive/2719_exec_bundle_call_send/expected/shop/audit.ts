@@ -32,7 +32,7 @@ export const audit = {
 
 export const relay = {
   async call(id: number, deps: { Ledger: Ledger; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    return logIt(id, async (n) => deps.Ledger.book(n), deps.__exec);
+    return logIt(id, async (n: number) => deps.Ledger.book(n), deps.__exec);
   },
 };
 

@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr } from "../__bynk_runtime/int.js";
 import { type ValidationError, __fault } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export type Status =
@@ -91,7 +91,7 @@ export function unwrap(o: Option<number>): number {
  * A fault in a lambda body takes its type from the expected function type.
  */
 export function viaLambda(n: number): string {
-  const f: (a0: number) => string = (x) => __fault("Unreachable", "never called", "demo/orders.bynk:53:37");
+  const f: (a0: number) => string = (x: number) => __fault("Unreachable", "never called", "demo/orders.bynk:53:37");
   return (n > 0 ? "ok" : f(n));
 }
 
@@ -211,6 +211,7 @@ export class Ledger {
   private async loadState(): globalThis.Promise<LedgerState> {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
+    __checkStoredLayout("Ledger", stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -225,7 +226,7 @@ export class Ledger {
   async bump(fail: boolean, deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.total = ((n) => n + 1)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((n: number) => n + 1)(__state.total); return undefined; })();
       return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:155:17") : __state.total);
     })();
     await this.commitState(__state);

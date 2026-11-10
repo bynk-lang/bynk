@@ -7,29 +7,28 @@ suite todos
 // through `pendingCount`, a storage aggregate that returns a scalar.
 
 case "add returns the item, freshly created and not done" {
-  let item <- Todos("bob").add("Buy milk")
-  expect item.title == "Buy milk"
-  expect item.done == false
+	let item <- Todos("bob").add("Buy milk")
+	expect item.title == "Buy milk"
+	expect item.done == false
 }
 
 case "completing a known id succeeds" {
-  let item    <- Todos("carol").add("Walk the dog")
-  let outcome <- Todos("carol").complete(item.id)
-  expect outcome is Ok(_)
+	let item <- Todos("carol").add("Walk the dog")
+	let outcome <- Todos("carol").complete(item.id)
+	expect outcome is Ok(_)
 }
 
 case "completing an unknown id is NotFound" {
-  let outcome <- Todos("dave").complete("nope")
-  expect outcome is Err(_)
+	let outcome <- Todos("dave").complete("nope")
+	expect outcome is Err(_)
 }
 
 case "pendingCount falls as items are completed" {
-  let a <- Todos("erin").add("first")
-  let _ <- Todos("erin").add("second")
-  let before <- Todos("erin").pendingCount()
-  expect before == 2
-
-  let _ <- Todos("erin").complete(a.id)
-  let after <- Todos("erin").pendingCount()
-  expect after == 1
+	let a <- Todos("erin").add("first")
+	let _ <- Todos("erin").add("second")
+	let before <- Todos("erin").pendingCount()
+	expect before == 2
+	let _ <- Todos("erin").complete(a.id)
+	let after <- Todos("erin").pendingCount()
+	expect after == 1
 }

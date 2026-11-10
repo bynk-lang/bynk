@@ -253,20 +253,25 @@ after the provider name, and call them in the bodies:
 ```bynk
 context demo
 
-capability Logger  { fn info(message: String) -> Effect[()] }
-capability Greeter { fn greet() -> Effect[()] }
+capability Logger {
+	fn info(message: String) -> Effect[()]
+}
+
+capability Greeter {
+	fn greet() -> Effect[()]
+}
 
 provides Logger = ConsoleLogger {
-  fn info(message: String) -> Effect[()] {
-    Effect.pure(())
-  }
+	fn info(message: String) -> Effect[()] {
+		Effect.pure(())
+	}
 }
 
 provides Greeter = PoliteGreeter given Logger {
-  fn greet() -> Effect[()] {
-    let _ <- Logger.info("hello")
-    Effect.pure(())
-  }
+	fn greet() -> Effect[()] {
+		let _ <- Logger.info("hello")
+		Effect.pure(())
+	}
 }
 ```
 
@@ -289,13 +294,14 @@ context shop.cart
 consumes bynk.cloudflare { Kv }
 
 capability Sessions = Kv
+
 capability PriceCache = Kv
 
 service remember {
-  on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
-    let _ <- Sessions.put(k, v)
-    Sessions.get(k)
-  }
+	on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
+		let _ <- Sessions.put(k, v)
+		Sessions.get(k)
+	}
 }
 ```
 
@@ -363,13 +369,13 @@ context platform.time
 exports capability { Clock }
 
 capability Clock {
-  fn now() -> Effect[Int]
+	fn now() -> Effect[Int]
 }
 
 provides Clock = SystemClock {
-  fn now() -> Effect[Int] {
-    0
-  }
+	fn now() -> Effect[Int] {
+		0
+	}
 }
 ```
 
@@ -383,10 +389,10 @@ context ops.jobs
 consumes platform.time
 
 service tick {
-  on call() -> Effect[Int] given platform.time.Clock {
-    let t <- platform.time.Clock.now()
-    t
-  }
+	on call() -> Effect[Int] given platform.time.Clock {
+		let t <- platform.time.Clock.now()
+		t
+	}
 }
 ```
 

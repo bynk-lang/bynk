@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
@@ -43,6 +43,7 @@ export class Counter {
   private async loadState(): globalThis.Promise<CounterState> {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
+    __checkStoredLayout("Counter", stored);
     const __zero = __zeroOfCounterState();
     __reportUnknownStoredKeys("Counter", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -62,7 +63,7 @@ export class Counter {
     const __state = { ...(await this.loadState()) };
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
     const __result = await (async () => {
-      const __r0 = await (() => { __state.n = ((v) => v + 1)(__state.n); return undefined; })();
+      const __r0 = await (() => { __state.n = ((v: number) => v + 1)(__state.n); return undefined; })();
       return (async () => { __events.push({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1 } }); })();
     })();
     await this.commitState(__state);

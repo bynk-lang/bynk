@@ -12,13 +12,15 @@ Code that uses no bound emits as before.
 ```bynk
 commons demo.generics
 
-type Box[A] = { value: A }
+type Box[A] = {
+	value: A,
+}
 
 fn first[T](xs: List[T], fallback: T) -> T {
-  match xs.get(0) {
-    Some(x) => x
-    None => fallback
-  }
+	match xs.get(0) {
+		Some(x) => x,
+		None => fallback,
+	}
 }
 ```
 
@@ -39,10 +41,12 @@ name is `bynk.generics.unknown_constraint`.
 ```bynk
 commons demo.bounds
 
-fn same[T: Eq](a: T, b: T) -> Bool { a == b }
+fn same[T: Eq](a: T, b: T) -> Bool {
+	a == b
+}
 
 fn dedupe[T: Eq](xs: List[T]) -> List[T] {
-  xs
+	xs
 }
 ```
 
@@ -64,7 +68,9 @@ see it:
 ```bynk,fail=bynk.generics.missing_eq_bound
 commons demo.missing
 
-fn same[T](a: T, b: T) -> Bool { a == b }
+fn same[T](a: T, b: T) -> Bool {
+	a == b
+}
 ```
 
 An `Eq` bound costs nothing at run time: `==` on a `T` still lowers to the
@@ -82,15 +88,19 @@ commons demo.ord
 
 uses bynk.list
 
-fn top[T: Ord](xs: List[T]) -> Option[T] { max(xs) }
+fn top[T: Ord](xs: List[T]) -> Option[T] {
+	max(xs)
+}
 
 fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
-  if x < lo { lo } else if x > hi { hi } else { x }
+	if x < lo { lo } else if x > hi { hi } else { x }
 }
 
 type Priority = enum { Low, Medium, High } derives Ord
 
-fn highest(ps: List[Priority]) -> Option[Priority] { top(ps) }
+fn highest(ps: List[Priority]) -> Option[Priority] {
+	top(ps)
+}
 ```
 
 - **`Ord` implies `Eq`.** A `T: Ord` may also use `==`. Writing `T: Eq + Ord` is
@@ -109,7 +119,9 @@ fn highest(ps: List[Priority]) -> Option[Priority] { top(ps) }
 ```bynk,fail=bynk.generics.missing_ord_bound
 commons demo.missing.ord
 
-fn bigger[T](a: T, b: T) -> Bool { a > b }
+fn bigger[T](a: T, b: T) -> Bool {
+	a > b
+}
 ```
 
 `bynk.list` ships `sort`, `min` and `max` as `Ord`-bounded generics
@@ -144,25 +156,27 @@ generic type's field, or a `distinct`/`groupBy`/join key in a body, must be decl
 commons demo.keybounds
 
 fn tally[K: Key](xs: List[K]) -> Map[K, Int] {
-  let init: Map[K, Int] = Map.empty()
-  xs.fold(init, (acc, k) => {
-    let seen = match acc.get(k) {
-      Some(n) => n,
-      None => 0,
-    }
-    acc.insert(k, seen + 1)
-  })
+	let init: Map[K, Int] = Map.empty()
+	xs.fold(init, (acc, k) => {
+		let seen = match acc.get(k) {
+			Some(n) => n,
+			None => 0,
+		}
+		acc.insert(k, seen + 1)
+	})
 }
 
-type Index[K: Key, V] = { m: Map[K, V] }
+type Index[K: Key, V] = {
+	m: Map[K, V],
+}
 ```
 
 ```bynk,fail=bynk.generics.missing_key_bound
 commons demo.missing.key
 
 fn single[K](k: K) -> Map[K, Int] {
-  let m: Map[K, Int] = Map.empty()
-  m.insert(k, 1)
+	let m: Map[K, Int] = Map.empty()
+	m.insert(k, 1)
 }
 ```
 
@@ -184,10 +198,12 @@ held under a canonical encoding the runtime derives from the value itself.
 commons demo.codable
 
 fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] {
-  Json.decode[T](Json.encode(v))
+	Json.decode[T](Json.encode(v))
 }
 
-fn encodeAll[T: Codable](xs: List[T]) -> String { Json.encode(xs) }
+fn encodeAll[T: Codable](xs: List[T]) -> String {
+	Json.encode(xs)
+}
 ```
 
 `Codable` is automatic, never derived, and means exactly what `Json.decode` accepts:
@@ -219,8 +235,11 @@ inside the function; a `Set[T]` needs `T: Key + Codable`. A generic record or su
 own over a type parameter (`Box[T]` inside `fn f[T: Codable]`) does too: the unit that
 names it builds a codec factory from the declaration and applies it to the codecs of the
 arguments, so the JSON, the error paths and the revalidation of a field are those of the
-codec for a concrete `Box[Order]`. A recursive generic type is still refused at a
-boundary (`bynk.generics.recursive_generic_at_boundary`).
+codec for a concrete `Box[Order]`. A recursive generic type is still refused where a codec is
+required (`bynk.generics.recursive_generic_at_boundary`), but it declares and
+works inside a context; polymorphic recursion is refused at the declaration
+(`bynk.generics.polymorphic_recursion`). See
+[Recursive generic types](/book/guides/type-system/recursive-generic-types/).
 
 A type another context owns and exports opaque cannot be decoded, by `Json.decode`,
 `Json.decodeSql` or a `Codable` witness: decoding creates a value, and only the owning
@@ -236,11 +255,17 @@ type:
 ```bynk
 commons demo.boxes
 
-type Box[A] = { value: A }
+type Box[A] = {
+	value: A,
+}
 
-fn Box.has(self, x: A) -> Bool where A: Eq { self.value == x }
+fn Box.has(self, x: A) -> Bool where A: Eq {
+	self.value == x
+}
 
-fn Box.size(self) -> Int { 1 }
+fn Box.size(self) -> Int {
+	1
+}
 ```
 
 Only callers of `has` are constrained. A `Box[(Int) -> Int]` is still a valid
@@ -259,22 +284,32 @@ commons demo.constructors
 
 uses bynk.list
 
-type Box[T] = { value: T }
+type Box[T] = {
+	value: T,
+}
 
-fn Box.of(value: T) -> Box[T] { Box { value } }
+fn Box.of(value: T) -> Box[T] {
+	Box { value }
+}
 
-fn Box.empty() -> Box[Option[T]] { Box { value: None } }
+fn Box.empty() -> Box[Option[T]] {
+	Box { value: None }
+}
 
-type Sorted[T: Ord] = { items: List[T] }
+type Sorted[T: Ord] = {
+	items: List[T],
+}
 
-fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: xs.sortBy((x) => x) } }
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] {
+	Sorted { items: xs.sortBy((x) => x) }
+}
 
 fn demo() -> Int {
-  let a = Box.of(5)
-  let b: Box[Option[String]] = Box.empty()
-  let c = Box.empty[String]()
-  let s = Sorted.fromList(["b", "a"])
-  a.value
+	let a = Box.of(5)
+	let b: Box[Option[String]] = Box.empty()
+	let c = Box.empty[String]()
+	let s = Sorted.fromList(["b", "a"])
+	a.value
 }
 ```
 

@@ -16,13 +16,13 @@ context platform.time
 exports capability { Clock }
 
 capability Clock {
-  fn now() -> Effect[Int]
+	fn now() -> Effect[Int]
 }
 
 provides Clock = SystemClock {
-  fn now() -> Effect[Int] {
-    0
-  }
+	fn now() -> Effect[Int] {
+		0
+	}
 }
 ```
 
@@ -40,10 +40,10 @@ context ops.jobs
 consumes platform.time
 
 service tick {
-  on call() -> Effect[Int] given platform.time.Clock {
-    let t <- platform.time.Clock.now()
-    t
-  }
+	on call() -> Effect[Int] given platform.time.Clock {
+		let t <- platform.time.Clock.now()
+		t
+	}
 }
 ```
 

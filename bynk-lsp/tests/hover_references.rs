@@ -183,7 +183,7 @@ fn index_key(r: &ProjectDiagnostics, p: &Path) -> PathBuf {
 /// earlier in the file (`items` declares before it is used) resolves to the use.
 fn in_add_handler(text: &str, needle: &str) -> usize {
     let body = text.find("on call add(").expect("the `add` handler");
-    let end = text[body..].find("\n  }").expect("the handler's end") + body;
+    let end = text[body..].find("\n\t}").expect("the handler's end") + body;
     body + text[body..end].find(needle).unwrap_or_else(|| {
         panic!(
             "`{needle}` is not in the `add` handler body:\n{}",
@@ -215,7 +215,7 @@ fn store_field_reference_hovers_as_its_declaration() {
 fn record_construction_labels_hover_as_the_types_fields() {
     let (r, _, text, root) = todos();
     let rel = index_path(&r);
-    let ctor = in_add_handler(&text, "Stored { seq: next");
+    let ctor = in_add_handler(&text, "Stored {");
 
     for (label, expected) in [
         ("seq: next", "seq: Int"),
@@ -274,7 +274,7 @@ fn a_structural_rung_outranks_the_name_matching_locals_rung() {
 
     // `title:` — the index resolves `Stored.title`; the locals rung would match
     // the in-scope `add(title: Title)` param by name. The index must win.
-    let ctor = in_add_handler(&text, "Stored { seq: next");
+    let ctor = in_add_handler(&text, "Stored {");
     let label = ctor + text[ctor..].find("title: title").expect("the label");
     let hover = hover_at(&r, &rel, &text, &root, label).expect("hover on the label");
     assert!(
@@ -439,7 +439,11 @@ fn header_rung_answers_the_header_and_never_shadows_a_params_type_name() {
         &rel,
         &text,
         &root,
-        at(&text, "(client: ClientId) -> Effect[HttpResult", "ClientId"),
+        at(
+            &text,
+            "client: ClientId\n\t) -> Effect[HttpResult",
+            "ClientId",
+        ),
     )
     .expect("hover on the param's type name");
     assert!(

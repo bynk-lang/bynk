@@ -47,7 +47,7 @@ export const __FixedPricesProvider = { token: __PricesToken, factory: () => new 
 
 export const api = {
   async http_GET(deps: { Audit: Audit; Prices: Prices; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<HttpResult<string>> {
-    const n = await audited(async (x) => deps.Audit.note(x), 1, deps.__exec);
+    const n = await audited(async (x: number) => deps.Audit.note(x), 1, deps.__exec);
     const ok = await priced(deps.Prices.get(n), deps.__exec);
     return HttpResult.Ok("done");
   },
@@ -55,7 +55,7 @@ export const api = {
 
 export const direct = {
   async call(sku: number, deps: { Audit: Audit; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    const n = await audited(async (x) => deps.Audit.note(x), sku, deps.__exec);
+    const n = await audited(async (x: number) => deps.Audit.note(x), sku, deps.__exec);
     return n;
   },
 };

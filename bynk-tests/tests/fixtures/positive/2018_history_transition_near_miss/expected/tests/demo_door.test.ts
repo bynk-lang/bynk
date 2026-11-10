@@ -288,7 +288,7 @@ async function __prop_test_a_closed_door_was_closed_or_has_just_been_closed() {
     ];
     const __body = async (__run: globalThis.Array<{ h: number, args: unknown[] }>) => {
       const run = __run;
-      if (!((run).every((__x: __History_Door_Step) => ((s) => (!(((__c: boolean) => __c)(s.new.status.tag === "Closed")) || (((__c: boolean) => __c)(s.old.status.tag === "Closed") || ((__c: boolean) => __c)(s.call.tag === "Close"))))(__x)))) { throw __bynkExpectFailure("tests/door.test.bynk:7:14", 367, 457, "expect run.all((s) => s.new.status is Closed implies (s.old.status is Closed || s.call is Close))"); }
+      if (!((run).every((__x: __History_Door_Step) => ((s: __History_Door_Step) => (!(((__c: boolean) => __c)(s.new.status.tag === "Closed")) || (((__c: boolean) => __c)(s.old.status.tag === "Closed") || ((__c: boolean) => __c)(s.call.tag === "Close"))))(__x)))) { throw __bynkExpectFailure("tests/door.test.bynk:7:14", 367, 457, "expect run.all((s) => s.new.status is Closed implies (s.old.status is Closed || s.call is Close))"); }
     };
     const __drive = (seq: globalThis.Array<{ h: number, args: unknown[] }>) => (__ns_demo_door as any).__bynkDriveHistory_Door(seq, deps);
     return await __bynkRunHistory({ seed: __bynkMix(__bynkSeed, 0), cases: 60, maxLen: 16, handlers: __handlers, drive: __drive, body: __body, name: "a closed door was closed or has just been closed", location: "tests/door.test.bynk", file: "tests/door.test.bynk" });

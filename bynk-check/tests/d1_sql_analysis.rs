@@ -401,3 +401,60 @@ fn a_decode_is_checked_against_the_statements_columns() {
         ["bynk.d1.select_field_missing"]
     );
 }
+
+/// #3197: a batch's statements are checked in order, each against the schema
+/// the earlier ones leave, so the issue's `DROP` → `CREATE` → `INSERT` batch is
+/// valid as written.
+#[test]
+fn a_batch_may_drop_then_recreate_a_table() {
+    let batch = "    let _ <- Orders.batch([\n\
+        \x20     SqlStatement { sql: \"DROP TABLE orders\", params: [] },\n\
+        \x20     SqlStatement { sql: \"CREATE TABLE orders (id, total, note)\", params: [] },\n\
+        \x20     SqlStatement { sql: \"INSERT INTO orders VALUES ('x', 10, 'n')\", params: [] }\n\
+        \x20   ])\n";
+    assert_eq!(categories("batch-recreate", "", batch), Vec::<&str>::new());
+}
+
+/// #3197: a table created earlier in the batch exists for a later statement.
+#[test]
+fn a_batch_may_use_a_table_it_creates() {
+    let batch = "    let _ <- Orders.batch([\n\
+        \x20     SqlStatement { sql: \"CREATE TABLE audit (id TEXT, note TEXT)\", params: [] },\n\
+        \x20     SqlStatement { sql: \"INSERT INTO audit VALUES (?1, 'seen')\", params: [Text(id)] }\n\
+        \x20   ])\n";
+    assert_eq!(categories("batch-create", "", batch), Vec::<&str>::new());
+}
+
+/// #3197: an invalid statement after DDL is still refused.
+#[test]
+fn an_invalid_statement_after_ddl_is_still_refused() {
+    let batch = "    let _ <- Orders.batch([\n\
+        \x20     SqlStatement { sql: \"CREATE TABLE audit (id TEXT)\", params: [] },\n\
+        \x20     SqlStatement { sql: \"INSERT INTO audit (nope) VALUES (1)\", params: [] }\n\
+        \x20   ])\n";
+    assert_eq!(
+        categories("batch-invalid", "", batch),
+        ["bynk.d1.sql_invalid"]
+    );
+}
+
+/// #3197: the batch's DDL does not leak out: a later, separate `batch` or
+/// single statement is checked against the migrated schema, where `orders`
+/// still has its original columns and `audit` does not exist.
+#[test]
+fn a_following_statement_sees_the_original_schema() {
+    let statements = "    let _ <- Orders.batch([\n\
+        \x20     SqlStatement { sql: \"DROP TABLE orders\", params: [] },\n\
+        \x20     SqlStatement { sql: \"CREATE TABLE audit (id)\", params: [] }\n\
+        \x20   ])\n\
+        \x20   let _ <- Orders.all(\"SELECT id, total FROM orders\", [])\n\
+        \x20   let _ <- Orders.run(\"INSERT INTO audit VALUES (1)\", [])\n\
+        \x20   let _ <- Orders.batch([\n\
+        \x20     SqlStatement { sql: \"UPDATE orders SET total = 1\", params: [] }\n\
+        \x20   ])\n";
+    // Only the `INSERT INTO audit` (no such table outside the first batch) fails.
+    assert_eq!(
+        categories("batch-isolated", "", statements),
+        ["bynk.d1.sql_invalid"]
+    );
+}

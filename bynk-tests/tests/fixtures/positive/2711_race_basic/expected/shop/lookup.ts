@@ -63,7 +63,7 @@ export const chained = {
 
 export const many = {
   async call(skus: readonly number[], deps: { Prices: Prices; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<readonly Result<number, TimedOut>[]> {
-    return (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (sku) => __bynkWithin(__bynkRace([deps.Prices.get("east", sku), deps.Prices.get("west", sku)], deps.__exec), 1000, deps.__exec))(__x))))(skus);
+    return (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (sku: number) => __bynkWithin(__bynkRace([deps.Prices.get("east", sku), deps.Prices.get("west", sku)], deps.__exec), 1000, deps.__exec))(__x))))(skus);
   },
 };
 
