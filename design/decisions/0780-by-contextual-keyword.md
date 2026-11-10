@@ -1,12 +1,6 @@
----
-level: minor
-changelog: "`by` is a contextual keyword: an ordinary name (a parameter, a binding, a field) everywhere except its clause positions, so `on call bump(by: Int)` parses"
-probes: diagnostic_coverage
----
+# 0780 — `by` is a contextual keyword, read by text in its clause positions
 
-## ADR: by-contextual-keyword
-title: `by` is a contextual keyword, read by text in its clause positions
-summary: `by` lexes as an identifier; its four clause positions recognise it by text, with a same-line-and-identifier rule for the call-site clause
+- **Status:** Accepted (v0.531)
 
 **Context.** `by` was one of the 61 hard keywords, so `on call bump(by: Int)` was
 `bynk.parse.reserved_keyword` and its only advice was "rename the identifier".

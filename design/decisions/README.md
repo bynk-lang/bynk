@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0780](0780-by-contextual-keyword.md) | **`by` is a contextual keyword, read by text in its clause positions** (v0.531) — `by` lexes as an identifier; its four clause positions recognise it by text, with a same-line-and-identifier rule for the call-site clause | Accepted (v0.531) |
 | [0779](0779-recursive-generic-refused-at-use.md) | **A recursive generic type is refused where a codec is required, not at its declaration** (v0.530) — Uniform recursion declares and works in memory; polymorphic recursion is a declaration error; codecs are a later step | Accepted (v0.530) |
 | [0778](0778-migrate-sweep-reports-layout.md) | **The sweep wake reports each instance's storage layout, and the sweep says how far the layout upgrade has got** (v0.529) — The wake answer carries layoutBefore and layoutAfter, the sweep answer carries the layout the Worker writes, and the sweep line reports instances moved up; none of it affects the floor | Accepted (v0.529) |
 | [0777](0777-per-entry-storage-runtime-primitives.md) | **The per-entry storage runtime: key layout, a staged write-set flushed in one transaction, and the wholesale split** (v0.528) — Key shapes, EntryOverlay with an atomic chunked flush through storage.transaction, splitWholesale, and an in-memory storage that enforces the 128-key batch and counts operations | Accepted (v0.528) |
