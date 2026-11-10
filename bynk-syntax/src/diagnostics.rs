@@ -119,7 +119,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 retry) can see it. A `:=` is for a value that does not depend on what \
                 the cell held.",
         example: "count := count + 1                       // ✗ reads `count` while writing it\n\n\
-                  let _ <- count.update((c) => c + 1)      // ✓ the combiner receives the old value",
+                  count.update((c) => c + 1)                // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
     },
