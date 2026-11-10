@@ -43,6 +43,8 @@
 mod integration {
     #[path = "agent_state_corpus.rs"]
     mod agent_state_corpus;
+    #[path = "storage_layout_marker.rs"]
+    mod storage_layout_marker;
     #[path = "by_on_agent.rs"]
     mod by_on_agent;
     #[path = "call_hierarchy_index.rs"]

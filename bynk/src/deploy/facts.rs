@@ -32,6 +32,11 @@ pub(crate) struct Facts {
     /// writes (its `__v`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) agents: BTreeMap<String, i64>,
+    /// The storage layout this build writes (`bynk_emit::STORAGE_LAYOUT`), recorded
+    /// only when it is beyond the original wholesale layout. `None` is layout 1, so
+    /// a record from a build that did not know about layouts reads the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) layout: Option<i64>,
     /// The Durable Object classes the push declared, sorted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) classes: Vec<String>,
@@ -51,6 +56,11 @@ pub(crate) struct Facts {
 }
 
 impl Facts {
+    /// The storage layout this build writes; an unrecorded one is the original.
+    pub(crate) fn layout(&self) -> i64 {
+        self.layout.unwrap_or(1)
+    }
+
     /// The compact JSON a push sets, or `None` when it would not fit.
     pub(crate) fn encode(&self) -> Option<String> {
         let text = serde_json::to_string(self).ok()?;
@@ -110,6 +120,7 @@ pub(crate) fn build_facts(
             .filter(|(class, _)| crate::migrate::worker_of(class) == worker)
             .map(|(c, v)| (c.clone(), *v))
             .collect(),
+        layout: (bynk_emit::STORAGE_LAYOUT > 1).then_some(bynk_emit::STORAGE_LAYOUT),
         classes,
         provides: manifest.provides.clone(),
         expects: manifest.expects.clone(),
@@ -154,6 +165,24 @@ mod tests {
             "{text}"
         );
         assert_eq!(Facts::decode(&text), Some(f));
+    }
+
+    #[test]
+    fn a_layout_is_recorded_only_beyond_the_original_one() {
+        // Layout 1 adds nothing to the record, so the record is as it was before layouts.
+        let plain = sample();
+        assert!(!plain.encode().unwrap().contains("layout"));
+        assert_eq!(plain.layout(), 1);
+        // A later layout round-trips.
+        let later = Facts {
+            layout: Some(2),
+            ..sample()
+        };
+        let text = later.encode().unwrap();
+        assert!(text.contains(r#""layout":2"#), "{text}");
+        assert_eq!(Facts::decode(&text).map(|f| f.layout()), Some(2));
+        // A record written before layouts existed reads as layout 1.
+        assert_eq!(Facts::decode(r#"{"v":1}"#).map(|f| f.layout()), Some(1));
     }
 
     #[test]
