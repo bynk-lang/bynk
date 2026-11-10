@@ -21,6 +21,10 @@ dependencies float) and runs install scripts, since workerd downloads its
 binary; that is fine for a manual developer tool, and worth revisiting if this
 ever runs in CI.
 
+Bundle sizes (bundled, minified and gzipped, for each example and its twin) are
+recorded per release in that file. They are tracked, not gated: there is no size
+threshold and no CI check yet, so a regression shows up as a diff in the record.
+
 ## What is measured
 
 For each of `examples/hello-world`, `examples/orders` and `examples/rate-limiter`:

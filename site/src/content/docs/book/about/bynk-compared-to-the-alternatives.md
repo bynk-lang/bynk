@@ -292,6 +292,8 @@ in the repository under
 [`benchmarks/runtime/`](https://github.com/bynk-lang/bynk/tree/main/benchmarks/runtime),
 and `cargo xtask bench-runtime --record` writes the figures for each release to
 `design/benchmarks/runtime/`, so a change that adds weight shows up as a diff.
+Bundle sizes are tracked per release in that record; there is no size threshold
+or CI gate yet.
 
 ## The honest summary
 
