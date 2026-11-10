@@ -68,7 +68,7 @@ export class Room {
   async join(conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.conns, String(this.__key), { value: __connIdOf(conn), writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { const __k = String(this.__key); const __new = __connIdOf(conn); const __old = globalThis.Object.hasOwn(__state.conns, __k) ? __state.conns[__k] : undefined; if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<Frame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } globalThis.Object.defineProperty(__state.conns, __k, { value: __new, writable: true, enumerable: true, configurable: true }); return undefined; })();
       __state.opened = Some(this.__key);
       return undefined;
     })();

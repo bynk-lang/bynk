@@ -1,0 +1,2 @@
+# #3261: put over an existing key closes the displaced connection; re-putting the same one does not.
+passed=4 failed=0
