@@ -35,7 +35,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 | **v0.530.0** | A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`) |
 | **v0.529.0** | `bynk migrate sweep` reports storage-layout progress once a deployed Worker writes a layout beyond the original one (per-entry storage, slice 5a) |
 | **v0.528.4** | '`bynk explain` gains a written explanation for `bynk.parse.bare_expression_statement`' |
-| **v0.528.3** | '`bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229' |
+| **v0.528.3** | `bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229 |
 | **v0.528.2** | `cargo xtask bench` measures `bynk check` and the language server's edit-to-diagnostics time on a synthetic project, recorded per release in `design/benchmarks/` |
 | **v0.528.1** | "The emitter classifies an agent's `store` fields once, in a named `AgentStoreLayout`, as the first step of splitting `emit_agent` (#3167)" |
 | **v0.528.0** | The runtime gains the per-entry storage primitives (batched, ranged and transactional storage, the key layout, a staged write-set and the wholesale split); nothing emitted uses them yet (per-entry storage, slice 1) |
