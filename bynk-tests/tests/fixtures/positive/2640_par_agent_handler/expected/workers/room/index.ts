@@ -4,10 +4,11 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
-export { Room } from "./handlers.js";
+export const Room = __serialiseAgentClass(handlers.Room);
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
   if (ctx === undefined) return;
