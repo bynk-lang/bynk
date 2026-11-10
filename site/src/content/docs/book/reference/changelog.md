@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.531.2** | "`cargo xtask bench-runtime` measures compiled Bynk against hand-written TypeScript twins (bundle size, start-up, request latency) under workerd, and records the results per release" |
 | **v0.531.1** | "The emitter builds an agent's state record in `emit_agent_state_record` and writes its `loadState` and `commitState` methods together in `emit_agent_load_commit_state`, as part of splitting `emit_agent` (#3167)" |
 | **v0.531.0** | "`by` is a contextual keyword: an ordinary name (a parameter, a binding, a field) everywhere except its clause positions, so `on call bump(by: Int)` parses" |
 | **v0.530.1** | `bynk check` and the language server build the cross-context views once per project instead of once per context, so checking is roughly linear in project size (500 contexts: 7.5 s to 0.47 s per edit) |
