@@ -1,6 +1,7 @@
 ---
 level: minor
-changelog: "`@form` decodes an `application/x-www-form-urlencoded` request body into a typed record at the boundary, with the refinements, defaults and `Option`s of a JSON body (#3276, slice 1; #3180 stays open for streaming)"
+changelog: `@form` decodes an `application/x-www-form-urlencoded` request body into a typed record at the boundary, with the refinements, defaults and `Option`s of a JSON body (#3276, slice 1; #3180 stays open for streaming)
+probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage, explained_codes
 ---
 
 ## ADR: form-request-bodies
