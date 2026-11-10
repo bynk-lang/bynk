@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.539.3** | `cargo xtask bench` also times a body-only edit (`lsp_body_edit`), the edit an incremental analysis is meant to make cheap, next to the signature-level one |
 | **v0.539.2** | `cargo xtask bench` also measures a "linked" project shape (contexts that consume each other, larger handler bodies) and checks the scheduler yardstick, p95 over 250 ms at 200 contexts on either shape, in each release record |
 | **v0.539.1** | A differential oracle for the language server's coming analysis memo: a canonical report of a project analysis, a stateful `analyse_project_memoised` entry point that delegates for now, and a CI test comparing it with a fresh analysis over the examples and seeded random edit sequences |
 | **v0.539.0** | `bynk check --each` and `bynk test --each` run each project directly inside a directory with no `bynk.toml`, as a workspace root runs its members |
