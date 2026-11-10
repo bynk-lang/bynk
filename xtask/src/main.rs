@@ -706,6 +706,23 @@ fn bench(args: &[String]) -> ExitCode {
                     }
                 }
             }
+            "--shape" => {
+                let Some(v) = value("--shape") else {
+                    return ExitCode::from(2);
+                };
+                opts.shapes = match v.as_str() {
+                    "independent" => vec![xtask::bench::Shape::Independent],
+                    "linked" => vec![xtask::bench::Shape::Linked],
+                    "both" => vec![
+                        xtask::bench::Shape::Independent,
+                        xtask::bench::Shape::Linked,
+                    ],
+                    _ => {
+                        eprintln!("xtask bench: --shape is independent, linked or both");
+                        return ExitCode::from(2);
+                    }
+                };
+            }
             "--runs" | "--edits" => {
                 let Some(v) = value(a) else {
                     return ExitCode::from(2);
@@ -801,7 +818,7 @@ fn release_notes(args: &[String]) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

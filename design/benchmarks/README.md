@@ -37,6 +37,23 @@ version. The default `--sizes` is `10,50,200` for a quick run; pass
 `--sizes 10,50,200,500` for a release record, so the 500-context row (which the
 `keystroke_latency` reading shows) is not dropped.
 
+## The two shapes
+
+A record holds two project shapes (`--shape independent|linked|both`, both by
+default):
+
+- **independent** (`sizes`): N unrelated contexts with small handler bodies. The
+  budget below is stated on this shape.
+- **linked** (`linked_sizes`): contexts that consume each other, and larger
+  handler bodies (a cross-context call, branching, a filter, a map and a sum per
+  handler). Context `i` consumes context `(i-1)/4`, a 4-ary tree, so the
+  contexts near the root are consumed by many and a project of N contexts is
+  about log4(N) consumes-levels deep. This is closer to a real project than the
+  independent shape; it is still synthetic.
+
+Both edit `ctx0` (the root of the linked tree, so its dependents are the most
+affected ones).
+
 ## The budget
 
 The accepted editor-latency budget (#3168): the language server's
@@ -73,3 +90,14 @@ each unit's prelude; *definition* is resolving and checking declaration bodies
 (and test bodies); *project* is the whole-project validations and assembling the
 result. The marks sit at the pipeline's own phase boundaries, so this is an
 attribution, not a profile. It is the evidence #1523's trigger asks for.
+
+## The scheduler trigger
+
+The incremental-scheduler decision (S2 of
+[#3243](https://github.com/bynk-lang/bynk/issues/3243), the deferred
+[#1523](https://github.com/bynk-lang/bynk/issues/1523)) was deferred by the
+maintainer with this trigger: **edit-to-diagnostics p95 above 250 ms at 200
+contexts, on either shape, in a release record.** `cargo xtask bench` warns when a
+record reaches it, and the `keystroke_latency` row of
+`design/greenfield-status.md` says whether it is reached. The 200-context size
+must be in a record (the default `--sizes` includes it).
