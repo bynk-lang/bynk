@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`)
----
+# 0779 — A recursive generic type is refused where a codec is required, not at its declaration
 
-## ADR: recursive-generic-refused-at-use
-title: A recursive generic type is refused where a codec is required, not at its declaration
-summary: Uniform recursion declares and works in memory; polymorphic recursion is a declaration error; codecs are a later step
+- **Status:** Accepted (v0.530)
 
 **Context.** ADR 0197 C refused a recursive generic type because it has no finite
 set of monomorphised codecs, and ADR 0237 and ADR 0705 C carried the refusal to

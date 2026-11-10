@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk migrate sweep` reports storage-layout progress once a deployed Worker writes a layout beyond the original one (per-entry storage, slice 5a)
----
+# 0778 — The sweep wake reports each instance's storage layout, and the sweep says how far the layout upgrade has got
 
-## ADR: migrate-sweep-reports-layout
-title: The sweep wake reports each instance's storage layout, and the sweep says how far the layout upgrade has got
-summary: The wake answer carries layoutBefore and layoutAfter, the sweep answer carries the layout the Worker writes, and the sweep line reports instances moved up; none of it affects the floor
+- **Status:** Accepted (v0.529)
 
 **Context.** The per-entry storage track (`design/tracks/per-entry-storage.md`, #3195, proposal #3189) adds a stored-layout marker, `__layout`, with a lazy upgrade in `loadState`. `bynk migrate sweep` already wakes every stored instance through `/_bynk/migrate`, which calls `loadState` and `commitState`, so it is the eager path for the upgrade and needs no new mechanism. What it lacks is a way to say how far the upgrade has got, and an operator wants that before relying on the new layout.
 
