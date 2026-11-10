@@ -785,7 +785,7 @@ pub(super) fn synthetic_typed_commons_for_target(
         }
     }
     checker::TypedCommons {
-        commons: Commons {
+        commons: Arc::new(Commons {
             name: QualifiedName {
                 parts: target_name
                     .split('.')
@@ -803,7 +803,7 @@ pub(super) fn synthetic_typed_commons_for_target(
             span: Span::default(),
             trivia: Trivia::default(),
             trailing_comments: Vec::new(),
-        },
+        }),
         types,
         fns,
         methods,
