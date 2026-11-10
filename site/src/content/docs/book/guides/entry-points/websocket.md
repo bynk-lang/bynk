@@ -87,6 +87,10 @@ socket. Putting back the connection the key already holds closes nothing. This
 behaves the same in `bynk test` as when deployed, so a case can check it: after the
 second `put`, the displaced `TestConnection` reports `closed()`.
 
+A connection held under two keys is one socket, so closing it through either key, by
+`remove` or by replacement, closes it for both: the other key is left holding a
+closed connection.
+
 ## Receive inbound frames and broadcast
 
 Inbound frames arrive through `on message`; `on close` fires when the client
