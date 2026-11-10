@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.535**.
+written against **v0.536**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.536.0** | The decode error type is renamed from `JsonError` to `DecodeError`; `JsonError` stays as a deprecated alias with an auto-fix |
 | **v0.535.0** | An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2) |
 | **v0.534.7** | The emitter writes an agent class's Workers dispatch and websocket-open dispatch in `emit_agent_dispatch`, as part of splitting `emit_agent` (#3167) |
 | **v0.534.6** | The checker registers a project's files for error attribution once instead of once per unit, removing a units-times-files cost (500 contexts: 18% fewer instructions in `bynk check`) |

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0786](0786-decode-error-rename.md) | **JsonError is renamed DecodeError, with a deprecated alias** (v0.536) — One decode error type for Json.decode and the coming Yaml.decode; the old spelling warns with an auto-fix | Accepted (v0.536) |
 | [0785](0785-per-entry-storage-layout.md) | **Collection entries are stored per entry, in a layout frozen for 1.0** (v0.535) — Each Map, Set, Cache and Log entry and each index posting is its own Durable Object key; the state record keeps the Cells and a `__layout: 2` marker; an older record is split by its next commit and every handler commits only the entries it changed | Accepted (v0.535) |
 | [0784](0784-revert-refuses-a-layout-rollback.md) | **A revert refuses a rollback to a build that writes an older storage layout when instances hold stored data** (v0.534) — Each pushed version records the storage layout it writes in its deploy facts, and the revert preflight refuses a target on an older layout than the live version unless no instance holds stored data | Accepted (v0.534) |
 | [0783](0783-oidc-algorithm-and-subject-failure-principals.md) | **Two reserved failure principals for an Oidc route: WrongAlgorithm and NoSubject** (v0.533) — Each presents two tokens, and the call reads the first outcome that is not the seam's refusal | Accepted (v0.533) |

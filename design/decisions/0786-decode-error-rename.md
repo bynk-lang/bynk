@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, explained_codes
-changelog: The decode error type is renamed from `JsonError` to `DecodeError`; `JsonError` stays as a deprecated alias with an auto-fix
----
+# 0786 — JsonError is renamed DecodeError, with a deprecated alias
 
-## ADR: decode-error-rename
-title: JsonError is renamed DecodeError, with a deprecated alias
-summary: One decode error type for Json.decode and the coming Yaml.decode; the old spelling warns with an auto-fix
+- **Status:** Accepted (v0.536)
 
 **Context.** ADR 0047 made `JsonError` the compiler-known record (`kind`, `path`,
 `message`) that `Json.decode` returns. A second decoder, `Yaml.decode[T]` (proposed in
