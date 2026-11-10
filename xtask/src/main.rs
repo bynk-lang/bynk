@@ -3,6 +3,8 @@
 //! - `check-pending` (Slice 0) validates the files under `design/pending/`.
 //! - `stamp` (Slice 1) assigns the version(s) + ADR number(s) for the pending
 //!   files and materialises them; dry-run by default, `--apply` to write.
+//! - `release-notes <tag>` (#3178) prints the release body's "Upgrading from
+//!   vPREV" section, assembled from the Book's `reference/upgrading.md`.
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
@@ -52,6 +54,7 @@ fn main() -> ExitCode {
             }
             stamp(args.iter().any(|a| a == "--apply"))
         }
+        Some("release-notes") => release_notes(&args[1..]),
         Some("manifest-schema") => {
             if let Some(bad) = args[1..].iter().find(|a| *a != "--check") {
                 eprintln!("xtask manifest-schema: unknown argument {bad:?}");
@@ -570,9 +573,52 @@ fn have_nextest(root: &Path) -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
+/// `release-notes <tag>`: the "Upgrading from vPREV" section for `tag`, on
+/// stdout. The previous release is the greatest plain `v*` tag below `tag` in
+/// this clone (the release workflow checks out full history and tags).
+fn release_notes(args: &[String]) -> ExitCode {
+    let [tag] = args else {
+        eprintln!("xtask release-notes: expected exactly one argument, the release tag");
+        usage();
+        return ExitCode::from(2);
+    };
+    let Some(version) = tag.strip_prefix('v').and_then(xtask::stamp::Version::parse) else {
+        eprintln!("xtask release-notes: {tag:?} is not a plain `vX.Y.Z` tag");
+        return ExitCode::from(2);
+    };
+    let root = repo_root();
+    let page = match std::fs::read_to_string(root.join(xtask::release_notes::UPGRADING_PAGE)) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("release-notes: cannot read the upgrading page: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let tags = match Command::new("git")
+        .args(["tag", "--list", "v[0-9]*"])
+        .current_dir(&root)
+        .output()
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
+        _ => {
+            eprintln!("release-notes: `git tag --list` failed");
+            return ExitCode::FAILURE;
+        }
+    };
+    let prev = xtask::release_notes::previous_tag(&tags, version);
+    print!(
+        "{}",
+        xtask::release_notes::release_section(&page, prev, version)
+    );
+    ExitCode::SUCCESS
+}
+
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | tier-probe>"
     );
 }
 

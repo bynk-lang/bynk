@@ -575,6 +575,10 @@
       {
         "label": "Version compatibility & changelog",
         "link": "/book/reference/changelog/"
+      },
+      {
+        "label": "Upgrading",
+        "link": "/book/reference/upgrading/"
       }
     ]
   },
