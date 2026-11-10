@@ -2,17 +2,16 @@ context greeter.web
 
 uses bynk.locale.types
 uses greeter.messages
-
 consumes bynk { Locale }
 
 service api from http {
-  on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
-    let tag <- Locale.current()
-    Ok(greet(tag, "greeting", name))
-  }
+	on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
+		let tag <- Locale.current()
+		Ok(greet(tag, "greeting", name))
+	}
 
-  on GET("/bye/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
-    let tag <- Locale.current()
-    Ok(greet(tag, "farewell", name))
-  }
+	on GET("/bye/:name") (name: String) -> Effect[HttpResult[String]] by v: Visitor given Locale {
+		let tag <- Locale.current()
+		Ok(greet(tag, "farewell", name))
+	}
 }

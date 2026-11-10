@@ -7,9 +7,23 @@ The renderer's state between lines: the HTML finished so far, plus whatever
 block is still open — a paragraph being gathered, list items waiting for their
 `<ul>`, or the lines of a fenced code block.
 ---
-type Doc = { html: String, para: String, items: String, code: String, fenced: Bool }
+type Doc = {
+	html: String,
+	para: String,
+	items: String,
+	code: String,
+	fenced: Bool,
+}
 
-fn empty() -> Doc { Doc { html: "", para: "", items: "", code: "", fenced: false } }
+fn empty() -> Doc {
+	Doc {
+		html: "",
+		para: "",
+		items: "",
+		code: "",
+		fenced: false,
+	}
+}
 
 ---
 Close the open paragraph, if any.
@@ -18,7 +32,11 @@ fn flushPara(d: Doc) -> Doc {
 	if d.para == "" {
 		d
 	} else {
-		Doc { ...d, html: "\(d.html)<p>\(inline(d.para))</p>\n", para: "" }
+		Doc {
+			...d,
+			html: "\(d.html)<p>\(inline(d.para))</p>\n",
+			para: "",
+		}
 	}
 }
 
@@ -29,11 +47,17 @@ fn flushList(d: Doc) -> Doc {
 	if d.items == "" {
 		d
 	} else {
-		Doc { ...d, html: "\(d.html)<ul>\n\(d.items)</ul>\n", items: "" }
+		Doc {
+			...d,
+			html: "\(d.html)<ul>\n\(d.items)</ul>\n",
+			items: "",
+		}
 	}
 }
 
-fn flush(d: Doc) -> Doc { flushList(flushPara(d)) }
+fn flush(d: Doc) -> Doc {
+	flushList(flushPara(d))
+}
 
 ---
 The close of a fenced code block: its lines, escaped and otherwise untouched.
@@ -83,11 +107,17 @@ fn step(d: Doc, line: String) -> Doc {
 		if line.startsWith("```") {
 			closeFence(d)
 		} else {
-			Doc { ...d, code: "\(d.code)\(line)\n" }
+			Doc {
+				...d,
+				code: "\(d.code)\(line)\n",
+			}
 		}
 	} else {
 		if line.startsWith("```") {
-			Doc { ...flush(d), fenced: true }
+			Doc {
+				...flush(d),
+				fenced: true,
+			}
 		} else {
 			if line.trim() == "" {
 				flush(d)
@@ -95,7 +125,10 @@ fn step(d: Doc, line: String) -> Doc {
 				if level > 0 {
 					let done = flush(d)
 					let text = inline(line.slice(level + 1, line.length()).trim())
-					Doc { ...done, html: "\(done.html)<h\(level)>\(text)</h\(level)>\n" }
+					Doc {
+						...done,
+						html: "\(done.html)<h\(level)>\(text)</h\(level)>\n",
+					}
 				} else {
 					if line.startsWith("- ") || line.startsWith("* ") {
 						let done = flushPara(d)

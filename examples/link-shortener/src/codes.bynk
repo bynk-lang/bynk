@@ -18,5 +18,5 @@ The KV key for a slug. Namespacing keeps the link table separate from anything
 else stored in the same namespace.
 ---
 fn keyOf(code: Slug) -> String {
-  "link:\(code)"
+	"link:\(code)"
 }

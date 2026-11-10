@@ -516,6 +516,16 @@ type Step = (
 fn ci_steps(fast: bool, nextest: bool) -> Vec<Step> {
     let mut steps: Vec<Step> = vec![
         ("formatting", vec!["fmt", "--all", "--check"], vec![]),
+        // #3174: the examples are the corpus newcomers read, so they must be what
+        // `bynk fmt` produces. (CI enforces the same via xtask's
+        // `examples_fmt_clean` test.)
+        (
+            "examples formatting",
+            vec![
+                "run", "--locked", "-q", "-p", "bynk", "--", "fmt", "--check", "examples",
+            ],
+            vec![],
+        ),
         (
             "clippy",
             vec![
@@ -590,10 +600,13 @@ mod tests {
     #[test]
     fn fast_is_exactly_the_non_test_gates() {
         let steps = ci_steps(true, false);
-        assert_eq!(names(&steps), ["formatting", "clippy", "docs"]);
+        assert_eq!(
+            names(&steps),
+            ["formatting", "examples formatting", "clippy", "docs"]
+        );
         assert_eq!(steps[0].1[0], "fmt");
-        assert_eq!(steps[1].1[0], "clippy");
-        assert_eq!(steps[2].1[0], "doc");
+        assert_eq!(steps[2].1[0], "clippy");
+        assert_eq!(steps[3].1[0], "doc");
     }
 
     /// Matches CI's `API docs (cargo doc)` job, in both `--fast` and the full
@@ -628,7 +641,16 @@ mod tests {
     #[test]
     fn full_run_appends_the_suite_after_the_lints() {
         let steps = ci_steps(false, true);
-        assert_eq!(names(&steps), ["formatting", "clippy", "docs", "tests"]);
+        assert_eq!(
+            names(&steps),
+            [
+                "formatting",
+                "examples formatting",
+                "clippy",
+                "docs",
+                "tests"
+            ]
+        );
     }
 
     /// Both arms run the whole workspace and both pass `--locked`, so a local

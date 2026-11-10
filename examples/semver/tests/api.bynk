@@ -10,23 +10,23 @@ suite api {
 	}
 
 	case "satisfies applies a range" {
-		let yes <- api.POST(
-			"/satisfies",
-			SatisfiesRequest { version: "1.4.2", range: "^1.2.0" }
-		) by Visitor
+		let yes <- api.POST("/satisfies", SatisfiesRequest {
+			version: "1.4.2",
+			range: "^1.2.0",
+		}) by Visitor
 		expect yes is Ok(v) && v.satisfies == true
-		let no <- api.POST(
-			"/satisfies",
-			SatisfiesRequest { version: "2.0.0", range: "^1.2.0" }
-		) by Visitor
+		let no <- api.POST("/satisfies", SatisfiesRequest {
+			version: "2.0.0",
+			range: "^1.2.0",
+		}) by Visitor
 		expect no is Ok(v) && v.satisfies == false
 	}
 
 	case "satisfies rejects a malformed range" {
-		let r <- api.POST(
-			"/satisfies",
-			SatisfiesRequest { version: "1.0.0", range: "^banana" }
-		) by Visitor
+		let r <- api.POST("/satisfies", SatisfiesRequest {
+			version: "1.0.0",
+			range: "^banana",
+		}) by Visitor
 		expect r is BadRequest(_)
 	}
 
@@ -39,10 +39,10 @@ suite api {
 	}
 
 	case "resolve answers null when nothing matches" {
-		let r <- api.POST(
-			"/resolve",
-			ResolveRequest { versions: ["1.0.0"], range: "^2.0.0" }
-		) by Visitor
+		let r <- api.POST("/resolve", ResolveRequest {
+			versions: ["1.0.0"],
+			range: "^2.0.0",
+		}) by Visitor
 		expect r is Ok(v) && v.version == None
 	}
 

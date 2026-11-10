@@ -8,18 +8,18 @@ The reference locale — every code here must appear, with the same
 placeholders, in every other declared locale below.
 ---
 messages "en" @reference {
-  "greeting" => "Hello, {name}!"
-  "farewell" => "Goodbye, {name}!"
+	"greeting" => "Hello, {name}!"
+	"farewell" => "Goodbye, {name}!"
 }
 
 messages "fr" {
-  "greeting" => "Bonjour, {name} !"
-  "farewell" => "Au revoir, {name} !"
+	"greeting" => "Bonjour, {name} !"
+	"farewell" => "Au revoir, {name} !"
 }
 
 messages "es" {
-  "greeting" => "¡Hola, {name}!"
-  "farewell" => "¡Adiós, {name}!"
+	"greeting" => "¡Hola, {name}!"
+	"farewell" => "¡Adiós, {name}!"
 }
 
 ---
@@ -29,5 +29,5 @@ caller only ever needs `bynk.locale.types`, for `LocaleTag` itself (see
 `greeter.web`).
 ---
 fn greet(tag: LocaleTag, code: String, name: String) -> String {
-  render(tag, withText(message(code), "name", name))
+	render(tag, withText(message(code), "name", name))
 }

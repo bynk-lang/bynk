@@ -4,22 +4,22 @@ suite status
 // no Fetch, no KV, no cron. `statusKey` is the pure key-namespacing helper.
 
 case "a 2xx code is healthy" {
-  expect isHealthy(200) == true
+	expect isHealthy(200) == true
 }
 
 case "a 3xx code is still healthy" {
-  expect isHealthy(301) == true
+	expect isHealthy(301) == true
 }
 
 case "a 4xx/5xx code is unhealthy" {
-  expect isHealthy(404) == false
-  expect isHealthy(503) == false
+	expect isHealthy(404) == false
+	expect isHealthy(503) == false
 }
 
 case "code 0 (the request never completed) is unhealthy" {
-  expect isHealthy(0) == false
+	expect isHealthy(0) == false
 }
 
 case "the KV key is namespaced" {
-  expect statusKey("example") == "status:example"
+	expect statusKey("example") == "status:example"
 }
