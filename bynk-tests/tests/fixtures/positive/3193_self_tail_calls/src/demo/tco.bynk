@@ -50,6 +50,35 @@ fn firstDiff(xs: List[Int], ys: List[Int], i: Int) -> Int {
   }
 }
 
+// Covered: a pattern binder with the same name as a parameter. The call passes
+// the binder (the next value), not the parameter it shadows.
+fn drain(n: Int, acc: Int, xs: List[Int]) -> Int {
+  match xs.first() {
+    None => acc,
+    Some(acc) => drain(n + 1, acc, xs.skip(1)),
+  }
+}
+
+fn countdown(n: Int, steps: Int, xs: List[Int]) -> Int {
+  match xs.first() {
+    None => steps,
+    Some(n) => if n == 0 { steps } else { countdown(n - 1, steps + 1, [n - 1]) },
+  }
+}
+
+fn isDrain(n: Int, acc: Int, xs: List[Int]) -> Int {
+  let head = xs.first()
+  if head is Some(acc) { isDrain(n + 1, acc, xs.skip(1)) } else { acc }
+}
+
+fn nestedDrain(n: Int, acc: Int, xs: List[Option[Int]]) -> Int {
+  match xs.first() {
+    None => acc,
+    Some(Some(acc)) => nestedDrain(n + 1, acc, xs.skip(1)),
+    Some(None) => nestedDrain(n + 1, acc, xs.skip(1)),
+  }
+}
+
 // Covered: a tail call in a `match` arm with a guard.
 fn collatz(n: Int, steps: Int) -> Int {
   match n {

@@ -34,7 +34,10 @@ export function countdown<T>(a: T, n: number): boolean {
     if (n === 0) {
       return same(a, a);
     } else {
-      __tco1 = n - 1;
+      const __r0 = a;
+      const __r1 = n - 1;
+      __tco0 = __r0;
+      __tco1 = __r1;
       continue __tco;
     }
   }

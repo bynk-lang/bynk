@@ -61,7 +61,10 @@ export async function repeat(n: number, step: (a0: number) => globalThis.Promise
       return undefined;
     } else {
       await step(n);
-      __tco0 = n - 1;
+      const __r0 = n - 1;
+      const __r1 = step;
+      __tco0 = __r0;
+      __tco1 = __r1;
       continue __tco;
     }
   }

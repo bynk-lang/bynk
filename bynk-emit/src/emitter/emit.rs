@@ -957,7 +957,10 @@ fn emit_method(
     // an effectful method that awaits is valid TS; #2719's exec-context need
     // also forces it (a defensive union: such a method is effectful anyway).
     let is_async = is_effectful_return(&f.return_type) || commons.exec_plan.fn_needs(f);
-    // #3193: a direct self tail call runs as a loop, in constant stack.
+    // #3193: a direct self tail call runs as a loop, in constant stack. A method
+    // carries no contract clauses (`emit_method` guards none), so there are no
+    // `requires` to re-check per iteration; if methods gain them, they belong in
+    // the guards closure below.
     if let Some(plan) = super::tco::plan(f, commons) {
         super::tco::emit_loop_body(
             &mut body_text,

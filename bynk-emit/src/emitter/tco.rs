@@ -143,9 +143,6 @@ fn same_fn(decl: &FnDecl, f: &FnDecl) -> bool {
         }
 }
 
-/// The expressions a self call passes, in slot order (receiver first for an
-/// instance method call), or `None` when `e` is not a self call or not at the
-/// function's own instantiation.
 /// A call's callee and the expressions it passes in slot order (the receiver
 /// first for an instance method call), and its explicit type arguments.
 fn call_parts<'e>(
@@ -319,29 +316,17 @@ pub(crate) fn emit_continue(out: &mut String, e: &Expr, cx: &mut LowerCtx, inden
     for s in pre.stmts() {
         write_line(out, indent, s);
     }
-    // An argument that is the parameter itself needs no assignment.
-    let changed: Vec<(&Slot, &String)> = plan
-        .slots
-        .iter()
-        .zip(&vals)
-        .filter(|(s, v)| s.binder != **v)
-        .collect();
-    if changed.len() == 1 {
-        write_line(
-            out,
-            indent,
-            &format!("{} = {};", changed[0].0.var, changed[0].1),
-        );
-    } else if changed.len() > 1 {
-        // Every new argument is evaluated before any loop variable changes, so
-        // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
-        let temps: Vec<String> = changed.iter().map(|_| cx.fresh()).collect();
-        for ((_, v), t) in changed.iter().zip(&temps) {
-            write_line(out, indent, &format!("const {t} = {v};"));
-        }
-        for ((s, _), t) in changed.iter().zip(&temps) {
-            write_line(out, indent, &format!("{} = {t};", s.var));
-        }
+    // Every slot is assigned, even where the argument looks like the parameter's
+    // own name: a binder in the body can share a parameter's name, and the
+    // assignment is the only thing that can tell them apart. Every new argument
+    // is evaluated into a temporary before any loop variable changes, so
+    // `f(b, a)` swaps and `f(n - 1, acc + n)` reads the old `n`.
+    let temps: Vec<String> = vals.iter().map(|_| cx.fresh()).collect();
+    for (v, t) in vals.iter().zip(&temps) {
+        write_line(out, indent, &format!("const {t} = {v};"));
+    }
+    for (s, t) in plan.slots.iter().zip(&temps) {
+        write_line(out, indent, &format!("{} = {t};", s.var));
     }
     write_line(out, indent, &format!("continue {LABEL};"));
     true

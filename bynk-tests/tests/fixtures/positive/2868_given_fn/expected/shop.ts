@@ -27,7 +27,8 @@ export async function countdown(n: number, deps: { Logger: Logger }): globalThis
       return 0;
     } else {
       const __r0 = await warn("tick", deps);
-      __tco0 = n - 1;
+      const __r1 = n - 1;
+      __tco0 = __r1;
       continue __tco;
     }
   }

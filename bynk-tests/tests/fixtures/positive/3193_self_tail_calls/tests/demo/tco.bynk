@@ -33,6 +33,13 @@ case "a nested match arm is a loop" {
   expect firstDiff([1, 2], [1, 2, 3], 0) == 0
 }
 
+case "a pattern binder that shadows a parameter is passed on" {
+  expect drain(0, 0, [5, 6, 7]) == 7
+  expect countdown(0, 0, [3]) == 3
+  expect isDrain(0, 0, [5, 6, 7]) == 7
+  expect nestedDrain(0, 0, [Some(1), None, Some(9)]) == 9
+}
+
 case "a guarded match arm is a loop" {
   expect collatz(27, 0) == 111
 }

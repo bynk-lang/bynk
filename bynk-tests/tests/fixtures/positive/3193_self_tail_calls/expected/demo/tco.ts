@@ -142,7 +142,10 @@ export async function repeat(n: number, step: (a0: number) => globalThis.Promise
       return undefined;
     } else {
       await step(n);
-      __tco0 = n - 1;
+      const __r0 = n - 1;
+      const __r1 = step;
+      __tco0 = __r0;
+      __tco1 = __r1;
       continue __tco;
     }
   }
@@ -194,13 +197,129 @@ export function firstDiff(xs: readonly number[], ys: readonly number[], i: numbe
             if (x !== y) {
               return x - y;
             } else {
-              __tco2 = i + 1;
+              const __r2 = xs;
+              const __r3 = ys;
+              const __r4 = i + 1;
+              __tco0 = __r2;
+              __tco1 = __r3;
+              __tco2 = __r4;
               continue __tco;
             }
           }
         }
         throw new globalThis.Error("non-exhaustive match");
       }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  }
+}
+
+export function drain(n: number, acc: number, xs: readonly number[]): number {
+  let __tco0 = n, __tco1 = acc, __tco2 = xs;
+  __tco: while (true) {
+    const n = __tco0;
+    const acc = __tco1;
+    const xs = __tco2;
+    const __r0 = ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs);
+    switch (__r0.tag) {
+      case "None": {
+        return acc;
+      }
+      case "Some": {
+        const __r1 = __r0.value;
+        const __r2 = n + 1;
+        const __r3 = __r1;
+        const __r4 = (xs).slice(globalThis.Math.max(0, 1));
+        __tco0 = __r2;
+        __tco1 = __r3;
+        __tco2 = __r4;
+        continue __tco;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  }
+}
+
+export function countdown(n: number, steps: number, xs: readonly number[]): number {
+  let __tco0 = n, __tco1 = steps, __tco2 = xs;
+  __tco: while (true) {
+    const n = __tco0;
+    const steps = __tco1;
+    const xs = __tco2;
+    const __r0 = ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs);
+    switch (__r0.tag) {
+      case "None": {
+        return steps;
+      }
+      case "Some": {
+        const __r1 = __r0.value;
+        if (__r1 === 0) {
+          return steps;
+        } else {
+          const __r2 = __r1 - 1;
+          const __r3 = steps + 1;
+          const __r4 = [__r1 - 1];
+          __tco0 = __r2;
+          __tco1 = __r3;
+          __tco2 = __r4;
+          continue __tco;
+        }
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  }
+}
+
+export function isDrain(n: number, acc: number, xs: readonly number[]): number {
+  let __tco0 = n, __tco1 = acc, __tco2 = xs;
+  __tco: while (true) {
+    const n = __tco0;
+    const acc = __tco1;
+    const xs = __tco2;
+    const head = ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs);
+    if (((__c: boolean) => __c)(head.tag === "Some")) {
+      const __r0 = (head as Extract<typeof head, { tag: "Some" }>).value;
+      const __r1 = n + 1;
+      const __r2 = __r0;
+      const __r3 = (xs).slice(globalThis.Math.max(0, 1));
+      __tco0 = __r1;
+      __tco1 = __r2;
+      __tco2 = __r3;
+      continue __tco;
+    } else {
+      return acc;
+    }
+  }
+}
+
+export function nestedDrain(n: number, acc: number, xs: readonly Option<number>[]): number {
+  let __tco0 = n, __tco1 = acc, __tco2 = xs;
+  __tco: while (true) {
+    const n = __tco0;
+    const acc = __tco1;
+    const xs = __tco2;
+    const __r0 = ((__xs: readonly Option<number>[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs);
+    if (__r0.tag === "None") {
+      return acc;
+    }
+    if (__r0.tag === "Some" && __r0.value.tag === "Some") {
+      const __r1 = __r0.value.value;
+      const __r2 = n + 1;
+      const __r3 = __r1;
+      const __r4 = (xs).slice(globalThis.Math.max(0, 1));
+      __tco0 = __r2;
+      __tco1 = __r3;
+      __tco2 = __r4;
+      continue __tco;
+    }
+    if (__r0.tag === "Some" && __r0.value.tag === "None") {
+      const __r5 = n + 1;
+      const __r6 = acc;
+      const __r7 = (xs).slice(globalThis.Math.max(0, 1));
+      __tco0 = __r5;
+      __tco1 = __r6;
+      __tco2 = __r7;
+      continue __tco;
     }
     throw new globalThis.Error("non-exhaustive match");
   }
