@@ -355,6 +355,12 @@ mod native {
     /// parameters or a constraint, and never changes the schema. A statement
     /// that doesn't prepare is reported with its position in the list and
     /// leaves the schema as it was; checking goes on with the next one.
+    ///
+    /// A DDL statement that doesn't prepare isn't applied, so a later statement
+    /// that depends on it (a failed `CREATE`, then an `INSERT` into the table it
+    /// would have made) is reported too. That is accepted rather than
+    /// suppressed: at run time the batch stops at the first failure, so the
+    /// first error is the one to fix, and later ones go once it is fixed.
     pub(super) fn check_batch(
         conn: &mut Connection,
         members: &[&D1SqlSite],
