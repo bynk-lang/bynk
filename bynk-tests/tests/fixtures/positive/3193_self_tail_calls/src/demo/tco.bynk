@@ -38,6 +38,18 @@ fn lastOf(xs: List[Int], fallback: Int) -> Int {
   }
 }
 
+// Covered: a bare `match` as an arm's body, with the tail call under it. The
+// inner match is written as statements so the `continue` reaches the loop.
+fn firstDiff(xs: List[Int], ys: List[Int], i: Int) -> Int {
+  match xs.skip(i).first() {
+    None => 0,
+    Some(x) => match ys.skip(i).first() {
+      None => 0,
+      Some(y) => if x != y { x - y } else { firstDiff(xs, ys, i + 1) },
+    },
+  }
+}
+
 // Covered: a tail call in a `match` arm with a guard.
 fn collatz(n: Int, steps: Int) -> Int {
   match n {

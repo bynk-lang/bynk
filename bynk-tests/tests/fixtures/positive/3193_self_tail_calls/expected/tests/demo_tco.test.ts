@@ -41,7 +41,7 @@ function __makeTestDeps() {
 async function test_a_million_self_tail_calls_run_in_constant_stack() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     if (!(count(1000000, 0) === 1000000)) { throw __bynkExpectFailure("tests/demo/tco.bynk:8:10", 198, 226, "expect count(1000000, 0) == 1000000\n  expected: count(1000000, 0) == 1000000\n  actual:   " + __bynkShow((count(1000000, 0))) + " == " + __bynkShow((1000000))); }
     return { pass: true };
@@ -57,7 +57,7 @@ async function test_a_million_self_tail_calls_run_in_constant_stack() {
 async function test_an_accumulator_pair_swaps_and_reads_old_values() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     if (!(fibLoop(10, 0, 1) === 55)) { throw __bynkExpectFailure("tests/demo/tco.bynk:12:10", 295, 318, "expect fibLoop(10, 0, 1) == 55\n  expected: fibLoop(10, 0, 1) == 55\n  actual:   " + __bynkShow((fibLoop(10, 0, 1))) + " == " + __bynkShow((55))); }
     if (!(fibLoop(70, 0, 1) === 190392490709135)) { throw __bynkExpectFailure("tests/demo/tco.bynk:13:10", 328, 364, "expect fibLoop(70, 0, 1) == 190392490709135\n  expected: fibLoop(70, 0, 1) == 190392490709135\n  actual:   " + __bynkShow((fibLoop(70, 0, 1))) + " == " + __bynkShow((190392490709135))); }
@@ -74,7 +74,7 @@ async function test_an_accumulator_pair_swaps_and_reads_old_values() {
 async function test_an_Effect_function_with_a_million_self_tail_calls() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     const n = await countE(1000000, 0);
     if (!(n === 1000000)) { throw __bynkExpectFailure("tests/demo/tco.bynk:18:10", 466, 478, "expect n == 1000000\n  expected: n == 1000000\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1000000))); }
@@ -91,7 +91,7 @@ async function test_an_Effect_function_with_a_million_self_tail_calls() {
 async function test_an_Effect_function_that_awaits_before_a_million_self_tail_calls() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     await repeat(1000000, async (i) => globalThis.Promise.resolve(undefined));
     if (!(true)) { throw __bynkExpectFailure("tests/demo/tco.bynk:23:10", 609, 613, "expect true"); }
@@ -108,7 +108,7 @@ async function test_an_Effect_function_that_awaits_before_a_million_self_tail_ca
 async function test_a_recursive_match_is_a_loop() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     if (!(lastOf([1, 2, 3], 0) === 3)) { throw __bynkExpectFailure("tests/demo/tco.bynk:27:10", 663, 688, "expect lastOf([1, 2, 3], 0) == 3\n  expected: lastOf([1, 2, 3], 0) == 3\n  actual:   " + __bynkShow((lastOf([1, 2, 3], 0))) + " == " + __bynkShow((3))); }
     if (!(lastOf([], 9) === 9)) { throw __bynkExpectFailure("tests/demo/tco.bynk:28:10", 698, 716, "expect lastOf([], 9) == 9\n  expected: lastOf([], 9) == 9\n  actual:   " + __bynkShow((lastOf([], 9))) + " == " + __bynkShow((9))); }
@@ -122,12 +122,29 @@ async function test_a_recursive_match_is_a_loop() {
 }
 
 // case tier: unit
+async function test_a_nested_match_arm_is_a_loop() {
+  try {
+    const deps = __makeTestDeps();
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    type Chain = __ns_demo_tco.Chain;
+    if (!(firstDiff([1, 2, 3, 4], [1, 2, 9, 4], 0) === -6)) { throw __bynkExpectFailure("tests/demo/tco.bynk:32:10", 767, 813, "expect firstDiff([1, 2, 3, 4], [1, 2, 9, 4], 0) == -6\n  expected: firstDiff([1, 2, 3, 4], [1, 2, 9, 4], 0) == -6\n  actual:   " + __bynkShow((firstDiff([1, 2, 3, 4], [1, 2, 9, 4], 0))) + " == " + __bynkShow((-6))); }
+    if (!(firstDiff([1, 2], [1, 2, 3], 0) === 0)) { throw __bynkExpectFailure("tests/demo/tco.bynk:33:10", 823, 859, "expect firstDiff([1, 2], [1, 2, 3], 0) == 0\n  expected: firstDiff([1, 2], [1, 2, 3], 0) == 0\n  actual:   " + __bynkShow((firstDiff([1, 2], [1, 2, 3], 0))) + " == " + __bynkShow((0))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
 async function test_a_guarded_match_arm_is_a_loop() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(collatz(27, 0) === 111)) { throw __bynkExpectFailure("tests/demo/tco.bynk:32:10", 768, 789, "expect collatz(27, 0) == 111\n  expected: collatz(27, 0) == 111\n  actual:   " + __bynkShow((collatz(27, 0))) + " == " + __bynkShow((111))); }
+    if (!(collatz(27, 0) === 111)) { throw __bynkExpectFailure("tests/demo/tco.bynk:37:10", 911, 932, "expect collatz(27, 0) == 111\n  expected: collatz(27, 0) == 111\n  actual:   " + __bynkShow((collatz(27, 0))) + " == " + __bynkShow((111))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -141,10 +158,10 @@ async function test_a_guarded_match_arm_is_a_loop() {
 async function test_each_iteration_s_closure_keeps_its_own_binding() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     const fs = adders(3, []);
-    if (!(__bynkEq((fs).map((__x: (a0: number) => number) => ((f) => f(10))(__x)), [13, 12, 11]))) { throw __bynkExpectFailure("tests/demo/tco.bynk:37:10", 883, 919, "expect fs.map((f) => f(10)) == [13, 12, 11]\n  expected: fs.map((f) => f(10)) == [13, 12, 11]\n  actual:   " + __bynkShow(((fs).map((__x: (a0: number) => number) => ((f) => f(10))(__x)))) + " == " + __bynkShow(([13, 12, 11]))); }
+    if (!(__bynkEq((fs).map((__x: (a0: number) => number) => ((f) => f(10))(__x)), [13, 12, 11]))) { throw __bynkExpectFailure("tests/demo/tco.bynk:42:10", 1026, 1062, "expect fs.map((f) => f(10)) == [13, 12, 11]\n  expected: fs.map((f) => f(10)) == [13, 12, 11]\n  actual:   " + __bynkShow(((fs).map((__x: (a0: number) => number) => ((f) => f(10))(__x)))) + " == " + __bynkShow(([13, 12, 11]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -158,11 +175,11 @@ async function test_each_iteration_s_closure_keeps_its_own_binding() {
 async function test_a_method_tail_call_is_a_loop() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     const c = Chain.build(200000, Chain.End);
-    if (!(Chain.total(c, 0) === 20000100000)) { throw __bynkExpectFailure("tests/demo/tco.bynk:42:10", 1005, 1030, "expect c.total(0) == 20000100000\n  expected: c.total(0) == 20000100000\n  actual:   " + __bynkShow((Chain.total(c, 0))) + " == " + __bynkShow((20000100000))); }
-    if (!(Chain.length(c, 0) === 200000)) { throw __bynkExpectFailure("tests/demo/tco.bynk:43:10", 1040, 1061, "expect c.length(0) == 200000\n  expected: c.length(0) == 200000\n  actual:   " + __bynkShow((Chain.length(c, 0))) + " == " + __bynkShow((200000))); }
+    if (!(Chain.total(c, 0) === 20000100000)) { throw __bynkExpectFailure("tests/demo/tco.bynk:47:10", 1148, 1173, "expect c.total(0) == 20000100000\n  expected: c.total(0) == 20000100000\n  actual:   " + __bynkShow((Chain.total(c, 0))) + " == " + __bynkShow((20000100000))); }
+    if (!(Chain.length(c, 0) === 200000)) { throw __bynkExpectFailure("tests/demo/tco.bynk:48:10", 1183, 1204, "expect c.length(0) == 200000\n  expected: c.length(0) == 200000\n  actual:   " + __bynkShow((Chain.length(c, 0))) + " == " + __bynkShow((200000))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -176,10 +193,10 @@ async function test_a_method_tail_call_is_a_loop() {
 async function test_a_generic_tail_call_at_its_own_instantiation_is_a_loop() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(lastOr([1, 2, 3], 0) === 3)) { throw __bynkExpectFailure("tests/demo/tco.bynk:47:10", 1138, 1163, "expect lastOr([1, 2, 3], 0) == 3\n  expected: lastOr([1, 2, 3], 0) == 3\n  actual:   " + __bynkShow((lastOr([1, 2, 3], 0))) + " == " + __bynkShow((3))); }
-    if (!(lastOr(["a", "b"], "z") === "b")) { throw __bynkExpectFailure("tests/demo/tco.bynk:48:10", 1173, 1203, "expect lastOr([\"a\", \"b\"], \"z\") == \"b\"\n  expected: lastOr([\"a\", \"b\"], \"z\") == \"b\"\n  actual:   " + __bynkShow((lastOr(["a", "b"], "z"))) + " == " + __bynkShow(("b"))); }
+    if (!(lastOr([1, 2, 3], 0) === 3)) { throw __bynkExpectFailure("tests/demo/tco.bynk:52:10", 1281, 1306, "expect lastOr([1, 2, 3], 0) == 3\n  expected: lastOr([1, 2, 3], 0) == 3\n  actual:   " + __bynkShow((lastOr([1, 2, 3], 0))) + " == " + __bynkShow((3))); }
+    if (!(lastOr(["a", "b"], "z") === "b")) { throw __bynkExpectFailure("tests/demo/tco.bynk:53:10", 1316, 1346, "expect lastOr([\"a\", \"b\"], \"z\") == \"b\"\n  expected: lastOr([\"a\", \"b\"], \"z\") == \"b\"\n  actual:   " + __bynkShow((lastOr(["a", "b"], "z"))) + " == " + __bynkShow(("b"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -193,9 +210,9 @@ async function test_a_generic_tail_call_at_its_own_instantiation_is_a_loop() {
 async function test_requires_holds_on_every_iteration() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(down(10, 0) === 5)) { throw __bynkExpectFailure("tests/demo/tco.bynk:52:10", 1259, 1275, "expect down(10, 0) == 5\n  expected: down(10, 0) == 5\n  actual:   " + __bynkShow((down(10, 0))) + " == " + __bynkShow((5))); }
+    if (!(down(10, 0) === 5)) { throw __bynkExpectFailure("tests/demo/tco.bynk:57:10", 1402, 1418, "expect down(10, 0) == 5\n  expected: down(10, 0) == 5\n  actual:   " + __bynkShow((down(10, 0))) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -209,10 +226,10 @@ async function test_requires_holds_on_every_iteration() {
 async function test_requires_holds_on_every_iteration_of_an_Effect_function() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
     const n = await downE(10, 0);
-    if (!(n === 5)) { throw __bynkExpectFailure("tests/demo/tco.bynk:57:10", 1377, 1383, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
+    if (!(n === 5)) { throw __bynkExpectFailure("tests/demo/tco.bynk:62:10", 1520, 1526, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -226,9 +243,9 @@ async function test_requires_holds_on_every_iteration_of_an_Effect_function() {
 async function test_requires_reports_the_iteration_whose_arguments_violate_it() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!((await (async () => { try { await (downE(5, 0)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/tco.bynk:61:10", 1463, 1481, "expect downE(5, 0) faults\n  the call returned without faulting"); }
+    if (!((await (async () => { try { await (downE(5, 0)); return false; } catch (__e) { if (__e instanceof ExpectationError) { throw __e; } return true; } })()))) { throw __bynkExpectFailure("tests/demo/tco.bynk:66:10", 1606, 1624, "expect downE(5, 0) faults\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -242,9 +259,9 @@ async function test_requires_reports_the_iteration_whose_arguments_violate_it() 
 async function test_an_ensures_function_is_unchanged() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(countEnsured(50, 0) === 50)) { throw __bynkExpectFailure("tests/demo/tco.bynk:65:10", 1536, 1561, "expect countEnsured(50, 0) == 50\n  expected: countEnsured(50, 0) == 50\n  actual:   " + __bynkShow((countEnsured(50, 0))) + " == " + __bynkShow((50))); }
+    if (!(countEnsured(50, 0) === 50)) { throw __bynkExpectFailure("tests/demo/tco.bynk:70:10", 1679, 1704, "expect countEnsured(50, 0) == 50\n  expected: countEnsured(50, 0) == 50\n  actual:   " + __bynkShow((countEnsured(50, 0))) + " == " + __bynkShow((50))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -258,9 +275,9 @@ async function test_an_ensures_function_is_unchanged() {
 async function test_a_non_tail_self_call_is_unchanged() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(sumTo(100) === 5050)) { throw __bynkExpectFailure("tests/demo/tco.bynk:69:10", 1617, 1635, "expect sumTo(100) == 5050\n  expected: sumTo(100) == 5050\n  actual:   " + __bynkShow((sumTo(100))) + " == " + __bynkShow((5050))); }
+    if (!(sumTo(100) === 5050)) { throw __bynkExpectFailure("tests/demo/tco.bynk:74:10", 1760, 1778, "expect sumTo(100) == 5050\n  expected: sumTo(100) == 5050\n  actual:   " + __bynkShow((sumTo(100))) + " == " + __bynkShow((5050))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -274,10 +291,10 @@ async function test_a_non_tail_self_call_is_unchanged() {
 async function test_mutual_recursion_is_unchanged() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(isEven(100))) { throw __bynkExpectFailure("tests/demo/tco.bynk:73:10", 1687, 1698, "expect isEven(100)"); }
-    if (!(!isOdd(100))) { throw __bynkExpectFailure("tests/demo/tco.bynk:74:10", 1708, 1719, "expect !isOdd(100)"); }
+    if (!(isEven(100))) { throw __bynkExpectFailure("tests/demo/tco.bynk:78:10", 1830, 1841, "expect isEven(100)"); }
+    if (!(!isOdd(100))) { throw __bynkExpectFailure("tests/demo/tco.bynk:79:10", 1851, 1862, "expect !isOdd(100)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -291,10 +308,10 @@ async function test_mutual_recursion_is_unchanged() {
 async function test_a_shifting_generic_instantiation_is_unchanged() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(nest(10, 1) === 10)) { throw __bynkExpectFailure("tests/demo/tco.bynk:78:10", 1787, 1804, "expect nest(10, 1) == 10\n  expected: nest(10, 1) == 10\n  actual:   " + __bynkShow((nest(10, 1))) + " == " + __bynkShow((10))); }
-    if (!(nestTail(10, 1) === 0)) { throw __bynkExpectFailure("tests/demo/tco.bynk:79:10", 1814, 1834, "expect nestTail(10, 1) == 0\n  expected: nestTail(10, 1) == 0\n  actual:   " + __bynkShow((nestTail(10, 1))) + " == " + __bynkShow((0))); }
+    if (!(nest(10, 1) === 10)) { throw __bynkExpectFailure("tests/demo/tco.bynk:83:10", 1930, 1947, "expect nest(10, 1) == 10\n  expected: nest(10, 1) == 10\n  actual:   " + __bynkShow((nest(10, 1))) + " == " + __bynkShow((10))); }
+    if (!(nestTail(10, 1) === 0)) { throw __bynkExpectFailure("tests/demo/tco.bynk:84:10", 1957, 1977, "expect nestTail(10, 1) == 0\n  expected: nestTail(10, 1) == 0\n  actual:   " + __bynkShow((nestTail(10, 1))) + " == " + __bynkShow((0))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -308,9 +325,9 @@ async function test_a_shifting_generic_instantiation_is_unchanged() {
 async function test_a_wrapped_self_call_is_unchanged() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(__bynkEq(wrapped(10), Some(10)))) { throw __bynkExpectFailure("tests/demo/tco.bynk:83:10", 1889, 1912, "expect wrapped(10) == Some(10)\n  expected: wrapped(10) == Some(10)\n  actual:   " + __bynkShow((wrapped(10))) + " == " + __bynkShow((Some(10)))); }
+    if (!(__bynkEq(wrapped(10), Some(10)))) { throw __bynkExpectFailure("tests/demo/tco.bynk:88:10", 2032, 2055, "expect wrapped(10) == Some(10)\n  expected: wrapped(10) == Some(10)\n  actual:   " + __bynkShow((wrapped(10))) + " == " + __bynkShow((Some(10)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -324,9 +341,9 @@ async function test_a_wrapped_self_call_is_unchanged() {
 async function test_a_self_call_under___is_unchanged() {
   try {
     const deps = __makeTestDeps();
-    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
+    const { Chain, adders, collatz, count, countE, countEnsured, down, downE, fibLoop, firstDiff, isEven, isOdd, lastOf, lastOr, nest, nestTail, repeat, sumTo, tried, wrapped } = __ns_demo_tco;
     type Chain = __ns_demo_tco.Chain;
-    if (!(__bynkEq(tried(10), Ok(10)))) { throw __bynkExpectFailure("tests/demo/tco.bynk:87:10", 1967, 1986, "expect tried(10) == Ok(10)\n  expected: tried(10) == Ok(10)\n  actual:   " + __bynkShow((tried(10))) + " == " + __bynkShow((Ok(10)))); }
+    if (!(__bynkEq(tried(10), Ok(10)))) { throw __bynkExpectFailure("tests/demo/tco.bynk:92:10", 2110, 2129, "expect tried(10) == Ok(10)\n  expected: tried(10) == Ok(10)\n  actual:   " + __bynkShow((tried(10))) + " == " + __bynkShow((Ok(10)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -350,7 +367,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a million self tail calls run in constant stack", "an accumulator pair swaps and reads old values", "an Effect function with a million self tail calls", "an Effect function that awaits before a million self tail calls", "a recursive match is a loop", "a guarded match arm is a loop", "each iteration's closure keeps its own binding", "a method tail call is a loop", "a generic tail call at its own instantiation is a loop", "requires holds on every iteration", "requires holds on every iteration of an Effect function", "requires reports the iteration whose arguments violate it", "an ensures function is unchanged", "a non-tail self call is unchanged", "mutual recursion is unchanged", "a shifting generic instantiation is unchanged", "a wrapped self call is unchanged", "a self call under ? is unchanged"];
+export const __bynkCases: readonly string[] = ["a million self tail calls run in constant stack", "an accumulator pair swaps and reads old values", "an Effect function with a million self tail calls", "an Effect function that awaits before a million self tail calls", "a recursive match is a loop", "a nested match arm is a loop", "a guarded match arm is a loop", "each iteration's closure keeps its own binding", "a method tail call is a loop", "a generic tail call at its own instantiation is a loop", "requires holds on every iteration", "requires holds on every iteration of an Effect function", "requires reports the iteration whose arguments violate it", "an ensures function is unchanged", "a non-tail self call is unchanged", "mutual recursion is unchanged", "a shifting generic instantiation is unchanged", "a wrapped self call is unchanged", "a self call under ? is unchanged"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -382,6 +399,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a recursive match is a loop")) {
     const started = __bynkCaseNow();
     const r = { name: "a recursive match is a loop", ...(await test_a_recursive_match_is_a_loop()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a nested match arm is a loop")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a nested match arm is a loop", ...(await test_a_nested_match_arm_is_a_loop()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

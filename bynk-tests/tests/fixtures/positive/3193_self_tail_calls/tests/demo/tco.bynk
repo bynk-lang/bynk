@@ -28,6 +28,11 @@ case "a recursive match is a loop" {
   expect lastOf([], 9) == 9
 }
 
+case "a nested match arm is a loop" {
+  expect firstDiff([1, 2, 3, 4], [1, 2, 9, 4], 0) == -6
+  expect firstDiff([1, 2], [1, 2, 3], 0) == 0
+}
+
 case "a guarded match arm is a loop" {
   expect collatz(27, 0) == 111
 }

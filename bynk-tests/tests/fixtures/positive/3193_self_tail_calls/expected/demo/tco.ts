@@ -171,6 +171,41 @@ export function lastOf(xs: readonly number[], fallback: number): number {
   }
 }
 
+export function firstDiff(xs: readonly number[], ys: readonly number[], i: number): number {
+  let __tco0 = xs, __tco1 = ys, __tco2 = i;
+  __tco: while (true) {
+    const xs = __tco0;
+    const ys = __tco1;
+    const i = __tco2;
+    const __r0 = ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)((xs).slice(globalThis.Math.max(0, i)));
+    switch (__r0.tag) {
+      case "None": {
+        return 0;
+      }
+      case "Some": {
+        const x = __r0.value;
+        const __r1 = ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)((ys).slice(globalThis.Math.max(0, i)));
+        switch (__r1.tag) {
+          case "None": {
+            return 0;
+          }
+          case "Some": {
+            const y = __r1.value;
+            if (x !== y) {
+              return x - y;
+            } else {
+              __tco2 = i + 1;
+              continue __tco;
+            }
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  }
+}
+
 export function collatz(n: number, steps: number): number {
   let __tco0 = n, __tco1 = steps;
   __tco: while (true) {

@@ -41,8 +41,9 @@ struct Slot {
 pub(crate) struct TcoPlan {
     /// The tail self calls.
     calls: HashSet<ExprId>,
-    /// The `if` expressions with a tail self call in one of their branches, at
-    /// any depth: they must be emitted as statements, never as a ternary.
+    /// The `if` and `match` expressions with a tail self call in one of their
+    /// branches, at any depth: they must be emitted as statements, never as a
+    /// ternary or an arrow, whose `continue` could not reach the loop.
     ifs: HashSet<ExprId>,
     /// The receiver (when the function has `self`) and the parameters, in
     /// argument order.
@@ -110,6 +111,9 @@ fn walk_expr(e: &Expr, f: &FnDecl, commons: &TypedCommons, p: &mut TcoPlan) -> b
                     MatchBody::Expr(e) => walk_expr(e, f, commons, p),
                     MatchBody::Block(b) => walk_block(b, f, commons, p),
                 };
+            }
+            if any {
+                p.ifs.insert(e.id);
             }
             any
         }
@@ -246,8 +250,8 @@ impl TcoPlan {
         self.calls.contains(&e.id)
     }
 
-    /// Whether the `if` `e` has a tail self call in a branch.
-    pub(crate) fn if_has_call(&self, e: &Expr) -> bool {
+    /// Whether the `if` or `match` `e` has a tail self call in a branch.
+    pub(crate) fn has_call_in(&self, e: &Expr) -> bool {
         self.ifs.contains(&e.id)
     }
 }
