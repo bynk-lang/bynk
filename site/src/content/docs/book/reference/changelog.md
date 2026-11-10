@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.534.3** | The editor-latency budget (language-server edit-to-diagnostics p95 under 100 ms on the 50-context project) is stated in the benchmark README and the `keystroke_latency` row, and `cargo xtask bench` warns when a record breaches it |
+| **v0.534.2** | `cargo xtask check-pending` rejects a pending file whose `changelog` is wrapped in quotes, which the stamp would have copied into the changelog row |
 | **v0.534.1** | "The emitter lowers an agent class's handler methods in `emit_agent_handlers`, as part of splitting `emit_agent` (#3167)" |
 | **v0.534.0** | `bynk deploy revert` refuses a rollback to a build that writes an older storage layout over stored data (per-entry storage, slice 5b) |
 | **v0.533.0** | A `system` case can drive an `Oidc` route as `by WrongAlgorithm` (an `alg: none` token and an HS256 token keyed with the public key) and `by NoSubject` (an empty and a missing `sub`), each expected to read `Rejected(Unauthorized)` |
