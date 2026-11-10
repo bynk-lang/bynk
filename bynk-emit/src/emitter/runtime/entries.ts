@@ -441,61 +441,103 @@ export async function readStored<S extends object>(
   const entries = new Map<string, unknown>();
   for (const [k, v] of all) if (isEntryKey(k)) entries.set(k, v);
   bases.set(self, { entries });
-  return joinStored(stored, fields, entries) as S;
+  return joinStored(stored, entries) as S;
 }
 
+// Join every per-entry key found in storage back into a wholesale-shaped record. It is
+// driven by what is stored, not by the current class's field list: a migration step runs
+// on the record as the *stored* version shaped it, so a collection the current version
+// removed, or re-kinded, must be joined as it was stored. A collection field is rebuilt
+// from the prefix its entries are under (`m/` a Map, or a Cache when its entries carry an
+// expiry; `s/` a Set; `l/` a Log) and its index postings from `i/`. A field that has an
+// inline value in the record and no entries is left as it is.
 function joinStored(
   stored: Readonly<Record<string, unknown>>,
-  fields: readonly EntryField[],
   entries: ReadonlyMap<string, unknown>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...stored };
   delete out[LAYOUT_KEY];
-  for (const f of fields) {
-    const own = [...entries].filter(([k]) => k.startsWith(f.kind === "set" ? setPrefix(f.name) : f.kind === "log" ? logPrefix(f.name) : mapPrefix(f.name)));
-    if (f.kind === "log") {
-      own.sort(([a], [b]) => utf8Compare(a, b));
-      out[f.name] = own.map(([, v]) => copyStored(v));
-      continue;
+  const maps = new Map<string, Array<[string, Record<string, unknown>]>>();
+  const sets = new Map<string, Array<[string, Record<string, unknown>]>>();
+  const logs = new Map<string, Array<[string, unknown]>>();
+  const postings = new Map<string, Array<[string, string]>>();
+  const split = (key: string, parts: number): string[] => {
+    const all = key.slice(2).split("/");
+    return all.length === parts ? all.map(decodeKeyPart) : [];
+  };
+  for (const [key, value] of entries) {
+    const tag = key.slice(0, 2);
+    if (tag === "m/" || tag === "s/") {
+      const [field, k] = split(key, 2);
+      if (field === undefined || k === undefined) continue;
+      const into = tag === "m/" ? maps : sets;
+      into.set(field, [...(into.get(field) ?? []), [k, value as Record<string, unknown>]]);
+    } else if (tag === "l/") {
+      const [field] = split(key, 2);
+      if (field === undefined) continue;
+      logs.set(field, [...(logs.get(field) ?? []), [key, value]]);
+    } else if (tag === "i/") {
+      const [field, index, by, pk] = split(key, 4);
+      if (field === undefined || index === undefined || by === undefined || pk === undefined) continue;
+      const name = `${field}__idx_${index}`;
+      postings.set(`${field}\u0000${name}`, [...(postings.get(`${field}\u0000${name}`) ?? []), [by, pk]]);
     }
-    const prefix = f.kind === "set" ? setPrefix(f.name) : mapPrefix(f.name);
+  }
+  const define = (name: string, value: unknown): void => {
+    Object.defineProperty(out, name, { value, enumerable: true, writable: true, configurable: true });
+  };
+  const record = (
+    own: Array<[string, Record<string, unknown>]>,
+    read: (env: Record<string, unknown>) => unknown,
+  ): { value: Record<string, unknown>; order: Map<string, number> } => {
     own.sort(([, a], [, b]) => orderOf(a) - orderOf(b));
-    const record: Record<string, unknown> = {};
+    const value: Record<string, unknown> = {};
     const order = new Map<string, number>();
-    for (const [key, env] of own) {
-      const k = entryKeyOf(prefix, key);
+    for (const [k, env] of own) {
       order.set(k, orderOf(env));
-      const { i: _i, ...rest } = env as Record<string, unknown>;
-      // A `Map` entry is `{ i, v }` and reads back as `v`; a `Cache` entry is
-      // `{ v, exp, i }` and reads back as `{ v, exp }`; a `Set` element is `true`.
-      Object.defineProperty(record, k, {
-        value: f.kind === "set" ? true : copyStored(f.kind === "map" ? rest.v : rest),
+      Object.defineProperty(value, k, { value: read(env), enumerable: true, writable: true, configurable: true });
+    }
+    return { value, order };
+  };
+  const owners = new Map<string, Map<string, number>>();
+  for (const [field, own] of maps) {
+    const cache = own.every(([, env]) => Object.hasOwn(env, "exp"));
+    const { value, order } = record(own, (env) => {
+      if (!cache) return copyStored(env.v);
+      const { i: _i, ...rest } = env;
+      return copyStored(rest);
+    });
+    owners.set(field, order);
+    define(field, value);
+  }
+  for (const [field, own] of sets) {
+    const { value, order } = record(own, () => true);
+    owners.set(field, order);
+    define(field, value);
+  }
+  for (const [field, own] of logs) {
+    own.sort(([a], [b]) => utf8Compare(a, b));
+    define(
+      field,
+      own.map(([, v]) => copyStored(v)),
+    );
+  }
+  for (const [id, own] of postings) {
+    const [field, name] = id.split("\u0000") as [string, string];
+    const order = owners.get(field);
+    const sorted = own
+      .map(([by, pk]): [string, string, number] => [by, pk, order?.get(pk) ?? Number.MAX_SAFE_INTEGER])
+      .sort((a, b) => a[2] - b[2]);
+    const buckets: Record<string, string[]> = {};
+    for (const [by, pk] of sorted) {
+      Object.defineProperty(buckets, by, {
+        value: [...(globalThis.Object.hasOwn(buckets, by) ? (buckets[by] as string[]) : []), pk],
         enumerable: true,
         writable: true,
         configurable: true,
       });
     }
-    out[f.name] = record;
-    for (const ix of f.indexes ?? []) {
-      const prefixIx = postingPrefix(f.name, ix.index);
-      const members: Array<[string, string, number]> = [];
-      for (const key of entries.keys()) {
-        if (!key.startsWith(prefixIx)) continue;
-        const [by, pk] = key.slice(prefixIx.length).split("/").map(decodeKeyPart) as [string, string];
-        members.push([by, pk, order.get(pk) ?? Number.MAX_SAFE_INTEGER]);
-      }
-      members.sort((a, b) => a[2] - b[2]);
-      const buckets: Record<string, string[]> = {};
-      for (const [by, pk] of members) {
-        Object.defineProperty(buckets, by, {
-          value: [...(globalThis.Object.hasOwn(buckets, by) ? (buckets[by] as string[]) : []), pk],
-          enumerable: true,
-          writable: true,
-          configurable: true,
-        });
-      }
-      out[ix.recordField] = buckets;
-    }
+    define(name, buckets);
   }
   return out;
 }

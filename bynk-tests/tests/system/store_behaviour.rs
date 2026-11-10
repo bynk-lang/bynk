@@ -2470,6 +2470,24 @@ assert((await fault(() => new Cart(blank.state as never).getOwner({}))) === "Ref
 const cur = fakeState({ ownerName: { kind: "None" }, totalCents: 9, share: 1, items: {}, tags: 4, memo: "m", __v: 3 });
 assert((await new Cart(cur.state as never).getTags({})) === 4, "a current record is read as it is");
 
+// 7. A record in the per-entry layout runs the step over the record as it was stored: the
+//    entries of the carried map are joined, a re-kinded Set (`tags`, dropped by the step)
+//    is joined as the Set it was, and the commit deletes its old keys and keeps the map's.
+const pe = fakeState({ owner: "ev", total: 3, note: "x", __v: 2, __layout: 2 });
+pe.m.set("m/items/a", { i: 0, v: 1 });
+pe.m.set("m/items/b", { i: 1, v: 2 });
+pe.m.set("c/items", { size: 2, seq: 2 });
+pe.m.set("s/tags/x", { i: 0 });
+pe.m.set("c/tags", { size: 1, seq: 1 });
+const cpe = new Cart(pe.state as never);
+assert((await cpe.getCents({})) === 300, "a step runs over a per-entry record");
+assert((await cpe.itemCount({})) === 2, "the carried map's entries are joined before the step");
+assert((await cpe.getTags({})) === 0, "a re-kinded field the step drops starts at its zero");
+await cpe.setCents(5, {});
+assert(!pe.m.has("s/tags/x") && !pe.m.has("c/tags"), "the dropped field's old entries are deleted by the commit");
+assert(pe.m.has("m/items/a") && pe.m.has("m/items/b"), "the carried map's entries are kept");
+assert(stored(pe).__layout === 2 && stored(pe).__v === 3, "the record stays in layout 2 at the new version");
+
 console.log("ALL OK");
 "#;
 

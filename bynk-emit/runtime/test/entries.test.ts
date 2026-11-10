@@ -365,7 +365,7 @@ test("diffEntries: only new, changed and removed keys are written", () => {
   assert.deepEqual(diffEntries(new Map(Object.entries(next)), next), { puts: {}, deletes: [] });
 });
 
-test("sameStored compares plain data structurally, including key order", () => {
+test("sameStored compares plain data structurally, whatever the key order", () => {
   assert.ok(sameStored({ a: 1, b: [1, { c: 2 }] }, { b: [1, { c: 2 }], a: 1 }));
   assert.ok(!sameStored({ a: 1 }, { a: 1, b: undefined }));
   assert.ok(!sameStored([1, 2], [2, 1]));
@@ -492,4 +492,38 @@ test("codec: a value a handler mutates in place is written, not hidden by the ba
   st.users.a.n = 2; // in place, as a handler's lowered update does
   await commitStored(self, s as never, st, FIELDS);
   assert.deepEqual((await load({}, s)).users, { a: { n: 2 } });
+});
+
+test("codec: a collection the current fields do not list is joined as it was stored", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { users: { a: 1 }, hits: { k: { v: 1, exp: 9 } }, tags: { z: true } }, FIELDS);
+  // A later version has none of these fields; a migration step reads them.
+  const st = (await readStored({}, s as never, ((await s.get("state")) ?? {}) as object, [])) as Record<string, any>;
+  assert.deepEqual(st.users, { a: 1 });
+  assert.deepEqual(st.hits, { k: { v: 1, exp: 9 } });
+  assert.deepEqual(st.tags, { z: true });
+  assert.equal(st.__layout, undefined);
+});
+
+test("codec: a Cell re-kinded to a collection keeps its inline value for a step to read", async () => {
+  const s = new InMemoryStorage();
+  await s.put("state", { __layout: 2, users: 42 });
+  const st = (await readStored({}, s as never, ((await s.get("state")) ?? {}) as object, FIELDS)) as Record<string, any>;
+  assert.equal(st.users, 42);
+});
+
+test("codec: a field re-kinded from a Map to a Set is joined as the Map it was, and committed as a Set", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  await commitStored(self, s as never, { users: { a: 1, b: 2 } }, FIELDS);
+  const asSet: EntryField[] = [{ name: "users", kind: "set" }];
+  const st = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object, asSet)) as Record<string, any>;
+  assert.deepEqual(st.users, { a: 1, b: 2 }); // what the step reads
+  st.users = { a: true, b: true }; // what the step produces
+  await commitStored(self, s as never, st, asSet);
+  assert.deepEqual([...(await s.list({ prefix: "m/users/" })).keys()], []);
+  assert.deepEqual(Object.keys(((await readStored({}, s as never, ((await s.get("state")) ?? {}) as object, asSet)) as Record<string, any>).users), ["a", "b"]);
 });
