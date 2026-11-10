@@ -23,6 +23,11 @@
 //! count is a property of the SQL text, so `parameter_count` (a scanner that
 //! mirrors SQLite's) still checks it (#3126). A database whose migrations
 //! failed is skipped entirely, as each statement would only echo that warning.
+//! #3197: the statements of a literal `batch` list run in order, so each is
+//! prepared against the schema the earlier ones leave: inside a savepoint on the
+//! schema connection, a statement that prepares and is DDL (`CREATE`, `DROP`,
+//! `ALTER`) is also executed, and the savepoint is rolled back when the batch
+//! has been checked, on every path, so the shared schema is never left changed.
 //! Never stricter than the test tier is the aim, since that tier runs the same
 //! migrations on Node's own SQLite.
 //!
@@ -76,7 +81,7 @@ mod native {
     use bynk_syntax::ast::ExprId;
     use bynk_syntax::error::CompileError;
     use bynk_syntax::span::Span;
-    use rusqlite::{Connection, config::DbConfig};
+    use rusqlite::{Connection, DropBehavior, config::DbConfig};
 
     use crate::checker::Callee;
     use crate::checker::{D1DecodeSite, D1SqlSite};
@@ -262,6 +267,10 @@ mod native {
             }
             let worker = bynk_project::worker_dir_name(unit);
             let mut out = Vec::new();
+            // #3197: a batch is checked as a whole, the first time one of its
+            // statements is reached (they are contiguous in source order).
+            let mut batches_done: std::collections::HashSet<(String, usize)> =
+                std::collections::HashSet::new();
             for site in sites.values() {
                 let Some(instance) = table.derived.get(&site.cap).filter(|d| is_d1(d)) else {
                     continue;
@@ -279,7 +288,19 @@ mod native {
                     }
                     continue;
                 };
-                let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
+                let mut conn = conn.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(position) = site.batch {
+                    if batches_done.insert((database.clone(), position.group)) {
+                        let members: Vec<&D1SqlSite> = sites
+                            .values()
+                            .copied()
+                            .filter(|s| s.batch.is_some_and(|b| b.group == position.group))
+                            .filter(|s| s.cap == site.cap)
+                            .collect();
+                        out.extend(check_batch(&mut conn, &members, &database, source));
+                    }
+                    continue;
+                }
                 if let Some(err) = check_site(&conn, site, &database, source) {
                     out.push(err);
                 }
@@ -324,6 +345,78 @@ mod native {
         };
         let at = usize::try_from(offset as isize - origin).ok()?;
         super::literal_subspan(source, site.span, decoded, at)
+    }
+
+    /// #3197: one literal `batch` list's statements, in order, each prepared
+    /// against the schema the earlier ones leave. The work happens inside a
+    /// savepoint whose guard rolls back (and releases) when it drops, so the
+    /// cached schema connection comes out unchanged on every path, an early
+    /// return or a panic included. Only DDL is executed: DML can fail on its
+    /// parameters or a constraint, and never changes the schema. A statement
+    /// that doesn't prepare is reported with its position in the list and
+    /// leaves the schema as it was; checking goes on with the next one.
+    pub(super) fn check_batch(
+        conn: &mut Connection,
+        members: &[&D1SqlSite],
+        database: &str,
+        source: Option<&str>,
+    ) -> Vec<CompileError> {
+        let mut out = Vec::new();
+        let Ok(mut savepoint) = conn.savepoint() else {
+            // No savepoint to work in: check each against the migrated schema.
+            for site in members {
+                out.extend(check_site(conn, site, database, source));
+            }
+            return out;
+        };
+        savepoint.set_drop_behavior(DropBehavior::Rollback);
+        for site in members {
+            match check_site(&savepoint, site, database, source) {
+                Some(err) => {
+                    let index = site.batch.map_or(0, |b| b.index) + 1;
+                    out.push(err.with_note(format!(
+                        "statement {index} of the batch; a batch's statements run in order, so each is checked against the schema the earlier ones leave"
+                    )));
+                }
+                None => apply_ddl(&savepoint, &site.text),
+            }
+        }
+        out
+    }
+
+    /// Whether `sql` begins (past whitespace and comments) with a schema
+    /// statement.
+    pub(super) fn is_ddl(sql: &str) -> bool {
+        let mut rest = sql;
+        loop {
+            rest = rest.trim_start();
+            if let Some(after) = rest.strip_prefix("--") {
+                rest = after.split_once('\n').map_or("", |(_, tail)| tail);
+            } else if let Some(after) = rest.strip_prefix("/*") {
+                rest = after.split_once("*/").map_or("", |(_, tail)| tail);
+            } else {
+                break;
+            }
+        }
+        let word: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphabetic())
+            .collect::<String>()
+            .to_ascii_uppercase();
+        matches!(word.as_str(), "CREATE" | "DROP" | "ALTER")
+    }
+
+    /// Execute `sql` when it is DDL, so the next statement of the batch sees its
+    /// effect. A failure to execute leaves the schema as it was.
+    fn apply_ddl(conn: &Connection, sql: &str) {
+        if !is_ddl(sql) {
+            return;
+        }
+        if let Ok(mut stmt) = conn.prepare(sql)
+            && stmt.parameter_count() == 0
+        {
+            let _ = stmt.execute([]);
+        }
     }
 
     fn check_site(
@@ -869,6 +962,7 @@ mod tests {
             row: None,
             passed: None,
             literal: literal.map(|(l, o)| (l.to_string(), o)),
+            batch: None,
         }
     }
 
@@ -893,5 +987,185 @@ mod tests {
         let decoded = "SELECT \"nope\" FROM t";
         let lit = bynk_syntax::span::Span::new(2, source.len() - 1);
         assert_eq!(literal_subspan(source, lit, decoded, 7), None);
+    }
+
+    /// #3197: a statement of a `batch`, at `index`, in the batch at `group`.
+    fn batch_site(text: &str, index: usize) -> crate::checker::D1SqlSite {
+        crate::checker::D1SqlSite {
+            op: "batch".into(),
+            batch: Some(crate::checker::BatchPosition { group: 7, index }),
+            // A distinct span per statement, as in source.
+            ..site(text, None, (index * 100, index * 100 + 50))
+        }
+    }
+
+    /// Check one batch's statements against a database built from `migration`;
+    /// returns the diagnostics and the (shared, cached) schema connection.
+    fn check_batch_of(
+        migration: &str,
+        statements: &[&str],
+    ) -> (
+        Vec<bynk_syntax::error::CompileError>,
+        std::sync::Arc<std::sync::Mutex<Connection>>,
+    ) {
+        let mut errors = ErrorSink::new();
+        let built =
+            D1Sql::build(&migrations(&[("0001_a.sql", migration)]), &mut errors).expect("applies");
+        let conn = built.schemas["demo-orders"].clone();
+        let sites: Vec<_> = statements
+            .iter()
+            .enumerate()
+            .map(|(i, text)| batch_site(text, i))
+            .collect();
+        let members: Vec<&crate::checker::D1SqlSite> = sites.iter().collect();
+        let out = super::native::check_batch(
+            &mut conn.lock().unwrap_or_else(|e| e.into_inner()),
+            &members,
+            "demo-orders",
+            None,
+        );
+        (out, conn)
+    }
+
+    fn tables(conn: &std::sync::Arc<std::sync::Mutex<Connection>>) -> Vec<String> {
+        let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
+            .unwrap();
+        stmt.query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    /// #3197: `DROP`, then `CREATE` of the same table, then an `INSERT` into it
+    /// is a valid batch: the `CREATE` runs after the `DROP`.
+    #[test]
+    fn a_batch_may_drop_then_recreate_a_table() {
+        let (out, _) = check_batch_of(
+            "CREATE TABLE b3197_books (isbn, title);",
+            &[
+                "DROP TABLE b3197_books",
+                "CREATE TABLE b3197_books (isbn, title, author, pages, finished)",
+                "INSERT INTO b3197_books VALUES ('x', 'Notes', 'Anon', 10, 2)",
+            ],
+        );
+        assert!(out.is_empty(), "{out:?}");
+    }
+
+    /// #3197: a table created earlier in the batch exists for a later statement.
+    #[test]
+    fn a_batch_may_use_a_table_it_creates() {
+        let (out, _) = check_batch_of(
+            "CREATE TABLE b3197_other (id);",
+            &[
+                "CREATE TABLE b3197_fresh (id, name)",
+                "INSERT INTO b3197_fresh VALUES (1, 'a')",
+                "ALTER TABLE b3197_fresh ADD COLUMN extra",
+                "UPDATE b3197_fresh SET extra = 'x' WHERE id = ?1",
+            ],
+        );
+        assert!(out.is_empty(), "{out:?}");
+    }
+
+    /// #3197: a genuinely invalid statement after DDL is still refused, at that
+    /// statement's own span, naming its position, and a later valid one is not.
+    #[test]
+    fn an_invalid_statement_after_ddl_is_refused_at_its_element() {
+        let (out, _) = check_batch_of(
+            "CREATE TABLE b3197_t (id);",
+            &[
+                "CREATE TABLE b3197_u (id)",
+                "INSERT INTO b3197_u (nope) VALUES (1)",
+                "INSERT INTO b3197_u (id) VALUES (1)",
+            ],
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].category, "bynk.d1.sql_invalid");
+        assert!(out[0].message.contains("nope"), "{}", out[0].message);
+        assert_eq!((out[0].span.start, out[0].span.end), (100, 150));
+        assert!(
+            out[0]
+                .notes
+                .iter()
+                .any(|n| n.contains("statement 2 of the batch")),
+            "{:?}",
+            out[0].notes
+        );
+    }
+
+    /// #3197: a statement that doesn't prepare doesn't change the schema, so a
+    /// later statement still sees the table as it was.
+    #[test]
+    fn a_failing_ddl_statement_leaves_the_schema_alone() {
+        let (out, _) = check_batch_of(
+            "CREATE TABLE b3197_k (id);",
+            &[
+                "CREATE TABLE b3197_k (id)",      // already exists: refused
+                "INSERT INTO b3197_k VALUES (1)", // still the migrated table
+            ],
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert!(
+            out[0].message.contains("already exists"),
+            "{}",
+            out[0].message
+        );
+    }
+
+    /// #3197: the cached schema connection comes out of a batch unchanged, so
+    /// the next batch, or a single statement, sees the migrated schema: the
+    /// dropped table is back and the created one is gone. Rolled back even
+    /// when a statement is refused part-way.
+    #[test]
+    fn the_cached_schema_is_unchanged_after_a_batch() {
+        let migration = "CREATE TABLE b3197_keep (id, name);";
+        let before = {
+            let (_, conn) = check_batch_of(migration, &[]);
+            tables(&conn)
+        };
+        assert!(before.contains(&"b3197_keep".to_string()), "{before:?}");
+        let (out, conn) = check_batch_of(
+            migration,
+            &[
+                "DROP TABLE b3197_keep",
+                "CREATE TABLE b3197_made (id)",
+                "SELECT nope FROM b3197_made", // refused part-way
+                "ALTER TABLE b3197_made ADD COLUMN more",
+            ],
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(tables(&conn), before, "the migrated schema is untouched");
+        // A separate statement sees the original schema, and a second batch
+        // starts from it too.
+        let c = conn.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(c.prepare("SELECT name FROM b3197_keep").is_ok());
+        assert!(c.prepare("SELECT id FROM b3197_made").is_err());
+        drop(c);
+        let (again, _) = check_batch_of(migration, &["INSERT INTO b3197_keep VALUES (1, 'a')"]);
+        assert!(again.is_empty(), "{again:?}");
+    }
+
+    /// DML is never executed; only DDL is recognised, past comments.
+    #[test]
+    fn only_schema_statements_are_executed() {
+        use super::native::is_ddl;
+        for ddl in [
+            "CREATE TABLE t (a)",
+            "  drop table t",
+            "-- note\nALTER TABLE t ADD c",
+            "/* x */ CREATE INDEX i ON t (a)",
+        ] {
+            assert!(is_ddl(ddl), "{ddl}");
+        }
+        for other in [
+            "INSERT INTO t VALUES (1)",
+            "UPDATE t SET a = 1",
+            "SELECT 1",
+            "PRAGMA x",
+            "",
+        ] {
+            assert!(!is_ddl(other), "{other}");
+        }
     }
 }
