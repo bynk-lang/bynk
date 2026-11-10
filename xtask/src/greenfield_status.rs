@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Eighteen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Nineteen are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -86,7 +86,7 @@ impl Report {
 }
 
 /// Run every probe against the tree rooted at `root` (the repo root). Used by the CLI's
-/// full report; the gating test uses the eighteen gated probes alone
+/// full report; the gating test uses the nineteen gated probes alone
 /// ([`gated_disagreements`]) so it never pays for a workspace-wide clippy pass
 /// (`wildcard_arms`) just to check the probes that are actually diffed.
 pub fn run(root: &Path) -> Report {
@@ -98,7 +98,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 18] = [
+pub const GATED_PROBES: [&str; 19] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -117,9 +117,10 @@ pub const GATED_PROBES: [&str; 18] = [
     "diagnostic_coverage",
     "model_readers_beyond_emit",
     "unused_deps",
+    "explained_codes",
 ];
 
-/// The eighteen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The nineteen gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -140,6 +141,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         diagnostic_coverage(root),
         model_readers_beyond_emit(root),
         unused_deps(root),
+        explained_codes(root),
     ]
 }
 
@@ -2978,6 +2980,36 @@ fn diagnostic_coverage(root: &Path) -> Probe {
     }
 }
 
+// --- explained_codes ------------------------------------------------------
+
+/// #3163. Registry codes with a curated `bynk explain` entry
+/// ([`bynk_syntax::diagnostics::EXPLANATIONS`]), out of all registry codes.
+///
+/// Coverage is deliberately incremental (`bynk/src/explain.rs`, DECISION B),
+/// so this is a ratchet, not a closure: `xtask/tests/greenfield_status.rs`'s
+/// `explained_codes_never_fall` refuses a fall even when a pending file
+/// acknowledges the probe. A new error code should ship with an explanation
+/// (`design/proposals/README.md`, "Documentation is part of done").
+fn explained_codes(_root: &Path) -> Probe {
+    let total = bynk_syntax::diagnostics::REGISTRY.len();
+    let explained = bynk_syntax::diagnostics::EXPLANATIONS.len();
+    Probe {
+        name: "explained_codes",
+        gated: true,
+        reads: format!("explained={explained} (of {total})"),
+    }
+}
+
+/// The leading count of an `explained_codes` reading (`explained=N (of M)`).
+pub fn explained_codes_count(reading: &str) -> Option<usize> {
+    reading
+        .strip_prefix("explained=")?
+        .split(' ')
+        .next()?
+        .parse()
+        .ok()
+}
+
 // --- Reported probe 4: fixture_kinds --------------------------------------
 
 /// R11.2. Fixture directories under `bynk-tests/tests` using each assertion granularity —
@@ -3325,7 +3357,7 @@ pub fn render_table(report: &Report) -> String {
          `incremental_query_types`/`keystroke_latency` added by P8.0 (#1510); \
          `unconsumed_ir_items` added by Slice D3 of the IR cutover (#1542); \
          `diagnostic_coverage` added by #1662; `model_readers_beyond_emit` added by \
-         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976). Eighteen \
+         crate-hygiene B1 (#2939); `unused_deps` added by crate-hygiene A4 (#2976); `explained_codes` added by #3163. Nineteen \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",

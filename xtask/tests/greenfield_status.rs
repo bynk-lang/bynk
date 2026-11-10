@@ -1,6 +1,6 @@
 //! Drift guard: `design/greenfield-status.md` matches a fresh probe run.
 //!
-//! Only the eighteen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
+//! Only the nineteen gated (zero/closure/existence) probes are diffed — `wildcard_arms`,
 //! `keep_in_sync`, `test_density`, `fixture_kinds`, `keystroke_latency` are trend
 //! probes, recomputed and printed by `cargo xtask greenfield-status` but never gated
 //! here (#999 Decision D): they move on nearly any ordinary Rust PR (or, for
@@ -100,5 +100,36 @@ fn model_readers_beyond_emit_never_falls() {
          probe's committed row in design/greenfield-status.md to the new reading in the \
          same PR, and naming the probe in that PR's pending file's `probes:`.",
         live.reads
+    );
+}
+
+/// #3163: the number of codes with a written `bynk explain` entry can only
+/// rise. `greenfield_status_table_is_current` accepts any move a pending
+/// file's `probes:` acknowledges; this refuses a fall even then.
+#[test]
+fn explained_codes_never_fall() {
+    let root = repo_root();
+    let probes = xtask::greenfield_status::run_gated(&root);
+    let live = probes
+        .iter()
+        .find(|p| p.name == "explained_codes")
+        .expect("explained_codes runs as a gated probe");
+    let committed = std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
+        .expect("read the committed greenfield-status table");
+    let row_prefix = "| `explained_codes` | yes | ";
+    let committed_reads = committed
+        .lines()
+        .find_map(|l| l.strip_prefix(row_prefix))
+        .and_then(|l| l.strip_suffix(" |"))
+        .expect("the committed table has an explained_codes row");
+    let floor = xtask::greenfield_status::explained_codes_count(committed_reads)
+        .expect("the committed reading starts with a count");
+    let now = xtask::greenfield_status::explained_codes_count(&live.reads)
+        .expect("the live reading starts with a count");
+    assert!(
+        now >= floor,
+        "explained_codes fell from {floor} to {now}: a `bynk explain` entry was removed. \
+         Coverage only goes up; restore it, or (for a code retired from the registry) lower \
+         the committed row in design/greenfield-status.md in the same PR."
     );
 }
