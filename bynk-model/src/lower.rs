@@ -56,7 +56,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bynk_check::checker::{self, Callee, CheckedProgram, Ty, TyId, TypedCommons, Types};
+use bynk_check::checker::{self, Callee, CheckedProgram, TyId, TypedCommons, Types};
 use bynk_check::resolver::MethodTable;
 use bynk_syntax::ast::{
     ActorDecl, Block, CapRef, CapabilityDecl, CapabilityOp, CommonsItem, EventPattern,
@@ -122,8 +122,25 @@ impl<'a> LowerIrCtx<'a> {
         )
     }
 
-    fn unit_ty(&self) -> TyId {
-        self.program.ty_intern.intern(Ty::Unit)
+    /// [`Self::resolve_type_ref`] for a reference the checker has already
+    /// accepted. A miss is a compiler bug, so it stops with an internal error
+    /// naming the declaration and the type (active in release builds) rather
+    /// than substituting `()`, which would let the emitter generate code for a
+    /// declaration that takes or returns the wrong type.
+    ///
+    /// Every caller of the lowering functions that use this runs after
+    /// certification: they are reached only through `bynk-emit`, which the
+    /// driver invokes on a program that checked clean. `bynk-ide` and
+    /// `bynk-lsp` read `lower_handler_kind_ir` and the shape helpers, never these
+    /// signature readers, so a half-typed file cannot reach this path.
+    fn resolve_checked_type_ref(&self, r: &bynk_syntax::ast::TypeRef, what: &str) -> TyId {
+        self.resolve_type_ref(r).unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: {what}: type `{}` does not resolve, but the checker \
+                 already accepted this declaration",
+                bynk_syntax::print::type_ref_to_string(r)
+            )
+        })
     }
 }
 
@@ -177,16 +194,21 @@ pub fn lower_service_handler_signature_ir(
         .params
         .iter()
         .map(|p| {
-            let ty = cx
-                .resolve_type_ref(&p.type_ref)
-                .unwrap_or_else(|| cx.unit_ty());
+            let ty = cx.resolve_checked_type_ref(
+                &p.type_ref,
+                &format!(
+                    "service handler at {:?}, parameter `{}`",
+                    h.span, p.name.name
+                ),
+            );
             (p.name.name.clone(), ty)
         })
         .collect();
     let given: Vec<String> = h.given.iter().map(|c| c.key().to_string()).collect();
-    let ret = cx
-        .resolve_type_ref(&h.return_type)
-        .unwrap_or_else(|| cx.unit_ty());
+    let ret = cx.resolve_checked_type_ref(
+        &h.return_type,
+        &format!("service handler at {:?}, return type", h.span),
+    );
     let effectful = is_effectful_return(&h.return_type);
     (params, given, ret, effectful)
 }
@@ -323,8 +345,8 @@ fn lower_type_shape_in(decl: &Arc<TypeDecl>, program: &TypedCommons) -> TypeShap
 /// field type (`bynk.resolve.unknown_type`), so this fallback is defensive:
 /// it keeps lowering total rather than asserting a guarantee it does not
 /// itself check.
-fn resolve_store_field_ty(cx: &LowerIrCtx, r: &bynk_syntax::ast::TypeRef) -> TyId {
-    cx.resolve_type_ref(r).unwrap_or_else(|| cx.unit_ty())
+fn resolve_store_field_ty(cx: &LowerIrCtx, field: &str, r: &bynk_syntax::ast::TypeRef) -> TyId {
+    cx.resolve_checked_type_ref(r, &format!("store field `{field}`"))
 }
 
 /// A `@name(<duration literal>)` annotation's own millisecond value — the
@@ -360,15 +382,15 @@ fn duration_millis_annotation(
 fn store_field_kind_and_indexed(f: &StoreField, cx: &LowerIrCtx) -> (StoreKindIr, Vec<String>) {
     let head = f.kind.head.name.as_str();
     let kind = match head {
-        "Cell" => StoreKindIr::Cell(resolve_store_field_ty(cx, &f.kind.args[0])),
+        "Cell" => StoreKindIr::Cell(resolve_store_field_ty(cx, &f.name.name, &f.kind.args[0])),
         "Map" => StoreKindIr::Map(
-            resolve_store_field_ty(cx, &f.kind.args[0]),
-            resolve_store_field_ty(cx, &f.kind.args[1]),
+            resolve_store_field_ty(cx, &f.name.name, &f.kind.args[0]),
+            resolve_store_field_ty(cx, &f.name.name, &f.kind.args[1]),
         ),
-        "Set" => StoreKindIr::Set(resolve_store_field_ty(cx, &f.kind.args[0])),
+        "Set" => StoreKindIr::Set(resolve_store_field_ty(cx, &f.name.name, &f.kind.args[0])),
         "Cache" => {
-            let k = resolve_store_field_ty(cx, &f.kind.args[0]);
-            let v = resolve_store_field_ty(cx, &f.kind.args[1]);
+            let k = resolve_store_field_ty(cx, &f.name.name, &f.kind.args[0]);
+            let v = resolve_store_field_ty(cx, &f.name.name, &f.kind.args[1]);
             let ttl = duration_millis_annotation(&f.annotations, "ttl").unwrap_or_else(|| {
                 panic!(
                     "bynk internal error (ADR 0334): `Cache` field `{}` has no resolvable \
@@ -381,7 +403,7 @@ fn store_field_kind_and_indexed(f: &StoreField, cx: &LowerIrCtx) -> (StoreKindIr
             StoreKindIr::Cache(k, v, ttl)
         }
         "Log" => {
-            let elem = resolve_store_field_ty(cx, &f.kind.args[0]);
+            let elem = resolve_store_field_ty(cx, &f.name.name, &f.kind.args[0]);
             let retain = duration_millis_annotation(&f.annotations, "retain");
             StoreKindIr::Log(elem, retain)
         }
@@ -593,19 +615,15 @@ pub fn lower_protocol_ir_from_commons(
         ServiceProtocol::Cron => ProtocolIr::Cron,
         ServiceProtocol::Queue { name } => ProtocolIr::Queue { name: name.clone() },
         ServiceProtocol::WebSocket { in_type, out_type } => ProtocolIr::WebSocket {
-            in_ty: cx.resolve_type_ref(in_type).unwrap_or_else(|| cx.unit_ty()),
-            out_ty: cx
-                .resolve_type_ref(out_type)
-                .unwrap_or_else(|| cx.unit_ty()),
+            in_ty: cx.resolve_checked_type_ref(in_type, "WebSocket service protocol in-type"),
+            out_ty: cx.resolve_checked_type_ref(out_type, "WebSocket service protocol out-type"),
         },
         ServiceProtocol::Events {
             event_type,
             pattern,
             schema_dispatch,
         } => ProtocolIr::Events {
-            event: cx
-                .resolve_type_ref(event_type)
-                .unwrap_or_else(|| cx.unit_ty()),
+            event: cx.resolve_checked_type_ref(event_type, "Events service protocol event type"),
             pattern: pattern.as_ref().map(lower_event_pattern_ir),
             schema_dispatch: schema_dispatch.as_ref().map(|d| match &d.pattern {
                 bynk_syntax::ast::SchemaVersionPattern::Literal(v) => {
@@ -845,9 +863,8 @@ fn lower_op_sig_ir(op: &CapabilityOp, program: &CheckedProgram) -> OpSig {
 /// this function never reads a per-expression type — the one lookup whose
 /// `.expect()`-panic needed a genuinely certified program, and the reason
 /// this module's own file-level doc comment gives for taking
-/// `&CheckedProgram` by default elsewhere. `resolve_type_ref`/`unit_ty()` (below) both degrade via
-/// `.unwrap_or_else` and read nothing `TypedCommons` doesn't already expose
-/// directly.
+/// `&CheckedProgram` by default elsewhere. `resolve_checked_type_ref` (below) reads nothing `TypedCommons` doesn't
+/// already expose directly, and stops with an internal error on a miss.
 fn lower_op_sig_ir_from_commons(op: &CapabilityOp, commons: &TypedCommons) -> OpSig {
     let type_vars: HashSet<String> = op
         .type_params
@@ -859,15 +876,20 @@ fn lower_op_sig_ir_from_commons(op: &CapabilityOp, commons: &TypedCommons) -> Op
         .params
         .iter()
         .map(|p| {
-            let ty = cx
-                .resolve_type_ref(&p.type_ref)
-                .unwrap_or_else(|| cx.unit_ty());
+            let ty = cx.resolve_checked_type_ref(
+                &p.type_ref,
+                &format!(
+                    "capability op `{}`, parameter `{}`",
+                    op.name.name, p.name.name
+                ),
+            );
             (p.name.name.clone(), ty)
         })
         .collect();
-    let return_ty = cx
-        .resolve_type_ref(&op.return_type)
-        .unwrap_or_else(|| cx.unit_ty());
+    let return_ty = cx.resolve_checked_type_ref(
+        &op.return_type,
+        &format!("capability op `{}`, return type", op.name.name),
+    );
     OpSig {
         name: op.name.name.clone(),
         type_params: op
@@ -912,18 +934,25 @@ fn lower_fn_sig_ir_from_types(
         .iter()
         .map(|tp| tp.name.name.clone())
         .collect();
-    let unit_ty = || tys.intern(Ty::Unit);
+    let fn_name = f.name.display();
+    let resolve = |r: &bynk_syntax::ast::TypeRef, what: &str| {
+        checker::resolve_type_ref_in(r, types, &type_vars, tys).unwrap_or_else(|| {
+            panic!(
+                "bynk internal error: fn `{fn_name}`, {what}: type `{}` does not resolve, but \
+                 the checker already accepted this declaration",
+                bynk_syntax::print::type_ref_to_string(r)
+            )
+        })
+    };
     let params: Vec<(String, TyId)> = f
         .params
         .iter()
         .map(|p| {
-            let ty = checker::resolve_type_ref_in(&p.type_ref, types, &type_vars, tys)
-                .unwrap_or_else(unit_ty);
+            let ty = resolve(&p.type_ref, &format!("parameter `{}`", p.name.name));
             (p.name.name.clone(), ty)
         })
         .collect();
-    let return_ty = checker::resolve_type_ref_in(&f.return_type, types, &type_vars, tys)
-        .unwrap_or_else(unit_ty);
+    let return_ty = resolve(&f.return_type, "return type");
     let name = match &f.name {
         FnName::Method { method_name, .. } => method_name.name.clone(),
         FnName::Free(id) => id.name.clone(),
@@ -1078,7 +1107,7 @@ pub fn lower_cap_ref_ir(cap_ref: &CapRef) -> CapRefIr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bynk_check::checker::CheckedProgram;
+    use bynk_check::checker::{CheckedProgram, Ty};
     use bynk_check::hints::HintSink;
     use bynk_check::index::RefSink;
     use bynk_check::locals::LocalsSink;
@@ -1088,6 +1117,21 @@ mod tests {
     use bynk_syntax::ast::{AgentDecl, Commons, CommonsItem, HandlerKind, ServiceDecl, SourceUnit};
     use bynk_syntax::span::Span;
     use bynk_syntax::{lexer, parser};
+
+    /// #3166: a type reference the checker accepted but that does not resolve
+    /// is an internal error naming the declaration and the type, not a silent
+    /// `()`.
+    #[test]
+    #[should_panic(expected = "capability op `get`, return type: type `Bogus` does not resolve")]
+    fn an_unresolved_type_is_an_internal_error_naming_it() {
+        let program = checked_context_program("context demo\n");
+        let cx = LowerIrCtx::new(&program, HashSet::new());
+        let bogus = bynk_syntax::ast::TypeRef::Named(bynk_syntax::ast::Ident {
+            name: "Bogus".to_string(),
+            span: Default::default(),
+        });
+        cx.resolve_checked_type_ref(&bogus, "capability op `get`, return type");
+    }
 
     /// Like [`checked_program`], but for source that declares an `agent`
     /// and/or a `service` — both are only legal inside a `context`, not a
