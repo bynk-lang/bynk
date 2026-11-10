@@ -3354,11 +3354,18 @@ fn block_uses_nobody(block: &Block) -> bool {
 }
 
 /// #2135, #2864: whether `name` is a reserved bad-credential principal (`by
-/// Forged`, `by Stale`, `by Expired`).
+/// Forged`, `by Stale`, `by Expired`, and the `Oidc`-only `by WrongIssuer`,
+/// `by WrongAudience`, `by WrongAlgorithm` and `by NoSubject`).
 fn is_bad_signature_name(name: &str) -> bool {
     matches!(
         name,
-        "Forged" | "Stale" | "Expired" | "WrongIssuer" | "WrongAudience"
+        "Forged"
+            | "Stale"
+            | "Expired"
+            | "WrongIssuer"
+            | "WrongAudience"
+            | "WrongAlgorithm"
+            | "NoSubject"
     )
 }
 
