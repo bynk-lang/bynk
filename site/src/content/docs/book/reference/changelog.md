@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.532.3** | "The emitter declares an agent's rehydration, encode and migration functions in `emit_agent_state_persistence`, as part of splitting `emit_agent` (#3167)" |
 | **v0.532.2** | "`bynk check`, `bynk test` and `bynk compile` treat a subdirectory with its own `bynk.toml` as a separate project, skipping it with a note, and refuse a directory that is no project but holds one or more, naming them and suggesting a `[workspace]` root (#3242)" |
 | **v0.532.1** | '`bynk explain` gains written explanations for `bynk.generics.polymorphic_recursion` and `bynk.generics.recursive_generic_at_boundary`' |
 | **v0.532.0** | An agent instance runs one handler at a time, so a handler that awaits another agent is no longer interleaved with a second handler and no longer loses updates; re-entrant calls fault `ReentrantAgentCall`, long waits fault `AgentBusy` |
