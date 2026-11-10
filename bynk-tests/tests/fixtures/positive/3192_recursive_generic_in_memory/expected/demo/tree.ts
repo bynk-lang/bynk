@@ -128,16 +128,22 @@ export function size<A>(r: Rose<A>): number {
 }
 
 export function litCount<A>(e: Expr<A>): number {
-  switch (e.tag) {
-    case "Lit": {
-      return 1;
+  let __tco0 = e;
+  __tco: while (true) {
+    const e = __tco0;
+    switch (e.tag) {
+      case "Lit": {
+        return 1;
+      }
+      case "Let": {
+        const b = e.b;
+        const __r0 = b.body;
+        __tco0 = __r0;
+        continue __tco;
+      }
     }
-    case "Let": {
-      const b = e.b;
-      return litCount(b.body);
-    }
+    throw new globalThis.Error("non-exhaustive match");
   }
-  throw new globalThis.Error("non-exhaustive match");
 }
 
 export const probe = {
