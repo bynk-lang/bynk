@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.541.1** | The runtime gains insertion-ordered in-memory handles for an agent's store collections, `StoreMap`, `StoreSet`, `StoreCache` and `StoreLog`, the first step of keeping a `store Map`/`Set` in insertion order for integer-like keys too; nothing emits them yet (#3254) |
 | **v0.541.0** | `@form` decodes an `application/x-www-form-urlencoded` request body into a typed record at the boundary, with the refinements, defaults and `Option`s of a JSON body (#3276, slice 1; #3180 stays open for streaming) |
 | **v0.540.1** | The emitter lowers a built-in method call's kernel dispatch in `lower_kernel_method_call` and its UFCS fallback in `lower_ufcs_method_call`, the first step of splitting `lower_method_call` per receiver kind (#3167) |
 | **v0.540.0** | Expired `Cache` entries are deleted when an agent commits, no longer only hidden, so a `Cache` no longer grows without bound (per-entry storage, slice 4) |
