@@ -5094,11 +5094,41 @@ mod tests {
             "commons m\n\nfn double(n: Int) -> Int { n * }\n",
             "suite m\n\ncase \"d\" {\n  expect double(2) == 4\n}\n",
         );
-        assert!(
-            !cats.iter().any(|c| c.starts_with("bynk.resolve.")),
-            "no resolve echo of the skipped `double`: {cats:?}"
+        // Exactly one syntax error, and no resolve echo of the skipped `double`.
+        assert_eq!(cats.len(), 1, "{cats:?}");
+        assert!(cats[0].starts_with("bynk.parse."), "{cats:?}");
+    }
+
+    /// A suite may `use` a commons its target does not; that commons' skipped
+    /// declarations are as visible to the suite as the target's own.
+    #[test]
+    fn a_suite_using_a_commons_with_a_skipped_function_reports_only_the_syntax_error() {
+        let root = scratch_project(
+            "suite_uses_broken_commons",
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                ("src/m.bynk", "commons m\n\nfn one() -> Int { 1 }\n"),
+                (
+                    "src/util.bynk",
+                    "commons util\n\nfn helper(n: Int) -> Int { n * }\n",
+                ),
+                (
+                    "tests/m_test.bynk",
+                    "suite m\n\nuses util\n\ncase \"h\" {\n  expect helper(2) == one()\n}\n",
+                ),
+            ],
         );
-        assert!(!cats.is_empty(), "the syntax error is still reported");
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let cats: Vec<String> = check_project(&options)
+            .errors
+            .iter()
+            .map(|ae| ae.error.category.to_string())
+            .collect();
+        assert_eq!(cats.len(), 1, "{cats:?}");
+        assert!(cats[0].starts_with("bynk.parse."), "{cats:?}");
     }
 
     /// The suppression is only for names recovery skipped: a mistyped agent is

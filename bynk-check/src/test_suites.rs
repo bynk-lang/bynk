@@ -301,6 +301,13 @@ pub fn phase_test_bodies(
         // #3162: as `prepare_unit_check_ctx` does for a unit's own files, the
         // names visible to the suite are its target's and those of the units
         // the target `uses` or `consumes`. The echoes still fail the target.
+        // The suite's own `uses` count too, as in the private-reference gate
+        // above: it may use a commons its target does not.
+        let suite_uses: Vec<String> = indices
+            .iter()
+            .flat_map(|&i| parsed[i].uses())
+            .map(|u| u.target.joined())
+            .collect();
         let visible_broken: Vec<String> = std::iter::once(target_name)
             .chain(
                 unit_uses
@@ -309,6 +316,7 @@ pub fn phase_test_bodies(
                     .chain(unit_consumes.get(target_name))
                     .flatten(),
             )
+            .chain(suite_uses.iter())
             .filter_map(|u| broken.get(u))
             .flatten()
             .cloned()
