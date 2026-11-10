@@ -218,40 +218,47 @@ fn random_edit(project: &mut Project, rng: &mut Rng, step: usize) -> String {
     let name = target.file_name().unwrap().to_string_lossy().into_owned();
     let text = project.overlay[&target].clone();
     let op = rng.below(9);
-    let edited: Option<(String, &str)> = match op {
+    // `Some(new text)` edits `target`; `None` means the op changed the project
+    // some other way (another file, an added or removed context) and `target`
+    // must be left exactly as it is, or its write would undo that.
+    let edited: Option<(Option<String>, &str)> = match op {
         // A field's type becomes unknown, and back: an error appears and clears.
         0 => toggle(&text, "label: String,", "label: Strng,")
-            .map(|t| (t, "toggle a field to an unknown type")),
+            .map(|t| (Some(t), "toggle a field to an unknown type")),
         // A numeric field becomes a String: the bodies that use it stop checking.
         1 => toggle(&text, "qty: Int,", "qty: String,")
             .or_else(|| toggle(&text, "count: Int,", "count: String,"))
-            .map(|t| (t, "change a record field's type")),
+            .map(|t| (Some(t), "change a record field's type")),
         // A body-only edit: a literal in a filter.
-        2 => toggle(&text, "> 0)", "> 1)").map(|t| (t, "change a literal in a body")),
+        2 => toggle(&text, "> 0)", "> 1)").map(|t| (Some(t), "change a literal in a body")),
         // A service's parameter type changes: every caller in another unit is affected.
         3 => toggle(&text, "on call(n: Int)", "on call(n: String)")
-            .map(|t| (t, "change a service signature")),
+            .map(|t| (Some(t), "change a service signature")),
         // A whole declaration appears or disappears at the end of the file.
         4 => Some(if text.contains("// extra") {
             (
-                text.replacen(EXTRA_SERVICE, "", 1),
+                Some(text.replacen(EXTRA_SERVICE, "", 1)),
                 "remove a trailing service",
             )
         } else {
-            (format!("{text}{EXTRA_SERVICE}"), "add a trailing service")
+            (
+                Some(format!("{text}{EXTRA_SERVICE}")),
+                "add a trailing service",
+            )
         }),
-        // The body fact that crosses units: the commons function gains or loses a `~>`.
+        // The body fact that crosses units: the commons function gains or loses a
+        // `~>`. It edits `util.bynk` itself, whatever file was drawn as `target`.
         5 => {
             let util = project.root.join("src/util.bynk");
             let util_text = project.overlay[&util].clone();
             toggle(&util_text, "let _ <- f(n)", "~> f(n)").map(|t| {
                 project.overlay.insert(util, t);
-                (text.clone(), "toggle `~>` in the commons function body")
+                (None, "toggle `~>` in the commons function body")
             })
         }
         // A comment before everything: every span in the file shifts.
         6 => Some((
-            text.replacen('\n', &format!("\n// shift {step}\n"), 1),
+            Some(format!("// shift {step}\n{text}")),
             "insert a leading comment",
         )),
         // A new overlay-only context appears.
@@ -262,25 +269,29 @@ fn random_edit(project: &mut Project, rng: &mut Rng, step: usize) -> String {
             );
             project.overlay.insert(path.clone(), body);
             project.added.push(path);
-            Some((text.clone(), "add a context"))
+            Some((None, "add a context"))
         }
         // An added context is removed again.
-        _ => match project.added.pop() {
-            Some(path) => {
-                project.overlay.remove(&path);
-                Some((text.clone(), "remove an added context"))
-            }
-            None => None,
-        },
+        _ => project.added.pop().map(|path| {
+            project.overlay.remove(&path);
+            (None, "remove an added context")
+        }),
     };
+    // An op that found nothing to change falls back to a leading comment (which
+    // still shifts every span in the file), so each step changes the project.
     let (new_text, what) = edited.unwrap_or_else(|| {
         (
-            text.replacen('\n', &format!("\n// fallback {step}\n"), 1),
+            Some(format!("// fallback {step}\n{text}")),
             "insert a leading comment (fallback)",
         )
     });
-    project.overlay.insert(target, new_text);
-    format!("{what} in {name}")
+    match new_text {
+        Some(t) => {
+            project.overlay.insert(target, t);
+            format!("{what} in {name}")
+        }
+        None => what.to_string(),
+    }
 }
 
 fn run_sequence(shape: Shape, seed: u64, steps: usize) -> BTreeSet<&'static str> {

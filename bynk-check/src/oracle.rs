@@ -25,16 +25,42 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Write};
 
-use crate::analysis::ProjectAnalysis;
+use crate::analysis::{ContextBoundaryInfo, ContextSequenceInfo, ProjectAnalysis};
+use crate::index::ProjectIndex;
 use crate::resolver::CrossContextInfo;
 
 /// One deterministic rendering of everything `analysis` says. See the module doc.
 pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
     let mut out = String::new();
-    let a = analysis;
+    // Destructured exhaustively, with no `..`: a field added to `ProjectAnalysis`
+    // is a compile error here until the report accounts for it, so a memo cannot
+    // serve a stale value for a field the oracle never looked at.
+    let ProjectAnalysis {
+        snapshots,
+        errors,
+        index,
+        hints,
+        expr_types,
+        ty_intern,
+        locals,
+        requirements,
+        capability_paths,
+        unit_sources,
+        sequence_info,
+        boundary_info,
+        doc_scope,
+        contract_diff,
+    } = analysis;
+    let ProjectIndex {
+        symbols,
+        foreign_refs,
+        calls,
+        impls,
+        refinements,
+    } = index;
 
     section(&mut out, "snapshots", {
-        let mut v: Vec<String> = a.snapshots.iter().map(|s| format!("{s:?}")).collect();
+        let mut v: Vec<String> = snapshots.iter().map(|s| format!("{s:?}")).collect();
         v.sort();
         v
     });
@@ -42,40 +68,27 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
     section(
         &mut out,
         "errors",
-        a.errors
+        errors
             .iter()
             .map(|e| format!("{:?} | {:?} | {:?}", e.source_path, e.error, e.label_files))
             .collect(),
     );
 
-    section(&mut out, "index.symbols", sorted_map(&a.index.symbols));
-    section(
-        &mut out,
-        "index.foreign_refs",
-        debug_all(&a.index.foreign_refs),
-    );
-    section(&mut out, "index.calls", debug_all(&a.index.calls));
-    section(&mut out, "index.impls", debug_all(&a.index.impls));
-    section(
-        &mut out,
-        "index.refinements",
-        debug_all(&a.index.refinements),
-    );
+    section(&mut out, "index.symbols", sorted_map(symbols));
+    section(&mut out, "index.foreign_refs", debug_all(foreign_refs));
+    section(&mut out, "index.calls", debug_all(calls));
+    section(&mut out, "index.impls", debug_all(impls));
+    section(&mut out, "index.refinements", debug_all(refinements));
 
-    section(&mut out, "hints", sorted_map(&a.hints));
-    section(&mut out, "locals", sorted_map(&a.locals));
-    section(&mut out, "requirements", sorted_map(&a.requirements));
-    section(
-        &mut out,
-        "capability_paths",
-        sorted_map(&a.capability_paths),
-    );
+    section(&mut out, "hints", sorted_map(hints));
+    section(&mut out, "locals", sorted_map(locals));
+    section(&mut out, "requirements", sorted_map(requirements));
+    section(&mut out, "capability_paths", sorted_map(capability_paths));
 
     // Expression types are `(Span, TyId)`; the id means nothing outside this
     // analysis's own table, so each is rendered through it.
-    let tys = &a.ty_intern;
-    let expr: BTreeMap<String, Vec<String>> = a
-        .expr_types
+    let tys = ty_intern;
+    let expr: BTreeMap<String, Vec<String>> = expr_types
         .iter()
         .map(|(path, entries)| {
             (
@@ -95,33 +108,42 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
             .collect(),
     );
 
-    section(&mut out, "unit_sources", sorted_map(&a.unit_sources));
-    section(&mut out, "doc_scope", sorted_map(&a.doc_scope));
+    section(&mut out, "unit_sources", sorted_map(unit_sources));
+    section(&mut out, "doc_scope", sorted_map(doc_scope));
     section(
         &mut out,
         "contract_diff",
-        vec![format!("{:?}", a.contract_diff)],
+        vec![format!("{contract_diff:?}")],
     );
     section(
         &mut out,
         "sequence_info",
-        sorted_lines(a.sequence_info.iter().map(|(name, info)| {
+        sorted_lines(sequence_info.iter().map(|(name, info)| {
+            let ContextSequenceInfo {
+                cross_context: cc,
+                agents,
+            } = info;
             format!(
                 "{name:?} => cross_context[{}] agents[{}]",
-                cross_context(&info.cross_context),
-                sorted_map(&info.agents).join("; ")
+                cross_context(cc),
+                sorted_map(agents).join("; ")
             )
         })),
     );
     section(
         &mut out,
         "boundary_info",
-        sorted_lines(a.boundary_info.iter().map(|(name, info)| {
+        sorted_lines(boundary_info.iter().map(|(name, info)| {
+            let ContextBoundaryInfo {
+                types,
+                services,
+                agents,
+            } = info;
             format!(
                 "{name:?} => types[{}] services[{}] agents[{}]",
-                sorted_map(&info.types).join("; "),
-                sorted_map(&info.services).join("; "),
-                sorted_map(&info.agents).join("; ")
+                sorted_map(types).join("; "),
+                sorted_map(services).join("; "),
+                sorted_map(agents).join("; ")
             )
         })),
     );
@@ -131,6 +153,23 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
 /// A [`CrossContextInfo`] with every map and set in sorted order. Its fields are
 /// maps of maps, so `Debug` on the whole would print hash order.
 fn cross_context(c: &CrossContextInfo) -> String {
+    // Exhaustive (no `..`), like `canonical_report`: a field added to
+    // `CrossContextInfo` must be accounted for here.
+    let CrossContextInfo {
+        self_context,
+        consumed_contexts,
+        aliases,
+        consumed_services,
+        consumed_types,
+        consumed_type_renames,
+        consumed_capabilities,
+        flattened_caps,
+        consumed_event_names,
+        consumed_type_owners,
+        consumed_type_aliases,
+        callee_type_aliases,
+        callee_alias_keys,
+    } = c;
     fn two_level<V: Debug>(map: &HashMap<String, HashMap<String, V>>) -> String {
         sorted_lines(
             map.iter()
@@ -138,44 +177,41 @@ fn cross_context(c: &CrossContextInfo) -> String {
         )
         .join("; ")
     }
-    let events = sorted_lines(c.consumed_event_names.iter().map(|(k, set)| {
+    let events = sorted_lines(consumed_event_names.iter().map(|(k, set)| {
         let mut names: Vec<&String> = set.iter().collect();
         names.sort();
         format!("{k:?} => {names:?}")
     }))
     .join("; ");
     [
-        format!("self_context={:?}", c.self_context),
-        format!("consumed_contexts={:?}", c.consumed_contexts),
-        format!("aliases={{{}}}", sorted_map(&c.aliases).join("; ")),
-        format!("consumed_services={{{}}}", two_level(&c.consumed_services)),
-        format!("consumed_types={{{}}}", two_level(&c.consumed_types)),
+        format!("self_context={:?}", self_context),
+        format!("consumed_contexts={:?}", consumed_contexts),
+        format!("aliases={{{}}}", sorted_map(aliases).join("; ")),
+        format!("consumed_services={{{}}}", two_level(consumed_services)),
+        format!("consumed_types={{{}}}", two_level(consumed_types)),
         format!(
             "consumed_type_renames={{{}}}",
-            two_level(&c.consumed_type_renames)
+            two_level(consumed_type_renames)
         ),
         format!(
             "consumed_capabilities={{{}}}",
-            two_level(&c.consumed_capabilities)
+            two_level(consumed_capabilities)
         ),
         format!(
             "flattened_caps={{{}}}",
-            sorted_map(&c.flattened_caps).join("; ")
+            sorted_map(flattened_caps).join("; ")
         ),
         format!("consumed_event_names={{{events}}}"),
         format!(
             "consumed_type_owners={{{}}}",
-            two_level(&c.consumed_type_owners)
+            two_level(consumed_type_owners)
         ),
         format!(
             "consumed_type_aliases={{{}}}",
-            two_level(&c.consumed_type_aliases)
+            two_level(consumed_type_aliases)
         ),
-        format!(
-            "callee_type_aliases={{{}}}",
-            two_level(&c.callee_type_aliases)
-        ),
-        format!("callee_alias_keys={{{}}}", two_level(&c.callee_alias_keys)),
+        format!("callee_type_aliases={{{}}}", two_level(callee_type_aliases)),
+        format!("callee_alias_keys={{{}}}", two_level(callee_alias_keys)),
     ]
     .join(" ")
 }
