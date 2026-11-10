@@ -127,6 +127,88 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// #3161: the diagnostic for an expression written as a statement.
+    ///
+    /// A block has no expression statements: each statement is a `let`, `do`,
+    /// `~>`, `expect`, `:=` and so on, and the last expression is the block's
+    /// value. An expression followed, on a later line, by something that starts
+    /// another statement or expression is therefore a bare statement, whose
+    /// value would be discarded. `None` when `expr` is the block's value (the
+    /// next token closes it, or does not start anything), leaving the generic
+    /// "expected `}`" report.
+    ///
+    /// The fix is `let _ <- ` before an effectful-looking call and `let _ = `
+    /// otherwise. The parser cannot see types, so "effectful-looking" is
+    /// [`looks_effectful`], and the note names the other form.
+    fn bare_expression_error(&self, expr: &Expr) -> Option<CompileError> {
+        let next = self.peek()?;
+        if !self.next_token_on_new_line(expr.span) || !starts_statement_or_expression(next.kind) {
+            return None;
+        }
+        // Text the lexer skipped (a stray character) between the two is the
+        // real fault, and the generic report at `next` is the one the
+        // lexical-echo filter knows to drop (#2807).
+        if !self.gap_is_blank_or_comments(expr.span.end, next.span.start) {
+            return None;
+        }
+        // A `match` ends its block, so a second `match` straight after has its
+        // own report (`match_ends_block`).
+        if matches!(expr.kind, ExprKind::Match { .. }) && next.kind == TokenKind::Match {
+            return None;
+        }
+        let effectful = looks_effectful(expr);
+        let (binder, other) = if effectful {
+            ("let _ <- ", "let _ = ")
+        } else {
+            ("let _ = ", "let _ <- ")
+        };
+        let at = Span::new_in(expr.span.file, expr.span.start, expr.span.start);
+        let mut err = CompileError::new(
+            "bynk.parse.bare_expression_statement",
+            expr.span,
+            "an expression cannot stand alone as a statement; its value would be discarded",
+        )
+        .with_label(next.span, "the block carries on here")
+        .with_note(format!(
+            "bind it: `{binder}{}`; use `{other}` instead if the value is {}",
+            {
+                let text = self.slice(expr.span);
+                match text.split_once('\n') {
+                    Some((first, _)) => format!("{first} …"),
+                    None => text.to_string(),
+                }
+            },
+            if effectful {
+                "not an effect"
+            } else {
+                "an effect to run"
+            },
+        ));
+        if effectful {
+            err = err
+                .with_note("`do <call>` is the shorter form for a call that returns `Effect[()]`");
+        }
+        Some(err.with_suggestion(
+            format!("bind the value with `{}`", binder.trim_end()),
+            vec![(at, binder.to_string())],
+            Applicability::MachineApplicable,
+        ))
+    }
+
+    /// Whether the source between `from` and `to` is only whitespace and line
+    /// comments (`//`, or the legacy `--`), i.e. holds no skipped character.
+    /// Anything else (a block comment included) is treated as a skipped
+    /// character, which falls back to the generic report: the safe direction.
+    fn gap_is_blank_or_comments(&self, from: usize, to: usize) -> bool {
+        let Some(gap) = self.source.get(from..to) else {
+            return false;
+        };
+        gap.lines().all(|line| {
+            let line = line.trim();
+            line.is_empty() || line.starts_with("//") || line.starts_with("--")
+        })
+    }
+
     /// Parse a brace-delimited block: `{ statement* expr }` (v0.1 §3.1, v0.5).
     pub(crate) fn parse_block(&mut self, ctx: &str) -> Result<Block, CompileError> {
         let open = self.expect(TokenKind::LBrace, ctx)?;
@@ -173,6 +255,9 @@ impl<'a> Parser<'a> {
         // v0.1: `let`. v0.5: `let ... <-` is also a statement.
         // v0.7: `assert` is a statement form inside test bodies.
         let tail_leading: Vec<Comment>;
+        // #3161: the tail expression, parsed inside the loop so a bare
+        // expression statement can be told from the block's value.
+        let mut parsed_tail: Option<Expr> = None;
         loop {
             let leading = self.take_leading_trivia();
             // v0.81: `name := expr` is a statement led by an identifier, so it is
@@ -230,6 +315,47 @@ impl<'a> Parser<'a> {
                         )));
                     }
                 }
+                // #3161: an expression with more block after it, on a later
+                // line, is a statement without a binder: say how to bind it.
+                if self.peek_kind() != Some(TokenKind::RBrace) && self.peek().is_some() {
+                    let expr = self.parse_expr()?;
+                    if let Some(err) = self.bare_expression_error(&expr) {
+                        if !self.recover_mode {
+                            return Err(err);
+                        }
+                        // Recovery mode: report it, then carry on as if it
+                        // were the `let _ = …` it should have been, so later
+                        // errors in the block still surface.
+                        self.recovered_errors.push(err);
+                        let name = Ident {
+                            name: "_".to_string(),
+                            span: Span::new_in(expr.span.file, expr.span.start, expr.span.start),
+                        };
+                        let span = expr.span;
+                        let trailing = self.take_trailing_trivia();
+                        // The binder the fix would write, so the checker does
+                        // not add an unawaited-effect error of its own.
+                        let effectful = looks_effectful(&expr);
+                        let bound = LetStmt {
+                            name,
+                            type_annot: None,
+                            value: expr,
+                            principal: None,
+                            let_else: None,
+                            span,
+                            trivia: Trivia::default(),
+                        };
+                        let mut stmt = if effectful {
+                            Statement::EffectLet(bound)
+                        } else {
+                            Statement::Let(bound)
+                        };
+                        attach_trivia(&mut stmt, leading, trailing);
+                        statements.push(stmt);
+                        continue;
+                    }
+                    parsed_tail = Some(expr);
+                }
                 tail_leading = leading;
                 break;
             }
@@ -242,38 +368,42 @@ impl<'a> Parser<'a> {
         // ordinary type mismatch. `implicit_tail` records the synthesis so the
         // formatter omits the `()` (Bynk has no statement terminator, so a
         // printed `()` would re-attach to the last statement on re-parse).
-        let (tail, close, implicit_tail) = if self.peek_kind() == Some(TokenKind::RBrace) {
-            let close = self.expect(TokenKind::RBrace, "to close the block")?;
-            let tail = Expr {
-                id: self.alloc_expr_id(),
-                kind: ExprKind::UnitLit,
-                span: close.span,
-            };
-            (tail, close.span, true)
-        } else {
-            let tail = self.parse_expr()?;
-            self.check_staircase(&tail);
-            // #2838: a block has no expression statements, so a `match` ends
-            // it. A second `match` straight after is the common slip; say why
-            // it cannot follow rather than only that a `}` was expected.
-            if matches!(tail.kind, ExprKind::Match { .. })
-                && self.peek_kind() == Some(TokenKind::Match)
-            {
-                let next = self.peek().unwrap().span;
-                return Err(CompileError::new(
-                    "bynk.parse.match_ends_block",
-                    next,
-                    "a `match` ends the block it is in, so another `match` cannot follow it",
-                )
-                .with_label(tail.span, "this `match` is the block's final value")
-                .with_note(
-                    "bind the first with `let _ = match …`, or flatten a chain of fallible \
+        let (tail, close, implicit_tail) =
+            if parsed_tail.is_none() && self.peek_kind() == Some(TokenKind::RBrace) {
+                let close = self.expect(TokenKind::RBrace, "to close the block")?;
+                let tail = Expr {
+                    id: self.alloc_expr_id(),
+                    kind: ExprKind::UnitLit,
+                    span: close.span,
+                };
+                (tail, close.span, true)
+            } else {
+                let tail = match parsed_tail {
+                    Some(t) => t,
+                    None => self.parse_expr()?,
+                };
+                self.check_staircase(&tail);
+                // #2838: a block has no expression statements, so a `match` ends
+                // it. A second `match` straight after is the common slip; say why
+                // it cannot follow rather than only that a `}` was expected.
+                if matches!(tail.kind, ExprKind::Match { .. })
+                    && self.peek_kind() == Some(TokenKind::Match)
+                {
+                    let next = self.peek().unwrap().span;
+                    return Err(CompileError::new(
+                        "bynk.parse.match_ends_block",
+                        next,
+                        "a `match` ends the block it is in, so another `match` cannot follow it",
+                    )
+                    .with_label(tail.span, "this `match` is the block's final value")
+                    .with_note(
+                        "bind the first with `let _ = match …`, or flatten a chain of fallible \
                      steps with `let … else`",
-                ));
-            }
-            let close = self.expect(TokenKind::RBrace, "to close the block")?;
-            (tail, close.span, false)
-        };
+                    ));
+                }
+                let close = self.expect(TokenKind::RBrace, "to close the block")?;
+                (tail, close.span, false)
+            };
         let mut block = Block {
             statements,
             tail: Box::new(tail),
@@ -594,7 +724,11 @@ impl<'a> Parser<'a> {
                 .get(self.pos)
                 .is_some_and(|t| self.slice(t.span) == "advance")
             && kind(1) == Some(TokenKind::Ident)
-            && kind(2) == Some(TokenKind::By)
+            && kind(2) == Some(TokenKind::Ident)
+            && self
+                .tokens
+                .get(self.pos + 2)
+                .is_some_and(|t| self.slice(t.span) == "by")
     }
 
     /// #2640: `par {` opens a concurrent binding block. `par` is contextual, and
@@ -716,16 +850,59 @@ impl<'a> Parser<'a> {
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::ColonEq)
     }
 
+    /// #3191: is the next token the contextual word `by`?
+    pub(crate) fn at_by(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self.peek().is_some_and(|t| self.slice(t.span) == "by")
+    }
+
+    /// #3191: does a call-site actor clause start here — `by` on the line the
+    /// preceding value ended on, followed by the actor's name?
+    fn at_call_site_by(&self) -> bool {
+        if !self.at_by() || self.nth_kind(1) != Some(TokenKind::Ident) {
+            return false;
+        }
+        match self.pos.checked_sub(1).and_then(|i| self.tokens.get(i)) {
+            Some(prev) => !self.next_token_on_new_line(prev.span),
+            None => false,
+        }
+    }
+
+    /// #3191: consume the contextual `by`, which the caller has already found.
+    pub(crate) fn expect_by(&mut self, ctx: &str) -> Result<Token, CompileError> {
+        if self.at_by() {
+            return Ok(self.bump().expect("`by` is the next token"));
+        }
+        // Not `by`: the generic report, naming the word that was expected.
+        Err(match self.peek() {
+            Some(t) => CompileError::new(
+                "bynk.parse.expected_token",
+                t.span,
+                format!("expected `by` {ctx}, found {}", t.kind.describe()),
+            ),
+            None => CompileError::new(
+                "bynk.parse.unexpected_eof",
+                self.eof_span(),
+                format!("expected `by` {ctx}, found end of file"),
+            ),
+        })
+    }
+
     /// v0.182 (#664): parse an optional call-site actor clause after an
     /// effect-let value — `by <Actor>` (unit identity) or `by <Actor>(<expr>)`.
+    /// `by` is contextual (#3191), so it opens the clause only when it is on the
+    /// same line as the end of the value **and** an identifier (the actor)
+    /// follows; a statement that begins with the name `by` on a later line is a
+    /// statement, not a clause. The formatter always writes the clause on the
+    /// value's own line, so formatted code is never misread.
     /// Distinct from the handler `by` clause (`parse_by_clause`), which admits a
     /// binder and an actor *sum* but no identity argument. #1812: also read
     /// after a fault claim's subject (`expect <call> by User("bob") faults`).
     pub(crate) fn parse_call_site_actor(&mut self) -> Result<Option<CallSiteActor>, CompileError> {
-        if self.peek_kind() != Some(TokenKind::By) {
+        if !self.at_call_site_by() {
             return Ok(None);
         }
-        let by_kw = self.expect(TokenKind::By, "to start the call-site actor clause")?;
+        let by_kw = self.expect_by("to start the call-site actor clause")?;
         let actor = self.expect_ident("as the actor after `by` at a call site")?;
         let (identity, claims, end) = if self.peek_kind() == Some(TokenKind::LParen) {
             self.expect(TokenKind::LParen, "after the actor name")?;
@@ -770,7 +947,7 @@ impl<'a> Parser<'a> {
         if self.advance_ahead() {
             let keyword = self.expect_ident("to start an advance statement")?.span;
             let cap = self.expect_ident("as the capability after `advance`")?;
-            self.expect(TokenKind::By, "after the capability in `advance`")?;
+            self.expect_by("after the capability in `advance`")?;
             let amount = self.parse_expr()?;
             let span = keyword.merge(amount.span);
             return Ok(Statement::Advance(AdvanceStmt {
@@ -1219,4 +1396,72 @@ fn attach_trivia(stmt: &mut Statement, leading: Vec<Comment>, trailing: Option<S
     };
     trivia.leading = leading;
     trivia.trailing = trailing;
+}
+
+/// #3161: can `kind` begin another statement or an expression? Only a token
+/// that can is read as the block carrying on after a bare expression; a stray
+/// `)` or `else` keeps the generic report.
+fn starts_statement_or_expression(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Let
+            | TokenKind::Expect
+            | TokenKind::TildeArrow
+            | TokenKind::Do
+            | TokenKind::Ident
+            | TokenKind::IntLit
+            | TokenKind::FloatLit
+            | TokenKind::DecimalLit
+            | TokenKind::StrLit
+            | TokenKind::InterpStr
+            | TokenKind::True
+            | TokenKind::False
+            | TokenKind::LParen
+            | TokenKind::LBracket
+            | TokenKind::If
+            | TokenKind::Match
+            | TokenKind::Ok
+            | TokenKind::Err
+            | TokenKind::Some
+            | TokenKind::None
+    )
+}
+
+/// The built-in types and stdlib namespaces whose static calls are pure
+/// (`Json.encode(x)`, `Set.of(xs)`, `Bytes.fromUtf8(s)`), so a capitalised
+/// root of one of these is not a capability.
+const PURE_NAMESPACES: &[&str] = &[
+    "Bool", "Bytes", "Decimal", "Duration", "Float", "Instant", "Int", "Json", "List", "Map",
+    "Option", "Result", "Set", "String",
+];
+
+/// #3161: does `expr` look like a call made for its effect? The parser has no
+/// types, so this is a syntactic guess: a `.update(…)` (a `Cell` write), or a
+/// method-call chain rooted at an agent construction (`Counter("a").bump(1)`)
+/// or at a capitalised name that is not a built-in type or a pure stdlib
+/// namespace (a capability, `Logger.info(…)`). A user type's pure static call
+/// (`Money.zero()`) is indistinguishable from a capability here and is guessed
+/// effectful; the note names the other form, and `bynk check --fix` writes
+/// nothing if the result would still fail.
+fn looks_effectful(expr: &Expr) -> bool {
+    fn rooted_at_effect_source(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Ident(id) => {
+                id.name.starts_with(|c: char| c.is_uppercase())
+                    && !PURE_NAMESPACES.contains(&id.name.as_str())
+                    && !crate::keywords::is_builtin_type_name(&id.name)
+            }
+            ExprKind::Call { name, .. } => name.name.starts_with(|c: char| c.is_uppercase()),
+            ExprKind::MethodCall { receiver, .. } | ExprKind::FieldAccess { receiver, .. } => {
+                rooted_at_effect_source(receiver)
+            }
+            _ => false,
+        }
+    }
+    match &expr.kind {
+        ExprKind::MethodCall {
+            receiver, method, ..
+        } => method.name == "update" || rooted_at_effect_source(receiver),
+        _ => false,
+    }
 }

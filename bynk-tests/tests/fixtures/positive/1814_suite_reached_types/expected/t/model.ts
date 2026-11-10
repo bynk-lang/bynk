@@ -15,5 +15,5 @@ export const Run = {
 };
 
 export function first(runs: readonly Run[]): Option<Repo> {
-  return ((__xs: readonly Repo[]) => __xs.length > 0 ? Some(__xs[0]) : None)((runs).map((__x: Run) => ((r) => r.repo)(__x)));
+  return ((__xs: readonly Repo[]) => __xs.length > 0 ? Some(__xs[0]) : None)((runs).map((__x: Run) => ((r: Run) => r.repo)(__x)));
 }

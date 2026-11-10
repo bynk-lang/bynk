@@ -54,7 +54,7 @@ export class Inventory {
 
   async pending(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    const q: (() => readonly Reservation[]) = (() => globalThis.Object.values(__state.reservations).filter((__x) => ((r) => r.qty > 0)(__x)));
+    const q: (() => readonly Reservation[]) = (() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x)));
     return (q)();
   }
 

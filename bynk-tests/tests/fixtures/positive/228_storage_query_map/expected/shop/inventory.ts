@@ -54,43 +54,43 @@ export class Inventory {
 
   async bigQuantities(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return ((() => ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r) => r.qty > 0)(__x))))().map((__x) => ((r) => r.qty)(__x))))();
+    return ((() => ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x))))().map((__x) => ((r: Reservation) => r.qty)(__x))))();
   }
 
   async pageById(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => [...globalThis.Object.values(__state.reservations)].sort((__a, __b) => { const __ka = ((r) => r.id)(__a), __kb = ((r) => r.id)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().slice(globalThis.Math.max(0, 1))))().slice(0, globalThis.Math.max(0, 10))))();
+    return ((() => ((() => ((() => [...globalThis.Object.values(__state.reservations)].sort((__a, __b) => { const __ka = ((r: Reservation) => r.id)(__a), __kb = ((r: Reservation) => r.id)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().slice(globalThis.Math.max(0, 1))))().slice(0, globalThis.Math.max(0, 10))))();
   }
 
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return globalThis.Object.values(__state.reservations).reduce((__s: number, __x) => __s + ((r) => r.qty)(__x), 0);
+    return globalThis.Object.values(__state.reservations).reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0);
   }
 
   async largest(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = globalThis.Object.values(__state.reservations); if (__a.length === 0) return None; let __m = ((r) => r.qty)(__a[0]); for (const __x of __a) { const __k = ((r) => r.qty)(__x); if (__k > __m) __m = __k; } return Some(__m); })();
+    return (() => { const __a = globalThis.Object.values(__state.reservations); if (__a.length === 0) return None; let __m = ((r: Reservation) => r.qty)(__a[0]); for (const __x of __a) { const __k = ((r: Reservation) => r.qty)(__x); if (__k > __m) __m = __k; } return Some(__m); })();
   }
 
   async howMany(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r) => r.qty > 0)(__x))))().length;
+    return ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x))))().length;
   }
 
   async anyBig(deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return globalThis.Object.values(__state.reservations).some((__x) => ((r) => r.qty > 100)(__x));
+    return globalThis.Object.values(__state.reservations).some((__x) => ((r: Reservation) => r.qty > 100)(__x));
   }
 
   async pending(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    const q = (() => globalThis.Object.values(__state.reservations).filter((__x) => ((r) => r.qty > 0)(__x)));
-    return ((() => (() => { const __seen = new globalThis.Set(); const __out: Reservation[] = []; for (const __x of (q)()) { const __k = ((r) => r.id)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
+    const q = (() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x)));
+    return ((() => (() => { const __seen = new globalThis.Set(); const __out: Reservation[] = []; for (const __x of (q)()) { const __k = ((r: Reservation) => r.id)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
   }
 
   async firstBig(deps: {}): globalThis.Promise<Reservation> {
     const __state = await this.loadState();
-    return (() => { const __a = ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r) => r.qty > 50)(__x))))(); return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 }); })();
+    return (() => { const __a = ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 50)(__x))))(); return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 }); })();
   }
 
 }

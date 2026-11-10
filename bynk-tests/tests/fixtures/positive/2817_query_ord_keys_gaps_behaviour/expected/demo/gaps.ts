@@ -48,7 +48,7 @@ export const Frame = {
 };
 
 export function keyed<K>(xs: readonly Item[], key: (a0: Item) => K, __cmp_K: (a: K, b: K) => number): readonly string[] {
-  return ([...xs].sort((__a: Item, __b: Item) => __cmp_K((key)(__a), (key)(__b)))).map((__x: Item) => ((i) => i.name)(__x));
+  return ([...xs].sort((__a: Item, __b: Item) => __cmp_K((key)(__a), (key)(__b)))).map((__x: Item) => ((i: Item) => i.name)(__x));
 }
 
 export interface ShelfState {
@@ -102,27 +102,27 @@ export class Shelf {
 
   async byRank(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.items)].sort((__a, __b) => __c(((i) => i.rank)(__a), ((i) => i.rank)(__b))))(__bynkCmpOption(__bynkCmpInt))))().map((__x) => ((i) => i.name)(__x))))();
+    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.items)].sort((__a, __b) => __c(((i: Item) => i.rank)(__a), ((i: Item) => i.rank)(__b))))(__bynkCmpOption(__bynkCmpInt))))().map((__x) => ((i: Item) => i.name)(__x))))();
   }
 
   async minScore(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = globalThis.Object.values(__state.items); if (__a.length === 0) return None; let __m = ((i) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) < 0) __m = __k; } return Some(__m); })();
+    return (() => { const __a = globalThis.Object.values(__state.items); if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) < 0) __m = __k; } return Some(__m); })();
   }
 
   async maxScore(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = globalThis.Object.values(__state.items); if (__a.length === 0) return None; let __m = ((i) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) > 0) __m = __k; } return Some(__m); })();
+    return (() => { const __a = globalThis.Object.values(__state.items); if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) > 0) __m = __k; } return Some(__m); })();
   }
 
   async byTag(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.items)].sort((__a, __b) => __bynkCmpInt(((i) => i.tag)(__a), ((i) => i.tag)(__b)))))().map((__x) => ((i) => i.name)(__x))))();
+    return ((() => ((() => [...globalThis.Object.values(__state.items)].sort((__a, __b) => __bynkCmpInt(((i: Item) => i.tag)(__a), ((i: Item) => i.tag)(__b)))))().map((__x) => ((i: Item) => i.name)(__x))))();
   }
 
   async openCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => ((__c) => [...globalThis.Object.values(__state.conns)].sort((__a, __b) => __c(((c) => Some(0))(__a), ((c) => Some(0))(__b))))(__bynkCmpOption(__bynkCmpInt))))().length;
+    return ((() => ((__c) => [...globalThis.Object.values(__state.conns)].sort((__a, __b) => __c(((c: Connection<Frame>) => Some(0))(__a), ((c: Connection<Frame>) => Some(0))(__b))))(__bynkCmpOption(__bynkCmpInt))))().length;
   }
 
 }

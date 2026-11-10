@@ -57,7 +57,7 @@ export const booking = {
 
 export const many = {
   async call(ids: readonly number[], deps: { Pricing: Pricing; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    const rs = await (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (id) => __bynkWithin(deps.Pricing.quote(id), 2000, deps.__exec))(__x))))(ids);
+    const rs = await (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (id: number) => __bynkWithin(deps.Pricing.quote(id), 2000, deps.__exec))(__x))))(ids);
     return (rs).length;
   },
 };

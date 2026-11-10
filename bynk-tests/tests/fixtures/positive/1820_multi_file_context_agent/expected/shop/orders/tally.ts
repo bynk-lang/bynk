@@ -46,7 +46,7 @@ export class Tally {
   async hit(deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.hits = ((h) => h + 1)(__state.hits); return undefined; })();
+      const __r0 = await (() => { __state.hits = ((h: number) => h + 1)(__state.hits); return undefined; })();
       return __state.hits;
     })();
     await this.commitState(__state);

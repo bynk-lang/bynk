@@ -860,19 +860,30 @@ A **non-serialisable argument** is still rejected, at the argument: a function,
 (`bynk.types.function_at_boundary`, …), and an uncodable `Json` target draws
 `bynk.types.json_uncodable`.
 
-A **recursive** generic record or sum — one that transitively contains itself,
+A **recursive** generic type — a record or sum that transitively contains itself,
 whether directly, through another type, or through an `Option`/`List` wrapper
-(`type Node[T] = { value: T, next: Option[Node[T]] }`, or a `Tree[T]` sum whose
-`Branch` variant holds a `List[Tree[T]]`) — has no finite set of
-monomorphised codecs, so it is rejected with
-`bynk.generics.recursive_generic_at_boundary`. Because a record field and a sum-variant payload are themselves boundary
-positions, the self-referential field or payload makes such a type
-**undeclarable**, not merely unusable at a boundary — the error fires at the
-declaration. (A
-*non-generic* recursive record or sum is unaffected: its single codec is
-self-referential and terminates on the data, so it declares and serialises as
-before; only the per-instantiation generic form is deferred.) Use a concrete
-recursive type, or break the cycle.
+(`type Node[T] = { value: T, next: Option[Node[T]] }`) — **declares and works
+inside a context**: build it, match on it, fold it and pass it to generic
+functions like any other generic. It has no codec yet, so it is refused where a
+codec is required, with `bynk.generics.recursive_generic_at_boundary`: a service
+or agent handler signature, an agent `store` field or key, an event field, an
+actor identity type, a `Json.encode`/`Json.decode` target and a `Codable`
+witness. A record field, a sum payload and a capability signature are not such
+positions, so a type that merely *contains* a recursive generic is refused where
+*it* is used, and the note names the field path it is reached through
+(`Holder.t`). The refusal fires once per use, not once per self-reference.
+
+Recursion must be **uniform**: a self-reference passes the declaration's own
+type parameters through unchanged and in order (`Node[T]` inside `Node[T]`,
+including through `Option`, `List`, `Map` and sum payloads), and a mutually
+recursive partner, of any arity, is applied only to the declaration's own
+parameters or to types that mention none (`Binding[A, String]` inside `Expr[A]`). **Polymorphic** recursion
+(`type Weird[T] = { next: Option[Weird[List[T]]] }`, or `Pair[B, A]` inside
+`Pair[A, B]`) generates an unbounded set of instantiations and is refused at the
+declaration with `bynk.generics.polymorphic_recursion`. (A *non-generic*
+recursive type is unaffected: its single codec is self-referential and
+terminates on the data.) To cross a boundary today, use a concrete recursive
+type.
 
 A generic type may carry **instance methods**. A method whose receiver is a
 generic type sees the type's own parameters in scope alongside any it declares
@@ -1002,10 +1013,9 @@ fn find(users: List[User]) -> Opt[User] {
 Like a generic record, a generic-sum instantiation is **serialisable** exactly
 when its type arguments are, through a monomorphised codec per instantiation
 (`__serialise_ApiResult_User` / `__deserialise_ApiResult_User`); a recursive generic
-sum has no finite codec set, so it is rejected with
-`bynk.generics.recursive_generic_at_boundary`, which names it as a recursive
-generic *sum*. As with a record, the error fires at the declaration, since the
-self-referential variant payload is itself a boundary position. A generic sum may not carry an
+sum declares and works inside a context but has no codec yet, so it is refused
+where a codec is required, with `bynk.generics.recursive_generic_at_boundary`
+(see Generic records above). A generic sum may not carry an
 `embeds` clause (`bynk.generics.generic_sum_embeds`).
 
 ## Opaque types

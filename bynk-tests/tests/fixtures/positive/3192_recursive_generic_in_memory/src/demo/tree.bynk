@@ -1,0 +1,76 @@
+context demo.tree
+
+// #3192: a recursive generic type declares and works in memory. It is refused
+// only where a codec is required (see the negative fixtures).
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+type Link[T] = { value: T, next: Option[Link[T]] }
+
+// Mutually recursive generics pass their parameters through unchanged.
+type Forest[A] = { trees: List[Rose[A]] }
+type Rose[A] = { value: A, children: Forest[A] }
+
+// A partner of a different arity, applied to own parameters or closed types.
+type Expr[A] = | Lit(v: A) | Let(b: Binding[A, String])
+type Binding[A, N] = { name: N, body: Expr[A] }
+
+type Holder = { tree: Tree[Int] }
+
+fn insert(t: Tree[Int], x: Int) -> Tree[Int] {
+	match t {
+		Leaf => Node(Leaf, x, Leaf)
+		Node(l, v, r) => if x < v {
+			Node(insert(l, x), v, r)
+		} else {
+			Node(l, v, insert(r, x))
+		}
+	}
+}
+
+fn depth[A](t: Tree[A]) -> Int {
+	match t {
+		Leaf => 0
+		Node(l, _, r) => {
+			let dl = depth(l)
+			let dr = depth(r)
+			1 + if dl > dr { dl } else { dr }
+		}
+	}
+}
+
+fn sum(t: Tree[Int]) -> Int {
+	match t {
+		Leaf => 0
+		Node(l, v, r) => sum(l) + v + sum(r)
+	}
+}
+
+fn chainLength[T](l: Link[T]) -> Int {
+	match l.next {
+		None => 1
+		Some(n) => 1 + chainLength(n)
+	}
+}
+
+fn build() -> Holder {
+	Holder { tree: insert(insert(insert(Leaf, 2), 1), 3) }
+}
+
+service probe {
+	on call() -> Effect[Int] {
+		sum(build().tree)
+	}
+}
+
+fn size[A](r: Rose[A]) -> Int {
+	1 + r.children.trees.length()
+}
+
+fn litCount[A](e: Expr[A]) -> Int {
+	match e {
+		Lit(_) => 1
+		Let(b) => litCount(b.body)
+	}
+}

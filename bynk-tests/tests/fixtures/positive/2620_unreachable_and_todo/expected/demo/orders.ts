@@ -91,7 +91,7 @@ export function unwrap(o: Option<number>): number {
  * A fault in a lambda body takes its type from the expected function type.
  */
 export function viaLambda(n: number): string {
-  const f: (a0: number) => string = (x) => __fault("Unreachable", "never called", "demo/orders.bynk:53:37");
+  const f: (a0: number) => string = (x: number) => __fault("Unreachable", "never called", "demo/orders.bynk:53:37");
   return (n > 0 ? "ok" : f(n));
 }
 
@@ -226,7 +226,7 @@ export class Ledger {
   async bump(fail: boolean, deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.total = ((n) => n + 1)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((n: number) => n + 1)(__state.total); return undefined; })();
       return (fail ? __fault("Unreachable", "the ledger was told to fail", "demo/orders.bynk:155:17") : __state.total);
     })();
     await this.commitState(__state);

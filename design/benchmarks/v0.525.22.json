@@ -1,0 +1,129 @@
+{
+  "commit": "91677993",
+  "debounce_ms_in_lsp_runs": 0,
+  "host": {
+    "arch": "x86_64",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.30GHz",
+    "logical_cpus": 4,
+    "os": "linux"
+  },
+  "sizes": [
+    {
+      "cli_check": {
+        "max_ms": 14.2,
+        "median_ms": 12.0,
+        "p95_ms": 14.2,
+        "runs": 7
+      },
+      "cli_recheck": {
+        "max_ms": 24.7,
+        "median_ms": 12.3,
+        "p95_ms": 24.7,
+        "runs": 7
+      },
+      "contexts": 10,
+      "groups_per_context": 3,
+      "lsp_edit": {
+        "max_ms": 12.5,
+        "median_ms": 11.3,
+        "p95_ms": 12.1,
+        "runs": 20
+      },
+      "lsp_first_round": {
+        "max_ms": 11.4,
+        "median_ms": 11.4,
+        "p95_ms": 11.4,
+        "runs": 1
+      },
+      "source_lines": 926
+    },
+    {
+      "cli_check": {
+        "max_ms": 86.6,
+        "median_ms": 85.7,
+        "p95_ms": 86.6,
+        "runs": 7
+      },
+      "cli_recheck": {
+        "max_ms": 128.8,
+        "median_ms": 86.1,
+        "p95_ms": 128.8,
+        "runs": 7
+      },
+      "contexts": 50,
+      "groups_per_context": 3,
+      "lsp_edit": {
+        "max_ms": 96.2,
+        "median_ms": 79.4,
+        "p95_ms": 84.2,
+        "runs": 20
+      },
+      "lsp_first_round": {
+        "max_ms": 90.1,
+        "median_ms": 90.1,
+        "p95_ms": 90.1,
+        "runs": 1
+      },
+      "source_lines": 4606
+    },
+    {
+      "cli_check": {
+        "max_ms": 1399.8,
+        "median_ms": 986.3,
+        "p95_ms": 1399.8,
+        "runs": 7
+      },
+      "cli_recheck": {
+        "max_ms": 1620.2,
+        "median_ms": 992.3,
+        "p95_ms": 1620.2,
+        "runs": 7
+      },
+      "contexts": 200,
+      "groups_per_context": 3,
+      "lsp_edit": {
+        "max_ms": 1555.1,
+        "median_ms": 1032.2,
+        "p95_ms": 1400.7,
+        "runs": 20
+      },
+      "lsp_first_round": {
+        "max_ms": 955.4,
+        "median_ms": 955.4,
+        "p95_ms": 955.4,
+        "runs": 1
+      },
+      "source_lines": 18406
+    },
+    {
+      "cli_check": {
+        "max_ms": 8472.2,
+        "median_ms": 7141.7,
+        "p95_ms": 8472.2,
+        "runs": 7
+      },
+      "cli_recheck": {
+        "max_ms": 9668.1,
+        "median_ms": 7389.1,
+        "p95_ms": 9668.1,
+        "runs": 7
+      },
+      "contexts": 500,
+      "groups_per_context": 3,
+      "lsp_edit": {
+        "max_ms": 9859.8,
+        "median_ms": 7467.7,
+        "p95_ms": 9853.8,
+        "runs": 20
+      },
+      "lsp_first_round": {
+        "max_ms": 6074.9,
+        "median_ms": 6074.9,
+        "p95_ms": 6074.9,
+        "runs": 1
+      },
+      "source_lines": 46006
+    }
+  ],
+  "version": "0.525.22"
+}

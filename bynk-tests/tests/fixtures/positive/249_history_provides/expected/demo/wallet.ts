@@ -79,7 +79,7 @@ export class Wallet {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await deps.Ledger.note(amount);
-      return (() => { __state.balance = ((b) => b + amount)(__state.balance); return undefined; })();
+      return (() => { __state.balance = ((b: number) => b + amount)(__state.balance); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;
@@ -88,7 +88,7 @@ export class Wallet {
   async spend(amount: Amount, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (() => { __state.balance = ((b) => b - amount)(__state.balance); return undefined; })();
+      return (() => { __state.balance = ((b: number) => b - amount)(__state.balance); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;

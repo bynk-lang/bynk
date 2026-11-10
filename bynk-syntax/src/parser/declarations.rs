@@ -4321,10 +4321,10 @@ impl<'a> Parser<'a> {
     /// Shared by handlers (after the return type, v0.155) and the service header
     /// (the service-level default, v0.155).
     fn parse_by_clause(&mut self) -> Result<Option<ByClause>, CompileError> {
-        if self.peek_kind() != Some(TokenKind::By) {
+        if !self.at_by() {
             return Ok(None);
         }
-        let by_kw = self.expect(TokenKind::By, "to start the actor clause")?;
+        let by_kw = self.expect_by("to start the actor clause")?;
         // `_` is not a valid binder — guide to the binder-less form.
         if self.peek_kind() == Some(TokenKind::Underscore) {
             let t = self.peek().unwrap();

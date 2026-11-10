@@ -173,3 +173,88 @@ test("makeIntegrationR2: every part but the last must be the same size", async (
   await u.abort();
   await assert.rejects(u.complete(parts), /no multipart upload/);
 });
+
+// Per-entry storage slice 1 (#3189): the batched, ranged and transactional forms.
+import { InMemoryStorage, STORAGE_BATCH_LIMIT } from "../src/storage.ts";
+
+test("InMemoryStorage: batched get, put and delete, in key order", async () => {
+  const s = new InMemoryStorage();
+  await s.put({ b: 2, a: 1, c: 3 });
+  assert.deepEqual([...(await s.get<number>(["c", "a", "zz"]))], [["a", 1], ["c", 3]]);
+  assert.equal(await s.delete(["a", "b", "nope"]), 2);
+  assert.equal(await s.get("a"), undefined);
+  assert.equal(await s.get("c"), 3);
+});
+
+test("InMemoryStorage: a batch past the platform limit is refused, as Cloudflare documents", async () => {
+  const s = new InMemoryStorage();
+  const many = Array.from({ length: STORAGE_BATCH_LIMIT + 1 }, (_, i) => `k${i}`);
+  await assert.rejects(() => s.get(many), RangeError);
+  await assert.rejects(() => s.delete(many), RangeError);
+  await assert.rejects(() => s.put(Object.fromEntries(many.map((k) => [k, 1]))), RangeError);
+  // Exactly the limit is fine.
+  await s.put(Object.fromEntries(many.slice(0, STORAGE_BATCH_LIMIT).map((k) => [k, 1])));
+  assert.equal(s.size, STORAGE_BATCH_LIMIT);
+});
+
+test("InMemoryStorage: list takes prefix, start, startAfter, end, limit and reverse", async () => {
+  const s = new InMemoryStorage();
+  for (const k of ["a", "b", "c", "d", "e", "x1"]) await s.put(k, k);
+  const l = async (o: object): Promise<string[]> => [...(await s.list(o)).keys()];
+  assert.deepEqual(await l({ start: "b", end: "e" }), ["b", "c", "d"]);
+  assert.deepEqual(await l({ startAfter: "b", end: "e" }), ["c", "d"]);
+  assert.deepEqual(await l({ end: "c", reverse: true }), ["b", "a"]);
+  assert.deepEqual(await l({ limit: 2 }), ["a", "b"]);
+  assert.deepEqual(await l({ limit: 2, reverse: true }), ["x1", "e"]);
+  assert.deepEqual(await l({ prefix: "x" }), ["x1"]);
+});
+
+test("InMemoryStorage: a transaction commits together, and a throw or rollback commits nothing", async () => {
+  const s = new InMemoryStorage();
+  await s.put("keep", 1);
+  const r = await s.transaction(async (txn) => {
+    await txn.put({ a: 1, b: 2 });
+    await txn.delete("keep");
+    assert.equal(await txn.get("a"), 1, "a transaction reads its own writes");
+    assert.equal(await txn.get("keep"), undefined);
+    assert.equal(await s.get("a"), undefined, "nothing is visible outside before it commits");
+    return "done";
+  });
+  assert.equal(r, "done");
+  assert.deepEqual([await s.get("a"), await s.get("b"), await s.get("keep")], [1, 2, undefined]);
+
+  await assert.rejects(
+    () =>
+      s.transaction(async (txn) => {
+        await txn.put("c", 1);
+        throw new Error("boom");
+      }),
+    /boom/,
+  );
+  await s.transaction(async (txn) => {
+    await txn.put("d", 1);
+    txn.rollback();
+  });
+  assert.deepEqual([await s.get("c"), await s.get("d")], [undefined, undefined]);
+  // A failed transaction does not wedge the storage.
+  await s.put("after", 1);
+  assert.equal(await s.get("after"), 1);
+});
+
+test("InMemoryStorage: transactions cannot nest or overlap", async () => {
+  const s = new InMemoryStorage();
+  await assert.rejects(() => s.transaction(async () => s.transaction(async () => 1)), /cannot overlap or nest/);
+});
+
+test("InMemoryStorage: it counts operations so a test can assert I/O does not grow with state", async () => {
+  const s = new InMemoryStorage();
+  for (let i = 0; i < 100; i += 1) await s.put(`k${i}`, i);
+  s.resetStats();
+  await s.get("k1");
+  await s.put("k1", 2);
+  await s.list({ prefix: "k9" });
+  assert.deepEqual(
+    { reads: s.stats.reads, writes: s.stats.writes, lists: s.stats.lists, keysRead: s.stats.keysRead, keysWritten: s.stats.keysWritten },
+    { reads: 1, writes: 1, lists: 1, keysRead: 1 + 11, keysWritten: 1 },
+  );
+});

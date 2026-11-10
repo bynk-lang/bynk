@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.527**.
+written against **v0.531**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,18 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.531.0** | "`by` is a contextual keyword: an ordinary name (a parameter, a binding, a field) everywhere except its clause positions, so `on call bump(by: Int)` parses" |
+| **v0.530.1** | `bynk check` and the language server build the cross-context views once per project instead of once per context, so checking is roughly linear in project size (500 contexts: 7.5 s to 0.47 s per edit) |
+| **v0.530.0** | A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`) |
+| **v0.529.0** | `bynk migrate sweep` reports storage-layout progress once a deployed Worker writes a layout beyond the original one (per-entry storage, slice 5a) |
+| **v0.528.4** | '`bynk explain` gains a written explanation for `bynk.parse.bare_expression_statement`' |
+| **v0.528.3** | '`bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229' |
+| **v0.528.2** | `cargo xtask bench` measures `bynk check` and the language server's edit-to-diagnostics time on a synthetic project, recorded per release in `design/benchmarks/` |
+| **v0.528.1** | "The emitter classifies an agent's `store` fields once, in a named `AgentStoreLayout`, as the first step of splitting `emit_agent` (#3167)" |
+| **v0.528.0** | The runtime gains the per-entry storage primitives (batched, ranged and transactional storage, the key layout, a staged write-set and the wholesale split); nothing emitted uses them yet (per-entry storage, slice 1) |
+| **v0.527.7** | The emitter annotates every lambda parameter with its checked type, so a lambda handed to a kernel method (`append`, `map`, `filter`, `flatMap`, `any`) no longer fails `tsc --strict` with an implicit `any` ([#3228](https://github.com/bynk-lang/bynk/issues/3228)) |
+| **v0.527.6** | A `system`-tier suite that names a declaration the parser skipped after a syntax error no longer reports it as unknown |
+| **v0.527.5** | An expression written as a statement gets `bynk.parse.bare_expression_statement`, with a machine-applicable `let _ <-` (effectful call) or `let _ =` fix that `bynk check --fix` and the editor apply, instead of "expected `}`" |
 | **v0.527.4** | An attached fn of a generic type resolves the receiver's type variables when its signature is lowered |
 | **v0.527.3** | "The emitter lowers a built-in method call by its typed `KernelOp`, not by the method's spelling, as the second slice of the typed built-in dispatch (#3164)" |
 | **v0.527.2** | "The checker's built-in method typing matches on the typed `KernelOp` exhaustively, so a method listed for completion without a typing rule, or the converse, no longer compiles, and the registry drift tests are retired (#3164)" |

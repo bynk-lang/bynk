@@ -12,7 +12,7 @@ export function sample(): Run {
 }
 
 export function repos(runs: readonly Run[]): readonly string[] {
-  return [...new globalThis.Set(((runs).map((__x: Run) => ((r) => r.repo)(__x))).map((__x: Repo) => ((n) => n)(__x)))];
+  return [...new globalThis.Set(((runs).map((__x: Run) => ((r: Run) => r.repo)(__x))).map((__x: Repo) => ((n: Repo) => n)(__x)))];
 }
 
 export function queued(): Job {

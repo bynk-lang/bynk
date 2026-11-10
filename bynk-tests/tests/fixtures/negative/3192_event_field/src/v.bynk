@@ -1,0 +1,7 @@
+context v
+
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+event Grown = { t: Tree[Int] }

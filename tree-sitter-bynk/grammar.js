@@ -102,6 +102,15 @@ module.exports = grammar({
     // Both parses are equivalent once the next `on`/`store`/handler-body
     // token is seen, so GLR resolves it rather than the grammar needing to.
     [$.store_field],
+    // #3191: `by` is contextual. After a statement's value, `by` opens a
+    // call-site actor clause (`let r <- f() by User("bob")`) or is the first
+    // token of the next statement, an ordinary name (`by`, `by.log()`). One
+    // token cannot tell them apart; GLR keeps both, and `call_site_actor`'s
+    // dynamic precedence settles it for the clause. The compiler is the
+    // authority on the contrived one-line layout (it also asks for the actor to
+    // follow on the same line); the grammar has no newline awareness.
+    [$.let_else_stmt],
+    [$.effect_let_stmt],
   ],
 
   rules: {
@@ -1140,7 +1149,9 @@ module.exports = grammar({
       ),
     annotation_arg: ($) =>
       seq(
-        optional(seq(field("label", $.identifier), ":")),
+        // #3191: `by:` is a label here (`@indexed(by: f)`), and `by` is also a
+        // contextual identifier a value may start with.
+        optional(seq(field("label", choice($.identifier, $._contextual_identifier)), ":")),
         field("value", $._expression),
       ),
 
@@ -1592,7 +1603,9 @@ module.exports = grammar({
     // `prec.right` so an immediately-following `(` is taken as the identity
     // argument rather than starting a fresh token sequence.
     call_site_actor: ($) =>
-      prec.right(
+      prec.dynamic(
+        1,
+        prec.right(
         seq(
           "by",
           field("actor", $.identifier),
@@ -1605,6 +1618,7 @@ module.exports = grammar({
               ")",
             ),
           ),
+        ),
         ),
       ),
     // v0.79: `~> expr` — an asynchronous fire-and-forget send (no binder).
@@ -2003,8 +2017,9 @@ module.exports = grammar({
         $._contextual_identifier,
       ),
 
-    // `trace`, `advance` and `par` are contextual in the compiler — ordinary
-    // identifiers outside `trace(Cap.op)` / `advance Clock by …`. Here, as
+    // `trace`, `advance`, `par` and `by` are contextual in the compiler — ordinary
+    // identifiers outside `trace(Cap.op)` / `advance Clock by …` / an actor
+    // clause (`by` is a clause word only before the actor it names, #3191). Here, as
     // `word`-shaped literals, they are extracted as keyword tokens, and where an
     // identifier and the keyword are both valid (an expression or statement
     // head) the keyword always wins the lex. Re-admit the keyword token as an
@@ -2012,7 +2027,7 @@ module.exports = grammar({
     // followed by an identifier can only open an `advance_stmt`, and `trace (`
     // is a declared conflict that `trace_expr`'s dynamic precedence settles.
     _contextual_identifier: ($) =>
-      alias(choice("trace", "advance", "par"), $.identifier),
+      alias(choice("trace", "advance", "par", "by"), $.identifier),
 
     // v0.20a: a lambda — `(params) => expr | block`. Conflicts with
     // paren_expr/unit_literal until the `=>` disambiguates (GLR conflict

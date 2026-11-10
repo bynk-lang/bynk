@@ -180,6 +180,28 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.parse.bare_expression_statement",
+        blurb: "A block has no expression statements: each statement is a `let`, `do`, \
+                `~>`, `expect`, `:=` and so on, and the last expression is the block's \
+                value. An expression written on its own line with more of the block after \
+                it would have its value thrown away, so the compiler asks you to say what \
+                happens to it. Bind it: `let _ = expr` when you only want to discard a \
+                value, or `let _ <- expr` when it is an effect to run and await (a call \
+                through a capability or an agent, or a cell's `.update`). The parser \
+                cannot see types, so it picks the `<-` form for a call that looks like an \
+                effect and the `=` form otherwise, and its note names the other. The fix \
+                is machine-applicable, so `bynk check --fix` applies it.",
+        example: "on call bump() -> Effect[Result[Int, String]] {\n    \
+                    count.update((c) => c + 1)            // ✗ an expression standing alone\n    \
+                    Ok(count)\n}\n\n\
+                  on call bump() -> Effect[Result[Int, String]] {\n    \
+                    let _ <- count.update((c) => c + 1)   // ✓ the effect is bound\n    \
+                    Ok(count)\n}\n\n\
+                  let _ = a + b                           // ✓ a plain value you mean to discard",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.parse.record_pattern_without_rest",
         blurb: "Every record pattern ends with `..`. Record patterns are always open: they \
                 name the fields they care about and ignore the rest, so adding a field \
@@ -1384,8 +1406,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["fn_decl"],
     ),
     dg(
+        "bynk.generics.polymorphic_recursion",
+        "A generic type refers to itself with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`), or to a mutually recursive partner with an argument that wraps one of its own parameters (`Inner[List[T]]` inside `Outer[T]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a self-reference that passes the parameters through unchanged, and a partner applied to the declaration's own parameters or to types that mention none (of any arity), are accepted (#3192).",
+        &[],
+    ),
+    dg(
         "bynk.generics.recursive_generic_at_boundary",
-        "A recursive generic record or sum (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197).",
+        "A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197).",
         &[],
     ),
     warn(dg(
@@ -2004,6 +2031,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
         &["par_stmt"],
     )),
+    dg(
+        "bynk.parse.bare_expression_statement",
+        "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`.",
+        &["block"],
+    ),
     d(
         "bynk.parse.clause_after_statement",
         "A `stub` or `env` clause came after a statement in a test case; they lead the case body.",

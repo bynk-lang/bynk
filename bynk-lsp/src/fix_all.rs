@@ -233,6 +233,40 @@ mod tests {
         assert_eq!(a.kind, Some(CodeActionKind::QUICKFIX));
     }
 
+    /// #3161: a bare expression statement carries a machine-applicable fix, so
+    /// fix-all binds it (an effectful-looking call with `let _ <-`, a pure one
+    /// with `let _ =`) and the editor offers it as a quick fix.
+    #[test]
+    fn binds_a_bare_expression_statement() {
+        let text = "context m\n\nconsumes bynk { Logger }\n\nfn g(x: Int) -> Int { x }\n\nservice s from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor given Logger {\n    Logger.info(\"hi\")\n    g(1)\n    Ok(\"x\")\n  }\n}\n";
+        let diagnostics = bynk_ide::diagnose(text);
+        let bare: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.error.category == "bynk.parse.bare_expression_statement")
+            .collect();
+        assert_eq!(
+            bare.len(),
+            2,
+            "{:?}",
+            diagnostics
+                .iter()
+                .map(|d| d.error.category)
+                .collect::<Vec<_>>()
+        );
+        let out = fixed(text);
+        assert!(out.contains("let _ <- Logger.info(\"hi\")"), "{out}");
+        assert!(out.contains("let _ = g(1)"), "{out}");
+        let uri = Url::parse("file:///a.bynk").unwrap();
+        let fixes =
+            crate::code_actions::quick_fixes(text, &diagnostics, bare[0].error.span, &uri, Some(1));
+        let [CodeActionOrCommand::CodeAction(a)] = fixes.as_slice() else {
+            panic!("one quick fix: {fixes:?}");
+        };
+        assert!(a.title.contains("let _ <-"), "{}", a.title);
+        assert_ne!(a.is_preferred, Some(false));
+        assert_eq!(a.kind, Some(CodeActionKind::QUICKFIX));
+    }
+
     /// The selection rule itself is tested in `bynk_syntax::fix`; this pins
     /// the adapter that feeds it the IDE's diagnostics.
     #[test]

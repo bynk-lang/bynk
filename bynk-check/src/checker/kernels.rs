@@ -2841,45 +2841,46 @@ fn check_effect_result_fn_arg(
 /// boundary-serialisable shape: bases, named types, and the built-in
 /// generic containers over them. Functions, effects, `HttpResult`, the
 /// error builtins, and type variables cannot.
-/// v0.174 (#592): the shared diagnostic for a recursive generic record reaching
-/// a boundary — a `Json.encode`/`decode` target here, a serialised position in
-/// the emit-side boundary pass.
+/// #3192: the diagnostic for a recursive generic type reaching a codec target
+/// — a `Json.encode`/`decode` target or a `Codable` witness here, the same
+/// use-site refusal `reject_fn_types` makes for a declared position.
 pub(crate) fn recursive_generic_error(
-    name: &str,
-    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    rg: &bynk_syntax::ast::RecursiveGenericPath,
     span: bynk_syntax::span::Span,
 ) -> CompileError {
-    let kind = bynk_syntax::ast::generic_kind_word(name, types);
-    CompileError::new(
-        "bynk.generics.recursive_generic_at_boundary",
-        span,
-        format!(
-            "recursive generic {kind} `{name}` cannot cross a boundary — it has no finite monomorphised codec"
-        ),
-    )
-    .with_note(format!(
-        "a generic {kind} that transitively contains itself is not yet boundary-serialisable; \
-         use a concrete (non-generic) recursive type, or break the cycle"
-    ))
+    crate::context_checks::recursive_generic_at_boundary(rg, span, "a position that needs a codec")
 }
 
-/// v0.174 (#592): the name of a recursive generic-record instantiation reachable
-/// anywhere in `t` (as a codec target or nested inside one), or `None`. A
-/// recursive generic record has no finite set of monomorphised codecs, so it
-/// cannot cross a boundary yet — this reports it with a specific diagnostic
-/// rather than the generic `json_uncodable`.
+/// v0.174 (#592): a recursive generic type reachable anywhere in `t` (as a codec
+/// target, nested inside one, or contained in a named type's fields), with the
+/// field path it is reached through, or `None`. A recursive generic has no
+/// codec yet, so it cannot cross a boundary — this reports it with a specific
+/// diagnostic rather than the generic `json_uncodable` (#3192: the walk now
+/// follows named types into their declarations).
 pub(crate) fn first_recursive_generic(
     t: TyId,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
-) -> Option<String> {
+) -> Option<bynk_syntax::ast::RecursiveGenericPath> {
     match &*tys.get(t) {
         Ty::Named { name, args, .. } => {
-            if !args.is_empty() && generic_record_is_recursive(name, types) {
-                return Some(name.clone());
-            }
-            args.iter()
-                .find_map(|a| first_recursive_generic(*a, types, tys))
+            let ident = Ident {
+                name: name.clone(),
+                span: Span::default(),
+            };
+            let head = if args.is_empty() {
+                TypeRef::Named(ident)
+            } else {
+                TypeRef::App {
+                    name: ident,
+                    args: Vec::new(),
+                    span: Span::default(),
+                }
+            };
+            bynk_syntax::ast::recursive_generic_path(&head, types).or_else(|| {
+                args.iter()
+                    .find_map(|a| first_recursive_generic(*a, types, tys))
+            })
         }
         Ty::Result(a, b) | Ty::Map(a, b) => first_recursive_generic(*a, types, tys)
             .or_else(|| first_recursive_generic(*b, types, tys)),
@@ -2952,11 +2953,7 @@ pub(crate) fn check_json_static(
             }
             let t = type_of(&args[0], None, ctx)?;
             if let Some(rec) = first_recursive_generic(t, &ctx.input.types, tys) {
-                ctx.errors.push(recursive_generic_error(
-                    &rec,
-                    &ctx.input.types,
-                    args[0].span,
-                ));
+                ctx.errors.push(recursive_generic_error(&rec, args[0].span));
                 return None;
             }
             if super::d1::carries_statement(t, &ctx.input.types, tys) {
@@ -3079,8 +3076,7 @@ pub(crate) fn check_json_static(
                 }
             };
             if let Some(rec) = first_recursive_generic(t, &ctx.input.types, tys) {
-                ctx.errors
-                    .push(recursive_generic_error(&rec, &ctx.input.types, span));
+                ctx.errors.push(recursive_generic_error(&rec, span));
                 return None;
             }
             if super::d1::carries_statement(t, &ctx.input.types, tys) {

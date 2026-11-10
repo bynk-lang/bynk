@@ -17,6 +17,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub mod bench;
 pub mod editor_contract;
 pub mod grammar;
 pub mod greenfield_status;

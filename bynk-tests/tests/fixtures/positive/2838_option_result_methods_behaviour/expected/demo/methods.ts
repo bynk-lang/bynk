@@ -17,7 +17,7 @@ export function firstOf(a: Option<number>, b: Option<number>): Option<number> {
 }
 
 export function onlyPositive(o: Option<number>): Option<number> {
-  return ((__o: Option<number>, __p: (x: number) => boolean) => __o.tag === "Some" && __p(__o.value) ? __o : None)(o, (n) => n > 0);
+  return ((__o: Option<number>, __p: (x: number) => boolean) => __o.tag === "Some" && __p(__o.value) ? __o : None)(o, (n: number) => n > 0);
 }
 
 export function failed(r: Result<number, string>): boolean {

@@ -37,7 +37,7 @@ export const maybe = {
 
 export const total = {
   async call(all: readonly Cents[], deps: { identity: string }): globalThis.Promise<number> {
-    return ((__xs: readonly Cents[], __acc: number, __f: (acc: number, x: Cents) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (acc, v) => acc + v);
+    return ((__xs: readonly Cents[], __acc: number, __f: (acc: number, x: Cents) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (acc: number, v: Cents) => acc + v);
   },
 };
 

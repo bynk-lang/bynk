@@ -45,13 +45,13 @@ export function top<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Optio
 }
 
 export function urgent(ts: readonly Task[]): readonly Task[] {
-  return (sort(ts, __bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt], ["title", __bynkCmpString]]))).filter((__x: Task) => ((t) => __bynkCmpSum(["Low", "Medium", "High"], {})(t.priority, Priority.High) >= 0)(__x));
+  return (sort(ts, __bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt], ["title", __bynkCmpString]]))).filter((__x: Task) => ((t: Task) => __bynkCmpSum(["Low", "Medium", "High"], {})(t.priority, Priority.High) >= 0)(__x));
 }
 
 export function firstAfter<T>(xs: readonly T[], pivot: T, __cmp_T: (a: T, b: T) => number): Option<T> {
-  return min((xs).filter((__x: T) => ((x) => __cmp_T(x, pivot) > 0)(__x)), __cmp_T);
+  return min((xs).filter((__x: T) => ((x: T) => __cmp_T(x, pivot) > 0)(__x)), __cmp_T);
 }
 
 export function titles(ts: readonly Task[]): readonly string[] {
-  return (sort(ts, __bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt], ["title", __bynkCmpString]]))).map((__x: Task) => ((t) => t.title)(__x));
+  return (sort(ts, __bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt], ["title", __bynkCmpString]]))).map((__x: Task) => ((t: Task) => t.title)(__x));
 }
