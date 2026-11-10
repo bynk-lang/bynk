@@ -7,6 +7,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 **Understand**
 - [The type-system philosophy](/book/guides/type-system/philosophy/)
 - [The refined-literal admission model](/book/guides/type-system/refined-literal-admission/)
+- [Recursion and iteration](/book/guides/type-system/recursion-and-iteration/)
 - [Choosing `Int`, `Float` or `Decimal`](/book/guides/type-system/handle-money-correctly/#choosing-int-float-or-decimal)
 
 **Do**

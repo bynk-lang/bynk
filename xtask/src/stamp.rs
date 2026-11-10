@@ -93,6 +93,10 @@ pub struct Stamped {
     /// Gated greenfield-status probes this increment acknowledges moving — the
     /// stamp rewrites only these rows of the table.
     pub probes: Vec<String>,
+    /// The increment's breaking-change note (#3178), if it declared one; the
+    /// stamp writes it, under this increment's version, into the Book's
+    /// `reference/upgrading.md`.
+    pub breaking: Option<String>,
 }
 
 /// The full stamp plan for the pending files present.
@@ -148,6 +152,7 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
             adrs: p.adrs,
             closes_rule: p.closes_rule,
             probes: p.probes,
+            breaking: p.breaking,
         });
     }
 
@@ -203,6 +208,7 @@ pub fn apply(
     let changelog_path = root.join("site/src/content/docs/book/reference/changelog.md");
     let readme_path = decisions.join("README.md");
     let rule_ledger_path = root.join("design/greenfield-status-rules.md");
+    let upgrading_path = root.join(crate::release_notes::UPGRADING_PAGE);
 
     // `pr_number` names the PR whose merge triggered *this run*, not any one
     // increment in `plan` — those are usually the same increment, but not
@@ -227,6 +233,7 @@ pub fn apply(
     let mut changelog_rows = Vec::new();
     let mut index_rows = Vec::new();
     let mut rule_ledger_rows_all = Vec::new();
+    let mut upgrading_entries = Vec::new();
     for inc in &plan.increments {
         for adr in &inc.adrs {
             let path = decisions.join(format!("{number:04}-{}.md", adr.slug));
@@ -248,6 +255,9 @@ pub fn apply(
         }
         changelog_rows.push(changelog_row(inc.version, &inc.changelog));
         rule_ledger_rows_all.extend(rule_ledger_rows(inc, ledger_pr_number));
+        if let Some(note) = &inc.breaking {
+            upgrading_entries.push(crate::release_notes::upgrading_entry(inc.version, note));
+        }
     }
 
     // Newest on top: the highest version/number is applied last, so reverse the
@@ -255,6 +265,7 @@ pub fn apply(
     changelog_rows.reverse();
     index_rows.reverse();
     rule_ledger_rows_all.reverse();
+    upgrading_entries.reverse();
 
     let changelog_before = fs::read_to_string(&changelog_path)?;
     let changelog_after =
@@ -293,6 +304,18 @@ pub fn apply(
         Some((ledger_before, after))
     };
 
+    // Only touch the upgrading page when some increment declared `breaking:` —
+    // a tree whose increments break nothing never needs the page to exist, which
+    // keeps the stamp backward-compatible with fixtures and forks that lack it.
+    let upgrading_edit = if upgrading_entries.is_empty() {
+        None
+    } else {
+        let before = fs::read_to_string(&upgrading_path)?;
+        let after = crate::release_notes::insert_upgrading_entries(&before, &upgrading_entries)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        Some((before, after))
+    };
+
     // --- Commit: mutate the tree. Track what we write so a mid-flight failure
     // (the injected `bump` is the likely one) can be unwound. ---
     let mut written_adrs: Vec<PathBuf> = Vec::new();
@@ -308,6 +331,9 @@ pub fn apply(
         if let Some((_, after)) = &ledger_edit {
             fs::write(&rule_ledger_path, after)?;
         }
+        if let Some((_, after)) = &upgrading_edit {
+            fs::write(&upgrading_path, after)?;
+        }
         // The flaky step, run last so its failure unwinds cleanly here rather
         // than stranding a changelog that cites a version the manifests never
         // reached.
@@ -321,6 +347,9 @@ pub fn apply(
         let _ = fs::write(&changelog_path, &changelog_before);
         if let Some((before, _)) = &readme_edit {
             let _ = fs::write(&readme_path, before);
+        }
+        if let Some((before, _)) = &upgrading_edit {
+            let _ = fs::write(&upgrading_path, before);
         }
         if let Some((before, _)) = &ledger_edit {
             match before {

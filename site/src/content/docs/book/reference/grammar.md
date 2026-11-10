@@ -749,6 +749,12 @@ commons demo {
 **Static semantics.**
 {{#grammar-semantics fn_decl}}
 
+A function may call itself. A direct self call in tail position runs as a loop,
+in constant stack, for pure and `Effect` functions alike; mutual recursion,
+non-tail recursion and a function with an `ensures` clause keep direct recursion,
+bounded by the host's stack. See
+[Recursion and iteration](/book/guides/type-system/recursion-and-iteration/).
+
 **See also.** [Operators & built-ins](/book/reference/operators/).
 
 ### type_param {#rule-type_param}
@@ -809,7 +815,9 @@ A function **postcondition** (v0.115): `ensures <name>: <predicate>`. A pure
 awaited element for an `Effect`). Checked at every call in the dev/test build and
 generated against by the runner (a contract is a property that is always on). A
 `case`/`property` that merely restates it is flagged
-(`bynk.contract.restated_by_test`).
+(`bynk.contract.restated_by_test`). A function with an `ensures` clause is not
+rewritten into a loop when it calls itself in tail position (a loop has one frame
+to check), so it keeps direct recursion and the host's stack limit.
 
 **See also.** [Contracts](/book/reference/testing/#contracts).
 

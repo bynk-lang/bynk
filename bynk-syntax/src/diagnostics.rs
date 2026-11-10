@@ -111,6 +111,19 @@ impl Explain {
 /// enforced by `tests/diagnostics_registry.rs`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.cell.self_reference",
+        blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
+                it is writing. Computing the new value from the old one is a hidden \
+                read-modify-write; Bynk asks for `.update(fn)` instead, so the \
+                dependency on the prior value is written down where a reader (and a \
+                retry) can see it. A `:=` is for a value that does not depend on what \
+                the cell held.",
+        example: "count := count + 1                       // ✗ reads `count` while writing it\n\n\
+                  count.update((c) => c + 1)                // ✓ awaited, as an effect; the combiner gets the old value",
+        page: "/book/reference/agents",
+        anchor: "reading-and-writing-state",
+    },
+    Explain {
         code: "bynk.given.undeclared_capability",
         blurb: "A handler may only use a capability it has itself declared with \
                 `given`. Effects in Bynk are explicit: the `given` clause is the \
@@ -167,6 +180,18 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.parse.record_pattern_without_rest",
+        blurb: "Every record pattern ends with `..`. Record patterns are always open: they \
+                name the fields they care about and ignore the rest, so adding a field \
+                to the record later never breaks a pattern that was already written. \
+                The `..` makes that openness visible at the pattern. The compiler offers \
+                the fix: it adds `..` after the last field.",
+        example: "match o {\n    Order { total } => total          // ✗ no trailing `..`\n}\n\n\
+                  match o {\n    Order { total, .. } => total      // ✓ open: other fields ignored\n}",
+        page: "/book/reference/types",
+        anchor: "record-patterns",
+    },
+    Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
         blurb: "A provider calls an agent handler, and the handler needs a capability \
                 the provider's `given` does not list. A handler's `given` is \
@@ -186,6 +211,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                     fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
         page: "/book/guides/effects-and-capabilities/compose-a-provider",
         anchor: "the-rules",
+    },
+    Explain {
+        code: "bynk.refine.literal_violates",
+        blurb: "A literal written where a refined type is expected is checked at compile \
+                time, and this one does not satisfy the type's predicate. A refined \
+                type is a base type plus a rule (`InRange`, `NonEmpty`, …), and a \
+                literal that breaks the rule can never be a valid value, so the \
+                compiler rejects it instead of admitting it. Use a value that \
+                satisfies the predicate, or loosen the type. A value known only at \
+                run time goes through `.of`, which returns a `Result`.",
+        example: "type Age = Int where InRange(0, 150)\n\n\
+                  fn limit() -> Age { 200 }   // ✗ 200 is outside InRange(0, 150)\n\
+                  fn limit() -> Age { 150 }   // ✓ admitted at compile time",
+        page: "/book/reference/refined-types",
+        anchor: "literal-admission",
     },
     Explain {
         code: "bynk.registry.withdrawn",
@@ -283,6 +323,52 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let repo = w.claims.get(\"repository\")            // ✓ keep the String",
         page: "/book/reference/actors",
         anchor: "reading-claims",
+    },
+    Explain {
+        code: "bynk.types.no_numeric_coercion",
+        blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
+                a comparison or an `InRange` bound. Each conversion can lose or invent \
+                precision, so Bynk makes you write it: `.toFloat()` on an `Int`, \
+                `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, \
+                `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same \
+                code covers a `Duration` or `Instant` used with an operand it does not \
+                support.",
+        example: "fn total(count: Int, price: Float) -> Float {\n    count * price                    // ✗ `Int` and `Float` in one operator\n}\n\n\
+                  fn total(count: Int, price: Float) -> Float {\n    count.toFloat() * price          // ✓ explicit conversion\n}",
+        page: "/book/reference/operators",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.non_exhaustive_match",
+        blurb: "A `match` must cover every value its subject can take, so it can never \
+                fall off its end. The compiler names a case that no arm covers: add an \
+                arm for it, or end the `match` with a wildcard `_` arm. Listing every \
+                variant a type has today is not a substitute for `_` where the compiler \
+                says one is needed, and where a `match` is too complex for it to prove \
+                exhaustive it asks for `_` too.",
+        example: "type Status = enum { Pending, Active, Done }\n\n\
+                  match s {\n    Pending => \"p\"\n    Active => \"a\"       // ✗ `Done` is not covered\n}\n\n\
+                  match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.return_mismatch",
+        blurb: "The value a function or handler body ends with does not have the declared \
+                return type, and the compiler compares the two exactly. Either change the \
+                body so it produces the declared type, or change the declared return type \
+                to match what the body produces. A refined type is the same rule with one extra step: an \
+                `Int` is not an `Age`, because `Age` carries a rule the `Int` has not been \
+                checked against. Build the refined value with `.of`, which checks the \
+                predicate and returns a `Result`, and declare that `Result` as the return \
+                type.",
+        example: "fn count() -> Int { \"three\" }       // ✗ a `String` where an `Int` is declared\n\n\
+                  fn count() -> Int { 3 }              // ✓ the body has the declared type\n\n\
+                  type Age = Int where InRange(0, 150)\n\n\
+                  fn parse(n: Int) -> Age { n }                           // ✗ an `Int` is not an `Age`\n\n\
+                  fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
 ];
 

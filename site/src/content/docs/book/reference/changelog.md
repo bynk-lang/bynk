@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.526**.
+written against **v0.527**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,11 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.527.3** | "The emitter lowers a built-in method call by its typed `KernelOp`, not by the method's spelling, as the second slice of the typed built-in dispatch (#3164)" |
+| **v0.527.2** | "The checker's built-in method typing matches on the typed `KernelOp` exhaustively, so a method listed for completion without a typing rule, or the converse, no longer compiles, and the registry drift tests are retired (#3164)" |
+| **v0.527.1** | '`bynk explain` gains written explanations for six common newcomer diagnostics' |
+| **v0.527.0** | A direct self tail call runs in constant stack, emitted as a loop, for pure and `Effect` functions alike; `requires` is re-checked on each iteration, a function with `ensures` is not rewritten, and mutual and non-tail recursion keep a host-defined depth ([#3193](https://github.com/bynk-lang/bynk/issues/3193), [#3176](https://github.com/bynk-lang/bynk/issues/3176)) |
+| **v0.526.3** | An increment can declare `breaking:` in its pending file; the stamp collects it into the Book's upgrading page and each release body gains an "Upgrading from vX" section |
 | **v0.526.2** | "`bynk check` prepares a literal D1 `batch`'s statements in order, each against the schema the earlier statements leave, so a batch that drops then recreates a table, or creates a table and then uses it, is no longer refused (#3197)" |
 | **v0.526.1** | An unresolved type in lowering now stops with an internal error instead of becoming `()` |
 | **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |

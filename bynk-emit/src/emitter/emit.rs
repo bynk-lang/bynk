@@ -957,14 +957,30 @@ fn emit_method(
     // an effectful method that awaits is valid TS; #2719's exec-context need
     // also forces it (a defensive union: such a method is effectful anyway).
     let is_async = is_effectful_return(&f.return_type) || commons.exec_plan.fn_needs(f);
-    emit_block_as_function_body_with_return(
-        &mut body_text,
-        &f.body,
-        &mut cx,
-        INDENT_STEP * 2,
-        is_async,
-        Some(&f.return_type),
-    );
+    // #3193: a direct self tail call runs as a loop, in constant stack. A method
+    // carries no contract clauses (`emit_method` guards none), so there are no
+    // `requires` to re-check per iteration; if methods gain them, they belong in
+    // the guards closure below.
+    if let Some(plan) = super::tco::plan(f, commons) {
+        super::tco::emit_loop_body(
+            &mut body_text,
+            f,
+            &plan,
+            &mut cx,
+            is_async,
+            INDENT_STEP * 2,
+            |_, _, _| {},
+        );
+    } else {
+        emit_block_as_function_body_with_return(
+            &mut body_text,
+            &f.body,
+            &mut cx,
+            INDENT_STEP * 2,
+            is_async,
+            Some(&f.return_type),
+        );
+    }
     bynk_ts::TsObjectEntry::Method {
         name: method_name.name.clone(),
         is_async,
@@ -1145,7 +1161,24 @@ fn emit_free_fn_in(
         cx.declare_binder(&p.name.name);
     }
     let mut body_text = String::new();
-    if guarded {
+    // #3193: a direct self tail call runs as a loop, in constant stack.
+    if let Some(plan) = super::tco::plan(f, commons) {
+        let check_requires = contracts && !f.requires.is_empty();
+        let guards = |out: &mut String, cx: &mut LowerCtx, depth: usize| {
+            if check_requires {
+                emit_requires_guards(out, f, cx, depth);
+            }
+        };
+        super::tco::emit_loop_body(
+            &mut body_text,
+            f,
+            &plan,
+            &mut cx,
+            async_tail,
+            INDENT_STEP,
+            guards,
+        );
+    } else if guarded {
         emit_contract_guarded_body(&mut body_text, f, &mut cx, async_tail);
     } else {
         emit_block_as_function_body_with_return(
@@ -1291,6 +1324,49 @@ fn emit_const_in(c: &ConstDecl, module: ModuleCtx<'_>) -> Vec<bynk_ts::TsStmt> {
     stmts
 }
 
+/// A `${…}` interpolation of each in-scope value for a contract failure report.
+fn contract_param_dump(f: &FnDecl, extra_result: bool) -> String {
+    let mut parts: Vec<String> = f
+        .params
+        .iter()
+        .filter(|p| p.name.name != "_")
+        .map(|p| format!("{n}=${{{v}}}", n = p.name.name, v = ts_ident(&p.name.name)))
+        .collect();
+    if extra_result {
+        parts.push("result=${result}".to_string());
+    }
+    parts.join(", ")
+}
+
+/// `requires` guards of a contracted free function, parameters in scope. Also
+/// re-run at the top of each iteration of a self-tail-call loop (#3193).
+fn emit_requires_guards(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, depth: usize) {
+    let FnName::Free(name) = &f.name else {
+        return;
+    };
+    let fn_name = name.name.clone();
+    // Precondition guards — parameters are the TS function params, in scope.
+    for c in &f.requires {
+        let mut pre = Pre::new();
+        let pred = pre.lower(&c.predicate, cx);
+        for s in pre.stmts() {
+            out.push_str(&bynk_ts::print_stmt(
+                &bynk_ts::TsStmt::raw(format!("{}{s}\n", "  ".repeat(depth)), None),
+                0,
+            ));
+        }
+        let msg = format!(
+            "contract violated: precondition \\`{clause}\\` of {fn_name} ({dump})",
+            clause = c.name.name,
+            dump = contract_param_dump(f, false),
+        );
+        out.push_str(&bynk_ts::print_stmt(
+            &contract_guard_if_stmt(&pred, &msg),
+            depth,
+        ));
+    }
+}
+
 /// #1353 (R7.1): closes step (4) of the design pass's own decomposition
 /// order — `emit_free_fn`'s own outer wrapper landed in #1352; this converts
 /// `emit_contract_guarded_body`'s own real remainder. Each precondition/
@@ -1351,39 +1427,7 @@ fn emit_contract_guarded_body(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, a
         return;
     };
     let fn_name = name.name.clone();
-    // A `${…}` interpolation of each in-scope value for the failure report.
-    let param_dump = |extra_result: bool| -> String {
-        let mut parts: Vec<String> = f
-            .params
-            .iter()
-            .filter(|p| p.name.name != "_")
-            .map(|p| format!("{n}=${{{v}}}", n = p.name.name, v = ts_ident(&p.name.name)))
-            .collect();
-        if extra_result {
-            parts.push("result=${result}".to_string());
-        }
-        parts.join(", ")
-    };
-    // Precondition guards — parameters are the TS function params, in scope.
-    for c in &f.requires {
-        let mut pre = Pre::new();
-        let pred = pre.lower(&c.predicate, cx);
-        for s in pre.stmts() {
-            out.push_str(&bynk_ts::print_stmt(
-                &bynk_ts::TsStmt::raw(format!("  {s}\n"), None),
-                0,
-            ));
-        }
-        let msg = format!(
-            "contract violated: precondition \\`{clause}\\` of {fn_name} ({dump})",
-            clause = c.name.name,
-            dump = param_dump(false),
-        );
-        out.push_str(&bynk_ts::print_stmt(
-            &contract_guard_if_stmt(&pred, &msg),
-            1,
-        ));
-    }
+    emit_requires_guards(out, f, cx, 1);
     // Run the original body, capturing its value as `result` for the `ensures`.
     //
     // Written directly into `out`, NOT captured into a local buffer and
@@ -1430,7 +1474,7 @@ fn emit_contract_guarded_body(out: &mut String, f: &FnDecl, cx: &mut LowerCtx, a
         let msg = format!(
             "contract violated: postcondition \\`{clause}\\` of {fn_name} ({dump})",
             clause = c.name.name,
-            dump = param_dump(true),
+            dump = contract_param_dump(f, true),
         );
         out.push_str(&bynk_ts::print_stmt(
             &contract_guard_if_stmt(&pred, &msg),

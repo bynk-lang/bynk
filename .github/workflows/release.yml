@@ -378,11 +378,47 @@ jobs:
           path: editor-contract/bynk-editor-contract-*.json
           if-no-files-found: error
 
+  # The "Upgrading from vX" section of the release body (#3178), assembled from
+  # the Book's `reference/upgrading.md`, which the stamp fills from each
+  # increment's `breaking:` field. It runs as its own read-only job, not inside
+  # `github-release`: building xtask executes transitive build scripts, and that
+  # job holds `contents: write` and the attestation token (#727). Only the
+  # resulting text crosses over, as a job output, never interpolated into a shell.
+  release-notes:
+    name: Release notes (upgrading section)
+    needs: [verify]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      upgrading: ${{ steps.notes.outputs.upgrading }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the previous release is found from the tag list
+          fetch-tags: true
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+      - id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cargo run --quiet --package xtask -- release-notes "$TAG" > upgrading.md
+          cat upgrading.md
+          {
+            echo "upgrading<<UPGRADING_EOF"
+            cat upgrading.md
+            echo "UPGRADING_EOF"
+          } >> "$GITHUB_OUTPUT"
+
   # Collect every platform's archive and the browser artefacts, checksum them,
   # attest build provenance, and attach everything to one GitHub Release.
   github-release:
     name: Publish GitHub Release
-    needs: [binaries, web-assets, registry-core-wasm, editor-contract]
+    needs: [binaries, web-assets, registry-core-wasm, editor-contract, release-notes]
     if: github.event_name == 'push' # tag push only — not the manual registry-publish dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -423,6 +459,9 @@ jobs:
             dist/SHA256SUMS
             scripts/install.sh
             scripts/install.ps1
+          # The upgrading section leads; GitHub appends its generated
+          # "What's Changed" list after it.
+          body: ${{ needs.release-notes.outputs.upgrading }}
           generate_release_notes: true
           fail_on_unmatched_files: true
 

@@ -141,8 +141,8 @@ kernel_ops! {
 /// `store Map` used as a value). Builders stay lazy (`Query[U]`); terminals
 /// fold into the agent's storage capability (`Effect[T]`). Mirrors
 /// [`ListOp`]'s eager vocabulary; dispatched in
-/// `crate::checker::kernels::check_query_kernel_method`, which this table pins
-/// (`kernel_registry_pins_dispatch`).
+/// `crate::checker::kernels::check_query_kernel_method`, which matches on it
+/// exhaustively.
     QueryOp {
         Map = "map", "map(f: T -> U) -> Query[U]";
         Filter = "filter", "filter(p: T -> Bool) -> Query[T]";
