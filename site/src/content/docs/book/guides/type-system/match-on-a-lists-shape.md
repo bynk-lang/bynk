@@ -58,7 +58,9 @@ whole list.
 > each match costs time in proportion to the list's length, and the recursive
 > `sum` above is quadratic. Reach for `..rest` to peel off a few elements; to
 > add up or transform every element, use a fold such as `xs.fold(0, (a, x) => a + x)`.
-> A bare `..` (`[first, ..]`) copies nothing.
+> A bare `..` (`[first, ..]`) copies nothing. See
+> [Recursion and iteration](/book/guides/type-system/recursion-and-iteration/) for
+> when recursion is the right tool.
 
 ## Look inside the elements
 

@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **781** codes in total.
+There are **783** codes in total.
 
 ## Agents
 
@@ -343,7 +343,7 @@ There are **781** codes in total.
 | `bynk.adapter.no_binding` | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
-| `bynk.cell.self_reference` | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
+| [`bynk.cell.self_reference`](/book/reference/agents/#reading-and-writing-state) | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
 | `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
 | `bynk.d1.migration_invalid` | A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning). |  | Warning |
 | `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
@@ -400,7 +400,8 @@ There are **781** codes in total.
 | `bynk.generics.missing_eq_bound` | A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.generics.missing_key_bound` | A type parameter keys a `Map` or `Set` (a `Map` key, a `Set` element, a `distinct`/`groupBy`/join key), or is passed to a `Key`-bounded parameter of another generic, but is not declared `Key` (`[K: Key]`, or `where A: Key` for a receiver type's parameter; on the type for a generic type's own parameter). The diagnostic carries a machine-applicable fix that declares `Key`, replacing an existing `Eq`, which `Key` implies (constrained-generics slice 2). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.generics.missing_ord_bound` | A type parameter is ordered (`<`, `<=`, `>`, `>=`, an ordering kernel key), or passed to an `Ord`-bounded parameter of another generic, but is not declared `Ord` (`[T: Ord]`, or `where A: Ord` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Ord`, replacing an existing `Eq`, which `Ord` implies (constrained-generics slice 1). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.generics.recursive_generic_at_boundary` | A recursive generic record or sum (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197). |  | — |
+| `bynk.generics.polymorphic_recursion` | A generic type refers to itself with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`), or to a mutually recursive partner with an argument that wraps one of its own parameters (`Inner[List[T]]` inside `Outer[T]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a self-reference that passes the parameters through unchanged, and a partner applied to the declaration's own parameters or to types that mention none (of any arity), are accepted (#3192). |  | — |
+| `bynk.generics.recursive_generic_at_boundary` | A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197). |  | — |
 | `bynk.generics.redundant_eq_bound` | A type parameter is declared both `Eq` and `Ord` (or `Eq` and `Key`); `Ord` and `Key` imply `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slices 1 and 2, warning). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | Warning |
 | `bynk.generics.type_arg_count` | A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183). | [`applied_type_ref`](/book/reference/grammar/#rule-applied_type_ref) | — |
 | `bynk.generics.type_arg_mismatch` | Inferred or explicit type arguments conflict, have the wrong arity, target a non-generic function, or a type parameter shadows a declared type. | [`call`](/book/reference/grammar/#rule-call) | — |
@@ -572,6 +573,7 @@ There are **781** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| [`bynk.parse.bare_expression_statement`](/book/spec/syntactic-grammar/) | An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`. | [`block`](/book/reference/grammar/#rule-block) | — |
 | `bynk.parse.clause_after_statement` | A `stub` or `env` clause came after a statement in a test case; they lead the case body. |  | — |
 | `bynk.parse.const_missing_type` | A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.parse.consumes_after_decls` | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
@@ -625,7 +627,7 @@ There are **781** codes in total.
 | `bynk.parse.orphan_doc_block` | A documentation block is not attached to a declaration (warning). |  | Warning |
 | `bynk.parse.policy_order` | A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.record_pattern_in_is_unparenthesised` | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
-| `bynk.parse.record_pattern_without_rest` | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
+| [`bynk.parse.record_pattern_without_rest`](/book/reference/types/#record-patterns) | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.parse.refined_pattern_inner` | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
 | `bynk.parse.reserved_keyword` | A reserved keyword was used as an identifier. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
 | `bynk.parse.self_outside_method` | `self` used outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
@@ -705,7 +707,7 @@ There are **781** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.refine.literal_violates` | A literal does not satisfy the refined type's predicate. | [`refined_type`](/book/reference/grammar/#rule-refined_type) | — |
+| [`bynk.refine.literal_violates`](/book/reference/refined-types/#literal-admission) | A literal does not satisfy the refined type's predicate. | [`refined_type`](/book/reference/grammar/#rule-refined_type) | — |
 
 ## Resolution
 
@@ -893,8 +895,8 @@ There are **781** codes in total.
 | `bynk.types.mixed_pattern_bindings` | A pattern mixes named and positional bindings. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.negative_length` | A length predicate was given a negative value. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.never_inferred` | An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
-| `bynk.types.no_numeric_coercion` | `Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds. | [`binary_expr`](/book/reference/grammar/#rule-binary_expr), [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.non_exhaustive_match` | A `match` does not cover every value. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
+| [`bynk.types.no_numeric_coercion`](/book/reference/operators/) | `Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds. | [`binary_expr`](/book/reference/grammar/#rule-binary_expr), [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.non_exhaustive_match`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` does not cover every value. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
 | `bynk.types.not_codable` | A type is instantiated at a `Codable`-bounded parameter (of a generic function, or of a capability operation) but is outside the domain `Json.decode` accepts: top-level `()`, a function, `Effect`, `Query`, a `Stream` or a type that carries one, a connection, the HTTP and queue result types, `Asset`, request headers, token claims, or an actor (constrained-generics slice 3). |  | — |
 | `bynk.types.not_comparable` | A value compared with `==`/`!=` contains a function, `Effect`, or `Query` somewhere inside it — those have no value equality, so the type is not equality-supporting (type-system §2.3.5, #1652). |  | — |
 | `bynk.types.not_keyable` | A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2). | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
@@ -919,7 +921,7 @@ There are **781** codes in total.
 | `bynk.types.regex_not_literal` | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.request_query_at_boundary` | `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
-| `bynk.types.return_mismatch` | A returned value does not match the declared return type. |  | — |
+| [`bynk.types.return_mismatch`](/book/reference/types/) | A returned value does not match the declared return type. |  | — |
 | `bynk.types.rounding_mode_position` | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |
 | `bynk.types.select_tail_has_select` | A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sequence_needs_result` | `sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

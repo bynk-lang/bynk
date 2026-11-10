@@ -53,7 +53,7 @@ export class Tally {
   async bump(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.seen = ((v) => v + 1)(__state.seen); return undefined; })();
+      const __r0 = await (() => { __state.seen = ((v: number) => v + 1)(__state.seen); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

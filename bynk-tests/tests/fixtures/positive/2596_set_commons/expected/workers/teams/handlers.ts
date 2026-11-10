@@ -28,11 +28,11 @@ export function onlyA(): readonly string[] {
 }
 
 export function lengths(): readonly number[] {
-  return ([...(mapSet(a(), (s) => (s).length))] as readonly number[]);
+  return ([...(mapSet(a(), (s: string) => (s).length))] as readonly number[]);
 }
 
 export function short(): readonly string[] {
-  return ([...(filterSet(a(), (s) => (s).length < 3))] as readonly string[]);
+  return ([...(filterSet(a(), (s: string) => (s).length < 3))] as readonly string[]);
 }
 
 export function within(): boolean {

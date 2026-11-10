@@ -154,12 +154,12 @@ export function __makeRoller(key: string, env?: { ROLLER?: __DurableObjectNamesp
 
 export const run = {
   async call(n: number, deps: { Audit: Audit; Quotes: Quotes; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    const a = await outer(async (x) => deps.Audit.note(x), n, deps.__exec);
+    const a = await outer(async (x: number) => deps.Audit.note(x), n, deps.__exec);
     const b = await bounded(deps.Quotes.quote(n), deps.__exec);
     const c = await hedged(deps.Quotes.quote(1), deps.Quotes.quote(2), deps.__exec);
-    const d = await viaLambda(async (x) => deps.Audit.note(x), n, deps.__exec);
+    const d = await viaLambda(async (x: number) => deps.Audit.note(x), n, deps.__exec);
     const __r0 = await (async (__xs: readonly number[]) => { await __bynkSettleAll(__xs.map((__x: number) => () => (((__a0: number) => tick(__a0, deps.__exec)))(__x))); })([1, 2]);
-    const e = await guarded(async (x) => deps.Audit.note(x), n, deps.__exec);
+    const e = await guarded(async (x: number) => deps.Audit.note(x), n, deps.__exec);
     const box = await Box.make(n, deps.__exec);
     const f = await Box.bump(box, 1, deps.__exec);
     const g = await __makeRoller("r").roll(deps);

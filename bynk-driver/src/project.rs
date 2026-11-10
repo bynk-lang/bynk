@@ -1888,6 +1888,8 @@ fn check_unit_files(
     indices: &[usize],
     parsed: &[ParsedFile],
     unit_info: &BTreeMap<String, UnitInfo>,
+    // #3229: the project's cross-context views, built once across all units.
+    views: &check_pipeline::CrossContextViewsCache,
     combined_types: &HashMap<String, Arc<TypeDecl>>,
     combined_fns: &HashMap<String, Arc<FnDecl>>,
     combined_methods: &HashMap<String, ResolverMethodTable>,
@@ -1957,6 +1959,7 @@ fn check_unit_files(
         kind,
         broken,
         unit_info,
+        views,
         combined_types,
         imported_from_kind,
         reached_types,
@@ -2837,6 +2840,8 @@ fn run_checks(
     } else {
         HashSet::new()
     };
+    // #3229: one set of cross-context views for the whole project, not one per unit.
+    let views = check_pipeline::CrossContextViewsCache::default();
     for name in bynk_check::project_model::uses_first_order(unit_info.keys(), &unit_uses) {
         let info = &unit_info[name];
         let kind = info.kind;
@@ -2938,6 +2943,7 @@ fn run_checks(
             indices,
             &parsed,
             &unit_info,
+            &views,
             &combined_types,
             &combined_fns,
             &combined_methods,
@@ -3130,6 +3136,7 @@ fn run_checks(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_uses,
+        &broken,
         &groups,
         &mut emitted_barrels,
         &test_asset_files,
@@ -5164,6 +5171,39 @@ mod tests {
         let notes = format!("{:?}", e.error.notes);
         assert!(notes.contains("constructs an agent"), "{notes}");
         assert!(!notes.contains("this commons"), "{notes}");
+    }
+
+    /// #3162, integration suites: a `system`-tier suite that constructs an
+    /// agent the parser skipped gets the syntax error alone, as a unit suite does.
+    #[test]
+    fn a_system_suite_naming_a_skipped_agent_reports_only_the_syntax_error() {
+        let root = scratch_project(
+            "system_suite_skipped_agent",
+            &[
+                ("bynk.toml", "[project]\nname = \"c\"\n"),
+                (
+                    "src/m.bynk",
+                    "context m\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n\n\
+                     agent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
+                     on call bump(by: Int) -> Effect[Int] {\n    n\n  }\n}\n",
+                ),
+                (
+                    "tests/m_test.bynk",
+                    "suite m as system {\n  case \"bump\" {\n    let a <- Counter(\"x\").bump(2)\n    \
+                     expect a == 2\n  }\n}\n",
+                ),
+            ],
+        );
+        let options = compile_options_split_with_sources(
+            root.to_path_buf(),
+            try_read_project_paths(&root).expect("well-formed fixture manifest"),
+        );
+        let cats: Vec<String> = check_project(&options)
+            .errors
+            .iter()
+            .map(|ae| ae.error.category.to_string())
+            .collect();
+        assert_eq!(cats, ["bynk.parse.reserved_keyword"], "{cats:?}");
     }
 
     // -- Slice 0: file identity is not the unit-validation path ---------------

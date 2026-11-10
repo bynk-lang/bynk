@@ -124,6 +124,10 @@
   ],
   "block": [
     {
+      "code": "bynk.parse.bare_expression_statement",
+      "summary": "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`."
+    },
+    {
       "code": "bynk.parse.match_ends_block",
       "summary": "A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow."
     }

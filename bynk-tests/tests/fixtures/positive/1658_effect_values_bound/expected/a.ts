@@ -59,7 +59,7 @@ export class Counter {
   async bump(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (() => { __state.n = ((x) => x + 1)(__state.n); return undefined; })();
+      return (() => { __state.n = ((x: number) => x + 1)(__state.n); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;

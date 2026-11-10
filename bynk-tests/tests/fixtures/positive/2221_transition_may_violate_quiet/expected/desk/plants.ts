@@ -76,7 +76,7 @@ export class Dial {
   async turn(deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.level = ((l) => l)(__state.level); return undefined; })();
+      const __r0 = await (() => { __state.level = ((l: Level) => l)(__state.level); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

@@ -48,7 +48,7 @@ export class Ledger {
   async bump(deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<string> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.total = ((n) => n + 1)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((n: number) => n + 1)(__state.total); return undefined; })();
       const cached = await deps.Idempotency.dedup<string>(`shop.dedupe.Ledger.bump::${"same-key"}`);
       switch (cached.tag) {
         case "Some": {

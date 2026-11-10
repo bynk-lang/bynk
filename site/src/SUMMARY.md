@@ -34,6 +34,7 @@
     - [Match on a record's fields](guides/type-system/match-on-a-records-fields.md)
     - [Destructure a record with `let`](guides/type-system/destructure-a-record-with-let.md)
     - [Match on a list's shape](guides/type-system/match-on-a-lists-shape.md)
+    - [Recursion and iteration](guides/type-system/recursion-and-iteration.md)
     - [Match on a range of numbers](guides/type-system/match-on-a-range-of-numbers.md)
     - [Narrow and bind with `is`](guides/type-system/narrow-with-is.md)
     - [Declare `Eq` on a generic that compares](guides/type-system/declare-eq-bounds.md)
@@ -139,6 +140,7 @@
   - [TypeScript client](reference/typescript-client.md)
   - [Diagnostic index](reference/diagnostics.md)
   - [Version compatibility & changelog](reference/changelog.md)
+  - [Upgrading](reference/upgrading.md)
 
 # Specification
 

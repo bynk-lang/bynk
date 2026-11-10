@@ -51,7 +51,7 @@ export interface Bag<A> {
 
 export const Bag = {
   largest<A>(self: Bag<A>, __cmp_A: (a: A, b: A) => number): Option<A> {
-    return ((__xs: readonly A[]) => { if (__xs.length === 0) return None; let __m = ((x) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x) => x)(__x); if (__cmp_A(__k, __m) > 0) __m = __k; } return Some(__m); })(self.items);
+    return ((__xs: readonly A[]) => { if (__xs.length === 0) return None; let __m = ((x: A) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x: A) => x)(__x); if (__cmp_A(__k, __m) > 0) __m = __k; } return Some(__m); })(self.items);
   },
 };
 

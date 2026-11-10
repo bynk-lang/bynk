@@ -116,6 +116,10 @@
             "link": "/book/guides/type-system/match-on-a-lists-shape/"
           },
           {
+            "label": "Recursion and iteration",
+            "link": "/book/guides/type-system/recursion-and-iteration/"
+          },
+          {
             "label": "Match on a range of numbers",
             "link": "/book/guides/type-system/match-on-a-range-of-numbers/"
           },
@@ -579,6 +583,10 @@
       {
         "label": "Version compatibility & changelog",
         "link": "/book/reference/changelog/"
+      },
+      {
+        "label": "Upgrading",
+        "link": "/book/reference/upgrading/"
       }
     ]
   },

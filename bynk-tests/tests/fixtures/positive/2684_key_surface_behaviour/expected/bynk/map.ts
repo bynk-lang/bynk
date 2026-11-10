@@ -11,7 +11,7 @@ import { reverse } from "./list.js";
  */
 export function values<K, V>(m: ReadonlyMap<K, V>): readonly V[] {
   const init: readonly V[] = ([] as readonly V[]);
-  return reverse(((__xs: readonly K[], __acc: readonly V[], __f: (acc: readonly V[], x: K) => readonly V[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })([...(m).keys()], init, (acc, k) => ((__d) => {
+  return reverse(((__xs: readonly K[], __acc: readonly V[], __f: (acc: readonly V[], x: K) => readonly V[]) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })([...(m).keys()], init, (acc: readonly V[], k: K) => ((__d) => {
     switch (__d.tag) {
       case "Some": {
         const v = __d.value;

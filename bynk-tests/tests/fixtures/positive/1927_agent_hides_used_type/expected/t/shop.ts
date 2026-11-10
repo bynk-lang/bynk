@@ -10,7 +10,7 @@ import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../
 import { carts, isFull } from "./lib.js";
 
 export function fullCarts(): number {
-  return ((carts()).filter((__x: import("./lib.js").Cart) => ((c) => isFull(c))(__x))).length;
+  return ((carts()).filter((__x: import("./lib.js").Cart) => ((c: import("./lib.js").Cart) => isFull(c))(__x))).length;
 }
 
 export interface CartState {

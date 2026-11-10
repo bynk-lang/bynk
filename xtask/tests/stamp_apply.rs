@@ -490,3 +490,102 @@ fn a_failed_bump_rolls_back_an_existing_rule_ledger_to_its_prior_content() {
         "rollback must restore exactly the prior content, not just leave it stale-but-close"
     );
 }
+
+const UPGRADING_FIXTURE: &str =
+    "# Upgrading\n\nIntro.\n\n<!-- stamp:breaking-entries -->\n\n## v0.185.0\n\nOld break.\n\n";
+
+fn upgrading_path(root: &Path) -> PathBuf {
+    root.join("site/src/content/docs/book/reference/upgrading.md")
+}
+
+#[test]
+fn stamp_collects_breaking_notes_into_the_upgrading_page() {
+    let root = fixture("breaking");
+    fs::write(upgrading_path(&root), UPGRADING_FIXTURE).unwrap();
+    fs::write(
+        root.join("design/pending/a-break.md"),
+        "---\nlevel: minor\nchangelog: Break a\nbreaking: `a` is gone; use `b`\n---\n",
+    )
+    .unwrap();
+    // No `breaking:` — must leave no entry.
+    fs::write(
+        root.join("design/pending/b-quiet.md"),
+        "---\nlevel: patch\nchangelog: Quiet\n---\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("design/pending/c-break.md"),
+        "---\nlevel: patch\nchangelog: Break c\nbreaking: `c` renamed\n---\n",
+    )
+    .unwrap();
+
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
+
+    let page = fs::read_to_string(upgrading_path(&root)).unwrap();
+    let entries = xtask::release_notes::parse_entries(&page);
+    let got: Vec<(String, String)> = entries
+        .into_iter()
+        .map(|(v, n)| (v.to_string(), n))
+        .collect();
+    // b-quiet (0.186.1) declared nothing, so it has no entry; newest first.
+    let want: Vec<(String, String)> = [
+        ("0.186.2", "`c` renamed"),
+        ("0.186.0", "`a` is gone; use `b`"),
+        ("0.185.0", "Old break."),
+    ]
+    .iter()
+    .map(|(v, n)| (v.to_string(), n.to_string()))
+    .collect();
+    assert_eq!(got, want);
+}
+
+#[test]
+fn increments_without_breaking_never_need_the_upgrading_page() {
+    // Backward compatibility: a tree with no page, and pending files with no
+    // `breaking:`, stamps exactly as before and does not create the page.
+    let root = fixture("no-breaking");
+    fs::write(
+        root.join("design/pending/quiet.md"),
+        "---\nlevel: patch\nchangelog: Quiet\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
+    assert!(!upgrading_path(&root).exists());
+}
+
+#[test]
+fn a_failed_bump_rolls_back_the_upgrading_page() {
+    let root = fixture("breaking-rollback");
+    fs::write(upgrading_path(&root), UPGRADING_FIXTURE).unwrap();
+    fs::write(
+        root.join("design/pending/a-break.md"),
+        "---\nlevel: patch\nchangelog: Break a\nbreaking: `a` is gone\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, |_| Err(std::io::Error::other("boom")))
+        .expect_err("bump failure surfaces");
+    assert_eq!(
+        fs::read_to_string(upgrading_path(&root)).unwrap(),
+        UPGRADING_FIXTURE
+    );
+    assert!(root.join("design/pending/a-break.md").exists());
+}
+
+#[test]
+fn breaking_without_the_page_fails_before_writing_anything() {
+    let root = fixture("breaking-no-page");
+    fs::write(
+        root.join("design/pending/a-break.md"),
+        "---\nlevel: patch\nchangelog: Break a\nbreaking: `a` is gone\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect_err("page is missing");
+    let changelog =
+        fs::read_to_string(root.join("site/src/content/docs/book/reference/changelog.md")).unwrap();
+    assert!(!changelog.contains("Break a"), "nothing may be written");
+    assert!(root.join("design/pending/a-break.md").exists());
+}

@@ -35,7 +35,7 @@ export function apply(f: (a0: number) => number, n: number): number {
 }
 
 export function viaLambda(n: number): number {
-  return apply((x) => __fault("Unreachable", "never called", "demo/shapes.bynk:34:16"), n);
+  return apply((x: number) => __fault("Unreachable", "never called", "demo/shapes.bynk:34:16"), n);
 }
 
 /**
@@ -49,14 +49,14 @@ export function pick(): (a0: number) => string {
  * A combinator whose lambda only faults takes its type from the result position.
  */
 export function prices(xs: readonly number[]): readonly number[] {
-  return (xs).map((__x: number) => ((o) => __fault("Unreachable", "prices are filled in later", "demo/shapes.bynk:48:17"))(__x));
+  return (xs).map((__x: number) => ((o: number) => __fault("Unreachable", "prices are filled in later", "demo/shapes.bynk:48:17"))(__x));
 }
 
 export function annotated_map(xs: readonly number[]): number {
-  const ys: readonly number[] = (xs).map((__x: number) => ((o) => __fault("Unreachable", "never called", "demo/shapes.bynk:52:37"))(__x));
+  const ys: readonly number[] = (xs).map((__x: number) => ((o: number) => __fault("Unreachable", "never called", "demo/shapes.bynk:52:37"))(__x));
   return (ys).length;
 }
 
 export function mapped_err(r: Result<number, string>): Result<number, string> {
-  return ((__r: Result<number, string>, __f: (e: string) => never) => __r.tag === "Err" ? Err(__f(__r.error)) : __r)(r, (e) => __fault("Unreachable", "errors are impossible here", "demo/shapes.bynk:57:19"));
+  return ((__r: Result<number, string>, __f: (e: string) => never) => __r.tag === "Err" ? Err(__f(__r.error)) : __r)(r, (e: string) => __fault("Unreachable", "errors are impossible here", "demo/shapes.bynk:57:19"));
 }

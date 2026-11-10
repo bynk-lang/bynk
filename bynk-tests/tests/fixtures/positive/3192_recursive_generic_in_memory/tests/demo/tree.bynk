@@ -1,0 +1,27 @@
+suite demo.tree
+
+case "a recursive generic sum builds and folds" {
+	let h = build()
+	expect sum(h.tree) == 6
+	expect depth(h.tree) == 2
+}
+
+case "a recursive generic record chains through Option" {
+	let l = Link { value: 1, next: Some(Link { value: 2, next: None }) }
+	expect chainLength(l) == 2
+}
+
+case "the same generic function works at another element type" {
+	let t: Tree[String] = Node(Leaf, "a", Node(Leaf, "b", Leaf))
+	expect depth(t) == 2
+}
+
+case "mutually recursive generics declare and build" {
+	let r = Rose { value: 1, children: Forest { trees: [Rose { value: 2, children: Forest { trees: [] } }] } }
+	expect size(r) == 2
+}
+
+case "mutually recursive generics of different arity declare and build" {
+	let e: Expr[Int] = Let(Binding { name: "x", body: Lit(1) })
+	expect litCount(e) == 1
+}
