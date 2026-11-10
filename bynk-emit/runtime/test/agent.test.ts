@@ -16,7 +16,7 @@ import {
   type DurableObjectNamespace,
   type WireCodec,
 } from "../src/agent.ts";
-import type { BoundaryError, JsonValue } from "../src/boundary.ts";
+import { checkStoredLayout, type BoundaryError, type JsonValue } from "../src/boundary.ts";
 import { Ok, Err } from "../src/result.ts";
 import { makeIntegrationKv, type DurableObjectState } from "../src/storage.ts";
 
@@ -283,7 +283,7 @@ test("wakeForMigration: an older record loads and commits", async () => {
   const r = await wakeForMigration({ __v: 2, n: 1 }, 3, async () => ({ n: 1 }), async (s) => {
     committed.push(s);
   });
-  assert.deepEqual(await r.json(), { before: 2, after: 3 });
+  assert.deepEqual(await r.json(), { before: 2, after: 3, layoutBefore: 1, layoutAfter: 1 });
   assert.deepEqual(committed, [{ n: 1 }]);
 });
 
@@ -293,10 +293,10 @@ test("wakeForMigration: a current record is read, not written; absent __v is ver
     commits++;
   };
   const current = await wakeForMigration({ __v: 3 }, 3, async () => ({}), commit);
-  assert.deepEqual(await current.json(), { before: 3, after: 3 });
+  assert.deepEqual(await current.json(), { before: 3, after: 3, layoutBefore: 1, layoutAfter: 1 });
   assert.equal(commits, 0);
   const unmarked = await wakeForMigration({ n: 1 }, 3, async () => ({}), commit);
-  assert.deepEqual(await unmarked.json(), { before: 1, after: 3 });
+  assert.deepEqual(await unmarked.json(), { before: 1, after: 3, layoutBefore: 1, layoutAfter: 1 });
   assert.equal(commits, 1);
 });
 
@@ -310,7 +310,34 @@ test("wakeForMigration: no record, and a fault reported by kind only", async () 
   const faulted = await wakeForMigration({ __v: 1, secret: "x" }, 3, async () => {
     throw e;
   }, async () => {});
-  assert.deepEqual(await faulted.json(), { before: 1, fault: "NoMigrationPath" });
+  assert.deepEqual(await faulted.json(), { before: 1, layoutBefore: 1, fault: "NoMigrationPath" });
+});
+
+test("wakeForMigration: reports the layout a record was in and the one this build writes", async () => {
+  // A build writing layout 2 wakes a wholesale record: `load` upgrades it.
+  const up = await wakeForMigration({ __v: 3, n: 1 }, 3, async () => ({}), async () => {}, 2);
+  assert.deepEqual(await up.json(), { before: 3, after: 3, layoutBefore: 1, layoutAfter: 2 });
+  // A record already in layout 2 is reported as such.
+  const there = await wakeForMigration({ __v: 3, __layout: 2 }, 3, async () => ({}), async () => {}, 2);
+  assert.deepEqual(await there.json(), { before: 3, after: 3, layoutBefore: 2, layoutAfter: 2 });
+  // A marker that is not a positive integer is reported as unknown, not as a layout.
+  const odd = await wakeForMigration({ __v: 3, __layout: "x" }, 3, async () => ({}), async () => {}, 2);
+  assert.equal(((await odd.json()) as { layoutBefore: unknown }).layoutBefore, null);
+});
+
+test("wakeForMigration: a layout this build does not know is reported as a NewerLayout fault with its layout", async () => {
+  const quiet = globalThis.console.error;
+  globalThis.console.error = () => {};
+  try {
+    const stored = { __v: 1, __layout: 7 };
+    const r = await wakeForMigration(stored, 1, async () => {
+      checkStoredLayout("Cart", stored);
+      return {};
+    }, async () => {});
+    assert.deepEqual(await r.json(), { before: 1, layoutBefore: 7, fault: "NewerLayout" });
+  } finally {
+    globalThis.console.error = quiet;
+  }
 });
 
 test("sweepAgentInstances: wakes each id, reports per id, and states current", async () => {
@@ -334,6 +361,7 @@ test("sweepAgentInstances: wakes each id, reports per id, and states current", a
   const r = await sweepAgentInstances(binding, JSON.stringify({ ids: ["a", "bad", "gone"] }), 2);
   assert.deepEqual(await r.json(), {
     current: 2,
+    layout: 1,
     results: [
       { id: "a", before: 1, after: 2 },
       { id: "bad", fault: "BadId" },
@@ -342,7 +370,7 @@ test("sweepAgentInstances: wakes each id, reports per id, and states current", a
   });
   assert.deepEqual(fetched, ["a https://_bynk/_bynk/migrate", "gone https://_bynk/_bynk/migrate"]);
   const empty = await sweepAgentInstances(binding, JSON.stringify({ ids: [] }), 2);
-  assert.deepEqual(await empty.json(), { current: 2, results: [] });
+  assert.deepEqual(await empty.json(), { current: 2, layout: 1, results: [] });
   const bad = await sweepAgentInstances(binding, "{\"ids\": [1]}", 2);
   assert.equal(bad.status, 400);
 });
