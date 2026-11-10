@@ -657,6 +657,8 @@ fn bench(args: &[String]) -> ExitCode {
         eprintln!("bench: recorded {}", path.display());
     }
     print!("{text}");
+    ExitCode::SUCCESS
+}
 
 /// `release-notes <tag>`: the "Upgrading from vPREV" section for `tag`, on
 /// stdout. The previous release is the greatest plain `v*` tag below `tag` in
