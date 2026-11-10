@@ -209,6 +209,11 @@ struct ProjectState {
     /// re-tokenising and re-parsing every file just to learn a name that only
     /// changes when the file does was about 8% of a round.
     doc_owner_cache: std::collections::HashMap<PathBuf, (u64, Option<String>)>,
+    /// #3243 S2.3b: what the last analysis round kept for the next (each
+    /// file's checked output, keyed by a digest of everything the check read).
+    /// Behind a mutex because the round runs on a blocking thread; rounds of one
+    /// project never overlap in practice, and a second would simply wait.
+    analysis_memo: Arc<std::sync::Mutex<bynk_check::memo::AnalysisMemo>>,
     /// v0.24: URIs that currently carry published project diagnostics — the
     /// previous round's dirty set, so newly-clean files get a clearing
     /// (empty) publish. Per-project (slice D): a round for this root must only
@@ -804,13 +809,41 @@ impl Backend {
         // #2081: the committed schema lock, so a non-additive event change is
         // diagnosed here as `bynk check` diagnoses it.
         let schema_lock = self.schema_lock_for(&root).await;
+        let memo = self
+            .state
+            .read()
+            .await
+            .projects
+            .get(&root)
+            .map(|ps| Arc::clone(&ps.analysis_memo));
         let joined = tokio::task::spawn_blocking(move || {
             #[cfg(test)]
             if inject_panic {
                 panic!("injected analysis panic");
             }
             let content = crate::content::sweep_project_content(&roots, &overlay);
-            bynk_ide::diagnose_project_with(&roots, &content, &schema_lock)
+            match memo {
+                // A poisoned memo (a panic mid-round) is dropped, not trusted.
+                Some(memo) => match memo.lock() {
+                    Ok(mut memo) => bynk_ide::diagnose_project_memoised(
+                        &roots,
+                        &content,
+                        &schema_lock,
+                        &mut memo,
+                    ),
+                    Err(poisoned) => {
+                        let mut memo = poisoned.into_inner();
+                        *memo = bynk_check::memo::AnalysisMemo::new();
+                        bynk_ide::diagnose_project_memoised(
+                            &roots,
+                            &content,
+                            &schema_lock,
+                            &mut memo,
+                        )
+                    }
+                },
+                None => bynk_ide::diagnose_project_with(&roots, &content, &schema_lock),
+            }
         })
         .await;
         let result = match joined {

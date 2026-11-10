@@ -117,7 +117,7 @@
 //!   (`target == BuildTarget::Workers`) can never pass against this entry
 //!   point's hardcoded `BuildTarget::Bundle`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -132,12 +132,12 @@ use crate::hints::{FileHints, HintSink};
 use crate::index::{ProjectIndex, RefSink};
 use crate::locals::{FileLocals, LocalsSink};
 use crate::project_model::{
-    self, ErrorSink, assemble_unit_info, close_reachable_types, collect_unit_methods,
+    self, ErrorSink, UnitInfo, assemble_unit_info, close_reachable_types, collect_unit_methods,
     compose_unit_symbols, merge_consumed_exports, normalize_service_defaults,
 };
 use crate::requirements::{FileRequirements, RequirementSink};
-use crate::symbols::{assemble_index, build_cross_context_info};
-use bynk_project::{AttributedError, Roots, SchemaLock, UnitKind};
+use crate::symbols::{ConsumedType, assemble_index, build_cross_context_info};
+use bynk_project::{AttributedError, ParsedFile, Roots, SchemaLock, UnitKind};
 use bynk_syntax::ast::{AgentDecl, ServiceDecl, TypeDecl};
 
 /// #846: the per-unit slice of resolution the sequence-diagram classifier
@@ -315,6 +315,75 @@ fn bailed(
     }
 }
 
+/// Check one file into its own scratch sinks (#3243 S2.3), returning everything it
+/// produced. Today's per-file unit of work; the memo keeps these between rounds.
+#[allow(clippy::too_many_arguments)]
+fn check_one_file(
+    name: &str,
+    kind: UnitKind,
+    pf: &ParsedFile,
+    unit_info: &BTreeMap<String, UnitInfo>,
+    combined_types: &HashMap<String, Arc<TypeDecl>>,
+    combined_fns: &HashMap<String, Arc<bynk_syntax::ast::FnDecl>>,
+    combined_methods: &HashMap<String, crate::resolver::MethodTable>,
+    local_names: &HashSet<String>,
+    local_methods_for_type: &HashMap<String, Vec<bynk_syntax::ast::FnDecl>>,
+    consumed_types: &HashMap<String, ConsumedType>,
+    imported_from: &HashMap<String, String>,
+    ctx: &crate::check_pipeline::UnitCheckCtx,
+    tys: &Arc<Types>,
+) -> crate::memo::FileRecord {
+    let mut errors = ErrorSink::new();
+    let mut refs = RefSink::new();
+    let mut hints = HintSink::new();
+    let mut locals = LocalsSink::new();
+    let mut exprs = ExprTypeSink::new();
+    let mut requirements = RequirementSink::new();
+    let typed = check_file_core(
+        name,
+        kind,
+        pf,
+        unit_info,
+        combined_types,
+        combined_fns,
+        combined_methods,
+        local_names,
+        local_methods_for_type,
+        consumed_types,
+        imported_from,
+        ctx,
+        &mut errors,
+        &mut refs,
+        &mut hints,
+        &mut locals,
+        &mut exprs,
+        &mut requirements,
+        tys,
+    )
+    .map(|crate::check_pipeline::FileCheckResult { typed, .. }| {
+        // This entry point never emits — every clean file's exit is the
+        // Analyse-mode one (record best-effort/final types, move on to the next
+        // file). Mirrors `check_unit_files`'s own `mode == Mode::Analyse`
+        // clean-path branch.
+        record_analyse_types(
+            &mut exprs,
+            &pf.identity_path(),
+            pf.is_synthetic(),
+            &typed.expr_types,
+        );
+        Arc::new(typed)
+    });
+    crate::memo::FileRecord {
+        errors,
+        refs,
+        hints,
+        locals,
+        exprs,
+        requirements,
+        typed,
+    }
+}
+
 /// The `bynk-check`-native discovery→parse→resolve→check entry point (P4.1,
 /// #1115) — see this module's own doc comment for the residual-gap
 /// accounting against `bynk-emit`'s now-deleted (#1541) `analyse_project_with`.
@@ -351,7 +420,36 @@ pub fn analyse_project_with_policy(
     policy: crate::stability::StabilityPolicy,
     schema_lock: &SchemaLock,
 ) -> ProjectAnalysis {
-    let tys = &Arc::new(Types::new());
+    analyse_project_inner(roots, overlay, policy, schema_lock, None)
+}
+
+/// [`analyse_project`] reusing `memo` (#3243 S2.3b): the language server's entry
+/// point, via [`crate::memo::analyse_project_memoised`].
+pub(crate) fn analyse_project_cached(
+    roots: &Roots,
+    overlay: &HashMap<PathBuf, String>,
+    schema_lock: &SchemaLock,
+    memo: &mut crate::memo::AnalysisMemo,
+) -> ProjectAnalysis {
+    let policy =
+        crate::stability::StabilityPolicy::for_project(Some(roots.project_root()), overlay);
+    memo.begin_round();
+    let analysis = analyse_project_inner(roots, overlay, policy, schema_lock, Some(&mut *memo));
+    memo.end_round();
+    analysis
+}
+
+fn analyse_project_inner(
+    roots: &Roots,
+    overlay: &HashMap<PathBuf, String>,
+    policy: crate::stability::StabilityPolicy,
+    schema_lock: &SchemaLock,
+    mut memo: Option<&mut crate::memo::AnalysisMemo>,
+) -> ProjectAnalysis {
+    let tys = &match memo.as_deref() {
+        Some(m) => Arc::clone(m.types()),
+        None => Arc::new(Types::new()),
+    };
     // #2223: a manifest-backed project's path dependencies are walked too.
     let packages = matches!(roots, Roots::Split { .. });
     let mut trees = roots.trees();
@@ -782,64 +880,98 @@ pub fn analyse_project_with_policy(
         ctx.d1_sql = d1_sql.clone();
 
         crate::phase_timing::mark(crate::phase_timing::Level::Definition);
-        let mut checked: Vec<crate::checker::TypedCommons> = Vec::new();
+        let mut checked: Vec<Arc<crate::checker::TypedCommons>> = Vec::new();
+        // #3243 S2.3b: what the unit's files say, for the digest of each (a
+        // diagnostic's label can point into a sibling).
+        let unit_files_digest = memo.as_ref().map(|_| {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            for &i in indices {
+                parsed[i].identity_path().hash(&mut h);
+                parsed[i].source().hash(&mut h);
+            }
+            h.finish()
+        });
         for &i in indices {
             let pf = &parsed[i];
-            // #3243 S2.3: each file's check writes into its own scratch sinks,
-            // folded into the project's afterwards. That is the unit of output a
-            // later slice can keep from one round to the next; today every file
-            // is still checked every round, and the fold reproduces what one
-            // shared sink would have held.
-            let mut file_errors = ErrorSink::new();
-            let mut file_refs = RefSink::new();
-            let mut file_hints = HintSink::new();
-            let mut file_locals = LocalsSink::new();
-            let mut file_exprs = ExprTypeSink::new();
-            let mut file_requirements = RequirementSink::new();
-            if let Some(crate::check_pipeline::FileCheckResult { typed, .. }) = check_file_core(
-                name,
-                kind,
-                pf,
-                &unit_info,
-                &combined_types,
-                &combined_fns,
-                &combined_methods,
-                &local_names,
-                &local_methods_for_type,
-                &consumed_types,
-                &imported_from,
-                &ctx,
-                &mut file_errors,
-                &mut file_refs,
-                &mut file_hints,
-                &mut file_locals,
-                &mut file_exprs,
-                &mut file_requirements,
-                tys,
-            ) {
-                // This entry point never emits — every clean file's exit is
-                // the Analyse-mode one (record best-effort/final types, move
-                // on to the next file). Mirrors `check_unit_files`'s own
-                // `mode == Mode::Analyse` clean-path branch.
-                record_analyse_types(
-                    &mut file_exprs,
-                    &pf.identity_path(),
-                    pf.is_synthetic(),
-                    &typed.expr_types,
-                );
-                checked.push(typed);
-            }
+            let path = pf.identity_path();
+            let digest = unit_files_digest.map(|ufd| {
+                crate::check_pipeline::file_check_digest(
+                    name,
+                    kind,
+                    pf,
+                    ufd,
+                    &unit_info,
+                    &combined_types,
+                    &combined_fns,
+                    &combined_methods,
+                    &local_names,
+                    &local_methods_for_type,
+                    &consumed_types,
+                    &imported_from,
+                    &ctx,
+                )
+            });
+            let record = match (memo.as_deref_mut(), digest) {
+                (Some(m), Some(d)) => match m.lookup(&path, d) {
+                    Some(record) => record,
+                    None => {
+                        let record = check_one_file(
+                            name,
+                            kind,
+                            pf,
+                            &unit_info,
+                            &combined_types,
+                            &combined_fns,
+                            &combined_methods,
+                            &local_names,
+                            &local_methods_for_type,
+                            &consumed_types,
+                            &imported_from,
+                            &ctx,
+                            tys,
+                        );
+                        m.store(path, d, record.clone());
+                        record
+                    }
+                },
+                _ => check_one_file(
+                    name,
+                    kind,
+                    pf,
+                    &unit_info,
+                    &combined_types,
+                    &combined_fns,
+                    &combined_methods,
+                    &local_names,
+                    &local_methods_for_type,
+                    &consumed_types,
+                    &imported_from,
+                    &ctx,
+                    tys,
+                ),
+            };
+            let crate::memo::FileRecord {
+                errors: file_errors,
+                refs: file_refs,
+                hints: file_hints,
+                locals: file_locals,
+                exprs: file_exprs,
+                requirements: file_requirements,
+                typed,
+            } = record;
             errors.absorb(file_errors);
             refs.absorb(file_refs);
             hints.absorb(file_hints);
             locals.absorb(file_locals);
             exprs.absorb(file_exprs);
             requirements.absorb(file_requirements);
+            checked.extend(typed);
         }
         crate::phase_timing::mark(crate::phase_timing::Level::Unit);
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
-        let plan_errors = exec_plan.extend(&checked.iter().collect::<Vec<_>>());
+        let plan_errors = exec_plan.extend(&checked.iter().map(|t| &**t).collect::<Vec<_>>());
         errors.extend_attributed(plan_errors);
     }
 

@@ -78,6 +78,7 @@ use bynk_syntax::span::{FileId, Span};
 /// `ProjectFailure` (the other two `diagnostics.rs` pipeline-driving types)
 /// stayed in `bynk-emit`, unaffected — neither is a dependency of anything
 /// this module needs.
+#[derive(Clone)]
 pub struct ErrorSink {
     entries: Vec<AttributedError>,
     /// v0.89 (ADR 0117): non-failing warnings, classified on push by

@@ -274,6 +274,7 @@ pub fn run(root: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Value
                 "lsp_edit_levels": level_medians(&lsp_run.edit_levels),
                 "lsp_body_edit": summary(&lsp_run.body_edits),
                 "lsp_body_edit_levels": level_medians(&lsp_run.body_edit_levels),
+                "lsp_peak_rss_mb": lsp_run.peak_rss_mb,
                 "lsp_edit_outside_analysis_ms": outside_analysis(&lsp_run.edits, &lsp_run.edit_levels),
             }));
         }
@@ -520,6 +521,23 @@ struct LspTimings {
     /// Edit-to-diagnostics for a **body-only** edit (see [`edit_body`]).
     body_edits: Vec<f64>,
     body_edit_levels: Vec<[f64; 4]>,
+    /// The server's peak resident set, in MB, read from `/proc` just before it
+    /// exits (`None` off Linux). Retained analysis state shows up here.
+    peak_rss_mb: Option<f64>,
+}
+
+/// `VmHWM` of process `pid` in MB, from `/proc/<pid>/status`.
+fn peak_rss_mb(pid: u32) -> Option<f64> {
+    let status = fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    let kb: f64 = status
+        .lines()
+        .find_map(|l| l.strip_prefix("VmHWM:"))?
+        .trim()
+        .strip_suffix("kB")?
+        .trim()
+        .parse()
+        .ok()?;
+    Some((kb / 1024.0 * 10.0).round() / 10.0)
 }
 
 fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> {
@@ -625,6 +643,7 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
         }
     }
 
+    let peak_rss_mb = peak_rss_mb(c.child.id());
     let _ = send(
         &mut c.child,
         &json!({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null}),
@@ -640,6 +659,7 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> 
         edit_levels,
         body_edits: body_samples,
         body_edit_levels: body_levels,
+        peak_rss_mb,
     })
 }
 
