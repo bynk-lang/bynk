@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: Under `bynk test`, `remove` on a held `Map[K, Connection]` now closes the connection the entry held before deleting it, as the Workers build does, so a case can observe the close with `TestConnection.closed()` ([#3224](https://github.com/bynk-lang/bynk/issues/3224))
----
+# 0782 — On the bundle target, remove on a held Map closes the connection it held
 
-## ADR: bundle-held-map-remove-closes-the-connection
-title: On the bundle target, remove on a held Map closes the connection it held
-summary: The bundle lowers a held-map remove to close-then-delete over its in-memory TestConnections, keeping the bundle representation distinct from Workers
+- **Status:** Accepted (v0.532.4)
 
 **Context.** The WebSocket guide (§2.9) says `remove` on a `store Map[K, Connection]` removes the entry and closes the connection, so a connection cannot be lost. The Workers build does this: a held map persists `K → connId`, and `remove` resolves the id, closes the socket, then deletes the entry. `bynk test` builds the bundle target, where the same field is an ordinary in-memory map holding `TestConnection` objects (the connection-id representation is Workers-only, because it re-resolves a hibernatable socket through the platform), so `remove` was a plain delete: the connection was never closed and `tc.closed()` stayed `false`, and the ownership rule could not be tested in process (#3224).
 

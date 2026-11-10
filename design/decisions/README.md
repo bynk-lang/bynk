@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0782](0782-bundle-held-map-remove-closes-the-connection.md) | **On the bundle target, remove on a held Map closes the connection it held** (v0.532.4) — The bundle lowers a held-map remove to close-then-delete over its in-memory TestConnections, keeping the bundle representation distinct from Workers | Accepted (v0.532.4) |
 | [0781](0781-serialise-agent-handlers.md) | **An agent instance runs one handler at a time** (v0.532) — Every handler that reaches an instance, read-only ones included, runs through a per-instance queue; a re-entrant call faults ReentrantAgentCall and a long wait faults AgentBusy | Accepted (v0.532) |
 | [0780](0780-by-contextual-keyword.md) | **`by` is a contextual keyword, read by text in its clause positions** (v0.531) — `by` lexes as an identifier; its four clause positions recognise it by text, with a same-line-and-identifier rule for the call-site clause | Accepted (v0.531) |
 | [0779](0779-recursive-generic-refused-at-use.md) | **A recursive generic type is refused where a codec is required, not at its declaration** (v0.530) — Uniform recursion declares and works in memory; polymorphic recursion is a declaration error; codecs are a later step | Accepted (v0.530) |
