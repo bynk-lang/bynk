@@ -6392,12 +6392,12 @@ mod label_attribution_tests {
         let mut sink = ErrorSink::new();
         sink.register_file(known, PathBuf::from("src/a.bynk"));
         sink.extend_attributed([CompileError::new(
-            "bynk.test.known",
+            "bynk.resolve.duplicate_service",
             Span::new_in(known, 0, 1),
             "in a registered file",
         )]);
         sink.extend_attributed([CompileError::new(
-            "bynk.test.unknown",
+            "bynk.resolve.duplicate_service",
             Span::new_in(FileId(41), 0, 1),
             "in no registered file",
         )]);
