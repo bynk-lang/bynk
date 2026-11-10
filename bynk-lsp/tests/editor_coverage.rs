@@ -70,7 +70,11 @@ fn every_contextual_keyword_has_a_hover_path() {
     }
     // #3191: `by` is a keyword only in its clause positions.
     let by = "context Scaffold\n\nservice s from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by who: Visitor {\n    Ok(\"x\")\n  }\n}\n";
-    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "by") {
+    assert!(
+        CONTEXTUAL_KEYWORDS.iter().any(|k| k.word == "by"),
+        "`by` is a contextual keyword"
+    );
+    {
         let offset = by.find(" by ").expect("`by` is in the fixture") + 1;
         assert!(
             symbols::describe_by_at(by, offset).is_some(),
