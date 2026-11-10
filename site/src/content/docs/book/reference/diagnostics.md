@@ -919,7 +919,7 @@ There are **781** codes in total.
 | `bynk.types.regex_not_literal` | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.request_query_at_boundary` | `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
-| [`bynk.types.return_mismatch`](/book/reference/refined-types/#of-checked-construction) | A returned value does not match the declared return type. |  | — |
+| [`bynk.types.return_mismatch`](/book/reference/refined-types/) | A returned value does not match the declared return type. |  | — |
 | `bynk.types.rounding_mode_position` | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |
 | `bynk.types.select_tail_has_select` | A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sequence_needs_result` | `sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
