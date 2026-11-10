@@ -168,12 +168,6 @@ fn a_minted_token_is_accepted_and_expired_or_not_yet_valid_ones_are_refused() {
             .arg(&proj)
             .arg("--base-port")
             .arg(port.to_string())
-            // `wrangler dev` always starts an inspector, on 9229 unless told
-            // otherwise, and `--inspect-port` alone is ignored for a lone
-            // worker: `--inspect` is what passes it on. Without it two of these
-            // sessions at once both bind 9229 and one dies with `Address
-            // already in use` (#3233).
-            .arg("--inspect")
             .arg("--inspect-port")
             .arg(inspector.to_string())
             .arg("--ready-json")
