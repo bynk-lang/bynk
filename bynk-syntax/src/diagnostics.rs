@@ -2004,6 +2004,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
         &["par_stmt"],
     )),
+    dg(
+        "bynk.parse.bare_expression_statement",
+        "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`.",
+        &["block"],
+    ),
     d(
         "bynk.parse.clause_after_statement",
         "A `stub` or `env` clause came after a statement in a test case; they lead the case body.",
