@@ -80,7 +80,11 @@ Bynk compiles in one of two modes.
 exist (`src`, and `tests` when present) or the project root itself, so a
 conventional `src/`(+`tests/`) project and a flat project both need no `[paths]`
 config; `exclude`, and the tool's own `out`/`node_modules`/dot-directories, are
-pruned from discovery.
+pruned from discovery. A subdirectory holding its own `bynk.toml` is another
+project and is pruned too: discovery MUST NOT cross a project boundary. A
+command that compiles (`check`, `test`, `compile`) given a directory that has no
+`bynk.toml` of its own, none above it, and projects nested below it MUST refuse,
+naming them, rather than compile them as one program.
 
 **Legacy mode** — no manifest. A single `.bynk` file compiles as one standalone
 unit.

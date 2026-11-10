@@ -138,9 +138,30 @@ pub fn list_migration_folder(
 /// and read each one's content. Keys are the same literal (non-canonicalised)
 /// path shape a plain recursive walk produces — `CompileOptions.sources`'s own
 /// contract, and what `read_source`'s overlay lookup tries first.
+///
+/// #3242: a subdirectory holding its own `bynk.toml` is another project and is
+/// not entered, as `bynk_project::discover_bynk_files` does. Use
+/// [`read_bynk_tree_across_projects`] to walk through such a directory.
 pub fn read_bynk_tree(
     root: &Path,
     excludes: &[PathBuf],
+) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
+    walk_bynk_tree(root, excludes, true)
+}
+
+/// [`read_bynk_tree`] without stopping at nested projects, for `bynk fmt`: it
+/// formats each file by its own project's `[fmt]` settings, so a directory of
+/// projects is a fine thing to format as one tree.
+pub fn read_bynk_tree_across_projects(
+    root: &Path,
+) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
+    walk_bynk_tree(root, &[], false)
+}
+
+fn walk_bynk_tree(
+    root: &Path,
+    excludes: &[PathBuf],
+    respect_projects: bool,
 ) -> Result<HashMap<PathBuf, String>, DiscoveryError> {
     let mut out = HashMap::new();
     let is_excluded = |dir: &Path| {
@@ -161,7 +182,7 @@ pub fn read_bynk_tree(
             let entry = entry.map_err(|e| to_err(&dir, e))?;
             let p = entry.path();
             if p.is_dir() {
-                if !is_excluded(&p) {
+                if !(is_excluded(&p) || respect_projects && bynk_project::is_project_boundary(&p)) {
                     stack.push(p);
                 }
             } else if p.extension().and_then(|e| e.to_str()) == Some("bynk") {

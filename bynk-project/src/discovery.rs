@@ -541,6 +541,76 @@ fn parsed_files(
         .collect()
 }
 
+/// #3242: whether `dir` is the root of another project: it holds its own
+/// `bynk.toml`. Discovery never crosses such a boundary, the way it never enters
+/// `out/`. The directory a walk *starts* at is not tested, only the
+/// subdirectories below it, so a project's own root is never its own boundary.
+pub fn is_project_boundary(dir: &Path) -> bool {
+    dir.join("bynk.toml").is_file()
+}
+
+/// #3242: the projects nested below `root`: each directory under it holding its
+/// own `bynk.toml`, outermost only (a project's own subtree isn't entered), in
+/// path order. Walked as discovery walks, skipping `excludes`, hidden
+/// directories and the tool's `out` and `node_modules` caches. `root` itself is
+/// not reported even if it holds a manifest.
+pub fn nested_projects(root: &Path, excludes: &[PathBuf]) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if !p.is_dir() || is_skipped_dir(&p, excludes) {
+                continue;
+            }
+            if is_project_boundary(&p) {
+                found.push(p);
+            } else {
+                stack.push(p);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// #3242: whether any `.bynk` file sits under `dir`, walked as discovery walks
+/// (hidden directories and the `out`/`node_modules` caches skipped).
+pub fn holds_bynk_source(dir: &Path) -> bool {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return false;
+    };
+    rd.flatten().any(|entry| {
+        let p = entry.path();
+        if p.is_dir() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            !name.starts_with('.')
+                && name != "out"
+                && name != "node_modules"
+                && holds_bynk_source(&p)
+        } else {
+            p.extension().and_then(|e| e.to_str()) == Some("bynk")
+        }
+    })
+}
+
+/// Whether a walk skips `dir`: an author `exclude`, or a hidden directory.
+fn is_skipped_dir(dir: &Path, excludes: &[PathBuf]) -> bool {
+    excludes.iter().any(|ex| dir == ex || dir.starts_with(ex))
+        || dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.') && n != ".")
+        || dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n == "out" || n == "node_modules")
+}
+
 pub fn discover_bynk_files(
     root: &Path,
     excludes: &[PathBuf],
@@ -578,7 +648,8 @@ pub fn discover_bynk_files(
         for entry in rd.flatten() {
             let p = entry.path();
             if p.is_dir() {
-                if !is_excluded(&p) {
+                // #3242: another project's root is that project's, not ours.
+                if !is_excluded(&p) && !is_project_boundary(&p) {
                     stack.push(p);
                 }
             } else if p.extension().and_then(|e| e.to_str()) == Some("bynk") {
