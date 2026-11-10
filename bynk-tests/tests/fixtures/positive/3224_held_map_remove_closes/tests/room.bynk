@@ -1,0 +1,33 @@
+// #3224: a held connection is closed when its entry is removed.
+suite room {
+  case "a member who leaves is closed" {
+    let grace = TestConnection[ServerFrame]()
+    let room = Room(RoomId.unsafe("lab"))
+    let _ <- room.join(UserId.unsafe("grace"), grace.connection())
+    expect grace.closed() == false
+    let _ <- room.leave(UserId.unsafe("grace"))
+    expect grace.closed()
+    let n <- room.count()
+    expect n == 0
+  }
+
+  case "removing one member closes only that member" {
+    let grace = TestConnection[ServerFrame]()
+    let linus = TestConnection[ServerFrame]()
+    let room = Room(RoomId.unsafe("lab2"))
+    let _ <- room.join(UserId.unsafe("grace"), grace.connection())
+    let _ <- room.join(UserId.unsafe("linus"), linus.connection())
+    let _ <- room.leave(UserId.unsafe("grace"))
+    expect grace.closed()
+    expect linus.closed() == false
+    let n <- room.count()
+    expect n == 1
+  }
+
+  case "removing an absent member is a no-op" {
+    let room = Room(RoomId.unsafe("lab3"))
+    let _ <- room.leave(UserId.unsafe("nobody"))
+    let n <- room.count()
+    expect n == 0
+  }
+}
