@@ -1089,6 +1089,16 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   lowers to `await Promise.all(xs.map(f))`. Only modules that use streams or
   WebSockets emit this machinery.
 
+A held `Map[K, Connection]` closes the connections it stops holding, on **both**
+targets, so a held connection is never dropped with its socket open. `remove`
+closes the connection the key held and then deletes the entry, and `put` over a key
+that already holds a connection closes the displaced connection before storing the
+new one. A `put` of the connection the key already holds (on Workers, the same
+connection id; on the bundle, the same `TestConnection`) closes nothing. An absent
+key is a no-op for `remove`. The close happens while the handler runs, before its
+end-of-handler commit, so a handler that closes a connection and then faults has
+closed it although the entry is not committed as removed.
+
 ## §7.4 The runtime library
 
 Every emitted project ships a single runtime module that the per-context and

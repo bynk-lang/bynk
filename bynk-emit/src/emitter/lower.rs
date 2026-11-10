@@ -2315,9 +2315,15 @@ fn lower_method_call(
         let m = format!("{var}.{}", id.name);
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
         return pre.finish(match method.name.as_str() {
+            // #3261: `put` over a key that already holds a connection closes the
+            // displaced one first, as `remove` does, so a held connection cannot
+            // be dropped unclosed. Re-putting the same connection under its own
+            // key (the same connection id) leaves it open.
             "put" => format!(
-                "({}, undefined)",
-                own_set(&m, &format!("String({})", a[0]), &format!("__connIdOf({})", a[1]))
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {2}; return undefined; }})()",
+                a[0],
+                a[1],
+                own_set(&m, "__k", "__new")
             ),
             "remove" => format!(
                 "(async () => {{ const __k = String({0}); const __cid = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} delete {m}[__k]; }} return undefined; }})()",
@@ -2418,6 +2424,22 @@ fn lower_method_call(
             }
             "upsert" if !idx_fields.is_empty() => {
                 idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
+            }
+            // #3261: on the bundle, `put` over a key that already holds a
+            // `Connection` closes the displaced `TestConnection` first, as
+            // `remove` does and as the Workers build does; re-putting the same
+            // connection under its own key leaves it open (compared by identity).
+            "put"
+                if cx
+                    .agent_store_map_value_ts(&id.name)
+                    .is_some_and(|v| v.starts_with("Connection<")) =>
+            {
+                format!(
+                    "(async () => {{ const __k = {0}; const __new = {1}; if (globalThis.Object.hasOwn({m}, __k) && {m}[__k] !== __new) {{ await {m}[__k].close(); }} {2}; return undefined; }})()",
+                    a[0],
+                    a[1],
+                    own_set(&m, "__k", "__new")
+                )
             }
             "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
