@@ -1,0 +1,7 @@
+commons settings
+
+// #3214: an effect has no codec, for YAML as for JSON.
+fn load(text: String) -> Int {
+  let r = Yaml.decode[Effect[Int]](text)
+  0
+}
