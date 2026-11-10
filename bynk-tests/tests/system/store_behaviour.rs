@@ -1272,70 +1272,6 @@ fn store_rehydration_gate_runtime_semantics() {
     verify("rehydration", REHYDRATE_SOURCE, REHYDRATE_DRIVER_TS);
 }
 
-// Per-entry storage slice 0 (#3189): a stored record carrying a `__layout`
-// marker was written by a later build. Loading it faults `NewerLayout` as a
-// `RehydrationViolation` before anything is decoded, and the record is left
-// exactly as found (never zero-merged and written back, which would orphan the
-// per-entry keys a later layout keeps beside it). A record without the marker,
-// the layout this build reads, still loads.
-const LAYOUT_GUARD_DRIVER_TS: &str = r#"
-import { Gauge } from "./shop.js";
-
-function assert(cond: boolean, msg: string): void {
-  if (!cond) {
-    throw new Error(`assertion failed: ${msg}`);
-  }
-}
-
-function fakeState() {
-  const m = new Map<string, unknown>();
-  return {
-    m,
-    storage: {
-      async get(key: string): Promise<unknown> { return m.get(key); },
-      async put(key: string, value: unknown): Promise<void> { m.set(key, value); },
-    },
-  };
-}
-
-const quiet = globalThis.console.error;
-globalThis.console.error = () => {};
-const faultDetail = async (f: () => Promise<unknown>): Promise<string> => {
-  try {
-    await f();
-    return "no fault";
-  } catch (e) {
-    const rv = (e as { rehydrationViolation?: { kind: string; detail: { kind: string } } }).rehydrationViolation;
-    return rv === undefined ? "other fault" : `${rv.kind}/${rv.detail.kind}`;
-  }
-};
-
-for (const marker of [2, 99, "x"]) {
-  const st = fakeState();
-  const record = { level: 3, note: "ok", __layout: marker };
-  await st.storage.put("state", record);
-  const before = JSON.stringify(st.m.get("state"));
-  const g = new Gauge(st as never);
-  assert(
-    (await faultDetail(() => g.read({}))) === "RehydrationViolation/NewerLayout",
-    `__layout ${String(marker)} faults NewerLayout`,
-  );
-  assert(JSON.stringify(st.m.get("state")) === before, "the record is not written back");
-}
-globalThis.console.error = quiet;
-
-const ok = fakeState();
-await ok.storage.put("state", { level: 4, note: "ok" });
-assert((await new Gauge(ok as never).read({})) === 4, "a record without a layout marker loads");
-
-console.log("ALL OK");
-"#;
-
-#[test]
-fn newer_layout_marker_faults_and_is_not_written_back() {
-    verify("layout_guard", REHYDRATE_SOURCE, LAYOUT_GUARD_DRIVER_TS);
-}
-
 // #2607 (Decision F): rehydration decodes a stored record through the same
 // codec a wire body passes, so a record held in a `Cell` that has since gained
 // a defaulted field loads an instance stored before the field existed, and the
@@ -1852,6 +1788,96 @@ fn stored_state_is_stamped_and_checked_against_its_schema_version() {
         "schema_version",
         VERSIONED_SOURCE,
         VERSIONED_DRIVER_TS,
+        Some(VERSIONED_LOCK_V1),
+    );
+}
+
+// Per-entry storage slice 0 (#3189): a stored record carrying a `__layout` marker
+// was written by a later build. Loading it faults `NewerLayout` as a
+// `RehydrationViolation` before anything is decoded. What the guard exists to stop
+// is a *writing* handler zero-merging the record and committing it back, so the
+// driver runs `set` as well as `get` and checks the stored record is untouched. A
+// locked agent with a newer `__v` as well as a `__layout` faults `NewerLayout`, not
+// `NewerSchema`: the layout check runs first. A record without the marker still
+// loads.
+const LAYOUT_GUARD_DRIVER_TS: &str = r#"
+import { Counter } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState(initial?: unknown) {
+  const m = new Map<string, unknown>();
+  if (initial !== undefined) m.set("state", structuredClone(initial));
+  return {
+    m,
+    state: {
+      storage: {
+        async get(key: string): Promise<unknown> { return structuredClone(m.get(key)); },
+        async put(key: string, value: unknown): Promise<void> { m.set(key, structuredClone(value)); },
+      },
+    },
+  };
+}
+
+async function faultKind(run: () => Promise<unknown>): Promise<string> {
+  try {
+    await run();
+  } catch (e) {
+    const rv = (e as { rehydrationViolation?: { detail?: { kind?: string } } }).rehydrationViolation;
+    return rv?.detail?.kind ?? `other: ${String(e)}`;
+  }
+  return "none";
+}
+
+const quiet = console.error;
+console.error = () => {};
+
+for (const marker of [2, 99, "x", null]) {
+  const record = { count: 3, label: "a", __layout: marker };
+  const f = fakeState(record);
+  const c = new Counter(f.state as never);
+  assert((await faultKind(() => c.get({}))) === "NewerLayout", `a read of __layout ${String(marker)} faults NewerLayout`);
+  assert(
+    (await faultKind(() => c.set(9, {}))) === "NewerLayout",
+    `a write against __layout ${String(marker)} faults NewerLayout, not a commit`,
+  );
+  assert(
+    JSON.stringify(f.m.get("state")) === JSON.stringify(record),
+    "the record is exactly as found, never zero-merged and written back",
+  );
+}
+
+// The layout check runs before the schema-version check.
+const both = fakeState({ count: 3, __v: 99, __layout: 2 });
+assert(
+  (await faultKind(() => new Counter(both.state as never).get({}))) === "NewerLayout",
+  "__layout wins over a newer __v",
+);
+const schemaOnly = fakeState({ count: 3, __v: 99 });
+assert(
+  (await faultKind(() => new Counter(schemaOnly.state as never).get({}))) === "NewerSchema",
+  "without a layout marker a newer __v still faults NewerSchema",
+);
+
+console.error = quiet;
+
+// The layout this build reads: no marker.
+const ok = fakeState({ count: 4, label: "a" });
+assert((await new Counter(ok.state as never).get({})) === 4, "a record without a layout marker loads");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn newer_layout_marker_faults_and_a_writing_handler_does_not_commit() {
+    verify_with_lock(
+        "layout_guard",
+        VERSIONED_SOURCE,
+        LAYOUT_GUARD_DRIVER_TS,
         Some(VERSIONED_LOCK_V1),
     );
 }
