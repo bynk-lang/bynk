@@ -3549,6 +3549,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A record field was given a value of the wrong type.",
         &["record_construction"],
     ),
+    d(
+        "bynk.types.file_at_boundary",
+        "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
+    ),
     dg(
         "bynk.types.function_at_boundary",
         "A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary.",

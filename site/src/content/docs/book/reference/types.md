@@ -250,7 +250,9 @@ File = { filename: Option[String], contentType: String, bytes: Bytes }
 `contentType` is the type the client claimed; `bytes` is the whole part, and its size is
 `bytes.length()`. The name and the type are client-controlled, so neither is a storage key
 or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
-`Option` or in a `List`; a test builds one with a record literal.
+`Option` or in a `List` (one layer); a test builds one with a record literal. It is not a boundary
+type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
+a handler's parameter or result, an event or a call argument.
 
 ## Built-in generic types
 

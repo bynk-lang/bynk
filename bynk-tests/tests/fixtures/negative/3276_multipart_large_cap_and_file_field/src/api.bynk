@@ -12,10 +12,4 @@ service api from http {
   on POST("/up") (body: Up) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("x")
   }
-
-  @form
-  on POST("/form") (body: Up3) -> Effect[HttpResult[String]] by v: Visitor {
-    Ok("x")
-  }
 }
-type Up3 = { photo: File }
