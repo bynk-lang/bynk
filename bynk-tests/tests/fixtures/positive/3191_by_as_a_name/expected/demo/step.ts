@@ -22,7 +22,7 @@ export const Step = {
 };
 
 export function shift(xs: readonly number[], by: number): readonly number[] {
-  return (xs).map((__x: number) => ((x) => x + by)(__x));
+  return (xs).map((__x: number) => ((x: number) => x + by)(__x));
 }
 
 export function step_of(n: number): Step {
@@ -80,7 +80,7 @@ export class Counter {
   async bump(by: number, deps: {}): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { __state.total = ((n) => n + by)(__state.total); return undefined; })();
+      const __r0 = await (() => { __state.total = ((n: number) => n + by)(__state.total); return undefined; })();
       return __state.total;
     })();
     await this.commitState(__state);
