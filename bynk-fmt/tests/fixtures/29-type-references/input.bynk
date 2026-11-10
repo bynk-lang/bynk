@@ -18,7 +18,7 @@ commons demo.typerefs {
       fn mp(m: Map[String,Int]) -> Map[Int,Widget] { m }
 
   fn verr(v: ValidationError) -> ValidationError { v }
-  fn jerr(j: DecodeError) -> DecodeError { j }
+  fn jerr(j: JsonError) -> DecodeError { j }
 
   fn unit(u: ()) -> () { u }
 
