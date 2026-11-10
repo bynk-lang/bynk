@@ -41,6 +41,7 @@
 //! never reach), so they're covered directly below.
 
 use bynk_check::checker::{self, Callee};
+use bynk_check::kernel_op::{KernelOp, ListOp, StringOp};
 use bynk_check::resolver;
 use bynk_syntax::{lexer, parser};
 
@@ -266,10 +267,14 @@ commons demo {
 "#;
     let callees = callees_for(src);
     assert!(
-        callees
-            .iter()
-            .any(|c| matches!(c, Callee::Kernel { op, .. } if op == "map")),
-        "expected a Callee::Kernel{{ op: \"map\" }}, got {callees:?}"
+        callees.iter().any(|c| matches!(
+            c,
+            Callee::Kernel {
+                op: KernelOp::List(ListOp::Map),
+                ..
+            }
+        )),
+        "expected a Callee::Kernel {{ op: List(Map) }}, got {callees:?}"
     );
     let ts = emit(src);
     assert!(
@@ -324,5 +329,28 @@ commons demo {
     assert!(
         ts.contains("f(x)"),
         "expected a plain application emission for the function-typed local, got:\n{ts}"
+    );
+}
+
+#[test]
+fn refined_receiver_kernel_method_is_classified_by_its_base() {
+    let src = r#"
+commons demo {
+  type Name = String where NonEmpty
+  fn size(n: Name) -> Int {
+    n.length()
+  }
+}
+"#;
+    let callees = callees_for(src);
+    assert!(
+        callees.iter().any(|c| matches!(
+            c,
+            Callee::Kernel {
+                op: KernelOp::String(StringOp::Length),
+                ..
+            }
+        )),
+        "expected a Callee::Kernel {{ op: String(Length) }}, got {callees:?}"
     );
 }
