@@ -7,6 +7,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use bynk_check::checker::{Callee, NamedKind, Ty, TyId, TypedCommons};
+use bynk_check::kernel_op::{
+    BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp, IntOp, KernelOp,
+    ListOp, MapOp, OptionOp, QueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
+};
 use bynk_syntax::ast::{
     BaseType, BinOp, Block, Expr, ExprKind, FaultsExpr, FieldInit, Ident, InterpPart, LambdaExpr,
     LiteralValue, MatchArm, MatchBody, ObservationExpr, ObservationMatcher, Pattern,
@@ -2327,7 +2331,7 @@ fn lower_method_call(
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
                     .unwrap_or_default();
-                lower_query_method(
+                lower_query_by_name(
                     format!(
                         "globalThis.Object.values({m}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
                     ),
@@ -2450,7 +2454,7 @@ fn lower_method_call(
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
                     .unwrap_or_default();
-                lower_query_method(
+                lower_query_by_name(
                     format!("globalThis.Object.values({m})"),
                     method,
                     &a,
@@ -2608,7 +2612,7 @@ fn lower_method_call(
                     .first()
                     .map(|_| join_other_elem_ts(args, cx))
                     .unwrap_or_default();
-                lower_query_method(
+                lower_query_by_name(
                     values,
                     method,
                     &a,
@@ -3772,18 +3776,33 @@ fn lower_method_call(
     // dispatched on the receiver's checked type. Emitted inline
     // (typed IIFEs / spreads) — no runtime imports, so files that
     // never touch collections emit byte-identically to v0.20a.
-    if let Some(recv_ty) = cx.commons().expr_ty(receiver.id).as_deref().cloned() {
-        match &recv_ty {
-            Ty::List(elem) => {
-                if let Some(s) =
-                    pre.absorb_opt(lower_list_kernel(e, receiver, method, args, *elem, cx))
+    // The checker resolved this call to a typed `KernelOp` (#3164), so each arm
+    // matches on the resolved operation, not on the method's spelling, and the
+    // receiver's type arguments are read off its checked type.
+    if let Some(Callee::Kernel { op: kop, .. }) = cx.commons().callee(e.id).cloned()
+        && let Some(recv_ty) = cx.commons().expr_ty(receiver.id).as_deref().cloned()
+    {
+        // The receiver's checked type disagrees with the resolved op only if
+        // the checker and the emitter have drifted.
+        let mismatch = |kop: KernelOp| -> ! {
+            panic!("bynk internal error (#3164): kernel op {kop:?} on a mismatched receiver type")
+        };
+        match kop {
+            KernelOp::List(op) => {
+                let Ty::List(elem) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(s) = pre.absorb_opt(lower_list_kernel(e, receiver, op, args, *elem, cx))
                 {
                     return pre.finish(s);
                 }
             }
             // v0.91 (ADR 0119): a chained op on a lazy `Query` — the source is
             // the receiver thunk, invoked (`(recv)()`).
-            Ty::Query(elem) => {
+            KernelOp::Query(op) => {
+                let Ty::Query(elem) = &recv_ty else {
+                    mismatch(kop)
+                };
                 let elem_ts = ts_ty(*elem, tys);
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
@@ -3795,7 +3814,7 @@ fn lower_method_call(
                     .unwrap_or_default();
                 if let Some(s) = lower_query_method(
                     format!("({recv})()"),
-                    method,
+                    op,
                     &a,
                     result_ty,
                     &QueryShape {
@@ -3812,42 +3831,47 @@ fn lower_method_call(
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
             // async iterable, so it is the source directly. Emitted inline as
             // async-generator IIFEs (builders) / an async drain (`collect`).
-            Ty::Stream(_) => {
+            KernelOp::Stream(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                if let Some(s) = lower_stream_method(recv, method, &a) {
+                if let Some(s) = lower_stream_method(recv, op, &a) {
                     return pre.finish(s);
                 }
             }
             // #3051: a case's recording `TestConnection[F]`.
-            Ty::TestConnection(_) => {
+            KernelOp::TestConnection(op) => {
                 let recv = pre.lower(receiver, cx);
-                let s = match method.name.as_str() {
-                    "sent" => format!("[...({recv}).sent]"),
-                    "closed" => format!("({recv}).closed"),
-                    _ => format!("({recv}).mint()"),
+                let s = match op {
+                    TestConnectionOp::Sent => format!("[...({recv}).sent]"),
+                    TestConnectionOp::Closed => format!("({recv}).closed"),
+                    TestConnectionOp::Connection => format!("({recv}).mint()"),
                 };
                 return pre.finish(s);
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
             // `close()`. The linearity pass has already verified ownership.
-            Ty::Connection(_) => {
+            KernelOp::Connection(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                return pre.finish(format!("({recv}).{}({})", method.name, a.join(", ")));
+                return pre.finish(format!("({recv}).{}({})", op.name(), a.join(", ")));
             }
-            Ty::Map(key, val) => {
+            KernelOp::Map(op) => {
+                let Ty::Map(key, val) = &recv_ty else {
+                    mismatch(kop)
+                };
                 if let Some(s) =
-                    pre.absorb_opt(lower_map_kernel(receiver, method, args, *key, *val, cx))
+                    pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
                     return pre.finish(s);
                 }
             }
             // K6a (#2596): the `Set` kernel.
-            Ty::Set(elem) => {
-                if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, method, args, *elem, cx))
-                {
+            KernelOp::Set(op) => {
+                let Ty::Set(elem) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
                     return pre.finish(s);
                 }
             }
@@ -3855,174 +3879,148 @@ fn lower_method_call(
             // at runtime (the Int/Float distinction is erased);
             // the four `Float -> Int` roundings map onto `Math.*`.
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
-            Ty::Base(base @ (BaseType::Int | BaseType::Float)) => {
-                let base = *base;
-                if let Some(s) =
-                    pre.absorb_opt(lower_numeric_kernel(receiver, method, args, base, cx))
-                {
+            KernelOp::Int(op) => {
+                if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
+                    return pre.finish(s);
+                }
+            }
+            KernelOp::Float(op) => {
+                if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
                     return pre.finish(s);
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
             // at runtime (a `Duration` already *is* its milliseconds); `toString`
             // renders the number.
-            Ty::Base(BaseType::Duration) => {
-                if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, method, args, cx)) {
+            KernelOp::Duration(op) => {
+                if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
                     return pre.finish(s);
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
             // identity (an `Instant` lowers to its epoch millis); `toString`
             // renders the number.
-            Ty::Base(BaseType::Instant) => {
-                if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, method, args, cx)) {
+            KernelOp::Instant(op) => {
+                if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
                     return pre.finish(s);
                 }
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            Ty::RequestHeaders | Ty::RequestQuery | Ty::TokenClaims => {
+            KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                return pre.finish(format!("({recv}).{}({})", method.name, args.join(", ")));
+                return pre.finish(format!("({recv}).{}({})", kop.name(), args.join(", ")));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
-            Ty::Base(BaseType::Bytes) => {
-                if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, method, args, cx)) {
+            KernelOp::Bytes(op) => {
+                if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
                     return pre.finish(s);
                 }
             }
             // #2622: the `Decimal` kernel.
-            Ty::Base(BaseType::Decimal) => {
-                if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, method, args, cx)) {
+            KernelOp::Decimal(op) => {
+                if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
                     return pre.finish(s);
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
-            Ty::Base(BaseType::String) => {
-                if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, method, args, cx)) {
-                    return pre.finish(s);
-                }
-            }
-            // v0.22a: Option/Result combinators (ADR 0048).
-            Ty::Option(inner) => {
-                if let Some(s) =
-                    pre.absorb_opt(lower_option_kernel(e, receiver, method, args, *inner, cx))
+            KernelOp::String(op) => {
+                if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, method, args, cx))
                 {
                     return pre.finish(s);
                 }
             }
-            Ty::Result(ok, err) => {
-                if let Some(s) = pre.absorb_opt(lower_result_kernel(
-                    e, receiver, method, args, *ok, *err, cx,
-                )) {
+            // v0.22a: Option/Result combinators (ADR 0048).
+            KernelOp::Option(op) => {
+                let Ty::Option(inner) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(s) =
+                    pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
+                {
                     return pre.finish(s);
+                }
+            }
+            KernelOp::Result(op) => {
+                let Ty::Result(ok, err) = &recv_ty else {
+                    mismatch(kop)
+                };
+                if let Some(s) =
+                    pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
+                {
+                    return pre.finish(s);
+                }
+            }
+            // #2683 / #2711: `within` and `race`, on every `Effect[T]`.
+            KernelOp::Effect(op) => {
+                match op {
+                    // #2683: `e.within(d)` races the effect against a deadline
+                    // and hands the abandoned effect to the handler's execution
+                    // context.
+                    EffectOp::Within if args.len() == 1 => {
+                        cx.note_within();
+                        let recv = pre.lower(receiver, cx);
+                        let after = pre.lower(&args[0], cx);
+                        return pre
+                            .finish(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
+                    }
+                    // #2711: `a.race(b)` takes the first side to succeed and
+                    // hands the rest to the same execution context, uncancelled.
+                    EffectOp::Race if args.len() == 1 => {
+                        cx.note_race();
+                        // A chain `a.race(b).race(c)` lowers to one
+                        // `__bynkRace([a, b, c], …)`: nesting would let `c` beat
+                        // `a` in a same-instant tie, as the inner race settles a
+                        // microtask later, and ties go to source order.
+                        let mut operands: Vec<&Expr> = vec![&args[0]];
+                        let mut head: &Expr = receiver;
+                        while let ExprKind::MethodCall {
+                            receiver: inner,
+                            method: m,
+                            args: a,
+                            ..
+                        } = &head.kind
+                            && m.name == "race"
+                            && a.len() == 1
+                            && matches!(
+                                cx.commons().expr_ty(inner.id).as_deref(),
+                                Some(Ty::Effect(_))
+                            )
+                        {
+                            operands.push(&a[0]);
+                            head = inner;
+                        }
+                        operands.push(head);
+                        operands.reverse();
+                        let lowered: Vec<String> =
+                            operands.into_iter().map(|o| pre.lower(o, cx)).collect();
+                        return pre.finish(format!(
+                            "__bynkRace([{}], {})",
+                            lowered.join(", "),
+                            cx.exec_expr()
+                        ));
+                    }
+                    EffectOp::Within | EffectOp::Race => {}
                 }
             }
             // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/
             // `flatMapOk`/`flatMapErr`. Lowered as an `async` IIFE that awaits the
             // receiver `Promise<Result<…>>` and rebuilds the transformed Result.
-            Ty::Effect(inner) => {
-                // #2683: `e.within(d)` races the effect against a deadline and
-                // hands the abandoned effect to the handler's execution context.
-                if method.name == "within" && args.len() == 1 {
-                    cx.note_within();
-                    let recv = pre.lower(receiver, cx);
-                    let after = pre.lower(&args[0], cx);
-                    return pre
-                        .finish(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
-                }
-                // #2711: `a.race(b)` takes the first side to succeed and hands
-                // the rest to the same execution context, uncancelled.
-                if method.name == "race" && args.len() == 1 {
-                    cx.note_race();
-                    // A chain `a.race(b).race(c)` lowers to one
-                    // `__bynkRace([a, b, c], …)`: nesting would let `c` beat `a`
-                    // in a same-instant tie, as the inner race settles a
-                    // microtask later, and ties go to source order.
-                    let mut operands: Vec<&Expr> = vec![&args[0]];
-                    let mut head: &Expr = receiver;
-                    while let ExprKind::MethodCall {
-                        receiver: inner,
-                        method: m,
-                        args: a,
-                        ..
-                    } = &head.kind
-                        && m.name == "race"
-                        && a.len() == 1
-                        && matches!(
-                            cx.commons().expr_ty(inner.id).as_deref(),
-                            Some(Ty::Effect(_))
-                        )
-                    {
-                        operands.push(&a[0]);
-                        head = inner;
-                    }
-                    operands.push(head);
-                    operands.reverse();
-                    let lowered: Vec<String> =
-                        operands.into_iter().map(|o| pre.lower(o, cx)).collect();
-                    return pre.finish(format!(
-                        "__bynkRace([{}], {})",
-                        lowered.join(", "),
-                        cx.exec_expr()
-                    ));
-                }
+            KernelOp::EffectResult(op) => {
+                let Ty::Effect(inner) = &recv_ty else {
+                    mismatch(kop)
+                };
                 if let Ty::Result(ok, err) = &*tys.get(*inner)
                     && let Some(s) = pre.absorb_opt(lower_effect_result_kernel(
-                        e, receiver, method, args, *ok, *err, cx,
+                        e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
                     return pre.finish(s);
                 }
             }
-            // #561: a refined receiver inherits its base type's read-only kernel
-            // methods (DECISION D). A refined value erases to its branded base
-            // representation, so the inherited call lowers through the *same*
-            // base-kernel helper as a plain base receiver — the emitted call is
-            // byte-identical, with no unwrap/`.raw` step. Declared methods win:
-            // when the refined type declares this method it takes the UFCS tail
-            // below, so route to the kernel only when it is *not* declared.
-            // `Bool` has no kernel and always falls through.
-            Ty::Named {
-                name,
-                kind: NamedKind::Refined(base),
-                ..
-            } if !cx
-                .commons()
-                .methods
-                .get(name)
-                .is_some_and(|t| t.instance.contains_key(&method.name)) =>
-            {
-                let lowered = match base {
-                    BaseType::Int | BaseType::Float => {
-                        let base = *base;
-                        pre.absorb_opt(lower_numeric_kernel(receiver, method, args, base, cx))
-                    }
-                    BaseType::String => {
-                        pre.absorb_opt(lower_string_kernel(receiver, method, args, cx))
-                    }
-                    BaseType::Duration => {
-                        pre.absorb_opt(lower_duration_kernel(receiver, method, args, cx))
-                    }
-                    BaseType::Instant => {
-                        pre.absorb_opt(lower_instant_kernel(receiver, method, args, cx))
-                    }
-                    BaseType::Bytes => {
-                        pre.absorb_opt(lower_bytes_kernel(receiver, method, args, cx))
-                    }
-                    BaseType::Decimal => {
-                        pre.absorb_opt(lower_decimal_kernel(receiver, method, args, cx))
-                    }
-                    BaseType::Bool => None,
-                };
-                if let Some(s) = lowered {
-                    return pre.finish(s);
-                }
-            }
-            _ => {}
         }
     }
     // Instance call: UFCS lowering with the receiver as first arg. The
@@ -4834,7 +4832,7 @@ fn list_ok_elem_ts(call_ty: Option<TyId>, tys: &Arc<Types>) -> String {
 fn lower_list_kernel(
     e: &Expr,
     receiver: &Expr,
-    method: &Ident,
+    op: ListOp,
     args: &[Expr],
     elem: TyId,
     cx: &mut LowerCtx,
@@ -4843,36 +4841,36 @@ fn lower_list_kernel(
     let mut pre = Pre::new();
     let elem_ts = ts_ty(elem, tys);
     let elem_el = ts_array_elem(&elem_ts);
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("length", []) => {
+    let text: Option<String> = match (op, args) {
+        (ListOp::Length, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).length"))
         }
-        ("get", [index]) => {
+        (ListOp::Get, [index]) => {
             let recv = pre.lower(receiver, cx);
             let idx = pre.lower(index, cx);
             Some(format!(
                 "((__xs: readonly {elem_el}[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as {elem_ts}) : None)({recv}, {idx})"
             ))
         }
-        ("prepend", [head]) => {
+        (ListOp::Prepend, [head]) => {
             let head = pre.lower(head, cx);
             let recv = pre.lower(receiver, cx);
             Some(format!("[{head}, ...{recv}]"))
         }
         // #1889: the receiver lowers before the argument, as written, so any
         // hoisted effects keep source order.
-        ("append", [item]) => {
+        (ListOp::Append, [item]) => {
             let recv = pre.lower(receiver, cx);
             let item = pre.lower(item, cx);
             Some(format!("[...{recv}, {item}]"))
         }
-        ("concat", [other]) => {
+        (ListOp::Concat, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
             Some(format!("[...{recv}, ...{other}]"))
         }
-        ("fold", [init, f]) => {
+        (ListOp::Fold, [init, f]) => {
             // The call's checked type is the accumulator type.
             let acc_ts = cx
                 .commons()
@@ -4893,7 +4891,7 @@ fn lower_list_kernel(
                 "((__xs: readonly {elem_el}[], __acc: {acc_ts}, __f: (acc: {acc_ts}, x: {elem_ts}) => {acc_ts}) => {{ for (const __x of __xs) __acc = __f(__acc, __x); return __acc; }})({recv}, {init}, {f})"
             ))
         }
-        (FOLD_EFF, [init, f]) => {
+        (ListOp::FoldEff, [init, f]) => {
             // The call's checked type is `Effect[Acc]` — peel for the TS
             // accumulator annotation.
             let acc_ts = match cx.commons().expr_ty(e.id).as_deref() {
@@ -4915,7 +4913,7 @@ fn lower_list_kernel(
         // v0.146 (ADR 0170): `forEach` — run an effectful step per element in
         // order, awaiting each; yields `Promise<void>`. The eager `List`
         // analogue of the `Query.forEach` terminal, emitted inline.
-        (FOR_EACH, [f]) => {
+        (ListOp::ForEach, [f]) => {
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
@@ -4926,7 +4924,7 @@ fn lower_list_kernel(
         // element concurrently and await them together, so one slow element does
         // not head-of-line-block the rest. The eager `List` analogue of the
         // `Query.parTraverse` terminal, emitted inline.
-        (PAR_TRAVERSE, [f]) => {
+        (ListOp::ParTraverse, [f]) => {
             cx.note_settle_all();
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
@@ -4939,7 +4937,7 @@ fn lower_list_kernel(
         // `traverseAll` awaits each in order into a typed array; `parTraverseAll`
         // issues all at once and `Promise.all`s the resolved `Result`s. Both
         // yield `Promise<Result<…>[]>`.
-        (TRAVERSE_ALL, [f]) => {
+        (ListOp::TraverseAll, [f]) => {
             // The call's checked type is `Effect[List[Result[B, E]]]` — peel to
             // the `Result[B, E]` TS for the output-array annotation.
             let res_ts = match cx.commons().expr_ty(e.id).as_deref() {
@@ -4961,7 +4959,7 @@ fn lower_list_kernel(
                 "(async (__xs: readonly {elem_el}[]) => {{ const __out: {res_el}[] = []; for (const __x of __xs) {{ __out.push(await ({f})(__x)); }} return __out; }})({recv})"
             ))
         }
-        (PAR_TRAVERSE_ALL, [f]) => {
+        (ListOp::ParTraverseAll, [f]) => {
             cx.note_settle_all();
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
@@ -4972,7 +4970,7 @@ fn lower_list_kernel(
         // #2806: pure `Result` accumulation. The call's checked type is
         // `Result[List[T], E']`; `T` and `E` (the element's own `Err` type) type
         // the accumulators.
-        (name @ ("sequenceAll" | "sequenceTry"), []) => {
+        (name @ (ListOp::SequenceAll | ListOp::SequenceTry), []) => {
             let (ok_ts, err_ts) = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Result(ok, err)) => {
                     let ok_ts = match &*tys.get(*ok) {
@@ -4980,7 +4978,7 @@ fn lower_list_kernel(
                         _ => ts_ty(*ok, tys),
                     };
                     let err_ts = match &*tys.get(*err) {
-                        Ty::List(t) if name == "sequenceAll" => ts_ty(*t, tys),
+                        Ty::List(t) if name == ListOp::SequenceAll => ts_ty(*t, tys),
                         _ => ts_ty(*err, tys),
                     };
                     (ok_ts, err_ts)
@@ -4990,7 +4988,7 @@ fn lower_list_kernel(
             let ok_el = ts_array_elem(&ok_ts);
             let err_el = ts_array_elem(&err_ts);
             let recv = pre.lower(receiver, cx);
-            Some(if name == "sequenceAll" {
+            Some(if name == ListOp::SequenceAll {
                 format!(
                     "((__xs: readonly {elem_el}[]) => {{ const __ok: {ok_el}[] = []; const __errs: {err_el}[] = []; for (const __r of __xs) {{ if (__r.tag === \"Err\") {{ __errs.push(__r.error); }} else {{ __ok.push(__r.value); }} }} return __errs.length > 0 ? Err(__errs) : Ok(__ok); }})({recv})"
                 )
@@ -5004,7 +5002,7 @@ fn lower_list_kernel(
         // first `Err` and return it (`Effect[Result[List[U], E]]`). `traverseTry`
         // awaits each in order, bailing on the first `Err`; `parTraverseTry`
         // issues all at once, then scans the resolved `Result`s in input order.
-        (TRAVERSE_TRY, [f]) => {
+        (ListOp::TraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
             let u_el = ts_array_elem(&u_ts);
             let recv = pre.lower(receiver, cx);
@@ -5013,7 +5011,7 @@ fn lower_list_kernel(
                 "(async (__xs: readonly {elem_el}[]) => {{ const __out: {u_el}[] = []; for (const __x of __xs) {{ const __r = await ({f})(__x); if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})({recv})"
             ))
         }
-        (PAR_TRAVERSE_TRY, [f]) => {
+        (ListOp::ParTraverseTry, [f]) => {
             cx.note_settle_all();
             let u_ts = list_ok_elem_ts(cx.commons().expr_types.get(&e.id).map(|te| te.ty), tys);
             let u_el = ts_array_elem(&u_ts);
@@ -5026,41 +5024,41 @@ fn lower_list_kernel(
         // v0.88 (ADR 0116): the eager builder/terminal vocabulary. Most lower
         // to native array methods; callbacks are wrapped in a single-arg arrow
         // so the array index/array extra args never reach a Bynk one-param fn.
-        ("map", [f]) => {
+        (ListOp::Map, [f]) => {
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!("({recv}).map((__x: {elem_ts}) => ({f})(__x))"))
         }
-        ("filter", [p]) => {
+        (ListOp::Filter, [p]) => {
             let recv = pre.lower(receiver, cx);
             let p = pre.lower(p, cx);
             Some(format!("({recv}).filter((__x: {elem_ts}) => ({p})(__x))"))
         }
-        ("flatMap", [f]) => {
+        (ListOp::FlatMap, [f]) => {
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!("({recv}).flatMap((__x: {elem_ts}) => ({f})(__x))"))
         }
-        ("take", [n]) => {
+        (ListOp::Take, [n]) => {
             let recv = pre.lower(receiver, cx);
             let n = pre.lower(n, cx);
             Some(format!("({recv}).slice(0, globalThis.Math.max(0, {n}))"))
         }
-        ("skip", [n]) => {
+        (ListOp::Skip, [n]) => {
             let recv = pre.lower(receiver, cx);
             let n = pre.lower(n, cx);
             Some(format!("({recv}).slice(globalThis.Math.max(0, {n}))"))
         }
-        ("count", []) => {
+        (ListOp::Count, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).length"))
         }
-        ("any", [p]) => {
+        (ListOp::Any, [p]) => {
             let recv = pre.lower(receiver, cx);
             let p = pre.lower(p, cx);
             Some(format!("({recv}).some((__x: {elem_ts}) => ({p})(__x))"))
         }
-        ("all", [p]) => {
+        (ListOp::All, [p]) => {
             let recv = pre.lower(receiver, cx);
             let p = pre.lower(p, cx);
             Some(format!("({recv}).every((__x: {elem_ts}) => ({p})(__x))"))
@@ -5069,20 +5067,20 @@ fn lower_list_kernel(
         // strictly before `step`. Steps are distinct object instances in the run
         // array, so `indexOf` is reference identity. An IIFE avoids re-evaluating
         // the receiver.
-        ("upTo", [step]) => {
+        (ListOp::UpTo, [step]) => {
             let recv = pre.lower(receiver, cx);
             let step = pre.lower(step, cx);
             Some(format!(
                 "((__xs: readonly {elem_el}[], __s: {elem_ts}) => __xs.slice(0, __xs.indexOf(__s)))({recv}, {step})"
             ))
         }
-        ("first", []) => {
+        (ListOp::First, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!(
                 "((__xs: readonly {elem_el}[]) => __xs.length > 0 ? Some(__xs[0]) : None)({recv})"
             ))
         }
-        ("firstOrElse", [default]) => {
+        (ListOp::FirstOrElse, [default]) => {
             let recv = pre.lower(receiver, cx);
             let default = pre.lower(default, cx);
             Some(format!(
@@ -5092,7 +5090,7 @@ fn lower_list_kernel(
         // v0.88 (ADR 0116 D2/D3/D4): ordering + aggregates. The comparator
         // `<`/`>` works for the numeric- and string-erased orderable keys
         // alike, so no key-type branch is needed (except average's rounding).
-        ("sortBy", [key]) => {
+        (ListOp::SortBy, [key]) => {
             let cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
@@ -5115,7 +5113,7 @@ fn lower_list_kernel(
         }
         // #2805: `sortByDescending` is the exact reverse of `sortBy`'s order
         // (the comparator's arguments swapped, so `NaN` is first), and stable.
-        ("sortByDescending", [key]) => {
+        (ListOp::SortByDescending, [key]) => {
             let cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
@@ -5131,18 +5129,18 @@ fn lower_list_kernel(
                 ),
             })
         }
-        ("distinct", []) if !key_is_plain(elem, tys) => {
+        (ListOp::Distinct, []) if !key_is_plain(elem, tys) => {
             cx.runtime_use().note_key("__bynkDistinct");
             let recv = pre.lower(receiver, cx);
             Some(format!("__bynkDistinct({recv})"))
         }
-        ("distinctBy", [key]) if !key_fn_is_plain(key, cx) => {
+        (ListOp::DistinctBy, [key]) if !key_fn_is_plain(key, cx) => {
             cx.runtime_use().note_key("__bynkDistinctBy");
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
             Some(format!("__bynkDistinctBy({recv}, {key})"))
         }
-        ("joinOn", [other, left, ..]) if !key_fn_is_plain(left, cx) => {
+        (ListOp::JoinOn, [other, left, ..]) if !key_fn_is_plain(left, cx) => {
             cx.runtime_use().note_key("__bynkJoinOn");
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
@@ -5153,7 +5151,7 @@ fn lower_list_kernel(
                 "__bynkJoinOn({recv}, {other}, {left}, {right}, {into})"
             ))
         }
-        ("leftJoin", [other, left, ..]) if !key_fn_is_plain(left, cx) => {
+        (ListOp::LeftJoin, [other, left, ..]) if !key_fn_is_plain(left, cx) => {
             cx.runtime_use().note_key("__bynkLeftJoin");
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
@@ -5164,25 +5162,25 @@ fn lower_list_kernel(
                 "__bynkLeftJoin({recv}, {other}, {left}, {right}, {into})"
             ))
         }
-        ("groupBy", [key, into]) if !key_fn_is_plain(key, cx) => {
+        (ListOp::GroupBy, [key, into]) if !key_fn_is_plain(key, cx) => {
             cx.runtime_use().note_key("__bynkGroupBy");
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
             let into = pre.lower(into, cx);
             Some(format!("__bynkGroupBy({recv}, {key}, {into})"))
         }
-        ("distinct", []) => {
+        (ListOp::Distinct, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("[...new globalThis.Set({recv})]"))
         }
-        ("distinctBy", [key]) => {
+        (ListOp::DistinctBy, [key]) => {
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
             Some(format!(
                 "((__xs: readonly {elem_el}[]) => {{ const __seen = new globalThis.Set(); const __out: {elem_el}[] = []; for (const __x of __xs) {{ const __k = ({key})(__x); if (!__seen.has(__k)) {{ __seen.add(__k); __out.push(__x); }} }} return __out; }})({recv})"
             ))
         }
-        ("sum", [key])
+        (ListOp::Sum, [key])
             if key_fn_ret(key, cx).and_then(|t| t.base(tys)) == Some(BaseType::Decimal) =>
         {
             // #2622: an exact sum, from the zero decimal.
@@ -5195,15 +5193,15 @@ fn lower_list_kernel(
                 crate::emitter::decimal_ts_literal("0", 0)
             ))
         }
-        ("sum", [key]) => {
+        (ListOp::Sum, [key]) => {
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
             Some(format!(
                 "({recv}).reduce((__s: number, __x: {elem_ts}) => __s + ({key})(__x), 0)"
             ))
         }
-        ("min" | "max", [key]) => {
-            let cmp = if method.name == "min" { "<" } else { ">" };
+        (ListOp::Min | ListOp::Max, [key]) => {
+            let cmp = if op == ListOp::Min { "<" } else { ">" };
             let key_cmp = kernel_key_comparator(&args[0], cx);
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
@@ -5218,7 +5216,7 @@ fn lower_list_kernel(
                 }),
             })
         }
-        ("average", [key]) => {
+        (ListOp::Average, [key]) => {
             // D3: Duration averages round to integer millis; Int/Float -> Float.
             let round = matches!(
                 cx.commons().expr_ty(e.id).as_deref(),
@@ -5242,7 +5240,7 @@ fn lower_list_kernel(
         // `groupBy` partitions in first-seen key order. Group/`into` receive the
         // **original** key (re-derived from a representative row), not the
         // stringified hash key.
-        ("joinOn", [other, left, right, into]) => {
+        (ListOp::JoinOn, [other, left, right, into]) => {
             let recv = pre.lower(receiver, cx);
             let u_ts = join_other_elem_ts(args, cx);
             let u_el = ts_array_elem(&u_ts);
@@ -5254,7 +5252,7 @@ fn lower_list_kernel(
                 "(() => {{ const __h: globalThis.Record<string, {u_el}[]> = globalThis.Object.create(null); for (const __u of {other}) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return ({recv}).flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {u_ts}) => ({into})(__t, __u)); }}); }})()"
             ))
         }
-        ("leftJoin", [other, left, right, into]) => {
+        (ListOp::LeftJoin, [other, left, right, into]) => {
             let recv = pre.lower(receiver, cx);
             let u_ts = join_other_elem_ts(args, cx);
             let u_el = ts_array_elem(&u_ts);
@@ -5266,7 +5264,7 @@ fn lower_list_kernel(
                 "(() => {{ const __h: globalThis.Record<string, {u_el}[]> = globalThis.Object.create(null); for (const __u of {other}) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return ({recv}).flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {u_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }})()"
             ))
         }
-        ("join", [other, on, into]) => {
+        (ListOp::Join, [other, on, into]) => {
             let recv = pre.lower(receiver, cx);
             let u_ts = join_other_elem_ts(args, cx);
             let u_el = ts_array_elem(&u_ts);
@@ -5277,7 +5275,7 @@ fn lower_list_kernel(
                 "(() => {{ const __b: readonly {u_el}[] = {other}; return ({recv}).flatMap((__t: {elem_ts}) => __b.filter((__u: {u_ts}) => ({on})(__t, __u)).map((__u: {u_ts}) => ({into})(__t, __u))); }})()"
             ))
         }
-        ("groupBy", [key, into]) => {
+        (ListOp::GroupBy, [key, into]) => {
             let recv = pre.lower(receiver, cx);
             let key = pre.lower(key, cx);
             let into = pre.lower(into, cx);
@@ -5324,18 +5322,18 @@ fn join_other_elem_ts(args: &[Expr], cx: &LowerCtx) -> String {
 /// K-streams (#2623): a stream is single-pass. Each op claims its source when
 /// it first reads it ([`STREAM_CLAIM`]): a builder when its generator is first
 /// pulled, so building is free and draining claims; `collect` when it runs.
-fn lower_stream_method(source: String, method: &Ident, a: &[String]) -> Option<String> {
+fn lower_stream_method(source: String, op: StreamOp, a: &[String]) -> Option<String> {
     let claim = STREAM_CLAIM;
-    match (method.name.as_str(), a) {
+    match (op, a) {
         // -- builders (return an AsyncIterable) --
-        ("map", [f]) => Some(format!(
+        (StreamOp::Map, [f]) => Some(format!(
             "(async function* (__s) {{ {claim} for await (const __e of __s) {{ yield ({f})(__e); }} }})({source})"
         )),
-        ("take", [n]) => Some(format!(
+        (StreamOp::Take, [n]) => Some(format!(
             "(async function* (__s) {{ {claim} const __n = {n}; if (__n <= 0) {{ return; }} let __i = 0; for await (const __e of __s) {{ yield __e; if (++__i >= __n) {{ return; }} }} }})({source})"
         )),
         // -- terminal (drains to a list; Effect-typed) --
-        ("collect", []) => Some(format!(
+        (StreamOp::Collect, []) => Some(format!(
             "(async (__s) => {{ {claim} const __r = []; for await (const __e of __s) {{ __r.push(__e); }} return __r; }})({source})"
         )),
         _ => None,
@@ -5431,9 +5429,24 @@ fn query_keyed(e: &Expr, method: &Ident, args: &[Expr], cx: &LowerCtx) -> bool {
 /// (`distinct`/`collect`/etc. have no `other` to derive one from —
 /// `other_elem_ts` is simply unused there). Both ride in [`QueryShape`], with
 /// `keyed`, to stay under clippy's argument-count lint.
-fn lower_query_method(
+/// A store-lift receiver (`Callee::Store`/`Callee::Query`, a `store Map` lifted
+/// into a scan) carries its operation as a name, so resolve it to a [`QueryOp`]
+/// here; the value-kernel `Query` receiver has a typed op already.
+fn lower_query_by_name(
     source: String,
     method: &Ident,
+    a: &[String],
+    result_ty: Option<TyId>,
+    shape: &QueryShape,
+    tys: &Arc<Types>,
+) -> Option<String> {
+    QueryOp::from_name(&method.name)
+        .and_then(|op| lower_query_method(source, op, a, result_ty, shape, tys))
+}
+
+fn lower_query_method(
+    source: String,
+    op: QueryOp,
     a: &[String],
     result_ty: Option<TyId>,
     shape: &QueryShape,
@@ -5449,40 +5462,42 @@ fn lower_query_method(
     let elem_el = ts_array_elem(elem_ts);
     let other_elem_el = ts_array_elem(other_elem_ts);
     let thunk = |body: String| format!("(() => {body})");
-    Some(match (method.name.as_str(), a) {
+    Some(match (op, a) {
         // -- builders → a deferred thunk over the narrowed source --
-        ("filter", [p]) => thunk(format!("{source}.filter((__x) => ({p})(__x))")),
-        ("map", [f]) => thunk(format!("{source}.map((__x) => ({f})(__x))")),
+        (QueryOp::Filter, [p]) => thunk(format!("{source}.filter((__x) => ({p})(__x))")),
+        (QueryOp::Map, [f]) => thunk(format!("{source}.map((__x) => ({f})(__x))")),
         // storage flatMap: the fn returns a `Query` (a thunk) — invoke each.
-        ("flatMap", [f]) => thunk(format!("{source}.flatMap((__x) => ({f})(__x)())")),
-        ("sortBy", [key]) if let Some(cmp) = key_cmp => thunk(with_comparator(cmp, |c| {
+        (QueryOp::FlatMap, [f]) => thunk(format!("{source}.flatMap((__x) => ({f})(__x)())")),
+        (QueryOp::SortBy, [key]) if let Some(cmp) = key_cmp => thunk(with_comparator(cmp, |c| {
             format!("[...{source}].sort((__a, __b) => {c}(({key})(__a), ({key})(__b)))")
         })),
-        ("sortBy", [key]) => thunk(format!(
+        (QueryOp::SortBy, [key]) => thunk(format!(
             "[...{source}].sort((__a, __b) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }})"
         )),
-        ("sortByDescending", [key]) if let Some(cmp) = key_cmp => {
+        (QueryOp::SortByDescending, [key]) if let Some(cmp) = key_cmp => {
             thunk(with_comparator(cmp, |c| {
                 format!("[...{source}].sort((__a, __b) => {c}(({key})(__b), ({key})(__a)))")
             }))
         }
-        ("sortByDescending", [key]) => thunk(format!(
+        (QueryOp::SortByDescending, [key]) => thunk(format!(
             "[...{source}].sort((__a, __b) => {{ const __ka = ({key})(__a), __kb = ({key})(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }})"
         )),
-        ("take", [n]) => thunk(format!("{source}.slice(0, globalThis.Math.max(0, {n}))")),
-        ("skip", [n]) => thunk(format!("{source}.slice(globalThis.Math.max(0, {n}))")),
-        ("distinct", []) if keyed => thunk(format!("__bynkDistinct({source})")),
-        ("distinctBy", [key]) if keyed => thunk(format!("__bynkDistinctBy({source}, {key})")),
-        ("groupBy", [key, into]) if keyed => {
+        (QueryOp::Take, [n]) => thunk(format!("{source}.slice(0, globalThis.Math.max(0, {n}))")),
+        (QueryOp::Skip, [n]) => thunk(format!("{source}.slice(globalThis.Math.max(0, {n}))")),
+        (QueryOp::Distinct, []) if keyed => thunk(format!("__bynkDistinct({source})")),
+        (QueryOp::DistinctBy, [key]) if keyed => {
+            thunk(format!("__bynkDistinctBy({source}, {key})"))
+        }
+        (QueryOp::GroupBy, [key, into]) if keyed => {
             thunk(format!("__bynkGroupBy({source}, {key}, {into})"))
         }
-        ("joinOn", [other, left, right, into]) if keyed => thunk(format!(
+        (QueryOp::JoinOn, [other, left, right, into]) if keyed => thunk(format!(
             "__bynkJoinOn({source}, ({other})(), {left}, {right}, {into})"
         )),
-        ("leftJoin", [other, left, right, into]) if keyed => thunk(format!(
+        (QueryOp::LeftJoin, [other, left, right, into]) if keyed => thunk(format!(
             "__bynkLeftJoin({source}, ({other})(), {left}, {right}, {into})"
         )),
-        ("distinct", []) => thunk(format!("[...new globalThis.Set({source})]")),
+        (QueryOp::Distinct, []) => thunk(format!("[...new globalThis.Set({source})]")),
         // Review of #1460: narrowed, not deferred. A first attempt used
         // `unknown[]` here and broke real `tsc --strict` fixtures (228/231) —
         // the whole expression's result flows into a context expecting a
@@ -5494,7 +5509,7 @@ fn lower_query_method(
         // via `Ty::Query(elem)`, just never threaded into this function before
         // (the `List[T]` sibling, `lower_list_kernel`, already does this for
         // its own `distinctBy`/`joinOn`/`leftJoin`/`groupBy`).
-        ("distinctBy", [key]) => thunk(format!(
+        (QueryOp::DistinctBy, [key]) => thunk(format!(
             "(() => {{ const __seen = new globalThis.Set(); const __out: {elem_el}[] = []; for (const __x of {source}) {{ const __k = ({key})(__x); if (!__seen.has(__k)) {{ __seen.add(__k); __out.push(__x); }} }} return __out; }})()"
         )),
         // v0.94 (ADR 0116/0120): joins & grouping over storage queries — lazy
@@ -5509,51 +5524,53 @@ fn lower_query_method(
         // already call over `args[0]`'s checked type) — reused, not
         // re-derived, and threaded as a param rather than called here to
         // keep this function's own argument count under clippy's lint.
-        ("joinOn", [other, left, right, into]) => thunk(format!(
+        (QueryOp::JoinOn, [other, left, right, into]) => thunk(format!(
             "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of ({other})()) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {other_elem_ts}) => ({into})(__t, __u)); }}); }}"
         )),
-        ("leftJoin", [other, left, right, into]) => thunk(format!(
+        (QueryOp::LeftJoin, [other, left, right, into]) => thunk(format!(
             "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of ({other})()) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {other_elem_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }}"
         )),
-        ("join", [other, on, into]) => thunk(format!(
+        (QueryOp::Join, [other, on, into]) => thunk(format!(
             "{{ const __b = ({other})(); return {source}.flatMap((__t) => __b.filter((__u) => ({on})(__t, __u)).map((__u) => ({into})(__t, __u))); }}"
         )),
         // Review of #1460: `__h`'s buckets hold `{source}`'s own rows
         // (`elem_ts`), the receiver's element type — same as `distinctBy`
         // above, not `other`-derived (`groupBy` has no `other` argument).
-        ("groupBy", [key, into]) => thunk(format!(
+        (QueryOp::GroupBy, [key, into]) => thunk(format!(
             "{{ const __h: globalThis.Record<string, {elem_el}[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of {source}) {{ const __k = String(({key})(__t)); if (!(__k in __h)) {{ __h[__k] = []; __order.push(__k); }} __h[__k].push(__t); }} return __order.map((__k) => {{ const __rows = __h[__k]; return ({into})(({key})(__rows[0]), __rows); }}); }}"
         )),
         // -- terminals → read the source array (awaited at the `<-`) --
-        ("collect", []) => source,
-        ("first", []) => format!(
+        (QueryOp::Collect, []) => source,
+        (QueryOp::First, []) => format!(
             "(() => {{ const __a = {source}; return __a.length > 0 ? Some(__a[0]) : None; }})()"
         ),
-        ("firstOrElse", [default]) => format!(
+        (QueryOp::FirstOrElse, [default]) => format!(
             "(() => {{ const __a = {source}; return __a.length > 0 ? __a[0] : ({default}); }})()"
         ),
-        ("count", []) => format!("{source}.length"),
-        ("fold", [init, f]) => format!(
+        (QueryOp::Count, []) => format!("{source}.length"),
+        (QueryOp::Fold, [init, f]) => format!(
             "(() => {{ let __acc = {init}; for (const __x of {source}) __acc = ({f})(__acc, __x); return __acc; }})()"
         ),
-        ("any", [p]) => format!("{source}.some((__x) => ({p})(__x))"),
-        ("all", [p]) => format!("{source}.every((__x) => ({p})(__x))"),
-        ("sum", [key]) => format!("{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)"),
-        ("min" | "max", [key]) if let Some(key_cmp) = key_cmp => {
-            let op = if method.name == "min" { "<" } else { ">" };
+        (QueryOp::Any, [p]) => format!("{source}.some((__x) => ({p})(__x))"),
+        (QueryOp::All, [p]) => format!("{source}.every((__x) => ({p})(__x))"),
+        (QueryOp::Sum, [key]) => {
+            format!("{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)")
+        }
+        (QueryOp::Min | QueryOp::Max, [key]) if let Some(key_cmp) = key_cmp => {
+            let op = if op == QueryOp::Min { "<" } else { ">" };
             with_comparator(key_cmp, |c| {
                 format!(
                     "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if ({c}(__k, __m) {op} 0) __m = __k; }} return Some(__m); }})()"
                 )
             })
         }
-        ("min" | "max", [key]) => {
-            let cmp = if method.name == "min" { "<" } else { ">" };
+        (QueryOp::Min | QueryOp::Max, [key]) => {
+            let cmp = if op == QueryOp::Min { "<" } else { ">" };
             format!(
                 "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})()"
             )
         }
-        ("average", [key]) => {
+        (QueryOp::Average, [key]) => {
             // Duration averages round to integer millis (checker result decides).
             let round = matches!(
                 result_ty.map(|t| tys.get(t)).as_deref(),
@@ -5570,20 +5587,20 @@ fn lower_query_method(
                 "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __s = 0; for (const __x of __a) __s += ({key})(__x); return Some({mean}); }})()"
             )
         }
-        ("forEach", [f]) => {
+        (QueryOp::ForEach, [f]) => {
             format!("(async () => {{ for (const __x of {source}) {{ await ({f})(__x); }} }})()")
         }
         // v0.107 (slice 4): the parallel broadcast form — issue the effectful fn over
         // every element concurrently and await them together, so one slow element
         // does not head-of-line-block the rest.
-        ("parTraverse", [f]) => {
+        (QueryOp::ParTraverse, [f]) => {
             format!(
                 "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
             )
         }
         // v0.149 (ADR 0173): the collect-all terminals over a query/broadcast —
         // gather every `Result` outcome (an `Err` is a value, so nothing rejects).
-        ("traverseAll", [f]) => {
+        (QueryOp::TraverseAll, [f]) => {
             let res_ts = match result_ty.map(|t| tys.get(t)).as_deref() {
                 Some(Ty::Effect(inner)) => match &*tys.get(*inner) {
                     Ty::List(el) => ts_ty(*el, tys),
@@ -5596,21 +5613,21 @@ fn lower_query_method(
                 "(async () => {{ const __out: {res_el}[] = []; for (const __x of {source}) {{ __out.push(await ({f})(__x)); }} return __out; }})()"
             )
         }
-        ("parTraverseAll", [f]) => {
+        (QueryOp::ParTraverseAll, [f]) => {
             format!(
                 "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
             )
         }
         // v0.150 (ADR 0174): the short-circuit collect terminals — stop at the
         // first `Err`, returning `Result[List[U], E]`.
-        ("traverseTry", [f]) => {
+        (QueryOp::TraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
             format!(
                 "(async () => {{ const __out: {u_el}[] = []; for (const __x of {source}) {{ const __r = await ({f})(__x); if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
             )
         }
-        ("parTraverseTry", [f]) => {
+        (QueryOp::ParTraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
             format!(
@@ -5788,17 +5805,87 @@ fn param_independent(e: &Expr, pname: &str) -> bool {
 /// v0.21/v0.22a: lower a built-in numeric kernel method. `toFloat` is the
 /// identity at runtime (the Int/Float distinction is erased); everything
 /// else maps onto `Math.*` / `Number.*`.
-fn lower_numeric_kernel(
+fn lower_int_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: IntOp,
     args: &[Expr],
-    base: BaseType,
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("toFloat", []) => Some(pre.lower(receiver, cx)),
-        ("abs", []) => {
+    let text: Option<String> = match (op, args) {
+        (IntOp::ToFloat, []) => Some(pre.lower(receiver, cx)),
+        (IntOp::Abs, []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("globalThis.Math.abs({recv})"))
+        }
+        (IntOp::Min | IntOp::Max, [other]) => {
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            Some(format!("globalThis.Math.{}({recv}, {other})", op.name()))
+        }
+        (IntOp::Clamp, [lo, hi]) => {
+            let recv = pre.lower(receiver, cx);
+            let lo = pre.lower(lo, cx);
+            let hi = pre.lower(hi, cx);
+            Some(format!(
+                "globalThis.Math.min(globalThis.Math.max({recv}, {lo}), {hi})"
+            ))
+        }
+        // v0.42 (ADR 0074): host number→string — `String(n)` is ECMAScript's
+        // Number::toString (shortest round-trip; `1e21`/`Infinity`/`NaN` as the
+        // host renders them). The normative contract is the platform's.
+        (IntOp::ToString, []) => {
+            let recv = pre.lower(receiver, cx);
+            Some(format!("String({recv})"))
+        }
+        // K6b (#2598): the `Int` division companions and exact power, through
+        // `int.ts` helpers so their fault branches stay out of coverage.
+        (
+            IntOp::Div
+            | IntOp::Rem
+            | IntOp::Mod
+            | IntOp::Pow
+            | IntOp::And
+            | IntOp::Or
+            | IntOp::Xor
+            | IntOp::AndNot
+            | IntOp::Shl
+            | IntOp::Shr,
+            [other],
+        ) => {
+            let recv = pre.lower(receiver, cx);
+            let other = pre.lower(other, cx);
+            let helper = match op {
+                IntOp::Div => "__bynkIntDivFloor",
+                IntOp::Rem => "__bynkIntRem",
+                IntOp::Mod => "__bynkIntMod",
+                // #2621: the bitwise operations, split hi/lo in the runtime.
+                IntOp::And => "__bynkIntAnd",
+                IntOp::Or => "__bynkIntOr",
+                IntOp::Xor => "__bynkIntXor",
+                IntOp::AndNot => "__bynkIntAndNot",
+                IntOp::Shl => "__bynkIntShl",
+                IntOp::Shr => "__bynkIntShr",
+                _ => "__bynkIntPow",
+            };
+            cx.note_int();
+            Some(format!("{helper}({recv}, {other})"))
+        }
+        _ => None,
+    };
+    text.map(|expr| pre.finish(expr))
+}
+
+/// The `Float` kernel's lowering (see [`lower_int_kernel`]).
+fn lower_float_kernel(
+    receiver: &Expr,
+    op: FloatOp,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+) -> Option<Lowered> {
+    let mut pre = Pre::new();
+    let text: Option<String> = match (op, args) {
+        (FloatOp::Abs, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("globalThis.Math.abs({recv})"))
         }
@@ -5809,25 +5896,25 @@ fn lower_numeric_kernel(
         // division by zero.
         // Returning `Option[Int]` was rejected: a signature change to four
         // kernel methods.
-        ("round" | "floor" | "ceil" | "truncate", []) => {
+        (FloatOp::Round | FloatOp::Floor | FloatOp::Ceil | FloatOp::Truncate, []) => {
             let recv = pre.lower(receiver, cx);
-            let f = if method.name == "truncate" {
+            let f = if op == FloatOp::Truncate {
                 "trunc"
             } else {
-                method.name.as_str()
+                op.name()
             };
             cx.note_int();
             Some(format!(
                 "__bynkToInt(globalThis.Math.{f}({recv}), \"{}\")",
-                method.name
+                op.name()
             ))
         }
-        ("min" | "max", [other]) => {
+        (FloatOp::Min | FloatOp::Max, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
-            Some(format!("globalThis.Math.{}({recv}, {other})", method.name))
+            Some(format!("globalThis.Math.{}({recv}, {other})", op.name()))
         }
-        ("clamp", [lo, hi]) => {
+        (FloatOp::Clamp, [lo, hi]) => {
             let recv = pre.lower(receiver, cx);
             let lo = pre.lower(lo, cx);
             let hi = pre.lower(hi, cx);
@@ -5835,60 +5922,42 @@ fn lower_numeric_kernel(
                 "globalThis.Math.min(globalThis.Math.max({recv}, {lo}), {hi})"
             ))
         }
-        ("isNaN" | "isFinite", []) => {
+        (FloatOp::IsNaN | FloatOp::IsFinite, []) => {
             let recv = pre.lower(receiver, cx);
-            Some(format!("globalThis.Number.{}({recv})", method.name))
+            Some(format!("globalThis.Number.{}({recv})", op.name()))
         }
-        // v0.42 (ADR 0074): host number→string — `String(n)` is ECMAScript's
-        // Number::toString (shortest round-trip; `1e21`/`Infinity`/`NaN` as the
-        // host renders them). The normative contract is the platform's.
-        ("toString", []) => {
+        (FloatOp::ToString, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("String({recv})"))
         }
-        // K6b (#2598): the `Int` division companions and exact power, through
-        // `int.ts` helpers so their fault branches stay out of coverage.
-        (
-            "div" | "rem" | "mod" | "pow" | "and" | "or" | "xor" | "andNot" | "shl" | "shr",
-            [other],
-        ) if base == BaseType::Int => {
-            let recv = pre.lower(receiver, cx);
-            let other = pre.lower(other, cx);
-            let helper = match method.name.as_str() {
-                "div" => "__bynkIntDivFloor",
-                "rem" => "__bynkIntRem",
-                "mod" => "__bynkIntMod",
-                // #2621: the bitwise operations, split hi/lo in the runtime.
-                "and" => "__bynkIntAnd",
-                "or" => "__bynkIntOr",
-                "xor" => "__bynkIntXor",
-                "andNot" => "__bynkIntAndNot",
-                "shl" => "__bynkIntShl",
-                "shr" => "__bynkIntShr",
-                _ => "__bynkIntPow",
-            };
-            cx.note_int();
-            Some(format!("{helper}({recv}, {other})"))
-        }
         // K6b (#2598): the `Float` functions, straight onto JS `Math`.
         (
-            "sqrt" | "exp" | "log10" | "log2" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan",
+            FloatOp::Sqrt
+            | FloatOp::Exp
+            | FloatOp::Log10
+            | FloatOp::Log2
+            | FloatOp::Sin
+            | FloatOp::Cos
+            | FloatOp::Tan
+            | FloatOp::Asin
+            | FloatOp::Acos
+            | FloatOp::Atan,
             [],
         ) => {
             let recv = pre.lower(receiver, cx);
-            Some(format!("globalThis.Math.{}({recv})", method.name))
+            Some(format!("globalThis.Math.{}({recv})", op.name()))
         }
-        ("ln", []) => {
+        (FloatOp::Ln, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("globalThis.Math.log({recv})"))
         }
-        ("pow", [other]) => {
+        (FloatOp::Pow, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
             Some(format!("globalThis.Math.pow({recv}, {other})"))
         }
         // `y.atan2(x)`: the angle of the point `(x, y)`.
-        ("atan2", [x]) => {
+        (FloatOp::Atan2, [x]) => {
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
             Some(format!("globalThis.Math.atan2({recv}, {x})"))
@@ -5902,14 +5971,14 @@ fn lower_numeric_kernel(
 /// identity (a `Duration` lowers to its milliseconds); `toString` renders it.
 fn lower_duration_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: DurationOp,
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("toMillis", []) => Some(pre.lower(receiver, cx)),
-        ("toString", []) => {
+    let text: Option<String> = match (op, args) {
+        (DurationOp::ToMillis, []) => Some(pre.lower(receiver, cx)),
+        (DurationOp::ToString, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("String({recv})"))
         }
@@ -5923,19 +5992,19 @@ fn lower_duration_kernel(
 /// it.
 fn lower_instant_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: InstantOp,
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("toEpochMillis", []) => Some(pre.lower(receiver, cx)),
-        ("toString", []) => {
+    let text: Option<String> = match (op, args) {
+        (InstantOp::ToEpochMillis, []) => Some(pre.lower(receiver, cx)),
+        (InstantOp::ToString, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("String({recv})"))
         }
         // K3 (#2592): RFC 3339 in UTC.
-        ("toIso", []) => {
+        (InstantOp::ToIso, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_time_ops();
             Some(format!("__bynkInstantToIso({recv})"))
@@ -5951,22 +6020,22 @@ fn lower_instant_kernel(
 /// (`None` on an invalid UTF-8 sequence).
 fn lower_bytes_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: BytesOp,
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("length", []) => {
+    let text: Option<String> = match (op, args) {
+        (BytesOp::Length, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).length"))
         }
-        ("toBase64", []) => {
+        (BytesOp::ToBase64, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_bytes();
             Some(format!("__bynkBytesToBase64({recv})"))
         }
-        ("decodeUtf8", []) => {
+        (BytesOp::DecodeUtf8, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_bytes();
             Some(format!("__bynkBytesDecodeUtf8({recv})"))
@@ -5974,7 +6043,7 @@ fn lower_bytes_kernel(
         // #2016 (standard-library K1). `slice` clamps negative indices to 0 as
         // `String.slice` does, and `Uint8Array.slice` copies, so a slice never
         // aliases a buffer a binding may still hold.
-        ("slice", [lo, hi]) => {
+        (BytesOp::Slice, [lo, hi]) => {
             let recv = pre.lower(receiver, cx);
             let lo = pre.lower(lo, cx);
             let hi = pre.lower(hi, cx);
@@ -5982,24 +6051,24 @@ fn lower_bytes_kernel(
                 "({recv}).slice(globalThis.Math.max(0, {lo}), globalThis.Math.max(0, {hi}))"
             ))
         }
-        ("concat", [other]) => {
+        (BytesOp::Concat, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
             cx.note_bytes_ops();
             Some(format!("__bynkBytesConcat({recv}, {other})"))
         }
-        ("compare", [other]) => {
+        (BytesOp::Compare, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
             cx.note_bytes_ops();
             Some(format!("__bynkBytesCompare({recv}, {other})"))
         }
-        ("toHex", []) => {
+        (BytesOp::ToHex, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_bytes_ops();
             Some(format!("__bynkBytesToHex({recv})"))
         }
-        ("toBase64Url", []) => {
+        (BytesOp::ToBase64Url, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_bytes_ops();
             Some(format!("__bynkBytesToBase64Url({recv})"))
@@ -6036,6 +6105,7 @@ fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
 
 fn lower_string_kernel(
     receiver: &Expr,
+    op: StringOp,
     method: &Ident,
     args: &[Expr],
     cx: &mut LowerCtx,
@@ -6052,25 +6122,25 @@ fn lower_string_kernel(
         let groups = "(__m: globalThis.RegExpMatchArray): Option<string>[] => \
                       [...__m].map((__g: string | undefined): Option<string> => \
                       __g === undefined ? None : Some(__g))";
-        let text = match (method.name.as_str(), args.len()) {
-            ("matchesRegex", 1) => Some(format!(
+        let text = match (op, args.len()) {
+            (StringOp::MatchesRegex, 1) => Some(format!(
                 "{}.test({recv})",
                 regex_construction(&literal, "", true)
             )),
-            ("containsRegex", 1) => Some(format!(
+            (StringOp::ContainsRegex, 1) => Some(format!(
                 "{}.test({recv})",
                 regex_construction(&literal, "", false)
             )),
-            ("findRegex", 1) => Some(format!(
+            (StringOp::FindRegex, 1) => Some(format!(
                 "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => \
                  __m === null ? None : Some(({groups})(__m)))({}.exec({recv}))",
                 regex_construction(&literal, "", false)
             )),
-            ("findAllRegex", 1) => Some(format!(
+            (StringOp::FindAllRegex, 1) => Some(format!(
                 "([...({recv}).matchAll({})].map({groups}) as readonly (readonly Option<string>[])[])",
                 regex_construction(&literal, "g", false)
             )),
-            ("replaceRegex", 2) => {
+            (StringOp::ReplaceRegex, 2) => {
                 let with = pre.lower(&args[1], cx);
                 Some(format!(
                     "({recv}).replace({}, {with})",
@@ -6080,7 +6150,7 @@ fn lower_string_kernel(
             // JS `split` with a regex, minus the captured groups it splices in:
             // its own algorithm over a sticky scan, an empty match at the last
             // split point advancing by one code unit.
-            ("splitRegex", 1) => Some(format!(
+            (StringOp::SplitRegex, 1) => Some(format!(
                 "((__s: string, __r: globalThis.RegExp): readonly string[] => {{ \
                  if (__s.length === 0) {{ return __r.exec(__s) === null ? [\"\"] : []; }} \
                  const __out: string[] = []; let __p = 0; let __q = 0; \
@@ -6095,48 +6165,48 @@ fn lower_string_kernel(
         };
         return text.map(|expr| pre.finish(expr));
     }
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("length", []) => {
+    let text: Option<String> = match (op, args) {
+        (StringOp::Length, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).length"))
         }
-        ("trim", []) => {
+        (StringOp::Trim, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("{recv}.trim()"))
         }
-        ("toUpper", []) => {
+        (StringOp::ToUpper, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("{recv}.toUpperCase()"))
         }
-        ("toLower", []) => {
+        (StringOp::ToLower, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("{recv}.toLowerCase()"))
         }
-        ("chars", []) => {
+        (StringOp::Chars, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("[...{recv}]"))
         }
-        ("split", [sep]) => {
+        (StringOp::Split, [sep]) => {
             let recv = pre.lower(receiver, cx);
             let sep = pre.lower(sep, cx);
             Some(format!("{recv}.split({sep})"))
         }
-        ("contains", [sub]) => {
+        (StringOp::Contains, [sub]) => {
             let recv = pre.lower(receiver, cx);
             let sub = pre.lower(sub, cx);
             Some(format!("{recv}.includes({sub})"))
         }
-        ("startsWith" | "endsWith", [sub]) => {
+        (StringOp::StartsWith | StringOp::EndsWith, [sub]) => {
             let recv = pre.lower(receiver, cx);
             let sub = pre.lower(sub, cx);
             Some(format!("{recv}.{}({sub})", method.name))
         }
-        ("concat", [other]) => {
+        (StringOp::Concat, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
             Some(format!("{recv}.concat({other})"))
         }
-        ("replace", [from, to]) => {
+        (StringOp::Replace, [from, to]) => {
             let recv = pre.lower(receiver, cx);
             let from = pre.lower(from, cx);
             let to = pre.lower(to, cx);
@@ -6148,7 +6218,7 @@ fn lower_string_kernel(
             // costly replacement is recomputed.
             Some(format!("{recv}.replaceAll({from}, () => {to})"))
         }
-        ("slice", [lo, hi]) => {
+        (StringOp::Slice, [lo, hi]) => {
             let recv = pre.lower(receiver, cx);
             let lo = pre.lower(lo, cx);
             let hi = pre.lower(hi, cx);
@@ -6156,7 +6226,7 @@ fn lower_string_kernel(
                 "{recv}.slice(globalThis.Math.max(0, {lo}), globalThis.Math.max(0, {hi}))"
             ))
         }
-        ("indexOf", [sub]) => {
+        (StringOp::IndexOf, [sub]) => {
             let recv = pre.lower(receiver, cx);
             let sub = pre.lower(sub, cx);
             Some(format!(
@@ -6164,12 +6234,12 @@ fn lower_string_kernel(
             ))
         }
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
-        ("percentEncode", []) => {
+        (StringOp::PercentEncode, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_url_ops();
             Some(format!("__bynkPercentEncode({recv})"))
         }
-        ("percentDecode", []) => {
+        (StringOp::PercentDecode, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_url_ops();
             Some(format!("__bynkPercentDecode({recv})"))
@@ -6186,7 +6256,7 @@ fn lower_string_kernel(
 fn lower_option_kernel(
     e: &Expr,
     receiver: &Expr,
-    method: &Ident,
+    op: OptionOp,
     args: &[Expr],
     inner: TyId,
     cx: &mut LowerCtx,
@@ -6194,8 +6264,8 @@ fn lower_option_kernel(
     let tys = cx.commons().tys();
     let mut pre = Pre::new();
     let t = ts_ty(inner, tys);
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("map", [f]) => {
+    let text: Option<String> = match (op, args) {
+        (OptionOp::Map, [f]) => {
             // The call's checked type is `Option[B]` — peel for B.
             let b = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Option(b)) => ts_ty(*b, tys),
@@ -6212,7 +6282,7 @@ fn lower_option_kernel(
                 "((__o: Option<{t}>, __f: (x: {t}) => {b}) => __o.tag === \"Some\" ? Some(__f(__o.value)) : None)({recv}, {f})"
             ))
         }
-        ("andThen", [f]) => {
+        (OptionOp::AndThen, [f]) => {
             let b = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Option(b)) => ts_ty(*b, tys),
                 other => panic!(
@@ -6228,18 +6298,18 @@ fn lower_option_kernel(
                 "((__o: Option<{t}>, __f: (x: {t}) => Option<{b}>) => __o.tag === \"Some\" ? __f(__o.value) : None)({recv}, {f})"
             ))
         }
-        ("getOrElse", [fallback]) => {
+        (OptionOp::GetOrElse, [fallback]) => {
             let recv = pre.lower(receiver, cx);
             let fallback = pre.lower(fallback, cx);
             Some(format!(
                 "((__o: Option<{t}>, __d: {t}) => __o.tag === \"Some\" ? __o.value : __d)({recv}, {fallback})"
             ))
         }
-        ("isSome", []) => {
+        (OptionOp::IsSome, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}.tag === \"Some\")"))
         }
-        ("okOr", [error]) => {
+        (OptionOp::OkOr, [error]) => {
             // The call's checked type is `Result[T, E]` — peel for E.
             let err = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Result(_, err)) => ts_ty(*err, tys),
@@ -6256,18 +6326,18 @@ fn lower_option_kernel(
                 "((__o: Option<{t}>, __e: {err}) => __o.tag === \"Some\" ? Ok(__o.value) : Err(__e))({recv}, {error})"
             ))
         }
-        ("isNone", []) => {
+        (OptionOp::IsNone, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}.tag === \"None\")"))
         }
-        ("orElse", [f]) => {
+        (OptionOp::OrElse, [f]) => {
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
             Some(format!(
                 "((__o: Option<{t}>, __f: () => Option<{t}>) => __o.tag === \"Some\" ? __o : __f())({recv}, {f})"
             ))
         }
-        ("filter", [p]) => {
+        (OptionOp::Filter, [p]) => {
             let recv = pre.lower(receiver, cx);
             let p = pre.lower(p, cx);
             Some(format!(
@@ -6286,7 +6356,7 @@ fn lower_option_kernel(
 fn lower_result_kernel(
     e: &Expr,
     receiver: &Expr,
-    method: &Ident,
+    op: ResultOp,
     args: &[Expr],
     ok: TyId,
     err: TyId,
@@ -6296,8 +6366,8 @@ fn lower_result_kernel(
     let mut pre = Pre::new();
     let t = ts_ty(ok, tys);
     let et = ts_ty(err, tys);
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("map", [f]) => {
+    let text: Option<String> = match (op, args) {
+        (ResultOp::Map, [f]) => {
             // The call's checked type is `Result[B, E]` — peel for B.
             let b = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Result(b, _)) => ts_ty(*b, tys),
@@ -6314,7 +6384,7 @@ fn lower_result_kernel(
                 "((__r: Result<{t}, {et}>, __f: (x: {t}) => {b}) => __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r)({recv}, {f})"
             ))
         }
-        ("andThen", [f]) => {
+        (ResultOp::AndThen, [f]) => {
             let b = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Result(b, _)) => ts_ty(*b, tys),
                 other => panic!(
@@ -6330,7 +6400,7 @@ fn lower_result_kernel(
                 "((__r: Result<{t}, {et}>, __f: (x: {t}) => Result<{b}, {et}>) => __r.tag === \"Ok\" ? __f(__r.value) : __r)({recv}, {f})"
             ))
         }
-        ("mapErr", [f]) => {
+        (ResultOp::MapErr, [f]) => {
             // The call's checked type is `Result[T, F]` — peel for F.
             let fts = match cx.commons().expr_ty(e.id).as_deref() {
                 Some(Ty::Result(_, f)) => ts_ty(*f, tys),
@@ -6347,22 +6417,22 @@ fn lower_result_kernel(
                 "((__r: Result<{t}, {et}>, __f: (e: {et}) => {fts}) => __r.tag === \"Err\" ? Err(__f(__r.error)) : __r)({recv}, {f})"
             ))
         }
-        ("getOrElse", [fallback]) => {
+        (ResultOp::GetOrElse, [fallback]) => {
             let recv = pre.lower(receiver, cx);
             let fallback = pre.lower(fallback, cx);
             Some(format!(
                 "((__r: Result<{t}, {et}>, __d: {t}) => __r.tag === \"Ok\" ? __r.value : __d)({recv}, {fallback})"
             ))
         }
-        ("isOk", []) => {
+        (ResultOp::IsOk, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}.tag === \"Ok\")"))
         }
-        ("isErr", []) => {
+        (ResultOp::IsErr, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}.tag === \"Err\")"))
         }
-        ("ok", []) => {
+        (ResultOp::Ok, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!(
                 "((__r: Result<{t}, {et}>) => __r.tag === \"Ok\" ? Some(__r.value) : None)({recv})"
@@ -6384,7 +6454,7 @@ fn lower_result_kernel(
 fn lower_effect_result_kernel(
     e: &Expr,
     receiver: &Expr,
-    method: &Ident,
+    op: EffectResultOp,
     args: &[Expr],
     ok: TyId,
     err: TyId,
@@ -6413,8 +6483,8 @@ fn lower_effect_result_kernel(
             e.span
         ),
     };
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("mapOk", [f]) => {
+    let text: Option<String> = match (op, args) {
+        (EffectResultOp::MapOk, [f]) => {
             // result `Effect[Result[U, E]]` — `a_ts` is `U`.
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
@@ -6422,7 +6492,7 @@ fn lower_effect_result_kernel(
                 "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => {a_ts}) => {{ const __r = await __e; return __r.tag === \"Ok\" ? Ok(__f(__r.value)) : __r; }})({recv}, {f})"
             ))
         }
-        ("mapErr", [f]) => {
+        (EffectResultOp::MapErr, [f]) => {
             // result `Effect[Result[T, F]]` — `b_ts` is `F`.
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
@@ -6430,7 +6500,7 @@ fn lower_effect_result_kernel(
                 "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (e: {et}) => {b_ts}) => {{ const __r = await __e; return __r.tag === \"Err\" ? Err(__f(__r.error)) : __r; }})({recv}, {f})"
             ))
         }
-        ("flatMapOk", [f]) => {
+        (EffectResultOp::FlatMapOk, [f]) => {
             // `f: T -> Effect[Result[U, E]]`; result `Effect[Result[U, E]]`.
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
@@ -6438,7 +6508,7 @@ fn lower_effect_result_kernel(
                 "(async (__e: globalThis.Promise<Result<{t}, {et}>>, __f: (x: {t}) => globalThis.Promise<Result<{a_ts}, {et}>>) => {{ const __r = await __e; return __r.tag === \"Ok\" ? await __f(__r.value) : __r; }})({recv}, {f})"
             ))
         }
-        ("flatMapErr", [f]) => {
+        (EffectResultOp::FlatMapErr, [f]) => {
             // `f: E -> Effect[Result[T, F]]`; result `Effect[Result[T, F]]`.
             let recv = pre.lower(receiver, cx);
             let f = pre.lower(f, cx);
@@ -6459,7 +6529,7 @@ fn lower_effect_result_kernel(
 /// insertion order, and inserting a present element keeps its position.
 fn lower_set_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: SetOp,
     args: &[Expr],
     elem: TyId,
     cx: &mut LowerCtx,
@@ -6467,43 +6537,43 @@ fn lower_set_kernel(
     let tys = cx.commons().tys();
     let mut pre = Pre::new();
     let elem_ts = ts_ty(elem, tys);
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("length", []) => {
+    let text: Option<String> = match (op, args) {
+        (SetOp::Length, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).size"))
         }
-        ("contains", [x]) => {
+        (SetOp::Contains, [x]) => {
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
             Some(format!("({recv}).has({x})"))
         }
-        ("insert", [x]) if !key_is_plain(elem, tys) => {
+        (SetOp::Insert, [x]) if !key_is_plain(elem, tys) => {
             cx.runtime_use().note_key("__bynkSetInsert");
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
             Some(format!("__bynkSetInsert<{elem_ts}>({recv}, {x})"))
         }
-        ("remove", [x]) if !key_is_plain(elem, tys) => {
+        (SetOp::Remove, [x]) if !key_is_plain(elem, tys) => {
             cx.runtime_use().note_key("__bynkSetRemove");
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
             Some(format!("__bynkSetRemove<{elem_ts}>({recv}, {x})"))
         }
-        ("insert", [x]) => {
+        (SetOp::Insert, [x]) => {
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
             Some(format!(
                 "(new globalThis.Set<{elem_ts}>({recv}).add({x}) as ReadonlySet<{elem_ts}>)"
             ))
         }
-        ("remove", [x]) => {
+        (SetOp::Remove, [x]) => {
             let recv = pre.lower(receiver, cx);
             let x = pre.lower(x, cx);
             Some(format!(
                 "((__s: globalThis.Set<{elem_ts}>) => (__s.delete({x}), __s as ReadonlySet<{elem_ts}>))(new globalThis.Set<{elem_ts}>({recv}))"
             ))
         }
-        ("toList", []) => {
+        (SetOp::ToList, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!(
                 "([...({recv})] as readonly {}[])",
@@ -6517,7 +6587,7 @@ fn lower_set_kernel(
 
 fn lower_map_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: MapOp,
     args: &[Expr],
     key: TyId,
     val: TyId,
@@ -6527,29 +6597,29 @@ fn lower_map_kernel(
     let mut pre = Pre::new();
     let key_ts = ts_ty(key, tys);
     let val_ts = ts_ty(val, tys);
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("length", []) => {
+    let text: Option<String> = match (op, args) {
+        (MapOp::Length, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).size"))
         }
-        ("keys", []) => {
+        (MapOp::Keys, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("[...({recv}).keys()]"))
         }
         // v0.149 (ADR 0173): the values in key order — the `keys()` sibling over
         // the in-memory `ReadonlyMap`.
-        ("values", []) => {
+        (MapOp::Values, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("[...({recv}).values()]"))
         }
-        ("get", [k]) => {
+        (MapOp::Get, [k]) => {
             let recv = pre.lower(receiver, cx);
             let k = pre.lower(k, cx);
             Some(format!(
                 "((__m: ReadonlyMap<{key_ts}, {val_ts}>, __k: {key_ts}) => __m.has(__k) ? Some(__m.get(__k) as {val_ts}) : None)({recv}, {k})"
             ))
         }
-        ("insert", [k, v]) if !key_is_plain(key, tys) => {
+        (MapOp::Insert, [k, v]) if !key_is_plain(key, tys) => {
             cx.runtime_use().note_key("__bynkMapInsert");
             let recv = pre.lower(receiver, cx);
             let k = pre.lower(k, cx);
@@ -6558,7 +6628,7 @@ fn lower_map_kernel(
                 "__bynkMapInsert<{key_ts}, {val_ts}>({recv}, {k}, {v})"
             ))
         }
-        ("insert", [k, v]) => {
+        (MapOp::Insert, [k, v]) => {
             let recv = pre.lower(receiver, cx);
             let k = pre.lower(k, cx);
             let v = pre.lower(v, cx);
@@ -9615,41 +9685,41 @@ mod settle_tests {
 /// and lowered to its name as a string literal.
 fn lower_decimal_kernel(
     receiver: &Expr,
-    method: &Ident,
+    op: DecimalOp,
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
     let mode = |a: &Expr| bynk_syntax::ast::rounding_mode(a).map(|m| format!("\"{}\"", m.name()));
-    let text: Option<String> = match (method.name.as_str(), args) {
-        ("scale", []) => {
+    let text: Option<String> = match (op, args) {
+        (DecimalOp::Scale, []) => {
             let recv = pre.lower(receiver, cx);
             Some(format!("({recv}).scale"))
         }
-        ("toString", []) => {
+        (DecimalOp::ToString, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_decimal("__bynkDecimalToString");
             Some(format!("__bynkDecimalToString({recv})"))
         }
-        ("abs", []) => {
+        (DecimalOp::Abs, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_decimal("__bynkDecimalAbs");
             Some(format!("__bynkDecimalAbs({recv})"))
         }
-        ("toInt", []) => {
+        (DecimalOp::ToInt, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_decimal("__bynkDecimalToInt");
             Some(format!("__bynkDecimalToInt({recv})"))
         }
-        ("toFloat", []) => {
+        (DecimalOp::ToFloat, []) => {
             let recv = pre.lower(receiver, cx);
             cx.note_decimal("__bynkDecimalToFloat");
             Some(format!("__bynkDecimalToFloat({recv})"))
         }
-        ("min" | "max", [other]) => {
+        (DecimalOp::Min | DecimalOp::Max, [other]) => {
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
-            let (helper, name) = if method.name == "min" {
+            let (helper, name) = if op == DecimalOp::Min {
                 ("__bynkDecimalMin", "__bynkDecimalMin")
             } else {
                 ("__bynkDecimalMax", "__bynkDecimalMax")
@@ -9657,14 +9727,14 @@ fn lower_decimal_kernel(
             cx.note_decimal(name);
             Some(format!("{helper}({recv}, {other})"))
         }
-        ("round", [scale, m]) => {
+        (DecimalOp::Round, [scale, m]) => {
             let mode = mode(m)?;
             let recv = pre.lower(receiver, cx);
             let scale = pre.lower(scale, cx);
             cx.note_decimal("__bynkDecimalRound");
             Some(format!("__bynkDecimalRound({recv}, {scale}, {mode})"))
         }
-        ("div", [other, scale, m]) => {
+        (DecimalOp::Div, [other, scale, m]) => {
             let mode = mode(m)?;
             let recv = pre.lower(receiver, cx);
             let other = pre.lower(other, cx);
