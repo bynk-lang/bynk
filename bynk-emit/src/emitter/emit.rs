@@ -7192,6 +7192,344 @@ fn emit_agent_handlers(
     }
 }
 
+/// What an agent class's dispatch methods depend on, decided while the class
+/// header was written (#3167).
+struct AgentDispatchFacts<'a> {
+    /// The handler reads the agent's key (`self.key`).
+    reads_key: bool,
+    /// The `given` capability dependencies the RPC branch rebuilds, if any.
+    given_deps_expr: &'a Option<String>,
+    /// Whether the RPC branch rebuilds the agent's environment at all.
+    rpc_rebuilds_env: bool,
+    /// Whether a handler body emits events directly.
+    agent_uses_emit: bool,
+    /// Whether a handler body reaches the Worker's own `env`.
+    agent_reaches_env: bool,
+    /// The agent's declared schema versions, if it has any.
+    agent_versions: &'a Option<bynk_check::schema_registry::AgentVersions>,
+}
+
+/// The tail of an agent class (#3167): the Workers `fetch` dispatch that turns
+/// an RPC request into a method call, the dispatch for each `from websocket`
+/// `on open` host, and the class's closing brace. Written onto `out`.
+fn emit_agent_dispatch(
+    out: &mut String,
+    a: &AgentDecl,
+    facts: &AgentDispatchFacts,
+    ws_open_hosts: &[WsOpenHost<'_>],
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    class_smb: &RefCell<SourceMapBuilder>,
+) {
+    let tys = commons.tys();
+    let AgentDispatchFacts {
+        reads_key,
+        given_deps_expr,
+        rpc_rebuilds_env,
+        agent_uses_emit,
+        agent_reaches_env,
+        agent_versions,
+    } = *facts;
+    // #2280: the dispatch methods below belong to the agent, not to the last
+    // hosted lifecycle method's final body line.
+    class_smb.borrow_mut().record(out.len(), a.span);
+    // v0.9.2: workers-mode DO dispatch. Method calls arrive as `fetch` requests
+    // under `/_bynk/agent/<method>`; decode `{ args, deps }`, invoke the
+    // handler with deps as the trailing argument, and serialise the result.
+    if matches!(ctx.target, BuildTarget::Workers) {
+        // Arc C, slice 27 (#1384): the third and final of step (9) sub-slice
+        // (5)'s own 3 independent slices — converts to a real
+        // `bynk_ts::TsClassMethod`, printed through `print_class_method`, the
+        // same zero-`LowerCtx`/no-merge shape #1382 (`emit_ws_dispatch_
+        // handlers`) established for this cluster's other Rust-side-only
+        // emitter. `(this as unknown as Record<string, (...bynkArgs:
+        // unknown[]) => unknown>)` stays one opaque `TsExpr::Ident` (a
+        // nested `As`-under-`As` chain the printer's own `needs_parens_as_
+        // operand` would otherwise wrap in an extra, wrong parenthesis pair
+        // — a real, previously-unpredicted algebra gap, not a style choice);
+        // `...args` stays one opaque `TsExpr::Ident` call argument (the
+        // spread-call-argument shape the grounding pass DID predict for this
+        // slice, #1382's own PR confirming it belongs here, not there).
+        let mut fetch_stmts = vec![bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("url".to_string()),
+            None,
+            bynk_ts::TsExpr::New {
+                callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.URL".to_string())),
+                args: vec![bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
+                    property: "url".to_string(),
+                }],
+            },
+            None,
+        )];
+        // v0.104 (slice 3b): a forwarded WebSocket upgrade. The edge has already
+        // authenticated the actor (the body never runs unverified); accept the
+        // socket here, run the on-open body, and return the `101` carrying the
+        // client end. The verified identity and route arguments ride in a trusted
+        // internal header (the DO is only reachable through the Worker).
+        for host in ws_open_hosts {
+            fetch_stmts.push(ws_open_fetch_branch_stmt(host, tys));
+        }
+        // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake,
+        // a branch of its own before the method dispatch. It carries no key
+        // (steps are key-free), loads the state (running any step), and
+        // commits only a record older than this build's version. Reachable
+        // only through this Worker's signed `/_bynk/migrate/` route.
+        if let Some(v) = &agent_versions {
+            fetch_stmts.push(migrate_wake_branch_stmt(v.version));
+        }
+        let dispatch_callee = bynk_ts::TsExpr::Index {
+            object: Box::new(bynk_ts::TsExpr::Ident(
+                "(this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)"
+                    .to_string(),
+            )),
+            index: Box::new(bynk_ts::TsExpr::Ident("methodName".to_string())),
+        };
+        let mut agent_dispatch_stmts = vec![
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("methodName".to_string()),
+                None,
+                bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Member {
+                            object: Box::new(bynk_ts::TsExpr::Ident("url".to_string())),
+                            property: "pathname".to_string(),
+                        }),
+                        property: "slice".to_string(),
+                    }),
+                    args: vec![bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                            "/_bynk/agent/".to_string(),
+                        ))),
+                        property: "length".to_string(),
+                    }],
+                },
+                None,
+            ),
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::ObjectPattern(if reads_key {
+                    vec!["args".to_string(), "deps".to_string(), "key".to_string()]
+                } else {
+                    vec!["args".to_string(), "deps".to_string()]
+                }),
+                None,
+                bynk_ts::TsExpr::As {
+                    expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Await(
+                        Box::new(bynk_ts::TsExpr::Call {
+                            callee: Box::new(bynk_ts::TsExpr::Member {
+                                object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
+                                property: "json".to_string(),
+                            }),
+                            args: Vec::new(),
+                        }),
+                    )))),
+                    ty: bynk_ts::TsType::Object(
+                        vec![
+                            bynk_ts::TsTypeMember::prop(
+                                "args",
+                                bynk_ts::TsType::array(bynk_ts::TsType::named("unknown")),
+                            ),
+                            bynk_ts::TsTypeMember::prop("deps", bynk_ts::TsType::named("unknown")),
+                        ]
+                        .into_iter()
+                        .chain(reads_key.then(|| {
+                            bynk_ts::TsTypeMember::prop("key", bynk_ts::TsType::named("unknown"))
+                        }))
+                        .collect(),
+                    ),
+                },
+                None,
+            ),
+        ];
+        // #1818: an agent that reads its key learns it from the call, decoded
+        // by its key codec, before the handler runs.
+        if reads_key {
+            agent_dispatch_stmts.push(agent_key_assign(
+                &agent_key_codec_name(&a.name.name),
+                &crate::emitter::ts_type_ref(&a.key_type),
+                "key",
+            ));
+        }
+        // #1678: the wire arguments are decoded through this agent's table
+        // before the handler sees them (`decodeAgentArgs` throws on a decode
+        // failure, an internal fault), and the result is encoded on the way out.
+        let decoded_args = bynk_ts::TsExpr::Ident(format!(
+            "...__decodeAgentArgs({}, methodName, args)",
+            agent_wire_name(&a.name.name)
+        ));
+        let result_expr = if rpc_rebuilds_env {
+            // #527: the wire deps are JSON — any capability provider in them
+            // is a dead plain object (its methods did not survive
+            // serialisation). Rebuild this agent's `given` deps in-process,
+            // exactly as compose wires them, and let them win the merge.
+            //
+            // Events track, slice 0: `deps.__eventsDispatch` is a function
+            // too, and does not survive the wire any better than a provider
+            // — rebuilt from this Worker's own `env.EVENTS_FANOUT` binding
+            // (shared by every DO class this script hosts) rather than
+            // trusting whatever the caller's JSON carried.
+            // P7.2: matches `emitter/workers.rs`'s own established idiom for a
+            // multi-binding env whose exact accessed keys vary by call site
+            // (`given_deps_expr` may reference other bindings besides
+            // `EVENTS_FANOUT`, computed elsewhere and not fully traced here) —
+            // a generic string-keyed record, not a precise structural type.
+            //
+            // `this.__env as unknown as Record<string, unknown>` stays one
+            // opaque `TsExpr::Ident` — the same nested-`As`-chain gap the
+            // dispatch callee above hits.
+            agent_dispatch_stmts.push(agent_env_const_stmt());
+            let mut entries = vec![bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Paren(
+                Box::new(bynk_ts::TsExpr::As {
+                    expr: Box::new(bynk_ts::TsExpr::Binary {
+                        op: bynk_ts::TsBinaryOp::NullishCoalescing,
+                        left: Box::new(bynk_ts::TsExpr::Ident("deps".to_string())),
+                        right: Box::new(bynk_ts::TsExpr::object(Vec::new())),
+                    }),
+                    ty: bynk_ts::TsType::named_with_args(
+                        "globalThis.Record",
+                        vec![
+                            bynk_ts::TsType::named("string"),
+                            bynk_ts::TsType::named("unknown"),
+                        ],
+                    ),
+                }),
+            ))];
+            if let Some(expr) = &given_deps_expr {
+                agent_dispatch_stmts.push(given_deps_const_stmt(expr));
+                entries.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
+                    "__givenDeps".to_string(),
+                )));
+            }
+            if agent_uses_emit {
+                agent_dispatch_stmts.push(events_deps_const_stmt());
+                entries.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
+                    "__eventsDeps".to_string(),
+                )));
+            }
+            if agent_reaches_env {
+                entries.push(bynk_ts::TsObjectEntry::Shorthand("env".to_string()));
+            }
+            // P7.2: `methodName` is read from `url.pathname` at runtime, so no
+            // static type can name which handler this is — a callable
+            // dictionary is what's actually known, and `result` flows only into
+            // a generic `JSON.stringify` below, so `unknown` costs nothing there.
+            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                callee: Box::new(dispatch_callee),
+                args: vec![
+                    decoded_args.clone(),
+                    bynk_ts::TsExpr::object_entries(entries),
+                ],
+            }))
+        } else {
+            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                callee: Box::new(dispatch_callee),
+                args: vec![decoded_args, bynk_ts::TsExpr::Ident("deps".to_string())],
+            }))
+        };
+        agent_dispatch_stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("result".to_string()),
+            None,
+            result_expr,
+            None,
+        ));
+        // #1678: the result is encoded through the wire table. A void method's
+        // `()` codec encodes `null`; before #1678 `?? null` did that here,
+        // since `JSON.stringify(undefined)` is the *string* `undefined` — not
+        // JSON — which the calling proxy's `response.json()` rejects (#527).
+        agent_dispatch_stmts.push(bynk_ts::TsStmt::return_stmt(
+            Some(bynk_ts::TsExpr::New {
+                callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.Response".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Member {
+                            object: Box::new(bynk_ts::TsExpr::Ident("globalThis.JSON".to_string())),
+                            property: "stringify".to_string(),
+                        }),
+                        args: vec![bynk_ts::TsExpr::Call {
+                            callee: Box::new(bynk_ts::TsExpr::Ident(
+                                "__encodeAgentResult".to_string(),
+                            )),
+                            args: vec![
+                                bynk_ts::TsExpr::Ident(agent_wire_name(&a.name.name)),
+                                bynk_ts::TsExpr::Ident("methodName".to_string()),
+                                bynk_ts::TsExpr::Ident("result".to_string()),
+                            ],
+                        }],
+                    },
+                    bynk_ts::TsExpr::object(vec![(
+                        "headers".to_string(),
+                        bynk_ts::TsExpr::object(vec![(
+                            "\"content-type\"".to_string(),
+                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                "application/json".to_string(),
+                            )),
+                        )]),
+                    )]),
+                ],
+            }),
+            None,
+        ));
+        fetch_stmts.push(bynk_ts::TsStmt::if_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Ident("url".to_string())),
+                        property: "pathname".to_string(),
+                    }),
+                    property: "startsWith".to_string(),
+                }),
+                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                    "/_bynk/agent/".to_string(),
+                ))],
+            },
+            bynk_ts::TsStmt::block(agent_dispatch_stmts, None),
+            None,
+        ));
+        fetch_stmts.push(bynk_ts::TsStmt::return_stmt(
+            Some(bynk_ts::TsExpr::New {
+                callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.Response".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("Not Found".to_string())),
+                    bynk_ts::TsExpr::object(vec![(
+                        "status".to_string(),
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("404".to_string())),
+                    )]),
+                ],
+            }),
+            None,
+        ));
+        let fetch_method = bynk_ts::TsClassMethod {
+            name: "fetch".to_string(),
+            private: false,
+            is_async: true,
+            params: vec![bynk_ts::TsParam {
+                name: "request".to_string(),
+                ty: Some(bynk_ts::TsType::named("globalThis.Request")),
+                optional: false,
+            }],
+            return_type: Some(bynk_ts::TsType::named_with_args(
+                "globalThis.Promise",
+                vec![bynk_ts::TsType::named("globalThis.Response")],
+            )),
+            doc: None,
+            body: fetch_stmts,
+        };
+        out.push_str(&bynk_ts::print_class_method(&fetch_method, 0));
+        writeln!(out).unwrap();
+        // v0.106 (slice 3b-iii): the inbound/close dispatch — Cloudflare calls
+        // `webSocketMessage`/`webSocketClose` on a hibernatable socket. Decode the
+        // frame against `in:` (reject-and-close on failure), recover the sender
+        // identity + route args from the socket attachment, and run the body.
+        for host in ws_open_hosts {
+            emit_ws_dispatch_handlers(out, host, &ctx.runtime_use, &commons.types, tys);
+        }
+    }
+    writeln!(out, "}}").unwrap();
+    // #1486: no trailing blank baked in here — the printer's automatic
+    // top-level spacing policy supplies the single blank before whatever
+    // statement follows.
+}
+
 /// The names of an agent's state registry and fresh-state factory.
 struct AgentStateNames {
     /// The per-agent state registry (`__agentStates…`).
@@ -7595,7 +7933,6 @@ pub(crate) fn emit_agent(
     ctx: &EmitProjectCtx,
     source_text: &str,
 ) -> Vec<bynk_ts::TsStmt> {
-    let tys = commons.tys();
     let mut stmts = Vec::new();
     if let Some(doc) = a.documentation.as_deref() {
         stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
@@ -7778,304 +8115,22 @@ pub(crate) fn emit_agent(
             );
         }
     }
-    // #2280: the dispatch methods below belong to the agent, not to the last
-    // hosted lifecycle method's final body line.
-    class_smb.borrow_mut().record(out.len(), a.span);
-    // v0.9.2: workers-mode DO dispatch. Method calls arrive as `fetch` requests
-    // under `/_bynk/agent/<method>`; decode `{ args, deps }`, invoke the
-    // handler with deps as the trailing argument, and serialise the result.
-    if matches!(ctx.target, BuildTarget::Workers) {
-        // Arc C, slice 27 (#1384): the third and final of step (9) sub-slice
-        // (5)'s own 3 independent slices — converts to a real
-        // `bynk_ts::TsClassMethod`, printed through `print_class_method`, the
-        // same zero-`LowerCtx`/no-merge shape #1382 (`emit_ws_dispatch_
-        // handlers`) established for this cluster's other Rust-side-only
-        // emitter. `(this as unknown as Record<string, (...bynkArgs:
-        // unknown[]) => unknown>)` stays one opaque `TsExpr::Ident` (a
-        // nested `As`-under-`As` chain the printer's own `needs_parens_as_
-        // operand` would otherwise wrap in an extra, wrong parenthesis pair
-        // — a real, previously-unpredicted algebra gap, not a style choice);
-        // `...args` stays one opaque `TsExpr::Ident` call argument (the
-        // spread-call-argument shape the grounding pass DID predict for this
-        // slice, #1382's own PR confirming it belongs here, not there).
-        let mut fetch_stmts = vec![bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident("url".to_string()),
-            None,
-            bynk_ts::TsExpr::New {
-                callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.URL".to_string())),
-                args: vec![bynk_ts::TsExpr::Member {
-                    object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
-                    property: "url".to_string(),
-                }],
-            },
-            None,
-        )];
-        // v0.104 (slice 3b): a forwarded WebSocket upgrade. The edge has already
-        // authenticated the actor (the body never runs unverified); accept the
-        // socket here, run the on-open body, and return the `101` carrying the
-        // client end. The verified identity and route arguments ride in a trusted
-        // internal header (the DO is only reachable through the Worker).
-        for host in &ws_open_hosts {
-            fetch_stmts.push(ws_open_fetch_branch_stmt(host, tys));
-        }
-        // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake,
-        // a branch of its own before the method dispatch. It carries no key
-        // (steps are key-free), loads the state (running any step), and
-        // commits only a record older than this build's version. Reachable
-        // only through this Worker's signed `/_bynk/migrate/` route.
-        if let Some(v) = &agent_versions {
-            fetch_stmts.push(migrate_wake_branch_stmt(v.version));
-        }
-        let dispatch_callee = bynk_ts::TsExpr::Index {
-            object: Box::new(bynk_ts::TsExpr::Ident(
-                "(this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)"
-                    .to_string(),
-            )),
-            index: Box::new(bynk_ts::TsExpr::Ident("methodName".to_string())),
-        };
-        let mut agent_dispatch_stmts = vec![
-            bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::Ident("methodName".to_string()),
-                None,
-                bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Member {
-                        object: Box::new(bynk_ts::TsExpr::Member {
-                            object: Box::new(bynk_ts::TsExpr::Ident("url".to_string())),
-                            property: "pathname".to_string(),
-                        }),
-                        property: "slice".to_string(),
-                    }),
-                    args: vec![bynk_ts::TsExpr::Member {
-                        object: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                            "/_bynk/agent/".to_string(),
-                        ))),
-                        property: "length".to_string(),
-                    }],
-                },
-                None,
-            ),
-            bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::ObjectPattern(if reads_key {
-                    vec!["args".to_string(), "deps".to_string(), "key".to_string()]
-                } else {
-                    vec!["args".to_string(), "deps".to_string()]
-                }),
-                None,
-                bynk_ts::TsExpr::As {
-                    expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Await(
-                        Box::new(bynk_ts::TsExpr::Call {
-                            callee: Box::new(bynk_ts::TsExpr::Member {
-                                object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
-                                property: "json".to_string(),
-                            }),
-                            args: Vec::new(),
-                        }),
-                    )))),
-                    ty: bynk_ts::TsType::Object(
-                        vec![
-                            bynk_ts::TsTypeMember::prop(
-                                "args",
-                                bynk_ts::TsType::array(bynk_ts::TsType::named("unknown")),
-                            ),
-                            bynk_ts::TsTypeMember::prop("deps", bynk_ts::TsType::named("unknown")),
-                        ]
-                        .into_iter()
-                        .chain(reads_key.then(|| {
-                            bynk_ts::TsTypeMember::prop("key", bynk_ts::TsType::named("unknown"))
-                        }))
-                        .collect(),
-                    ),
-                },
-                None,
-            ),
-        ];
-        // #1818: an agent that reads its key learns it from the call, decoded
-        // by its key codec, before the handler runs.
-        if reads_key {
-            agent_dispatch_stmts.push(agent_key_assign(
-                &agent_key_codec_name(&a.name.name),
-                &crate::emitter::ts_type_ref(&a.key_type),
-                "key",
-            ));
-        }
-        // #1678: the wire arguments are decoded through this agent's table
-        // before the handler sees them (`decodeAgentArgs` throws on a decode
-        // failure, an internal fault), and the result is encoded on the way out.
-        let decoded_args = bynk_ts::TsExpr::Ident(format!(
-            "...__decodeAgentArgs({}, methodName, args)",
-            agent_wire_name(&a.name.name)
-        ));
-        let result_expr = if rpc_rebuilds_env {
-            // #527: the wire deps are JSON — any capability provider in them
-            // is a dead plain object (its methods did not survive
-            // serialisation). Rebuild this agent's `given` deps in-process,
-            // exactly as compose wires them, and let them win the merge.
-            //
-            // Events track, slice 0: `deps.__eventsDispatch` is a function
-            // too, and does not survive the wire any better than a provider
-            // — rebuilt from this Worker's own `env.EVENTS_FANOUT` binding
-            // (shared by every DO class this script hosts) rather than
-            // trusting whatever the caller's JSON carried.
-            // P7.2: matches `emitter/workers.rs`'s own established idiom for a
-            // multi-binding env whose exact accessed keys vary by call site
-            // (`given_deps_expr` may reference other bindings besides
-            // `EVENTS_FANOUT`, computed elsewhere and not fully traced here) —
-            // a generic string-keyed record, not a precise structural type.
-            //
-            // `this.__env as unknown as Record<string, unknown>` stays one
-            // opaque `TsExpr::Ident` — the same nested-`As`-chain gap the
-            // dispatch callee above hits.
-            agent_dispatch_stmts.push(agent_env_const_stmt());
-            let mut entries = vec![bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Paren(
-                Box::new(bynk_ts::TsExpr::As {
-                    expr: Box::new(bynk_ts::TsExpr::Binary {
-                        op: bynk_ts::TsBinaryOp::NullishCoalescing,
-                        left: Box::new(bynk_ts::TsExpr::Ident("deps".to_string())),
-                        right: Box::new(bynk_ts::TsExpr::object(Vec::new())),
-                    }),
-                    ty: bynk_ts::TsType::named_with_args(
-                        "globalThis.Record",
-                        vec![
-                            bynk_ts::TsType::named("string"),
-                            bynk_ts::TsType::named("unknown"),
-                        ],
-                    ),
-                }),
-            ))];
-            if let Some(expr) = &given_deps_expr {
-                agent_dispatch_stmts.push(given_deps_const_stmt(expr));
-                entries.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
-                    "__givenDeps".to_string(),
-                )));
-            }
-            if agent_uses_emit {
-                agent_dispatch_stmts.push(events_deps_const_stmt());
-                entries.push(bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
-                    "__eventsDeps".to_string(),
-                )));
-            }
-            if agent_reaches_env {
-                entries.push(bynk_ts::TsObjectEntry::Shorthand("env".to_string()));
-            }
-            // P7.2: `methodName` is read from `url.pathname` at runtime, so no
-            // static type can name which handler this is — a callable
-            // dictionary is what's actually known, and `result` flows only into
-            // a generic `JSON.stringify` below, so `unknown` costs nothing there.
-            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(dispatch_callee),
-                args: vec![
-                    decoded_args.clone(),
-                    bynk_ts::TsExpr::object_entries(entries),
-                ],
-            }))
-        } else {
-            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(dispatch_callee),
-                args: vec![decoded_args, bynk_ts::TsExpr::Ident("deps".to_string())],
-            }))
-        };
-        agent_dispatch_stmts.push(bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident("result".to_string()),
-            None,
-            result_expr,
-            None,
-        ));
-        // #1678: the result is encoded through the wire table. A void method's
-        // `()` codec encodes `null`; before #1678 `?? null` did that here,
-        // since `JSON.stringify(undefined)` is the *string* `undefined` — not
-        // JSON — which the calling proxy's `response.json()` rejects (#527).
-        agent_dispatch_stmts.push(bynk_ts::TsStmt::return_stmt(
-            Some(bynk_ts::TsExpr::New {
-                callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.Response".to_string())),
-                args: vec![
-                    bynk_ts::TsExpr::Call {
-                        callee: Box::new(bynk_ts::TsExpr::Member {
-                            object: Box::new(bynk_ts::TsExpr::Ident("globalThis.JSON".to_string())),
-                            property: "stringify".to_string(),
-                        }),
-                        args: vec![bynk_ts::TsExpr::Call {
-                            callee: Box::new(bynk_ts::TsExpr::Ident(
-                                "__encodeAgentResult".to_string(),
-                            )),
-                            args: vec![
-                                bynk_ts::TsExpr::Ident(agent_wire_name(&a.name.name)),
-                                bynk_ts::TsExpr::Ident("methodName".to_string()),
-                                bynk_ts::TsExpr::Ident("result".to_string()),
-                            ],
-                        }],
-                    },
-                    bynk_ts::TsExpr::object(vec![(
-                        "headers".to_string(),
-                        bynk_ts::TsExpr::object(vec![(
-                            "\"content-type\"".to_string(),
-                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                "application/json".to_string(),
-                            )),
-                        )]),
-                    )]),
-                ],
-            }),
-            None,
-        ));
-        fetch_stmts.push(bynk_ts::TsStmt::if_stmt(
-            bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Member {
-                    object: Box::new(bynk_ts::TsExpr::Member {
-                        object: Box::new(bynk_ts::TsExpr::Ident("url".to_string())),
-                        property: "pathname".to_string(),
-                    }),
-                    property: "startsWith".to_string(),
-                }),
-                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                    "/_bynk/agent/".to_string(),
-                ))],
-            },
-            bynk_ts::TsStmt::block(agent_dispatch_stmts, None),
-            None,
-        ));
-        fetch_stmts.push(bynk_ts::TsStmt::return_stmt(
-            Some(bynk_ts::TsExpr::New {
-                callee: Box::new(bynk_ts::TsExpr::Ident("globalThis.Response".to_string())),
-                args: vec![
-                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("Not Found".to_string())),
-                    bynk_ts::TsExpr::object(vec![(
-                        "status".to_string(),
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("404".to_string())),
-                    )]),
-                ],
-            }),
-            None,
-        ));
-        let fetch_method = bynk_ts::TsClassMethod {
-            name: "fetch".to_string(),
-            private: false,
-            is_async: true,
-            params: vec![bynk_ts::TsParam {
-                name: "request".to_string(),
-                ty: Some(bynk_ts::TsType::named("globalThis.Request")),
-                optional: false,
-            }],
-            return_type: Some(bynk_ts::TsType::named_with_args(
-                "globalThis.Promise",
-                vec![bynk_ts::TsType::named("globalThis.Response")],
-            )),
-            doc: None,
-            body: fetch_stmts,
-        };
-        out.push_str(&bynk_ts::print_class_method(&fetch_method, 0));
-        writeln!(out).unwrap();
-        // v0.106 (slice 3b-iii): the inbound/close dispatch — Cloudflare calls
-        // `webSocketMessage`/`webSocketClose` on a hibernatable socket. Decode the
-        // frame against `in:` (reject-and-close on failure), recover the sender
-        // identity + route args from the socket attachment, and run the body.
-        for host in &ws_open_hosts {
-            emit_ws_dispatch_handlers(&mut out, host, &ctx.runtime_use, &commons.types, tys);
-        }
-    }
-    writeln!(out, "}}").unwrap();
-    // #1486: no trailing blank baked in here — the printer's automatic
-    // top-level spacing policy supplies the single blank before whatever
-    // statement follows.
+    emit_agent_dispatch(
+        &mut out,
+        a,
+        &AgentDispatchFacts {
+            reads_key,
+            given_deps_expr: &given_deps_expr,
+            rpc_rebuilds_env,
+            agent_uses_emit,
+            agent_reaches_env,
+            agent_versions: &agent_versions,
+        },
+        &ws_open_hosts,
+        commons,
+        ctx,
+        &class_smb,
+    );
     let mut class_stmt = bynk_ts::TsStmt::raw(out, None);
     class_stmt.nested_map = Some(class_smb.into_inner());
     stmts.push(class_stmt);
