@@ -159,7 +159,8 @@ An agent's **whole state is persisted as one stored value**: every `Cell`, and
 every entry of every `Map`, `Set`, `Cache` and `Log` together with the posting
 lists of any [`@indexed`](#indexed-routing) field, is written under a single
 Durable Object storage key. On the SQLite-backed Durable Objects Bynk emits, one
-value is limited to about **2 MB**, and an agent whose state outgrows that fails to
+value is limited to about **8 MB** (key and value combined; see
+Cloudflare's [Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)), and an agent whose state outgrows that fails to
 persist. Each handler call also reads and rewrites that whole value, so the cost of a
 handler grows with the size of the agent's entire state, not with the entries it
 touches. This is how persistence works today; [#3159](https://github.com/bynk-lang/bynk/issues/3159) tracks the planned change.

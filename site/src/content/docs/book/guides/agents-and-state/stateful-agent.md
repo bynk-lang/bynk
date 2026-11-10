@@ -174,7 +174,7 @@ To route an equality filter through a maintained index, annotate the map with
 
 An agent's whole state, every entry of every `Map`, `Set`, `Cache` and `Log` and
 their `@indexed` posting lists included, is persisted as **one stored value** of
-about 2 MB at most, and each handler call reads and rewrites all of it. So a handler
+about 8 MB at most, and each handler call reads and rewrites all of it. So a handler
 costs in proportion to the whole state, not to what it touches, and a collection
 that keeps growing will eventually stop persisting ([#3159](https://github.com/bynk-lang/bynk/issues/3159) tracks the planned fix).
 Keep the collections an agent holds small and bounded:
