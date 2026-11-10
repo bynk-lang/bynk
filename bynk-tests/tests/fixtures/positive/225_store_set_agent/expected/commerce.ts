@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface AudienceState {
@@ -31,6 +31,7 @@ export class Audience {
   private async loadState(): globalThis.Promise<AudienceState> {
     const stored = await this.state.storage.get<AudienceState>("state");
     if (stored === undefined) return __zeroOfAudienceState();
+    __checkStoredLayout("Audience", stored);
     const __zero = __zeroOfAudienceState();
     __reportUnknownStoredKeys("Audience", stored, __zero);
     const __merged = { ...__zero, ...stored };

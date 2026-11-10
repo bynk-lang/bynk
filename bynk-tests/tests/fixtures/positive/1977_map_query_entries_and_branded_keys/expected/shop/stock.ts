@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 import { Acct as __CommonsAcct, Sku as __CommonsSku, sku } from "./values.js";
@@ -52,6 +52,7 @@ export class Box {
   private async loadState(): globalThis.Promise<BoxState> {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
+    __checkStoredLayout("Box", stored);
     const __zero = __zeroOfBoxState();
     __reportUnknownStoredKeys("Box", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -115,6 +116,7 @@ export class ByKey {
   private async loadState(): globalThis.Promise<ByKeyState> {
     const stored = await this.state.storage.get<ByKeyState>("state");
     if (stored === undefined) return __zeroOfByKeyState();
+    __checkStoredLayout("ByKey", stored);
     const __zero = __zeroOfByKeyState();
     __reportUnknownStoredKeys("ByKey", stored, __zero);
     const __merged = { ...__zero, ...stored };
@@ -191,6 +193,7 @@ export class Ledger {
   private async loadState(): globalThis.Promise<LedgerState> {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
+    __checkStoredLayout("Ledger", stored);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", stored, __zero);
     const __merged = { ...__zero, ...stored };

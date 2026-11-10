@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkDistinct, __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkLeftJoin } from "../__bynk_runtime/keys.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -101,6 +101,7 @@ export class Log {
   private async loadState(): globalThis.Promise<LogState> {
     const stored = await this.state.storage.get<LogState>("state");
     if (stored === undefined) return __zeroOfLogState();
+    __checkStoredLayout("Log", stored);
     const __zero = __zeroOfLogState();
     __reportUnknownStoredKeys("Log", stored, __zero);
     const __merged = { ...__zero, ...stored };
