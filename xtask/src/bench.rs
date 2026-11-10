@@ -149,7 +149,7 @@ pub fn run(root: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Value
         progress(&format!("{n} contexts: bynk check after an edit"));
         let cli_recheck = time_cli(&bynk, &dir, opts.runs, true)?;
         progress(&format!("{n} contexts: language server"));
-        let (first, edits) = time_lsp(&lsp, &dir, opts.edits)?;
+        let lsp_run = time_lsp(&lsp, &dir, opts.edits)?;
 
         sizes.push(json!({
             "contexts": n,
@@ -157,8 +157,11 @@ pub fn run(root: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Value
             "source_lines": lines,
             "cli_check": summary(&cli_check),
             "cli_recheck": summary(&cli_recheck),
-            "lsp_first_round": summary(&[first]),
-            "lsp_edit": summary(&edits),
+            "lsp_first_round": summary(&[lsp_run.first]),
+            "lsp_edit": summary(&lsp_run.edits),
+            "lsp_first_round_levels": level_medians(&lsp_run.first_levels.into_iter().collect::<Vec<_>>()),
+            "lsp_edit_levels": level_medians(&lsp_run.edit_levels),
+            "lsp_edit_outside_analysis_ms": outside_analysis(&lsp_run.edits, &lsp_run.edit_levels),
         }));
     }
     Ok(json!({
@@ -261,7 +264,25 @@ fn time_cli(bynk: &Path, dir: &Path, runs: usize, edit_first: bool) -> Result<Ve
 struct Client {
     child: Child,
     rx: mpsc::Receiver<Value>,
+    /// The per-level timing line the server writes to stderr after each
+    /// analysis round (`BYNK_PHASE_TIMING`), as `[file, unit, definition, project]` ms.
+    timings: mpsc::Receiver<[f64; 4]>,
 }
+
+/// Parse `bynk-phase-timing file=1.0 unit=2.0 definition=3.0 project=4.0`.
+pub fn parse_timing_line(line: &str) -> Option<[f64; 4]> {
+    let rest = line.trim().strip_prefix("bynk-phase-timing")?;
+    let mut out = [f64::NAN; 4];
+    for part in rest.split_whitespace() {
+        let (k, v) = part.split_once('=')?;
+        let i = LEVELS.iter().position(|l| *l == k)?;
+        out[i] = v.parse().ok()?;
+    }
+    out.iter().all(|x| x.is_finite()).then_some(out)
+}
+
+/// R3.13's four query levels, in the order the timing line reports them.
+pub const LEVELS: [&str; 4] = ["file", "unit", "definition", "project"];
 
 fn send(child: &mut Child, msg: &Value) -> Result<(), String> {
     let body = msg.to_string();
@@ -275,9 +296,21 @@ impl Client {
         let mut child = Command::new(lsp)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
+            .env("BYNK_PHASE_TIMING", "1")
             .spawn()
             .map_err(|e| format!("cannot start bynk-lsp: {e}"))?;
+        let err = BufReader::new(child.stderr.take().ok_or("no stderr")?);
+        let (ttx, timings) = mpsc::channel();
+        std::thread::spawn(move || {
+            for line in err.lines().map_while(Result::ok) {
+                if let Some(t) = parse_timing_line(&line)
+                    && ttx.send(t).is_err()
+                {
+                    return;
+                }
+            }
+        });
         let mut out = BufReader::new(child.stdout.take().ok_or("no stdout")?);
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
@@ -309,7 +342,21 @@ impl Client {
                 }
             }
         });
-        Ok(Client { child, rx })
+        Ok(Client { child, rx, timings })
+    }
+
+    /// Drop any timing lines already received (a late line from a previous round).
+    fn discard_timings(&self) {
+        while self.timings.try_recv().is_ok() {}
+    }
+
+    /// The timing line of the round whose diagnostics just arrived. The server
+    /// writes it to stderr before it publishes, but stdout and stderr are read
+    /// by separate threads, so the diagnostics can be seen first: wait briefly
+    /// for the line rather than take whatever has arrived. `None` when the
+    /// server writes none (an older `bynk-lsp`), after a few seconds.
+    fn round_timing(&self) -> Option<[f64; 4]> {
+        self.timings.recv_timeout(Duration::from_secs(5)).ok()
     }
 
     /// Wait for a message satisfying `want`, answering any server-to-client
@@ -344,8 +391,17 @@ fn is_diagnostics_for(msg: &Value, uri: &str, version: i64) -> bool {
         && msg["params"]["version"].as_i64() == Some(version)
 }
 
-/// `(first round, per-edit edit-to-diagnostics)` in milliseconds.
-fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<(f64, Vec<f64>), String> {
+/// What one language-server run measured, in milliseconds.
+struct LspTimings {
+    first: f64,
+    edits: Vec<f64>,
+    /// The first round's `[file, unit, definition, project]` attribution.
+    first_levels: Option<[f64; 4]>,
+    /// One `[file, unit, definition, project]` per timed edit.
+    edit_levels: Vec<[f64; 4]>,
+}
+
+fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<LspTimings, String> {
     let dir = dir.canonicalize().map_err(|e| e.to_string())?;
     let root_uri = format!("file://{}", dir.display());
     let file = dir.join(EDITED_FILE);
@@ -378,14 +434,18 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<(f64, Vec<f64>), Str
     };
     send(&mut c.child, &did_open(&text))?;
     let first = c.wait(|m| is_diagnostics_for(m, &uri, 1))?;
+    let first_levels = c.round_timing();
 
     let mut samples = Vec::new();
+    let mut edit_levels = Vec::new();
     let warmup = 2;
     for i in 0..(edits + warmup) {
         let version = i as i64 + 2;
         // Opened broken, so the first edit restores it.
         let valid = i % 2 == 0;
         let edited = edit_source(&clean, valid);
+        // Nothing from an earlier round may be mistaken for this one's.
+        c.discard_timings();
         send(
             &mut c.child,
             &json!({"jsonrpc":"2.0","method":"textDocument/didChange","params":{
@@ -394,8 +454,10 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<(f64, Vec<f64>), Str
             }}),
         )?;
         let took = c.wait(|m| is_diagnostics_for(m, &uri, version))?;
+        let levels = c.round_timing();
         if i >= warmup {
             samples.push(ms(took));
+            edit_levels.extend(levels);
         }
     }
 
@@ -407,7 +469,41 @@ fn time_lsp(lsp: &Path, dir: &Path, edits: usize) -> Result<(f64, Vec<f64>), Str
     std::thread::sleep(Duration::from_millis(100));
     let _ = c.child.kill();
     let _ = c.child.wait();
-    Ok((ms(first), samples))
+    Ok(LspTimings {
+        first: ms(first),
+        edits: samples,
+        first_levels,
+        edit_levels,
+    })
+}
+
+/// Median time per edit spent outside the analysis round (the server's content
+/// sweep, converting and publishing diagnostics): the edit-to-diagnostics time
+/// less the four levels. `null` unless every timed edit has its timing line.
+fn outside_analysis(edits: &[f64], levels: &[[f64; 4]]) -> Value {
+    if edits.is_empty() || edits.len() != levels.len() {
+        return Value::Null;
+    }
+    let outside: Vec<f64> = edits
+        .iter()
+        .zip(levels)
+        .map(|(e, l)| (e - l.iter().sum::<f64>()).max(0.0))
+        .collect();
+    json!((percentile(&outside, 50.0) * 10.0).round() / 10.0)
+}
+
+/// Median of each level across `rows`, as a JSON object (`null` when there are none).
+fn level_medians(rows: &[[f64; 4]]) -> Value {
+    if rows.is_empty() {
+        return Value::Null;
+    }
+    let round = |x: f64| (x * 10.0).round() / 10.0;
+    let mut o = serde_json::Map::new();
+    for (i, name) in LEVELS.iter().enumerate() {
+        let col: Vec<f64> = rows.iter().map(|r| r[i]).collect();
+        o.insert((*name).to_string(), json!(round(percentile(&col, 50.0))));
+    }
+    Value::Object(o)
 }
 
 // --- recorded results -------------------------------------------------------
@@ -528,6 +624,33 @@ mod tests {
         let broken = edit_source(&src, false);
         assert_ne!(broken, src);
         assert_eq!(edit_source(&broken, true), src);
+    }
+
+    #[test]
+    fn the_timing_line_parses_in_level_order() {
+        let t =
+            parse_timing_line("bynk-phase-timing file=1.5 unit=2.0 definition=30.25 project=4.0");
+        assert_eq!(t, Some([1.5, 2.0, 30.25, 4.0]));
+        // A missing level, a bad number or another line is not a timing line.
+        assert_eq!(parse_timing_line("bynk-phase-timing file=1 unit=2"), None);
+        assert_eq!(
+            parse_timing_line("bynk-phase-timing file=x unit=2 definition=3 project=4"),
+            None
+        );
+        assert_eq!(parse_timing_line("some other log line"), None);
+    }
+
+    #[test]
+    fn level_medians_are_per_level() {
+        let rows = [
+            [1.0, 10.0, 100.0, 5.0],
+            [3.0, 30.0, 300.0, 7.0],
+            [2.0, 20.0, 200.0, 6.0],
+        ];
+        let m = level_medians(&rows);
+        assert_eq!(m["file"], json!(2.0));
+        assert_eq!(m["definition"], json!(200.0));
+        assert_eq!(level_medians(&[]), Value::Null);
     }
 
     #[test]
