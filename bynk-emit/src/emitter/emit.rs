@@ -5824,6 +5824,558 @@ fn classify_agent_store<'a>(
     }
 }
 
+/// The names and facts about an agent's state that `loadState` refers to: the
+/// fresh-state factory, the rehydration/migration functions, and the schema
+/// versions the stored layout is checked against (#3167).
+struct AgentLoadFns<'a> {
+    zero_fn: &'a String,
+    rehydrate_fn: &'a String,
+    encode_fn: &'a String,
+    migrate_fn: &'a String,
+    has_rehydrate: bool,
+    step_plans: &'a [bynk_check::schema_registry::MigrationStep],
+    agent_versions: &'a Option<bynk_check::schema_registry::AgentVersions>,
+}
+
+/// An agent class's two private state methods, `loadState` and `commitState`
+/// (#3167): load reads, rehydrates and migrates the stored record; commit
+/// checks the agent's invariants and transitions and writes it back. Kept
+/// together as one unit, and written onto `out` in that order, because the two
+/// are the agent's whole storage contract with the platform.
+#[allow(clippy::too_many_arguments)]
+fn emit_agent_load_commit_state(
+    out: &mut String,
+    a: &AgentDecl,
+    effective_fields: &[RecordField],
+    fns: &AgentLoadFns,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+) {
+    let state_ty = format!("{}State", a.name.name);
+    let AgentLoadFns {
+        zero_fn,
+        rehydrate_fn,
+        encode_fn,
+        migrate_fn,
+        has_rehydrate,
+        step_plans,
+        agent_versions,
+    } = *fns;
+    // Arc C, slice 21 (#1371): the third of step (9)'s own proposed 5-6
+    // sub-slices — the class's own wrapper (header/fields/constructor) stays
+    // hand-written text (Decision C, the same boundary #1359's own
+    // `emit_provider` already established), but `loadState` converts fully
+    // to a real `bynk_ts::TsClassMethod` fragment, printed through
+    // `print_class_method` (the same fragment entry point #1359 added).
+    // `commitState`, this class's OTHER private method, stays deferred as
+    // its own separate, later sub-slice — a real, harder remainder found
+    // only once actually read (its own invariant/transition predicate
+    // lowering writes directly into `out` today, the same "direct write,
+    // real position" shape `emit_free_fn`/`emit_contract_guarded_body` had
+    // *before* their own conversions needed a sub-builder for `Raw`-
+    // embedding, #1352/#1353), not silently folded into "step (9), slice 3
+    // done." `this.state.storage.get<{state_ty}>(...)`'s own generic method
+    // call has no representation in `TsExpr::Call` (`type_args` was never
+    // added — 41 real construction sites across the workspace, far more
+    // than a single narrow need like this one justifies touching) — carried
+    // as one opaque callee leaf, the same "an odd, one-off shape stays
+    // opaque text" precedent P7.9's own `Query[T]` and #1357's own `unique
+    // symbol` already established, not a new pattern; now tagged
+    // `VerbatimExpr`, not `Ident` (#1539).
+    // `TsClassMethod.private` is a real, new, small gap the grounding pass
+    // itself predicted (#1366) — `loadState`/`commitState` are the first
+    // `private` method sites this whole track has hit (`emit_provider`'s
+    // own ops, #1359, were all public).
+    let load_state_body = {
+        let mut stmts = vec![
+            bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("stored".to_string()),
+                None,
+                bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
+                        format!("this.state.storage.get<{state_ty}>"),
+                        bynk_ts::VerbatimOrigin::Emit,
+                    )),
+                    args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                        "state".to_string(),
+                    ))],
+                })),
+                None,
+            ),
+            // v0.96 (ADR 0124): a fresh key takes its zero (valid by
+            // construction). For a stored record, merge zero-then-stored —
+            // D4: a `store` field added in a later deploy and absent from
+            // the persisted record takes its default, rather than reading
+            // `undefined` — then run the rehydration validation gate on the
+            // merged state before any handler reads it (D1/D2).
+            bynk_ts::TsStmt::if_stmt(
+                bynk_ts::TsExpr::Binary {
+                    op: bynk_ts::TsBinaryOp::StrictEq,
+                    left: Box::new(bynk_ts::TsExpr::Ident("stored".to_string())),
+                    right: Box::new(bynk_ts::TsExpr::Ident("undefined".to_string())),
+                },
+                bynk_ts::TsStmt::return_stmt(
+                    Some(bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
+                        args: Vec::new(),
+                    }),
+                    None,
+                ),
+                None,
+            ),
+        ];
+        // Per-entry storage slice 0 (#3189): any `__layout` marker was written
+        // by a later build, so fault before anything is decoded, merged or
+        // written back. Unconditional: a lockless agent has no `__v` check.
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__checkStoredLayout".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                    bynk_ts::TsExpr::Ident("stored".to_string()),
+                ],
+            },
+            None,
+        ));
+        // State-migrations S1 (#2211, track §3.2, Decision D): with the
+        // schema lock, check the raw record's `__v` marker before anything is
+        // merged or decoded, so a record from a newer build (or with no path
+        // forward) faults without being read or written back.
+        if let Some(v) = &agent_versions {
+            stmts.push(bynk_ts::TsStmt::expr_stmt(
+                bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Ident(
+                        "__checkStoredSchemaVersion".to_string(),
+                    )),
+                    args: vec![
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                        bynk_ts::TsExpr::Ident("stored".to_string()),
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.version.to_string())),
+                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.oldest_readable.to_string())),
+                    ]
+                    .into_iter()
+                    // State-migrations S2 (#2224 Decision C): each step's
+                    // covered range makes those versions readable too.
+                    .chain((!step_plans.is_empty()).then(|| {
+                        bynk_ts::TsExpr::Array {
+                            items: step_plans
+                                .iter()
+                                .map(|s| bynk_ts::TsExpr::Array {
+                                    items: vec![
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(s.lo.to_string())),
+                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
+                                            s.from.to_string(),
+                                        )),
+                                    ],
+                                    multiline: false,
+                                })
+                                .collect(),
+                            multiline: false,
+                        }
+                    }))
+                    .collect(),
+                },
+                None,
+            ));
+        }
+        // State-migrations S2 (#2224 Decision D): a record a step covers runs
+        // it first; everything below reads the step's output.
+        let src = if step_plans.is_empty() {
+            "stored"
+        } else {
+            let as_ty = |expr: bynk_ts::TsExpr, ty: bynk_ts::TsType| bynk_ts::TsExpr::As {
+                expr: Box::new(bynk_ts::TsExpr::As {
+                    expr: Box::new(expr),
+                    ty: bynk_ts::TsType::named("unknown"),
+                }),
+                ty,
+            };
+            stmts.push(bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__src".to_string()),
+                None,
+                as_ty(
+                    bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Ident(migrate_fn.clone())),
+                        args: vec![as_ty(
+                            bynk_ts::TsExpr::Ident("stored".to_string()),
+                            bynk_ts::TsType::named("globalThis.Record<string, unknown>"),
+                        )],
+                    },
+                    bynk_ts::TsType::named(state_ty.clone()),
+                ),
+                None,
+            ));
+            "__src"
+        };
+        stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__zero".to_string()),
+            None,
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
+                args: Vec::new(),
+            },
+            None,
+        ));
+        // Track §3.4 (Decision E): name, once per isolate, any stored key the
+        // definition no longer declares. It stays in `__merged` and so is
+        // written back on commit, never deleted.
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident(
+                    "__reportUnknownStoredKeys".to_string(),
+                )),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                    bynk_ts::TsExpr::Ident(src.to_string()),
+                    bynk_ts::TsExpr::Ident("__zero".to_string()),
+                ],
+            },
+            None,
+        ));
+        stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__merged".to_string()),
+            None,
+            bynk_ts::TsExpr::object_entries(vec![
+                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("__zero".to_string())),
+                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(src.to_string())),
+            ]),
+            None,
+        ));
+        if has_rehydrate {
+            stmts.push(bynk_ts::TsStmt::expr_stmt(
+                bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Ident(rehydrate_fn.clone())),
+                    args: vec![
+                        bynk_ts::TsExpr::Ident("__merged".to_string()),
+                        bynk_ts::TsExpr::Ident(src.to_string()),
+                    ],
+                },
+                None,
+            ));
+        }
+        stmts.push(bynk_ts::TsStmt::return_stmt(
+            Some(bynk_ts::TsExpr::Ident("__merged".to_string())),
+            None,
+        ));
+        stmts
+    };
+    let load_state_method = bynk_ts::TsClassMethod {
+        name: "loadState".to_string(),
+        private: true,
+        is_async: true,
+        params: Vec::new(),
+        return_type: Some(bynk_ts::TsType::named_with_args(
+            "globalThis.Promise",
+            vec![bynk_ts::TsType::named(state_ty.clone())],
+        )),
+        doc: None,
+        body: load_state_body,
+    };
+    let class_depth = 0;
+    out.push_str(&bynk_ts::print_class_method(
+        &load_state_method,
+        class_depth,
+    ));
+    writeln!(out).unwrap();
+    // Arc C, slice 22 (#1373): closes step (9)'s own third sub-slice by
+    // landing the deferred remainder, `commitState` (#1371's own `loadState`
+    // landed the sub-slice's other half). `record_span` is a documented
+    // no-op when a `LowerCtx` has no attached builder (`emitter.rs`'s own
+    // doc), and neither the invariant nor the transition `LowerCtx` below
+    // is ever given one (`LowerCtx::new(...)`, never `.with_source_map(...)`
+    // — `emit_agent`'s own local `source_map` binding isn't threaded into
+    // either) — confirmed directly, not assumed, before writing this
+    // comment. So despite the grounding pass's own earlier caution that
+    // `commitState` would need the same sub-builder/merge care #1352/#1353
+    // established, it genuinely does not: there is no source map being
+    // written to here, today or after this conversion, so there is nothing
+    // to preserve. Each invariant's/transition's own hoisted pre-statements
+    // and predicate expression stay opaque (`lower.rs`'s own permanently-
+    // excluded general expression lowering, ADR
+    // `arc-c-lower-rs-permanent-exclusion`) — the hoisted lines as their own
+    // `TsStmt::Raw` (indent baked in manually, since `Raw` prints verbatim
+    // with none of its own — depth 2 for an invariant's own top-level
+    // check, depth 3 for a transition's own check nested inside the
+    // `if (__prior !== undefined)` block), the predicate wrapped in a real
+    // `Unary`/`Paren` condition — `!({pred})`, `pred` itself still one
+    // opaque `Ident` leaf (#1539: the same `Unary{Not, Paren(Ident(pred))}`
+    // shape `contract_guard_if_stmt`, above, already builds for its own
+    // opaque predicate; this site used to spell the whole thing as one
+    // `TsExpr::Ident(format!("!({pred})"))` string instead of the equivalent
+    // real node). Everything else — the `if`/`console.error`/`throw`
+    // wrapper, the transition prologue — is real: nothing here needs the
+    // general expression lowerer at all.
+    let commit_state_body = {
+        // Review of #1374: the hoisted-statement `Raw` indent is derived
+        // from `class_depth` rather than hardcoded — a hoisting predicate
+        // is untested by the fixture corpus today (every real `@invariant`/
+        // `transition` fixture's own predicate hoists nothing), so an
+        // un-derived literal here would have been silently wrong the day a
+        // future caller printed this method at a non-zero depth, with
+        // nothing but a fixture no one has written yet to catch it.
+        let build_violation_check = |name: &str,
+                                     declaration: &str,
+                                     location: &str,
+                                     pred: String,
+                                     pre_stmts: &[String],
+                                     hoist_depth: usize| {
+            let hoist_indent = "  ".repeat(hoist_depth);
+            let mut stmts: Vec<bynk_ts::TsStmt> = pre_stmts
+                .iter()
+                .map(|s| bynk_ts::TsStmt::raw(format!("{hoist_indent}{s}\n"), None))
+                .collect();
+            stmts.push(bynk_ts::TsStmt::if_stmt(
+                bynk_ts::TsExpr::Unary {
+                    op: bynk_ts::TsUnaryOp::Not,
+                    expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
+                        pred,
+                    )))),
+                },
+                bynk_ts::TsStmt::block(
+                    vec![
+                        bynk_ts::TsStmt::expr_stmt(
+                            bynk_ts::TsExpr::Call {
+                                callee: Box::new(bynk_ts::TsExpr::Ident(
+                                    "globalThis.console.error".to_string(),
+                                )),
+                                args: vec![
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(format!(
+                                        "InvariantViolation {}.{name}",
+                                        a.name.name
+                                    ))),
+                                    bynk_ts::TsExpr::object(vec![
+                                        (
+                                            "agent".to_string(),
+                                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                                a.name.name.clone(),
+                                            )),
+                                        ),
+                                        (
+                                            "invariant".to_string(),
+                                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                                name.to_string(),
+                                            )),
+                                        ),
+                                    ]),
+                                ],
+                            },
+                            None,
+                        ),
+                        bynk_ts::TsStmt::throw_stmt(
+                            bynk_ts::TsExpr::Call {
+                                callee: Box::new(bynk_ts::TsExpr::Ident(
+                                    "__invariantViolation".to_string(),
+                                )),
+                                args: vec![
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                                        declaration.to_string(),
+                                    )),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(location.to_string())),
+                                ],
+                            },
+                            None,
+                        ),
+                    ],
+                    None,
+                ),
+                None,
+            ));
+            stmts
+        };
+        let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
+        // v0.80 (§14): evaluate each invariant against the proposed state `s`
+        // before the write. A violation throws `InvariantViolation` *before*
+        // `storage.put`, so the offending commit never persists
+        // (non-persistence of the offending commit — not whole-handler
+        // rollback). The refusal is logged with the agent type and
+        // invariant name (never the key — see ADR 0107) so it is
+        // distinguishable from a crash in the logs.
+        if !a.invariants.is_empty() {
+            let field_names: HashSet<String> = effective_fields
+                .iter()
+                .map(|f| f.name.name.clone())
+                .collect();
+            for inv in &a.invariants {
+                let mut cx = LowerCtx::new(
+                    ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                    BodyMode::Invariant {
+                        name: "s".to_string(),
+                        fields: field_names.clone(),
+                    },
+                );
+                let mut pre = Pre::new();
+                let pred = pre.lower(&inv.predicate, &mut cx);
+                stmts.extend(build_violation_check(
+                    &inv.name.name,
+                    "invariant",
+                    &declaration_location(ctx, source_text, inv.name.span),
+                    pred,
+                    pre.stmts(),
+                    class_depth + 2,
+                ));
+            }
+        }
+        // v0.116 (testing track slice 4): step invariants — evaluate each
+        // `transition` against the pre-/post-commit state pair. The old
+        // state is still in storage (this method performs the `put`), so
+        // reading it here yields the pre-commit snapshot; `undefined` is the
+        // genesis commit, which has no prior state to transition from and is
+        // skipped (snapshot invariants above still apply). `old`/`new` are
+        // lowered to `__old`/`__new` (`new` is a JS reserved word). A
+        // violation throws the same `InvariantViolation`-family fault,
+        // before the write.
+        if !a.transitions.is_empty() {
+            let mut transition_body = vec![
+                bynk_ts::TsStmt::const_stmt(
+                    bynk_ts::TsBindingName::Ident("__old".to_string()),
+                    None,
+                    bynk_ts::TsExpr::object_entries(vec![
+                        bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Call {
+                            callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
+                            args: Vec::new(),
+                        }),
+                        bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
+                            "__prior".to_string(),
+                        )),
+                    ]),
+                    None,
+                ),
+                bynk_ts::TsStmt::const_stmt(
+                    bynk_ts::TsBindingName::Ident("__new".to_string()),
+                    None,
+                    bynk_ts::TsExpr::Ident("s".to_string()),
+                    None,
+                ),
+            ];
+            // #1649: the prior state is stored in the wire shape, so decode it
+            // the way `loadState` does before a predicate reads `old`. Before
+            // #1649 this read was raw and unvalidated.
+            if has_rehydrate {
+                transition_body.insert(
+                    1,
+                    bynk_ts::TsStmt::expr_stmt(
+                        bynk_ts::TsExpr::Call {
+                            callee: Box::new(bynk_ts::TsExpr::Ident(rehydrate_fn.clone())),
+                            args: vec![
+                                bynk_ts::TsExpr::Ident("__old".to_string()),
+                                bynk_ts::TsExpr::Ident("__prior".to_string()),
+                            ],
+                        },
+                        None,
+                    ),
+                );
+            }
+            for tr in &a.transitions {
+                let mut cx = LowerCtx::new(
+                    ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                    BodyMode::Transition {
+                        old: "__old".to_string(),
+                        new: "__new".to_string(),
+                    },
+                );
+                let mut pre = Pre::new();
+                let pred = pre.lower(&tr.predicate, &mut cx);
+                transition_body.extend(build_violation_check(
+                    &tr.name.name,
+                    "transition",
+                    &declaration_location(ctx, source_text, tr.name.span),
+                    pred,
+                    pre.stmts(),
+                    class_depth + 3,
+                ));
+            }
+            stmts.push(bynk_ts::TsStmt::const_stmt(
+                bynk_ts::TsBindingName::Ident("__prior".to_string()),
+                None,
+                bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
+                        format!("this.state.storage.get<{state_ty}>"),
+                        bynk_ts::VerbatimOrigin::Emit,
+                    )),
+                    args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                        "state".to_string(),
+                    ))],
+                })),
+                None,
+            ));
+            stmts.push(bynk_ts::TsStmt::if_stmt(
+                bynk_ts::TsExpr::Binary {
+                    op: bynk_ts::TsBinaryOp::StrictNotEq,
+                    left: Box::new(bynk_ts::TsExpr::Ident("__prior".to_string())),
+                    right: Box::new(bynk_ts::TsExpr::Ident("undefined".to_string())),
+                },
+                bynk_ts::TsStmt::block(transition_body, None),
+                None,
+            ));
+        }
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("this.state.storage.put".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("state".to_string())),
+                    // #1649: the wire shape, the same shape `loadState` decodes.
+                    // State-migrations S1 (#2211, Decision D): with the schema
+                    // lock, stamped with the class's version in the same `put`,
+                    // spread on so the state type is untouched. The commit does
+                    // not check the stored marker itself: it relies on every
+                    // caller having run `loadState` first, which faults a newer
+                    // record before any write. A future path that commits
+                    // without loading would overwrite a newer record silently,
+                    // so it must check `__v` too (#2213 review).
+                    {
+                        let payload = if has_rehydrate {
+                            bynk_ts::TsExpr::Call {
+                                callee: Box::new(bynk_ts::TsExpr::Ident(encode_fn.clone())),
+                                args: vec![bynk_ts::TsExpr::Ident("s".to_string())],
+                            }
+                        } else {
+                            bynk_ts::TsExpr::Ident("s".to_string())
+                        };
+                        match &agent_versions {
+                            Some(v) => bynk_ts::TsExpr::object_entries(vec![
+                                bynk_ts::TsObjectEntry::Spread(payload),
+                                bynk_ts::TsObjectEntry::Prop(
+                                    "__v".to_string(),
+                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
+                                        v.version.to_string(),
+                                    )),
+                                ),
+                            ]),
+                            None => payload,
+                        }
+                    },
+                ],
+            })),
+            None,
+        ));
+        stmts
+    };
+    let commit_state_method = bynk_ts::TsClassMethod {
+        name: "commitState".to_string(),
+        private: true,
+        is_async: true,
+        params: vec![bynk_ts::TsParam {
+            name: "s".to_string(),
+            ty: Some(bynk_ts::TsType::named(state_ty.clone())),
+            optional: false,
+        }],
+        return_type: Some(bynk_ts::TsType::named_with_args(
+            "globalThis.Promise",
+            vec![bynk_ts::TsType::named("void")],
+        )),
+        doc: None,
+        body: commit_state_body,
+    };
+    out.push_str(&bynk_ts::print_class_method(
+        &commit_state_method,
+        class_depth,
+    ));
+    writeln!(out).unwrap();
+}
+
 /// The names of an agent's state registry and fresh-state factory.
 struct AgentStateNames {
     /// The per-agent state registry (`__agentStates…`).
@@ -6793,518 +7345,24 @@ pub(crate) fn emit_agent(
         writeln!(out, "  }}").unwrap();
     }
     writeln!(out).unwrap();
-    // Arc C, slice 21 (#1371): the third of step (9)'s own proposed 5-6
-    // sub-slices — the class's own wrapper (header/fields/constructor) stays
-    // hand-written text (Decision C, the same boundary #1359's own
-    // `emit_provider` already established), but `loadState` converts fully
-    // to a real `bynk_ts::TsClassMethod` fragment, printed through
-    // `print_class_method` (the same fragment entry point #1359 added).
-    // `commitState`, this class's OTHER private method, stays deferred as
-    // its own separate, later sub-slice — a real, harder remainder found
-    // only once actually read (its own invariant/transition predicate
-    // lowering writes directly into `out` today, the same "direct write,
-    // real position" shape `emit_free_fn`/`emit_contract_guarded_body` had
-    // *before* their own conversions needed a sub-builder for `Raw`-
-    // embedding, #1352/#1353), not silently folded into "step (9), slice 3
-    // done." `this.state.storage.get<{state_ty}>(...)`'s own generic method
-    // call has no representation in `TsExpr::Call` (`type_args` was never
-    // added — 41 real construction sites across the workspace, far more
-    // than a single narrow need like this one justifies touching) — carried
-    // as one opaque callee leaf, the same "an odd, one-off shape stays
-    // opaque text" precedent P7.9's own `Query[T]` and #1357's own `unique
-    // symbol` already established, not a new pattern; now tagged
-    // `VerbatimExpr`, not `Ident` (#1539).
-    // `TsClassMethod.private` is a real, new, small gap the grounding pass
-    // itself predicted (#1366) — `loadState`/`commitState` are the first
-    // `private` method sites this whole track has hit (`emit_provider`'s
-    // own ops, #1359, were all public).
-    let load_state_body = {
-        let mut stmts = vec![
-            bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::Ident("stored".to_string()),
-                None,
-                bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
-                        format!("this.state.storage.get<{state_ty}>"),
-                        bynk_ts::VerbatimOrigin::Emit,
-                    )),
-                    args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                        "state".to_string(),
-                    ))],
-                })),
-                None,
-            ),
-            // v0.96 (ADR 0124): a fresh key takes its zero (valid by
-            // construction). For a stored record, merge zero-then-stored —
-            // D4: a `store` field added in a later deploy and absent from
-            // the persisted record takes its default, rather than reading
-            // `undefined` — then run the rehydration validation gate on the
-            // merged state before any handler reads it (D1/D2).
-            bynk_ts::TsStmt::if_stmt(
-                bynk_ts::TsExpr::Binary {
-                    op: bynk_ts::TsBinaryOp::StrictEq,
-                    left: Box::new(bynk_ts::TsExpr::Ident("stored".to_string())),
-                    right: Box::new(bynk_ts::TsExpr::Ident("undefined".to_string())),
-                },
-                bynk_ts::TsStmt::return_stmt(
-                    Some(bynk_ts::TsExpr::Call {
-                        callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
-                        args: Vec::new(),
-                    }),
-                    None,
-                ),
-                None,
-            ),
-        ];
-        // Per-entry storage slice 0 (#3189): any `__layout` marker was written
-        // by a later build, so fault before anything is decoded, merged or
-        // written back. Unconditional: a lockless agent has no `__v` check.
-        stmts.push(bynk_ts::TsStmt::expr_stmt(
-            bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Ident("__checkStoredLayout".to_string())),
-                args: vec![
-                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                    bynk_ts::TsExpr::Ident("stored".to_string()),
-                ],
-            },
-            None,
-        ));
-        // State-migrations S1 (#2211, track §3.2, Decision D): with the
-        // schema lock, check the raw record's `__v` marker before anything is
-        // merged or decoded, so a record from a newer build (or with no path
-        // forward) faults without being read or written back.
-        if let Some(v) = &agent_versions {
-            stmts.push(bynk_ts::TsStmt::expr_stmt(
-                bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident(
-                        "__checkStoredSchemaVersion".to_string(),
-                    )),
-                    args: vec![
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                        bynk_ts::TsExpr::Ident("stored".to_string()),
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.version.to_string())),
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.oldest_readable.to_string())),
-                    ]
-                    .into_iter()
-                    // State-migrations S2 (#2224 Decision C): each step's
-                    // covered range makes those versions readable too.
-                    .chain((!step_plans.is_empty()).then(|| {
-                        bynk_ts::TsExpr::Array {
-                            items: step_plans
-                                .iter()
-                                .map(|s| bynk_ts::TsExpr::Array {
-                                    items: vec![
-                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(s.lo.to_string())),
-                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
-                                            s.from.to_string(),
-                                        )),
-                                    ],
-                                    multiline: false,
-                                })
-                                .collect(),
-                            multiline: false,
-                        }
-                    }))
-                    .collect(),
-                },
-                None,
-            ));
-        }
-        // State-migrations S2 (#2224 Decision D): a record a step covers runs
-        // it first; everything below reads the step's output.
-        let src = if step_plans.is_empty() {
-            "stored"
-        } else {
-            let as_ty = |expr: bynk_ts::TsExpr, ty: bynk_ts::TsType| bynk_ts::TsExpr::As {
-                expr: Box::new(bynk_ts::TsExpr::As {
-                    expr: Box::new(expr),
-                    ty: bynk_ts::TsType::named("unknown"),
-                }),
-                ty,
-            };
-            stmts.push(bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::Ident("__src".to_string()),
-                None,
-                as_ty(
-                    bynk_ts::TsExpr::Call {
-                        callee: Box::new(bynk_ts::TsExpr::Ident(migrate_fn.clone())),
-                        args: vec![as_ty(
-                            bynk_ts::TsExpr::Ident("stored".to_string()),
-                            bynk_ts::TsType::named("globalThis.Record<string, unknown>"),
-                        )],
-                    },
-                    bynk_ts::TsType::named(state_ty.clone()),
-                ),
-                None,
-            ));
-            "__src"
-        };
-        stmts.push(bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident("__zero".to_string()),
-            None,
-            bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
-                args: Vec::new(),
-            },
-            None,
-        ));
-        // Track §3.4 (Decision E): name, once per isolate, any stored key the
-        // definition no longer declares. It stays in `__merged` and so is
-        // written back on commit, never deleted.
-        stmts.push(bynk_ts::TsStmt::expr_stmt(
-            bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Ident(
-                    "__reportUnknownStoredKeys".to_string(),
-                )),
-                args: vec![
-                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                    bynk_ts::TsExpr::Ident(src.to_string()),
-                    bynk_ts::TsExpr::Ident("__zero".to_string()),
-                ],
-            },
-            None,
-        ));
-        stmts.push(bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident("__merged".to_string()),
-            None,
-            bynk_ts::TsExpr::object_entries(vec![
-                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("__zero".to_string())),
-                bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(src.to_string())),
-            ]),
-            None,
-        ));
-        if has_rehydrate {
-            stmts.push(bynk_ts::TsStmt::expr_stmt(
-                bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident(rehydrate_fn.clone())),
-                    args: vec![
-                        bynk_ts::TsExpr::Ident("__merged".to_string()),
-                        bynk_ts::TsExpr::Ident(src.to_string()),
-                    ],
-                },
-                None,
-            ));
-        }
-        stmts.push(bynk_ts::TsStmt::return_stmt(
-            Some(bynk_ts::TsExpr::Ident("__merged".to_string())),
-            None,
-        ));
-        stmts
-    };
-    let load_state_method = bynk_ts::TsClassMethod {
-        name: "loadState".to_string(),
-        private: true,
-        is_async: true,
-        params: Vec::new(),
-        return_type: Some(bynk_ts::TsType::named_with_args(
-            "globalThis.Promise",
-            vec![bynk_ts::TsType::named(state_ty.clone())],
-        )),
-        doc: None,
-        body: load_state_body,
-    };
+    emit_agent_load_commit_state(
+        &mut out,
+        a,
+        &effective_fields,
+        &AgentLoadFns {
+            zero_fn: &zero_fn,
+            rehydrate_fn: &rehydrate_fn,
+            encode_fn: &encode_fn,
+            migrate_fn: &migrate_fn,
+            has_rehydrate,
+            step_plans: &step_plans,
+            agent_versions: &agent_versions,
+        },
+        commons,
+        ctx,
+        source_text,
+    );
     let class_depth = 0;
-    out.push_str(&bynk_ts::print_class_method(
-        &load_state_method,
-        class_depth,
-    ));
-    writeln!(out).unwrap();
-    // Arc C, slice 22 (#1373): closes step (9)'s own third sub-slice by
-    // landing the deferred remainder, `commitState` (#1371's own `loadState`
-    // landed the sub-slice's other half). `record_span` is a documented
-    // no-op when a `LowerCtx` has no attached builder (`emitter.rs`'s own
-    // doc), and neither the invariant nor the transition `LowerCtx` below
-    // is ever given one (`LowerCtx::new(...)`, never `.with_source_map(...)`
-    // — `emit_agent`'s own local `source_map` binding isn't threaded into
-    // either) — confirmed directly, not assumed, before writing this
-    // comment. So despite the grounding pass's own earlier caution that
-    // `commitState` would need the same sub-builder/merge care #1352/#1353
-    // established, it genuinely does not: there is no source map being
-    // written to here, today or after this conversion, so there is nothing
-    // to preserve. Each invariant's/transition's own hoisted pre-statements
-    // and predicate expression stay opaque (`lower.rs`'s own permanently-
-    // excluded general expression lowering, ADR
-    // `arc-c-lower-rs-permanent-exclusion`) — the hoisted lines as their own
-    // `TsStmt::Raw` (indent baked in manually, since `Raw` prints verbatim
-    // with none of its own — depth 2 for an invariant's own top-level
-    // check, depth 3 for a transition's own check nested inside the
-    // `if (__prior !== undefined)` block), the predicate wrapped in a real
-    // `Unary`/`Paren` condition — `!({pred})`, `pred` itself still one
-    // opaque `Ident` leaf (#1539: the same `Unary{Not, Paren(Ident(pred))}`
-    // shape `contract_guard_if_stmt`, above, already builds for its own
-    // opaque predicate; this site used to spell the whole thing as one
-    // `TsExpr::Ident(format!("!({pred})"))` string instead of the equivalent
-    // real node). Everything else — the `if`/`console.error`/`throw`
-    // wrapper, the transition prologue — is real: nothing here needs the
-    // general expression lowerer at all.
-    let commit_state_body = {
-        // Review of #1374: the hoisted-statement `Raw` indent is derived
-        // from `class_depth` rather than hardcoded — a hoisting predicate
-        // is untested by the fixture corpus today (every real `@invariant`/
-        // `transition` fixture's own predicate hoists nothing), so an
-        // un-derived literal here would have been silently wrong the day a
-        // future caller printed this method at a non-zero depth, with
-        // nothing but a fixture no one has written yet to catch it.
-        let build_violation_check = |name: &str,
-                                     declaration: &str,
-                                     location: &str,
-                                     pred: String,
-                                     pre_stmts: &[String],
-                                     hoist_depth: usize| {
-            let hoist_indent = "  ".repeat(hoist_depth);
-            let mut stmts: Vec<bynk_ts::TsStmt> = pre_stmts
-                .iter()
-                .map(|s| bynk_ts::TsStmt::raw(format!("{hoist_indent}{s}\n"), None))
-                .collect();
-            stmts.push(bynk_ts::TsStmt::if_stmt(
-                bynk_ts::TsExpr::Unary {
-                    op: bynk_ts::TsUnaryOp::Not,
-                    expr: Box::new(bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Ident(
-                        pred,
-                    )))),
-                },
-                bynk_ts::TsStmt::block(
-                    vec![
-                        bynk_ts::TsStmt::expr_stmt(
-                            bynk_ts::TsExpr::Call {
-                                callee: Box::new(bynk_ts::TsExpr::Ident(
-                                    "globalThis.console.error".to_string(),
-                                )),
-                                args: vec![
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(format!(
-                                        "InvariantViolation {}.{name}",
-                                        a.name.name
-                                    ))),
-                                    bynk_ts::TsExpr::object(vec![
-                                        (
-                                            "agent".to_string(),
-                                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                                a.name.name.clone(),
-                                            )),
-                                        ),
-                                        (
-                                            "invariant".to_string(),
-                                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                                name.to_string(),
-                                            )),
-                                        ),
-                                    ]),
-                                ],
-                            },
-                            None,
-                        ),
-                        bynk_ts::TsStmt::throw_stmt(
-                            bynk_ts::TsExpr::Call {
-                                callee: Box::new(bynk_ts::TsExpr::Ident(
-                                    "__invariantViolation".to_string(),
-                                )),
-                                args: vec![
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                        declaration.to_string(),
-                                    )),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(location.to_string())),
-                                ],
-                            },
-                            None,
-                        ),
-                    ],
-                    None,
-                ),
-                None,
-            ));
-            stmts
-        };
-        let mut stmts: Vec<bynk_ts::TsStmt> = Vec::new();
-        // v0.80 (§14): evaluate each invariant against the proposed state `s`
-        // before the write. A violation throws `InvariantViolation` *before*
-        // `storage.put`, so the offending commit never persists
-        // (non-persistence of the offending commit — not whole-handler
-        // rollback). The refusal is logged with the agent type and
-        // invariant name (never the key — see ADR 0107) so it is
-        // distinguishable from a crash in the logs.
-        if !a.invariants.is_empty() {
-            let field_names: HashSet<String> = effective_fields
-                .iter()
-                .map(|f| f.name.name.clone())
-                .collect();
-            for inv in &a.invariants {
-                let mut cx = LowerCtx::new(
-                    ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
-                    BodyMode::Invariant {
-                        name: "s".to_string(),
-                        fields: field_names.clone(),
-                    },
-                );
-                let mut pre = Pre::new();
-                let pred = pre.lower(&inv.predicate, &mut cx);
-                stmts.extend(build_violation_check(
-                    &inv.name.name,
-                    "invariant",
-                    &declaration_location(ctx, source_text, inv.name.span),
-                    pred,
-                    pre.stmts(),
-                    class_depth + 2,
-                ));
-            }
-        }
-        // v0.116 (testing track slice 4): step invariants — evaluate each
-        // `transition` against the pre-/post-commit state pair. The old
-        // state is still in storage (this method performs the `put`), so
-        // reading it here yields the pre-commit snapshot; `undefined` is the
-        // genesis commit, which has no prior state to transition from and is
-        // skipped (snapshot invariants above still apply). `old`/`new` are
-        // lowered to `__old`/`__new` (`new` is a JS reserved word). A
-        // violation throws the same `InvariantViolation`-family fault,
-        // before the write.
-        if !a.transitions.is_empty() {
-            let mut transition_body = vec![
-                bynk_ts::TsStmt::const_stmt(
-                    bynk_ts::TsBindingName::Ident("__old".to_string()),
-                    None,
-                    bynk_ts::TsExpr::object_entries(vec![
-                        bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Call {
-                            callee: Box::new(bynk_ts::TsExpr::Ident(zero_fn.clone())),
-                            args: Vec::new(),
-                        }),
-                        bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident(
-                            "__prior".to_string(),
-                        )),
-                    ]),
-                    None,
-                ),
-                bynk_ts::TsStmt::const_stmt(
-                    bynk_ts::TsBindingName::Ident("__new".to_string()),
-                    None,
-                    bynk_ts::TsExpr::Ident("s".to_string()),
-                    None,
-                ),
-            ];
-            // #1649: the prior state is stored in the wire shape, so decode it
-            // the way `loadState` does before a predicate reads `old`. Before
-            // #1649 this read was raw and unvalidated.
-            if has_rehydrate {
-                transition_body.insert(
-                    1,
-                    bynk_ts::TsStmt::expr_stmt(
-                        bynk_ts::TsExpr::Call {
-                            callee: Box::new(bynk_ts::TsExpr::Ident(rehydrate_fn.clone())),
-                            args: vec![
-                                bynk_ts::TsExpr::Ident("__old".to_string()),
-                                bynk_ts::TsExpr::Ident("__prior".to_string()),
-                            ],
-                        },
-                        None,
-                    ),
-                );
-            }
-            for tr in &a.transitions {
-                let mut cx = LowerCtx::new(
-                    ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
-                    BodyMode::Transition {
-                        old: "__old".to_string(),
-                        new: "__new".to_string(),
-                    },
-                );
-                let mut pre = Pre::new();
-                let pred = pre.lower(&tr.predicate, &mut cx);
-                transition_body.extend(build_violation_check(
-                    &tr.name.name,
-                    "transition",
-                    &declaration_location(ctx, source_text, tr.name.span),
-                    pred,
-                    pre.stmts(),
-                    class_depth + 3,
-                ));
-            }
-            stmts.push(bynk_ts::TsStmt::const_stmt(
-                bynk_ts::TsBindingName::Ident("__prior".to_string()),
-                None,
-                bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::VerbatimExpr(
-                        format!("this.state.storage.get<{state_ty}>"),
-                        bynk_ts::VerbatimOrigin::Emit,
-                    )),
-                    args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                        "state".to_string(),
-                    ))],
-                })),
-                None,
-            ));
-            stmts.push(bynk_ts::TsStmt::if_stmt(
-                bynk_ts::TsExpr::Binary {
-                    op: bynk_ts::TsBinaryOp::StrictNotEq,
-                    left: Box::new(bynk_ts::TsExpr::Ident("__prior".to_string())),
-                    right: Box::new(bynk_ts::TsExpr::Ident("undefined".to_string())),
-                },
-                bynk_ts::TsStmt::block(transition_body, None),
-                None,
-            ));
-        }
-        stmts.push(bynk_ts::TsStmt::expr_stmt(
-            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Ident("this.state.storage.put".to_string())),
-                args: vec![
-                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("state".to_string())),
-                    // #1649: the wire shape, the same shape `loadState` decodes.
-                    // State-migrations S1 (#2211, Decision D): with the schema
-                    // lock, stamped with the class's version in the same `put`,
-                    // spread on so the state type is untouched. The commit does
-                    // not check the stored marker itself: it relies on every
-                    // caller having run `loadState` first, which faults a newer
-                    // record before any write. A future path that commits
-                    // without loading would overwrite a newer record silently,
-                    // so it must check `__v` too (#2213 review).
-                    {
-                        let payload = if has_rehydrate {
-                            bynk_ts::TsExpr::Call {
-                                callee: Box::new(bynk_ts::TsExpr::Ident(encode_fn.clone())),
-                                args: vec![bynk_ts::TsExpr::Ident("s".to_string())],
-                            }
-                        } else {
-                            bynk_ts::TsExpr::Ident("s".to_string())
-                        };
-                        match &agent_versions {
-                            Some(v) => bynk_ts::TsExpr::object_entries(vec![
-                                bynk_ts::TsObjectEntry::Spread(payload),
-                                bynk_ts::TsObjectEntry::Prop(
-                                    "__v".to_string(),
-                                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
-                                        v.version.to_string(),
-                                    )),
-                                ),
-                            ]),
-                            None => payload,
-                        }
-                    },
-                ],
-            })),
-            None,
-        ));
-        stmts
-    };
-    let commit_state_method = bynk_ts::TsClassMethod {
-        name: "commitState".to_string(),
-        private: true,
-        is_async: true,
-        params: vec![bynk_ts::TsParam {
-            name: "s".to_string(),
-            ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-            optional: false,
-        }],
-        return_type: Some(bynk_ts::TsType::named_with_args(
-            "globalThis.Promise",
-            vec![bynk_ts::TsType::named("void")],
-        )),
-        doc: None,
-        body: commit_state_body,
-    };
-    out.push_str(&bynk_ts::print_class_method(
-        &commit_state_method,
-        class_depth,
-    ));
-    writeln!(out).unwrap();
     // 3) Handlers.
     let cell_names: HashSet<String> = effective_fields
         .iter()
