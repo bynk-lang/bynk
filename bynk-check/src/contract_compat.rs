@@ -401,7 +401,7 @@ fn shape_of(
         },
         TypeRef::HttpResult(a, _) => Shape::HttpResult(Box::new(go(a))),
         TypeRef::ValidationError(_) => Shape::Named("ValidationError".into()),
-        TypeRef::JsonError(_) => Shape::Named("JsonError".into()),
+        TypeRef::DecodeError(_) => Shape::Named("DecodeError".into()),
         TypeRef::QueueResult(_) => Shape::Named("QueueResult".into()),
         TypeRef::Asset(_) => Shape::Named("Asset".into()),
         TypeRef::RequestHeaders(_) => Shape::Named("RequestHeaders".into()),

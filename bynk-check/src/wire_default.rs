@@ -268,7 +268,7 @@ fn wire_in(
         | TypeRef::Connection(..)
         | TypeRef::History(..)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_)
         | TypeRef::Fn(..) => Err(DefaultReason::from(
             "this field type is not wire-representable".to_string(),
@@ -670,7 +670,7 @@ fn value_in(
         // applies a user generic (`App`), and the types with no wire form
         // (`Effect`, `HttpResult`, `QueueResult`, `Query`, `Stream`,
         // `Connection`, `History`, `Fn`, `Asset`, `RequestHeaders`,
-        // `TokenClaims`, `BoundaryRejection`, `ValidationError`, `JsonError`
+        // `TokenClaims`, `BoundaryRejection`, `ValidationError`, `DecodeError`
         // and `Unit`).
         _ => Err(DefaultReason::from(
             "this field type cannot carry a default".to_string(),

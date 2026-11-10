@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkCmpFloat, __bynkCmpSum } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -43,6 +44,8 @@ export interface BoardState {
 const __BoardRegistry = new __StateRegistry();
 function __zeroOfBoardState(): BoardState { return { jobs: {} }; }
 
+const __entryFieldsOfBoard = [{ name: "jobs", kind: "map" }] as const;
+
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) for (const __k of globalThis.Object.keys(s.jobs)) { const __r = __deserialise_Job((s.jobs[__k] as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); s.jobs[__k] = __r.value as unknown as (typeof s.jobs)[string]; }
   for (const __k of globalThis.Object.keys(s.jobs)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
@@ -62,15 +65,16 @@ export class Board {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
     __checkStoredLayout("Board", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBoardState();
-    __reportUnknownStoredKeys("Board", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBoardState(__merged, stored);
+    __reportUnknownStoredKeys("Board", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBoardState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BoardState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBoardState(s));
+    await __commitStored(this, this.state.storage, __encodeBoardState(s), __entryFieldsOfBoard);
   }
 
   async add(name: string, priority: Priority, due: number, score: number, div: number, deps: {}): globalThis.Promise<void> {

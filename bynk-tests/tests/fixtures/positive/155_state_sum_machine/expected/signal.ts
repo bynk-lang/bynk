@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkEq } from "./__bynk_runtime/equality.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -24,6 +25,8 @@ export interface SignalState {
 const __SignalRegistry = new __StateRegistry();
 function __zeroOfSignalState(): SignalState { return { colour: Light.Red }; }
 
+const __entryFieldsOfSignal = [] as const;
+
 function __rehydrateSignalState(s: SignalState, stored: SignalState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "colour")) { const __r = __deserialise_Light((s.colour as unknown as __JsonValue), "colour"); if (__r.tag === "Err") throw __rehydrationViolation("Signal", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).colour = __r.value as unknown as (typeof s)["colour"]; }
 }
@@ -42,15 +45,16 @@ export class Signal {
     const stored = await this.state.storage.get<SignalState>("state");
     if (stored === undefined) return __zeroOfSignalState();
     __checkStoredLayout("Signal", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSignalState();
-    __reportUnknownStoredKeys("Signal", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateSignalState(__merged, stored);
+    __reportUnknownStoredKeys("Signal", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateSignalState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: SignalState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeSignalState(s));
+    await __commitStored(this, this.state.storage, __encodeSignalState(s), __entryFieldsOfSignal);
   }
 
   async peek(deps: {}): globalThis.Promise<Result<void, string>> {

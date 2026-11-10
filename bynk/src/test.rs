@@ -18,7 +18,15 @@ use bynk_driver::test_runner::TestArgs;
 pub fn run(args: TestArgs) -> ExitCode {
     // #2207 (decision C): at a workspace root, test every member in order,
     // each under a header. Every member runs, and the run fails if any does.
-    if let Some(workspace) = bynk_driver::workspace_at(&args.input) {
+    // #3274: `--each` makes a manifest-less directory of projects the same.
+    let workspace = match bynk_driver::workspace_at_each(&args.input, args.each) {
+        Ok(w) => w,
+        Err(message) => {
+            eprintln!("bynk test: {message}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(workspace) = workspace {
         let workspace = match workspace {
             Ok(w) => w,
             Err(e) => {
@@ -58,6 +66,7 @@ pub fn run(args: TestArgs) -> ExitCode {
             let _ = std::io::Write::flush(&mut std::io::stdout());
             let member_args = TestArgs {
                 input: member,
+                each: false,
                 partial_selection: !filter.is_empty(),
                 ..args.clone()
             };

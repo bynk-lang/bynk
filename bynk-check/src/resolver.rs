@@ -139,7 +139,7 @@ pub struct MethodTable {
 
 /// Output of resolution: the AST plus the symbol tables the checker needs.
 pub struct ResolvedCommons {
-    pub commons: Commons,
+    pub commons: Arc<Commons>,
     /// Finding #10/#51: `Arc`-wrapped (not owned) so cloning this map — done
     /// once per synthetic per-handler `ResolvedCommons` during emission — is
     /// a pointer bump, not a deep copy of every declaration body in the unit.
@@ -164,7 +164,7 @@ pub struct ResolvedCommons {
     /// Agents declared in this context. Used to recognise the `Agent(key)`
     /// construction shape and the `agent_instance.handler(args)` method-call
     /// shape in handler bodies that mention other agents.
-    pub agents: HashMap<String, AgentDecl>,
+    pub agents: HashMap<String, Arc<AgentDecl>>,
     /// v0.91 (ADR 0116 D6): for each imported function name, the qualified unit
     /// it came from (`map` → `bynk.list`). Lets the checker flag deprecated
     /// first-party free functions at their call sites. Empty in single-file
@@ -442,12 +442,12 @@ impl ResolvedCommons {
     /// type or event (found during the events track, slice 0, spine #936).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        commons: Commons,
+        commons: Arc<Commons>,
         types: HashMap<String, Arc<TypeDecl>>,
         local_types: &HashMap<String, Arc<TypeDecl>>,
         fns: HashMap<String, Arc<FnDecl>>,
         methods: HashMap<String, MethodTable>,
-        agents: HashMap<String, AgentDecl>,
+        agents: HashMap<String, Arc<AgentDecl>>,
         local_events: &HashMap<String, EventDecl>,
         cross_context: CrossContextInfo,
         imported_from: HashMap<String, String>,
@@ -901,7 +901,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             })
             .collect();
         let resolved = ResolvedCommons {
-            commons,
+            commons: Arc::new(commons),
             types,
             fns,
             methods,
@@ -2024,7 +2024,7 @@ impl Gate<'_> {
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => {}
         }
     }
@@ -2779,7 +2779,7 @@ fn check_type_ref_resolves_in(
             check_type_ref_resolves_in(v, types, type_params, errors);
             check_keyable(k, types, type_params, errors, KeyRole::MapKey);
         }
-        TypeRef::ValidationError(_) | TypeRef::JsonError(_) => {}
+        TypeRef::ValidationError(_) | TypeRef::DecodeError(_) => {}
         TypeRef::Unit(_) => {}
     }
 }
@@ -3805,6 +3805,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Int"
                         | "Float"
                         | "Json"
+                        | "Yaml"
                         | "Duration"
                         | "Instant"
                         | "Stream"
@@ -3822,6 +3823,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     "Set" => &["empty", "of"],
                     // P4c (#2628): `decodeSql`, `decode` with SQLite's `0`/`1` flags.
                     "Json" => &["encode", "encodePlain", "decode", "decodeSql"],
+                    // #3214: decode only; there is no `Yaml.encode`.
+                    "Yaml" => &["decode"],
                     // v0.86 (ADR 0112): `Duration.millis(n)`.
                     "Duration" => &["millis"],
                     // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)`; K3

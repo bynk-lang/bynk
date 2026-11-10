@@ -2,7 +2,7 @@
 // commons demo.algo
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
 import { Code, Envelope } from "./shapes.js";
@@ -16,8 +16,8 @@ export function encode<T>(e: Envelope<T>, __codec_T: { encode: (v: T) => __JsonV
   return globalThis.JSON.stringify(__codecOf_Envelope(__codec_T).encode(e));
 }
 
-export function decode<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Envelope<T>, JsonError> {
-  return ((__s: string): Result<Envelope<T>, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codecOf_Envelope(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Envelope<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
+export function decode<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Envelope<T>, DecodeError> {
+  return ((__s: string): Result<Envelope<T>, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __codecOf_Envelope(__codec_T).decode(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as Envelope<T>); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })(s);
 }
 
 export function forward<T>(e: Envelope<T>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {

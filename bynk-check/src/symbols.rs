@@ -454,7 +454,7 @@ pub struct UnitTable {
     /// Per-context services (v0.5). Empty for commons.
     pub services: HashMap<String, ServiceDecl>,
     /// Per-context agents (v0.5). Empty for commons.
-    pub agents: HashMap<String, AgentDecl>,
+    pub agents: HashMap<String, Arc<AgentDecl>>,
     /// State-migrations S3 (#2248): the context's `removed agent`
     /// declarations, across its files.
     pub removed_agents: Vec<bynk_syntax::ast::RemovedAgentDecl>,
@@ -946,7 +946,9 @@ pub fn build_unit_table(
                             .with_label(prev.name.span, "previously declared here"),
                         );
                     } else {
-                        table.agents.insert(a.name.name.clone(), a.clone());
+                        table
+                            .agents
+                            .insert(a.name.name.clone(), Arc::new(a.clone()));
                     }
                 }
                 CommonsItem::Actor(a) => {
@@ -2377,7 +2379,7 @@ pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }

@@ -1711,7 +1711,7 @@ mod tests {
                 "type Result",
                 "type __BoundaryError",
                 "type __JsonValue",
-                "type JsonError",
+                "type DecodeError",
             ],
             "the shared bindings must be added once: {names:?}"
         );

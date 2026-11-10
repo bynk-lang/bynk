@@ -591,6 +591,16 @@ mod tests {
     }
 
     #[test]
+    fn yaml_decode_has_a_signature() {
+        // #3214: `Yaml.decode` reads the same table as `Json.decode`.
+        assert_eq!(
+            resolve_label("Yaml.decode", "context a.b\n", None).as_deref(),
+            Some("decode[T](s: String) -> Result[T, DecodeError]")
+        );
+        assert_eq!(resolve_label("Yaml.encode", "context a.b\n", None), None);
+    }
+
+    #[test]
     fn free_fn_and_capability_op_and_refined_labels() {
         let doc = "commons m {\n  fn add(a: Int, b: Int) -> Int { a }\n}\n";
         assert_eq!(

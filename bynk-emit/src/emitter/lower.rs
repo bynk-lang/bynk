@@ -2315,9 +2315,15 @@ fn lower_method_call(
         let m = format!("{var}.{}", id.name);
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
         return pre.finish(match method.name.as_str() {
+            // #3261: `put` over a key that already holds a connection closes the
+            // displaced one first, as `remove` does, so a held connection cannot
+            // be dropped unclosed. Re-putting the same connection under its own
+            // key (the same connection id) leaves it open.
             "put" => format!(
-                "({}, undefined)",
-                own_set(&m, &format!("String({})", a[0]), &format!("__connIdOf({})", a[1]))
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {2}; return undefined; }})()",
+                a[0],
+                a[1],
+                own_set(&m, "__k", "__new")
             ),
             "remove" => format!(
                 "(async () => {{ const __k = String({0}); const __cid = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} delete {m}[__k]; }} return undefined; }})()",
@@ -2418,6 +2424,22 @@ fn lower_method_call(
             }
             "upsert" if !idx_fields.is_empty() => {
                 idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
+            }
+            // #3261: on the bundle, `put` over a key that already holds a
+            // `Connection` closes the displaced `TestConnection` first, as
+            // `remove` does and as the Workers build does; re-putting the same
+            // connection under its own key leaves it open (compared by identity).
+            "put"
+                if cx
+                    .agent_store_map_value_ts(&id.name)
+                    .is_some_and(|v| v.starts_with("Connection<")) =>
+            {
+                format!(
+                    "(async () => {{ const __k = {0}; const __new = {1}; if (globalThis.Object.hasOwn({m}, __k) && {m}[__k] !== __new) {{ await {m}[__k].close(); }} {2}; return undefined; }})()",
+                    a[0],
+                    a[1],
+                    own_set(&m, "__k", "__new")
+                )
             }
             "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
@@ -2979,7 +3001,7 @@ fn lower_method_call(
     // Keyed on the recorded callee, not the method name. #2957: the error
     // tags are `as const` — `Err<E>` infers `E` from the literal, and a bare
     // `"Sql"` widens to `string`, so a match on `Err(Sql(e))` would not narrow
-    // and `e` would reach tsc as `JsonError | SqlError`.
+    // and `e` would reach tsc as `DecodeError | SqlError`.
     if let Some(Callee::D1Select {
         cap,
         row,
@@ -2994,7 +3016,7 @@ fn lower_method_call(
         } else {
             tys.intern(Ty::List(row))
         };
-        let decoder = json_decoder_fn(target, true, cx)
+        let decoder = json_decoder_fn(target, DecodeSource::Sql, cx)
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
@@ -4142,7 +4164,7 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
 /// `JSON.parse` + `deserialise_*`, mapping a parse failure to a `Malformed`
-/// JsonError and a BoundaryError to the uniform `kind`/`path`/`message`
+/// DecodeError and a BoundaryError to the uniform `kind`/`path`/`message`
 /// record (ADR 0047). Returns `None` when the receiver is not `Json` or the
 /// shape does not match, so the dispatcher falls through.
 ///
@@ -4170,6 +4192,19 @@ fn lower_json_codec_call(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
+    // #3214: `Yaml.decode[T](text)` is `Json.decode[T]` with the YAML parser in
+    // place of `JSON.parse`; the typed decode and its errors are the same.
+    if matches!(
+        cx.commons().callees.get(&e.id),
+        Some(Callee::Intrinsic { ns, .. }) if *ns == YAML
+    ) && args.len() == 1
+        && method.name == "decode"
+        && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+        && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
+    {
+        let arg = pre.lower(&args[0], cx);
+        return Some(pre.finish(format!("({decoder})({arg})")));
+    }
     if matches!(
         cx.commons().callees.get(&e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
@@ -4183,7 +4218,15 @@ fn lower_json_codec_call(
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(t, method.name == "decodeSql", cx)
+            && let Some(decoder) = json_decoder_fn(
+                t,
+                if method.name == "decodeSql" {
+                    DecodeSource::Sql
+                } else {
+                    DecodeSource::Json
+                },
+                cx,
+            )
         {
             let arg = pre.lower(&args[0], cx);
             return Some(pre.finish(format!("({decoder})({arg})")));
@@ -4193,12 +4236,28 @@ fn lower_json_codec_call(
     text.map(|expr| pre.finish(expr))
 }
 
-/// The arrow function that decodes JSON text into `t`:
-/// `((__s: string): Result<T, JsonError> => …)`, for `Json.decode` /
-/// `Json.decodeSql` (`sql`: SQLite's `0`/`1` flags read as `Bool`) and for the
-/// typed `D1` reads (#2865), which apply it to the rows `all`/`first` return.
-/// `None` when `t` has no TS rendering.
-fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -> Option<String> {
+/// Which text front end feeds a typed decode.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DecodeSource {
+    /// `Json.decode`: the text is JSON.
+    Json,
+    /// `Json.decodeSql` and the typed `D1` reads: JSON, with SQLite's `0`/`1` flags read as `Bool`.
+    Sql,
+    /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
+    Yaml,
+}
+
+/// The arrow function that decodes text into `t`:
+/// `((__s: string): Result<T, DecodeError> => …)`, for `Json.decode` /
+/// `Json.decodeSql` / `Yaml.decode` (`source`) and for the typed `D1` reads
+/// (#2865), which apply it to the rows `all`/`first` return. `None` when `t`
+/// has no TS rendering.
+fn json_decoder_fn(
+    t: bynk_check::checker::TyId,
+    source: DecodeSource,
+    cx: &mut LowerCtx,
+) -> Option<String> {
+    let sql = source == DecodeSource::Sql;
     let tys = cx.commons().tys();
     let rigid = super::codec::has_var(t, cx.commons());
     let tref = if rigid {
@@ -4221,7 +4280,7 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     if cx.records_codec_roots() {
         note_ground_roots(t, cx);
     }
-    // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
+    // #914: the wrapper below names `Result`, `JsonValue` and `DecodeError`
     // in its own signature and body, whichever arm the inner deserialiser
     // takes — including the delegating ones, which record nothing. A
     // module that curates its import list (the test-scaffold modules)
@@ -4242,11 +4301,23 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     } else {
         String::new()
     };
+    // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
+    // are already positioned `DecodeError`s.
+    let parse = if source == DecodeSource::Yaml {
+        cx.runtime_use().note_yaml();
+        "const __p = __bynkYamlParse(__s); \
+         if (__p.tag === \"Err\") return Err(__p.error); \
+         const __j: __JsonValue = __p.value; "
+            .to_string()
+    } else {
+        "let __j: __JsonValue; \
+         try { __j = globalThis.JSON.parse(__s) as __JsonValue; } \
+         catch (__e) { return Err({ kind: \"Malformed\", path: \"$\", message: String(__e) }); } "
+            .to_string()
+    };
     Some(format!(
-        "(__s: string): Result<{ts}, JsonError> => {{ \
-         let __j: __JsonValue; \
-         try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
-         catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
+        "(__s: string): Result<{ts}, DecodeError> => {{ \
+         {parse}\
          {sql_bools}const __r = {des}; \
          if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
          const __be = __r.error; \
@@ -7743,7 +7814,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Actor(_)
         | Ty::ActorSum(_)
         | Ty::Var(_) => EqualityLowering::Structural,

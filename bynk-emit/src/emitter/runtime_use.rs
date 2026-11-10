@@ -12,7 +12,7 @@
 //!   #878), emitted by a `messages` bundle's `render`;
 //! - the boundary-codec group (`Ok`, `Err`, `Result`, `BoundaryError`, #914),
 //!   which an *inlined* deserialiser builds directly;
-//! - the JSON-codec group (`Ok`, `Err`, `Result`, `JsonValue`, `JsonError`,
+//! - the JSON-codec group (`Ok`, `Err`, `Result`, `JsonValue`, `DecodeError`,
 //!   #914), which the `Json.decode[T]` wrapper names in its own signature and
 //!   body, independently of which arm the inner deserialiser takes.
 //!
@@ -98,6 +98,8 @@ pub struct RuntimeUse {
     time_ops: Cell<bool>,
     /// #2867: an `IsoDate` refinement check was emitted.
     iso_date: Cell<bool>,
+    /// #3214: the module lowers `Yaml.decode[T]` and imports the YAML parser.
+    yaml: Cell<bool>,
     /// #2640: the module references the `par` block's join, `__bynkSettleAll`.
     settle_all: Cell<bool>,
     /// #2683: the module references `e.within(d)`'s race, `__bynkWithin`.
@@ -202,6 +204,12 @@ impl RuntimeUse {
         if matches!(pred, bynk_syntax::ast::PredKind::IsoDate) {
             self.iso_date.set(true);
         }
+    }
+
+    /// #3214: record that the module lowers `Yaml.decode[T]`, so the YAML parser
+    /// module is imported (and emitted); no other module pays for it.
+    pub fn note_yaml(&self) {
+        self.yaml.set(true);
     }
 
     /// Record that the module references the `Instant` ISO-8601 helpers (#2592).
@@ -389,7 +397,7 @@ impl RuntimeUse {
     }
 
     /// Record that the module emits the `Json.decode[T]` wrapper, whose
-    /// signature and body name `Result`, `JsonValue` and `JsonError` regardless
+    /// signature and body name `Result`, `JsonValue` and `DecodeError` regardless
     /// of which arm the inner deserialiser takes.
     pub fn note_json_codec(&self) {
         self.json_codec.set(true);
@@ -464,6 +472,11 @@ impl RuntimeUse {
         self.iso_date.get()
     }
 
+    /// Whether the YAML parser must be imported (#3214).
+    pub fn yaml(&self) -> bool {
+        self.yaml.get()
+    }
+
     /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).
     pub fn time_ops(&self) -> bool {
         self.time_ops.get()
@@ -510,7 +523,7 @@ impl RuntimeUse {
         self.boundary_codec.get()
     }
 
-    /// Whether the `Ok` / `Err` / `Result` / `JsonValue` / `JsonError` group
+    /// Whether the `Ok` / `Err` / `Result` / `JsonValue` / `DecodeError` group
     /// must be imported.
     pub fn json_codec(&self) -> bool {
         self.json_codec.get()

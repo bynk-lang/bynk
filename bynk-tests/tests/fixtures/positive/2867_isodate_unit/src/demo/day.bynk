@@ -16,11 +16,11 @@ fn leapDay() -> Day {
   "2028-02-29"
 }
 
-fn decodeDay(json: String) -> Result[Day, JsonError] {
+fn decodeDay(json: String) -> Result[Day, DecodeError] {
   Json.decode[Day](json)
 }
 
-fn decodeBooking(json: String) -> Result[Booking, JsonError] {
+fn decodeBooking(json: String) -> Result[Booking, DecodeError] {
   Json.decode[Booking](json)
 }
 

@@ -8,6 +8,7 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
+import { commitStored, readStored } from "./entries.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
@@ -24,6 +25,7 @@ export {
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
   callService as __callService,
+  commitStored as __commitStored,
   checkStoredLayout as __checkStoredLayout,
   checkStoredSchemaVersion as __checkStoredSchemaVersion,
   connIdOf as __connIdOf,
@@ -54,6 +56,7 @@ export {
   makeTestState as __makeTestState,
   matchPath as __matchPath,
   mediaTypeMatches as __mediaTypeMatches,
+  readStored as __readStored,
   requestHeaders as __requestHeaders,
   queryObject as __queryObject,
   queryString as __queryString,

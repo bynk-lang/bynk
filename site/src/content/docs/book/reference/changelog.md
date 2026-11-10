@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.534**.
+written against **v0.539**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,22 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.539.3** | `cargo xtask bench` also times a body-only edit (`lsp_body_edit`), the edit an incremental analysis is meant to make cheap, next to the signature-level one |
+| **v0.539.2** | `cargo xtask bench` also measures a "linked" project shape (contexts that consume each other, larger handler bodies) and checks the scheduler yardstick, p95 over 250 ms at 200 contexts on either shape, in each release record |
+| **v0.539.1** | A differential oracle for the language server's coming analysis memo: a canonical report of a project analysis, a stateful `analyse_project_memoised` entry point that delegates for now, and a CI test comparing it with a fresh analysis over the examples and seeded random edit sequences |
+| **v0.539.0** | `bynk check --each` and `bynk test --each` run each project directly inside a directory with no `bynk.toml`, as a workspace root runs its members |
+| **v0.538.1** | `cargo xtask bench` also measures a "linked" project shape (contexts that consume each other, larger handler bodies) and checks the scheduler yardstick, p95 over 250 ms at 200 contexts on either shape, in each release record |
+| **v0.538.0** | A `Yaml.decode[T](text)` static reads a safe YAML 1.2 subset through the same typed decode as `Json.decode`, with positioned refusals and `DecodeError` paths |
+| **v0.537.0** | On a held `Map[K, Connection]`, `put` over a key that already holds a connection now closes the displaced connection first, as `remove` does, on both Workers and `bynk test`; putting back the connection the key already holds closes nothing ([#3261](https://github.com/bynk-lang/bynk/issues/3261)) |
+| **v0.536.1** | `BYNK_PHASE_TIMING=1` makes an analysis round report its time by R3.13 query level (file, unit, definition, project), and `cargo xtask bench` records it per release from the language server |
+| **v0.536.0** | The decode error type is renamed from `JsonError` to `DecodeError`; `JsonError` stays as a deprecated alias with an auto-fix |
+| **v0.535.0** | An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2) |
+| **v0.534.7** | The emitter writes an agent class's Workers dispatch and websocket-open dispatch in `emit_agent_dispatch`, as part of splitting `emit_agent` (#3167) |
+| **v0.534.6** | The checker registers a project's files for error attribution once instead of once per unit, removing a units-times-files cost (500 contexts: 18% fewer instructions in `bynk check`) |
+| **v0.534.5** | The language server remembers each file's owning unit for the doc-link hint scan instead of re-parsing every file on every round, about 7% off a 200-context edit |
+| **v0.534.4** | The checker shares a unit's parsed declarations and agents by reference instead of deep-cloning them for every agent and handler, so a project check is up to a third faster (500 contexts: a language-server edit 521 ms to 344 ms) |
+| **v0.534.3** | The editor-latency budget (language-server edit-to-diagnostics p95 under 100 ms on the 50-context project) is stated in the benchmark README and the `keystroke_latency` row, and `cargo xtask bench` warns when a record breaches it |
+| **v0.534.2** | `cargo xtask check-pending` rejects a pending file whose `changelog` is wrapped in quotes, which the stamp would have copied into the changelog row |
 | **v0.534.1** | "The emitter lowers an agent class's handler methods in `emit_agent_handlers`, as part of splitting `emit_agent` (#3167)" |
 | **v0.534.0** | `bynk deploy revert` refuses a rollback to a build that writes an older storage layout over stored data (per-entry storage, slice 5b) |
 | **v0.533.0** | A `system` case can drive an `Oidc` route as `by WrongAlgorithm` (an `alg: none` token and an HS256 token keyed with the public key) and `by NoSubject` (an empty and a missing `sub`), each expected to read `Rejected(Unauthorized)` |
@@ -36,7 +52,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 | **v0.532.2** | "`bynk check`, `bynk test` and `bynk compile` treat a subdirectory with its own `bynk.toml` as a separate project, skipping it with a note, and refuse a directory that is no project but holds one or more, naming them and suggesting a `[workspace]` root (#3242)" |
 | **v0.532.1** | `bynk explain` gains written explanations for `bynk.generics.polymorphic_recursion` and `bynk.generics.recursive_generic_at_boundary` |
 | **v0.532.0** | An agent instance runs one handler at a time, so a handler that awaits another agent is no longer interleaved with a second handler and no longer loses updates; re-entrant calls fault `ReentrantAgentCall`, long waits fault `AgentBusy` |
-| **v0.531.3** | '`bynk dev` honours an explicit `--inspect-port` for a single context, gives a lone worker a free inspector port so sessions started together no longer collide on 9229, and reports a taken inspector port itself' |
+| **v0.531.3** | `bynk dev` honours an explicit `--inspect-port` for a single context, gives a lone worker a free inspector port so sessions started together no longer collide on 9229, and reports a taken inspector port itself |
 | **v0.531.2** | "`cargo xtask bench-runtime` measures compiled Bynk against hand-written TypeScript twins (bundle size, start-up, request latency) under workerd, and records the results per release" |
 | **v0.531.1** | "The emitter builds an agent's state record in `emit_agent_state_record` and writes its `loadState` and `commitState` methods together in `emit_agent_load_commit_state`, as part of splitting `emit_agent` (#3167)" |
 | **v0.531.0** | "`by` is a contextual keyword: an ordinary name (a parameter, a binding, a field) everywhere except its clause positions, so `on call bump(by: Int)` parses" |
@@ -44,7 +60,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 | **v0.530.0** | A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`) |
 | **v0.529.0** | `bynk migrate sweep` reports storage-layout progress once a deployed Worker writes a layout beyond the original one (per-entry storage, slice 5a) |
 | **v0.528.4** | `bynk explain` gains a written explanation for `bynk.parse.bare_expression_statement` |
-| **v0.528.3** | '`bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229' |
+| **v0.528.3** | `bynk test --against dev` gives its `bynk dev` session its own inspector port, so concurrent sessions no longer fight over 9229 |
 | **v0.528.2** | `cargo xtask bench` measures `bynk check` and the language server's edit-to-diagnostics time on a synthetic project, recorded per release in `design/benchmarks/` |
 | **v0.528.1** | "The emitter classifies an agent's `store` fields once, in a named `AgentStoreLayout`, as the first step of splitting `emit_agent` (#3167)" |
 | **v0.528.0** | The runtime gains the per-entry storage primitives (batched, ranged and transactional storage, the key layout, a staged write-set and the wholesale split); nothing emitted uses them yet (per-entry storage, slice 1) |

@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkDistinct, __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkLeftJoin } from "../__bynk_runtime/keys.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -78,6 +79,8 @@ export interface LogState {
 const __LogRegistry = new __StateRegistry();
 function __zeroOfLogState(): LogState { return { visits: {}, labels: {}, regions: {}, trail: [] }; }
 
+const __entryFieldsOfLog = [{ name: "visits", kind: "map" }, { name: "labels", kind: "map" }, { name: "regions", kind: "map" }, { name: "trail", kind: "log" }] as const;
+
 function __rehydrateLogState(s: LogState, stored: LogState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "visits")) for (const __k of globalThis.Object.keys(s.visits)) { const __r = __deserialise_Visit((s.visits[__k] as unknown as __JsonValue), "visits"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); s.visits[__k] = __r.value as unknown as (typeof s.visits)[string]; }
   for (const __k of globalThis.Object.keys(s.visits)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "visits", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
@@ -102,15 +105,16 @@ export class Log {
     const stored = await this.state.storage.get<LogState>("state");
     if (stored === undefined) return __zeroOfLogState();
     __checkStoredLayout("Log", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLogState();
-    __reportUnknownStoredKeys("Log", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateLogState(__merged, stored);
+    __reportUnknownStoredKeys("Log", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateLogState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: LogState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeLogState(s));
+    await __commitStored(this, this.state.storage, __encodeLogState(s), __entryFieldsOfLog);
   }
 
   async visit(k: string, region: Region, code: number, n: number, deps: {}): globalThis.Promise<void> {

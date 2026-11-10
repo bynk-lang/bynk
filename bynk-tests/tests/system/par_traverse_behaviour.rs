@@ -97,7 +97,7 @@ function doubles() {
 
 function room() {
   const stored = { items: { a: 1, b: 2, c: 3 }, __v: 1 };
-  return new Room({ storage: { get: async () => stored, put: async () => {} } });
+  return new Room({ storage: { get: async () => stored, put: async () => {}, delete: async () => 0, list: async () => new Map(), transaction: async (f) => f({ put: async () => {}, delete: async () => 0 }) } });
 }
 
 // Each subject runs the operation over the elements 1, 2, 3, in that order.

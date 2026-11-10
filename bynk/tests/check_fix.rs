@@ -352,6 +352,32 @@ fn a_workspace_root_fixes_every_member() {
     }
 }
 
+/// #3274: `--each` over a manifest-less directory of projects fixes each one,
+/// as a workspace root does.
+#[test]
+fn each_fixes_every_project_of_a_directory() {
+    let root = scratch("each");
+    for name in ["a", "b"] {
+        write(
+            &root.join(format!("{name}/bynk.toml")),
+            &format!("[project]\nname = \"{name}\"\n"),
+        );
+        write(&root.join(format!("{name}/src/app/unused.bynk")), UNUSED);
+    }
+    let (code, err) = run(&bynk(), &root, &["check", "--each", "--fix"], &[]);
+    assert_eq!(code, 0, "{err}");
+    for name in ["a", "b"] {
+        assert_eq!(
+            read(&root.join(format!("{name}/src/app/unused.bynk"))),
+            UNUSED_FIXED
+        );
+        assert!(
+            err.contains(&format!("fixed: {name}/src/app/unused.bynk (1 edit)")),
+            "{err}"
+        );
+    }
+}
+
 #[test]
 fn without_fix_nothing_is_written() {
     let root = scratch("no-flag");

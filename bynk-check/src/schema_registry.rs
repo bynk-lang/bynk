@@ -113,7 +113,7 @@ fn canon_type(t: &TypeRef) -> String {
         TypeRef::Connection(t, _) => format!("Connection[{}]", canon_type(t)),
         TypeRef::History(t, _) => format!("History[{}]", canon_type(t)),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::Unit(_) => "()".to_string(),
         TypeRef::Fn(params, ret, _) => format!(
             "({}) -> {}",

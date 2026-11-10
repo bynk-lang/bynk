@@ -1,0 +1,8 @@
+commons settings
+
+// #3214: with no type argument and no expected `Result[T, DecodeError]`, the
+// target type cannot be inferred.
+fn load(text: String) -> Int {
+  let r = Yaml.decode(text)
+  0
+}

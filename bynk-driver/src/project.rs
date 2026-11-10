@@ -2026,7 +2026,7 @@ fn check_unit_files(
         exec_plan.extend(&files)
     };
     let plan_failed = !plan_errors.is_empty();
-    errors.extend_attributed_by_span(parsed, plan_errors);
+    errors.extend_attributed(plan_errors);
     if mode == Mode::Analyse {
         // #3142: an analysis keeps just the D1 SQL sites, for `bynk test
         // --mutate`; emission below is build-only.
@@ -2436,6 +2436,9 @@ fn run_checks(
         parsed.retain(|pf| !matches!(pf.kind(), UnitKind::Test | UnitKind::Integration));
     }
     let parsed = parsed;
+    // #3243: `parsed` is final here. Register its files once, so the per-unit
+    // attribution in `check_unit_files` does not re-register every file for every unit.
+    errors.register_parsed(&parsed);
 
     // -- 3. Group by (name, kind) and validate per-directory consistency.
     //       P5.2 (`design/tracks/semantics-in-the-checker.md` §6):

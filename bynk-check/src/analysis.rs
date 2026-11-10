@@ -375,6 +375,7 @@ pub fn analyse_project_with_policy(
     let mut exprs = ExprTypeSink::new();
     let mut snapshots: Vec<(PathBuf, String)> = Vec::new();
 
+    crate::phase_timing::begin(crate::phase_timing::Level::File);
     // -- 1. Discovery. --
     let file_lists = match project_model::phase_discovery(&trees, &excludes, &mut errors) {
         Ok(files) => files,
@@ -392,6 +393,7 @@ pub fn analyse_project_with_policy(
             Err(()) => return bailed(errors, snapshots, hints, locals, exprs, requirements, tys),
         };
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Unit);
     // -- 2a. #2223: fold the project's path dependencies in. --
     if packages {
         crate::packages::apply_graph(
@@ -406,6 +408,9 @@ pub fn analyse_project_with_policy(
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --
     normalize_service_defaults(&mut parsed);
     let parsed = parsed;
+    // #3243: `parsed` is final here. Register its files once, so the per-unit
+    // attribution below does not re-register every file for every unit.
+    errors.register_parsed(&parsed);
 
     // -- 3. Group. P5.2: closes category 6 of this module's own residual-gap
     //       accounting (see doc comment above) — `phase_group` now also
@@ -526,6 +531,7 @@ pub fn analyse_project_with_policy(
         &mut errors,
     );
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- 5c. `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
 
@@ -689,6 +695,7 @@ pub fn analyse_project_with_policy(
     // `Mode::Analyse` — independent unit groups resolve/check past another
     // group's errors).
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Unit);
     // -- 7. Per-unit file index. --
     let unit_file_index = project_model::phase_file_index(&groups, &parsed);
 
@@ -774,6 +781,7 @@ pub fn analyse_project_with_policy(
         );
         ctx.d1_sql = d1_sql.clone();
 
+        crate::phase_timing::mark(crate::phase_timing::Level::Definition);
         let mut checked: Vec<crate::checker::TypedCommons> = Vec::new();
         for &i in indices {
             let pf = &parsed[i];
@@ -811,10 +819,11 @@ pub fn analyse_project_with_policy(
                 checked.push(typed);
             }
         }
+        crate::phase_timing::mark(crate::phase_timing::Level::Unit);
         // #2719: the unit's needs-context set, and the calls that would carry
         // the execution context where none exists.
         let plan_errors = exec_plan.extend(&checked.iter().collect::<Vec<_>>());
-        errors.extend_attributed_by_span(&parsed, plan_errors);
+        errors.extend_attributed(plan_errors);
     }
 
     // P5.4 (`design/tracks/semantics-in-the-checker.md` §6): test/
@@ -830,6 +839,7 @@ pub fn analyse_project_with_policy(
     // ...)`), matching `run_checks`'s own `#696`-noted gap (attributing them
     // means threading a file through many internal push sites — out of scope
     // here, same as there).
+    crate::phase_timing::mark(crate::phase_timing::Level::Definition);
     let mut test_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
     let _ready_tests = crate::test_suites::phase_test_bodies(
         &test_groups,
@@ -898,6 +908,7 @@ pub fn analyse_project_with_policy(
         );
     }
 
+    crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- Assemble the `ProjectAnalysis`. Mirrored the now-deleted
     //    `analyse_project_with`'s own `RunChecks::Checked` arm exactly. --
     let index = assemble_index(
@@ -936,7 +947,13 @@ pub fn analyse_project_with_policy(
             &unit_tables,
         );
         cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        let agents: HashMap<String, AgentDecl> = table.agents.clone();
+        // `ContextSequenceInfo` owns plain `AgentDecl`s (it is read across crates);
+        // the checker's `Arc`-shared table is unwrapped here, once per context.
+        let agents: HashMap<String, AgentDecl> = table
+            .agents
+            .iter()
+            .map(|(k, v)| (k.clone(), AgentDecl::clone(v)))
+            .collect();
         sequence_info.insert(
             name.clone(),
             ContextSequenceInfo {
@@ -975,6 +992,7 @@ pub fn analyse_project_with_policy(
         doc_scope.insert(name.clone(), scope);
     }
 
+    crate::phase_timing::finish();
     ProjectAnalysis {
         snapshots,
         errors: errors.into_all(),

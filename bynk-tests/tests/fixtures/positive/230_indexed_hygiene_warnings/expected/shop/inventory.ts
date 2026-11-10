@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -25,6 +26,8 @@ export interface InventoryState {
 const __InventoryRegistry = new __StateRegistry();
 function __zeroOfInventoryState(): InventoryState { return { reservations: {}, reservations__idx_orderId: {} }; }
 
+const __entryFieldsOfInventory = [{ name: "reservations", kind: "map", indexes: [{ index: "orderId", recordField: "reservations__idx_orderId" }] }] as const;
+
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys(s.reservations)) { const __r = __deserialise_Reservation((s.reservations[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); s.reservations[__k] = __r.value as unknown as (typeof s.reservations)[string]; }
   for (const __k of globalThis.Object.keys(s.reservations)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
@@ -44,15 +47,16 @@ export class Inventory {
     const stored = await this.state.storage.get<InventoryState>("state");
     if (stored === undefined) return __zeroOfInventoryState();
     __checkStoredLayout("Inventory", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfInventoryState();
-    __reportUnknownStoredKeys("Inventory", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateInventoryState(__merged, stored);
+    __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateInventoryState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: InventoryState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeInventoryState(s));
+    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory);
   }
 
   async inRegion(rg: string, deps: {}): globalThis.Promise<number> {

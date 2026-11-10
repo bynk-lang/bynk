@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -23,6 +24,8 @@ export interface TurnstileState {
 const __TurnstileRegistry = new __StateRegistry();
 function __zeroOfTurnstileState(): TurnstileState { return { gate: Gate.Locked }; }
 
+const __entryFieldsOfTurnstile = [] as const;
+
 function __rehydrateTurnstileState(s: TurnstileState, stored: TurnstileState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "gate")) { const __r = __deserialise_Gate((s.gate as unknown as __JsonValue), "gate"); if (__r.tag === "Err") throw __rehydrationViolation("Turnstile", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).gate = __r.value as unknown as (typeof s)["gate"]; }
 }
@@ -41,15 +44,16 @@ export class Turnstile {
     const stored = await this.state.storage.get<TurnstileState>("state");
     if (stored === undefined) return __zeroOfTurnstileState();
     __checkStoredLayout("Turnstile", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTurnstileState();
-    __reportUnknownStoredKeys("Turnstile", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateTurnstileState(__merged, stored);
+    __reportUnknownStoredKeys("Turnstile", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateTurnstileState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: TurnstileState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeTurnstileState(s));
+    await __commitStored(this, this.state.storage, __encodeTurnstileState(s), __entryFieldsOfTurnstile);
   }
 
   async unlock(deps: {}): globalThis.Promise<Result<void, string>> {

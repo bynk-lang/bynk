@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -19,6 +20,8 @@ export interface BooksState {
 
 const __BooksRegistry = new __StateRegistry();
 function __zeroOfBooksState(): BooksState { return { count: 0, publisher: "" }; }
+
+const __entryFieldsOfBooks = [] as const;
 
 function __rehydrateBooksState(s: BooksState, stored: BooksState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Books", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"]; }
@@ -39,15 +42,16 @@ export class Books {
     const stored = await this.state.storage.get<BooksState>("state");
     if (stored === undefined) return __zeroOfBooksState();
     __checkStoredLayout("Books", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBooksState();
-    __reportUnknownStoredKeys("Books", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBooksState(__merged, stored);
+    __reportUnknownStoredKeys("Books", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBooksState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BooksState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBooksState(s));
+    await __commitStored(this, this.state.storage, __encodeBooksState(s), __entryFieldsOfBooks);
   }
 
   async bump(deps: {}): globalThis.Promise<void> {

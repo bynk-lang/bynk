@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import { __makeTestState } from "../__bynk_runtime/storage.js";
 import type { __BoundaryError, __JsonValue } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_hygiene from "./../demo/hygiene.js";

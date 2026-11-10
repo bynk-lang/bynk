@@ -13,39 +13,39 @@ type Email = String where MinLength(3)
 
 fn enc[T: Codable](v: T) -> String { Json.encode(v) }
 
-fn dec[T: Codable](s: String) -> Result[T, JsonError] { Json.decode[T](s) }
+fn dec[T: Codable](s: String) -> Result[T, DecodeError] { Json.decode[T](s) }
 
-fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] { Json.decode[T](Json.encode(v)) }
+fn roundTrip[T: Codable](v: T) -> Result[T, DecodeError] { Json.decode[T](Json.encode(v)) }
 
-fn viaTwo[T: Codable](v: T) -> Result[T, JsonError] { roundTrip(v) }
+fn viaTwo[T: Codable](v: T) -> Result[T, DecodeError] { roundTrip(v) }
 
 fn encList[T: Codable](v: List[T]) -> String { Json.encode(v) }
 
-fn decList[T: Codable](s: String) -> Result[List[T], JsonError] { Json.decode[List[T]](s) }
+fn decList[T: Codable](s: String) -> Result[List[T], DecodeError] { Json.decode[List[T]](s) }
 
 fn encOpt[T: Codable](v: Option[T]) -> String { Json.encode(v) }
 
-fn decOpt[T: Codable](s: String) -> Result[Option[T], JsonError] { Json.decode[Option[T]](s) }
+fn decOpt[T: Codable](s: String) -> Result[Option[T], DecodeError] { Json.decode[Option[T]](s) }
 
 fn encRes[T: Codable, E: Codable](v: Result[T, E]) -> String { Json.encode(v) }
 
-fn decRes[T: Codable, E: Codable](s: String) -> Result[Result[T, E], JsonError] {
+fn decRes[T: Codable, E: Codable](s: String) -> Result[Result[T, E], DecodeError] {
   Json.decode[Result[T, E]](s)
 }
 
 fn encSet[T: Key + Codable](v: Set[T]) -> String { Json.encode(v) }
 
-fn decSet[T: Key + Codable](s: String) -> Result[Set[T], JsonError] { Json.decode[Set[T]](s) }
+fn decSet[T: Key + Codable](s: String) -> Result[Set[T], DecodeError] { Json.decode[Set[T]](s) }
 
 fn encMap[K: Key + Codable, V: Codable](v: Map[K, V]) -> String { Json.encode(v) }
 
-fn decMap[K: Key + Codable, V: Codable](s: String) -> Result[Map[K, V], JsonError] {
+fn decMap[K: Key + Codable, V: Codable](s: String) -> Result[Map[K, V], DecodeError] {
   Json.decode[Map[K, V]](s)
 }
 
 fn nested[T: Codable](v: Option[List[T]]) -> String { Json.encode(v) }
 
-fn decNested[T: Codable](s: String) -> Result[Option[List[T]], JsonError] {
+fn decNested[T: Codable](s: String) -> Result[Option[List[T]], DecodeError] {
   Json.decode[Option[List[T]]](s)
 }
 
@@ -53,4 +53,4 @@ fn ordered[T: Ord + Codable](a: T, b: T) -> String {
   if a < b { Json.encode(a) } else { Json.encode(b) }
 }
 
-fn mapped(xs: List[P]) -> List[Result[P, JsonError]] { xs.map(roundTrip) }
+fn mapped(xs: List[P]) -> List[Result[P, DecodeError]] { xs.map(roundTrip) }

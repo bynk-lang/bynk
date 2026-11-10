@@ -18,7 +18,7 @@ type Point = {
 	y: Int,
 }
 
-fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] {
+fn roundTrip[T: Codable](v: T) -> Result[T, DecodeError] {
 	Json.decode[T](Json.encode(v))
 }
 
@@ -26,7 +26,7 @@ fn encodeAll[T: Codable](xs: List[T]) -> String {
 	Json.encode(xs)
 }
 
-fn check(p: Point) -> Result[Point, JsonError] {
+fn check(p: Point) -> Result[Point, DecodeError] {
 	roundTrip(p)
 }
 ```

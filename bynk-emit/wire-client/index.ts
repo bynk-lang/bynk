@@ -464,7 +464,7 @@ export interface ValidationError {
 // uniform, Bynk-inspectable record. `kind` is "Malformed" for a JSON.parse
 // failure, else the BoundaryError kind ("StructuralMismatch",
 // "RefinementViolation").
-export interface JsonError {
+export interface DecodeError {
   readonly kind: string;
   readonly path: string;
   readonly message: string;
@@ -947,12 +947,15 @@ export interface LayoutMismatch {
 // Per-entry storage slice 0 (#3189): check a raw stored record's `__layout`
 // marker before anything else reads it (before the `__v` check, which a
 // lockless agent does not run). Absent is the wholesale layout this build
-// reads; any present marker is `NewerLayout`, thrown as a `RehydrationViolation`
-// so a faulting record is never decoded or written back. A later slice that
-// teaches a build a layout widens the set this accepts.
+// reads; a marker this build knows (the wholesale layout 1, which is never
+// written, and the per-entry layout 2) passes; any other present marker is
+// `NewerLayout`, thrown as a `RehydrationViolation` so a faulting record is
+// never decoded or written back. A slice that teaches a build a layout widens
+// the set this accepts.
+const KNOWN_LAYOUTS: readonly number[] = [1, 2];
 export function checkStoredLayout(agent: string, stored: object): void {
   const raw = (stored as { readonly __layout?: unknown }).__layout;
-  if (raw === undefined) return;
+  if (raw === undefined || (typeof raw === "number" && KNOWN_LAYOUTS.includes(raw))) return;
   throw rehydrationViolation(agent, {
     kind: "NewerLayout",
     stored: typeof raw === "number" && globalThis.Number.isInteger(raw) && raw >= 1 ? raw : null,

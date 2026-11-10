@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_store_uploads from "../workers/store-uploads/handlers.js";

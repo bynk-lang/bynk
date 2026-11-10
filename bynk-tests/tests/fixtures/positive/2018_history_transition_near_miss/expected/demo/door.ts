@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -23,6 +24,8 @@ export interface DoorState {
 const __DoorRegistry = new __StateRegistry();
 function __zeroOfDoorState(): DoorState { return { status: Status.Open }; }
 
+const __entryFieldsOfDoor = [] as const;
+
 function __rehydrateDoorState(s: DoorState, stored: DoorState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) { const __r = __deserialise_Status((s.status as unknown as __JsonValue), "status"); if (__r.tag === "Err") throw __rehydrationViolation("Door", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"]; }
 }
@@ -41,10 +44,11 @@ export class Door {
     const stored = await this.state.storage.get<DoorState>("state");
     if (stored === undefined) return __zeroOfDoorState();
     __checkStoredLayout("Door", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfDoorState();
-    __reportUnknownStoredKeys("Door", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateDoorState(__merged, stored);
+    __reportUnknownStoredKeys("Door", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateDoorState(__merged, __wholesale);
     return __merged;
   }
 
@@ -59,7 +63,7 @@ export class Door {
         throw __invariantViolation("Door", "closed_is_final", "transition", "demo/door.bynk:8:14");
       }
     }
-    await this.state.storage.put("state", __encodeDoorState(s));
+    await __commitStored(this, this.state.storage, __encodeDoorState(s), __entryFieldsOfDoor);
   }
 
   async close(deps: {}): globalThis.Promise<void> {
@@ -81,7 +85,7 @@ export function __makeDoor(key: string, env?: { DOOR?: __DurableObjectNamespace 
 export async function __bynkDriveHistory_Door(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown }>> {
   __DoorRegistry.reset();
   const __inst = __makeDoor("") as any;
-  const __load = async (): globalThis.Promise<DoorState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfDoorState(); __checkStoredLayout("Door", __s); const __m = { ...__zeroOfDoorState(), ...__s }; __rehydrateDoorState(__m, __s); return __m; };
+  const __load = async (): globalThis.Promise<DoorState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfDoorState(); __checkStoredLayout("Door", __s); __s = await __readStored(__inst, __inst.state.storage, __s); const __m = { ...__zeroOfDoorState(), ...__s }; __rehydrateDoorState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
   const __steps: globalThis.Array<{ call: any, accepted: boolean, old: DoorState, new: DoorState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;

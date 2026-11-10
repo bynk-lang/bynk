@@ -2108,7 +2108,7 @@ mod emit_sum_codec_tests {
 /// rather than matching `TypeRef` directly — the same resolution
 /// `wire_ref` documents itself as mirroring one-for-one, **including** its
 /// `Effect`/`HttpResult`/etc. field-position arm folding into the same
-/// unchecked cast as `ValidationError`/`JsonError`/`QueueResult`. This is
+/// unchecked cast as `ValidationError`/`DecodeError`/`QueueResult`. This is
 /// the deserialise-side function `wire_ref`'s own doc names as the one it
 /// agrees with exactly; contrast [`serialise_field_expr_via`], which does
 /// not.
@@ -2303,7 +2303,7 @@ fn emit_field_deserialise_wire(
         // error types — each now casts through its own real, exported
         // runtime type (`bynk-emit/runtime/src/errors.ts`/`queue.ts`/
         // `http.ts`), gated into the module's own import list the same way
-        // `JsonError`/`HttpResult` already were (`write_header`'s
+        // `DecodeError`/`HttpResult` already were (`write_header`'s
         // `file_mentions_json_error`/`file_mentions_http_result`, now joined
         // by `file_mentions_queue_result`; `ValidationError` is imported
         // unconditionally). `Effect` stays `any`: a stray field-position
@@ -2331,9 +2331,9 @@ fn emit_field_deserialise_wire(
                     as_expr(ident(json), TsType::named("unknown")),
                     TsType::named("ValidationError"),
                 ),
-                UncheckedReason::JsonError => as_expr(
+                UncheckedReason::DecodeError => as_expr(
                     as_expr(ident(json), TsType::named("unknown")),
-                    TsType::named("JsonError"),
+                    TsType::named("DecodeError"),
                 ),
                 UncheckedReason::HttpResult => as_expr(
                     as_expr(ident(json), TsType::named("unknown")),
@@ -2667,7 +2667,7 @@ fn serialise_field_expr_wire(
         // Review of #1319/#1320, finding 1's own tsc run (a real fixture with
         // one of these types finally reached this arm — none had before):
         // `value as JsonValue` fails `tsc --strict` (TS2352) for
-        // `ValidationError`/`JsonError` specifically — real interfaces, not
+        // `ValidationError`/`DecodeError` specifically — real interfaces, not
         // structurally close enough to `JsonValue`'s own union for a direct
         // cast; `HttpResult<T>`/`QueueResult`'s own union shapes happen to
         // pass today, but that is a heuristic, not a guarantee this residual
@@ -2872,7 +2872,7 @@ pub(crate) fn agent_wire_passes_through(t: &TypeRef) -> bool {
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => false,
     }
 }
@@ -2928,7 +2928,7 @@ pub(crate) fn deserialise_expr_via(
     ) {
         ru.note_boundary_codec();
     }
-    // The runtime-owned-error-type arms below (`ValidationError`/`JsonError`/
+    // The runtime-owned-error-type arms below (`ValidationError`/`DecodeError`/
     // `QueueResult`/`HttpResult`) all share this one shape: `Ok(json as
     // unknown as {ty}) as Result<{ty}, BoundaryError>` — the deserialise-side
     // mirror of `serialise_field_expr_wire`'s own `WireRef::Unchecked` arm
@@ -3015,7 +3015,7 @@ pub(crate) fn deserialise_expr_via(
         // silently assumed correct, the same "not exercised, defensive"
         // precedent this file's own `TypeRef::Unit` arm above already sets.
         TypeRef::ValidationError(_) => ok_unknown_cast("ValidationError"),
-        TypeRef::JsonError(_) => ok_unknown_cast("JsonError"),
+        TypeRef::DecodeError(_) => ok_unknown_cast("DecodeError"),
         // Review of #1319/#1320, finding 1: `HttpResult<T>` (`bynk-emit/
         // runtime/src/http.ts:6`) is generic with no default type argument
         // — a bare `HttpResult` in type position is `tsc`'s TS2314, not the
@@ -3249,10 +3249,10 @@ mod deserialise_expr_via_error_type_tests {
     #[test]
     fn json_error_casts_through_unknown() {
         let ru = RuntimeUse::default();
-        let t = TypeRef::JsonError(sp());
+        let t = TypeRef::DecodeError(sp());
         assert_eq!(
             bynk_ts::print_expr(&deserialise_expr(&t, "json", "path", &ru)),
-            "Ok(json as unknown as JsonError) as Result<JsonError, __BoundaryError>"
+            "Ok(json as unknown as DecodeError) as Result<DecodeError, __BoundaryError>"
         );
     }
 

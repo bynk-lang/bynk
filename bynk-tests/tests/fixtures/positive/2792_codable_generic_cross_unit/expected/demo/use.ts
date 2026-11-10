@@ -2,7 +2,7 @@
 // commons demo.use
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
 import { decode, forward } from "./algo.js";
@@ -17,7 +17,7 @@ export function shown(c: Card, code: Code): string {
   return forward(e, { encode: __serialise_Card, decode: __deserialise_Card });
 }
 
-export function read(s: string): Result<Envelope<Card>, JsonError> {
+export function read(s: string): Result<Envelope<Card>, DecodeError> {
   return decode(s, { encode: __serialise_Card, decode: __deserialise_Card });
 }
 
