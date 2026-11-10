@@ -2237,8 +2237,8 @@ imposed; entries keep the order they were retired in.
 - **`post-trajectory-crate-hygiene.md`** — spine [#1533](https://github.com/bynk-lang/bynk/issues/1533):
   READMEs, crate-local unit tests, a comment rewrite, and module decomposition, proposed after the
   compiler trajectory closed (30 August 2026). **Withdrawn before it settled**: no slice was cut and
-  no ADR landed. It is superseded by [`crate-hygiene.md`](../tracks/crate-hygiene.md) (spine [#2775](https://github.com/bynk-lang/bynk/issues/2775)), which takes
-  the crate graph itself as its theme. That doc's §1.1 records what became of each workstream:
+  no ADR landed. It is superseded by the `crate-hygiene.md` entry below (spine [#2775](https://github.com/bynk-lang/bynk/issues/2775)), which takes
+  the crate graph itself as its theme. What became of each workstream:
   - **READMEs** are done. Every workspace crate has one.
   - **Unit tests** were not carried. The one structural finding, that `bynk-ir` depends on
     `bynk-check` only through `block_uses_emit`, moved to the successor's system-model question
@@ -2446,7 +2446,7 @@ imposed; entries keep the order they were retired in.
   - **§6, the model.** It sits above `bynk-check`, `bynk-lower` merges in, and the name is `bynk-model`;
     a public interface is deferred past 1.0 with a trigger.
   - **§7, published set and CI.** `bynk-wasm` stays; CI runs three tiers, each gated on the one before.
-  - **§9, installables.** `bynkc` was an `argv[0]` alias for one release, then dropped; `bynkc-lsp`
+  - **§9 E4 and §11 Q-E2, installables.** `bynkc` was an `argv[0]` alias for one release, then dropped; `bynkc-lsp`
     retired before 1.0.0.
 
   **Named follow-on.** `EntryShape` and a public model interface were deferred past 1.0 by B4.
