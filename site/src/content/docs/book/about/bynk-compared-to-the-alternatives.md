@@ -4,11 +4,11 @@ title: Bynk compared to the alternatives
 The fair question is rarely "Bynk versus another new language" — almost no team
 is choosing between fledgling languages. The honest comparisons are against what
 you would *actually* reach for to build a typed service today: a backend
-framework that puts infrastructure in code, the assemble-it-yourself stack of
-TypeScript, a validation library, and team discipline, a typed-effects library
-such as Effect, a mature language that reaches Workers such as Rust, or the
-Cloudflare primitives by hand. This page argues both, and
-is candid about where Bynk is younger and where it is not yet finished. (For the
+framework that puts infrastructure in code; the assemble-it-yourself stack of
+TypeScript, a validation library and team discipline; a typed-effects library
+such as Effect; a mature language that reaches Workers, such as Rust; or the
+Cloudflare primitives by hand. This page takes each in turn, and is candid about
+where Bynk is younger and where it is not yet finished. (For the
 language-level comparison with plain TypeScript, see
 [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/).)
 
@@ -119,8 +119,8 @@ The difference is **library versus language**:
 Where Effect is ahead: it is a library in a language your team probably already
 uses, so adopting it is incremental and needs no new toolchain, and it sits
 beside the whole npm ecosystem. It is also a more established project than a
-pre-1.0 language. (This page does not claim to know how well Effect runs on
-Workers; check its documentation for the runtime you intend.)
+pre-1.0 language. (How well it runs on Workers is a question for its own
+documentation; this page makes no claim either way.)
 
 ## Bynk vs Rust on Workers
 
@@ -156,10 +156,10 @@ compiles to Erlang or to JavaScript. Its stance is close to Bynk's: it has
 [no exceptions and no `null`](https://tour.gleam.run/everything/), and
 fallible functions return a `Result`.
 
-Gleam is a general-purpose language, so it stops at the language. It does not
-know about Cloudflare Workers or Durable Objects (its documentation does not
-mention them), so contexts, agents and capabilities are not in the language, and
-nothing in it checks that a handler's effects are declared. Bynk gives up
+Gleam is a general-purpose language, so it stops at the language. It has no
+built-in notion of Cloudflare Workers or Durable Objects, so contexts, agents and
+capabilities are not in the language, and nothing in it checks that a handler's
+effects are declared. Bynk gives up
 generality to make those part of the type system and to compile to a Worker
 directly.
 
