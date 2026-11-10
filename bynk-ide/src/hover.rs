@@ -304,6 +304,11 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_advance_at(text, span.start) {
         return Some(content);
     }
+    // 5a. #3191: the contextual `by` of an actor clause (an ordinary `by` name
+    //    keeps its own hover, which resolved above).
+    if let Some(content) = crate::symbols::describe_by_at(text, span.start) {
+        return Some(content);
+    }
     // 5a. Constrained generics slice 1: the contextual `derives` of a type's
     //    `derives Ord` clause, and a constraint name in a bound or that clause.
     if let Some(content) = crate::symbols::describe_derives_at(text, span.start) {

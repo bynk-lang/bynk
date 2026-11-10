@@ -217,12 +217,11 @@ pub enum TokenKind {
     Provides,
     #[token("service")]
     Service,
-    // v0.45 keywords: `actor` heads a boundary-contract declaration; `by`
-    // heads a handler's actor clause.
+    // v0.45 keywords: `actor` heads a boundary-contract declaration. (`by`,
+    // which heads a handler's actor clause, is contextual since #3191: it lexes
+    // as an `Ident` and the parser reads it by text in its clause positions.)
     #[token("actor")]
     Actor,
-    #[token("by")]
-    By,
     // v0.80 keywords: `invariant` heads an agent invariant declaration; `implies`
     // is the directional logical-implication operator (`P implies Q` ≡ `!P || Q`).
     #[token("invariant")]
@@ -488,7 +487,6 @@ impl TokenKind {
             Stub => "`stub`",
             Service => "`service`",
             Actor => "`actor`",
-            By => "`by`",
             Invariant => "`invariant`",
             Implies => "`implies`",
             Requires => "`requires`",

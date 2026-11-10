@@ -68,6 +68,23 @@ fn every_contextual_keyword_has_a_hover_path() {
             "advance: no hover path — describe_advance_at returned None"
         );
     }
+    // #3191: `by` is a keyword only in its clause positions.
+    let by = "context Scaffold\n\nservice s from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by who: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+    assert!(
+        CONTEXTUAL_KEYWORDS.iter().any(|k| k.word == "by"),
+        "`by` is a contextual keyword"
+    );
+    {
+        let offset = by.find(" by ").expect("`by` is in the fixture") + 1;
+        assert!(
+            symbols::describe_by_at(by, offset).is_some(),
+            "by: no hover path — describe_by_at returned None"
+        );
+        // …and an ordinary name `by` keeps its own hover.
+        let name = "context Scaffold\n\nfn f(by: Int) -> Int { by }\n";
+        assert!(symbols::describe_by_at(name, name.find("by").unwrap()).is_none());
+        assert!(symbols::describe_by_at(name, name.rfind("by").unwrap()).is_none());
+    }
     // #2640: `par` is a keyword only before `{` of a `par { … }` block.
     let block = "context Scaffold\n\nservice s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n      let b <- g()\n    }\n    Effect.pure(a + b)\n  }\n}\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "par") {
@@ -108,7 +125,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| {
         !matches!(
             k.word,
-            "advance" | "par" | "derives" | "private" | "fixture"
+            "advance" | "by" | "par" | "derives" | "private" | "fixture"
         )
     }) {
         let offset = source
