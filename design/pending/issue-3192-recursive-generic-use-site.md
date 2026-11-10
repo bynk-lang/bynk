@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, diagnostic_coverage
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: A recursive generic type declares and works inside a context; it is refused only where a codec is required (`bynk.generics.recursive_generic_at_boundary`, now at the use with the field path), and polymorphic recursion is refused at the declaration (`bynk.generics.polymorphic_recursion`)
 ---
 
