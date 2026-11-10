@@ -1,6 +1,7 @@
 // #2612: recursion is well-formed — self, mutual, generic and method
 // recursion, and a recursive function driving the effects of a function
-// value it is given. Each lowers to direct TypeScript recursion.
+// value it is given. Each lowers to direct TypeScript recursion, except a
+// direct self tail call (`repeat`), which lowers to a loop (#3193).
 commons recursion {
   fn fact(n: Int) -> Int {
     if n <= 1 { 1 } else { n * fact(n - 1) }

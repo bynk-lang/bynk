@@ -1,0 +1,181 @@
+---
+#3193: a direct self call in tail position runs as a loop, in constant stack.
+Each function below is a shape the guarantee covers or, where it says so, one
+it leaves as an ordinary recursive call.
+---
+context demo.tco
+
+// Covered: the accumulator loop.
+fn count(n: Int, acc: Int) -> Int {
+  if n == 0 { acc } else { count(n - 1, acc + 1) }
+}
+
+// Covered: a swap and a read of the old parameter in one call.
+fn fibLoop(n: Int, a: Int, b: Int) -> Int {
+  if n == 0 { a } else { fibLoop(n - 1, b, a + b) }
+}
+
+// Covered: an `Effect` function with no `do` before the call.
+fn countE(n: Int, acc: Int) -> Effect[Int] {
+  if n <= 0 { Effect.pure(acc) } else { countE(n - 1, acc + 1) }
+}
+
+// Covered: an `Effect` function that awaits before the tail call.
+fn repeat(n: Int, step: Int -> Effect[()]) -> Effect[()] {
+  if n <= 0 {
+    Effect.pure(())
+  } else {
+    do step(n)
+    repeat(n - 1, step)
+  }
+}
+
+// Covered: a recursive `match` (a `switch`, so the `continue` is labelled).
+fn lastOf(xs: List[Int], fallback: Int) -> Int {
+  match xs.first() {
+    None => fallback,
+    Some(x) => lastOf(xs.skip(1), x),
+  }
+}
+
+// Covered: a bare `match` as an arm's body, with the tail call under it. The
+// inner match is written as statements so the `continue` reaches the loop.
+fn firstDiff(xs: List[Int], ys: List[Int], i: Int) -> Int {
+  match xs.skip(i).first() {
+    None => 0,
+    Some(x) => match ys.skip(i).first() {
+      None => 0,
+      Some(y) => if x != y { x - y } else { firstDiff(xs, ys, i + 1) },
+    },
+  }
+}
+
+// Covered: a pattern binder with the same name as a parameter. The call passes
+// the binder (the next value), not the parameter it shadows.
+fn drain(n: Int, acc: Int, xs: List[Int]) -> Int {
+  match xs.first() {
+    None => acc,
+    Some(acc) => drain(n + 1, acc, xs.skip(1)),
+  }
+}
+
+fn countdown(n: Int, steps: Int, xs: List[Int]) -> Int {
+  match xs.first() {
+    None => steps,
+    Some(n) => if n == 0 { steps } else { countdown(n - 1, steps + 1, [n - 1]) },
+  }
+}
+
+fn isDrain(n: Int, acc: Int, xs: List[Int]) -> Int {
+  let head = xs.first()
+  if head is Some(acc) { isDrain(n + 1, acc, xs.skip(1)) } else { acc }
+}
+
+fn nestedDrain(n: Int, acc: Int, xs: List[Option[Int]]) -> Int {
+  match xs.first() {
+    None => acc,
+    Some(Some(acc)) => nestedDrain(n + 1, acc, xs.skip(1)),
+    Some(None) => nestedDrain(n + 1, acc, xs.skip(1)),
+  }
+}
+
+// Covered: a tail call in a `match` arm with a guard.
+fn collatz(n: Int, steps: Int) -> Int {
+  match n {
+    1 => steps,
+    m if m.rem(2) == 0 => collatz(m / 2, steps + 1),
+    m => collatz(3 * m + 1, steps + 1),
+  }
+}
+
+// Covered: closures capture the iteration's own bindings.
+fn adders(n: Int, acc: List[Int -> Int]) -> List[Int -> Int] {
+  if n == 0 { acc } else { adders(n - 1, acc.append((x: Int) => x + n)) }
+}
+
+// Covered: an instance method (by receiver) and a static one (by qualified name).
+type Chain =
+  | End
+  | Link(value: Int, next: Chain)
+
+fn Chain.total(self, acc: Int) -> Int {
+  match self {
+    End => acc,
+    Link(v, rest) => rest.total(acc + v),
+  }
+}
+
+fn Chain.length(self, acc: Int) -> Int {
+  match self {
+    End => acc,
+    Link(_, rest) => rest.length(acc + 1),
+  }
+}
+
+fn Chain.build(n: Int, acc: Chain) -> Chain {
+  if n == 0 { acc } else { Chain.build(n - 1, Link(n, acc)) }
+}
+
+// Covered: a generic function calling itself at its own instantiation.
+fn lastOr[A](xs: List[A], fallback: A) -> A {
+  match xs.first() {
+    None => fallback,
+    Some(x) => lastOr(xs.skip(1), x),
+  }
+}
+
+// Covered: `requires` is checked on every iteration.
+fn down(n: Int, acc: Int) -> Int
+  requires nonneg: n >= 0
+{
+  if n == 0 { acc } else { down(n - 2, acc + 1) }
+}
+
+// Covered: `requires` on an `Effect` function, checked on every iteration.
+fn downE(n: Int, acc: Int) -> Effect[Int]
+  requires nonneg: n >= 0
+{
+  if n == 0 { Effect.pure(acc) } else { downE(n - 2, acc + 1) }
+}
+
+// Not covered: an `ensures` clause keeps direct recursion.
+fn countEnsured(n: Int, acc: Int) -> Int
+  requires bounded: n >= 0 && n <= 100
+  ensures atLeast: result >= acc
+{
+  if n == 0 { acc } else { countEnsured(n - 1, acc + 1) }
+}
+
+// Not covered: the call is not in tail position.
+fn sumTo(n: Int) -> Int {
+  if n == 0 { 0 } else { n + sumTo(n - 1) }
+}
+
+// Not covered: mutual recursion.
+fn isEven(n: Int) -> Bool {
+  if n == 0 { true } else { isOdd(n - 1) }
+}
+
+fn isOdd(n: Int) -> Bool {
+  if n == 0 { false } else { isEven(n - 1) }
+}
+
+// Not covered: a generic function calling itself at a different instantiation.
+fn nest[A](n: Int, x: A) -> Int {
+  if n == 0 { 0 } else { 1 + nest(n - 1, [x]) }
+}
+
+fn nestTail[A](n: Int, x: A) -> Int {
+  if n == 0 { 0 } else { nestTail(n - 1, [x]) }
+}
+
+// Not covered: the call is wrapped, so it is not in tail position.
+fn wrapped(n: Int) -> Option[Int] {
+  if n == 0 { Some(0) } else { Some(wrapped(n - 1).getOrElse(0) + 1) }
+}
+
+// Not covered: a call under `?`.
+fn tried(n: Int) -> Result[Int, String] {
+  if n == 0 { Ok(0) } else { let r = tried(n - 1)?
+    Ok(r + 1) }
+}

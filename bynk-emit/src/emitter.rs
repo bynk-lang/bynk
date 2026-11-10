@@ -91,6 +91,7 @@ mod cmp;
 mod codec;
 mod lower;
 pub(crate) mod runtime_use;
+mod tco;
 mod zero_value;
 pub use lower::*;
 pub use runtime_use::RuntimeUse;
@@ -5092,6 +5093,8 @@ pub(crate) struct LowerCtx<'a> {
     /// the `?`'s own `return` still exits the enclosing function. Every arrow
     /// and function boundary resets it to `None` for its own body.
     pub(crate) tail_slot: Option<TailSlot>,
+    /// #3193: the self tail calls of the function being emitted as a loop.
+    pub(crate) tco: Option<std::rc::Rc<tco::TcoPlan>>,
     /// Constrained generics slice 1: the in-scope comparator witnesses of the
     /// function being emitted, by type-parameter name (`T` -> `__cmp_T`). Empty
     /// outside an `Ord`-bounded generic.
@@ -5187,6 +5190,7 @@ impl<'a> LowerCtx<'a> {
             emitted_early_return: false,
             lambda_depth: 0,
             tail_slot: None,
+            tco: None,
             cmp_scope: HashMap::new(),
             codec_scope: HashMap::new(),
         }

@@ -483,7 +483,9 @@ fn emit_block_inner(
             cond,
             then_block,
             else_block,
-        } if ternary_shaped(cond, then_block, else_block, cx) => {
+        } if ternary_shaped(cond, then_block, else_block, cx)
+            && !cx.tco.as_ref().is_some_and(|p| p.has_call_in(&block.tail)) =>
+        {
             // T2.1 (R6.2): the shape *could* be a ternary. Whether it actually
             // is depends on whether either branch hoists — which is now
             // answered by lowering it, not by predicting it. Both outcomes are
@@ -532,6 +534,8 @@ fn emit_block_inner(
         } => {
             emit_if_tail(out, cond, then_block, else_block, cx, indent, async_tail);
         }
+        // #3193: a self tail call is a `continue`, not a `return`.
+        _ if super::tco::emit_continue(out, &block.tail, cx, indent) => {}
         _ => {
             let tail = lower_tail_expr(&block.tail, cx, async_tail);
             for s in &tail.pre {
@@ -1268,7 +1272,7 @@ fn comparison_op_symbol(op: BinOp) -> Option<&'static str> {
     }
 }
 
-fn write_line(out: &mut String, indent: usize, line: &str) {
+pub(crate) fn write_line(out: &mut String, indent: usize, line: &str) {
     for _ in 0..indent {
         out.push(' ');
     }
@@ -8561,6 +8565,29 @@ fn emit_match_body(
 ) {
     match body {
         MatchBody::Expr(e) => {
+            if super::tco::emit_continue(out, e, cx, indent) {
+                return;
+            }
+            // #3193: a bare `match` or `if` arm body holding a tail self call is
+            // written as statements, as a block tail would be, so its
+            // `continue` is not inside an arrow.
+            if cx.tail_slot.is_none() && cx.tco.as_ref().is_some_and(|p| p.has_call_in(e)) {
+                match &e.kind {
+                    ExprKind::Match { discriminant, arms } => {
+                        emit_match_tail(out, discriminant, arms, cx, indent, async_tail);
+                        return;
+                    }
+                    ExprKind::If {
+                        cond,
+                        then_block,
+                        else_block,
+                    } => {
+                        emit_if_tail(out, cond, then_block, else_block, cx, indent, async_tail);
+                        return;
+                    }
+                    _ => {}
+                }
+            }
             let mut pre = Pre::new();
             let v = pre.absorb(lower_tail_expr(e, cx, async_tail));
             for s in pre.stmts() {
