@@ -41,3 +41,23 @@ The run-time cost of compiled Bynk (bundle size, start-up and request latency
 against hand-written TypeScript twins, [#3177](https://github.com/bynk-lang/bynk/issues/3177))
 is recorded separately, in [`runtime/`](runtime/), with `cargo xtask bench-runtime
 --record`. See [`benchmarks/runtime/`](../../benchmarks/runtime/README.md).
+
+## Per-level attribution
+
+The language-server runs set `BYNK_PHASE_TIMING=1`, which makes the server write
+one line per analysis round to stderr (`bynk-check/src/phase_timing.rs`; off and
+free when the variable is unset). The harness reads it and reports, as medians of
+the timed edits:
+
+| Field | What it holds |
+| ----- | ------------- |
+| `lsp_edit_levels` | `file`, `unit`, `definition`, `project`: where a warm edit's analysis time goes, by R3.13's query levels |
+| `lsp_first_round_levels` | the same for the cold first round |
+| `lsp_edit_outside_analysis_ms` | the edit-to-diagnostics time not spent in the analysis (the server's own work around it) |
+
+The levels partition the analysis call. *file* is discovery and parse through the
+shared cache; *unit* is grouping, symbol tables, `uses`/`consumes` resolution and
+each unit's prelude; *definition* is resolving and checking declaration bodies
+(and test bodies); *project* is the whole-project validations and assembling the
+result. The marks sit at the pipeline's own phase boundaries, so this is an
+attribution, not a profile. It is the evidence #1523's trigger asks for.

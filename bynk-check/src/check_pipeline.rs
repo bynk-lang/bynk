@@ -85,7 +85,8 @@ pub struct CrossContextViewsCache(std::cell::OnceCell<Arc<CrossContextViews>>);
 
 impl CrossContextViewsCache {
     fn get(&self, unit_info: &BTreeMap<String, UnitInfo>) -> Arc<CrossContextViews> {
-        self.0
+        let views = self
+            .0
             .get_or_init(|| {
                 let unit_tables = unit_info
                     .iter()
@@ -105,7 +106,15 @@ impl CrossContextViewsCache {
                     .collect();
                 Arc::new((unit_tables, unit_uses, unit_consumes, unit_consumes_aliases))
             })
-            .clone()
+            .clone();
+        // The cache is built for one `unit_info` and reused for the whole
+        // per-unit loop; a different map would silently get the first one's views.
+        debug_assert_eq!(
+            views.0.len(),
+            unit_info.len(),
+            "CrossContextViewsCache reused with a different unit_info"
+        );
+        views
     }
 }
 
@@ -720,6 +729,37 @@ mod tests {
         let first = cache.get(&unit_info);
         let second = cache.get(&unit_info);
         assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    const PAYMENT: &str = "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+
+    fn consumer(name: &str, arg: &str) -> String {
+        format!(
+            "context shop.{name}\n\nconsumes shop.payment\n\nservice place {{\n  on call() -> Effect[Int] {{\n    let n <- shop.payment.charge({arg})\n    Effect.pure(n)\n  }}\n}}\n"
+        )
+    }
+
+    /// #3239 review: every context resolves its `consumes` through the one shared
+    /// set of views, so two consumers of the same context both check, and a
+    /// mistake in one is reported without disturbing the other.
+    #[test]
+    fn two_consumers_of_one_context_share_the_views_without_interference() {
+        let ok = analyse(&[
+            ("shop/payment.bynk", PAYMENT),
+            ("shop/orders.bynk", &consumer("orders", "1")),
+            ("shop/billing.bynk", &consumer("billing", "2")),
+        ]);
+        ok.assert_clean();
+
+        let broken = analyse(&[
+            ("shop/payment.bynk", PAYMENT),
+            ("shop/orders.bynk", &consumer("orders", "1")),
+            ("shop/billing.bynk", &consumer("billing", "\"two\"")),
+        ]);
+        assert!(
+            !broken.error_categories().is_empty(),
+            "a wrongly typed cross-context call in one consumer must be reported"
+        );
     }
 
     #[test]
