@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk deploy revert` refuses a rollback to a build that writes an older storage layout over stored data (per-entry storage, slice 5b)
----
+# 0784 — A revert refuses a rollback to a build that writes an older storage layout when instances hold stored data
 
-## ADR: revert-refuses-a-layout-rollback
-title: A revert refuses a rollback to a build that writes an older storage layout when instances hold stored data
-summary: Each pushed version records the storage layout it writes in its deploy facts, and the revert preflight refuses a target on an older layout than the live version unless no instance holds stored data
+- **Status:** Accepted (v0.534)
 
 **Context.** The per-entry storage track (`design/tracks/per-entry-storage.md`, #3195, proposal #3189) will move collection entries to keys of their own and mark the `"state"` record with `__layout: 2`. A build that predates the layout, reading the new layout, would zero-merge the collections it no longer finds inline and write the record back wholesale, orphaning every per-entry key; a build with the forward-compatibility guard (ADR for slice 0) faults `NewerLayout` instead. The runtime fault protects data but turns a rollback into an outage. `bynk deploy revert` already refuses a rollback across a schema-version bump when stored instances exist (ADR 0545, `NewerSchema`), reading each version's recorded deploy facts; it knows nothing about layouts. The review of slice 0 (#3209) asked that the writer slice's loud runtime fault be backed by a refusal at deploy time.
 
