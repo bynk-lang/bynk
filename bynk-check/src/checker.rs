@@ -793,7 +793,7 @@ fn query_role(result: Option<TyId>, op: &str, tys: &Types) -> QueryRole {
 
 /// Output of type checking.
 pub struct TypedCommons {
-    pub commons: Commons,
+    pub commons: Arc<Commons>,
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub fns: HashMap<String, Arc<FnDecl>>,
     pub methods: HashMap<String, MethodTable>,
@@ -889,7 +889,7 @@ impl TypedCommons {
     /// dependency — P6.38, `design/tracks/the-ir.md` §6a).
     pub fn empty() -> Self {
         TypedCommons {
-            commons: Commons {
+            commons: Arc::new(Commons {
                 name: QualifiedName {
                     parts: Vec::new(),
                     span: Default::default(),
@@ -901,7 +901,7 @@ impl TypedCommons {
                 span: Default::default(),
                 trivia: Default::default(),
                 trailing_comments: Vec::new(),
-            },
+            }),
             types: HashMap::new(),
             fns: HashMap::new(),
             methods: HashMap::new(),

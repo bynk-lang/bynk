@@ -1243,12 +1243,12 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
         };
         let resolved = resolver::resolve(commons).expect("resolve");
         let mut typed = checker::check(resolved).expect("check");
-        let agents: HashMap<String, AgentDecl> = typed
+        let agents: HashMap<String, Arc<AgentDecl>> = typed
             .commons
             .items
             .iter()
             .filter_map(|item| match item {
-                CommonsItem::Agent(a) => Some((a.name.name.clone(), a.clone())),
+                CommonsItem::Agent(a) => Some((a.name.name.clone(), Arc::new(a.clone()))),
                 _ => None,
             })
             .collect();

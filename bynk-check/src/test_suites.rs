@@ -1198,7 +1198,7 @@ pub fn integration_resolved(
     let no_local_types = HashMap::new();
     let no_local_events = HashMap::new();
     let mut resolved = ResolvedCommons::new(
-        synthetic_commons,
+        Arc::new(synthetic_commons),
         types,
         &no_local_types,
         fns,
@@ -1498,9 +1498,9 @@ pub fn check_suite_decls(
         .map(CommonsItem::Type)
         .chain(ok_consts.iter().cloned().map(CommonsItem::Const))
         .collect();
-    let saved = std::mem::replace(&mut resolved.commons.items, probe_items);
+    let saved = std::mem::replace(&mut Arc::make_mut(&mut resolved.commons).items, probe_items);
     let resolution = resolver::resolve_file_record(resolved, refs);
-    resolved.commons.items = saved;
+    Arc::make_mut(&mut resolved.commons).items = saved;
     if let Err(errs) = resolution {
         errors.extend(errs);
         return Default::default();
@@ -4689,7 +4689,7 @@ fn check_property_body(
                     if let TypeRef::Named(agent_id) = &**inner
                         && let Some(agent) = resolved.agents.get(&agent_id.name)
                     {
-                        history_binding = Some((b.name.name.clone(), agent.clone()));
+                        history_binding = Some((b.name.name.clone(), AgentDecl::clone(agent)));
                     }
                     binding_scope.insert(b.name.name.clone(), tys.intern(step_ty.clone()));
                     binding_types.push((b.name.name.clone(), Some(tys.intern(step_ty))));
@@ -5284,7 +5284,7 @@ pub fn build_privileged_resolved(
         .unwrap_or_default();
     let no_local_events = HashMap::new();
     let resolved = ResolvedCommons::new(
-        synthetic_commons,
+        Arc::new(synthetic_commons),
         types,
         &local.types,
         fns,
