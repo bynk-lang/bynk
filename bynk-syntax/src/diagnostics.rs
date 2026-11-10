@@ -355,15 +355,19 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.types.return_mismatch",
         blurb: "The value a function or handler body ends with does not have the declared \
-                return type. The compiler compares the two exactly, and on a refined type \
-                a base value does not qualify: an `Int` is not an `Age`, because `Age` \
-                carries a rule the `Int` has not been checked against. Construct the \
-                refined value with `.of`, which checks the predicate and returns a \
-                `Result`, and declare that `Result` as the return type.",
-        example: "type Age = Int where InRange(0, 150)\n\n\
+                return type, and the compiler compares the two exactly. Either change the \
+                body so it produces the declared type, or change the declared return type \
+                to match what the body produces. A refined type is the same rule with one extra step: an \
+                `Int` is not an `Age`, because `Age` carries a rule the `Int` has not been \
+                checked against. Build the refined value with `.of`, which checks the \
+                predicate and returns a `Result`, and declare that `Result` as the return \
+                type.",
+        example: "fn count() -> Int { \"three\" }       // ✗ a `String` where an `Int` is declared\n\n\
+                  fn count() -> Int { 3 }              // ✓ the body has the declared type\n\n\
+                  type Age = Int where InRange(0, 150)\n\n\
                   fn parse(n: Int) -> Age { n }                           // ✗ an `Int` is not an `Age`\n\n\
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
-        page: "/book/reference/refined-types",
+        page: "/book/reference/types",
         anchor: "",
     },
 ];
