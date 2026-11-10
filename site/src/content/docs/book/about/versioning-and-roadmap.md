@@ -146,15 +146,14 @@ next.
 ## What is deferred to v1
 
 Some capabilities are designed but intentionally **deferred, not missing** — they
-are scheduled for later increments on the road to v1:
+are scheduled for later increments, none yet shipped:
 
-- **Sagas** — coordinating multi-step workflows across contexts.
+- **Sagas** — coordinating multi-step workflows across contexts. These come
+  after 1.0, as an additive minor, and are tracked in
+  [#3185](https://github.com/bynk-lang/bynk/issues/3185); Cloudflare Workflows is
+  a candidate substrate.
 - **Event replay** — re-delivering past events to a subscriber that joins late or
   recovers, with ordering across concurrent publishes.
-
-Sagas are tracked in [#3185](https://github.com/bynk-lang/bynk/issues/3185),
-deferred until after 1.0 as an additive minor; Cloudflare Workflows is a
-candidate substrate.
 
 Storage kinds, once on this list, have shipped: an agent's `store` fields are
 `Cell`, `Map`, `Set`, `Cache` or `Log` (see [Agents](/book/reference/agents/)).
