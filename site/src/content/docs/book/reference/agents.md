@@ -148,32 +148,44 @@ store key is not supported yet. A store collection is keyed by the key's
 string form, so a record has no stable key: key by one of its id fields instead.
 
 Every kind counts towards the [size ceiling](#size-and-cost-of-an-agents-state)
-of the agent's single stored value.
+of the agent's stored state.
 
 Reads over a `store Map`/`Log` are a lazy [`Query`](/book/reference/types/#query) — the same
 combinator vocabulary the eager `List` carries, dispatched by provenance.
 
 ## Size and cost of an agent's state
 
-An agent's **whole state is persisted as one stored value**: every `Cell`, and
-every entry of every `Map`, `Set`, `Cache` and `Log` together with the posting
-lists of any [`@indexed`](#indexed-routing) field, is written under a single
-Durable Object storage key. On the SQLite-backed Durable Objects Bynk emits, one
-value is limited to about **8 MB** (key and value combined; see
-Cloudflare's [Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)), and an agent whose state outgrows that fails to
-persist. Each handler call also reads and rewrites that whole value, so the cost of a
-handler grows with the size of the agent's entire state, not with the entries it
-touches. This is how persistence works today; [#3159](https://github.com/bynk-lang/bynk/issues/3159) tracks the planned change.
+An agent's state is persisted **per entry**: each entry of a `Map`, `Set`, `Cache` and
+`Log`, and each posting of an [`@indexed`](#indexed-routing) field, is stored under a
+Durable Object storage key of its own, while the `Cell` fields live together in one
+state record beside the schema and layout markers. On the SQLite-backed
+Durable Objects Bynk emits, one stored value is limited to about **8 MB** (key and
+value combined; see Cloudflare's
+[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)),
+so that limit now applies to a single entry, or to all the agent's `Cell`s taken
+together, not to the whole state; an agent as a whole is bounded by the platform's
+storage limit for one object instead. A handler writes only the entries it changed,
+so the storage it writes is proportional to what it touches, not to the size of the
+state.
+
+Reads are not lazy yet. Every call still loads every entry of every collection the
+agent declares before the handler runs, and a commit still compares the state it
+read with the state it produced, so the time and memory a handler takes still grow
+with the size of the agent's state; only the writes are bounded. Lazy and indexed
+reads are the planned next step ([#3159](https://github.com/bynk-lang/bynk/issues/3159)).
+An agent stored the earlier way (one value) is read as it is and split into entries
+by its next write, in one transaction; `bynk migrate sweep` does that for every
+instance.
 
 Design for it:
 
 - **Key agents finely.** One agent per customer, order or channel, not one per
   system: a collection that grows with your data belongs *across* agent instances,
-  not inside one.
+  not inside one, while every call still loads the whole of it.
 - **Bound a `Log` with `@retain`**, which prunes old entries as you append. `@ttl`
   on a `Cache` only *hides* an expired entry from reads; it does not delete it, so
-  an expired entry still counts towards the ceiling until the same key is written
-  again or you `remove` it. Keep a `Cache`'s key space bounded, or `remove` keys
+  an expired entry stays stored, and is still loaded on every call, until the same
+  key is written again or you `remove` it. Keep a `Cache`'s key space bounded, or `remove` keys
   you are finished with.
 - **Use D1 for a large or unbounded table.** A `Map` is the right home for a
   small, bounded collection owned by one agent; a table of every order, event or
