@@ -440,10 +440,20 @@ sum (§6.1.4, §6.1.5) — is an ordinary boundary-legal type. It MAY cross a
 context boundary, be a `store` field, be a field of an event payload, and pass
 through `Json.encode` and `Json.decode`; its codec is recursive. A **generic**
 recursive type (`type Node[T] = { value: T, next: Option[Node[T]] }`) is
-rejected at a boundary (`bynk.generics.recursive_generic_at_boundary`): a
-generic type crosses through a codec monomorphised per instantiation (ADR 0197,
-0237), and a recursive instantiation has no finite set of them. It remains
-usable inside a context.
+rejected where a codec is required (`bynk.generics.recursive_generic_at_boundary`):
+a generic type crosses through a codec monomorphised per instantiation (ADR 0197,
+0237), and the recursive form has none yet. It declares and is usable inside a
+context. The refusal is made at the use, not the declaration: a record field, a
+sum payload and a capability operation signature do not require a codec, so a
+type that only *contains* a recursive generic is itself refused where it appears
+in a handler signature, an agent `store` field or key, an event field, an actor
+identity type, a `Json.encode`/`Json.decode` target or a `Codable` witness, and
+the diagnostic names the field path it is reached through. Recursion of a
+generic type MUST be *uniform*: each recursive edge, including through a
+mutually recursive partner, passes the declaration's own type parameters
+unchanged and in order. Any other recursive edge is polymorphic recursion and is
+a declaration error (`bynk.generics.polymorphic_recursion`), because it yields an
+unbounded set of instantiations.
 
 **Nesting is bounded** (#2656). A boundary codec accepts a value of a
 recursive type nested at most **256 levels** deep. The outermost value of a

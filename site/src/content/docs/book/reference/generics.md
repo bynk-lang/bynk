@@ -219,8 +219,11 @@ inside the function; a `Set[T]` needs `T: Key + Codable`. A generic record or su
 own over a type parameter (`Box[T]` inside `fn f[T: Codable]`) does too: the unit that
 names it builds a codec factory from the declaration and applies it to the codecs of the
 arguments, so the JSON, the error paths and the revalidation of a field are those of the
-codec for a concrete `Box[Order]`. A recursive generic type is still refused at a
-boundary (`bynk.generics.recursive_generic_at_boundary`).
+codec for a concrete `Box[Order]`. A recursive generic type is still refused where a codec is
+required (`bynk.generics.recursive_generic_at_boundary`), but it declares and
+works inside a context; polymorphic recursion is refused at the declaration
+(`bynk.generics.polymorphic_recursion`). See
+[Recursive generic types](/book/guides/type-system/recursive-generic-types/).
 
 A type another context owns and exports opaque cannot be decoded, by `Json.decode`,
 `Json.decodeSql` or a `Codable` witness: decoding creates a value, and only the owning

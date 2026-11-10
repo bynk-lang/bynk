@@ -1298,8 +1298,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["fn_decl"],
     ),
     dg(
+        "bynk.generics.polymorphic_recursion",
+        "A generic type refers to itself (or to a mutually recursive partner) with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a recursive edge that passes the parameters through unchanged is accepted (#3192).",
+        &[],
+    ),
+    dg(
         "bynk.generics.recursive_generic_at_boundary",
-        "A recursive generic record (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197).",
+        "A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197).",
         &[],
     ),
     warn(dg(

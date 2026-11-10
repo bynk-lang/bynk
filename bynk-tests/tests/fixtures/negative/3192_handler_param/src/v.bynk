@@ -1,0 +1,12 @@
+context v
+
+// #3192: a recursive generic sum declares, and is refused where a codec is needed.
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+service s {
+	on call(t: Tree[Int]) -> Effect[Int] {
+		Effect.pure(0)
+	}
+}

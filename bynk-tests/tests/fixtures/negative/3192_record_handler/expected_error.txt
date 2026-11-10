@@ -1,0 +1,1 @@
+bynk.generics.recursive_generic_at_boundary recursive generic record `Link` cannot appear in a service handler signature
