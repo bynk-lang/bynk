@@ -59,7 +59,7 @@ not broken. *(October 2026: of these only sagas remain unbuilt; see §4.)*
 | **Actors track** (v0.45–v0.54) | ✅ Complete & closed | `actor` contracts, the `by` clause, BearerToken (JWT/HS256), Signature (HMAC-SHA256), multi-actor sum dispatch, authorisation invariants, cross-context `CallerId`. Q8 (replay/ordering) deferred to a future Events track. |
 | **`bynk-fmt`** | Strong | Full formatter contract incl. comment preservation; idempotent, round-trip-tested over the corpus. |
 | **`bynk-lsp`** | Rich | Diagnostics, hover, definition, completion, signature help, inlay hints, semantic tokens, codeLens, call hierarchy, implementation nav, folding/selection, workspace symbols, rename/references (v0.24–v0.43). The completion overhaul + editor polish shipped (ADRs 0093–0095, [`bynk-lsp-spec.md`](bynk-lsp-spec.md)); remaining: editor-agnostic setup docs + marketplace publishing ([#257](https://github.com/accuser/bynk/issues/257)/[#258](https://github.com/accuser/bynk/issues/258)). |
-| **`tree-sitter-bynk`** | Lags the language | Strong v0–v0.5 grammar + highlights; behind on newer surface (`on http`/`from <protocol>`, `assert`-expr, `test`/`mocks`, `HttpResult`, actors). See [`bynk-engineering-roadmap.md`](bynk-engineering-roadmap.md). |
+| **`tree-sitter-bynk`** | Current | The grammar covers the present surface (`suite`, `actor`, `store`, `par` and the rest), with a test corpus and a CI `generate` step. See [`bynk-engineering-roadmap.md`](bynk-engineering-roadmap.md). |
 | **`vscode-bynk`** | Solid client | LSP client + status bar + scaffolds/walkthrough (v0.38); now bundles the server (B-0). Highlighting is TextMate, not the tree-sitter grammar. |
 | **v1 coordination surface** (events, sagas, query algebra, rich storage kinds, agent invariants) | Shipped except sagas (October 2026) | See §4. |
 
@@ -238,10 +238,8 @@ track completed (decisions in ADRs 0093–0095, feature spec in
   member-index kinds, folding/selection ranges. The completion overhaul and
   B-1/B-2 polish shipped (ADRs 0093–0095); remaining: editor-agnostic setup docs
   + marketplace publishing (issues #257/#258).
-- **`tree-sitter-bynk`** — the biggest tooling lag: a strong v0–v0.5 grammar that
-  has not been brought forward to the current surface (`from <protocol>` / `on
-  http`, `assert`-expr, `test`/`mocks`, `HttpResult`, actors). Listed in the
-  engineering roadmap.
+- **`tree-sitter-bynk`** — now covers the present surface (`suite`, `actor`,
+  `store`, `par` and the rest), with a corpus and a CI `generate` step.
 - **`vscode-bynk`** — LSP client, status bar, and B-2 polish (scaffolds,
   commands, walkthrough, problem-matcher) are in; the server is bundled (B-0).
   Highlighting still uses a hand-written TextMate grammar rather than the
@@ -297,7 +295,7 @@ The forward plan lives in dedicated, domain-scoped docs:
 2. ~~Resolve the `Int`-precision issue before Bynk handles large integers.~~
    Closed by #1657 (the safe-integer domain); the workers-edge `any` half closed
    in v0.176, #642.
-3. Bring `tree-sitter-bynk` up to the current surface (see engineering roadmap).
+3. ~~Bring `tree-sitter-bynk` up to the current surface.~~ Done: the grammar covers the present surface, with a corpus and a CI `generate` step.
 4. Close or re-scope the one **Open** ADR (0020, adapter dependency trust).
 
 ---

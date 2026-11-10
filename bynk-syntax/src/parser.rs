@@ -2,8 +2,8 @@
 //!
 //! Token grammar in spec §4. The expression parser uses one function per
 //! precedence level (§4.4). Errors carry spans and short fix-oriented
-//! messages; the parser does not currently attempt synchronisation, which
-//! means at most one parse error is reported per compilation.
+//! messages. The parser recovers at declaration level, skipping a malformed
+//! declaration and carrying on, so several parse errors can be reported per file.
 
 use crate::ast::*;
 use crate::error::CompileError;
