@@ -24,6 +24,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::kernel_op::KernelOp;
+
 use bynk_syntax::ast::{
     Block, ExprId, ExprKind, FnDecl, Handler, HandlerKind, MatchBody, ServiceProtocol, Statement,
     TypeRef, expr_children,
@@ -379,12 +381,13 @@ fn scan_with<'a>(
             facts.direct.get_or_insert(("~>", span));
         }
         Hit::Expr(e) => match callees.get(&e.id) {
-            Some(Callee::Kernel { recv, op }) if op == "within" || op == "race" => {
+            Some(Callee::Kernel {
+                recv,
+                op: KernelOp::Effect(op),
+            }) => {
                 if matches!(&*tys.get(*recv), Ty::Effect(_)) {
                     facts.timed = true;
-                    facts
-                        .direct
-                        .get_or_insert((if op == "within" { "within" } else { "race" }, e.span));
+                    facts.direct.get_or_insert((op.name(), e.span));
                 }
             }
             Some(

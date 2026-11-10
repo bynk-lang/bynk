@@ -41,6 +41,7 @@
 //! never reach), so they're covered directly below.
 
 use bynk_check::checker::{self, Callee};
+use bynk_check::kernel_op::{KernelOp, ListOp};
 use bynk_check::resolver;
 use bynk_syntax::{lexer, parser};
 
@@ -266,10 +267,14 @@ commons demo {
 "#;
     let callees = callees_for(src);
     assert!(
-        callees
-            .iter()
-            .any(|c| matches!(c, Callee::Kernel { op, .. } if op == "map")),
-        "expected a Callee::Kernel{{ op: \"map\" }}, got {callees:?}"
+        callees.iter().any(|c| matches!(
+            c,
+            Callee::Kernel {
+                op: KernelOp::List(ListOp::Map),
+                ..
+            }
+        )),
+        "expected a Callee::Kernel {{ op: List(Map) }}, got {callees:?}"
     );
     let ts = emit(src);
     assert!(

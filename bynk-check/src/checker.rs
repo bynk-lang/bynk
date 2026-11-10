@@ -22,6 +22,11 @@ use crate::builtin_names::methods::*;
 use crate::builtin_names::types::*;
 use crate::hints::HintSink;
 use crate::index::{RefSink, SymbolKind};
+use crate::kernel_op::{
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp,
+    IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp,
+    SetOp, StreamOp, StringOp, TestConnectionOp, TokenClaimsOp,
+};
 use crate::locals::LocalsSink;
 use crate::requirements::{
     Materialize, Requirement, RequirementSink, RequirementSource, StoreKind,
@@ -612,9 +617,10 @@ pub enum Callee {
     /// A built-in method on a value — the collection/query/stream/
     /// connection/numeric/duration/instant/bytes/string/option/result/
     /// effect kernels, including the refined-receiver fallback (ADR 0168).
-    /// `recv` is the receiver's own checked type; no `KernelOp` enum exists
-    /// yet in this crate (R6.11), so the operation is named, not typed.
-    Kernel { recv: TyId, op: String },
+    /// `recv` is the receiver's own checked type; `op` is the resolved
+    /// operation on it (#3164), so a consumer matches on the enum rather than
+    /// on the method's spelling.
+    Kernel { recv: TyId, op: KernelOp },
     /// A built-in static constructor with no declaring type — `List.empty`,
     /// `Map.empty`, `Int.parse`/`Float.parse`, `Duration.millis`,
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
