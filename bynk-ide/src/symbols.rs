@@ -705,7 +705,7 @@ pub fn describe_by_at(source: &str, offset: usize) -> Option<String> {
     // A clause word is followed by the name it governs; a `by` that ends the
     // expression (`{ by }`) is a reference.
     let named = tokens.get(idx + 1).map(|t| t.kind) == Some(bynk_syntax::lexer::TokenKind::Ident);
-    if !advance && !(named && crate::completion::is_by_clause_position(&prefix)) {
+    if !(advance || named && crate::completion::is_by_clause_position(&prefix)) {
         return None;
     }
     let (shape, doc) = if advance {
