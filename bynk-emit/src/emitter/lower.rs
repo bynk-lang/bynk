@@ -3779,9 +3779,12 @@ fn lower_method_call(
     // The checker resolved this call to a typed `KernelOp` (#3164), so each arm
     // matches on the resolved operation, not on the method's spelling, and the
     // receiver's type arguments are read off its checked type.
-    if let Some(Callee::Kernel { op: kop, .. }) = cx.commons().callee(e.id).cloned()
-        && let Some(recv_ty) = cx.commons().expr_ty(receiver.id).as_deref().cloned()
+    if let Some(Callee::Kernel {
+        op: kop,
+        recv: kernel_recv,
+    }) = cx.commons().callee(e.id).cloned()
     {
+        let recv_ty = (*tys.get(kernel_recv)).clone();
         // The receiver's checked type disagrees with the resolved op only if
         // the checker and the emitter have drifted.
         let mismatch = |kop: KernelOp| -> ! {
@@ -3928,8 +3931,7 @@ fn lower_method_call(
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
-                if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, method, args, cx))
-                {
+                if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
                     return pre.finish(s);
                 }
             }
@@ -3979,11 +3981,16 @@ fn lower_method_call(
                         let mut head: &Expr = receiver;
                         while let ExprKind::MethodCall {
                             receiver: inner,
-                            method: m,
                             args: a,
                             ..
                         } = &head.kind
-                            && m.name == "race"
+                            && matches!(
+                                cx.commons().callee(head.id),
+                                Some(Callee::Kernel {
+                                    op: KernelOp::Effect(EffectOp::Race),
+                                    ..
+                                })
+                            )
                             && a.len() == 1
                             && matches!(
                                 cx.commons().expr_ty(inner.id).as_deref(),
@@ -6106,7 +6113,6 @@ fn regex_construction(literal: &str, extra: &str, anchored: bool) -> String {
 fn lower_string_kernel(
     receiver: &Expr,
     op: StringOp,
-    method: &Ident,
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
@@ -6114,7 +6120,19 @@ fn lower_string_kernel(
     // K6c (#2600): the checker admits a regex method only with a literal
     // pattern; anything else never reaches here.
     let pattern = match args.first().map(|a| &a.kind) {
-        Some(ExprKind::StrLit(literal)) if method.name.ends_with("Regex") => Some(literal.clone()),
+        Some(ExprKind::StrLit(literal))
+            if matches!(
+                op,
+                StringOp::MatchesRegex
+                    | StringOp::ContainsRegex
+                    | StringOp::FindRegex
+                    | StringOp::FindAllRegex
+                    | StringOp::ReplaceRegex
+                    | StringOp::SplitRegex
+            ) =>
+        {
+            Some(literal.clone())
+        }
         _ => None,
     };
     if let Some(literal) = pattern {
@@ -6199,7 +6217,7 @@ fn lower_string_kernel(
         (StringOp::StartsWith | StringOp::EndsWith, [sub]) => {
             let recv = pre.lower(receiver, cx);
             let sub = pre.lower(sub, cx);
-            Some(format!("{recv}.{}({sub})", method.name))
+            Some(format!("{recv}.{}({sub})", op.name()))
         }
         (StringOp::Concat, [other]) => {
             let recv = pre.lower(receiver, cx);
