@@ -154,12 +154,13 @@ fn run() -> ExitCode {
             format,
             fix,
             emit,
+            each,
             lock,
         } => {
-            if !prepare(&input, lock.options()) {
+            if !prepare_each(&input, each, lock.options()) {
                 return ExitCode::FAILURE;
             }
-            run_check(input, format, fix, emit)
+            run_check(input, format, fix, emit, each)
         }
         Command::Openapi {
             input,
@@ -260,7 +261,7 @@ fn run() -> ExitCode {
         }
         Command::Fmt { args } => run_fmt(args),
         Command::Test { args, lock } => {
-            if !prepare(&args.input, lock.options()) {
+            if !prepare_each(&args.input, args.each, lock.options()) {
                 return ExitCode::FAILURE;
             }
             run_test(*args)
@@ -454,7 +455,9 @@ fn run() -> ExitCode {
             if !prepare(&root, bynk::fetch::FetchOptions::default()) {
                 return ExitCode::FAILURE;
             }
-            if run_check(root.clone(), CheckFormatArg::Short, false, false) != ExitCode::SUCCESS {
+            if run_check(root.clone(), CheckFormatArg::Short, false, false, false)
+                != ExitCode::SUCCESS
+            {
                 eprintln!("bynk: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
@@ -605,6 +608,27 @@ fn prepare(input: &Path, opts: bynk::fetch::FetchOptions) -> bool {
             false
         }
     }
+}
+
+/// #3274: [`prepare`], or, for `--each` over a manifest-less directory of
+/// projects, each of its projects in turn: every one is its own lock root, as
+/// when it is run alone. An `--each` that is not an implicit workspace (a
+/// project, a workspace root, a file) prepares as it always did; the command
+/// itself reports what is wrong with the flag.
+fn prepare_each(input: &Path, each: bool, opts: bynk::fetch::FetchOptions) -> bool {
+    if !each {
+        return prepare(input, opts);
+    }
+    let Ok(Some(Ok(workspace))) = bynk_driver::workspace_at_each(input, true) else {
+        return prepare(input, opts);
+    };
+    if bynk_driver::project::is_workspace_root(input) {
+        return prepare(input, opts);
+    }
+    workspace
+        .members
+        .iter()
+        .all(|member| prepare(&bynk_driver::member_dir(input, member), opts.clone()))
 }
 
 /// #2378: `bynk org`.
@@ -937,8 +961,14 @@ fn run_deploy(path: PathBuf, opts: DeployOptions) -> ExitCode {
 }
 
 /// `bynk check` (#487): type-check in-process via the linked pipeline.
-fn run_check(input: PathBuf, format: CheckFormatArg, fix: bool, emit: bool) -> ExitCode {
-    check::run(input, format, fix, emit)
+fn run_check(
+    input: PathBuf,
+    format: CheckFormatArg,
+    fix: bool,
+    emit: bool,
+    each: bool,
+) -> ExitCode {
+    check::run(input, format, fix, emit, each)
 }
 
 /// `bynk fmt` (#487): format in-process via `bynk-fmt`.
