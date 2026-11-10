@@ -46,7 +46,7 @@ pub use bynk_syntax::ast::ExprId;
 mod calls;
 pub mod codable;
 mod d1;
-pub use d1::{D1DecodeSite, D1SqlSite, RowLink};
+pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
