@@ -1005,8 +1005,7 @@ mod tests {
     /// #2863: the built-in `DecodeError` hovers with its fields.
     #[test]
     fn json_error_hovers_with_its_fields() {
-        let src =
-            "commons demo.m\n\nfn f(s: String) -> Result[Int, DecodeError] { Json.decode[Int](s) }\n";
+        let src = "commons demo.m\n\nfn f(s: String) -> Result[Int, DecodeError] { Json.decode[Int](s) }\n";
         let h = hover_at(src, "DecodeError", 0).expect("`DecodeError` hovers");
         assert!(
             h.contains("`kind`") && h.contains("`path`") && h.contains("`message`"),

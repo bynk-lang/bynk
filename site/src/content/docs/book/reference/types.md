@@ -582,7 +582,6 @@ every decoder: the old spelling still compiles, as the same type, with a
 `bynk.types.deprecated_json_error` warning whose fix rewrites it (`bynk fmt`
 rewrites it too). Its fields let a failed decode be explained in Bynk:
 
-
 | Field | Meaning |
 |---|---|
 | `kind` | what went wrong: `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate) |
