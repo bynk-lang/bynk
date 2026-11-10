@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.525**.
+written against **v0.526**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.526.0** | An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0) |
 | **v0.525.26** | A suite that names a declaration the parser skipped after a syntax error no longer reports it as an unknown function; an unknown agent construction's note no longer talks of a commons |
 | **v0.525.25** | "The checker resolves a built-in method call to a typed `KernelOp`, and the editor's completion tables are generated from it, as the first slice of the typed built-in dispatch (#3164)" |
 | **v0.525.24** | The Book's types reference now documents generic sums, and `bynk.generics.recursive_generic_at_boundary` names a recursive generic sum as a sum rather than a record |

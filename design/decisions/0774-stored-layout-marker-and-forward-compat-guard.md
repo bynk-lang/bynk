@@ -1,11 +1,6 @@
----
-level: minor
-changelog: An agent that meets a stored `__layout` marker it does not know faults `NewerLayout` instead of zero-merging (per-entry storage, slice 0)
----
+# 0774 — A stored record's `__layout` marker, and a build that faults on one it does not know
 
-## ADR: stored-layout-marker-and-forward-compat-guard
-title: A stored record's `__layout` marker, and a build that faults on one it does not know
-summary: `__layout` is reserved beside `__v`; absent is the wholesale layout; any marker a build does not know faults NewerLayout before decode or write-back
+- **Status:** Accepted (v0.526)
 
 **Context.** An agent's state is one record under the Durable Object key `"state"`, read by `loadState` and rewritten whole by `commitState` (ADR 0109, ADR 0110 D3). The per-entry storage track (`design/tracks/per-entry-storage.md`, proposal #3189, originating issue #3159) will move collection entries and index postings to their own keys, leaving the `Cell` record in `"state"`. ADR 0538 freezes the stored-state encoding and the place and meaning of the `__v` marker at 1.0, so the layout needs a marker of its own, and it has to exist in a released build before any build writes the new layout. A build that predates the layout, reading a record whose collection fields are no longer inline, would zero-merge them (ADR 0124 D4) and write the whole record back, silently orphaning every per-entry key. The `NewerSchema` guard (ADR 0538) does not cover this: it fires only on a `__v` bump, and only for builds with a schema lock.
 
