@@ -132,18 +132,19 @@ fn check_set_of(args: &[Expr], span: Span, expected: Option<TyId>, ctx: &mut Ctx
 /// and `toList`. Every operation returns a new set; none mutates.
 pub(crate) fn check_set_kernel_method(
     method: &Ident,
+    op: Option<SetOp>,
     args: &[Expr],
     elem: TyId,
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
-        "length" => Some((vec![], Ty::Base(BaseType::Int))),
-        "contains" => Some((vec![elem], Ty::Base(BaseType::Bool))),
-        "insert" | "remove" => Some((vec![elem], Ty::Set(elem))),
-        "toList" => Some((vec![], Ty::List(elem))),
-        _ => None,
+    let sig: Option<(Vec<TyId>, Ty)> = match op {
+        Some(SetOp::Length) => Some((vec![], Ty::Base(BaseType::Int))),
+        Some(SetOp::Contains) => Some((vec![elem], Ty::Base(BaseType::Bool))),
+        Some(SetOp::Insert | SetOp::Remove) => Some((vec![elem], Ty::Set(elem))),
+        Some(SetOp::ToList) => Some((vec![], Ty::List(elem))),
+        None => None,
     };
     let Some((params, ret)) = sig else {
         ctx.errors.push(CompileError::new(
@@ -397,6 +398,7 @@ fn check_group_by(
 /// the fully-instantiated function type (params type contextually, v0.20a).
 pub(crate) fn check_list_kernel_method(
     method: &Ident,
+    op: Option<ListOp>,
     args: &[Expr],
     elem: TyId,
     span: Span,
@@ -422,14 +424,14 @@ pub(crate) fn check_list_kernel_method(
         }
         true
     };
-    match method.name.as_str() {
-        "length" => {
+    match op {
+        Some(ListOp::Length) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Int)))
         }
-        "get" => {
+        Some(ListOp::Get) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -441,7 +443,7 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::Option(elem)))
         }
-        "prepend" => {
+        Some(ListOp::Prepend) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -450,7 +452,7 @@ pub(crate) fn check_list_kernel_method(
         }
         // #1889: `append(x)` mirrors `prepend`, putting the item on the end.
         // Pure and non-mutating: it returns a new list.
-        "append" => {
+        Some(ListOp::Append) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -460,7 +462,7 @@ pub(crate) fn check_list_kernel_method(
         // #1889: `concat(other)` joins two lists of one element type, the
         // receiver's elements first. `other` checks against the receiver's
         // `List[T]`, so an empty `[]` argument takes its `T` from it.
-        "concat" => {
+        Some(ListOp::Concat) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -468,7 +470,7 @@ pub(crate) fn check_list_kernel_method(
             check_arg(&args[0], list, "the `List.concat` argument", ctx);
             Some(list)
         }
-        "fold" => {
+        Some(ListOp::Fold) => {
             if !arity(2, ctx) {
                 return None;
             }
@@ -485,7 +487,7 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(acc)
         }
-        FOLD_EFF => {
+        Some(ListOp::FoldEff) => {
             if !arity(2, ctx) {
                 return None;
             }
@@ -524,7 +526,7 @@ pub(crate) fn check_list_kernel_method(
         // lowering. Both are the `List` analogue of the `Query` terminals; like
         // `foldEff`, each runs an effectful function value and so is confined to
         // effectful contexts.
-        FOR_EACH | PAR_TRAVERSE => {
+        Some(ListOp::ForEach | ListOp::ParTraverse) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -562,7 +564,7 @@ pub(crate) fn check_list_kernel_method(
         // (`Ok` or `Err`) is collected into the result list — a `Result` `Err` is
         // a value, not a fault, so nothing is discarded. Like `forEach`, each
         // runs an effectful function value and is confined to effectful contexts.
-        TRAVERSE_ALL | PAR_TRAVERSE_ALL => {
+        Some(ListOp::TraverseAll | ListOp::ParTraverseAll) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -628,7 +630,7 @@ pub(crate) fn check_list_kernel_method(
         // The fault-propagating counterpart to `traverseAll` (which gathers every
         // outcome). Like `forEach`, each runs an effectful function value and is
         // confined to effectful contexts.
-        TRAVERSE_TRY | PAR_TRAVERSE_TRY => {
+        Some(ListOp::TraverseTry | ListOp::ParTraverseTry) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -656,7 +658,7 @@ pub(crate) fn check_list_kernel_method(
         // (`Result[List[T], List[E]]`); `sequenceTry` stops at the first
         // (`Result[List[T], E]`, `traverseTry`'s shape). The receiver must be a
         // `List[Result[T, E]]`; nothing runs a function value, so both are pure.
-        "sequenceAll" | "sequenceTry" => {
+        Some(ListOp::SequenceAll | ListOp::SequenceTry) => {
             if !arity(0, ctx) {
                 return None;
             }
@@ -676,7 +678,7 @@ pub(crate) fn check_list_kernel_method(
                 return None;
             };
             let ok_list = tys.intern(Ty::List(*ok));
-            let err_ty = if method.name == "sequenceAll" {
+            let err_ty = if op == Some(ListOp::SequenceAll) {
                 tys.intern(Ty::List(*err))
             } else {
                 *err
@@ -687,14 +689,14 @@ pub(crate) fn check_list_kernel_method(
         // and terminal vocabulary as kernel methods. Lazy storage queries reuse
         // these names over a `Query[T]` receiver (slice 2); here every chain is
         // eager — builders return the collection, terminals return `T`.
-        "map" => {
+        Some(ListOp::Map) => {
             if !arity(1, ctx) {
                 return None;
             }
             let ret = check_kernel_fn_arg(&args[0], vec![elem], "the `List.map` function", ctx)?;
             Some(tys.intern(Ty::List(ret)))
         }
-        "filter" => {
+        Some(ListOp::Filter) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -710,7 +712,7 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::List(elem)))
         }
-        "flatMap" => {
+        Some(ListOp::FlatMap) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -731,7 +733,7 @@ pub(crate) fn check_list_kernel_method(
                 }
             }
         }
-        "take" | "skip" => {
+        Some(ListOp::Take | ListOp::Skip) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -743,13 +745,13 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::List(elem)))
         }
-        "count" => {
+        Some(ListOp::Count) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Int)))
         }
-        "any" | "all" => {
+        Some(ListOp::Any | ListOp::All) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -765,13 +767,13 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
-        "first" => {
+        Some(ListOp::First) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Option(elem)))
         }
-        "firstOrElse" => {
+        Some(ListOp::FirstOrElse) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -783,7 +785,7 @@ pub(crate) fn check_list_kernel_method(
         // `Ty::base()` (so Opaque keys, whose base is hidden, are rejected —
         // ordering an opaque id is meaningless). Empty aggregates are total:
         // min/max/average -> Option, sum -> the zero (D4).
-        "sortBy" | "sortByDescending" => {
+        Some(ListOp::SortBy | ListOp::SortByDescending) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -793,14 +795,14 @@ pub(crate) fn check_list_kernel_method(
             require_key_ord(key, &format!("List.{name}"), args[0].span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
-        "distinct" => {
+        Some(ListOp::Distinct) => {
             if !arity(0, ctx) {
                 return None;
             }
             require_keyable(elem, "List.distinct", span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
-        "distinctBy" => {
+        Some(ListOp::DistinctBy) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -808,7 +810,7 @@ pub(crate) fn check_list_kernel_method(
             require_keyable(key, "List.distinctBy", args[0].span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
-        "sum" => {
+        Some(ListOp::Sum) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -820,7 +822,7 @@ pub(crate) fn check_list_kernel_method(
             require_numeric(key, "List.sum", args[0].span, ctx);
             Some(key)
         }
-        "min" | "max" => {
+        Some(ListOp::Min | ListOp::Max) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -833,7 +835,7 @@ pub(crate) fn check_list_kernel_method(
             require_key_ord(key, &format!("List.{}", method.name), args[0].span, ctx);
             Some(tys.intern(Ty::Option(key)))
         }
-        "average" => {
+        Some(ListOp::Average) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -849,20 +851,24 @@ pub(crate) fn check_list_kernel_method(
         }
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form. Each projects
         // its result through `into` (no pair type); the result is `List[V]`.
-        "joinOn" => Some(tys.intern(Ty::List(check_equi_join(
+        Some(ListOp::JoinOn) => Some(tys.intern(Ty::List(check_equi_join(
             args, elem, span, false, false, ctx,
         )?))),
-        "leftJoin" => Some(tys.intern(Ty::List(check_equi_join(
+        Some(ListOp::LeftJoin) => Some(tys.intern(Ty::List(check_equi_join(
             args, elem, span, false, true, ctx,
         )?))),
-        "join" => Some(tys.intern(Ty::List(check_pred_join(args, elem, span, false, ctx)?))),
-        "groupBy" => Some(tys.intern(Ty::List(check_group_by(args, elem, span, false, ctx)?))),
+        Some(ListOp::Join) => {
+            Some(tys.intern(Ty::List(check_pred_join(args, elem, span, false, ctx)?)))
+        }
+        Some(ListOp::GroupBy) => {
+            Some(tys.intern(Ty::List(check_group_by(args, elem, span, false, ctx)?)))
+        }
         // v0.119 (ADR 0155, DECISION C-a): `run.upTo(step)` — the history strictly
         // before `step`. A history-scoped accessor: admitted only when the element
         // is a synthesised history `Step`, so it never leaks onto ordinary lists
         // (it collapses into a general `List` slice if one ever lands). Returns the
         // prefix as an ordinary `List[Step]`.
-        "upTo"
+        Some(ListOp::UpTo)
             if matches!(&*tys.get(elem), Ty::Named { name, kind: NamedKind::Record, .. }
                 if name.starts_with("__History_") && name.ends_with("_Step")) =>
         {
@@ -872,7 +878,7 @@ pub(crate) fn check_list_kernel_method(
             check_arg(&args[0], elem, "the `History.upTo` step", ctx);
             Some(tys.intern(Ty::List(elem)))
         }
-        _ => {
+        None | Some(ListOp::UpTo) => {
             // Generated from `LIST_METHODS` (v0.30.2, ADR 0063) rather than
             // hand-listed here, so the two can't drift the way this message
             // and the table's `join`/`joinOn`/`leftJoin`/`groupBy` once did.
@@ -898,39 +904,9 @@ pub(crate) fn check_list_kernel_method(
 /// `store` map receiver lifts into a `Query` (vs the entry ops `put`/`get`/…).
 /// `count` is the query terminal; the map's entry-count op is `size`.
 pub(crate) fn is_query_op(name: &str) -> bool {
-    matches!(
-        name,
-        "map"
-            | "filter"
-            | "flatMap"
-            | "sortBy"
-            | "sortByDescending"
-            | "take"
-            | "skip"
-            | "distinct"
-            | "distinctBy"
-            | "joinOn"
-            | "leftJoin"
-            | "join"
-            | "groupBy"
-            | "collect"
-            | "first"
-            | "firstOrElse"
-            | "count"
-            | "fold"
-            | "any"
-            | "all"
-            | "sum"
-            | "min"
-            | "max"
-            | "average"
-            | "forEach"
-            | "parTraverse"
-            | "traverseAll"
-            | "parTraverseAll"
-            | "traverseTry"
-            | "parTraverseTry"
-    )
+    // Generated from the typed operations (#3164), so a `QueryOp` can't be left
+    // out of the store-lift gate.
+    QueryOp::from_name(name).is_some()
 }
 
 /// v0.91 (ADR 0115/0119, query-algebra slice 2): type a **lazy** storage-query
@@ -941,6 +917,7 @@ pub(crate) fn is_query_op(name: &str) -> bool {
 /// is the query's element type. Joins and `groupBy` arrive with slice 4.
 pub(crate) fn check_query_kernel_method(
     method: &Ident,
+    op: Option<QueryOp>,
     args: &[Expr],
     elem: TyId,
     span: Span,
@@ -969,16 +946,16 @@ pub(crate) fn check_query_kernel_method(
     // T3.6b: both wrappers take and return interned ids.
     let query = |t: TyId| tys.intern(Ty::Query(t));
     let eff = |t: TyId| tys.intern(Ty::Effect(t));
-    match method.name.as_str() {
+    match op {
         // -- builders (return Query) --
-        "map" => {
+        Some(QueryOp::Map) => {
             if !arity(1, ctx) {
                 return None;
             }
             let ret = check_kernel_fn_arg(&args[0], vec![elem], "the `Query.map` function", ctx)?;
             Some(query(ret))
         }
-        "filter" => {
+        Some(QueryOp::Filter) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -994,7 +971,7 @@ pub(crate) fn check_query_kernel_method(
             );
             Some(query(elem))
         }
-        "flatMap" => {
+        Some(QueryOp::FlatMap) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1015,7 +992,7 @@ pub(crate) fn check_query_kernel_method(
                 }
             }
         }
-        "sortBy" | "sortByDescending" => {
+        Some(QueryOp::SortBy | QueryOp::SortByDescending) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1025,7 +1002,7 @@ pub(crate) fn check_query_kernel_method(
             require_key_ord(key, &format!("Query.{name}"), args[0].span, ctx);
             Some(query(elem))
         }
-        "take" | "skip" => {
+        Some(QueryOp::Take | QueryOp::Skip) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1037,14 +1014,14 @@ pub(crate) fn check_query_kernel_method(
             );
             Some(query(elem))
         }
-        "distinct" => {
+        Some(QueryOp::Distinct) => {
             if !arity(0, ctx) {
                 return None;
             }
             require_keyable(elem, "Query.distinct", span, ctx);
             Some(query(elem))
         }
-        "distinctBy" => {
+        Some(QueryOp::DistinctBy) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1053,32 +1030,32 @@ pub(crate) fn check_query_kernel_method(
             Some(query(elem))
         }
         // -- terminals (return Effect) --
-        "collect" => {
+        Some(QueryOp::Collect) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(eff(tys.intern(Ty::List(elem))))
         }
-        "first" => {
+        Some(QueryOp::First) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(eff(tys.intern(Ty::Option(elem))))
         }
-        "firstOrElse" => {
+        Some(QueryOp::FirstOrElse) => {
             if !arity(1, ctx) {
                 return None;
             }
             check_arg(&args[0], elem, "the `Query.firstOrElse` fallback", ctx);
             Some(eff(elem))
         }
-        "count" => {
+        Some(QueryOp::Count) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(eff(tys.intern(Ty::Base(BaseType::Int))))
         }
-        "fold" => {
+        Some(QueryOp::Fold) => {
             if !arity(2, ctx) {
                 return None;
             }
@@ -1095,7 +1072,7 @@ pub(crate) fn check_query_kernel_method(
             );
             Some(eff(acc))
         }
-        "any" | "all" => {
+        Some(QueryOp::Any | QueryOp::All) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1111,7 +1088,7 @@ pub(crate) fn check_query_kernel_method(
             );
             Some(eff(tys.intern(Ty::Base(BaseType::Bool))))
         }
-        "sum" => {
+        Some(QueryOp::Sum) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1119,7 +1096,7 @@ pub(crate) fn check_query_kernel_method(
             require_numeric(key, "Query.sum", args[0].span, ctx);
             Some(eff(key))
         }
-        "min" | "max" => {
+        Some(QueryOp::Min | QueryOp::Max) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1132,7 +1109,7 @@ pub(crate) fn check_query_kernel_method(
             require_key_ord(key, &format!("Query.{}", method.name), args[0].span, ctx);
             Some(eff(tys.intern(Ty::Option(key))))
         }
-        "average" => {
+        Some(QueryOp::Average) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1148,7 +1125,7 @@ pub(crate) fn check_query_kernel_method(
         // **in turn**; `parTraverse` runs them **concurrently** (the broadcast form —
         // a slow/half-dead connection must not head-of-line-block the rest). Same
         // type; the difference is sequential-vs-parallel lowering.
-        "forEach" | "parTraverse" => {
+        Some(QueryOp::ForEach | QueryOp::ParTraverse) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1170,7 +1147,7 @@ pub(crate) fn check_query_kernel_method(
         // gathered (no short-circuit) into `Effect[List[Result[U, E]]]`. The
         // `List.traverseAll`/`parTraverseAll` shape (ADR 0172) over the query
         // vocabulary, so the same fan-out reaches live connections.
-        TRAVERSE_ALL | PAR_TRAVERSE_ALL => {
+        Some(QueryOp::TraverseAll | QueryOp::ParTraverseAll) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1215,7 +1192,7 @@ pub(crate) fn check_query_kernel_method(
         // `Query`/a lifted storage collection — stop at the first `Err`, returning
         // `Effect[Result[List[U], E]]`. The `List.traverseTry`/`parTraverseTry`
         // shape over the query broadcast, so the fan-out reaches live connections.
-        TRAVERSE_TRY | PAR_TRAVERSE_TRY => {
+        Some(QueryOp::TraverseTry | QueryOp::ParTraverseTry) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1225,11 +1202,11 @@ pub(crate) fn check_query_kernel_method(
         }
         // v0.94 (ADR 0116/0120): joins & grouping are lazy builders — they project
         // through `into` and stay chainable as `Query[V]`.
-        "joinOn" => Some(query(check_equi_join(args, elem, span, true, false, ctx)?)),
-        "leftJoin" => Some(query(check_equi_join(args, elem, span, true, true, ctx)?)),
-        "join" => Some(query(check_pred_join(args, elem, span, true, ctx)?)),
-        "groupBy" => Some(query(check_group_by(args, elem, span, true, ctx)?)),
-        _ => {
+        Some(QueryOp::JoinOn) => Some(query(check_equi_join(args, elem, span, true, false, ctx)?)),
+        Some(QueryOp::LeftJoin) => Some(query(check_equi_join(args, elem, span, true, true, ctx)?)),
+        Some(QueryOp::Join) => Some(query(check_pred_join(args, elem, span, true, ctx)?)),
+        Some(QueryOp::GroupBy) => Some(query(check_group_by(args, elem, span, true, ctx)?)),
+        None => {
             // Generated from `QUERY_METHODS` (T1.6′) rather than hand-listed
             // here, so the two can't drift the way this message once did —
             // it fell behind when `join`/`joinOn`/`leftJoin`/`groupBy`
@@ -1260,6 +1237,7 @@ pub(crate) fn check_query_kernel_method(
 /// slice + ADR, as the query algebra did. `elem` is the stream's element type.
 pub(crate) fn check_stream_kernel_method(
     method: &Ident,
+    op: Option<StreamOp>,
     args: &[Expr],
     elem: TyId,
     span: Span,
@@ -1287,16 +1265,16 @@ pub(crate) fn check_stream_kernel_method(
     };
     let stream = |t: TyId| tys.intern(Ty::Stream(t));
     let eff = |t: TyId| tys.intern(Ty::Effect(t));
-    match method.name.as_str() {
+    match op {
         // -- builders (return Stream) --
-        "map" => {
+        Some(StreamOp::Map) => {
             if !arity(1, ctx) {
                 return None;
             }
             let ret = check_kernel_fn_arg(&args[0], vec![elem], "the `Stream.map` function", ctx)?;
             Some(stream(ret))
         }
-        "take" => {
+        Some(StreamOp::Take) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -1309,13 +1287,13 @@ pub(crate) fn check_stream_kernel_method(
             Some(stream(elem))
         }
         // -- terminal (returns Effect) --
-        "collect" => {
+        Some(StreamOp::Collect) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(eff(tys.intern(Ty::List(elem))))
         }
-        _ => {
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -1388,6 +1366,7 @@ pub(crate) fn check_stream_static(
 /// `frame` is the connection's `F` (the server→client frame type).
 pub(crate) fn check_connection_method(
     method: &Ident,
+    op: Option<ConnectionOp>,
     args: &[Expr],
     frame: TyId,
     span: Span,
@@ -1395,8 +1374,8 @@ pub(crate) fn check_connection_method(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let eff_unit = || Ty::Effect(tys.intern(Ty::Unit));
-    match method.name.as_str() {
-        "send" => {
+    match op {
+        Some(ConnectionOp::Send) => {
             if args.len() != 1 {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.method_arity",
@@ -1413,7 +1392,7 @@ pub(crate) fn check_connection_method(
             check_arg(&args[0], frame, "the `Connection.send` frame", ctx);
             Some(tys.intern(eff_unit()))
         }
-        "close" => {
+        Some(ConnectionOp::Close) => {
             if !args.is_empty() {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.method_arity",
@@ -1427,7 +1406,7 @@ pub(crate) fn check_connection_method(
             }
             Some(tys.intern(eff_unit()))
         }
-        _ => {
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -1450,17 +1429,18 @@ pub(crate) fn check_connection_method(
 /// owned `Connection[F]` an agent receives (once per handle).
 pub(crate) fn check_test_connection_method(
     method: &Ident,
+    op: Option<TestConnectionOp>,
     args: &[Expr],
     frame: TyId,
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let ret = match method.name.as_str() {
-        "sent" => Some(tys.intern(Ty::List(frame))),
-        "closed" => Some(tys.intern(Ty::Base(BaseType::Bool))),
-        "connection" => Some(tys.intern(Ty::Connection(frame))),
-        _ => None,
+    let ret = match op {
+        Some(TestConnectionOp::Sent) => Some(tys.intern(Ty::List(frame))),
+        Some(TestConnectionOp::Closed) => Some(tys.intern(Ty::Base(BaseType::Bool))),
+        Some(TestConnectionOp::Connection) => Some(tys.intern(Ty::Connection(frame))),
+        None => None,
     };
     let Some(ret) = ret else {
         ctx.errors.push(CompileError::new(
@@ -1503,6 +1483,7 @@ pub(crate) fn check_test_connection_method(
 /// `isNaN`/`isFinite` on `Float`.
 pub(crate) fn check_numeric_kernel_method(
     method: &Ident,
+    op: Option<KernelOp>,
     args: &[Expr],
     base: BaseType,
     span: Span,
@@ -1511,35 +1492,60 @@ pub(crate) fn check_numeric_kernel_method(
     let tys = ctx.tys;
     let b = Ty::Base(base);
     // (parameter types, return type)
-    let sig: Option<(Vec<TyId>, Ty)> = match (base, method.name.as_str()) {
-        (BaseType::Int, "toFloat") => Some((vec![], Ty::Base(BaseType::Float))),
-        (BaseType::Float, "round" | "floor" | "ceil" | "truncate") => {
-            Some((vec![], Ty::Base(BaseType::Int)))
-        }
-        (_, "abs") => Some((vec![], b.clone())),
-        (_, "min" | "max") => Some((vec![tys.intern(b.clone())], b.clone())),
-        (_, "clamp") => Some((
-            vec![tys.intern(b.clone()), tys.intern(b.clone())],
-            b.clone(),
-        )),
-        // v0.42 (ADR 0074): render a number as text — the missing direction
-        // (`Int.parse` covers parsing). Total on both `Int` and `Float`.
-        (_, "toString") => Some((vec![], Ty::Base(BaseType::String))),
-        (BaseType::Float, "isNaN" | "isFinite") => Some((vec![], Ty::Base(BaseType::Bool))),
-        // K6b (#2598): integer division companions and an exact power, each
-        // faulting on a zero divisor or a result past the safe-integer range.
-        (
-            BaseType::Int,
-            "div" | "rem" | "mod" | "pow" | "and" | "or" | "xor" | "andNot" | "shl" | "shr",
-        ) => Some((vec![tys.intern(b.clone())], b.clone())),
-        // K6b (#2598): the `Float` functions over JS `Math`, host-defined
-        // outside their domains as `Float` arithmetic is (ADR 0042).
-        (
-            BaseType::Float,
-            "sqrt" | "exp" | "ln" | "log10" | "log2" | "sin" | "cos" | "tan" | "asin" | "acos"
-            | "atan",
-        ) => Some((vec![], b.clone())),
-        (BaseType::Float, "pow" | "atan2") => Some((vec![tys.intern(b.clone())], b.clone())),
+    let one = || vec![tys.intern(b.clone())];
+    let sig: Option<(Vec<TyId>, Ty)> = match op {
+        Some(KernelOp::Int(op)) => Some(match op {
+            IntOp::ToFloat => (vec![], Ty::Base(BaseType::Float)),
+            IntOp::Abs => (vec![], b.clone()),
+            IntOp::Min | IntOp::Max => (one(), b.clone()),
+            IntOp::Clamp => (
+                vec![tys.intern(b.clone()), tys.intern(b.clone())],
+                b.clone(),
+            ),
+            // v0.42 (ADR 0074): render a number as text — the missing direction
+            // (`Int.parse` covers parsing). Total on both `Int` and `Float`.
+            IntOp::ToString => (vec![], Ty::Base(BaseType::String)),
+            // K6b (#2598): integer division companions and an exact power, each
+            // faulting on a zero divisor or a result past the safe-integer range.
+            IntOp::Div
+            | IntOp::Rem
+            | IntOp::Mod
+            | IntOp::Pow
+            | IntOp::And
+            | IntOp::Or
+            | IntOp::Xor
+            | IntOp::AndNot
+            | IntOp::Shl
+            | IntOp::Shr => (one(), b.clone()),
+        }),
+        Some(KernelOp::Float(op)) => Some(match op {
+            FloatOp::Round | FloatOp::Floor | FloatOp::Ceil | FloatOp::Truncate => {
+                (vec![], Ty::Base(BaseType::Int))
+            }
+            FloatOp::Abs => (vec![], b.clone()),
+            FloatOp::Min | FloatOp::Max => (one(), b.clone()),
+            FloatOp::Clamp => (
+                vec![tys.intern(b.clone()), tys.intern(b.clone())],
+                b.clone(),
+            ),
+            FloatOp::ToString => (vec![], Ty::Base(BaseType::String)),
+            FloatOp::IsNaN | FloatOp::IsFinite => (vec![], Ty::Base(BaseType::Bool)),
+            // K6b (#2598): the `Float` functions over JS `Math`, host-defined
+            // outside their domains as `Float` arithmetic is (ADR 0042).
+            FloatOp::Sqrt
+            | FloatOp::Exp
+            | FloatOp::Ln
+            | FloatOp::Log10
+            | FloatOp::Log2
+            | FloatOp::Sin
+            | FloatOp::Cos
+            | FloatOp::Tan
+            | FloatOp::Asin
+            | FloatOp::Acos
+            | FloatOp::Atan => (vec![], b.clone()),
+            FloatOp::Pow | FloatOp::Atan2 => (one(), b.clone()),
+        }),
+        // Not an operation of this kernel (`None`), or of another base.
         _ => None,
     };
     let Some((params, ret)) = sig else {
@@ -1601,15 +1607,16 @@ pub(crate) fn check_numeric_kernel_method(
 /// milliseconds (`toMillis`) plus `toString`.
 pub(crate) fn check_duration_kernel_method(
     method: &Ident,
+    op: Option<DurationOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
-        "toMillis" => Some((vec![], Ty::Base(BaseType::Int))),
-        "toString" => Some((vec![], Ty::Base(BaseType::String))),
-        _ => None,
+    let sig: Option<(Vec<TyId>, Ty)> = match op {
+        Some(DurationOp::ToMillis) => Some((vec![], Ty::Base(BaseType::Int))),
+        Some(DurationOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
+        None => None,
     };
     let Some((params, ret)) = sig else {
         ctx.errors.push(CompileError::new(
@@ -1651,17 +1658,18 @@ pub(crate) fn check_duration_kernel_method(
 /// separately as a type static.
 pub(crate) fn check_instant_kernel_method(
     method: &Ident,
+    op: Option<InstantOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
-        "toEpochMillis" => Some((vec![], Ty::Base(BaseType::Int))),
-        "toString" => Some((vec![], Ty::Base(BaseType::String))),
+    let sig: Option<(Vec<TyId>, Ty)> = match op {
+        Some(InstantOp::ToEpochMillis) => Some((vec![], Ty::Base(BaseType::Int))),
+        Some(InstantOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
         // K3 (#2592): RFC 3339 text in UTC.
-        "toIso" => Some((vec![], Ty::Base(BaseType::String))),
-        _ => None,
+        Some(InstantOp::ToIso) => Some((vec![], Ty::Base(BaseType::String))),
+        None => None,
     };
     let Some((params, ret)) = sig else {
         ctx.errors.push(CompileError::new(
@@ -1708,6 +1716,7 @@ pub(crate) fn check_instant_kernel_method(
 /// stays unorderable), `toHex` and `toBase64Url`.
 pub(crate) fn check_bytes_kernel_method(
     method: &Ident,
+    op: Option<BytesOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
@@ -1715,17 +1724,21 @@ pub(crate) fn check_bytes_kernel_method(
     let tys = ctx.tys;
     let bytes = Ty::Base(BaseType::Bytes);
     let int = Ty::Base(BaseType::Int);
-    let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
-        "length" => Some((vec![], int.clone())),
-        "toBase64" | "toBase64Url" | "toHex" => Some((vec![], Ty::Base(BaseType::String))),
-        "decodeUtf8" => Some((vec![], Ty::Option(tys.intern(Ty::Base(BaseType::String))))),
-        "concat" => Some((vec![tys.intern(bytes.clone())], bytes)),
-        "slice" => Some((
+    let sig: Option<(Vec<TyId>, Ty)> = match op {
+        Some(BytesOp::Length) => Some((vec![], int.clone())),
+        Some(BytesOp::ToBase64 | BytesOp::ToBase64Url | BytesOp::ToHex) => {
+            Some((vec![], Ty::Base(BaseType::String)))
+        }
+        Some(BytesOp::DecodeUtf8) => {
+            Some((vec![], Ty::Option(tys.intern(Ty::Base(BaseType::String)))))
+        }
+        Some(BytesOp::Concat) => Some((vec![tys.intern(bytes.clone())], bytes)),
+        Some(BytesOp::Slice) => Some((
             vec![tys.intern(int.clone()), tys.intern(int.clone())],
             bytes,
         )),
-        "compare" => Some((vec![tys.intern(bytes)], int)),
-        _ => None,
+        Some(BytesOp::Compare) => Some((vec![tys.intern(bytes)], int)),
+        None => None,
     };
     let Some((params, ret)) = sig else {
         ctx.errors.push(CompileError::new(
@@ -1772,16 +1785,17 @@ pub(crate) fn check_bytes_kernel_method(
 /// is `Option[String]`.
 pub(crate) fn check_request_headers_method(
     method: &Ident,
+    op: Option<RequestHeadersOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let string = tys.intern(Ty::Base(BaseType::String));
-    let params: Vec<TyId> = match method.name.as_str() {
-        "get" => vec![string],
-        "bearer" | "clientIp" => vec![],
-        _ => {
+    let params: Vec<TyId> = match op {
+        Some(RequestHeadersOp::Get) => vec![string],
+        Some(RequestHeadersOp::Bearer | RequestHeadersOp::ClientIp) => vec![],
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -1829,6 +1843,7 @@ pub(crate) fn check_request_headers_method(
 /// value in order, `params()` every key with its values.
 pub(crate) fn check_request_query_method(
     method: &Ident,
+    op: Option<RequestQueryOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
@@ -1836,11 +1851,11 @@ pub(crate) fn check_request_query_method(
     let tys = ctx.tys;
     let string = tys.intern(Ty::Base(BaseType::String));
     let strings = tys.intern(Ty::List(string));
-    let (params, ret): (Vec<TyId>, TyId) = match method.name.as_str() {
-        "get" => (vec![string], tys.intern(Ty::Option(string))),
-        "all" => (vec![string], strings),
-        "params" => (vec![], tys.intern(Ty::Map(string, strings))),
-        _ => {
+    let (params, ret): (Vec<TyId>, TyId) = match op {
+        Some(RequestQueryOp::Get) => (vec![string], tys.intern(Ty::Option(string))),
+        Some(RequestQueryOp::All) => (vec![string], strings),
+        Some(RequestQueryOp::Params) => (vec![], tys.intern(Ty::Map(string, strings))),
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -1888,16 +1903,17 @@ pub(crate) fn check_request_query_method(
 /// `has(name)` is whether the claim is present, of any type.
 pub(crate) fn check_token_claims_method(
     method: &Ident,
+    op: Option<TokenClaimsOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let string = tys.intern(Ty::Base(BaseType::String));
-    let ret = match method.name.as_str() {
-        "get" => Ty::Option(string),
-        "has" => Ty::Base(BaseType::Bool),
-        _ => {
+    let ret = match op {
+        Some(TokenClaimsOp::Get) => Ty::Option(string),
+        Some(TokenClaimsOp::Has) => Ty::Base(BaseType::Bool),
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -1942,6 +1958,7 @@ pub(crate) fn check_token_claims_method(
 /// are UTF-16 code units, except `chars()` (code points, normatively).
 pub(crate) fn check_string_kernel_method(
     method: &Ident,
+    op: Option<StringOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
@@ -1952,44 +1969,46 @@ pub(crate) fn check_string_kernel_method(
     let boolean = Ty::Base(BaseType::Bool);
     let strings = Ty::List(tys.intern(s.clone()));
     // (parameter types, return type)
-    let sig: Option<(Vec<TyId>, Ty)> = match method.name.as_str() {
-        "length" => Some((vec![], int.clone())),
-        "split" => Some((vec![tys.intern(s.clone())], strings.clone())),
-        "trim" | "toUpper" | "toLower" => Some((vec![], s.clone())),
-        "contains" | "startsWith" | "endsWith" => {
+    let sig: Option<(Vec<TyId>, Ty)> = match op {
+        Some(StringOp::Length) => Some((vec![], int.clone())),
+        Some(StringOp::Split) => Some((vec![tys.intern(s.clone())], strings.clone())),
+        Some(StringOp::Trim | StringOp::ToUpper | StringOp::ToLower) => Some((vec![], s.clone())),
+        Some(StringOp::Contains | StringOp::StartsWith | StringOp::EndsWith) => {
             Some((vec![tys.intern(s.clone())], boolean.clone()))
         }
         // K6c (#2600): the regex methods. The pattern is a checked literal
         // (below); the rest of the signature is ordinary.
-        "matchesRegex" | "containsRegex" => Some((vec![tys.intern(s.clone())], boolean)),
-        "findRegex" => Some((
+        Some(StringOp::MatchesRegex | StringOp::ContainsRegex) => {
+            Some((vec![tys.intern(s.clone())], boolean))
+        }
+        Some(StringOp::FindRegex) => Some((
             vec![tys.intern(s.clone())],
             Ty::Option(tys.intern(Ty::List(tys.intern(Ty::Option(tys.intern(s.clone())))))),
         )),
-        "findAllRegex" => Some((
+        Some(StringOp::FindAllRegex) => Some((
             vec![tys.intern(s.clone())],
             Ty::List(tys.intern(Ty::List(tys.intern(Ty::Option(tys.intern(s.clone())))))),
         )),
-        "replaceRegex" => Some((
+        Some(StringOp::ReplaceRegex) => Some((
             vec![tys.intern(s.clone()), tys.intern(s.clone())],
             s.clone(),
         )),
-        "splitRegex" => Some((vec![tys.intern(s.clone())], strings.clone())),
-        "replace" => Some((
+        Some(StringOp::SplitRegex) => Some((vec![tys.intern(s.clone())], strings.clone())),
+        Some(StringOp::Replace) => Some((
             vec![tys.intern(s.clone()), tys.intern(s.clone())],
             s.clone(),
         )),
-        "slice" => Some((
+        Some(StringOp::Slice) => Some((
             vec![tys.intern(int.clone()), tys.intern(int.clone())],
             s.clone(),
         )),
-        "indexOf" => Some((vec![tys.intern(s.clone())], Ty::Option(tys.intern(int)))),
-        "chars" => Some((vec![], strings)),
-        "concat" => Some((vec![tys.intern(s.clone())], s.clone())),
+        Some(StringOp::IndexOf) => Some((vec![tys.intern(s.clone())], Ty::Option(tys.intern(int)))),
+        Some(StringOp::Chars) => Some((vec![], strings)),
+        Some(StringOp::Concat) => Some((vec![tys.intern(s.clone())], s.clone())),
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
-        "percentEncode" => Some((vec![], s.clone())),
-        "percentDecode" => Some((vec![], Ty::Option(tys.intern(s.clone())))),
-        _ => None,
+        Some(StringOp::PercentEncode) => Some((vec![], s.clone())),
+        Some(StringOp::PercentDecode) => Some((vec![], Ty::Option(tys.intern(s.clone())))),
+        None => None,
     };
     let Some((params, ret)) = sig else {
         ctx.errors.push(CompileError::new(
@@ -2354,6 +2373,7 @@ fn check_try_fn_arg(
 /// free, unlike free functions imported by bare name).
 pub(crate) fn check_option_kernel_method(
     method: &Ident,
+    op: Option<OptionOp>,
     args: &[Expr],
     inner: TyId,
     span: Span,
@@ -2379,15 +2399,15 @@ pub(crate) fn check_option_kernel_method(
         }
         true
     };
-    match method.name.as_str() {
-        "map" => {
+    match op {
+        Some(OptionOp::Map) => {
             if !arity(1, ctx) {
                 return None;
             }
             let ret = check_kernel_fn_arg(&args[0], vec![inner], "the `Option.map` function", ctx)?;
             Some(tys.intern(Ty::Option(ret)))
         }
-        "andThen" => {
+        Some(OptionOp::AndThen) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2408,33 +2428,33 @@ pub(crate) fn check_option_kernel_method(
                 }
             }
         }
-        "getOrElse" => {
+        Some(OptionOp::GetOrElse) => {
             if !arity(1, ctx) {
                 return None;
             }
             check_arg(&args[0], inner, "the `Option.getOrElse` fallback", ctx);
             Some(inner)
         }
-        "isSome" => {
+        Some(OptionOp::IsSome) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
-        "okOr" => {
+        Some(OptionOp::OkOr) => {
             if !arity(1, ctx) {
                 return None;
             }
             let err = type_of(&args[0], None, ctx)?;
             Some(tys.intern(Ty::Result(inner, err)))
         }
-        "isNone" => {
+        Some(OptionOp::IsNone) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
-        "orElse" => {
+        Some(OptionOp::OrElse) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2456,7 +2476,7 @@ pub(crate) fn check_option_kernel_method(
                 None
             }
         }
-        "filter" => {
+        Some(OptionOp::Filter) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2472,7 +2492,7 @@ pub(crate) fn check_option_kernel_method(
             );
             Some(tys.intern(Ty::Option(inner)))
         }
-        _ => {
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -2502,6 +2522,7 @@ pub(crate) fn check_option_kernel_method(
 /// v0.22a: type a built-in `Result[T, E]` kernel method (ADR 0048).
 pub(crate) fn check_result_kernel_method(
     method: &Ident,
+    op: Option<ResultOp>,
     args: &[Expr],
     ok: TyId,
     err: TyId,
@@ -2528,15 +2549,15 @@ pub(crate) fn check_result_kernel_method(
         }
         true
     };
-    match method.name.as_str() {
-        "map" => {
+    match op {
+        Some(ResultOp::Map) => {
             if !arity(1, ctx) {
                 return None;
             }
             let ret = check_kernel_fn_arg(&args[0], vec![ok], "the `Result.map` function", ctx)?;
             Some(tys.intern(Ty::Result(ret, err)))
         }
-        "andThen" => {
+        Some(ResultOp::AndThen) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2572,7 +2593,7 @@ pub(crate) fn check_result_kernel_method(
                 }
             }
         }
-        "mapErr" => {
+        Some(ResultOp::MapErr) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2580,32 +2601,32 @@ pub(crate) fn check_result_kernel_method(
                 check_kernel_fn_arg(&args[0], vec![err], "the `Result.mapErr` function", ctx)?;
             Some(tys.intern(Ty::Result(ok, ret)))
         }
-        "getOrElse" => {
+        Some(ResultOp::GetOrElse) => {
             if !arity(1, ctx) {
                 return None;
             }
             check_arg(&args[0], ok, "the `Result.getOrElse` fallback", ctx);
             Some(ok)
         }
-        "isOk" => {
+        Some(ResultOp::IsOk) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
-        "isErr" => {
+        Some(ResultOp::IsErr) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
-        "ok" => {
+        Some(ResultOp::Ok) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Option(ok)))
         }
-        _ => {
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -2653,6 +2674,7 @@ pub(crate) fn check_result_kernel_method(
 /// handed and return it.
 pub(crate) fn check_effect_result_kernel_method(
     method: &Ident,
+    op: Option<EffectResultOp>,
     args: &[Expr],
     ok: TyId,
     err: TyId,
@@ -2679,8 +2701,8 @@ pub(crate) fn check_effect_result_kernel_method(
         }
         true
     };
-    match method.name.as_str() {
-        "mapOk" => {
+    match op {
+        Some(EffectResultOp::MapOk) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2692,7 +2714,7 @@ pub(crate) fn check_effect_result_kernel_method(
             )?;
             Some(tys.intern(Ty::Effect(tys.intern(Ty::Result(ret, err)))))
         }
-        "mapErr" => {
+        Some(EffectResultOp::MapErr) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2704,7 +2726,7 @@ pub(crate) fn check_effect_result_kernel_method(
             )?;
             Some(tys.intern(Ty::Effect(tys.intern(Ty::Result(ok, ret)))))
         }
-        "flatMapOk" => {
+        Some(EffectResultOp::FlatMapOk) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2726,7 +2748,7 @@ pub(crate) fn check_effect_result_kernel_method(
             }
             Some(tys.intern(Ty::Effect(tys.intern(Ty::Result(u, err)))))
         }
-        "flatMapErr" => {
+        Some(EffectResultOp::FlatMapErr) => {
             if !arity(1, ctx) {
                 return None;
             }
@@ -2747,7 +2769,7 @@ pub(crate) fn check_effect_result_kernel_method(
             }
             Some(tys.intern(Ty::Effect(tys.intern(Ty::Result(ok, f)))))
         }
-        _ => {
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -3470,6 +3492,7 @@ pub(crate) fn check_token_claims_static(
 /// v0.20b: type a built-in `Map[K, V]` kernel method.
 pub(crate) fn check_map_kernel_method(
     method: &Ident,
+    op: Option<MapOp>,
     args: &[Expr],
     key: TyId,
     val: TyId,
@@ -3496,34 +3519,34 @@ pub(crate) fn check_map_kernel_method(
         }
         true
     };
-    match method.name.as_str() {
-        "length" => {
+    match op {
+        Some(MapOp::Length) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Int)))
         }
-        "keys" => {
+        Some(MapOp::Keys) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::List(key)))
         }
         // v0.149 (ADR 0173): the `keys` sibling — the values in key order.
-        "values" => {
+        Some(MapOp::Values) => {
             if !arity(0, ctx) {
                 return None;
             }
             Some(tys.intern(Ty::List(val)))
         }
-        "get" => {
+        Some(MapOp::Get) => {
             if !arity(1, ctx) {
                 return None;
             }
             check_arg(&args[0], key, "the `Map.get` key", ctx);
             Some(tys.intern(Ty::Option(val)))
         }
-        "insert" => {
+        Some(MapOp::Insert) => {
             if !arity(2, ctx) {
                 return None;
             }
@@ -3531,7 +3554,7 @@ pub(crate) fn check_map_kernel_method(
             check_arg(&args[1], val, "the `Map.insert` value", ctx);
             Some(tys.intern(Ty::Map(key, val)))
         }
-        _ => {
+        None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
@@ -3555,6 +3578,7 @@ pub(crate) fn check_map_kernel_method(
 /// (`RoundingMode.HalfEven`), never typed as an expression.
 pub(crate) fn check_decimal_kernel_method(
     method: &Ident,
+    op: Option<DecimalOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
@@ -3563,19 +3587,19 @@ pub(crate) fn check_decimal_kernel_method(
     let dec = Ty::Base(BaseType::Decimal);
     let int = Ty::Base(BaseType::Int);
     // (parameter types, with `None` marking a rounding-mode slot; return)
-    let sig: Option<(Vec<Option<TyId>>, Ty)> = match method.name.as_str() {
-        "scale" => Some((vec![], int)),
-        "toString" => Some((vec![], Ty::Base(BaseType::String))),
-        "abs" => Some((vec![], dec)),
-        "toInt" => Some((vec![], Ty::Option(tys.intern(int)))),
-        "toFloat" => Some((vec![], Ty::Base(BaseType::Float))),
-        "min" | "max" => Some((vec![Some(tys.intern(dec.clone()))], dec)),
-        "round" => Some((vec![Some(tys.intern(int)), None], dec)),
-        "div" => Some((
+    let sig: Option<(Vec<Option<TyId>>, Ty)> = match op {
+        Some(DecimalOp::Scale) => Some((vec![], int)),
+        Some(DecimalOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
+        Some(DecimalOp::Abs) => Some((vec![], dec)),
+        Some(DecimalOp::ToInt) => Some((vec![], Ty::Option(tys.intern(int)))),
+        Some(DecimalOp::ToFloat) => Some((vec![], Ty::Base(BaseType::Float))),
+        Some(DecimalOp::Min | DecimalOp::Max) => Some((vec![Some(tys.intern(dec.clone()))], dec)),
+        Some(DecimalOp::Round) => Some((vec![Some(tys.intern(int)), None], dec)),
+        Some(DecimalOp::Div) => Some((
             vec![Some(tys.intern(dec.clone())), Some(tys.intern(int)), None],
             dec,
         )),
-        _ => None,
+        None => None,
     };
     let Some((params, ret)) = sig else {
         ctx.errors.push(CompileError::new(
