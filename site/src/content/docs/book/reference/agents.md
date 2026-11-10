@@ -137,7 +137,7 @@ as a plain value keeps its pure-collection methods).
 |---|---|---|
 | `Map[K, V]` | `put`/`get`/`update`/`upsert`/`remove`/`contains`/`size` | `update` on an absent key faults — use `upsert` for default-if-absent |
 | `Set[T]` | `add`/`remove`/`contains`/`size` | `add` is idempotent; `remove` of an absent member is a no-op |
-| `Cache[K, V]` | the `Map` op set, with per-entry TTL expiry | requires `@ttl`; eviction is lazy, check-on-read, and needs `given Clock` |
+| `Cache[K, V]` | the `Map` op set, with per-entry TTL expiry | requires `@ttl`; an expired entry reads as absent (check-on-read, needs `given Clock`) and is deleted when a handler that uses the `Cache` commits |
 | `Log[T]` | `append`; lazy `Query` reads via `since`/`before`/`between`/`recent`/`reversed` | `append` stamps the time (`given Clock`); the window roots take explicit `Instant`s, so reads need no clock |
 
 A `Map`'s or `Cache`'s key and a `Set`'s element must be `String`, `Int`, or a
@@ -147,8 +147,7 @@ collection persists as a JSON object keyed by the key's string form, so a compos
 store key is not supported yet. A store collection is keyed by the key's
 string form, so a record has no stable key: key by one of its id fields instead.
 
-Every kind counts towards the [size ceiling](#size-and-cost-of-an-agents-state)
-of the agent's stored state.
+Every entry is subject to the [size limits](#size-and-cost-of-an-agents-state).
 
 Reads over a `store Map`/`Log` are a lazy [`Query`](/book/reference/types/#query) — the same
 combinator vocabulary the eager `List` carries, dispatched by provenance.
@@ -182,11 +181,14 @@ Design for it:
 - **Key agents finely.** One agent per customer, order or channel, not one per
   system: a collection that grows with your data belongs *across* agent instances,
   not inside one, while every call still loads the whole of it.
-- **Bound a `Log` with `@retain`**, which prunes old entries as you append. `@ttl`
-  on a `Cache` only *hides* an expired entry from reads; it does not delete it, so
-  an expired entry stays stored, and is still loaded on every call, until the same
-  key is written again or you `remove` it. Keep a `Cache`'s key space bounded, or `remove` keys
-  you are finished with.
+- **Bound a `Log` with `@retain`**, which prunes old entries as you append. A
+  `Cache` entry past its `@ttl` reads as absent, and the commit of any handler that
+  uses the `Cache` deletes up to 64 expired entries (oldest first, judged by the
+  clock the handler read), so a `Cache` that is written regularly does not grow
+  without bound. A `Cache` that nothing writes any more keeps its expired entries,
+  and they are still loaded on every call, until a handler that uses it commits, and
+  a large backlog drains 64 at a time. Keep a `Cache`'s key space bounded, or
+  `remove` keys you are finished with.
 - **Use D1 for a large or unbounded table.** A `Map` is the right home for a
   small, bounded collection owned by one agent; a table of every order, event or
   user is a database's job (see [`D1`](/book/reference/capabilities/)).
