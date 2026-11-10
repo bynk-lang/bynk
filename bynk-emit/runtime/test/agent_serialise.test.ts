@@ -314,6 +314,58 @@ test("the chain wrapper keeps the stub's other members and merges Headers and Re
 
 // A publisher awaits the events fan-out after it commits; the fan-out calls a
 // subscriber that calls the publisher back.
+// The shape the emitter produces for a handler that emits: events are buffered
+// while the body runs, the state is committed, the buffered events go to the
+// fan-out, and only the reply is left. A subscriber that calls the publisher back
+// and mutates it must not lose the publisher's own write, nor be lost itself.
+test("a subscriber mutating the publisher during the fan-out loses no write", async () => {
+  const env = {} as Env;
+  class Tally {
+    state: DurableObjectState;
+    env: Env;
+    constructor(state: DurableObjectState, e: Env) {
+      this.state = state;
+      this.env = e;
+    }
+    async bump(emit: boolean): Promise<number> {
+      const cur = ((await this.state.storage.get<{ n: number }>("state")) ?? { n: 0 }).n; // load
+      await sleep(5); // a non-storage await, as a call to another agent would be
+      await this.state.storage.put("state", { n: cur + 1 }); // commit
+      if (emit) {
+        await (this.env.FAN as DurableObjectNamespace)
+          .get("singleton")
+          .fetch("https://_bynk/_bynk/fanout", { method: "POST" });
+      }
+      return cur + 1; // only the reply is left
+    }
+    async fetch(request: Request): Promise<Response> {
+      const path = new URL(request.url).pathname.split("/").pop();
+      return new Response(String(await this.bump(path === "emit")));
+    }
+  }
+  class Subscriber {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(): Promise<Response> {
+      // Reaches the publisher by a path that carries no chain, and mutates it.
+      return call(env.TALLY as DurableObjectNamespace, "t", "quiet");
+    }
+  }
+  env.TALLY = makeIntegrationDoNamespace(Tally as never, env, 2000);
+  env.FAN = makeIntegrationDoNamespace(Subscriber as never, env, 2000);
+  const tally = env.TALLY as DurableObjectNamespace;
+  // One emitting handler (whose fan-out mutates again) alongside four plain ones.
+  const replies = await Promise.all([
+    text(call(tally, "t", "emit")),
+    ...[1, 2, 3, 4].map(() => text(call(tally, "t", "quiet"))),
+  ]);
+  assert.equal(replies.length, 5);
+  // 5 external bumps + 1 from the subscriber = 6, none overwritten.
+  assert.equal(await text(call(tally, "t", "quiet")), "7");
+});
+
 test("events fan-out that calls the publisher back does not wait out the queue limit", async () => {
   const env = {} as Env;
   class Pub {
