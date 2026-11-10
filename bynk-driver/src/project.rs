@@ -5072,18 +5072,20 @@ mod tests {
             .collect()
     }
 
-    /// The report: a keyword as a parameter name drops the whole agent, and
-    /// the suite constructing it used to add an `unknown_function` per use.
+    /// The report: a syntax error in an agent's handler (here a dangling
+    /// operator; the report's own `by` parameter name is legal since #3191)
+    /// drops the whole agent, and the suite constructing it used to add an
+    /// `unknown_function` per use.
     #[test]
     fn a_suite_constructing_an_agent_whose_body_failed_to_parse_reports_only_the_syntax_error() {
         let cats = categories_for_broken_target(
             "broken_agent_keyword",
             "context m\n\nagent Counter {\n  key name: String\n  store n: Cell[Int]\n  \
-             on call bump(by: Int) -> Effect[Int] {\n    n\n  }\n}\n",
+             on call bump(amount: Int) -> Effect[Int] {\n    n +\n  }\n}\n",
             "suite m\n\ncase \"bump\" {\n  let a <- Counter(\"x\").bump(2)\n  \
              expect a == 2\n}\n",
         );
-        assert_eq!(cats, ["bynk.parse.reserved_keyword"], "{cats:?}");
+        assert_eq!(cats, ["bynk.parse.expected_expression"], "{cats:?}");
     }
 
     /// The same, from an unrelated syntax error (a missing `->` type), and for
