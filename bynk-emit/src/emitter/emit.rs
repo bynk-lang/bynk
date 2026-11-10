@@ -7552,6 +7552,353 @@ fn emit_agent_dispatch(
     // statement follows.
 }
 
+/// The agent-construction factory (#3167): `AgentName(key)` lowers to a call of
+/// this, which on the bundle target builds the agent over its registered state
+/// and on Workers hands back a proxy over the Durable Object stub. Pushes the
+/// factory declaration onto `stmts`.
+fn emit_agent_factory(
+    a: &AgentDecl,
+    ctx: &EmitProjectCtx,
+    reads_key: bool,
+    registry: &str,
+    stmts: &mut Vec<bynk_ts::TsStmt>,
+) {
+    // v0.9.2: agent-construction factory. Lowering of `AgentName(key)` calls
+    // this. A present DO binding (workers) routes through `makeWorkersAgent`;
+    // otherwise the bundle registry path is taken. The single `makeAgent`
+    // helper keeps the call site target-agnostic.
+    //
+    // Arc C, slice 24 (#1377): closes step (9)'s own sixth sub-slice, the
+    // factory function half — the smaller, self-contained half of the
+    // originally-lumped "(6) the factory function plus the history-driver"
+    // item, converted independently of the history-driver (which stays
+    // deferred, its own priority undecided). Converts fully, no opaque
+    // carve-out at all: every shape needed (`TsDecl::Function`,
+    // `TsExpr::OptionalMember`, `TsExpr::Arrow`, `TsExpr::New`) already
+    // existed. The WS-hosted DO methods/`fetch` dispatcher/
+    // `emit_ws_dispatch_handlers` cluster (originally sub-slice (5)) stays
+    // deferred here — as of this slice, not yet grounded; its own dedicated
+    // grounding pass (post-#1378, no issue number) has since found it
+    // genuinely lower source-map risk than this comment's own caution
+    // implied, decomposing into 3 independent slices — see
+    // `design/tracks/the-typescript-tree.md` §6 for the current state,
+    // since a comment landed at one slice's own commit is a snapshot, not
+    // a live pointer.
+    let workers = matches!(ctx.target, BuildTarget::Workers);
+    if workers {
+        stmts.push(agent_wire_table(a, &ctx.runtime_use));
+        if reads_key {
+            stmts.push(agent_key_codec(a, &ctx.runtime_use));
+        }
+    }
+    let key_ts = ts_type_ref_to_ts_type(&a.key_type, None);
+    let bind = crate::emitter::wrangler::agent_binding(&a.name.name).name;
+    let mut make_agent_args = vec![
+        bynk_ts::TsExpr::Ident(registry.to_string()),
+        bynk_ts::TsExpr::OptionalMember {
+            object: Box::new(bynk_ts::TsExpr::Ident("env".to_string())),
+            property: bind.clone(),
+        },
+        bynk_ts::TsExpr::Ident("key".to_string()),
+        bynk_ts::TsExpr::Arrow {
+            params: vec![bynk_ts::TsParam {
+                name: "state".to_string(),
+                ty: None,
+                optional: false,
+            }],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(if reads_key {
+                // #1818: the bundle instance learns its key here.
+                bynk_ts::TsExpr::Ident(format!(
+                    "globalThis.Object.assign(new {}(state), {{ __key: key }})",
+                    a.name.name
+                ))
+            } else {
+                bynk_ts::TsExpr::New {
+                    callee: Box::new(bynk_ts::TsExpr::Ident(a.name.name.clone())),
+                    args: vec![bynk_ts::TsExpr::Ident("state".to_string())],
+                }
+            }))),
+        },
+    ];
+    // #1678: on `workers` the proxy over the DO stub encodes arguments and
+    // decodes the result through this agent's wire table.
+    if workers {
+        make_agent_args.push(bynk_ts::TsExpr::Ident(agent_wire_name(&a.name.name)));
+        if reads_key {
+            make_agent_args.push(bynk_ts::TsExpr::Ident(agent_key_codec_name(&a.name.name)));
+        }
+    }
+    let factory_decl = bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Function {
+            name: agent_factory_name(&a.name.name),
+            generics: Vec::new(),
+            params: vec![
+                bynk_ts::TsParam {
+                    name: "key".to_string(),
+                    ty: Some(key_ts),
+                    optional: false,
+                },
+                bynk_ts::TsParam {
+                    name: "env".to_string(),
+                    ty: Some(bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
+                        name: bind.clone(),
+                        ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
+                        optional: true,
+                        readonly: false,
+                    }])),
+                    optional: true,
+                },
+            ],
+            return_type: Some(bynk_ts::TsType::named(a.name.name.clone())),
+            body: vec![bynk_ts::TsStmt::return_stmt(
+                Some(bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Ident("__makeAgent".to_string())),
+                    args: make_agent_args,
+                }),
+                None,
+            )],
+            is_async: false,
+            inline: false,
+        })),
+        None,
+    );
+    stmts.push(factory_decl);
+    // #1486: no explicit blank stmt here — the printer's automatic top-level
+    // spacing policy supplies the single blank before whatever follows.
+}
+
+/// The history-property driver (#3167): an exported, test-only function for each
+/// agent a `for all run: History[Agent]` property targets, so every other agent's
+/// emission is unchanged. Pushes it onto `stmts` after the agent's factory.
+fn emit_agent_history_driver(
+    a: &AgentDecl,
+    fns: &AgentLoadFns,
+    registry: &str,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    stmts: &mut Vec<bynk_ts::TsStmt>,
+) {
+    let state_ty = format!("{}State", a.name.name);
+    let AgentLoadFns {
+        zero_fn,
+        rehydrate_fn,
+        migrate_fn,
+        has_rehydrate,
+        step_plans,
+        agent_versions,
+        ..
+    } = *fns;
+    // v0.119 (testing track slice 7, ADR 0155): the history-property driver. Only
+    // agents a `for all run: History[Agent]` property targets get this exported
+    // test-support function (gated on `history_target_agents`), so every other
+    // agent's emission is byte-for-byte unchanged. It drives a generated call
+    // sequence through the *real* handlers from a fresh instance, recording each
+    // reached step — its call, whether it committed (an invariant/`transition`
+    // refusal throws `invariantViolation`, leaving state uncommitted), and the
+    // committed `old` → `new` pair — for the runner's predicate. Test-only, so it
+    // is stripped from deploy builds with the rest of the test surface.
+    if ctx.history_target_agents.contains(&a.name.name) {
+        // #1386/#1462: a second, separate permanent exclusion from this
+        // function's own top-level signature — genuinely raw hand-templated
+        // text throughout, zero `bynk_ts` nodes or `LowerCtx` involvement,
+        // not decomposed further. Local buffer, replacing this block's own
+        // former use of the function's `out` parameter.
+        let mut out = String::new();
+        let hs: Vec<&Handler> = a
+            .handlers
+            .iter()
+            .filter(|h| {
+                matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Call)
+                    && h.method_name.is_some()
+            })
+            .collect();
+        let driver = format!("__bynkDriveHistory_{}", a.name.name);
+        let factory = agent_factory_name(&a.name.name);
+        let key_val = zero_value_ts(&a.key_type, None, &commons.types)
+            .unwrap_or_else(|| "undefined as never".to_string());
+        // P7.2: `call`'s real shape is a discriminated union across `hs` (one
+        // variant per handler, built further down from `history_variant_tag` +
+        // each handler's own fields) and `deps` varies per handler too (each
+        // handler computes its own `deps_ty` from its own `given` set,
+        // `build_deps_object_ty_with_surface`'s own per-handler call elsewhere
+        // in this file) — a single driver-wide type for either needs the
+        // intersection/union across every handler this agent's history targets,
+        // not a same-line text change. `seq`'s own `args` is safe to narrow:
+        // it's read back only through `history_arg_ts`-shaped call sites below,
+        // never given a fixed shape of its own.
+        let step_ty = format!(
+            "{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty}, refusal?: unknown }}"
+        );
+        writeln!(
+            out,
+            "export async function {driver}(seq: globalThis.Array<{{ h: number, args: unknown[] }}>, deps: any): globalThis.Promise<globalThis.Array<{step_ty}>> {{"
+        )
+        .unwrap();
+        writeln!(out, "  {registry}.reset();").unwrap();
+        // P7.2: deferred, not narrowed. A first attempt dropped this cast,
+        // reasoning `{factory}` already declares `): {agent}` and `.state`/
+        // `.{{method}}` are real declared members — true, but it broke real
+        // `tsc --strict` fixtures (248/249): `history_arg_ts` below produces
+        // unbranded plain values (`Number(__st.args[0])`), which don't
+        // structurally match a branded handler param type (`Amount`) once
+        // `__inst` is genuinely `{agent}`-typed instead of `any`. Narrowing
+        // `history_arg_ts`'s own output to brand its values correctly is the
+        // real fix, not a same-line change here.
+        writeln!(out, "  const __inst = {factory}({key_val}) as any;").unwrap();
+        // #1649: decode the stored (wire-shape) state exactly as `loadState` does.
+        let decode = if has_rehydrate {
+            format!(" {rehydrate_fn}(__m, __s);")
+        } else {
+            String::new()
+        };
+        // State-migrations S1 (#2211): the same `__v` check `loadState` runs.
+        let version_check = agent_versions
+            .as_ref()
+            .map(|v| {
+                let steps = if step_plans.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        ", [{}]",
+                        step_plans
+                            .iter()
+                            .map(|s| format!("[{}, {}]", s.lo, s.from))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                format!(
+                    " __checkStoredSchemaVersion(\"{}\", __s, {}, {}{steps});",
+                    a.name.name, v.version, v.oldest_readable
+                )
+            })
+            .unwrap_or_default();
+        // State-migrations S2 (#2224): and the same step dispatch.
+        let migrate_call = if step_plans.is_empty() {
+            String::new()
+        } else {
+            format!(" __s = {migrate_fn}(__s);")
+        };
+        // `let`: the stored record is replaced by its joined, wholesale-shaped
+        // form below (#3189).
+        let s_decl = "let";
+        writeln!(
+            out,
+            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check} __s = await __readStored(__inst, __inst.state.storage, __s);{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
+            agent_name = a.name.name
+        )
+        .unwrap();
+        // P7.2: `e` is a caught throw of unknown shape by construction — a
+        // marker type stating exactly the one field this checks, not a blanket
+        // escape.
+        writeln!(
+            out,
+            "  const __rej = (e: unknown) => !!e && (e as {{ invariantViolation?: unknown }}).invariantViolation !== undefined;"
+        )
+        .unwrap();
+        writeln!(out, "  const __steps: globalThis.Array<{step_ty}> = [];").unwrap();
+        // A driven run deliberately provokes rejected steps (an invariant/
+        // `transition` refusal), each of which `console.error`s an
+        // `InvariantViolation` line from `commitState` before throwing. Mute just
+        // those lines for the duration of the drive so the run isn't drowned in
+        // expected noise; every other `console.error` still passes through, and the
+        // original is restored in `finally`.
+        // P7.2: `console.error`'s own real type, `(...data: unknown[]) => void`
+        // — `__ce` is already that type by inference, and the replacement
+        // matches it exactly, so neither cast was ever load-bearing.
+        writeln!(out, "  const __ce = globalThis.console.error;").unwrap();
+        writeln!(
+            out,
+            "  globalThis.console.error = (...__a: unknown[]) => {{ if (typeof __a[0] === \"string\" && __a[0].startsWith(\"InvariantViolation\")) return; __ce(...__a); }};"
+        )
+        .unwrap();
+        writeln!(out, "  try {{").unwrap();
+        writeln!(out, "  for (const __st of seq) {{").unwrap();
+        writeln!(out, "    const __old = await __load();").unwrap();
+        writeln!(out, "    let __accepted = true;").unwrap();
+        writeln!(out, "    let __refusal: unknown;").unwrap();
+        writeln!(out, "    try {{").unwrap();
+        writeln!(out, "      switch (__st.h) {{").unwrap();
+        for (i, h) in hs.iter().enumerate() {
+            let m = &h.method_name.as_ref().unwrap().name;
+            let mut call_args: Vec<String> = h
+                .params
+                .iter()
+                .enumerate()
+                .map(|(j, p)| history_arg_ts(p, j, &commons.types))
+                .collect();
+            call_args.push("deps".to_string());
+            writeln!(
+                out,
+                "        case {i}: await __inst.{m}({}); break;",
+                call_args.join(", ")
+            )
+            .unwrap();
+        }
+        writeln!(out, "      }}").unwrap();
+        writeln!(
+            out,
+            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; __refusal = (__e as {{ invariantViolation?: unknown }}).invariantViolation; }} else {{ throw __e; }} }}"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "    const __new = __accepted ? await __load() : __old;"
+        )
+        .unwrap();
+        // P7.2: deferred, same reason as `step_ty`'s own `call` field above —
+        // a real type here is the same per-handler discriminated union.
+        writeln!(out, "    let __call: any;").unwrap();
+        writeln!(out, "    switch (__st.h) {{").unwrap();
+        for (i, h) in hs.iter().enumerate() {
+            let tag = history_variant_tag(&h.method_name.as_ref().unwrap().name);
+            let fields: Vec<String> = h
+                .params
+                .iter()
+                .enumerate()
+                .map(|(j, p)| {
+                    format!(
+                        "{}: {}",
+                        ts_ident(&p.name.name),
+                        history_arg_ts(p, j, &commons.types)
+                    )
+                })
+                .collect();
+            let obj = if fields.is_empty() {
+                format!("{{ tag: \"{tag}\" }}")
+            } else {
+                format!("{{ tag: \"{tag}\", {} }}", fields.join(", "))
+            };
+            writeln!(out, "      case {i}: __call = {obj}; break;").unwrap();
+        }
+        writeln!(out, "    }}").unwrap();
+        writeln!(
+            out,
+            "    const __step: {step_ty} = {{ call: __call, accepted: __accepted, old: __old, new: __new }};"
+        )
+        .unwrap();
+        // The refusal is the runner's, not part of the step's Bynk type, so it is
+        // defined non-enumerable: `==` and a rendered step never see it.
+        writeln!(
+            out,
+            "    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, \"refusal\", {{ value: __refusal }});"
+        )
+        .unwrap();
+        writeln!(out, "    __steps.push(__step);").unwrap();
+        writeln!(out, "  }}").unwrap();
+        writeln!(out, "  return __steps;").unwrap();
+        writeln!(out, "  }} finally {{ globalThis.console.error = __ce; }}").unwrap();
+        writeln!(out, "}}").unwrap();
+        // #1486: no trailing blank baked in here — the printer's automatic
+        // top-level spacing policy supplies the single blank before whatever
+        // statement follows.
+        stmts.push(bynk_ts::TsStmt::raw(out, None));
+    }
+}
+
 /// The names of an agent's state registry and fresh-state factory.
 struct AgentStateNames {
     /// The per-agent state registry (`__agentStates…`).
@@ -8023,7 +8370,6 @@ pub(crate) fn emit_agent(
     if let Some(doc) = a.documentation.as_deref() {
         stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
     }
-    let state_ty = format!("{}State", a.name.name);
     let layout = classify_agent_store(a, state, commons, ctx);
     let AgentStateNames {
         registry,
@@ -8224,318 +8570,24 @@ pub(crate) fn emit_agent(
     let mut class_stmt = bynk_ts::TsStmt::raw(out, None);
     class_stmt.nested_map = Some(class_smb.into_inner());
     stmts.push(class_stmt);
-    // v0.9.2: agent-construction factory. Lowering of `AgentName(key)` calls
-    // this. A present DO binding (workers) routes through `makeWorkersAgent`;
-    // otherwise the bundle registry path is taken. The single `makeAgent`
-    // helper keeps the call site target-agnostic.
-    //
-    // Arc C, slice 24 (#1377): closes step (9)'s own sixth sub-slice, the
-    // factory function half — the smaller, self-contained half of the
-    // originally-lumped "(6) the factory function plus the history-driver"
-    // item, converted independently of the history-driver (which stays
-    // deferred, its own priority undecided). Converts fully, no opaque
-    // carve-out at all: every shape needed (`TsDecl::Function`,
-    // `TsExpr::OptionalMember`, `TsExpr::Arrow`, `TsExpr::New`) already
-    // existed. The WS-hosted DO methods/`fetch` dispatcher/
-    // `emit_ws_dispatch_handlers` cluster (originally sub-slice (5)) stays
-    // deferred here — as of this slice, not yet grounded; its own dedicated
-    // grounding pass (post-#1378, no issue number) has since found it
-    // genuinely lower source-map risk than this comment's own caution
-    // implied, decomposing into 3 independent slices — see
-    // `design/tracks/the-typescript-tree.md` §6 for the current state,
-    // since a comment landed at one slice's own commit is a snapshot, not
-    // a live pointer.
-    let workers = matches!(ctx.target, BuildTarget::Workers);
-    if workers {
-        stmts.push(agent_wire_table(a, &ctx.runtime_use));
-        if reads_key {
-            stmts.push(agent_key_codec(a, &ctx.runtime_use));
-        }
-    }
-    let key_ts = ts_type_ref_to_ts_type(&a.key_type, None);
-    let bind = crate::emitter::wrangler::agent_binding(&a.name.name).name;
-    let mut make_agent_args = vec![
-        bynk_ts::TsExpr::Ident(registry.clone()),
-        bynk_ts::TsExpr::OptionalMember {
-            object: Box::new(bynk_ts::TsExpr::Ident("env".to_string())),
-            property: bind.clone(),
+    emit_agent_factory(a, ctx, reads_key, &registry, &mut stmts);
+    emit_agent_history_driver(
+        a,
+        &AgentLoadFns {
+            zero_fn: &zero_fn,
+            fields_const: &fields_const,
+            rehydrate_fn: &rehydrate_fn,
+            encode_fn: &encode_fn,
+            migrate_fn: &migrate_fn,
+            has_rehydrate,
+            step_plans: &step_plans,
+            agent_versions: &agent_versions,
         },
-        bynk_ts::TsExpr::Ident("key".to_string()),
-        bynk_ts::TsExpr::Arrow {
-            params: vec![bynk_ts::TsParam {
-                name: "state".to_string(),
-                ty: None,
-                optional: false,
-            }],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: None,
-            body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(if reads_key {
-                // #1818: the bundle instance learns its key here.
-                bynk_ts::TsExpr::Ident(format!(
-                    "globalThis.Object.assign(new {}(state), {{ __key: key }})",
-                    a.name.name
-                ))
-            } else {
-                bynk_ts::TsExpr::New {
-                    callee: Box::new(bynk_ts::TsExpr::Ident(a.name.name.clone())),
-                    args: vec![bynk_ts::TsExpr::Ident("state".to_string())],
-                }
-            }))),
-        },
-    ];
-    // #1678: on `workers` the proxy over the DO stub encodes arguments and
-    // decodes the result through this agent's wire table.
-    if workers {
-        make_agent_args.push(bynk_ts::TsExpr::Ident(agent_wire_name(&a.name.name)));
-        if reads_key {
-            make_agent_args.push(bynk_ts::TsExpr::Ident(agent_key_codec_name(&a.name.name)));
-        }
-    }
-    let factory_decl = bynk_ts::TsStmt::decl(
-        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Function {
-            name: agent_factory_name(&a.name.name),
-            generics: Vec::new(),
-            params: vec![
-                bynk_ts::TsParam {
-                    name: "key".to_string(),
-                    ty: Some(key_ts),
-                    optional: false,
-                },
-                bynk_ts::TsParam {
-                    name: "env".to_string(),
-                    ty: Some(bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
-                        name: bind.clone(),
-                        ty: bynk_ts::TsType::named("__DurableObjectNamespace"),
-                        optional: true,
-                        readonly: false,
-                    }])),
-                    optional: true,
-                },
-            ],
-            return_type: Some(bynk_ts::TsType::named(a.name.name.clone())),
-            body: vec![bynk_ts::TsStmt::return_stmt(
-                Some(bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident("__makeAgent".to_string())),
-                    args: make_agent_args,
-                }),
-                None,
-            )],
-            is_async: false,
-            inline: false,
-        })),
-        None,
+        &registry,
+        commons,
+        ctx,
+        &mut stmts,
     );
-    stmts.push(factory_decl);
-    // #1486: no explicit blank stmt here — the printer's automatic top-level
-    // spacing policy supplies the single blank before whatever follows.
-
-    // v0.119 (testing track slice 7, ADR 0155): the history-property driver. Only
-    // agents a `for all run: History[Agent]` property targets get this exported
-    // test-support function (gated on `history_target_agents`), so every other
-    // agent's emission is byte-for-byte unchanged. It drives a generated call
-    // sequence through the *real* handlers from a fresh instance, recording each
-    // reached step — its call, whether it committed (an invariant/`transition`
-    // refusal throws `invariantViolation`, leaving state uncommitted), and the
-    // committed `old` → `new` pair — for the runner's predicate. Test-only, so it
-    // is stripped from deploy builds with the rest of the test surface.
-    if ctx.history_target_agents.contains(&a.name.name) {
-        // #1386/#1462: a second, separate permanent exclusion from this
-        // function's own top-level signature — genuinely raw hand-templated
-        // text throughout, zero `bynk_ts` nodes or `LowerCtx` involvement,
-        // not decomposed further. Local buffer, replacing this block's own
-        // former use of the function's `out` parameter.
-        let mut out = String::new();
-        let hs: Vec<&Handler> = a
-            .handlers
-            .iter()
-            .filter(|h| {
-                matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Call)
-                    && h.method_name.is_some()
-            })
-            .collect();
-        let driver = format!("__bynkDriveHistory_{}", a.name.name);
-        let factory = agent_factory_name(&a.name.name);
-        let key_val = zero_value_ts(&a.key_type, None, &commons.types)
-            .unwrap_or_else(|| "undefined as never".to_string());
-        // P7.2: `call`'s real shape is a discriminated union across `hs` (one
-        // variant per handler, built further down from `history_variant_tag` +
-        // each handler's own fields) and `deps` varies per handler too (each
-        // handler computes its own `deps_ty` from its own `given` set,
-        // `build_deps_object_ty_with_surface`'s own per-handler call elsewhere
-        // in this file) — a single driver-wide type for either needs the
-        // intersection/union across every handler this agent's history targets,
-        // not a same-line text change. `seq`'s own `args` is safe to narrow:
-        // it's read back only through `history_arg_ts`-shaped call sites below,
-        // never given a fixed shape of its own.
-        let step_ty = format!(
-            "{{ call: any, accepted: boolean, old: {state_ty}, new: {state_ty}, refusal?: unknown }}"
-        );
-        writeln!(
-            out,
-            "export async function {driver}(seq: globalThis.Array<{{ h: number, args: unknown[] }}>, deps: any): globalThis.Promise<globalThis.Array<{step_ty}>> {{"
-        )
-        .unwrap();
-        writeln!(out, "  {registry}.reset();").unwrap();
-        // P7.2: deferred, not narrowed. A first attempt dropped this cast,
-        // reasoning `{factory}` already declares `): {agent}` and `.state`/
-        // `.{{method}}` are real declared members — true, but it broke real
-        // `tsc --strict` fixtures (248/249): `history_arg_ts` below produces
-        // unbranded plain values (`Number(__st.args[0])`), which don't
-        // structurally match a branded handler param type (`Amount`) once
-        // `__inst` is genuinely `{agent}`-typed instead of `any`. Narrowing
-        // `history_arg_ts`'s own output to brand its values correctly is the
-        // real fix, not a same-line change here.
-        writeln!(out, "  const __inst = {factory}({key_val}) as any;").unwrap();
-        // #1649: decode the stored (wire-shape) state exactly as `loadState` does.
-        let decode = if has_rehydrate {
-            format!(" {rehydrate_fn}(__m, __s);")
-        } else {
-            String::new()
-        };
-        // State-migrations S1 (#2211): the same `__v` check `loadState` runs.
-        let version_check = agent_versions
-            .as_ref()
-            .map(|v| {
-                let steps = if step_plans.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        ", [{}]",
-                        step_plans
-                            .iter()
-                            .map(|s| format!("[{}, {}]", s.lo, s.from))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                };
-                format!(
-                    " __checkStoredSchemaVersion(\"{}\", __s, {}, {}{steps});",
-                    a.name.name, v.version, v.oldest_readable
-                )
-            })
-            .unwrap_or_default();
-        // State-migrations S2 (#2224): and the same step dispatch.
-        let migrate_call = if step_plans.is_empty() {
-            String::new()
-        } else {
-            format!(" __s = {migrate_fn}(__s);")
-        };
-        // `let`: the stored record is replaced by its joined, wholesale-shaped
-        // form below (#3189).
-        let s_decl = "let";
-        writeln!(
-            out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check} __s = await __readStored(__inst, __inst.state.storage, __s);{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
-            agent_name = a.name.name
-        )
-        .unwrap();
-        // P7.2: `e` is a caught throw of unknown shape by construction — a
-        // marker type stating exactly the one field this checks, not a blanket
-        // escape.
-        writeln!(
-            out,
-            "  const __rej = (e: unknown) => !!e && (e as {{ invariantViolation?: unknown }}).invariantViolation !== undefined;"
-        )
-        .unwrap();
-        writeln!(out, "  const __steps: globalThis.Array<{step_ty}> = [];").unwrap();
-        // A driven run deliberately provokes rejected steps (an invariant/
-        // `transition` refusal), each of which `console.error`s an
-        // `InvariantViolation` line from `commitState` before throwing. Mute just
-        // those lines for the duration of the drive so the run isn't drowned in
-        // expected noise; every other `console.error` still passes through, and the
-        // original is restored in `finally`.
-        // P7.2: `console.error`'s own real type, `(...data: unknown[]) => void`
-        // — `__ce` is already that type by inference, and the replacement
-        // matches it exactly, so neither cast was ever load-bearing.
-        writeln!(out, "  const __ce = globalThis.console.error;").unwrap();
-        writeln!(
-            out,
-            "  globalThis.console.error = (...__a: unknown[]) => {{ if (typeof __a[0] === \"string\" && __a[0].startsWith(\"InvariantViolation\")) return; __ce(...__a); }};"
-        )
-        .unwrap();
-        writeln!(out, "  try {{").unwrap();
-        writeln!(out, "  for (const __st of seq) {{").unwrap();
-        writeln!(out, "    const __old = await __load();").unwrap();
-        writeln!(out, "    let __accepted = true;").unwrap();
-        writeln!(out, "    let __refusal: unknown;").unwrap();
-        writeln!(out, "    try {{").unwrap();
-        writeln!(out, "      switch (__st.h) {{").unwrap();
-        for (i, h) in hs.iter().enumerate() {
-            let m = &h.method_name.as_ref().unwrap().name;
-            let mut call_args: Vec<String> = h
-                .params
-                .iter()
-                .enumerate()
-                .map(|(j, p)| history_arg_ts(p, j, &commons.types))
-                .collect();
-            call_args.push("deps".to_string());
-            writeln!(
-                out,
-                "        case {i}: await __inst.{m}({}); break;",
-                call_args.join(", ")
-            )
-            .unwrap();
-        }
-        writeln!(out, "      }}").unwrap();
-        writeln!(
-            out,
-            "    }} catch (__e) {{ if (__rej(__e)) {{ __accepted = false; __refusal = (__e as {{ invariantViolation?: unknown }}).invariantViolation; }} else {{ throw __e; }} }}"
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "    const __new = __accepted ? await __load() : __old;"
-        )
-        .unwrap();
-        // P7.2: deferred, same reason as `step_ty`'s own `call` field above —
-        // a real type here is the same per-handler discriminated union.
-        writeln!(out, "    let __call: any;").unwrap();
-        writeln!(out, "    switch (__st.h) {{").unwrap();
-        for (i, h) in hs.iter().enumerate() {
-            let tag = history_variant_tag(&h.method_name.as_ref().unwrap().name);
-            let fields: Vec<String> = h
-                .params
-                .iter()
-                .enumerate()
-                .map(|(j, p)| {
-                    format!(
-                        "{}: {}",
-                        ts_ident(&p.name.name),
-                        history_arg_ts(p, j, &commons.types)
-                    )
-                })
-                .collect();
-            let obj = if fields.is_empty() {
-                format!("{{ tag: \"{tag}\" }}")
-            } else {
-                format!("{{ tag: \"{tag}\", {} }}", fields.join(", "))
-            };
-            writeln!(out, "      case {i}: __call = {obj}; break;").unwrap();
-        }
-        writeln!(out, "    }}").unwrap();
-        writeln!(
-            out,
-            "    const __step: {step_ty} = {{ call: __call, accepted: __accepted, old: __old, new: __new }};"
-        )
-        .unwrap();
-        // The refusal is the runner's, not part of the step's Bynk type, so it is
-        // defined non-enumerable: `==` and a rendered step never see it.
-        writeln!(
-            out,
-            "    if (__refusal !== undefined) globalThis.Object.defineProperty(__step, \"refusal\", {{ value: __refusal }});"
-        )
-        .unwrap();
-        writeln!(out, "    __steps.push(__step);").unwrap();
-        writeln!(out, "  }}").unwrap();
-        writeln!(out, "  return __steps;").unwrap();
-        writeln!(out, "  }} finally {{ globalThis.console.error = __ce; }}").unwrap();
-        writeln!(out, "}}").unwrap();
-        // #1486: no trailing blank baked in here — the printer's automatic
-        // top-level spacing policy supplies the single blank before whatever
-        // statement follows.
-        stmts.push(bynk_ts::TsStmt::raw(out, None));
-    }
     stmts
 }
 

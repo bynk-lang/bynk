@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.539.5** | The emitter declares an agent's construction factory in `emit_agent_factory` and its history-property driver in `emit_agent_history_driver`, completing the split of `emit_agent` (#3167) |
 | **v0.539.4** | The project analysis collects each file's diagnostics, references, hints, locals, expression types and requirements into per-file scratch sinks before folding them together, the unit of output a later slice can reuse between editor rounds; no behaviour changes |
 | **v0.539.3** | `cargo xtask bench` also times a body-only edit (`lsp_body_edit`), the edit an incremental analysis is meant to make cheap, next to the signature-level one |
 | **v0.539.2** | `cargo xtask bench` also measures a "linked" project shape (contexts that consume each other, larger handler bodies) and checks the scheduler yardstick, p95 over 250 ms at 200 contexts on either shape, in each release record |
