@@ -430,7 +430,7 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     );
     assert!(
         first.contains(&format!(
-            "{{\"current\":2,\"layout\":1,\"results\":[{{\"id\":\"{id}\",\"before\":1,\"after\":2,\"layoutBefore\":1,\"layoutAfter\":1}}]}}"
+            "{{\"current\":2,\"layout\":2,\"results\":[{{\"id\":\"{id}\",\"before\":1,\"after\":2,\"layoutBefore\":1,\"layoutAfter\":2}}]}}"
         )),
         "the wake migrates the v1 record: {first}"
     );
