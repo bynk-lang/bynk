@@ -33,7 +33,7 @@ adapter workers_ai {
   exports capability  { Ai }
   exports transparent { AiError }
 
-  type AiError = enum { Unavailable, BadReply }
+  type AiError = enum { Unavailable, BadReply, InvalidModel }
 
   capability Ai {
     fn complete(model: String, prompt: String) -> Effect[Result[String, AiError]]
@@ -49,7 +49,10 @@ The binding implements `Ai` against the generated interface, so `tsc --strict`
 checks it. It reads `CF_ACCOUNT_ID` and `CF_API_TOKEN` through `Secrets`, sends
 the request through `Fetch`, and builds results with the emitted constructors
 (`Ok`, `Err`, `Some`, `None`, `Method.Post`). Model payloads differ per model; the
-text-generation shape is shown.
+text-generation shape is shown. The model id is part of the URL path that carries
+your API token, so the binding accepts only a plain `@cf/vendor/name` (or `@hf/…`)
+id and refuses anything with `..`, `?`, `#` or extra slashes, rather than trusting
+the caller.
 
 ```typescript
 // workers_ai.binding.ts
@@ -58,10 +61,15 @@ import { AiError } from "./workers_ai.js";
 import { Method, type Fetch, type Secrets } from "./bynk.js";
 import { Ok, Err, Some, None, type Result } from "./runtime.js";
 
+const MODEL = /^@(cf|hf)\/[a-z0-9_-]+\/[a-z0-9_-][a-z0-9._-]*$/;
+
 export class WorkersAi implements Ai {
   constructor(private deps: { Fetch: Fetch; Secrets: Secrets }) {}
 
   async complete(model: string, prompt: string): Promise<Result<string, AiError>> {
+    // The model id goes into an authenticated URL path: accept only a plain id.
+    if (!MODEL.test(model)) return Err(AiError.InvalidModel);
+
     const account = await this.deps.Secrets.get("CF_ACCOUNT_ID");
     const token = await this.deps.Secrets.get("CF_API_TOKEN");
     if (account.tag !== "Some" || token.tag !== "Some") return Err(AiError.Unavailable);
@@ -104,7 +112,7 @@ context assistant {
 
   service summarise {
     on call(text: String) -> Effect[String] given Ai {
-      let reply <- Ai.complete("@cf/meta/llama-3.1-8b-instruct", "Summarise: " + text)
+      let reply <- Ai.complete("@cf/meta/llama-3.1-8b-instruct", "Summarise: \(text)")
       match reply {
         Ok(summary) => summary
         Err(_) => "(no summary available)"
@@ -126,8 +134,8 @@ stub Ai.complete(_, _) returns Ok("a short summary")
 
 If you would rather not write a binding, the same call fits in a Bynk
 [provider](/book/guides/effects-and-capabilities/compose-a-provider/) over
-`Fetch` and `Secrets`. This version returns the raw response body and leaves
-decoding to the caller:
+`Fetch` and `Secrets`. This version validates the model id, returns the raw response body for a `200`
+and leaves decoding to the caller:
 
 ```bynk
 context assistant.ai
@@ -146,17 +154,19 @@ provides Ai = CloudflareAi given Fetch, Secrets {
       None => Effect.pure(Err("missing CF_ACCOUNT_ID"))
       Some(a) => match token {
         None => Effect.pure(Err("missing CF_API_TOKEN"))
-        Some(t) => {
+        Some(t) => if !model.matchesRegex("@(cf|hf)/[a-z0-9_-]+/[a-z0-9_-][a-z0-9._-]*") {
+          Effect.pure(Err("invalid model id"))
+        } else {
           let res <- Fetch.send(Request {
             method: Post,
-            url: "https://api.cloudflare.com/client/v4/accounts/${a}/ai/run/${model}",
+            url: "https://api.cloudflare.com/client/v4/accounts/\(a)/ai/run/\(model)",
             contentType: Some("application/json"),
-            authorization: Some("Bearer ${t}"),
+            authorization: Some("Bearer \(t)"),
             headers: Map.empty(),
             body: Some(body)
           })
           match res {
-            Ok(r) => Effect.pure(Ok(r.body))
+            Ok(r) => if r.status == 200 { Effect.pure(Ok(r.body)) } else { Effect.pure(Err("HTTP \(r.status)")) }
             Err(_) => Effect.pure(Err("request failed"))
           }
         }
