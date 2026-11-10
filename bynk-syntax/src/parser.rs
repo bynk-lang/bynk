@@ -1762,7 +1762,6 @@ pub fn is_reserved_keyword(kind: TokenKind) -> bool {
             | Stub
             | Service
             | Actor
-            | By
             | Expect
             | Suite
             | Case
@@ -3120,6 +3119,117 @@ mod tests {
     fn body_err(body: &str) -> Vec<CompileError> {
         let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
         parse_str(&src).expect_err(&format!("expected a parse error for {body:?}"))
+    }
+
+    // ---- #3191: `by` is a contextual keyword ----
+
+    /// The body of `fn f() -> Int { <body> }`, parsed.
+    fn body_of(body: &str) -> Block {
+        let src = format!("commons x\n\nfn f() -> Int {{\n  {body}\n}}\n");
+        let c = parse_str(&src).unwrap_or_else(|e| panic!("parse failed for {body:?}: {e:?}"));
+        let CommonsItem::Fn(f) = &c.items[0] else {
+            panic!("expected fn, got {:?}", c.items[0]);
+        };
+        f.body.clone()
+    }
+
+    fn effect_let_principal(stmt: &Statement) -> Option<&CallSiteActor> {
+        match stmt {
+            Statement::EffectLet(l) => l.principal.as_ref(),
+            other => panic!("expected an effect-let, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn by_is_an_ordinary_name_in_every_identifier_position() {
+        // A parameter, a lambda parameter, a `let`, a bare reference, field
+        // shorthand, a record pattern and an annotation label all take `by`.
+        for src in [
+            "commons x\n\nfn f(by: Int) -> Int { by }\n",
+            "commons x\n\nfn f(xs: List[Int], by: Int) -> List[Int] { xs.map((x) => x + by) }\n",
+            "commons x\n\nfn f() -> Int { let by = 1 by }\n",
+            "commons x\n\ntype S = { by: Int }\n\nfn f() -> S { let by = 1 S { by } }\n",
+            "commons x\n\ntype S = { by: Int }\n\nfn f(s: S) -> Int { let S { by, .. } = s by }\n",
+            "commons x\n\nfn f() -> Int { let g = (by: Int) => by g(1) }\n",
+        ] {
+            parse_str(src).unwrap_or_else(|e| panic!("{src:?}: {e:?}"));
+        }
+        // An agent operation and a `store` field named `by` (ADR: decision E).
+        let agent = "context x\n\nagent A {\n  key id: String\n  store by: Cell[Int]\n  on call by(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+        let (_, errors) = parse_recover_str(agent);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn by_still_starts_a_call_site_actor_clause_on_the_values_line() {
+        let block = body_of("let r <- g() by User(\"bob\")\n  1");
+        let actor = effect_let_principal(&block.statements[0]).expect("a clause");
+        assert_eq!(actor.actor.name, "User");
+        // Without an identity too.
+        let block = body_of("let r <- g() by Nobody\n  1");
+        assert_eq!(
+            effect_let_principal(&block.statements[0])
+                .unwrap()
+                .actor
+                .name,
+            "Nobody"
+        );
+    }
+
+    #[test]
+    fn a_by_on_the_next_line_after_an_effect_let_is_a_statement_not_a_clause() {
+        let block = body_of("let a <- g()\n  by");
+        assert!(effect_let_principal(&block.statements[0]).is_none());
+        assert!(matches!(&block.tail.kind, ExprKind::Ident(i) if i.name == "by"));
+        // Even with an identifier after it: the line break ends the value.
+        let src = "commons x\n\nfn f() -> Int {\n  let a <- g()\n  by\n  User\n}\n";
+        let c = parse_str(src);
+        // `by` then `User` is two expressions in a row — the generic report,
+        // never a silently-read clause.
+        assert!(c.is_err(), "{c:?}");
+    }
+
+    #[test]
+    fn a_by_not_followed_by_an_identifier_is_a_tail_even_on_the_values_line() {
+        let src = "commons x\n\nfn f() -> Effect[Int] { let by = 1 let a <- g() by }\n";
+        let c = parse_str(src).unwrap_or_else(|e| panic!("{e:?}"));
+        let CommonsItem::Fn(f) = &c.items[0] else {
+            panic!("expected fn")
+        };
+        assert!(effect_let_principal(&f.body.statements[1]).is_none());
+        assert!(matches!(&f.body.tail.kind, ExprKind::Ident(i) if i.name == "by"));
+    }
+
+    #[test]
+    fn advance_still_reads_its_by_and_admits_a_variable_amount() {
+        for stmt in ["advance Clock by 15.minutes", "advance Clock by by"] {
+            let src = format!("suite x\n\ncase \"c\" {{\n  let by = 1.minutes\n  {stmt}\n}}\n");
+            let toks = tokenize(&src).unwrap();
+            let unit = parse_unit_with_recovery(&toks, &src);
+            assert!(unit.1.is_empty(), "{stmt}: {:?}", unit.1);
+        }
+    }
+
+    #[test]
+    fn a_handler_actor_clause_still_follows_the_return_type() {
+        let src = "context x\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let (unit, errors) = parse_recover_str(src);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert!(unit.is_some());
+        // The clause word is also a legal name for the binder and the actor.
+        let src = "context x\n\nservice api from http {\n  on GET(\"/\") (by: Int) -> Effect[HttpResult[String]] by by: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let (_, errors) = parse_recover_str(src);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn another_keyword_is_still_refused_as_a_field_shorthand() {
+        // `by` left the keyword shorthand diagnostic; the hard keywords did not.
+        let errs = parse_str(
+            "commons x\n\ntype S = { type: Int }\n\nfn f() -> S { let type = 1 S { type } }\n",
+        )
+        .expect_err("`type` is reserved");
+        assert!(!errs.is_empty());
     }
 
     // ---- #2641: record patterns ----

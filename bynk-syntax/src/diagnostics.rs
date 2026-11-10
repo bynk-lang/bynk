@@ -124,6 +124,37 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "reading-and-writing-state",
     },
     Explain {
+        code: "bynk.generics.polymorphic_recursion",
+        blurb: "A generic type may refer to itself only uniformly: the self-reference must pass \
+                the declaration's own type parameters through unchanged and in order, as \
+                `Weird[T]` inside `Weird[T]`. Anything else is polymorphic recursion, such as \
+                `Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`, and it \
+                generates an unbounded set of instantiations, so it is refused at the \
+                declaration. The same holds for mutually recursive generics: a partner may be \
+                applied only to the declaration's own parameters or to types that mention none, \
+                never to a type that wraps one of them.",
+        example: "type Weird[T] = { value: T, next: Option[Weird[List[T]]] }   // ✗ a different instantiation\n\n\
+                  type Weird[T] = { value: T, next: Option[Weird[T]] }         // ✓ parameters passed through",
+        page: "/book/guides/type-system/recursive-generic-types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.generics.recursive_generic_at_boundary",
+        blurb: "A recursive generic type, a record or sum that contains itself, declares and works \
+                inside a context, but it has no codec yet. So it is refused wherever a codec is \
+                required: a service or agent handler signature, an agent `store` field or key, an \
+                event field, an actor identity type, a `Json.encode` or `Json.decode` target, or a \
+                `Codable` witness. The error fires once per use, and when the type is reached \
+                through another type, its note names the field path. To cross a boundary today, \
+                use a concrete recursive type, or keep the generic one inside the context.",
+        example: "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\n\
+                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\n\
+                  type IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\n\
+                  service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
+        page: "/book/guides/type-system/recursive-generic-types",
+        anchor: "where-it-cannot-go-yet",
+    },
+    Explain {
         code: "bynk.given.undeclared_capability",
         blurb: "A handler may only use a capability it has itself declared with \
                 `given`. Effects in Bynk are explicit: the `given` clause is the \
@@ -178,6 +209,28 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.parse.bare_expression_statement",
+        blurb: "A block has no expression statements: each statement is a `let`, `do`, \
+                `~>`, `expect`, `:=` and so on, and the last expression is the block's \
+                value. An expression written on its own line with more of the block after \
+                it would have its value thrown away, so the compiler asks you to say what \
+                happens to it. Bind it: `let _ = expr` when you only want to discard a \
+                value, or `let _ <- expr` when it is an effect to run and await (a call \
+                through a capability or an agent, or a cell's `.update`). The parser \
+                cannot see types, so it picks the `<-` form for a call that looks like an \
+                effect and the `=` form otherwise, and its note names the other. The fix \
+                is machine-applicable, so `bynk check --fix` applies it.",
+        example: "on call bump() -> Effect[Result[Int, String]] {\n    \
+                    count.update((c) => c + 1)            // ✗ an expression standing alone\n    \
+                    Ok(count)\n}\n\n\
+                  on call bump() -> Effect[Result[Int, String]] {\n    \
+                    let _ <- count.update((c) => c + 1)   // ✓ the effect is bound\n    \
+                    Ok(count)\n}\n\n\
+                  let _ = a + b                           // ✓ a plain value you mean to discard",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
     },
     Explain {
         code: "bynk.parse.record_pattern_without_rest",
@@ -1384,8 +1437,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["fn_decl"],
     ),
     dg(
+        "bynk.generics.polymorphic_recursion",
+        "A generic type refers to itself with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`), or to a mutually recursive partner with an argument that wraps one of its own parameters (`Inner[List[T]]` inside `Outer[T]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a self-reference that passes the parameters through unchanged, and a partner applied to the declaration's own parameters or to types that mention none (of any arity), are accepted (#3192).",
+        &[],
+    ),
+    dg(
         "bynk.generics.recursive_generic_at_boundary",
-        "A recursive generic record or sum (one that transitively contains itself, through any wrapper or generic argument) appears at a boundary; it has no finite set of monomorphised codecs, so it is not yet boundary-serialisable (ADR 0197).",
+        "A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197).",
         &[],
     ),
     warn(dg(
@@ -3059,7 +3117,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.faults_needs_in_process",
-        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer` or `by WrongAudience`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
+        "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(
@@ -3069,7 +3127,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.forged_needs_system",
-        "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer` or `by WrongAudience` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
+        "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.no_subject_needs_oidc_route",
+        "A case drives `by NoSubject` at an address that is not an http route with an `Oidc` actor; it sends correctly signed tokens whose `sub` is empty and whose `sub` is missing, so only an `Oidc` seam can refuse them.",
         &["case"],
     ),
     dg(
@@ -3209,6 +3272,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.wire_needs_system",
         "A `Wire(...)` raw argument is used outside a `system`-tier service address; `Wire` hands pre-validation input to the boundary and is meaningless at `unit` or in any other position.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.wrong_algorithm_needs_oidc_route",
+        "A case drives `by WrongAlgorithm` at an address that is not an http route with an `Oidc` actor; it sends a token with `alg: none` and an `HS256` token keyed with the JWKS public key, so only an `Oidc` seam can refuse them.",
         &["case"],
     ),
     dg(

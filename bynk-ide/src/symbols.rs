@@ -297,10 +297,18 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
         "WrongAudience",
         "Sends an `Oidc` route a token correctly signed by the test issuer and unexpired, whose `aud` is not the actor's audience, so the real seam refuses it (`Rejected(Unauthorized)`). Needs an `Oidc` actor. `system` tier only.",
     ),
+    (
+        "WrongAlgorithm",
+        "Sends an `Oidc` route two tokens that are otherwise valid, one with `alg: none` and one `HS256`-signed with the JWKS public key as the HMAC secret, so the real seam refuses both (`Rejected(Unauthorized)`); the case reads the first one it admits, if any. Needs an `Oidc` actor. `system` tier only.",
+    ),
+    (
+        "NoSubject",
+        "Sends an `Oidc` route two tokens that are correctly signed by the test issuer and unexpired, one with an empty `sub` and one with no `sub` claim, so the real seam refuses both before the handler runs (`Rejected(Unauthorized)`), whatever the identity's refinement. Needs an `Oidc` actor. `system` tier only.",
+    ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`, `WrongIssuer`, `WrongAudience`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -673,7 +681,7 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
     let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
     if text(idx)? != "advance"
         || tokens.get(idx + 1)?.kind != bynk_syntax::lexer::TokenKind::Ident
-        || tokens.get(idx + 2)?.kind != bynk_syntax::lexer::TokenKind::By
+        || text(idx + 2)? != "by"
     {
         return None;
     }
@@ -681,6 +689,45 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
         "```bynk\nadvance Clock by <Duration>\n```\n\nMoves the test harness's clock forward. Each case's clock starts at the epoch; at `unit` and `integration` the `Clock` double reads it, and at `system` every participant's first-party `Clock` does. It governs `Clock` only: JWT expiry, the `Signature` tolerance and Durable Object alarms keep wall-clock time."
             .to_string(),
     )
+}
+
+/// #3191 (ADR 0161): hover for the contextual `by` where it is a clause word —
+/// a handler's or service header's actor clause, a call's actor clause, or the
+/// `by` of `advance Clock by <Duration>`. `None` where `by` is an ordinary name
+/// (a parameter, a binding, a field), which keeps that name's own hover.
+pub fn describe_by_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "by" || tokens.get(idx)?.kind != bynk_syntax::lexer::TokenKind::Ident {
+        return None;
+    }
+    let advance = idx >= 2
+        && text(idx - 2) == Some("advance")
+        && tokens.get(idx - 1)?.kind == bynk_syntax::lexer::TokenKind::Ident;
+    let start = tokens[idx].span.start;
+    let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
+    let prefix = format!("{}by ", &source[line_start..start]);
+    // A clause word is followed by the name it governs; a `by` that ends the
+    // expression (`{ by }`) is a reference.
+    let named = tokens.get(idx + 1).map(|t| t.kind) == Some(bynk_syntax::lexer::TokenKind::Ident);
+    if !(advance || named && crate::completion::is_by_clause_position(&prefix)) {
+        return None;
+    }
+    let (shape, doc) = if advance {
+        (
+            "advance Clock by <Duration>",
+            "The amount to move the test harness's clock forward by.",
+        )
+    } else {
+        (
+            "by <name>: <Actor>",
+            "Names the actor a handler consumes, after the return type or on a service header — or, at a call, the principal it is made as (`let r <- f() by User(\"bob\")`). Outside these positions `by` is an ordinary name.",
+        )
+    };
+    Some(format!("```bynk\n{shape}\n```\n\n{doc}"))
 }
 
 /// Constrained generics slice 1 (ADR 0156): hover for the contextual `derives`
@@ -3493,6 +3540,22 @@ mod tests {
         assert!(
             wrong.contains("by WrongIssuer") && wrong.contains("`iss` is not the actor's"),
             "{wrong}"
+        );
+        // #3225: the algorithm and subject principals.
+        let src = "suite ci.api as system {\n\tcase \"c\" {\n\t\tlet r <- api.GET(\"/a\") by WrongAlgorithm\n\t\tlet s <- api.GET(\"/a\") by NoSubject\n\t\texpect r is Rejected(Unauthorized)\n\t}\n}\n";
+        let alg = describe_reserved_principal_at(src, src.find("WrongAlgorithm").unwrap()).unwrap();
+        assert!(
+            alg.contains("by WrongAlgorithm")
+                && alg.contains("`alg: none`")
+                && alg.contains("`HS256`"),
+            "{alg}"
+        );
+        let sub = describe_reserved_principal_at(src, src.find("NoSubject").unwrap()).unwrap();
+        assert!(
+            sub.contains("by NoSubject")
+                && sub.contains("empty `sub`")
+                && sub.contains("no `sub` claim"),
+            "{sub}"
         );
     }
 

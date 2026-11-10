@@ -1,1 +1,0 @@
-bynk.generics.recursive_generic_at_boundary recursive generic record `Node`

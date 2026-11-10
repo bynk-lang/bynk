@@ -70,6 +70,45 @@ type CrossContextViews = (
     HashMap<String, HashMap<String, String>>,
 );
 
+/// The project's `CrossContextViews`, built at most once and shared by every
+/// context/adapter unit's [`UnitCheckCtx`] (#3229).
+///
+/// The views deep-clone every unit's table, bodies included, so building them
+/// once per unit made a check cost units × project size: quadratic, and about
+/// 85% of a 200-context `bynk check` (clone plus drop). `unit_info` is fixed for
+/// the whole per-unit loop, so every unit's views were identical copies. Create
+/// one cache per project, before the loop, and pass it to every
+/// [`prepare_unit_check_ctx`]; it is filled on first use, so a project with no
+/// context or adapter never pays for the clone.
+#[derive(Default)]
+pub struct CrossContextViewsCache(std::cell::OnceCell<Arc<CrossContextViews>>);
+
+impl CrossContextViewsCache {
+    fn get(&self, unit_info: &BTreeMap<String, UnitInfo>) -> Arc<CrossContextViews> {
+        self.0
+            .get_or_init(|| {
+                let unit_tables = unit_info
+                    .iter()
+                    .map(|(n, i)| (n.clone(), i.table.clone()))
+                    .collect();
+                let unit_uses = unit_info
+                    .iter()
+                    .map(|(n, i)| (n.clone(), i.uses.clone()))
+                    .collect();
+                let unit_consumes = unit_info
+                    .iter()
+                    .map(|(n, i)| (n.clone(), i.consumes.clone()))
+                    .collect();
+                let unit_consumes_aliases = unit_info
+                    .iter()
+                    .map(|(n, i)| (n.clone(), i.aliases.clone()))
+                    .collect();
+                Arc::new((unit_tables, unit_uses, unit_consumes, unit_consumes_aliases))
+            })
+            .clone()
+    }
+}
+
 /// v0.29.4: `build_cross_context_info` (and its `combined_types_for` helper)
 /// is a general map-based function — the test-emission path calls it with
 /// *synthetic* harness maps, not `unit_info` — so it keeps its parallel-map
@@ -81,7 +120,7 @@ type CrossContextViews = (
 /// would otherwise be a whole-project deep clone, performed and discarded,
 /// once per unit.
 pub struct UnitCheckCtx {
-    cross_context_views: Option<CrossContextViews>,
+    cross_context_views: Option<Arc<CrossContextViews>>,
     /// #907: the exact set of type names `emit_context_rebrands` rebrands for
     /// this unit — names brought in via `uses` of a *commons* specifically
     /// (not a local declaration, and not a type surfaced via `consumes`,
@@ -124,29 +163,14 @@ pub fn prepare_unit_check_ctx(
     kind: UnitKind,
     broken: &crate::project_model::BrokenDeclNames,
     unit_info: &BTreeMap<String, UnitInfo>,
+    views: &CrossContextViewsCache,
     combined_types: &HashMap<String, Arc<TypeDecl>>,
     imported_from_kind: &HashMap<String, UnitKind>,
     reached_types: &crate::project_model::ReachedTypes,
     policy: &Arc<crate::stability::StabilityPolicy>,
 ) -> UnitCheckCtx {
     let cross_context_views = if kind == UnitKind::Context || kind == UnitKind::Adapter {
-        let unit_tables: HashMap<String, UnitTable> = unit_info
-            .iter()
-            .map(|(n, i)| (n.clone(), i.table.clone()))
-            .collect();
-        let unit_uses: HashMap<String, Vec<String>> = unit_info
-            .iter()
-            .map(|(n, i)| (n.clone(), i.uses.clone()))
-            .collect();
-        let unit_consumes: HashMap<String, Vec<String>> = unit_info
-            .iter()
-            .map(|(n, i)| (n.clone(), i.consumes.clone()))
-            .collect();
-        let unit_consumes_aliases: HashMap<String, HashMap<String, String>> = unit_info
-            .iter()
-            .map(|(n, i)| (n.clone(), i.aliases.clone()))
-            .collect();
-        Some((unit_tables, unit_uses, unit_consumes, unit_consumes_aliases))
+        Some(views.get(unit_info))
     } else {
         None
     };
@@ -326,7 +350,7 @@ pub fn check_file_core(
     // flattened consumed capabilities (spec §4.5).
     let cross_context_for_file =
         if let Some((unit_tables, unit_uses, unit_consumes, unit_consumes_aliases)) =
-            &ctx.cross_context_views
+            ctx.cross_context_views.as_deref()
         {
             let mut cci = build_cross_context_info(
                 name,
@@ -349,7 +373,7 @@ pub fn check_file_core(
     // event field default is constructible in that narrower view, not just
     // this unit's own wider one.
     let subscriber_visible_types: HashMap<String, Arc<TypeDecl>> =
-        if let Some((unit_tables, unit_uses, _, _)) = &ctx.cross_context_views {
+        if let Some((unit_tables, unit_uses, _, _)) = ctx.cross_context_views.as_deref() {
             combined_types_for(name, unit_tables, unit_uses)
         } else {
             HashMap::new()
@@ -684,7 +708,19 @@ pub fn check_file_core(
 
 #[cfg(test)]
 mod tests {
+    use super::{Arc, BTreeMap, CrossContextViewsCache};
     use crate::testkit::analyse;
+
+    /// #3229: every unit shares one set of views; a per-unit rebuild deep-cloned
+    /// the whole project once per context, which made a check quadratic.
+    #[test]
+    fn the_cross_context_views_are_built_once_and_shared() {
+        let cache = CrossContextViewsCache::default();
+        let unit_info = BTreeMap::new();
+        let first = cache.get(&unit_info);
+        let second = cache.get(&unit_info);
+        assert!(Arc::ptr_eq(&first, &second));
+    }
 
     #[test]
     fn a_file_with_a_type_error_still_records_its_other_expression_types() {

@@ -26,6 +26,15 @@ example, `private` is the visibility modifier only immediately before a
 binding named `private`, or the `private` in `@cache(scope: private)`, is an
 ordinary identifier.
 
+`by` is a contextual keyword too. It is a clause word in exactly four places: a
+handler's or a service header's actor clause
+([§4.4.8](/book/spec/syntactic-grammar/#448-by_clause)), a call's actor clause
+([§4.9.6](/book/spec/syntactic-grammar/#496-call_site_actor-v0182)), the amount of
+`advance <Capability> by <Duration>`, and the label of an annotation argument
+(`@indexed(by: f)`). Everywhere else it is an ordinary identifier: a parameter, a
+`let`, lambda or pattern binding, a bare reference, a record field with its
+shorthand (`Step { by }`), or a `store` field.
+
 ### §3.1.2 constant_name
 
 {{#grammar constant_name}}

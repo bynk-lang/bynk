@@ -1,0 +1,11 @@
+suite ci.api {
+	case "wrong-algorithm tokens at unit" {
+		let r <- api.GET("/who") by WrongAlgorithm
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "subjectless tokens in process" as integration {
+		let r <- api.GET("/who") by NoSubject
+		expect r is Rejected(Unauthorized)
+	}
+}

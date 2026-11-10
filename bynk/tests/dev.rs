@@ -164,7 +164,7 @@ fn golden_select_errors() {
 fn golden_serving_report() {
     let opts = dev::DevOptions {
         inspect: true,
-        inspect_port: 9229,
+        inspect_port: Some(9229),
         ..Default::default()
     };
     let mut out = String::new();

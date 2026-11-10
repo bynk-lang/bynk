@@ -48,3 +48,8 @@ newest record meets it. A record that breaches the budget is the trigger for the
 incremental-scheduler decision, [#1523](https://github.com/bynk-lang/bynk/issues/1523).
 The 50-context size must be in a record for the budget to be checked, which the
 default `--sizes` includes.
+
+The run-time cost of compiled Bynk (bundle size, start-up and request latency
+against hand-written TypeScript twins, [#3177](https://github.com/bynk-lang/bynk/issues/3177))
+is recorded separately, in [`runtime/`](runtime/), with `cargo xtask bench-runtime
+--record`. See [`benchmarks/runtime/`](../../benchmarks/runtime/README.md).

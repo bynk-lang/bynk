@@ -1,0 +1,1 @@
+recursive generic sum `Tree` cannot appear in an agent handler signature

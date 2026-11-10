@@ -1,0 +1,9 @@
+context v
+
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+fn show(t: Tree[Int]) -> String {
+	Json.encode(t)
+}

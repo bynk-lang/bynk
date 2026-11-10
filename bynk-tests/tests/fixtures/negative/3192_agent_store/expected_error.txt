@@ -1,0 +1,1 @@
+bynk.generics.recursive_generic_at_boundary recursive generic sum `Tree` cannot appear in an agent store field

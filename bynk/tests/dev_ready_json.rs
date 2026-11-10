@@ -16,8 +16,11 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
+
+#[path = "support/dev_child.rs"]
+mod dev_child;
 
 fn have(tool: &str) -> bool {
     Command::new(tool)
@@ -134,6 +137,8 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
     let ready: PathBuf = dir.join("ready.json");
     let (port, inspector) = free_ports();
 
+    let dev_log = dir.join("bynk-dev.log");
+    let (dev_stdout, dev_stderr) = dev_child::log_to(&dev_log);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
@@ -145,8 +150,8 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
             .arg(inspector.to_string())
             .arg("--ready-json")
             .arg(&ready)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(dev_stdout)
+            .stderr(dev_stderr)
             .spawn()
             .expect("spawn bynk dev"),
     );
@@ -154,7 +159,7 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
     let deadline = Instant::now() + Duration::from_secs(180);
     while !ready.exists() {
         if let Ok(Some(status)) = dev.0.try_wait() {
-            panic!("bynk dev exited before it was ready: {status}");
+            panic!("{}", dev_child::exited_early(status, &dev_log));
         }
         assert!(Instant::now() < deadline, "no readiness file within 180s");
         std::thread::sleep(Duration::from_millis(250));

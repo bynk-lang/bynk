@@ -5824,937 +5824,44 @@ fn classify_agent_store<'a>(
     }
 }
 
-pub(crate) fn emit_agent(
+/// The names and facts about an agent's state that `loadState` refers to: the
+/// fresh-state factory, the rehydration/migration functions, and the schema
+/// versions the stored layout is checked against (#3167).
+struct AgentLoadFns<'a> {
+    zero_fn: &'a String,
+    rehydrate_fn: &'a String,
+    encode_fn: &'a String,
+    migrate_fn: &'a String,
+    has_rehydrate: bool,
+    step_plans: &'a [bynk_check::schema_registry::MigrationStep],
+    agent_versions: &'a Option<bynk_check::schema_registry::AgentVersions>,
+}
+
+/// An agent class's two private state methods, `loadState` and `commitState`
+/// (#3167): load reads, rehydrates and migrates the stored record; commit
+/// checks the agent's invariants and transitions and writes it back. Kept
+/// together as one unit, and written onto `out` in that order, because the two
+/// are the agent's whole storage contract with the platform.
+#[allow(clippy::too_many_arguments)]
+fn emit_agent_load_commit_state(
+    out: &mut String,
     a: &AgentDecl,
-    state: &[StoreFieldIr],
+    effective_fields: &[RecordField],
+    fns: &AgentLoadFns,
     commons: &TypedCommons,
     ctx: &EmitProjectCtx,
     source_text: &str,
-) -> Vec<bynk_ts::TsStmt> {
-    let tys = commons.tys();
-    let mut stmts = Vec::new();
-    if let Some(doc) = a.documentation.as_deref() {
-        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
-    }
+) {
     let state_ty = format!("{}State", a.name.name);
-    let AgentStoreLayout {
-        store_field_ty,
-        effective_fields,
-        is_workers,
-        held_maps,
-        held_maps_ts,
-        store_map_fields,
-        map_names,
-        map_value_ts,
-        store_map_indexes,
-        store_set_fields,
-        set_field_names,
-        set_names,
-        store_cache_fields,
-        cache_ttls,
-        store_log_fields,
-        log_retains,
-        log_value_ts,
-    } = classify_agent_store(a, state, commons, ctx);
-    let is_store_agent = true;
-    // 1) State record type.
-    //
-    // Arc C, slice 19 (#1367): the first of step (9)'s own proposed 5-6
-    // sub-slices (design/tracks/the-typescript-tree.md §6's own grounding
-    // pass) — converts this block alone to a real `bynk_ts::TsDecl::Interface`
-    // (already exists, gained `type_params`/per-member `readonly` by #1339,
-    // no new algebra gap needed). Each field's own `readonly {name}: {ty};`
-    // line is a real `TsTypeMember::Prop`; `ts_ty_to_ts_type` (the real-node
-    // sibling of the plain-`String` `ts_ty` this block called before) already
-    // exists and is already used by `emit_service`/`emit_make_surface` for
-    // the identical purpose. Three compound member types, one load-bearing
-    // trap among them: `Cache`'s `Record<string, { v: T; exp: number }>` and
-    // `Log`'s `Array<{ t: number; v: T }>` are real `TsType::named_with_args`
-    // over a real inline `TsType::Object` — no opaque text anywhere in this
-    // block. The posting-list's own `Record<string, string[]>` is the third,
-    // and it must use `TsType::Array { readonly: false, .. }` (postfix `[]`
-    // syntax), NOT `named_with_args("Array", ..)` like `Cache`/`Log`
-    // themselves use two blocks down — semantically identical, textually
-    // distinct; using the generic form here would silently break zero-diff.
-    // See its own construction below for the actual choice, not just this
-    // note.
-    let mut members: Vec<bynk_ts::TsTypeMember> = Vec::new();
-    for f in &effective_fields {
-        let cell_ty = match store_field_ty.get(f.name.name.as_str()) {
-            Some(StoreKindIr::Cell(t)) => *t,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Cell in this \
-                 function's own state reader, found {other:?}",
-                f.name.name
-            ),
-        };
-        members.push(bynk_ts::TsTypeMember::Prop {
-            name: f.name.name.clone(),
-            ty: ts_ty_to_ts_type(cell_ty, tys),
-            optional: false,
-            readonly: true,
-        });
-    }
-    for (name, _) in &store_map_fields {
-        let value_ty = match store_field_ty.get(name.name.as_str()) {
-            Some(StoreKindIr::Map(_, v)) => *v,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Map in this \
-                 function's own state reader, found {other:?}",
-                name.name
-            ),
-        };
-        members.push(bynk_ts::TsTypeMember::Prop {
-            name: name.name.clone(),
-            ty: bynk_ts::TsType::named_with_args(
-                "globalThis.Record",
-                vec![
-                    bynk_ts::TsType::named("string"),
-                    ts_ty_to_ts_type(value_ty, tys),
-                ],
-            ),
-            optional: false,
-            readonly: true,
-        });
-    }
-    // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`.
-    for (name, _) in &held_maps {
-        members.push(bynk_ts::TsTypeMember::Prop {
-            name: name.name.clone(),
-            ty: bynk_ts::TsType::named_with_args(
-                "globalThis.Record",
-                vec![
-                    bynk_ts::TsType::named("string"),
-                    bynk_ts::TsType::named("string"),
-                ],
-            ),
-            optional: false,
-            readonly: true,
-        });
-    }
-    for name in &set_field_names {
-        members.push(bynk_ts::TsTypeMember::Prop {
-            name: name.to_string(),
-            ty: bynk_ts::TsType::named_with_args(
-                "globalThis.Record",
-                vec![
-                    bynk_ts::TsType::named("string"),
-                    bynk_ts::TsType::named("boolean"),
-                ],
-            ),
-            optional: false,
-            readonly: true,
-        });
-    }
-    // v0.93 (ADR 0118): a sibling posting-list per `@indexed(by: f)` — field
-    // value (stringified) → the primary keys whose value has it. Persisted and
-    // committed wholesale with the map it indexes.
-    for (map, fields) in sorted_index_fields(&store_map_indexes) {
-        for f in fields {
-            members.push(bynk_ts::TsTypeMember::Prop {
-                name: format!("{map}__idx_{f}"),
-                ty: bynk_ts::TsType::named_with_args(
-                    "globalThis.Record",
-                    vec![
-                        bynk_ts::TsType::named("string"),
-                        // Postfix `string[]`, not `named_with_args("Array",
-                        // ..)` — the original text here is `string[]`, not
-                        // `Array<string>`. Review of #1368: the two are
-                        // byte-different even though `Cache`/`Log` below use
-                        // the generic `Array<T>` form for their own arrays —
-                        // don't "unify" this with those without re-checking
-                        // the fixture text first.
-                        bynk_ts::TsType::Array {
-                            element: Box::new(bynk_ts::TsType::named("string")),
-                            readonly: false,
-                        },
-                    ],
-                ),
-                optional: false,
-                readonly: true,
-            });
-        }
-    }
-    for (name, _, _) in &store_cache_fields {
-        let value_ty = match store_field_ty.get(name.name.as_str()) {
-            Some(StoreKindIr::Cache(_, v, _)) => *v,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Cache in this \
-                 function's own state reader, found {other:?}",
-                name.name
-            ),
-        };
-        members.push(bynk_ts::TsTypeMember::Prop {
-            name: name.name.clone(),
-            ty: bynk_ts::TsType::named_with_args(
-                "globalThis.Record",
-                vec![
-                    bynk_ts::TsType::named("string"),
-                    bynk_ts::TsType::Object(vec![
-                        bynk_ts::TsTypeMember::Prop {
-                            name: "v".to_string(),
-                            ty: ts_ty_to_ts_type(value_ty, tys),
-                            optional: false,
-                            readonly: false,
-                        },
-                        bynk_ts::TsTypeMember::Prop {
-                            name: "exp".to_string(),
-                            ty: bynk_ts::TsType::named("number"),
-                            optional: false,
-                            readonly: false,
-                        },
-                    ]),
-                ],
-            ),
-            optional: false,
-            readonly: true,
-        });
-    }
-    for (name, _, _) in &store_log_fields {
-        let elem_ty = match store_field_ty.get(name.name.as_str()) {
-            Some(StoreKindIr::Log(t, _)) => *t,
-            other => panic!(
-                "bynk internal error: state field `{}` is not a resolved Log in this \
-                 function's own state reader, found {other:?}",
-                name.name
-            ),
-        };
-        members.push(bynk_ts::TsTypeMember::Prop {
-            name: name.name.clone(),
-            ty: bynk_ts::TsType::named_with_args(
-                "globalThis.Array",
-                vec![bynk_ts::TsType::Object(vec![
-                    bynk_ts::TsTypeMember::Prop {
-                        name: "t".to_string(),
-                        ty: bynk_ts::TsType::named("number"),
-                        optional: false,
-                        readonly: false,
-                    },
-                    bynk_ts::TsTypeMember::Prop {
-                        name: "v".to_string(),
-                        ty: ts_ty_to_ts_type(elem_ty, tys),
-                        optional: false,
-                        readonly: false,
-                    },
-                ])],
-            ),
-            optional: false,
-            readonly: true,
-        });
-    }
-    // #1486: `no_blank_before` when this agent's own doc comment is the
-    // preceding statement — see `emit_free_fn`'s own identical note. The
-    // explicit `TsStmt::blank(None)` push this used to carry is gone —
-    // `bynk_ts::print` itself now supplies the one blank line between
-    // adjacent real statements.
-    let mut state_interface = bynk_ts::TsStmt::decl(
-        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Interface {
-            name: state_ty.clone(),
-            type_params: Vec::new(),
-            members,
-        })),
-        None,
-    );
-    state_interface.no_blank_before = a.documentation.is_some();
-    stmts.push(state_interface);
-    // v0.9.2: per-agent state registry (bundle mode + `bynk test`) and the
-    // zero-value factory used to initialise a fresh key's state.
-    //
-    // Arc C, slice 20 (#1369): the second of step (9)'s own proposed 5-6
-    // sub-slices — the registry `const` and the zero-factory `function`
-    // build real nodes; the zero-record's own per-field VALUES stay
-    // opaque where they genuinely must (a `Cell` field with an initialiser
-    // lowers through `LowerCtx`, `lower.rs`'s own permanently-excluded
-    // general expression lowering — the same "carry an unconverted
-    // sibling's already-formed JS text as `TsExpr::Ident`" pattern
-    // #1355's own `emit_message_entry_renderer` call already established),
-    // but every EMPTY-container field (`Map`/`Set`/`Cache`/held-map/
-    // posting-list `{}`, `Log`'s `[]`) is fully real — `TsExpr::object(
-    // vec![])`/`TsExpr::array(vec![])`, no opacity needed there at all.
-    let registry = agent_registry_name(&a.name.name);
-    let zero_fn = format!("__zeroOf{}State", a.name.name);
-    let registry_const = bynk_ts::TsStmt::decl(
-        bynk_ts::TsDecl::ConstDecl {
-            name: registry.clone(),
-            ty: None,
-            init: bynk_ts::TsExpr::New {
-                callee: Box::new(bynk_ts::TsExpr::Ident("__StateRegistry".to_string())),
-                args: Vec::new(),
-            },
-        },
-        None,
-    );
-    stmts.push(registry_const);
-    // v0.11: build the fresh-state record. A field with an explicit initialiser
-    // lowers its (static) expression; a field without one uses the v0.9.2
-    // implicit zero.
-    let mut zero_entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
-    // Review of #1370, finding 1: `lower_if`'s own non-`ternary_shaped`
-    // branch and `build_match_iife` can both return a genuinely multi-line
-    // IIFE as `val` (real embedded `\n` bytes) with `pre` empty, so the
-    // `pre.is_empty()` branch above passes it straight through unwrapped —
-    // no fixture in the 31-fixture `store` sweep reaches this shape (the
-    // only store-init-with-`if` fixture, `1029_agent_static_init_hoist`,
-    // takes the `hoist_if_as_statement` path instead, whose own hoisted
-    // statements are individually newline-free), so it was invisible to the
-    // zero-diff check. Tracked here so the zero-factory's own `inline` flag
-    // can be set correctly below — `inline: true` is only safe when every
-    // entry's own value is genuinely single-line (`render_compact_stmts`'s
-    // own `debug_assert!` panics on an embedded newline, a real
-    // debug-build crash for a `store` field initialised with a `match` or a
-    // statement-shaped/`is`-binding `if`, not merely a formatting nit).
-    let mut zero_record_has_multiline_value = false;
-    for f in &effective_fields {
-        let val = if let Some(init) = &f.init {
-            let mut pre = Pre::new();
-            let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
-            module.target = ctx.target;
-            module.agent_method_givens = ctx.agent_method_givens.clone();
-            module.agent_called_contexts = ctx.agent_called_contexts.clone();
-            module.event_schema_versions = ctx.event_schema_versions.clone();
-            module.consumed_type_ns = consumed_type_ns(ctx);
-            module.consumed_type_declared = ctx.consumed_type_aliases.clone();
-            module.consumed_context_types = ctx.consumed_context_types();
-            let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
-            icx.local_agents = ctx.local_agents.clone();
-            let expr = pre.lower(init, &mut icx);
-            // A static initialiser lowers to a pure expression (no setup
-            // statements). #1029 review: if any appear, wrap them in an IIFE
-            // rather than splicing them into a comma sequence. The comma
-            // form only ever worked for expression-shaped hoists — a `const`
-            // or an `if` operand does not parse — and T2.1 made a
-            // statement-shaped hoist reachable here for the first time, since
-            // a value-position `if` that hoists now yields `let …; if (…) {…}`
-            // where it used to yield a self-contained arrow. An IIFE is
-            // sound for this position specifically: a static initialiser has
-            // no enclosing function to `return` out of, so the arrow cannot
-            // swallow a control transfer the way it would in a handler body.
-            if pre.is_empty() {
-                expr
-            } else {
-                format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
-            }
-        } else {
-            zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types)
-                .unwrap_or_else(|| "undefined as never".to_string())
-        };
-        if val.contains('\n') {
-            zero_record_has_multiline_value = true;
-        }
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-            f.name.name.clone(),
-            bynk_ts::TsExpr::Ident(val),
-        ));
-    }
-    // A fresh `store Map`/`store Set`/`store Cache` is the empty record.
-    for (name, _) in &store_map_fields {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::object(vec![]),
-        ));
-    }
-    // A fresh held `Map[K, Connection]` (a `K → connId` record) is empty too.
-    for (name, _) in &held_maps {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::object(vec![]),
-        ));
-    }
-    // A fresh `@indexed` posting-list is empty too (v0.93, ADR 0118).
-    for (map, fields) in sorted_index_fields(&store_map_indexes) {
-        for f in fields {
-            zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-                format!("{map}__idx_{f}"),
-                bynk_ts::TsExpr::object(vec![]),
-            ));
-        }
-    }
-    for name in &set_field_names {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-            name.to_string(),
-            bynk_ts::TsExpr::object(vec![]),
-        ));
-    }
-    for (name, _, _) in &store_cache_fields {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::object(vec![]),
-        ));
-    }
-    // A fresh `store Log` is the empty array.
-    for (name, _, _) in &store_log_fields {
-        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
-            name.name.clone(),
-            bynk_ts::TsExpr::array(vec![]),
-        ));
-    }
-    // #1486: `no_blank_before: true`, unconditional — no blank line wanted
-    // between `registry_const` and this function, matching the
-    // pre-conversion hand-written text this crate's own zero-diff
-    // discipline requires preserving exactly (see `TsStmt::no_blank_
-    // before`'s own doc, added specifically for this real, already-shipped
-    // pairing). The explicit `TsStmt::blank(None)` push this used to carry
-    // afterward is also gone — `bynk_ts::print` itself now supplies the one
-    // blank line before whatever follows.
-    let mut zero_fn_decl = bynk_ts::TsStmt::decl(
-        bynk_ts::TsDecl::Function {
-            name: zero_fn.clone(),
-            generics: Vec::new(),
-            params: Vec::new(),
-            return_type: Some(bynk_ts::TsType::named(state_ty.clone())),
-            body: vec![bynk_ts::TsStmt::return_stmt(
-                Some(bynk_ts::TsExpr::object_entries(zero_entries)),
-                None,
-            )],
-            is_async: false,
-            // Single-line only when safe (see the `zero_record_has_multiline_
-            // value` note above) — a genuinely multi-line `Cell` initialiser
-            // falls back to the ordinary multi-line block form instead of
-            // tripping `render_compact_stmts`'s own debug_assert!.
-            inline: !zero_record_has_multiline_value,
-        },
-        None,
-    );
-    zero_fn_decl.no_blank_before = true;
-    stmts.push(zero_fn_decl);
-    // v0.96 (ADR 0124): the rehydration validation gate. `loadState` validates a
-    // *loaded* (merged) state against the current type definition before any
-    // handler reads it — the load-time twin of the commit-time invariant gate.
-    // Each value position (a `Cell`'s `T`, a `Map`/`Cache`'s `V`, a `Log`'s `T`,
-    // and a textual `Set` element / `Map` key) is run through the same boundary
-    // deserialiser the HTTP/queue seams use; a failure is disposed of as an
-    // internal `RehydrationViolation` fault (Q6), never a caller-facing 400.
-    // (Non-textual `Map`/`Set` keys persist as structural string keys — refined-
-    // key rehydration validation is a named follow-on, ADR 0124 D5.)
-    let rehydrate_fn = format!("__rehydrate{}State", a.name.name);
-    // #1649 (runtime-semantics track §3.2): agent state is stored in the **wire
-    // shape**. `commitState` writes `__encode<Agent>State(s)`, which runs each
-    // codec-able value through the boundary serialiser (`kind`-tagged sums,
-    // base64 `Bytes`, entries-array value `Map`s). `loadState` merges
-    // zero-then-stored and calls `__rehydrate<Agent>State(merged, stored)`,
-    // which now *decodes* each value present in `stored` back into the in-memory
-    // shape, instead of validating it and discarding the result. Before #1649,
-    // `commitState` stored the in-memory shape while the gate validated against
-    // the wire shape, so every reload of an enum/`Option`/`Result`/`Bytes`/
-    // value-`Map` state faulted (`RehydrationViolation … StructuralMismatch`).
-    //
-    // A field absent from `stored` keeps its in-memory zero (ADR 0124 D4), and is
-    // not decoded. An unknown stored key (a renamed or removed field) rides along
-    // untouched and is written back, so #539's migrations still find it.
-    let encode_fn = format!("__encode{}State", a.name.name);
-    let mut encode_entries: Vec<String> = Vec::new();
-    let agent_name = &a.name.name;
-    let mut rehydrate_checks: Vec<String> = Vec::new();
-    // The loaded record is statically typed (its fields are the agent's types),
-    // but at runtime its bytes are untrusted, so each value is laundered to
-    // `JsonValue` before the boundary deserialiser decodes it.
-    let present =
-        |name: &str| format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")");
-    let ser = |ty: &TypeRef, value: &str| {
-        bynk_ts::print_expr(&serialisation::serialise_expr(ty, value, &ctx.runtime_use))
-    };
-    let push_value_check = |checks: &mut Vec<String>,
-                            ty: &TypeRef,
-                            value_expr: &str,
-                            path: &str| {
-        // Only codec-able types have a deserialiser; a non-storable type never
-        // reaches a `store` position (the checker rejects it), but guard anyway.
-        if !is_codecable(ty) {
-            return;
-        }
-        let json = format!("({value_expr} as unknown as __JsonValue)");
-        // #1435 (Arc E slice 1): `deserialise_expr` now returns a real
-        // `bynk_ts::TsExpr` — this closure stays `format!`-based (splicing
-        // into one `TsStmt::Raw` check line below), so it prints at the
-        // boundary, the same "opaque consumer needs its own print"
-        // treatment `lower.rs`/`tests_emit.rs`'s own call sites use.
-        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-            ty,
-            &json,
-            path,
-            &ctx.runtime_use,
-        ));
-        checks.push(format!(
-            // The state interface's fields are `readonly`; the decode writes
-            // through a mutable view of the freshly merged record. The cast to
-            // the field's own type matters on the workers target, where the
-            // state interface re-declares a commons type locally and
-            // TypeScript's brands make the two nominally distinct, though
-            // they share one runtime shape.
-            "  if ({p}) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); (s as {{ -readonly [K in keyof typeof s]: (typeof s)[K] }}).{path} = __r.value as unknown as (typeof s)[\"{path}\"]; }}",
-            p = present(path),
-        ));
-    };
-    // `Cell[T]` — decode the field value as `T`.
-    for f in &effective_fields {
-        push_value_check(
-            &mut rehydrate_checks,
-            &f.type_ref,
-            &format!("s.{}", f.name.name),
-            &f.name.name,
-        );
-        if is_codecable(&f.type_ref) {
-            encode_entries.push(format!(
-                "{n}: {e}",
-                n = f.name.name,
-                e = ser(&f.type_ref, &format!("s.{}", f.name.name)),
-            ));
-        }
-    }
-    // `Map[K, V]` — validate each entry value against `V`, and each key against
-    // `K` when `K` is textual (the key persists as a `String(k)` Record key).
-    for (name, v) in &store_map_fields {
-        if is_codecable(v) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); s.{n}[__k] = __r.value as unknown as (typeof s.{n})[string]; }}",
-                p = present(&name.name),
-                n = name.name,
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-                    v,
-                    &format!("(s.{}[__k] as unknown as __JsonValue)", name.name),
-                    &name.name,
-                    &ctx.runtime_use,
-                )),
-            ));
-            encode_entries.push(format!(
-                "{n}: globalThis.Object.fromEntries(globalThis.Object.entries(s.{n}).map(([__k, __v]) => [__k, {e}]))",
-                n = name.name,
-                e = ser(v, "__v"),
-            ));
-        }
-        if let Some(k) = store_field_key_type(a, &name.name)
-            && type_base_is_string(k, &commons.types)
-        {
-            rehydrate_checks.push(format!(
-                "  for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
-                n = name.name,
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(k, "(__k as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
-            ));
-        }
-    }
-    // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`. The
-    // connId is an opaque platform string (no value check); validate each textual
-    // `K` key, as for a plain map.
-    for (name, _) in &held_maps {
-        if let Some(k) = store_field_key_type(a, &name.name)
-            && type_base_is_string(k, &commons.types)
-        {
-            rehydrate_checks.push(format!(
-                "  for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
-                n = name.name,
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(k, "(__k as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
-            ));
-        }
-    }
-    // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
-    // is textual, else defer (structural string key).
-    for (name, t) in &store_set_fields {
-        if type_base_is_string(t, &commons.types) {
-            rehydrate_checks.push(format!(
-                "  for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
-                n = name.name,
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(t, "(__k as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
-            ));
-        }
-    }
-    // `Cache[K, V]` — validate each entry's `.v` against `V`.
-    for (name, v, _) in &store_cache_fields {
-        if is_codecable(v) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const __e of globalThis.Object.values(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); __e.v = __r.value as unknown as typeof __e.v; }}",
-                p = present(&name.name),
-                n = name.name,
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(v, "(__e.v as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
-            ));
-            encode_entries.push(format!(
-                "{n}: globalThis.Object.fromEntries(globalThis.Object.entries(s.{n}).map(([__k, __e]) => [__k, {{ ...__e, v: {e} }}]))",
-                n = name.name,
-                e = ser(v, "__e.v"),
-            ));
-        }
-    }
-    // `Log[T]` — validate each entry's `.v` against `T`.
-    for (name, t, _) in &store_log_fields {
-        if is_codecable(t) {
-            rehydrate_checks.push(format!(
-                "  if ({p}) for (const __e of s.{n}) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); __e.v = __r.value as unknown as typeof __e.v; }}",
-                p = present(&name.name),
-                n = name.name,
-                d = bynk_ts::print_expr(&serialisation::deserialise_expr(t, "(__e.v as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
-            ));
-            encode_entries.push(format!(
-                "{n}: s.{n}.map((__e) => ({{ ...__e, v: {e} }}))",
-                n = name.name,
-                e = ser(t, "__e.v"),
-            ));
-        }
-    }
-    let has_rehydrate = agent_needs_rehydrate(a, &commons.types);
-    // State-migrations S1 (#2211): this class's lock version facts, present
-    // only when the build has the schema lock (Decision A).
-    let agent_versions = ctx.agent_schema_versions.get(&a.name.name).cloned();
-    if has_rehydrate {
-        // Each check is already-formed JS text (`serialisation::
-        // deserialise_expr`, a confirmed unaffected, `String`-returning
-        // sibling helper, out of this slice's scope) — carried as its own
-        // opaque `TsStmt::Raw`, not merged into one blob: each is already a
-        // real, independent statement, and `Raw` prints verbatim with no
-        // indent of its own, matching every check's own hardcoded two-space
-        // prefix exactly (correct because this decl is always printed at
-        // depth 0, giving the body depth 1).
-        let rehydrate_fn_decl = bynk_ts::TsStmt::decl(
-            bynk_ts::TsDecl::Function {
-                name: rehydrate_fn.clone(),
-                generics: Vec::new(),
-                params: vec![
-                    bynk_ts::TsParam {
-                        name: "s".to_string(),
-                        ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-                        optional: false,
-                    },
-                    // #1649: the stored record, so a field absent from it keeps
-                    // its in-memory zero instead of being decoded (ADR 0124 D4).
-                    bynk_ts::TsParam {
-                        name: "stored".to_string(),
-                        ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-                        optional: false,
-                    },
-                ],
-                return_type: Some(bynk_ts::TsType::named("void")),
-                body: rehydrate_checks
-                    .iter()
-                    .map(|c| bynk_ts::TsStmt::raw(format!("{c}\n"), None))
-                    .collect(),
-                is_async: false,
-                inline: false,
-            },
-            None,
-        );
-        // #1486: no more explicit trailing `TsStmt::blank(None)` — see
-        // `emit_refined_type`'s own identical note.
-        stmts.push(rehydrate_fn_decl);
-        // #1649: the wire-shape encoder `commitState` writes through. Every
-        // codec-able value position is serialised; the rest of the record (held
-        // maps, `Set`s, `@indexed` posting lists, unknown stored keys) is
-        // already wire-shaped and spreads through unchanged.
-        let mut encode_body = String::from("  return { ...s");
-        for e in &encode_entries {
-            encode_body.push_str(", ");
-            encode_body.push_str(e);
-        }
-        encode_body.push_str(" };\n");
-        stmts.push(bynk_ts::TsStmt::decl(
-            bynk_ts::TsDecl::Function {
-                name: encode_fn.clone(),
-                generics: Vec::new(),
-                params: vec![bynk_ts::TsParam {
-                    name: "s".to_string(),
-                    ty: Some(bynk_ts::TsType::named(state_ty.clone())),
-                    optional: false,
-                }],
-                return_type: Some(bynk_ts::TsType::named("globalThis.Record<string, unknown>")),
-                body: vec![bynk_ts::TsStmt::raw(encode_body, None)],
-                is_async: false,
-                inline: false,
-            },
-            None,
-        ));
-    }
-    // State-migrations S2 (#2224, track §3.3, Decision D): one function per
-    // valid `migrate from N` step, carrying a stored (wire-shaped) record from
-    // version N to the current shape, and a dispatcher `loadState` calls after
-    // the `__v` check. A step's output is wire-shaped again, so `loadState`'s
-    // zero-merge and the ADR 0124 gate then validate it like any record.
-    let migrate_fn = format!("__migrate{}State", a.name.name);
-    let step_plans: Vec<bynk_check::schema_registry::MigrationStep> = agent_versions
-        .as_ref()
-        .map(|v| v.steps.clone())
-        .unwrap_or_default();
-    if !step_plans.is_empty() {
-        let agent_name = &a.name.name;
-        let present = |name: &str| {
-            format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")")
-        };
-        let ser = |ty: &TypeRef, value: &str| {
-            bynk_ts::print_expr(&serialisation::serialise_expr(ty, value, &ctx.runtime_use))
-        };
-        let cell_names: HashSet<String> = effective_fields
-            .iter()
-            .map(|f| f.name.name.clone())
-            .collect();
-        let map_names: HashSet<String> = store_map_fields
-            .iter()
-            .map(|(n, _)| n.name.clone())
-            .collect();
-        let quote_list = |names: &[String]| {
-            names
-                .iter()
-                .map(|n| format!("\"{n}\""))
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        let mut dispatch = String::new();
-        for plan in &step_plans {
-            let Some(step) = a.migrations.iter().find(|m| m.from == plan.from) else {
-                continue;
-            };
-            let step_fn = format!("__migrate{agent_name}From{}", plan.from);
-            // Names a step binds (`old`, its `let`s) shadow carried fields.
-            let mut shadowed: HashSet<String> =
-                step.old.iter().map(|o| o.name.name.clone()).collect();
-            for item in &step.items {
-                if let bynk_syntax::ast::MigrateItem::Let(l) = item {
-                    shadowed.insert(l.name.name.clone());
-                }
-            }
-            let mut cx = LowerCtx::new(
-                ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
-                BodyMode::Invariant {
-                    name: "__c".to_string(),
-                    fields: cell_names.difference(&shadowed).cloned().collect(),
-                },
-            );
-            let mut body = String::new();
-            // 1. Decode the old fields through the old type's own codec. A
-            //    field the stored record lacks (an additive predecessor,
-            //    Decision C) takes the old type's declared default — the
-            //    record decoder applies it — or else its type's zero.
-            if let Some(old) = &step.old
-                && let TypeRef::Named(id) = &old.type_ref
-                && let Some(decl) = commons.types.get(&id.name)
-                && let TypeBody::Record(r) = &decl.body
-            {
-                let mut entries = Vec::new();
-                for f in &r.fields {
-                    let n = &f.name.name;
-                    let raw = match &f.type_ref {
-                        // A store `Map` is a `Record<string, V>`; a `Map`
-                        // value's wire form is an entries array. A `Cell`
-                        // holding a map is already in that wire form.
-                        TypeRef::Map(k, _, _) if plan.store_maps.contains(n) => format!(
-                            "globalThis.Object.entries(stored[\"{n}\"] as globalThis.Record<string, unknown>).map(([__k, __v]) => [{key}, __v])",
-                            key = if type_base_is_string(k, &commons.types) {
-                                "__k"
-                            } else {
-                                "globalThis.Number(__k)"
-                            }
-                        ),
-                        _ => format!("stored[\"{n}\"]"),
-                    };
-                    if f.init.is_some() {
-                        entries.push(format!(
-                            "...({p} ? {{ {n}: {raw} }} : {{}})",
-                            p = present(n)
-                        ));
-                    } else {
-                        match zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types) {
-                            Some(z) => entries.push(format!(
-                                "{n}: {p} ? {raw} : {zw}",
-                                p = present(n),
-                                zw = ser(&f.type_ref, &z)
-                            )),
-                            None => entries.push(format!("{n}: {raw}")),
-                        }
-                    }
-                }
-                let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
-                    &old.type_ref,
-                    "(__ow as never)",
-                    &old.name.name,
-                    &ctx.runtime_use,
-                ));
-                let old_js = cx.bind_local_name(&old.name.name);
-                writeln!(body, "  const __ow = {{ {} }};", entries.join(", ")).unwrap();
-                writeln!(
-                    body,
-                    "  const __od = {d}; if (__od.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __od.error);"
-                )
-                .unwrap();
-                writeln!(body, "  const {old_js} = __od.value;").unwrap();
-            }
-            // 2. The carried state: version N's fields the current shape keeps
-            //    unchanged, decoded as today; every other field at its zero.
-            writeln!(
-                body,
-                "  const __picked: globalThis.Record<string, unknown> = {{}}; for (const __k of [{}]) if (globalThis.Object.prototype.hasOwnProperty.call(stored, __k)) __picked[__k] = stored[__k];",
-                quote_list(&plan.carried)
-            )
-            .unwrap();
-            writeln!(
-                body,
-                "  const __c = {{ ...{zero_fn}(), ...__picked }} as {state_ty};"
-            )
-            .unwrap();
-            if has_rehydrate {
-                writeln!(
-                    body,
-                    "  {rehydrate_fn}(__c, __picked as unknown as {state_ty});"
-                )
-                .unwrap();
-            }
-            // 3. The body, with record-literal semantics: every assignment
-            //    reads the carried state, never another assignment. A throw
-            //    is `MigrationFailed`, never a bare 500 (Decision D).
-            writeln!(body, "  let __out: {state_ty};").unwrap();
-            writeln!(body, "  try {{").unwrap();
-            let mut assigns = Vec::new();
-            for item in &step.items {
-                match item {
-                    bynk_syntax::ast::MigrateItem::Let(l) => {
-                        let mut pre = Pre::new();
-                        let v = pre.lower(&l.value, &mut cx);
-                        for s in pre.stmts() {
-                            writeln!(body, "    {s}").unwrap();
-                        }
-                        let js = cx.bind_local_name(&l.name.name);
-                        writeln!(body, "    const {js} = {v};").unwrap();
-                    }
-                    bynk_syntax::ast::MigrateItem::Assign(asg) => {
-                        let mut pre = Pre::new();
-                        let v = pre.lower(&asg.value, &mut cx);
-                        for s in pre.stmts() {
-                            writeln!(body, "    {s}").unwrap();
-                        }
-                        let n = &asg.target.name;
-                        let v = if map_names.contains(n) {
-                            // A `Map` value is a `ReadonlyMap`; a store `Map`
-                            // is a `Record` keyed by `String(k)`.
-                            format!(
-                                "globalThis.Object.fromEntries(globalThis.Array.from({v}, ([__k, __v]) => [globalThis.String(__k), __v]))"
-                            )
-                        } else {
-                            v
-                        };
-                        assigns.push(format!("{n}: {v}"));
-                    }
-                    bynk_syntax::ast::MigrateItem::Drop(_) => {}
-                }
-            }
-            let fields_out = if assigns.is_empty() {
-                String::new()
-            } else {
-                format!(", {}", assigns.join(", "))
-            };
-            writeln!(body, "    __out = {{ ...__c{fields_out} }} as {state_ty};").unwrap();
-            writeln!(
-                body,
-                "  }} catch {{ throw __migrationFailed(\"{agent_name}\", {}); }}",
-                plan.from
-            )
-            .unwrap();
-            // 4. Back to the wire, keeping any key version N did not know.
-            let enc = if has_rehydrate {
-                format!("{encode_fn}(__out)")
-            } else {
-                "(__out as unknown as globalThis.Record<string, unknown>)".to_string()
-            };
-            writeln!(
-                body,
-                "  const __known = new globalThis.Set<string>([{}]); const __keep: globalThis.Record<string, unknown> = {{}}; for (const __k of globalThis.Object.keys(stored)) if (__k !== \"__v\" && !__known.has(__k)) __keep[__k] = stored[__k];",
-                quote_list(&plan.known)
-            )
-            .unwrap();
-            writeln!(body, "  return {{ ...__keep, ...{enc} }};").unwrap();
-            stmts.push(bynk_ts::TsStmt::raw(
-                format!(
-                    "function {step_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n{body}}}\n"
-                ),
-                None,
-            ));
-            writeln!(
-                dispatch,
-                "  if (__v >= {lo} && __v <= {from}) return {step_fn}(stored);",
-                lo = plan.lo,
-                from = plan.from
-            )
-            .unwrap();
-        }
-        // The nearest step covering the stored version runs; a version no step
-        // covers reads by zero-merge (it passed `__checkStoredSchemaVersion`).
-        stmts.push(bynk_ts::TsStmt::raw(
-            format!(
-                "function {migrate_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n  const __v = stored[\"__v\"] === undefined ? 1 : stored[\"__v\"] as number;\n{dispatch}  return stored;\n}}\n"
-            ),
-            None,
-        ));
-    }
-    // 2) Durable Object class.
-    //
-    // #1482: local buffer/map pair, replacing this function's own former
-    // `out`/`source_map` parameters for the rest of the class's own
-    // construction below (through its closing brace) — every internal
-    // print-and-splice call site inside the class (`loadState`/
-    // `commitState`/the per-handler loop/the WS-hosted DO methods/`fetch`)
-    // is unchanged, since each already just referenced these two names.
-    let mut out = String::new();
-    let class_smb = RefCell::new(SourceMapBuilder::new());
-    let source_map = Some(&class_smb);
-    writeln!(out, "export class {name} {{", name = a.name.name).unwrap();
-    writeln!(out, "  state: __DurableObjectState;").unwrap();
-    let reads_key = agent_reads_key(a);
-    if reads_key {
-        // #1818: set before any handler runs, by the bundle factory or the
-        // workers `fetch` dispatch.
-        writeln!(
-            out,
-            "  __key!: {};",
-            crate::emitter::ts_type_ref(&a.key_type)
-        )
-        .unwrap();
-    }
-    // #527: an agent whose methods take `given` capabilities rebuilds those
-    // deps *inside* the DO (providers cannot cross the JSON wire), and some
-    // providers take the Worker `env` — workerd passes it as the DO
-    // constructor's second argument. Bundle mode constructs with `state`
-    // only and never uses the fetch path, so the parameter stays optional.
-    let given_deps_expr = ctx.agent_given_deps.get(&a.name.name).cloned();
-    // Events track, slice 0 (spine #936): the same wire problem #527 already
-    // solved for capability providers hits `deps.__eventsDispatch` too — it is
-    // a function, so it does not survive the DO's JSON wire either. An agent
-    // whose own handler body emits directly (`body_emits_directly`'s
-    // per-handler test, mirrored here at the whole-agent level) needs its
-    // fetch dispatch to rebuild it from `env.EVENTS_FANOUT` exactly as a
-    // `given` provider is rebuilt, so it takes the same env-carrying
-    // constructor.
-    let agent_uses_emit = a
-        .handlers
-        .iter()
-        .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees));
-    // #1960: likewise `deps.env` itself — its Service Bindings and DO
-    // namespaces are dead plain objects once the caller's deps cross the
-    // wire, so an agent whose handlers call a consumed context's service or
-    // construct an agent reads them from its own `env` instead.
-    let agent_reaches_env = ctx.target == BuildTarget::Workers
-        && a.handlers
-            .iter()
-            .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees));
-    // #3109: likewise the `from websocket` bodies this agent's Durable Object
-    // hosts (`on open` / `on message` / `on close`): they run here, so any
-    // Service Binding or DO namespace they reach comes from this object's `env`.
-    let ws_hosts_reach_env = ctx.target == BuildTarget::Workers
-        && ws_open_hosts_for(&a.name.name, commons, &ctx.local_agents, &ctx.actors)
-            .iter()
-            .any(|h| h.reaches_env(commons));
-    // The `/_bynk/agent/` RPC branch rebuilds on its own condition; the ws
-    // hosts only widen the constructor (and the ws entry points).
-    let rpc_rebuilds_env = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
-    let needs_env_ctor = rpc_rebuilds_env || ws_hosts_reach_env;
-    if needs_env_ctor {
-        writeln!(out, "  private __env: unknown;").unwrap();
-        writeln!(
-            out,
-            "  constructor(state: __DurableObjectState, env?: unknown) {{"
-        )
-        .unwrap();
-        writeln!(out, "    this.state = state;").unwrap();
-        writeln!(out, "    this.__env = env;").unwrap();
-        writeln!(out, "  }}").unwrap();
-    } else {
-        writeln!(out, "  constructor(state: __DurableObjectState) {{").unwrap();
-        writeln!(out, "    this.state = state;").unwrap();
-        writeln!(out, "  }}").unwrap();
-    }
-    writeln!(out).unwrap();
+    let AgentLoadFns {
+        zero_fn,
+        rehydrate_fn,
+        encode_fn,
+        migrate_fn,
+        has_rehydrate,
+        step_plans,
+        agent_versions,
+    } = *fns;
     // Arc C, slice 21 (#1371): the third of step (9)'s own proposed 5-6
     // sub-slices — the class's own wrapper (header/fields/constructor) stays
     // hand-written text (Decision C, the same boundary #1359's own
@@ -7267,6 +6374,1049 @@ pub(crate) fn emit_agent(
         class_depth,
     ));
     writeln!(out).unwrap();
+}
+
+/// What the rest of an agent's emission refers to by name once its state's
+/// validation and migration functions are declared (#3167).
+struct AgentPersistFns {
+    /// The rehydration check `loadState` runs on a stored record.
+    rehydrate_fn: String,
+    /// The wire-format encoder `commitState` writes through.
+    encode_fn: String,
+    /// The migration dispatcher `loadState` calls for an older stored layout.
+    migrate_fn: String,
+    /// Whether the agent's state needs the rehydration check and the encoder
+    /// at all; when it does not, `commitState` stores the record as it is.
+    has_rehydrate: bool,
+    /// The migration steps from each older schema version, in order.
+    step_plans: Vec<bynk_check::schema_registry::MigrationStep>,
+    /// The agent's declared schema versions, if it has any.
+    agent_versions: Option<bynk_check::schema_registry::AgentVersions>,
+}
+
+/// The functions that guard an agent's stored state across a deploy (#3167): the
+/// rehydration check `loadState` runs, the wire-format encoder, and the
+/// migration step chain for a stored layout from an older schema version.
+/// Pushes those declarations onto `stmts`; returns their names and the facts
+/// `loadState` needs.
+fn emit_agent_state_persistence(
+    a: &AgentDecl,
+    layout: &AgentStoreLayout,
+    zero_fn: &str,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    stmts: &mut Vec<bynk_ts::TsStmt>,
+) -> AgentPersistFns {
+    let state_ty = format!("{}State", a.name.name);
+    let AgentStoreLayout {
+        effective_fields,
+        held_maps,
+        store_map_fields,
+        store_set_fields,
+        store_cache_fields,
+        store_log_fields,
+        ..
+    } = layout;
+    // v0.96 (ADR 0124): the rehydration validation gate. `loadState` validates a
+    // *loaded* (merged) state against the current type definition before any
+    // handler reads it — the load-time twin of the commit-time invariant gate.
+    // Each value position (a `Cell`'s `T`, a `Map`/`Cache`'s `V`, a `Log`'s `T`,
+    // and a textual `Set` element / `Map` key) is run through the same boundary
+    // deserialiser the HTTP/queue seams use; a failure is disposed of as an
+    // internal `RehydrationViolation` fault (Q6), never a caller-facing 400.
+    // (Non-textual `Map`/`Set` keys persist as structural string keys — refined-
+    // key rehydration validation is a named follow-on, ADR 0124 D5.)
+    let rehydrate_fn = format!("__rehydrate{}State", a.name.name);
+    // #1649 (runtime-semantics track §3.2): agent state is stored in the **wire
+    // shape**. `commitState` writes `__encode<Agent>State(s)`, which runs each
+    // codec-able value through the boundary serialiser (`kind`-tagged sums,
+    // base64 `Bytes`, entries-array value `Map`s). `loadState` merges
+    // zero-then-stored and calls `__rehydrate<Agent>State(merged, stored)`,
+    // which now *decodes* each value present in `stored` back into the in-memory
+    // shape, instead of validating it and discarding the result. Before #1649,
+    // `commitState` stored the in-memory shape while the gate validated against
+    // the wire shape, so every reload of an enum/`Option`/`Result`/`Bytes`/
+    // value-`Map` state faulted (`RehydrationViolation … StructuralMismatch`).
+    //
+    // A field absent from `stored` keeps its in-memory zero (ADR 0124 D4), and is
+    // not decoded. An unknown stored key (a renamed or removed field) rides along
+    // untouched and is written back, so #539's migrations still find it.
+    let encode_fn = format!("__encode{}State", a.name.name);
+    let mut encode_entries: Vec<String> = Vec::new();
+    let agent_name = &a.name.name;
+    let mut rehydrate_checks: Vec<String> = Vec::new();
+    // The loaded record is statically typed (its fields are the agent's types),
+    // but at runtime its bytes are untrusted, so each value is laundered to
+    // `JsonValue` before the boundary deserialiser decodes it.
+    let present =
+        |name: &str| format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")");
+    let ser = |ty: &TypeRef, value: &str| {
+        bynk_ts::print_expr(&serialisation::serialise_expr(ty, value, &ctx.runtime_use))
+    };
+    let push_value_check = |checks: &mut Vec<String>,
+                            ty: &TypeRef,
+                            value_expr: &str,
+                            path: &str| {
+        // Only codec-able types have a deserialiser; a non-storable type never
+        // reaches a `store` position (the checker rejects it), but guard anyway.
+        if !is_codecable(ty) {
+            return;
+        }
+        let json = format!("({value_expr} as unknown as __JsonValue)");
+        // #1435 (Arc E slice 1): `deserialise_expr` now returns a real
+        // `bynk_ts::TsExpr` — this closure stays `format!`-based (splicing
+        // into one `TsStmt::Raw` check line below), so it prints at the
+        // boundary, the same "opaque consumer needs its own print"
+        // treatment `lower.rs`/`tests_emit.rs`'s own call sites use.
+        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+            ty,
+            &json,
+            path,
+            &ctx.runtime_use,
+        ));
+        checks.push(format!(
+            // The state interface's fields are `readonly`; the decode writes
+            // through a mutable view of the freshly merged record. The cast to
+            // the field's own type matters on the workers target, where the
+            // state interface re-declares a commons type locally and
+            // TypeScript's brands make the two nominally distinct, though
+            // they share one runtime shape.
+            "  if ({p}) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); (s as {{ -readonly [K in keyof typeof s]: (typeof s)[K] }}).{path} = __r.value as unknown as (typeof s)[\"{path}\"]; }}",
+            p = present(path),
+        ));
+    };
+    // `Cell[T]` — decode the field value as `T`.
+    for f in effective_fields {
+        push_value_check(
+            &mut rehydrate_checks,
+            &f.type_ref,
+            &format!("s.{}", f.name.name),
+            &f.name.name,
+        );
+        if is_codecable(&f.type_ref) {
+            encode_entries.push(format!(
+                "{n}: {e}",
+                n = f.name.name,
+                e = ser(&f.type_ref, &format!("s.{}", f.name.name)),
+            ));
+        }
+    }
+    // `Map[K, V]` — validate each entry value against `V`, and each key against
+    // `K` when `K` is textual (the key persists as a `String(k)` Record key).
+    for (name, v) in store_map_fields {
+        if is_codecable(v) {
+            rehydrate_checks.push(format!(
+                "  if ({p}) for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); s.{n}[__k] = __r.value as unknown as (typeof s.{n})[string]; }}",
+                p = present(&name.name),
+                n = name.name,
+                d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+                    v,
+                    &format!("(s.{}[__k] as unknown as __JsonValue)", name.name),
+                    &name.name,
+                    &ctx.runtime_use,
+                )),
+            ));
+            encode_entries.push(format!(
+                "{n}: globalThis.Object.fromEntries(globalThis.Object.entries(s.{n}).map(([__k, __v]) => [__k, {e}]))",
+                n = name.name,
+                e = ser(v, "__v"),
+            ));
+        }
+        if let Some(k) = store_field_key_type(a, &name.name)
+            && type_base_is_string(k, &commons.types)
+        {
+            rehydrate_checks.push(format!(
+                "  for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
+                n = name.name,
+                d = bynk_ts::print_expr(&serialisation::deserialise_expr(k, "(__k as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
+            ));
+        }
+    }
+    // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`. The
+    // connId is an opaque platform string (no value check); validate each textual
+    // `K` key, as for a plain map.
+    for (name, _) in held_maps {
+        if let Some(k) = store_field_key_type(a, &name.name)
+            && type_base_is_string(k, &commons.types)
+        {
+            rehydrate_checks.push(format!(
+                "  for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
+                n = name.name,
+                d = bynk_ts::print_expr(&serialisation::deserialise_expr(k, "(__k as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
+            ));
+        }
+    }
+    // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
+    // is textual, else defer (structural string key).
+    for (name, t) in store_set_fields {
+        if type_base_is_string(t, &commons.types) {
+            rehydrate_checks.push(format!(
+                "  for (const __k of globalThis.Object.keys(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}",
+                n = name.name,
+                d = bynk_ts::print_expr(&serialisation::deserialise_expr(t, "(__k as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
+            ));
+        }
+    }
+    // `Cache[K, V]` — validate each entry's `.v` against `V`.
+    for (name, v, _) in store_cache_fields {
+        if is_codecable(v) {
+            rehydrate_checks.push(format!(
+                "  if ({p}) for (const __e of globalThis.Object.values(s.{n})) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); __e.v = __r.value as unknown as typeof __e.v; }}",
+                p = present(&name.name),
+                n = name.name,
+                d = bynk_ts::print_expr(&serialisation::deserialise_expr(v, "(__e.v as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
+            ));
+            encode_entries.push(format!(
+                "{n}: globalThis.Object.fromEntries(globalThis.Object.entries(s.{n}).map(([__k, __e]) => [__k, {{ ...__e, v: {e} }}]))",
+                n = name.name,
+                e = ser(v, "__e.v"),
+            ));
+        }
+    }
+    // `Log[T]` — validate each entry's `.v` against `T`.
+    for (name, t, _) in store_log_fields {
+        if is_codecable(t) {
+            rehydrate_checks.push(format!(
+                "  if ({p}) for (const __e of s.{n}) {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); __e.v = __r.value as unknown as typeof __e.v; }}",
+                p = present(&name.name),
+                n = name.name,
+                d = bynk_ts::print_expr(&serialisation::deserialise_expr(t, "(__e.v as unknown as __JsonValue)", &name.name, &ctx.runtime_use)),
+            ));
+            encode_entries.push(format!(
+                "{n}: s.{n}.map((__e) => ({{ ...__e, v: {e} }}))",
+                n = name.name,
+                e = ser(t, "__e.v"),
+            ));
+        }
+    }
+    let has_rehydrate = agent_needs_rehydrate(a, &commons.types);
+    // State-migrations S1 (#2211): this class's lock version facts, present
+    // only when the build has the schema lock (Decision A).
+    let agent_versions = ctx.agent_schema_versions.get(&a.name.name).cloned();
+    if has_rehydrate {
+        // Each check is already-formed JS text (`serialisation::
+        // deserialise_expr`, a confirmed unaffected, `String`-returning
+        // sibling helper, out of this slice's scope) — carried as its own
+        // opaque `TsStmt::Raw`, not merged into one blob: each is already a
+        // real, independent statement, and `Raw` prints verbatim with no
+        // indent of its own, matching every check's own hardcoded two-space
+        // prefix exactly (correct because this decl is always printed at
+        // depth 0, giving the body depth 1).
+        let rehydrate_fn_decl = bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::Function {
+                name: rehydrate_fn.clone(),
+                generics: Vec::new(),
+                params: vec![
+                    bynk_ts::TsParam {
+                        name: "s".to_string(),
+                        ty: Some(bynk_ts::TsType::named(state_ty.clone())),
+                        optional: false,
+                    },
+                    // #1649: the stored record, so a field absent from it keeps
+                    // its in-memory zero instead of being decoded (ADR 0124 D4).
+                    bynk_ts::TsParam {
+                        name: "stored".to_string(),
+                        ty: Some(bynk_ts::TsType::named(state_ty.clone())),
+                        optional: false,
+                    },
+                ],
+                return_type: Some(bynk_ts::TsType::named("void")),
+                body: rehydrate_checks
+                    .iter()
+                    .map(|c| bynk_ts::TsStmt::raw(format!("{c}\n"), None))
+                    .collect(),
+                is_async: false,
+                inline: false,
+            },
+            None,
+        );
+        // #1486: no more explicit trailing `TsStmt::blank(None)` — see
+        // `emit_refined_type`'s own identical note.
+        stmts.push(rehydrate_fn_decl);
+        // #1649: the wire-shape encoder `commitState` writes through. Every
+        // codec-able value position is serialised; the rest of the record (held
+        // maps, `Set`s, `@indexed` posting lists, unknown stored keys) is
+        // already wire-shaped and spreads through unchanged.
+        let mut encode_body = String::from("  return { ...s");
+        for e in &encode_entries {
+            encode_body.push_str(", ");
+            encode_body.push_str(e);
+        }
+        encode_body.push_str(" };\n");
+        stmts.push(bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::Function {
+                name: encode_fn.clone(),
+                generics: Vec::new(),
+                params: vec![bynk_ts::TsParam {
+                    name: "s".to_string(),
+                    ty: Some(bynk_ts::TsType::named(state_ty.clone())),
+                    optional: false,
+                }],
+                return_type: Some(bynk_ts::TsType::named("globalThis.Record<string, unknown>")),
+                body: vec![bynk_ts::TsStmt::raw(encode_body, None)],
+                is_async: false,
+                inline: false,
+            },
+            None,
+        ));
+    }
+    // State-migrations S2 (#2224, track §3.3, Decision D): one function per
+    // valid `migrate from N` step, carrying a stored (wire-shaped) record from
+    // version N to the current shape, and a dispatcher `loadState` calls after
+    // the `__v` check. A step's output is wire-shaped again, so `loadState`'s
+    // zero-merge and the ADR 0124 gate then validate it like any record.
+    let migrate_fn = format!("__migrate{}State", a.name.name);
+    let step_plans: Vec<bynk_check::schema_registry::MigrationStep> = agent_versions
+        .as_ref()
+        .map(|v| v.steps.clone())
+        .unwrap_or_default();
+    if !step_plans.is_empty() {
+        let agent_name = &a.name.name;
+        let present = |name: &str| {
+            format!("globalThis.Object.prototype.hasOwnProperty.call(stored, \"{name}\")")
+        };
+        let ser = |ty: &TypeRef, value: &str| {
+            bynk_ts::print_expr(&serialisation::serialise_expr(ty, value, &ctx.runtime_use))
+        };
+        let cell_names: HashSet<String> = effective_fields
+            .iter()
+            .map(|f| f.name.name.clone())
+            .collect();
+        let map_names: HashSet<String> = store_map_fields
+            .iter()
+            .map(|(n, _)| n.name.clone())
+            .collect();
+        let quote_list = |names: &[String]| {
+            names
+                .iter()
+                .map(|n| format!("\"{n}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let mut dispatch = String::new();
+        for plan in &step_plans {
+            let Some(step) = a.migrations.iter().find(|m| m.from == plan.from) else {
+                continue;
+            };
+            let step_fn = format!("__migrate{agent_name}From{}", plan.from);
+            // Names a step binds (`old`, its `let`s) shadow carried fields.
+            let mut shadowed: HashSet<String> =
+                step.old.iter().map(|o| o.name.name.clone()).collect();
+            for item in &step.items {
+                if let bynk_syntax::ast::MigrateItem::Let(l) = item {
+                    shadowed.insert(l.name.name.clone());
+                }
+            }
+            let mut cx = LowerCtx::new(
+                ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use),
+                BodyMode::Invariant {
+                    name: "__c".to_string(),
+                    fields: cell_names.difference(&shadowed).cloned().collect(),
+                },
+            );
+            let mut body = String::new();
+            // 1. Decode the old fields through the old type's own codec. A
+            //    field the stored record lacks (an additive predecessor,
+            //    Decision C) takes the old type's declared default — the
+            //    record decoder applies it — or else its type's zero.
+            if let Some(old) = &step.old
+                && let TypeRef::Named(id) = &old.type_ref
+                && let Some(decl) = commons.types.get(&id.name)
+                && let TypeBody::Record(r) = &decl.body
+            {
+                let mut entries = Vec::new();
+                for f in &r.fields {
+                    let n = &f.name.name;
+                    let raw = match &f.type_ref {
+                        // A store `Map` is a `Record<string, V>`; a `Map`
+                        // value's wire form is an entries array. A `Cell`
+                        // holding a map is already in that wire form.
+                        TypeRef::Map(k, _, _) if plan.store_maps.contains(n) => format!(
+                            "globalThis.Object.entries(stored[\"{n}\"] as globalThis.Record<string, unknown>).map(([__k, __v]) => [{key}, __v])",
+                            key = if type_base_is_string(k, &commons.types) {
+                                "__k"
+                            } else {
+                                "globalThis.Number(__k)"
+                            }
+                        ),
+                        _ => format!("stored[\"{n}\"]"),
+                    };
+                    if f.init.is_some() {
+                        entries.push(format!(
+                            "...({p} ? {{ {n}: {raw} }} : {{}})",
+                            p = present(n)
+                        ));
+                    } else {
+                        match zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types) {
+                            Some(z) => entries.push(format!(
+                                "{n}: {p} ? {raw} : {zw}",
+                                p = present(n),
+                                zw = ser(&f.type_ref, &z)
+                            )),
+                            None => entries.push(format!("{n}: {raw}")),
+                        }
+                    }
+                }
+                let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+                    &old.type_ref,
+                    "(__ow as never)",
+                    &old.name.name,
+                    &ctx.runtime_use,
+                ));
+                let old_js = cx.bind_local_name(&old.name.name);
+                writeln!(body, "  const __ow = {{ {} }};", entries.join(", ")).unwrap();
+                writeln!(
+                    body,
+                    "  const __od = {d}; if (__od.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __od.error);"
+                )
+                .unwrap();
+                writeln!(body, "  const {old_js} = __od.value;").unwrap();
+            }
+            // 2. The carried state: version N's fields the current shape keeps
+            //    unchanged, decoded as today; every other field at its zero.
+            writeln!(
+                body,
+                "  const __picked: globalThis.Record<string, unknown> = {{}}; for (const __k of [{}]) if (globalThis.Object.prototype.hasOwnProperty.call(stored, __k)) __picked[__k] = stored[__k];",
+                quote_list(&plan.carried)
+            )
+            .unwrap();
+            writeln!(
+                body,
+                "  const __c = {{ ...{zero_fn}(), ...__picked }} as {state_ty};"
+            )
+            .unwrap();
+            if has_rehydrate {
+                writeln!(
+                    body,
+                    "  {rehydrate_fn}(__c, __picked as unknown as {state_ty});"
+                )
+                .unwrap();
+            }
+            // 3. The body, with record-literal semantics: every assignment
+            //    reads the carried state, never another assignment. A throw
+            //    is `MigrationFailed`, never a bare 500 (Decision D).
+            writeln!(body, "  let __out: {state_ty};").unwrap();
+            writeln!(body, "  try {{").unwrap();
+            let mut assigns = Vec::new();
+            for item in &step.items {
+                match item {
+                    bynk_syntax::ast::MigrateItem::Let(l) => {
+                        let mut pre = Pre::new();
+                        let v = pre.lower(&l.value, &mut cx);
+                        for s in pre.stmts() {
+                            writeln!(body, "    {s}").unwrap();
+                        }
+                        let js = cx.bind_local_name(&l.name.name);
+                        writeln!(body, "    const {js} = {v};").unwrap();
+                    }
+                    bynk_syntax::ast::MigrateItem::Assign(asg) => {
+                        let mut pre = Pre::new();
+                        let v = pre.lower(&asg.value, &mut cx);
+                        for s in pre.stmts() {
+                            writeln!(body, "    {s}").unwrap();
+                        }
+                        let n = &asg.target.name;
+                        let v = if map_names.contains(n) {
+                            // A `Map` value is a `ReadonlyMap`; a store `Map`
+                            // is a `Record` keyed by `String(k)`.
+                            format!(
+                                "globalThis.Object.fromEntries(globalThis.Array.from({v}, ([__k, __v]) => [globalThis.String(__k), __v]))"
+                            )
+                        } else {
+                            v
+                        };
+                        assigns.push(format!("{n}: {v}"));
+                    }
+                    bynk_syntax::ast::MigrateItem::Drop(_) => {}
+                }
+            }
+            let fields_out = if assigns.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", assigns.join(", "))
+            };
+            writeln!(body, "    __out = {{ ...__c{fields_out} }} as {state_ty};").unwrap();
+            writeln!(
+                body,
+                "  }} catch {{ throw __migrationFailed(\"{agent_name}\", {}); }}",
+                plan.from
+            )
+            .unwrap();
+            // 4. Back to the wire, keeping any key version N did not know.
+            let enc = if has_rehydrate {
+                format!("{encode_fn}(__out)")
+            } else {
+                "(__out as unknown as globalThis.Record<string, unknown>)".to_string()
+            };
+            writeln!(
+                body,
+                "  const __known = new globalThis.Set<string>([{}]); const __keep: globalThis.Record<string, unknown> = {{}}; for (const __k of globalThis.Object.keys(stored)) if (__k !== \"__v\" && !__known.has(__k)) __keep[__k] = stored[__k];",
+                quote_list(&plan.known)
+            )
+            .unwrap();
+            writeln!(body, "  return {{ ...__keep, ...{enc} }};").unwrap();
+            stmts.push(bynk_ts::TsStmt::raw(
+                format!(
+                    "function {step_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n{body}}}\n"
+                ),
+                None,
+            ));
+            writeln!(
+                dispatch,
+                "  if (__v >= {lo} && __v <= {from}) return {step_fn}(stored);",
+                lo = plan.lo,
+                from = plan.from
+            )
+            .unwrap();
+        }
+        // The nearest step covering the stored version runs; a version no step
+        // covers reads by zero-merge (it passed `__checkStoredSchemaVersion`).
+        stmts.push(bynk_ts::TsStmt::raw(
+            format!(
+                "function {migrate_fn}(stored: globalThis.Record<string, unknown>): globalThis.Record<string, unknown> {{\n  const __v = stored[\"__v\"] === undefined ? 1 : stored[\"__v\"] as number;\n{dispatch}  return stored;\n}}\n"
+            ),
+            None,
+        ));
+    }
+    AgentPersistFns {
+        rehydrate_fn,
+        encode_fn,
+        migrate_fn,
+        has_rehydrate,
+        step_plans,
+        agent_versions,
+    }
+}
+
+/// The names of an agent's state registry and fresh-state factory.
+struct AgentStateNames {
+    /// The per-agent state registry (`__agentStates…`).
+    registry: String,
+    /// The fresh-state factory (`__zeroOf<Agent>State`).
+    zero_fn: String,
+}
+
+/// The agent's state record, as the TypeScript the rest of the agent reads: the
+/// `<Agent>State` interface, the per-agent state registry, and the fresh-state
+/// factory (#3167). Pushes those three declarations, in that order, onto `stmts`.
+/// Returns the registry's and the factory's names, which `loadState`, the
+/// rehydration step and the test reset refer to.
+fn emit_agent_state_record(
+    a: &AgentDecl,
+    layout: &AgentStoreLayout,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    stmts: &mut Vec<bynk_ts::TsStmt>,
+) -> AgentStateNames {
+    let tys = commons.tys();
+    let state_ty = format!("{}State", a.name.name);
+    let AgentStoreLayout {
+        store_field_ty,
+        effective_fields,
+        held_maps,
+        store_map_fields,
+        store_map_indexes,
+        set_field_names,
+        store_cache_fields,
+        store_log_fields,
+        ..
+    } = layout;
+    // 1) State record type.
+    //
+    // Arc C, slice 19 (#1367): the first of step (9)'s own proposed 5-6
+    // sub-slices (design/tracks/the-typescript-tree.md §6's own grounding
+    // pass) — converts this block alone to a real `bynk_ts::TsDecl::Interface`
+    // (already exists, gained `type_params`/per-member `readonly` by #1339,
+    // no new algebra gap needed). Each field's own `readonly {name}: {ty};`
+    // line is a real `TsTypeMember::Prop`; `ts_ty_to_ts_type` (the real-node
+    // sibling of the plain-`String` `ts_ty` this block called before) already
+    // exists and is already used by `emit_service`/`emit_make_surface` for
+    // the identical purpose. Three compound member types, one load-bearing
+    // trap among them: `Cache`'s `Record<string, { v: T; exp: number }>` and
+    // `Log`'s `Array<{ t: number; v: T }>` are real `TsType::named_with_args`
+    // over a real inline `TsType::Object` — no opaque text anywhere in this
+    // block. The posting-list's own `Record<string, string[]>` is the third,
+    // and it must use `TsType::Array { readonly: false, .. }` (postfix `[]`
+    // syntax), NOT `named_with_args("Array", ..)` like `Cache`/`Log`
+    // themselves use two blocks down — semantically identical, textually
+    // distinct; using the generic form here would silently break zero-diff.
+    // See its own construction below for the actual choice, not just this
+    // note.
+    let mut members: Vec<bynk_ts::TsTypeMember> = Vec::new();
+    for f in effective_fields {
+        let cell_ty = match store_field_ty.get(f.name.name.as_str()) {
+            Some(StoreKindIr::Cell(t)) => *t,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Cell in this \
+                 function's own state reader, found {other:?}",
+                f.name.name
+            ),
+        };
+        members.push(bynk_ts::TsTypeMember::Prop {
+            name: f.name.name.clone(),
+            ty: ts_ty_to_ts_type(cell_ty, tys),
+            optional: false,
+            readonly: true,
+        });
+    }
+    for (name, _) in store_map_fields {
+        let value_ty = match store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Map(_, v)) => *v,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Map in this \
+                 function's own state reader, found {other:?}",
+                name.name
+            ),
+        };
+        members.push(bynk_ts::TsTypeMember::Prop {
+            name: name.name.clone(),
+            ty: bynk_ts::TsType::named_with_args(
+                "globalThis.Record",
+                vec![
+                    bynk_ts::TsType::named("string"),
+                    ts_ty_to_ts_type(value_ty, tys),
+                ],
+            ),
+            optional: false,
+            readonly: true,
+        });
+    }
+    // v0.105 (slice 3b-ii): a held `Map[K, Connection]` persists `K → connId`.
+    for (name, _) in held_maps {
+        members.push(bynk_ts::TsTypeMember::Prop {
+            name: name.name.clone(),
+            ty: bynk_ts::TsType::named_with_args(
+                "globalThis.Record",
+                vec![
+                    bynk_ts::TsType::named("string"),
+                    bynk_ts::TsType::named("string"),
+                ],
+            ),
+            optional: false,
+            readonly: true,
+        });
+    }
+    for name in set_field_names {
+        members.push(bynk_ts::TsTypeMember::Prop {
+            name: name.to_string(),
+            ty: bynk_ts::TsType::named_with_args(
+                "globalThis.Record",
+                vec![
+                    bynk_ts::TsType::named("string"),
+                    bynk_ts::TsType::named("boolean"),
+                ],
+            ),
+            optional: false,
+            readonly: true,
+        });
+    }
+    // v0.93 (ADR 0118): a sibling posting-list per `@indexed(by: f)` — field
+    // value (stringified) → the primary keys whose value has it. Persisted and
+    // committed wholesale with the map it indexes.
+    for (map, fields) in sorted_index_fields(store_map_indexes) {
+        for f in fields {
+            members.push(bynk_ts::TsTypeMember::Prop {
+                name: format!("{map}__idx_{f}"),
+                ty: bynk_ts::TsType::named_with_args(
+                    "globalThis.Record",
+                    vec![
+                        bynk_ts::TsType::named("string"),
+                        // Postfix `string[]`, not `named_with_args("Array",
+                        // ..)` — the original text here is `string[]`, not
+                        // `Array<string>`. Review of #1368: the two are
+                        // byte-different even though `Cache`/`Log` below use
+                        // the generic `Array<T>` form for their own arrays —
+                        // don't "unify" this with those without re-checking
+                        // the fixture text first.
+                        bynk_ts::TsType::Array {
+                            element: Box::new(bynk_ts::TsType::named("string")),
+                            readonly: false,
+                        },
+                    ],
+                ),
+                optional: false,
+                readonly: true,
+            });
+        }
+    }
+    for (name, _, _) in store_cache_fields {
+        let value_ty = match store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Cache(_, v, _)) => *v,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Cache in this \
+                 function's own state reader, found {other:?}",
+                name.name
+            ),
+        };
+        members.push(bynk_ts::TsTypeMember::Prop {
+            name: name.name.clone(),
+            ty: bynk_ts::TsType::named_with_args(
+                "globalThis.Record",
+                vec![
+                    bynk_ts::TsType::named("string"),
+                    bynk_ts::TsType::Object(vec![
+                        bynk_ts::TsTypeMember::Prop {
+                            name: "v".to_string(),
+                            ty: ts_ty_to_ts_type(value_ty, tys),
+                            optional: false,
+                            readonly: false,
+                        },
+                        bynk_ts::TsTypeMember::Prop {
+                            name: "exp".to_string(),
+                            ty: bynk_ts::TsType::named("number"),
+                            optional: false,
+                            readonly: false,
+                        },
+                    ]),
+                ],
+            ),
+            optional: false,
+            readonly: true,
+        });
+    }
+    for (name, _, _) in store_log_fields {
+        let elem_ty = match store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Log(t, _)) => *t,
+            other => panic!(
+                "bynk internal error: state field `{}` is not a resolved Log in this \
+                 function's own state reader, found {other:?}",
+                name.name
+            ),
+        };
+        members.push(bynk_ts::TsTypeMember::Prop {
+            name: name.name.clone(),
+            ty: bynk_ts::TsType::named_with_args(
+                "globalThis.Array",
+                vec![bynk_ts::TsType::Object(vec![
+                    bynk_ts::TsTypeMember::Prop {
+                        name: "t".to_string(),
+                        ty: bynk_ts::TsType::named("number"),
+                        optional: false,
+                        readonly: false,
+                    },
+                    bynk_ts::TsTypeMember::Prop {
+                        name: "v".to_string(),
+                        ty: ts_ty_to_ts_type(elem_ty, tys),
+                        optional: false,
+                        readonly: false,
+                    },
+                ])],
+            ),
+            optional: false,
+            readonly: true,
+        });
+    }
+    // #1486: `no_blank_before` when this agent's own doc comment is the
+    // preceding statement — see `emit_free_fn`'s own identical note. The
+    // explicit `TsStmt::blank(None)` push this used to carry is gone —
+    // `bynk_ts::print` itself now supplies the one blank line between
+    // adjacent real statements.
+    let mut state_interface = bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::Interface {
+            name: state_ty.clone(),
+            type_params: Vec::new(),
+            members,
+        })),
+        None,
+    );
+    state_interface.no_blank_before = a.documentation.is_some();
+    stmts.push(state_interface);
+    // v0.9.2: per-agent state registry (bundle mode + `bynk test`) and the
+    // zero-value factory used to initialise a fresh key's state.
+    //
+    // Arc C, slice 20 (#1369): the second of step (9)'s own proposed 5-6
+    // sub-slices — the registry `const` and the zero-factory `function`
+    // build real nodes; the zero-record's own per-field VALUES stay
+    // opaque where they genuinely must (a `Cell` field with an initialiser
+    // lowers through `LowerCtx`, `lower.rs`'s own permanently-excluded
+    // general expression lowering — the same "carry an unconverted
+    // sibling's already-formed JS text as `TsExpr::Ident`" pattern
+    // #1355's own `emit_message_entry_renderer` call already established),
+    // but every EMPTY-container field (`Map`/`Set`/`Cache`/held-map/
+    // posting-list `{}`, `Log`'s `[]`) is fully real — `TsExpr::object(
+    // vec![])`/`TsExpr::array(vec![])`, no opacity needed there at all.
+    let registry = agent_registry_name(&a.name.name);
+    let zero_fn = format!("__zeroOf{}State", a.name.name);
+    let registry_const = bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::ConstDecl {
+            name: registry.clone(),
+            ty: None,
+            init: bynk_ts::TsExpr::New {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__StateRegistry".to_string())),
+                args: Vec::new(),
+            },
+        },
+        None,
+    );
+    stmts.push(registry_const);
+    // v0.11: build the fresh-state record. A field with an explicit initialiser
+    // lowers its (static) expression; a field without one uses the v0.9.2
+    // implicit zero.
+    let mut zero_entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
+    // Review of #1370, finding 1: `lower_if`'s own non-`ternary_shaped`
+    // branch and `build_match_iife` can both return a genuinely multi-line
+    // IIFE as `val` (real embedded `\n` bytes) with `pre` empty, so the
+    // `pre.is_empty()` branch above passes it straight through unwrapped —
+    // no fixture in the 31-fixture `store` sweep reaches this shape (the
+    // only store-init-with-`if` fixture, `1029_agent_static_init_hoist`,
+    // takes the `hoist_if_as_statement` path instead, whose own hoisted
+    // statements are individually newline-free), so it was invisible to the
+    // zero-diff check. Tracked here so the zero-factory's own `inline` flag
+    // can be set correctly below — `inline: true` is only safe when every
+    // entry's own value is genuinely single-line (`render_compact_stmts`'s
+    // own `debug_assert!` panics on an embedded newline, a real
+    // debug-build crash for a `store` field initialised with a `match` or a
+    // statement-shaped/`is`-binding `if`, not merely a formatting nit).
+    let mut zero_record_has_multiline_value = false;
+    for f in effective_fields {
+        let val = if let Some(init) = &f.init {
+            let mut pre = Pre::new();
+            let mut module = ModuleCtx::new(commons, &ctx.cross_context, &ctx.runtime_use);
+            module.target = ctx.target;
+            module.agent_method_givens = ctx.agent_method_givens.clone();
+            module.agent_called_contexts = ctx.agent_called_contexts.clone();
+            module.event_schema_versions = ctx.event_schema_versions.clone();
+            module.consumed_type_ns = consumed_type_ns(ctx);
+            module.consumed_type_declared = ctx.consumed_type_aliases.clone();
+            module.consumed_context_types = ctx.consumed_context_types();
+            let mut icx = LowerCtx::new(module, BodyMode::StaticInit);
+            icx.local_agents = ctx.local_agents.clone();
+            let expr = pre.lower(init, &mut icx);
+            // A static initialiser lowers to a pure expression (no setup
+            // statements). #1029 review: if any appear, wrap them in an IIFE
+            // rather than splicing them into a comma sequence. The comma
+            // form only ever worked for expression-shaped hoists — a `const`
+            // or an `if` operand does not parse — and T2.1 made a
+            // statement-shaped hoist reachable here for the first time, since
+            // a value-position `if` that hoists now yields `let …; if (…) {…}`
+            // where it used to yield a self-contained arrow. An IIFE is
+            // sound for this position specifically: a static initialiser has
+            // no enclosing function to `return` out of, so the arrow cannot
+            // swallow a control transfer the way it would in a handler body.
+            if pre.is_empty() {
+                expr
+            } else {
+                format!("(() => {{ {} return {expr}; }})()", pre.stmts().join(" "))
+            }
+        } else {
+            zero_value_ts(&f.type_ref, f.refinement.as_ref(), &commons.types)
+                .unwrap_or_else(|| "undefined as never".to_string())
+        };
+        if val.contains('\n') {
+            zero_record_has_multiline_value = true;
+        }
+        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+            f.name.name.clone(),
+            bynk_ts::TsExpr::Ident(val),
+        ));
+    }
+    // A fresh `store Map`/`store Set`/`store Cache` is the empty record.
+    for (name, _) in store_map_fields {
+        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+            name.name.clone(),
+            bynk_ts::TsExpr::object(vec![]),
+        ));
+    }
+    // A fresh held `Map[K, Connection]` (a `K → connId` record) is empty too.
+    for (name, _) in held_maps {
+        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+            name.name.clone(),
+            bynk_ts::TsExpr::object(vec![]),
+        ));
+    }
+    // A fresh `@indexed` posting-list is empty too (v0.93, ADR 0118).
+    for (map, fields) in sorted_index_fields(store_map_indexes) {
+        for f in fields {
+            zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+                format!("{map}__idx_{f}"),
+                bynk_ts::TsExpr::object(vec![]),
+            ));
+        }
+    }
+    for name in set_field_names {
+        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+            name.to_string(),
+            bynk_ts::TsExpr::object(vec![]),
+        ));
+    }
+    for (name, _, _) in store_cache_fields {
+        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+            name.name.clone(),
+            bynk_ts::TsExpr::object(vec![]),
+        ));
+    }
+    // A fresh `store Log` is the empty array.
+    for (name, _, _) in store_log_fields {
+        zero_entries.push(bynk_ts::TsObjectEntry::Prop(
+            name.name.clone(),
+            bynk_ts::TsExpr::array(vec![]),
+        ));
+    }
+    // #1486: `no_blank_before: true`, unconditional — no blank line wanted
+    // between `registry_const` and this function, matching the
+    // pre-conversion hand-written text this crate's own zero-diff
+    // discipline requires preserving exactly (see `TsStmt::no_blank_
+    // before`'s own doc, added specifically for this real, already-shipped
+    // pairing). The explicit `TsStmt::blank(None)` push this used to carry
+    // afterward is also gone — `bynk_ts::print` itself now supplies the one
+    // blank line before whatever follows.
+    let mut zero_fn_decl = bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Function {
+            name: zero_fn.clone(),
+            generics: Vec::new(),
+            params: Vec::new(),
+            return_type: Some(bynk_ts::TsType::named(state_ty.clone())),
+            body: vec![bynk_ts::TsStmt::return_stmt(
+                Some(bynk_ts::TsExpr::object_entries(zero_entries)),
+                None,
+            )],
+            is_async: false,
+            // Single-line only when safe (see the `zero_record_has_multiline_
+            // value` note above) — a genuinely multi-line `Cell` initialiser
+            // falls back to the ordinary multi-line block form instead of
+            // tripping `render_compact_stmts`'s own debug_assert!.
+            inline: !zero_record_has_multiline_value,
+        },
+        None,
+    );
+    zero_fn_decl.no_blank_before = true;
+    stmts.push(zero_fn_decl);
+    AgentStateNames { registry, zero_fn }
+}
+
+pub(crate) fn emit_agent(
+    a: &AgentDecl,
+    state: &[StoreFieldIr],
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+) -> Vec<bynk_ts::TsStmt> {
+    let tys = commons.tys();
+    let mut stmts = Vec::new();
+    if let Some(doc) = a.documentation.as_deref() {
+        stmts.push(bynk_ts::TsStmt::doc_comment(doc, None));
+    }
+    let state_ty = format!("{}State", a.name.name);
+    let layout = classify_agent_store(a, state, commons, ctx);
+    let AgentStateNames { registry, zero_fn } =
+        emit_agent_state_record(a, &layout, commons, ctx, &mut stmts);
+    let AgentPersistFns {
+        rehydrate_fn,
+        encode_fn,
+        migrate_fn,
+        has_rehydrate,
+        step_plans,
+        agent_versions,
+    } = emit_agent_state_persistence(a, &layout, &zero_fn, commons, ctx, &mut stmts);
+    let AgentStoreLayout {
+        effective_fields,
+        is_workers,
+        held_maps_ts,
+        map_names,
+        map_value_ts,
+        store_map_indexes,
+        set_names,
+        cache_ttls,
+        log_retains,
+        log_value_ts,
+        ..
+    } = layout;
+    let is_store_agent = true;
+    // 2) Durable Object class.
+    //
+    // #1482: local buffer/map pair, replacing this function's own former
+    // `out`/`source_map` parameters for the rest of the class's own
+    // construction below (through its closing brace) — every internal
+    // print-and-splice call site inside the class (`loadState`/
+    // `commitState`/the per-handler loop/the WS-hosted DO methods/`fetch`)
+    // is unchanged, since each already just referenced these two names.
+    let mut out = String::new();
+    let class_smb = RefCell::new(SourceMapBuilder::new());
+    let source_map = Some(&class_smb);
+    writeln!(out, "export class {name} {{", name = a.name.name).unwrap();
+    writeln!(out, "  state: __DurableObjectState;").unwrap();
+    let reads_key = agent_reads_key(a);
+    if reads_key {
+        // #1818: set before any handler runs, by the bundle factory or the
+        // workers `fetch` dispatch.
+        writeln!(
+            out,
+            "  __key!: {};",
+            crate::emitter::ts_type_ref(&a.key_type)
+        )
+        .unwrap();
+    }
+    // #527: an agent whose methods take `given` capabilities rebuilds those
+    // deps *inside* the DO (providers cannot cross the JSON wire), and some
+    // providers take the Worker `env` — workerd passes it as the DO
+    // constructor's second argument. Bundle mode constructs with `state`
+    // only and never uses the fetch path, so the parameter stays optional.
+    let given_deps_expr = ctx.agent_given_deps.get(&a.name.name).cloned();
+    // Events track, slice 0 (spine #936): the same wire problem #527 already
+    // solved for capability providers hits `deps.__eventsDispatch` too — it is
+    // a function, so it does not survive the DO's JSON wire either. An agent
+    // whose own handler body emits directly (`body_emits_directly`'s
+    // per-handler test, mirrored here at the whole-agent level) needs its
+    // fetch dispatch to rebuild it from `env.EVENTS_FANOUT` exactly as a
+    // `given` provider is rebuilt, so it takes the same env-carrying
+    // constructor.
+    let agent_uses_emit = a
+        .handlers
+        .iter()
+        .any(|h| bynk_model::block_uses_emit(&h.body, &commons.callees));
+    // #1960: likewise `deps.env` itself — its Service Bindings and DO
+    // namespaces are dead plain objects once the caller's deps cross the
+    // wire, so an agent whose handlers call a consumed context's service or
+    // construct an agent reads them from its own `env` instead.
+    let agent_reaches_env = ctx.target == BuildTarget::Workers
+        && a.handlers
+            .iter()
+            .any(|h| bynk_model::block_reaches_worker_env(&h.body, &commons.callees));
+    // #3109: likewise the `from websocket` bodies this agent's Durable Object
+    // hosts (`on open` / `on message` / `on close`): they run here, so any
+    // Service Binding or DO namespace they reach comes from this object's `env`.
+    let ws_hosts_reach_env = ctx.target == BuildTarget::Workers
+        && ws_open_hosts_for(&a.name.name, commons, &ctx.local_agents, &ctx.actors)
+            .iter()
+            .any(|h| h.reaches_env(commons));
+    // The `/_bynk/agent/` RPC branch rebuilds on its own condition; the ws
+    // hosts only widen the constructor (and the ws entry points).
+    let rpc_rebuilds_env = given_deps_expr.is_some() || agent_uses_emit || agent_reaches_env;
+    let needs_env_ctor = rpc_rebuilds_env || ws_hosts_reach_env;
+    if needs_env_ctor {
+        writeln!(out, "  private __env: unknown;").unwrap();
+        writeln!(
+            out,
+            "  constructor(state: __DurableObjectState, env?: unknown) {{"
+        )
+        .unwrap();
+        writeln!(out, "    this.state = state;").unwrap();
+        writeln!(out, "    this.__env = env;").unwrap();
+        writeln!(out, "  }}").unwrap();
+    } else {
+        writeln!(out, "  constructor(state: __DurableObjectState) {{").unwrap();
+        writeln!(out, "    this.state = state;").unwrap();
+        writeln!(out, "  }}").unwrap();
+    }
+    writeln!(out).unwrap();
+    emit_agent_load_commit_state(
+        &mut out,
+        a,
+        &effective_fields,
+        &AgentLoadFns {
+            zero_fn: &zero_fn,
+            rehydrate_fn: &rehydrate_fn,
+            encode_fn: &encode_fn,
+            migrate_fn: &migrate_fn,
+            has_rehydrate,
+            step_plans: &step_plans,
+            agent_versions: &agent_versions,
+        },
+        commons,
+        ctx,
+        source_text,
+    );
+    let class_depth = 0;
     // 3) Handlers.
     let cell_names: HashSet<String> = effective_fields
         .iter()

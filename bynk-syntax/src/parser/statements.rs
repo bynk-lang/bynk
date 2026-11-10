@@ -724,7 +724,11 @@ impl<'a> Parser<'a> {
                 .get(self.pos)
                 .is_some_and(|t| self.slice(t.span) == "advance")
             && kind(1) == Some(TokenKind::Ident)
-            && kind(2) == Some(TokenKind::By)
+            && kind(2) == Some(TokenKind::Ident)
+            && self
+                .tokens
+                .get(self.pos + 2)
+                .is_some_and(|t| self.slice(t.span) == "by")
     }
 
     /// #2640: `par {` opens a concurrent binding block. `par` is contextual, and
@@ -846,16 +850,59 @@ impl<'a> Parser<'a> {
             && self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::ColonEq)
     }
 
+    /// #3191: is the next token the contextual word `by`?
+    pub(crate) fn at_by(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self.peek().is_some_and(|t| self.slice(t.span) == "by")
+    }
+
+    /// #3191: does a call-site actor clause start here — `by` on the line the
+    /// preceding value ended on, followed by the actor's name?
+    fn at_call_site_by(&self) -> bool {
+        if !self.at_by() || self.nth_kind(1) != Some(TokenKind::Ident) {
+            return false;
+        }
+        match self.pos.checked_sub(1).and_then(|i| self.tokens.get(i)) {
+            Some(prev) => !self.next_token_on_new_line(prev.span),
+            None => false,
+        }
+    }
+
+    /// #3191: consume the contextual `by`, which the caller has already found.
+    pub(crate) fn expect_by(&mut self, ctx: &str) -> Result<Token, CompileError> {
+        if self.at_by() {
+            return Ok(self.bump().expect("`by` is the next token"));
+        }
+        // Not `by`: the generic report, naming the word that was expected.
+        Err(match self.peek() {
+            Some(t) => CompileError::new(
+                "bynk.parse.expected_token",
+                t.span,
+                format!("expected `by` {ctx}, found {}", t.kind.describe()),
+            ),
+            None => CompileError::new(
+                "bynk.parse.unexpected_eof",
+                self.eof_span(),
+                format!("expected `by` {ctx}, found end of file"),
+            ),
+        })
+    }
+
     /// v0.182 (#664): parse an optional call-site actor clause after an
     /// effect-let value — `by <Actor>` (unit identity) or `by <Actor>(<expr>)`.
+    /// `by` is contextual (#3191), so it opens the clause only when it is on the
+    /// same line as the end of the value **and** an identifier (the actor)
+    /// follows; a statement that begins with the name `by` on a later line is a
+    /// statement, not a clause. The formatter always writes the clause on the
+    /// value's own line, so formatted code is never misread.
     /// Distinct from the handler `by` clause (`parse_by_clause`), which admits a
     /// binder and an actor *sum* but no identity argument. #1812: also read
     /// after a fault claim's subject (`expect <call> by User("bob") faults`).
     pub(crate) fn parse_call_site_actor(&mut self) -> Result<Option<CallSiteActor>, CompileError> {
-        if self.peek_kind() != Some(TokenKind::By) {
+        if !self.at_call_site_by() {
             return Ok(None);
         }
-        let by_kw = self.expect(TokenKind::By, "to start the call-site actor clause")?;
+        let by_kw = self.expect_by("to start the call-site actor clause")?;
         let actor = self.expect_ident("as the actor after `by` at a call site")?;
         let (identity, claims, end) = if self.peek_kind() == Some(TokenKind::LParen) {
             self.expect(TokenKind::LParen, "after the actor name")?;
@@ -900,7 +947,7 @@ impl<'a> Parser<'a> {
         if self.advance_ahead() {
             let keyword = self.expect_ident("to start an advance statement")?.span;
             let cap = self.expect_ident("as the capability after `advance`")?;
-            self.expect(TokenKind::By, "after the capability in `advance`")?;
+            self.expect_by("after the capability in `advance`")?;
             let amount = self.parse_expr()?;
             let span = keyword.merge(amount.span);
             return Ok(Statement::Advance(AdvanceStmt {

@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "wrong-algorithm tokens to a Bearer route" {
+		let r <- api.GET("/health") by WrongAlgorithm
+		expect r is Rejected(Unauthorized)
+	}
+}

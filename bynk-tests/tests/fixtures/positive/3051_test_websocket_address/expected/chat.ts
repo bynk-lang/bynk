@@ -114,7 +114,7 @@ export class Room {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await ((delete __state.members[u]), undefined);
-      const __r1 = await ((delete __state.conns[u]), undefined);
+      const __r1 = await (async () => { const __k = u; if (globalThis.Object.hasOwn(__state.conns, __k)) { await __state.conns[__k].close(); delete __state.conns[__k]; } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

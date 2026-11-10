@@ -1,0 +1,2 @@
+# #3224: remove on a held Map[K, Connection] closes the connection.
+passed=3 failed=0

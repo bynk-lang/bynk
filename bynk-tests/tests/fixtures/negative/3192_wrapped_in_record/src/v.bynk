@@ -1,0 +1,14 @@
+context v
+
+// A record that contains the tree is refused where the record is used.
+type Tree[A] =
+	| Leaf
+	| Node(left: Tree[A], value: A, right: Tree[A])
+
+type Holder = { t: Tree[Int] }
+
+service s {
+	on call(h: List[Holder]) -> Effect[Int] {
+		Effect.pure(0)
+	}
+}

@@ -77,6 +77,37 @@ bynk test .                      # compile and run the tests
 bynk check .                     # type-check only
 ```
 
+## Where a project ends
+
+A subdirectory with its own `bynk.toml` is **another project**, and a project never
+reaches into one. Discovery skips it as it skips `out/`, so its sources, fixtures
+and migrations stay its own. When the skipped project holds `.bynk` files, the
+command says so in one line:
+
+```text
+bynk: note: skipped `vendor/inner`: it has its own bynk.toml, so it is a separate project; run the command inside it
+```
+
+A directory that is **not** a project, with no `bynk.toml` here or in any
+directory above, but one or more projects below it (a repository of independent
+projects, say), has no single program to compile. `bynk check` and `bynk test`
+refuse there, name the projects (the first five, then a count), and exit non-zero:
+
+```text
+bynk: `.` is not a project (no `bynk.toml` here or above) but holds 3 projects that have their own: `a`, `b`, `c`.
+Run the command inside one of them, or add a `bynk.toml` here with
+
+    [workspace]
+    members = ["*"]
+
+to run it over each
+```
+
+Run the command inside one project, or add that root `bynk.toml` to make the
+directory a [workspace](#workspaces). `bynk fmt` is the exception: it formats a
+directory of projects as one tree, each file by its own project's `[fmt]`
+settings, since formatting reads no fixtures or migrations.
+
 ## Workspaces
 
 A **workspace** groups several projects in one repository. Its root holds a
