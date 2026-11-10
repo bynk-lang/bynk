@@ -297,10 +297,18 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
         "WrongAudience",
         "Sends an `Oidc` route a token correctly signed by the test issuer and unexpired, whose `aud` is not the actor's audience, so the real seam refuses it (`Rejected(Unauthorized)`). Needs an `Oidc` actor. `system` tier only.",
     ),
+    (
+        "WrongAlgorithm",
+        "Sends an `Oidc` route two tokens that are otherwise valid, one with `alg: none` and one `HS256`-signed with the JWKS public key as the HMAC secret, so the real seam refuses both (`Rejected(Unauthorized)`); the case reads the first one it admits, if any. Needs an `Oidc` actor. `system` tier only.",
+    ),
+    (
+        "NoSubject",
+        "Sends an `Oidc` route two tokens that are correctly signed by the test issuer and unexpired, one with an empty `sub` and one with no `sub` claim, so the real seam refuses both before the handler runs (`Rejected(Unauthorized)`), whatever the identity's refinement. Needs an `Oidc` actor. `system` tier only.",
+    ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`, `WrongIssuer`, `WrongAudience`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -3532,6 +3540,22 @@ mod tests {
         assert!(
             wrong.contains("by WrongIssuer") && wrong.contains("`iss` is not the actor's"),
             "{wrong}"
+        );
+        // #3225: the algorithm and subject principals.
+        let src = "suite ci.api as system {\n\tcase \"c\" {\n\t\tlet r <- api.GET(\"/a\") by WrongAlgorithm\n\t\tlet s <- api.GET(\"/a\") by NoSubject\n\t\texpect r is Rejected(Unauthorized)\n\t}\n}\n";
+        let alg = describe_reserved_principal_at(src, src.find("WrongAlgorithm").unwrap()).unwrap();
+        assert!(
+            alg.contains("by WrongAlgorithm")
+                && alg.contains("`alg: none`")
+                && alg.contains("`HS256`"),
+            "{alg}"
+        );
+        let sub = describe_reserved_principal_at(src, src.find("NoSubject").unwrap()).unwrap();
+        assert!(
+            sub.contains("by NoSubject")
+                && sub.contains("empty `sub`")
+                && sub.contains("no `sub` claim"),
+            "{sub}"
         );
     }
 

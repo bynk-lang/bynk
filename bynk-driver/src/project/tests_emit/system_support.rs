@@ -1082,7 +1082,8 @@ pub(super) fn emit_system_http_support(
             // #3052: on an `Oidc` route, `by Forged` (signed by a key the
             // JWKS does not publish), `by Expired`, `by WrongIssuer` and
             // `by WrongAudience`, typed and raw, each decoding a `401` to
-            // `Rejected(Unauthorized)`.
+            // `Rejected(Unauthorized)`; and (#3225) `by WrongAlgorithm` and
+            // `by NoSubject`.
             if let Some(trust) = oidc_trust.as_deref() {
                 let oidc_options = ident(format!(
                     "{{ method: {method:?}, headers: {{ {headers_spread}{content_type}\"authorization\": __token, }}, {body_init}}}",
@@ -1097,7 +1098,19 @@ pub(super) fn emit_system_http_support(
                         None => String::new(),
                     },
                 ));
-                for name in ["forged", "expired", "wrongissuer", "wrongaudience"] {
+                // #3225: `WrongAlgorithm` and `NoSubject` each present two
+                // tokens. Each token has a driver of its own, and the
+                // principal's driver (below) runs them in turn.
+                for name in [
+                    "forged",
+                    "expired",
+                    "wrongissuer",
+                    "wrongaudience",
+                    "algnone",
+                    "alghs256",
+                    "emptysub",
+                    "nosub",
+                ] {
                     // A valid `sub`, so only the one thing under test is wrong.
                     let sign_stmt = TsStmt::raw(
                         format!(
@@ -1135,6 +1148,33 @@ pub(super) fn emit_system_http_support(
                             false,
                             vec![sign_stmt],
                             false,
+                        ));
+                    }
+                }
+                // #3225: the two-token principals. The driver presents each
+                // token in order and returns the first outcome that is not the
+                // seam's refusal, so a seam that admits either one fails the
+                // case's `Rejected(Unauthorized)`; when every token is refused
+                // it returns that refusal. Typed and raw, like the others.
+                let prefixes: &[&str] = if h.params.is_empty() {
+                    &[""]
+                } else {
+                    &["", "raw"]
+                };
+                for (principal, tokens) in [
+                    ("wrongalgorithm", ["algnone", "alghs256"]),
+                    ("nosubject", ["emptysub", "nosub"]),
+                ] {
+                    for raw in prefixes {
+                        let driver = |kind: &str| format!("__sysdrive_{raw}{kind}_{sname}_{key}");
+                        routes.push(TsStmt::raw(
+                            format!(
+                                "async function {name}(...__a: Parameters<typeof {first}>) {{\n  const __first = await {first}(...__a);\n  if (__first.tag !== \"Rejected\" || __first.value.tag !== \"Unauthorized\") return __first;\n  return await {second}(...__a);\n}}",
+                                name = driver(principal),
+                                first = driver(tokens[0]),
+                                second = driver(tokens[1]),
+                            ),
+                            None,
                         ));
                     }
                 }
