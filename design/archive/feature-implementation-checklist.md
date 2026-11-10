@@ -1,5 +1,7 @@
 # Bynk — Design Notes vs. Implementation Checklist
 
+> **Archived.** A dated audit (~v0.107.0); many ❌ rows have since shipped (events, idempotency, OpenAPI and more). Nothing here is current. Present state: [`../bynk-status-and-roadmap.md`](../bynk-status-and-roadmap.md); per-increment doc and design deltas: [`../proposals/README.md`](../proposals/README.md) and the pull request template.
+
 _Comparing `design/bynk-design-notes.md` (working draft, 9 May 2026) against the
 compiler as it stands at **~v0.107.0** (head `cd8aa77`, latest ADR **0135**)._
 
