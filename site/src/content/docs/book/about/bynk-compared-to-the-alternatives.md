@@ -37,22 +37,22 @@ Where they differ is **what enforces the shape**:
   context-to-Worker mappings are part of the language itself. Encore is Go-first
   (with newer TypeScript support) and oriented to AWS/GCP and its own cloud.
 
-Where Encore is ahead — and this is the honest part:
+Bynk provisions and deploys to Cloudflare with one command
+([`bynk deploy`](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)),
+and `bynk migrate`, `bynk revert` and `bynk tail` cover state migrations,
+rollback and live logs. Where Encore is ahead — and this is the honest part:
 
-- **It ships today.** Encore provisions infrastructure and deploys to real clouds
-  now, with built-in observability and distributed tracing, and it is
-  production-proven with a company behind it. Bynk scaffolds, checks, tests, and
-  serves locally today, but a one-command remote deploy is still on the roadmap,
-  not yet shipped — taking a project live is a manual step for now. If "can I
-  deploy this next week?" is the question, Encore answers it and Bynk does not
-  yet.
-- **Maturity and breadth.** Encore is years and many production users ahead of a
-  pre-1.0 language.
+- **Reach.** Encore targets AWS and GCP as well as its own cloud; Bynk's deploy
+  path is Cloudflare-only.
+- **Tracing.** Encore ships built-in distributed tracing. Bynk's is
+  [still planned](https://github.com/bynk-lang/bynk/issues/555).
+- **Maturity and track record.** Encore is production-proven, with a company
+  behind it, and is years and many production users ahead of a pre-1.0 language.
 
 Reach for **Bynk** when you want the architecture *enforced by the type system*
 rather than by a framework you can step around, and Cloudflare Workers is your
 target. Reach for **Encore** when you need to ship to AWS or GCP today, want
-provisioning and tracing built in now, and are content for the guarantees to be
+multi-cloud provisioning and built-in tracing now, and are content for the guarantees to be
 framework-level in a mature host language.
 
 ## Bynk vs "TypeScript + Zod + discipline"
@@ -92,7 +92,8 @@ line than a wiki page.
 ## The honest summary
 
 - Against **Encore**: Bynk trades a mature, deploy-ready framework for
-  language-level enforcement — and is not yet finished (no one-command deploy).
+  language-level enforcement — and gives up multi-cloud targets, built-in tracing
+  and a long production record.
 - Against **TS + Zod + discipline**: Bynk trades ecosystem breadth and flexibility
   for the same good shape made *inexpressible to violate*, so it holds by
   construction rather than by vigilance.
