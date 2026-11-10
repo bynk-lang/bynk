@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: verbatim_sites, ts_writes
 changelog: An agent's `Map`, `Set`, `Cache` and `Log` entries, and their `@indexed` postings, are stored under a key of their own, so a handler's storage work no longer grows with the size of the state (per-entry storage, slice 2)
 ---
 
