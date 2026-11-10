@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -28,6 +29,8 @@ export interface IndexState {
 const __IndexRegistry = new __StateRegistry();
 function __zeroOfIndexState(): IndexState { return { hits: 0 }; }
 
+const __entryFieldsOfIndex = [] as const;
+
 function __rehydrateIndexState(s: IndexState, stored: IndexState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Index", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
 }
@@ -46,15 +49,16 @@ export class Index {
     const stored = await this.state.storage.get<IndexState>("state");
     if (stored === undefined) return __zeroOfIndexState();
     __checkStoredLayout("Index", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfIndexState();
-    __reportUnknownStoredKeys("Index", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateIndexState(__merged, stored);
+    __reportUnknownStoredKeys("Index", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateIndexState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: IndexState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeIndexState(s));
+    await __commitStored(this, this.state.storage, __encodeIndexState(s), __entryFieldsOfIndex);
   }
 
   async withdraw(version: string, deps: { Files: Files }): globalThis.Promise<number> {
@@ -75,6 +79,8 @@ export interface FrontState {
 const __FrontRegistry = new __StateRegistry();
 function __zeroOfFrontState(): FrontState { return { hits: 0 }; }
 
+const __entryFieldsOfFront = [] as const;
+
 function __rehydrateFrontState(s: FrontState, stored: FrontState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Front", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
 }
@@ -94,15 +100,16 @@ export class Front {
     const stored = await this.state.storage.get<FrontState>("state");
     if (stored === undefined) return __zeroOfFrontState();
     __checkStoredLayout("Front", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfFrontState();
-    __reportUnknownStoredKeys("Front", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateFrontState(__merged, stored);
+    __reportUnknownStoredKeys("Front", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateFrontState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: FrontState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeFrontState(s));
+    await __commitStored(this, this.state.storage, __encodeFrontState(s), __entryFieldsOfFront);
   }
 
   async go(version: string, deps: { Files: Files }): globalThis.Promise<number> {

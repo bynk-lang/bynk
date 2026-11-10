@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError, JsonError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -73,6 +74,8 @@ export interface KeeperState {
 const __KeeperRegistry = new __StateRegistry();
 function __zeroOfKeeperState(): KeeperState { return { tree: None }; }
 
+const __entryFieldsOfKeeper = [] as const;
+
 function __rehydrateKeeperState(s: KeeperState, stored: KeeperState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tree")) { const __r = __deserialise_Option_Tree((s.tree as unknown as __JsonValue), "tree"); if (__r.tag === "Err") throw __rehydrationViolation("Keeper", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).tree = __r.value as unknown as (typeof s)["tree"]; }
 }
@@ -91,15 +94,16 @@ export class Keeper {
     const stored = await this.state.storage.get<KeeperState>("state");
     if (stored === undefined) return __zeroOfKeeperState();
     __checkStoredLayout("Keeper", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfKeeperState();
-    __reportUnknownStoredKeys("Keeper", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateKeeperState(__merged, stored);
+    __reportUnknownStoredKeys("Keeper", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateKeeperState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: KeeperState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeKeeperState(s));
+    await __commitStored(this, this.state.storage, __encodeKeeperState(s), __entryFieldsOfKeeper);
   }
 
   async put(t: Tree, deps: {}): globalThis.Promise<void> {

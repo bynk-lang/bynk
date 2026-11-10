@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -31,6 +32,8 @@ export interface ToggleState {
 const __ToggleRegistry = new __StateRegistry();
 function __zeroOfToggleState(): ToggleState { return { active: false }; }
 
+const __entryFieldsOfToggle = [] as const;
+
 function __rehydrateToggleState(s: ToggleState, stored: ToggleState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "active")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "active", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.active as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Toggle", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).active = __r.value as unknown as (typeof s)["active"]; }
 }
@@ -49,15 +52,16 @@ export class Toggle {
     const stored = await this.state.storage.get<ToggleState>("state");
     if (stored === undefined) return __zeroOfToggleState();
     __checkStoredLayout("Toggle", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfToggleState();
-    __reportUnknownStoredKeys("Toggle", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateToggleState(__merged, stored);
+    __reportUnknownStoredKeys("Toggle", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateToggleState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ToggleState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeToggleState(s));
+    await __commitStored(this, this.state.storage, __encodeToggleState(s), __entryFieldsOfToggle);
   }
 
   async flip(force: boolean, deps: {}): globalThis.Promise<boolean> {

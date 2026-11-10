@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -13,6 +14,8 @@ export interface PackageIndexState {
 
 const __PackageIndexRegistry = new __StateRegistry();
 function __zeroOfPackageIndexState(): PackageIndexState { return { yanked: false }; }
+
+const __entryFieldsOfPackageIndex = [] as const;
 
 function __rehydratePackageIndexState(s: PackageIndexState, stored: PackageIndexState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "yanked")) { const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "yanked", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.yanked as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("PackageIndex", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).yanked = __r.value as unknown as (typeof s)["yanked"]; }
@@ -32,15 +35,16 @@ export class PackageIndex {
     const stored = await this.state.storage.get<PackageIndexState>("state");
     if (stored === undefined) return __zeroOfPackageIndexState();
     __checkStoredLayout("PackageIndex", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfPackageIndexState();
-    __reportUnknownStoredKeys("PackageIndex", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydratePackageIndexState(__merged, stored);
+    __reportUnknownStoredKeys("PackageIndex", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydratePackageIndexState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: PackageIndexState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodePackageIndexState(s));
+    await __commitStored(this, this.state.storage, __encodePackageIndexState(s), __entryFieldsOfPackageIndex);
   }
 
   async setYanked(value: boolean, deps: {}): globalThis.Promise<boolean> {

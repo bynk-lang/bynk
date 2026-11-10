@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -34,6 +35,8 @@ export interface TicketState {
 const __TicketRegistry = new __StateRegistry();
 function __zeroOfTicketState(): TicketState { return { state: Phase.Open }; }
 
+const __entryFieldsOfTicket = [] as const;
+
 function __rehydrateTicketState(s: TicketState, stored: TicketState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "state")) { const __r = __deserialise_Phase((s.state as unknown as __JsonValue), "state"); if (__r.tag === "Err") throw __rehydrationViolation("Ticket", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).state = __r.value as unknown as (typeof s)["state"]; }
 }
@@ -52,10 +55,11 @@ export class Ticket {
     const stored = await this.state.storage.get<TicketState>("state");
     if (stored === undefined) return __zeroOfTicketState();
     __checkStoredLayout("Ticket", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTicketState();
-    __reportUnknownStoredKeys("Ticket", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateTicketState(__merged, stored);
+    __reportUnknownStoredKeys("Ticket", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateTicketState(__merged, __wholesale);
     return __merged;
   }
 
@@ -70,7 +74,7 @@ export class Ticket {
         throw __invariantViolation("Ticket", "archived_is_final", "transition", "desk/tickets.bynk:12:14");
       }
     }
-    await this.state.storage.put("state", __encodeTicketState(s));
+    await __commitStored(this, this.state.storage, __encodeTicketState(s), __entryFieldsOfTicket);
   }
 
   async archive(deps: {}): globalThis.Promise<void> {
@@ -121,6 +125,8 @@ export interface GateState {
 const __GateRegistry = new __StateRegistry();
 function __zeroOfGateState(): GateState { return { gate: Power.Idle, hits: 0 }; }
 
+const __entryFieldsOfGate = [] as const;
+
 function __rehydrateGateState(s: GateState, stored: GateState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "gate")) { const __r = __deserialise_Power((s.gate as unknown as __JsonValue), "gate"); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).gate = __r.value as unknown as (typeof s)["gate"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "hits")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "hits", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.hits as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Gate", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).hits = __r.value as unknown as (typeof s)["hits"]; }
@@ -140,10 +146,11 @@ export class Gate {
     const stored = await this.state.storage.get<GateState>("state");
     if (stored === undefined) return __zeroOfGateState();
     __checkStoredLayout("Gate", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfGateState();
-    __reportUnknownStoredKeys("Gate", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateGateState(__merged, stored);
+    __reportUnknownStoredKeys("Gate", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateGateState(__merged, __wholesale);
     return __merged;
   }
 
@@ -158,7 +165,7 @@ export class Gate {
         throw __invariantViolation("Gate", "idle_must_start", "transition", "desk/tickets.bynk:43:14");
       }
     }
-    await this.state.storage.put("state", __encodeGateState(s));
+    await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate);
   }
 
   async ping(deps: {}): globalThis.Promise<void> {

@@ -1116,12 +1116,20 @@ implementation's limit (30 seconds) behind the handlers ahead of it MUST fault
 (`AgentBusy`). Neither fault runs the called handler, and neither affects the handler
 already running.
 
-**The layout marker.** `__layout` is a second reserved key in the stored record,
-beside `__v`, naming how the record is laid out in storage. An absent `__layout` is the
-layout described above, the only one a build can yet read or write. A load checks
-`__layout` on the raw stored record first, whether or not the project has the lock, and
-any marker present faults, `RehydrationViolation` with detail `NewerLayout` (a later
-build wrote the record). The faulting record is never decoded, merged or written back.
+**The layout marker and per-entry storage.** `__layout` is a second reserved key in
+the stored record, beside `__v`, naming how the record is laid out in storage. A build
+writes layout 2, the per-entry layout: the `"state"` record holds the `Cell` fields, `__v`
+and `__layout`, and each entry of a `Map`, `Set`, `Cache` and `Log`, and each `@indexed`
+posting, is stored under a key of its own. An entry of a `Map` or `Set` carries its
+insertion sequence, so a `Map` is read back in insertion order: an overwrite keeps its
+place, and a key removed and inserted again goes to the end. A record with no `__layout`
+is the earlier layout, with every collection inline in `"state"`; its next commit splits
+it, in one transaction, and a record is never left half upgraded. A handler commits only
+the entries it changed. A load checks `__layout` on the raw stored record first, whether
+or not the project has the lock, and a marker this build does not know faults,
+`RehydrationViolation` with detail `NewerLayout` (a later build wrote the record). The
+faulting record is never decoded, merged or written back. A held `Map[K, Connection]`
+stays in the `"state"` record.
 
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.

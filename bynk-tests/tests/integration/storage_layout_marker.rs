@@ -17,7 +17,8 @@
 //! per-entry layout number the runtime defines must be the one the constant takes
 //! once anything writes it.
 //!
-//! Today the constant is 1, the wholesale layout, and nothing writes a marker.
+//! The constant is 2, the per-entry layout, and every emitted agent writes it through
+//! the runtime's `commitStored` (and upgrades an older record through `readStored`).
 
 use std::path::{Path, PathBuf};
 
@@ -69,6 +70,8 @@ const WRITER_VOCABULARY: &[&str] = &[
     "splitWholesale",
     "EntryOverlay",
     "stampLayout",
+    "commitStored",
+    "readStored",
 ];
 
 /// The names in [`WRITER_VOCABULARY`] an emitted source mentions.

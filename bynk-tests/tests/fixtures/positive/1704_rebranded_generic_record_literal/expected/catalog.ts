@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -18,6 +19,8 @@ export interface ShelfState {
 
 const __ShelfRegistry = new __StateRegistry();
 function __zeroOfShelfState(): ShelfState { return { seen: 0 }; }
+
+const __entryFieldsOfShelf = [] as const;
 
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "seen")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.seen as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).seen = __r.value as unknown as (typeof s)["seen"]; }
@@ -37,15 +40,16 @@ export class Shelf {
     const stored = await this.state.storage.get<ShelfState>("state");
     if (stored === undefined) return __zeroOfShelfState();
     __checkStoredLayout("Shelf", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfShelfState();
-    __reportUnknownStoredKeys("Shelf", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateShelfState(__merged, stored);
+    __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateShelfState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ShelfState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeShelfState(s));
+    await __commitStored(this, this.state.storage, __encodeShelfState(s), __entryFieldsOfShelf);
   }
 
   async count(p: Page<Item>, deps: {}): globalThis.Promise<number> {

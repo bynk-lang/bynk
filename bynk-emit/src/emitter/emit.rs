@@ -5829,6 +5829,7 @@ fn classify_agent_store<'a>(
 /// versions the stored layout is checked against (#3167).
 struct AgentLoadFns<'a> {
     zero_fn: &'a String,
+    fields_const: &'a String,
     rehydrate_fn: &'a String,
     encode_fn: &'a String,
     migrate_fn: &'a String,
@@ -5855,6 +5856,7 @@ fn emit_agent_load_commit_state(
     let state_ty = format!("{}State", a.name.name);
     let AgentLoadFns {
         zero_fn,
+        fields_const,
         rehydrate_fn,
         encode_fn,
         migrate_fn,
@@ -5979,10 +5981,28 @@ fn emit_agent_load_commit_state(
                 None,
             ));
         }
+        // Per-entry storage (#3189): join the entries a per-entry record keeps
+        // outside `"state"` back into the wholesale-shaped record (a wholesale one
+        // is returned as it is, and split by its first commit). Everything below
+        // reads the joined record, so a migration step and the rehydration gate
+        // see what they always saw.
+        stmts.push(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__wholesale".to_string()),
+            None,
+            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__readStored".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Ident("this".to_string()),
+                    bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
+                    bynk_ts::TsExpr::Ident("stored".to_string()),
+                ],
+            })),
+            None,
+        ));
         // State-migrations S2 (#2224 Decision D): a record a step covers runs
         // it first; everything below reads the step's output.
         let src = if step_plans.is_empty() {
-            "stored"
+            "__wholesale"
         } else {
             let as_ty = |expr: bynk_ts::TsExpr, ty: bynk_ts::TsType| bynk_ts::TsExpr::As {
                 expr: Box::new(bynk_ts::TsExpr::As {
@@ -5998,7 +6018,7 @@ fn emit_agent_load_commit_state(
                     bynk_ts::TsExpr::Call {
                         callee: Box::new(bynk_ts::TsExpr::Ident(migrate_fn.clone())),
                         args: vec![as_ty(
-                            bynk_ts::TsExpr::Ident("stored".to_string()),
+                            bynk_ts::TsExpr::Ident("__wholesale".to_string()),
                             bynk_ts::TsType::named("globalThis.Record<string, unknown>"),
                         )],
                     },
@@ -6313,9 +6333,10 @@ fn emit_agent_load_commit_state(
         }
         stmts.push(bynk_ts::TsStmt::expr_stmt(
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Ident("this.state.storage.put".to_string())),
+                callee: Box::new(bynk_ts::TsExpr::Ident("__commitStored".to_string())),
                 args: vec![
-                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("state".to_string())),
+                    bynk_ts::TsExpr::Ident("this".to_string()),
+                    bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
                     // #1649: the wire shape, the same shape `loadState` decodes.
                     // State-migrations S1 (#2211, Decision D): with the schema
                     // lock, stamped with the class's version in the same `put`,
@@ -6347,6 +6368,7 @@ fn emit_agent_load_commit_state(
                             None => payload,
                         }
                     },
+                    bynk_ts::TsExpr::Ident(fields_const.clone()),
                 ],
             })),
             None,
@@ -7536,6 +7558,9 @@ struct AgentStateNames {
     registry: String,
     /// The fresh-state factory (`__zeroOf<Agent>State`).
     zero_fn: String,
+    /// The description of the agent's collection fields the per-entry storage
+    /// codec reads (`__entryFieldsOf<Agent>`, #3189).
+    fields_const: String,
 }
 
 /// The agent's state record, as the TypeScript the rest of the agent reads: the
@@ -7923,7 +7948,68 @@ fn emit_agent_state_record(
     );
     zero_fn_decl.no_blank_before = true;
     stmts.push(zero_fn_decl);
-    AgentStateNames { registry, zero_fn }
+    // Per-entry storage (#3189): which fields are collections, and which index
+    // posting records belong to which `Map`. The runtime codec splits a state record
+    // by this on commit and joins it back on load.
+    let fields_const = format!("__entryFieldsOf{}", a.name.name);
+    let mut spec: Vec<String> = Vec::new();
+    // A held `Map[K, Connection]` keeps its connection ids inline in the state record:
+    // its values are live connections, not stored data, so it is not a per-entry field.
+    // (On the bundle target `held_maps` is empty, so ask the declaration.)
+    let held_decls = held_map_fields(a);
+    let held_names: HashSet<&str> = held_decls.iter().map(|(n, _)| n.name.as_str()).collect();
+    for (name, _) in store_map_fields
+        .iter()
+        .filter(|(n, _)| !held_names.contains(n.name.as_str()))
+    {
+        let indexes: Vec<String> = store_map_indexes
+            .get(&name.name)
+            .map(|fs| {
+                let mut fs: Vec<&String> = fs.iter().collect();
+                fs.sort();
+                fs.into_iter()
+                    .map(|f| {
+                        format!(
+                            "{{ index: \"{f}\", recordField: \"{}__idx_{f}\" }}",
+                            name.name
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if indexes.is_empty() {
+            spec.push(format!("{{ name: \"{}\", kind: \"map\" }}", name.name));
+        } else {
+            spec.push(format!(
+                "{{ name: \"{}\", kind: \"map\", indexes: [{}] }}",
+                name.name,
+                indexes.join(", ")
+            ));
+        }
+    }
+    for name in set_field_names {
+        spec.push(format!("{{ name: \"{name}\", kind: \"set\" }}"));
+    }
+    for (name, _, _) in store_cache_fields {
+        spec.push(format!("{{ name: \"{}\", kind: \"cache\" }}", name.name));
+    }
+    for (name, _, _) in store_log_fields {
+        spec.push(format!("{{ name: \"{}\", kind: \"log\" }}", name.name));
+    }
+    stmts.push(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(fields_const.clone()),
+        None,
+        bynk_ts::TsExpr::VerbatimExpr(
+            format!("[{}] as const", spec.join(", ")),
+            bynk_ts::VerbatimOrigin::Emit,
+        ),
+        None,
+    ));
+    AgentStateNames {
+        registry,
+        zero_fn,
+        fields_const,
+    }
 }
 
 pub(crate) fn emit_agent(
@@ -7939,8 +8025,11 @@ pub(crate) fn emit_agent(
     }
     let state_ty = format!("{}State", a.name.name);
     let layout = classify_agent_store(a, state, commons, ctx);
-    let AgentStateNames { registry, zero_fn } =
-        emit_agent_state_record(a, &layout, commons, ctx, &mut stmts);
+    let AgentStateNames {
+        registry,
+        zero_fn,
+        fields_const,
+    } = emit_agent_state_record(a, &layout, commons, ctx, &mut stmts);
     let AgentPersistFns {
         rehydrate_fn,
         encode_fn,
@@ -8033,6 +8122,7 @@ pub(crate) fn emit_agent(
         &layout.effective_fields,
         &AgentLoadFns {
             zero_fn: &zero_fn,
+            fields_const: &fields_const,
             rehydrate_fn: &rehydrate_fn,
             encode_fn: &encode_fn,
             migrate_fn: &migrate_fn,
@@ -8331,14 +8421,12 @@ pub(crate) fn emit_agent(
         } else {
             format!(" __s = {migrate_fn}(__s);")
         };
-        let s_decl = if step_plans.is_empty() {
-            "const"
-        } else {
-            "let"
-        };
+        // `let`: the stored record is replaced by its joined, wholesale-shaped
+        // form below (#3189).
+        let s_decl = "let";
         writeln!(
             out,
-            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check}{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
+            "  const __load = async (): globalThis.Promise<{state_ty}> => {{ {s_decl} __s = await __inst.state.storage.get(\"state\"); if (__s === undefined) return {zero_fn}(); __checkStoredLayout(\"{agent_name}\", __s);{version_check} __s = await __readStored(__inst, __inst.state.storage, __s);{migrate_call} const __m = {{ ...{zero_fn}(), ...__s }};{decode} return __m; }};",
             agent_name = a.name.name
         )
         .unwrap();

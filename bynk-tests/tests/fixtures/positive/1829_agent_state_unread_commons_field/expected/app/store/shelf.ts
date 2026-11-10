@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../../__bynk_runtime/agent.js";
 
@@ -15,6 +16,8 @@ export interface BinState {
 
 const __BinRegistry = new __StateRegistry();
 function __zeroOfBinState(): BinState { return { items: {} }; }
+
+const __entryFieldsOfBin = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateBinState(s: BinState, stored: BinState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Crate((s.items[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
@@ -35,15 +38,16 @@ export class Bin {
     const stored = await this.state.storage.get<BinState>("state");
     if (stored === undefined) return __zeroOfBinState();
     __checkStoredLayout("Bin", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBinState();
-    __reportUnknownStoredKeys("Bin", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBinState(__merged, stored);
+    __reportUnknownStoredKeys("Bin", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBinState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BinState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBinState(s));
+    await __commitStored(this, this.state.storage, __encodeBinState(s), __entryFieldsOfBin);
   }
 
   async put(c: Crate, deps: {}): globalThis.Promise<boolean> {

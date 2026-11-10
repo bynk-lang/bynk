@@ -6,6 +6,7 @@ import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr } from "../__bynk_runtime/int.js";
 import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -420,6 +421,8 @@ export interface BagState {
 const __BagRegistry = new __StateRegistry();
 function __zeroOfBagState(): BagState { return { items: {}, seen: {} }; }
 
+const __entryFieldsOfBag = [{ name: "items", kind: "map" }, { name: "seen", kind: "set" }] as const;
+
 function __rehydrateBagState(s: BagState, stored: BagState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
   for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); }
@@ -440,15 +443,16 @@ export class Bag {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
     __checkStoredLayout("Bag", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBagState();
-    __reportUnknownStoredKeys("Bag", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBagState(__merged, stored);
+    __reportUnknownStoredKeys("Bag", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBagState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BagState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBagState(s));
+    await __commitStored(this, this.state.storage, __encodeBagState(s), __entryFieldsOfBag);
   }
 
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {

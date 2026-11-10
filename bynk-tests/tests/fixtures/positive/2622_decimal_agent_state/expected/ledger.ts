@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkDecimalAdd, __bynkDecimalParseWire, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -28,6 +29,8 @@ export interface AccountState {
 const __AccountRegistry = new __StateRegistry();
 function __zeroOfAccountState(): AccountState { return { balance: { coefficient: 0n, scale: 2 }, last: None, prices: {} }; }
 
+const __entryFieldsOfAccount = [{ name: "prices", kind: "map" }] as const;
+
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Price((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
@@ -49,15 +52,16 @@ export class Account {
     const stored = await this.state.storage.get<AccountState>("state");
     if (stored === undefined) return __zeroOfAccountState();
     __checkStoredLayout("Account", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAccountState();
-    __reportUnknownStoredKeys("Account", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateAccountState(__merged, stored);
+    __reportUnknownStoredKeys("Account", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateAccountState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: AccountState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeAccountState(s));
+    await __commitStored(this, this.state.storage, __encodeAccountState(s), __entryFieldsOfAccount);
   }
 
   async deposit(amount: { readonly coefficient: bigint; readonly scale: number }, deps: {}): globalThis.Promise<void> {

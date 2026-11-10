@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../../__bynk_runtime/agent.js";
 
@@ -22,6 +23,8 @@ export interface BookState {
 
 const __BookRegistry = new __StateRegistry();
 function __zeroOfBookState(): BookState { return { last: None, count: 0 }; }
+
+const __entryFieldsOfBook = [] as const;
 
 function __rehydrateBookState(s: BookState, stored: BookState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Line((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
@@ -44,15 +47,16 @@ export class Book {
     const stored = await this.state.storage.get<BookState>("state");
     if (stored === undefined) return __zeroOfBookState();
     __checkStoredLayout("Book", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBookState();
-    __reportUnknownStoredKeys("Book", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBookState(__merged, stored);
+    __reportUnknownStoredKeys("Book", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBookState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BookState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBookState(s));
+    await __commitStored(this, this.state.storage, __encodeBookState(s), __entryFieldsOfBook);
   }
 
   async add(line: Line, deps: { Stamp: Stamp; Fees: shop_fees.Fees }): globalThis.Promise<number> {

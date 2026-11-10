@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpOption } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 import type { Connection } from "../__bynk_runtime/connection.js";
@@ -59,6 +60,8 @@ export interface ShelfState {
 const __ShelfRegistry = new __StateRegistry();
 function __zeroOfShelfState(): ShelfState { return { items: {}, conns: {} }; }
 
+const __entryFieldsOfShelf = [{ name: "items", kind: "map" }] as const;
+
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Item((s.items[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
   for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
@@ -79,15 +82,16 @@ export class Shelf {
     const stored = await this.state.storage.get<ShelfState>("state");
     if (stored === undefined) return __zeroOfShelfState();
     __checkStoredLayout("Shelf", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfShelfState();
-    __reportUnknownStoredKeys("Shelf", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateShelfState(__merged, stored);
+    __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateShelfState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ShelfState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeShelfState(s));
+    await __commitStored(this, this.state.storage, __encodeShelfState(s), __entryFieldsOfShelf);
   }
 
   async add(name: string, rank: Option<number>, score: number, div: number, tag: number, deps: {}): globalThis.Promise<void> {
