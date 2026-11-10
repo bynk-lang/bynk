@@ -218,11 +218,19 @@ pub(crate) fn databases_to_read(live: &Facts, target: &Facts) -> BTreeSet<String
 }
 
 /// The agent classes whose stored data a case needs to know about: those the
-/// live version writes at a higher schema version than the target.
+/// live version writes at a higher schema version than the target, and, when the
+/// live version writes a later storage layout than the target (#3189), every class
+/// the two share.
 pub(crate) fn classes_to_probe(live: &Facts, target: &Facts) -> BTreeSet<String> {
+    let layout_ahead = live.layout() > target.layout();
     live.agents
         .iter()
-        .filter(|(class, lv)| target.agents.get(*class).is_some_and(|tv| tv < lv))
+        .filter(|(class, lv)| {
+            target
+                .agents
+                .get(*class)
+                .is_some_and(|tv| tv < lv || layout_ahead)
+        })
         .map(|(class, _)| class.clone())
         .collect()
 }
@@ -380,6 +388,57 @@ pub(crate) fn evaluate(c: &Case<'_>) -> Vec<Finding> {
                 }
             }
             (None, None) => {}
+        }
+    }
+
+    // Storage layout (#3189): a build that writes an older layout than the live one
+    // would read records in a layout it does not know. The build that has the
+    // forward-compatibility guard faults `NewerLayout`; one without it zero-merges
+    // the missing collections and writes wholesale, orphaning every per-entry key.
+    // Either way an instance with stored data is not safe to roll back over, and
+    // nothing here can tell the two builds apart, so any rollback to an older layout
+    // with stored data is refused. It is a property of the whole build, so every
+    // class the two share is looked at.
+    if c.live.layout() > c.target.layout() {
+        let (ll, tl) = (c.live.layout(), c.target.layout());
+        let shared: Vec<&String> = c
+            .live
+            .agents
+            .keys()
+            .filter(|class| c.target.agents.contains_key(*class))
+            .collect();
+        let mut found = false;
+        for class in &shared {
+            found = true;
+            match c.stored.get(*class) {
+                Some(Stored::None) => {}
+                Some(Stored::Present) => out.push(Finding::refused(
+                    "layout",
+                    class.as_str(),
+                    format!("the target writes storage layout {tl} but the live version wrote layout {ll}, and stored instances exist; the target cannot read them (NewerLayout), and a build without that check would orphan their entries"),
+                )),
+                Some(Stored::Unknown(why)) => out.push(Finding::refused(
+                    "layout",
+                    class.as_str(),
+                    format!("the target writes storage layout {tl}, live {ll}, and whether instances hold data is not known: {why}"),
+                )),
+                None => out.push(Finding::refused(
+                    "layout",
+                    class.as_str(),
+                    "stored data was not read",
+                )),
+            }
+        }
+        if !found
+            || shared
+                .iter()
+                .all(|class| matches!(c.stored.get(*class), Some(Stored::None)))
+        {
+            out.push(Finding::ok(
+                "layout",
+                c.worker,
+                format!("target writes layout {tl}, live {ll}, and no instance holds stored data"),
+            ));
         }
     }
 
@@ -1378,6 +1437,67 @@ mod tests {
         assert!(refusals(&f.run()).is_empty());
         // The same version, or a newer target, needs no look at the data.
         assert!(refusals(&Fx::new(with_agent(2), with_agent(2)).run()).is_empty());
+    }
+
+    fn with_layout(v: i64, layout: i64) -> Facts {
+        let mut f = with_agent(v);
+        f.layout = Some(layout);
+        f
+    }
+
+    #[test]
+    fn a_target_on_an_older_layout_is_refused_with_stored_data_or_unknown_and_passes_without() {
+        // Same schema version either side: only the layout differs.
+        let mut f = Fx::new(with_layout(2, 2), with_agent(2));
+        f.stored.insert("shop.Cart".into(), Stored::Present);
+        let found = f.run();
+        assert!(
+            found
+                .iter()
+                .any(|x| x.check == "layout" && x.is_refusal() && x.detail.contains("NewerLayout")),
+            "{found:?}"
+        );
+        f.stored
+            .insert("shop.Cart".into(), Stored::Unknown("lag".into()));
+        assert!(
+            f.run()
+                .iter()
+                .any(|x| x.check == "layout" && x.is_refusal() && x.detail.contains("not known"))
+        );
+        f.stored.remove("shop.Cart");
+        assert!(
+            f.run()
+                .iter()
+                .any(|x| x.check == "layout" && x.is_refusal() && x.detail.contains("not read"))
+        );
+        f.stored.insert("shop.Cart".into(), Stored::None);
+        assert!(refusals(&f.run()).is_empty());
+    }
+
+    #[test]
+    fn the_layout_checks_are_silent_when_the_target_is_not_older() {
+        // The same layout, or a newer target (the upgrade direction), needs no look at the data.
+        for (live, target) in [
+            (with_agent(2), with_agent(2)),
+            (with_layout(2, 2), with_layout(2, 2)),
+            (with_agent(2), with_layout(2, 2)),
+        ] {
+            let found = Fx::new(live, target).run();
+            assert!(refusals(&found).is_empty(), "{found:?}");
+            assert!(found.iter().all(|x| x.check != "layout"));
+        }
+    }
+
+    #[test]
+    fn a_layout_difference_makes_every_shared_class_probed_for_stored_data() {
+        let live = with_layout(2, 2);
+        let target = with_agent(2);
+        assert_eq!(
+            classes_to_probe(&live, &target),
+            BTreeSet::from(["shop.Cart".to_string()])
+        );
+        // Without the layout difference the same schema version needs no probe.
+        assert!(classes_to_probe(&with_agent(2), &with_agent(2)).is_empty());
     }
 
     #[test]

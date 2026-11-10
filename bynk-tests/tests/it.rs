@@ -127,6 +127,8 @@ mod integration {
     mod source_map;
     #[path = "source_map_bodies.rs"]
     mod source_map_bodies;
+    #[path = "storage_layout_marker.rs"]
+    mod storage_layout_marker;
     #[path = "store_checker.rs"]
     mod store_checker;
     #[path = "store_op_registry.rs"]
