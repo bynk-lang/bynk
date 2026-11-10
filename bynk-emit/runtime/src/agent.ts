@@ -220,7 +220,7 @@ export function makeAgent<C>(
     return makeWorkersAgent<C>(binding, key, wire, keyCodec);
   }
   const state = registry.getOrCreate(key);
-  return constructBundle(state);
+  return serialiseBundleAgent(state, constructBundle(state));
 }
 
 // Events track, slice 0 (spine #936, ADR 0284): a publishing context's
@@ -277,6 +277,7 @@ export function makeIntegrationDoNamespace(
     fetch(request: Request): Promise<Response>;
   },
   env?: unknown,
+  queueWaitMs: number = AGENT_QUEUE_WAIT_MS,
 ): DurableObjectNamespace {
   const instances = new Map<string, { fetch(request: Request): Promise<Response> }>();
   return {
@@ -287,7 +288,7 @@ export function makeIntegrationDoNamespace(
       const k = String(id);
       let inst = instances.get(k);
       if (inst === undefined) {
-        inst = new cls(makeTestState(k), env);
+        inst = new (serialiseAgentClass(cls, { waitMs: queueWaitMs }))(makeTestState(k), env);
         instances.set(k, inst);
       }
       const target = inst;
@@ -402,4 +403,273 @@ function migrationFaultKind(e: unknown): string {
     }
   }
   return "Fault";
+}
+
+// #3202: an agent instance runs the handlers that reach it one at a time.
+//
+// A handler loads the instance's state, runs, and commits it. The Durable
+// Object runtime closes its input gate only while a storage operation is in
+// flight, so a handler that awaits anything else (a call to another agent, a
+// capability) lets a second request run against the same instance, and the
+// second commit overwrites the first. The Book's "atomically when the handler
+// returns" needs the instance to run one handler at a time, so every entry
+// point that reaches an instance goes through one first-in, first-out queue.
+//
+// The queue is the whole fix; the rest is what keeps it from hanging.
+//
+//  - Re-entrancy. A handler that reaches its own instance again (directly, or
+//    through other agents) would wait on itself. Each cross-agent call carries
+//    the ids of the instances whose handlers are running along the way, and an
+//    instance that finds its own id in the chain faults `ReentrantAgentCall`
+//    at once instead of queuing. The chain rides in a request header set only
+//    by the wrapped `env` below, and is read only on the internal
+//    `/_bynk/agent/` route, never on a forwarded client request. It is bounded.
+//    A call that crosses a Service Binding to another Worker and back is not in
+//    the chain: the queue-wait timeout is the backstop for that.
+//  - Contention. A call waits at most `AGENT_QUEUE_WAIT_MS` for the handlers
+//    ahead of it, then faults `AgentBusy`. The timer measures queue wait only,
+//    never a handler's own run time. It is a different fault from re-entrancy,
+//    because a hot instance can reach it with no cycle at all.
+
+/** How long a call may wait behind the handlers ahead of it on one instance. */
+export const AGENT_QUEUE_WAIT_MS = 30_000;
+
+/** The request header that carries the call chain between agent instances. */
+export const AGENT_CHAIN_HEADER = "x-bynk-call-chain";
+
+/** The longest call chain honoured; a longer one is a fault, not truncated. */
+export const AGENT_CHAIN_MAX = 16;
+
+export interface AgentContentionFault {
+  readonly kind: "ReentrantAgentCall" | "AgentBusy";
+  readonly agent: string;
+}
+
+function contentionFault(kind: AgentContentionFault["kind"], agent: string, message: string): Error {
+  // Logged by kind and agent only, never an id or an argument (ADR 0107).
+  globalThis.console.error(`${kind} ${agent}`, { agent, kind });
+  const e = new Error(`${kind}: ${message}`);
+  globalThis.Object.defineProperty(e, "agentFault", {
+    value: { kind, agent } satisfies AgentContentionFault,
+    enumerable: false,
+  });
+  return e;
+}
+
+export function reentrantAgentCall(agent: string): Error {
+  return contentionFault(
+    "ReentrantAgentCall",
+    agent,
+    `${agent} was called from inside one of its own handlers, directly or through other agents. An agent instance runs one handler at a time, so the call would wait on itself.`,
+  );
+}
+
+export function agentBusy(agent: string, waitMs: number, queued: number): Error {
+  return contentionFault(
+    "AgentBusy",
+    agent,
+    `agent ${agent} busy: waited ${waitMs / 1000} s behind ${queued} queued call${queued === 1 ? "" : "s"}`,
+  );
+}
+
+// One first-in, first-out queue per instance.
+export class AgentQueue {
+  private tail: Promise<void> = Promise.resolve();
+  private pending = 0;
+
+  // Run `fn` once every call queued before it has finished. The wait, and only
+  // the wait, is bounded by `waitMs`; a call that gives up passes its place on.
+  run<T>(agent: string, waitMs: number, fn: () => Promise<T>): Promise<T> {
+    const ahead = this.pending;
+    const prev = this.tail;
+    let release!: () => void;
+    const mine = new globalThis.Promise<void>((r) => {
+      release = r;
+    });
+    this.tail = prev.then(() => mine);
+    this.pending += 1;
+    return (async () => {
+      let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+      try {
+        await globalThis.Promise.race([
+          prev,
+          new globalThis.Promise<never>((_, reject) => {
+            timer = globalThis.setTimeout(() => reject(agentBusy(agent, waitMs, ahead)), waitMs);
+          }),
+        ]);
+      } catch (e) {
+        this.pending -= 1;
+        void prev.then(release);
+        throw e;
+      } finally {
+        globalThis.clearTimeout(timer);
+      }
+      try {
+        return await fn();
+      } finally {
+        this.pending -= 1;
+        release();
+      }
+    })();
+  }
+}
+
+// Bundle mode: an agent value is rebuilt around the instance's one state on
+// every call, so the queue is keyed by that state. A call from outside goes
+// through the queue; a handler calling a sibling on `this` calls the raw
+// instance and does not. There is no call chain here, so a cycle is only
+// caught by the queue-wait timeout.
+const bundleQueues = new globalThis.WeakMap<object, AgentQueue>();
+
+export function serialiseBundleAgent<C>(state: DurableObjectState, instance: C): C {
+  let queue = bundleQueues.get(state);
+  if (queue === undefined) {
+    queue = new AgentQueue();
+    bundleQueues.set(state, queue);
+  }
+  const q = queue;
+  const agent = (instance as { constructor: { name: string } }).constructor.name;
+  return new Proxy(instance as object, {
+    get(target, prop, receiver) {
+      const v = Reflect.get(target, prop, receiver) as unknown;
+      if (typeof v !== "function" || typeof prop !== "string") return v;
+      return (...args: unknown[]): Promise<unknown> =>
+        q.run(agent, AGENT_QUEUE_WAIT_MS, async () => Reflect.apply(v, target, args));
+    },
+  }) as C;
+}
+
+interface InstanceGate {
+  readonly id: string;
+  readonly agent: string;
+  readonly queue: AgentQueue;
+  readonly waitMs: number;
+  // The chain of the handler running now. Only one runs at a time, so one
+  // field is unambiguous.
+  chain: readonly string[];
+}
+
+function isNamespace(v: unknown): v is DurableObjectNamespace {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as { idFromName?: unknown }).idFromName === "function" &&
+    typeof (v as { get?: unknown }).get === "function"
+  );
+}
+
+// The `env` an instance's class is built with: each Durable Object namespace
+// in it hands out stubs that add this instance's call chain to what they send.
+function chainEnv(env: unknown, gate: InstanceGate): unknown {
+  if (typeof env !== "object" || env === null) return env;
+  return new Proxy(env, {
+    get(target, prop) {
+      const v = Reflect.get(target, prop, target) as unknown;
+      if (!isNamespace(v)) return v;
+      return new Proxy(v, {
+        get(ns, nsProp) {
+          const f = Reflect.get(ns, nsProp, ns) as unknown;
+          if (nsProp !== "get" || typeof f !== "function") {
+            return typeof f === "function" ? f.bind(ns) : f;
+          }
+          return (id: unknown): DurableObjectStub => {
+            const stub = f.call(ns, id) as DurableObjectStub;
+            return {
+              fetch: (input: string, init?: unknown): Promise<Response> => {
+                const i = (init ?? {}) as { headers?: Record<string, string> };
+                return stub.fetch(input, {
+                  ...i,
+                  headers: { ...i.headers, [AGENT_CHAIN_HEADER]: gate.chain.join(",") },
+                });
+              },
+            };
+          };
+        },
+      });
+    },
+  });
+}
+
+function parseChain(header: string | null): string[] | undefined {
+  if (header === null || header === "") return [];
+  const parts = header.split(",");
+  return parts.length > AGENT_CHAIN_MAX ? undefined : parts;
+}
+
+function stateIdOf(state: DurableObjectState): string {
+  const id = state.id as { readonly name?: string; toString(): string };
+  const s = id.toString();
+  return s === "[object Object]" ? String(id.name) : s;
+}
+
+const ENTRY_POINTS = ["fetch", "webSocketMessage", "webSocketClose", "webSocketError", "alarm"] as const;
+const GATE = Symbol("bynk.agentGate");
+
+// A Durable Object class whose entry points run one at a time per instance.
+// Exported from the Worker entry in place of the emitted class, and used by
+// the integration namespace, so the same rule holds under `bynk test`.
+export function serialiseAgentClass<C extends new (...args: never[]) => object>(
+  Base: C,
+  options: { readonly waitMs?: number } = {},
+): C {
+  const Mixin = Base as unknown as new (...args: unknown[]) => object;
+  class Serialised extends Mixin {
+    constructor(...args: unknown[]) {
+      const state = args[0] as DurableObjectState;
+      const gate: InstanceGate = {
+        id: `${Base.name}:${stateIdOf(state)}`,
+        agent: Base.name,
+        queue: new AgentQueue(),
+        waitMs: options.waitMs ?? AGENT_QUEUE_WAIT_MS,
+        chain: [],
+      };
+      super(state, chainEnv(args[1], gate), ...args.slice(2));
+      (this as Record<symbol, unknown>)[GATE] = gate;
+    }
+  }
+  const proto = Serialised.prototype as Record<string, unknown>;
+  for (const name of ENTRY_POINTS) {
+    const original = (Base.prototype as Record<string, unknown>)[name];
+    if (typeof original !== "function") continue;
+    proto[name] = function (this: object, ...args: unknown[]): Promise<unknown> {
+      const gate = (this as Record<symbol, InstanceGate>)[GATE] as InstanceGate;
+      let incoming: readonly string[] = [];
+      if (name === "fetch") {
+        const request = args[0] as Request;
+        if (new globalThis.URL(request.url).pathname.startsWith("/_bynk/agent/")) {
+          const chain = parseChain(request.headers.get(AGENT_CHAIN_HEADER));
+          if (chain === undefined) {
+            return globalThis.Promise.resolve(
+              new globalThis.Response(
+                `AgentCallChainTooLong: more than ${AGENT_CHAIN_MAX} agent instances deep`,
+                { status: 500 },
+              ),
+            );
+          }
+          incoming = chain;
+        }
+      }
+      if (incoming.includes(gate.id)) {
+        return globalThis.Promise.resolve(
+          new globalThis.Response(reentrantAgentCall(gate.agent).message, { status: 500 }),
+        );
+      }
+      const run = gate.queue.run(gate.agent, gate.waitMs, async () => {
+        gate.chain = [...incoming, gate.id];
+        try {
+          return await Reflect.apply(original, this, args);
+        } finally {
+          gate.chain = [];
+        }
+      });
+      // A contention fault answers a `fetch` as the emitted dispatch answers a
+      // fault, so the caller's `callDurableObjectMethod` throws its message.
+      if (name !== "fetch") return run;
+      return run.catch((e: unknown) => {
+        if ((e as { agentFault?: unknown }).agentFault === undefined) throw e;
+        return new globalThis.Response((e as Error).message, { status: 500 });
+      });
+    };
+  }
+  return Serialised as unknown as C;
 }

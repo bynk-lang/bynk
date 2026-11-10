@@ -1216,3 +1216,74 @@ fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_worker
         ],
     );
 }
+
+/// #3202: an agent instance runs the handlers that reach it one at a time. `bump`
+/// loads its state, awaits a call to another agent (a Durable Object subrequest,
+/// which does not close the input gate), then commits `n + 1`. Before the fix, five
+/// concurrent `bump`s on one instance all read the same `n` and the later commits
+/// overwrote the earlier ones, so the count came out at 1 or 2, not 5.
+const SERIALISE_SOURCE: &str = r#"context smoke
+
+agent Probe {
+  key id: String
+  store seen: Cell[Int]
+
+  on call ping() -> Effect[Int] { 1 }
+}
+
+agent Tally {
+  key id: String
+  store n: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    let p <- Probe("p").ping()
+    let before = n
+    n := before + p
+    n
+  }
+
+  on call count() -> Effect[Int] { n }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/bump") () -> Effect[HttpResult[String]] by v: Visitor {
+    let n <- Tally("k").bump()
+    Ok("bumped=\(n)")
+  }
+
+  on GET("/count") () -> Effect[HttpResult[String]] by v: Visitor {
+    let n <- Tally("k").count()
+    Ok("count=\(n)")
+  }
+}
+"#;
+
+#[test]
+fn concurrent_handlers_on_one_agent_instance_all_count_on_workerd() {
+    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise", 45000) else {
+        return;
+    };
+    let url = served.url.clone();
+    // Warm the instances, so the burst below races the handlers and not the cold start.
+    fetch(&url, "/count").expect("GET /count before the burst");
+    let threads: Vec<_> = (0..5)
+        .map(|_| {
+            let url = url.clone();
+            std::thread::spawn(move || fetch(&url, "/bump"))
+        })
+        .collect();
+    for t in threads {
+        let body = t.join().expect("a bump thread").expect("GET /bump");
+        assert!(body.contains("bumped="), "unexpected /bump body: {body}");
+    }
+    let count = fetch(&url, "/count").expect("GET /count after the burst");
+    assert!(
+        count.contains("count=5"),
+        "five concurrent bumps on one instance must count five, none lost to an \
+         interleaved commit: {count}"
+    );
+}

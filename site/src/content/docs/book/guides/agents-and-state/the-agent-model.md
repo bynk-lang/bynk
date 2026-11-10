@@ -21,7 +21,10 @@ becomes a Cloudflare Durable Object, where the key selects the object instance.
 State lives in `store` fields: a handler reads a field by its bare name and writes
 it with `:=`. The writes are [committed](/book/reference/glossary/#term-commit)
 atomically when the handler returns — never persisted mid-flight, and never at all
-if the handler faults — which keeps each handler's effect on state explicit.
+if the handler faults — which keeps each handler's effect on state explicit. An instance also runs one handler at
+a time, so a handler that awaits another agent partway through is not interleaved with a
+second handler on the same instance; see
+[one handler at a time](/book/reference/agents/#one-handler-at-a-time).
 
 ```mermaid
 flowchart TD

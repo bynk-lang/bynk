@@ -381,6 +381,33 @@ let n <- c.increment()
 The same form works from a service handler or from another agent's handler. There
 is no separate agent-reference type to declare.
 
+### One handler at a time
+
+An agent instance runs one handler at a time: every handler that reaches an instance,
+read-only ones included, waits for the handlers ahead of it, so a handler's load, body
+and commit are never interleaved with another's on the same instance. Instances with
+different keys run independently, and a handler that calls another handler on its own
+agent through `this` is part of the same handler, not a second call. This is what makes
+"persisted atomically when the handler returns" true when a handler awaits another
+agent or a capability partway through.
+
+Two faults keep the queue from hanging, and they are different faults:
+
+- **`ReentrantAgentCall`**: a handler reached its own instance again, directly (an
+  agent calling itself by key) or through other agents (`X` calls `Y`, which calls `X`).
+  The call would wait on itself, so it faults at once, naming the agent. A call that
+  leaves the Worker through a Service Binding and comes back is not seen by this check;
+  it ends as `AgentBusy`.
+- **`AgentBusy`**: a call waited 30 seconds behind the handlers ahead of it and gave up
+  (`agent X busy: waited 30 s behind N queued calls`). The wait is the only thing timed;
+  a handler may run for as long as the platform lets it. A hot instance can reach this with
+  no cycle at all, which is why it is not reported as re-entrancy. The limit is not
+  configurable yet.
+
+In the in-memory bundle target (`bynk test` without a Workers runtime) calls are queued
+the same way, but a cycle is only caught by the wait limit, not named as
+`ReentrantAgentCall`.
+
 ## Capabilities a handler needs
 
 An agent handler declares the capabilities its body uses with `given`, exactly

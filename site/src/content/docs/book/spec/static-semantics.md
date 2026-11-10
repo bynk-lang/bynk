@@ -1102,6 +1102,17 @@ stored marker through unchanged. A stored key the current definition does not
 declare, other than `__v`, is reported once per isolate by name, never by value, and
 is still carried through.
 
+**Handler serialisation.** An agent instance executes at most one handler at a time:
+a handler that reaches an instance, whatever it reads or writes, begins only after
+every handler that reached the instance before it has finished, in arrival order, and
+the instance's state is loaded after it begins. A call to another handler of the same
+agent made on the agent itself is part of the running handler. A handler that reaches
+its own instance again through calls to other agents MUST fault
+(`ReentrantAgentCall`) rather than wait on itself; a call that has waited longer than the
+implementation's limit (30 seconds) behind the handlers ahead of it MUST fault
+(`AgentBusy`). Neither fault runs the called handler, and neither affects the handler
+already running.
+
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.
 - **The old shape.** `T` names a record type whose fields MUST match, on structure,
