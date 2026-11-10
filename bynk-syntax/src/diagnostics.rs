@@ -124,6 +124,37 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "reading-and-writing-state",
     },
     Explain {
+        code: "bynk.generics.polymorphic_recursion",
+        blurb: "A generic type may refer to itself only uniformly: the self-reference must pass \
+                the declaration's own type parameters through unchanged and in order, as \
+                `Weird[T]` inside `Weird[T]`. Anything else is polymorphic recursion, such as \
+                `Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`, and it \
+                generates an unbounded set of instantiations, so it is refused at the \
+                declaration. The same holds for mutually recursive generics: a partner may be \
+                applied only to the declaration's own parameters or to types that mention none, \
+                never to a type that wraps one of them.",
+        example: "type Weird[T] = { value: T, next: Option[Weird[List[T]]] }   // ✗ a different instantiation\n\n\
+                  type Weird[T] = { value: T, next: Option[Weird[T]] }         // ✓ parameters passed through",
+        page: "/book/guides/type-system/recursive-generic-types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.generics.recursive_generic_at_boundary",
+        blurb: "A recursive generic type, a record or sum that contains itself, declares and works \
+                inside a context, but it has no codec yet. So it is refused wherever a codec is \
+                required: a service or agent handler signature, an agent `store` field or key, an \
+                event field, an actor identity type, a `Json.encode` or `Json.decode` target, or a \
+                `Codable` witness. The error fires once per use, and when the type is reached \
+                through another type, its note names the field path. To cross a boundary today, \
+                use a concrete recursive type, or keep the generic one inside the context.",
+        example: "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\n\
+                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\n\
+                  type IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\n\
+                  service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
+        page: "/book/guides/type-system/recursive-generic-types",
+        anchor: "where-it-cannot-go-yet",
+    },
+    Explain {
         code: "bynk.given.undeclared_capability",
         blurb: "A handler may only use a capability it has itself declared with \
                 `given`. Effects in Bynk are explicit: the `given` clause is the \
