@@ -127,6 +127,8 @@ mod integration {
     mod source_map;
     #[path = "source_map_bodies.rs"]
     mod source_map_bodies;
+    #[path = "storage_layout_marker.rs"]
+    mod storage_layout_marker;
     #[path = "store_checker.rs"]
     mod store_checker;
     #[path = "store_op_registry.rs"]
@@ -237,6 +239,8 @@ mod system {
     mod accepted_contracts_behaviour;
     #[path = "adapter_flattened_capability_stub_behaviour.rs"]
     mod adapter_flattened_capability_stub_behaviour;
+    #[path = "agent_serialise_workerd.rs"]
+    mod agent_serialise_workerd;
     #[path = "agent_state_schema_lock.rs"]
     mod agent_state_schema_lock;
     #[path = "alias_service_workerd.rs"]

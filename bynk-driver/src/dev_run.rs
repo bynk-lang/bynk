@@ -465,10 +465,6 @@ impl Dev {
             .arg(input)
             .arg("--base-port")
             .arg(port.to_string())
-            // `--inspect-port` alone is ignored for a lone worker, which then
-            // takes wrangler's default inspector (9229) and collides with any
-            // other session; `--inspect` passes the free port on (#3233).
-            .arg("--inspect")
             .arg("--inspect-port")
             .arg(inspector.to_string())
             .arg("--ready-json")
