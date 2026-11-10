@@ -73,7 +73,8 @@ To require a *claim* the token carries (an `admin` role, say), add an
 ## Test an `Oidc` route's refusals
 
 An `Oidc` actor's main claims are that a token signed by another key, a token
-for another issuer or audience, and an expired token are all refused. A `system`
+for another issuer or audience, an expired token, a token under the wrong
+algorithm, and a token with no usable `sub` are all refused. A `system`
 suite checks them against the real seam without a fake issuer of your own: the
 test driver generates a key pair, serves the matching JWKS to the Worker's fetch
 of the actor's `jwks` URL, and mints the tokens.
@@ -91,11 +92,15 @@ suite ci.release as system {
 		let expired <- api.GET("/me") by Expired  // correctly signed, `exp` an hour ago
 		let wrongIss <- api.GET("/me") by WrongIssuer  // correctly signed, another `iss`
 		let wrongAud <- api.GET("/me") by WrongAudience  // correctly signed, another `aud`
+		let wrongAlg <- api.GET("/me") by WrongAlgorithm  // `alg: none`, and HS256 keyed with the public key
+		let noSub <- api.GET("/me") by NoSubject  // correctly signed, `sub` empty, and `sub` missing
 		expect none is Rejected(Unauthorized)
 		expect forged is Rejected(Unauthorized)
 		expect expired is Rejected(Unauthorized)
 		expect wrongIss is Rejected(Unauthorized)
 		expect wrongAud is Rejected(Unauthorized)
+		expect wrongAlg is Rejected(Unauthorized)
+		expect noSub is Rejected(Unauthorized)
 	}
 }
 ```

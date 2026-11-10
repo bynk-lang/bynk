@@ -1808,6 +1808,9 @@ fn bad_signature_driver(actor: &str) -> Option<&'static str> {
         // #3052: an `Oidc` route's token for another issuer or audience.
         "WrongIssuer" => Some("wrongissuer"),
         "WrongAudience" => Some("wrongaudience"),
+        // #3225: a token under a refused algorithm, or with no usable `sub`.
+        "WrongAlgorithm" => Some("wrongalgorithm"),
+        "NoSubject" => Some("nosubject"),
         _ => None,
     }
 }

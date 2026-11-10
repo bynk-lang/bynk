@@ -1,0 +1,6 @@
+[project]
+name = "3225-oidc-failure-principals-below-system"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

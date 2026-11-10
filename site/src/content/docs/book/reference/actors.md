@@ -35,7 +35,10 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
   a `body`; it is HTTP-only.
 - An **`Oidc`** actor names **no secret** — its trust root is the provider's
   public JWKS. It is HTTP-only and, this slice, single-actor only (not a sum
-  member, not a refinement base); `alg: none` and symmetric `HS*` are rejected.
+  member, not a refinement base); `alg: none` and symmetric `HS*` are rejected, as is a
+  token whose `sub` is empty or missing. A `system` suite can show the seam does so
+  (`by WrongAlgorithm`, `by NoSubject`; see
+  [the failure principals](/book/reference/testing/#failure-principals)).
 - A **`Foreign`** actor is a caller that is not Bynk, declared by the context it
   calls. Its name starts with a capital letter, so it never reads as a
   context's; it takes **no** `identity` (the actor is the identity); its

@@ -528,7 +528,7 @@ segment only: on a queue, cron, `on call` or event address it is
 `bynk.test.wire_http_only`, and a queue message is passed as a typed value. No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
-### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer` and `by WrongAudience` {#failure-principals}
+### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` and `by NoSubject` {#failure-principals}
 
 `by User("bob")` presents a valid, framework-signed credential the real seam
 verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
@@ -550,7 +550,7 @@ the bytes it sends (the serialised JSON of a typed call, the raw string of a
 [`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
 `system` nothing changes: the handler runs in process and the seam is skipped.
 
-Six reserved principals drive the failures. Each yields the same
+Eight reserved principals drive the failures. Each yields the same
 [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
 `Rejected(Unauthorized)`:
 
@@ -562,20 +562,24 @@ Six reserved principals drive the failures. Each yields the same
 | `by Expired` | a Bearer or `Oidc` token with a valid `sub`, correctly signed, whose `exp` is one hour before the test clock | a route with a Bearer or `Oidc` actor |
 | `by WrongIssuer` | an `Oidc` token correctly signed and unexpired, whose `iss` is not the actor's issuer | a route with an `Oidc` actor |
 | `by WrongAudience` | an `Oidc` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor |
+| `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |
+| `by NoSubject` | two correctly signed, unexpired `Oidc` tokens with a `sub` the seam must refuse: one empty, one absent | a route with an `Oidc` actor |
 
 On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
 member: `by Forged` and `by Stale` sign as the sum's first `Signature` member,
 and a sum with no `Signature` member, `by Forged` and `by Expired` mint the token
 for its first Bearer member. A sum that admits `Visitor` (`by who: Processor |
 Visitor`) never answers `401`: a request with a missing or bad credential
-resolves as `Visitor`. So none of the four is legal there.
+resolves as `Visitor`. So none of them is legal there.
 
-All six are `system`-tier only: below it the seam is skipped and the identity
+All eight are `system`-tier only: below it the seam is skipped and the identity
 is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
 `by Expired` on any other route is `bynk.test.expired_needs_bearer_route`, and
-`by WrongIssuer` or `by WrongAudience` on a route with no `Oidc` actor is
-`bynk.test.wrong_issuer_needs_oidc_route` or
-`bynk.test.wrong_audience_needs_oidc_route`.
+`by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` on a
+route with no `Oidc` actor is `bynk.test.wrong_issuer_needs_oidc_route`,
+`bynk.test.wrong_audience_needs_oidc_route`,
+`bynk.test.wrong_algorithm_needs_oidc_route` or
+`bynk.test.no_subject_needs_oidc_route`.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {
@@ -603,7 +607,7 @@ fake issuer of your own. At `system` the driver generates a key pair for the
 test process, answers the Worker's JWKS fetch for the actor's `jwks` URL with it,
 and mints the token a call presents: `by Workload("wid", TokenClaims.of([…]))`
 sends a valid one (`iss` and `aud` the actor's, `sub` `"wid"`, the claim lines as
-string claims), and the four failure principals above send one the seam must
+string claims), and the failure principals above send the tokens the seam must
 refuse. The Worker is the unmodified emitted one: the key pair, the JWKS answer
 and the minting exist only in the test module, and nothing in the deployed
 Worker trusts them. Other requests, including any other `fetch` the code makes,
@@ -629,8 +633,27 @@ suite ci.release as system {
 		expect wrongIss is Rejected(Unauthorized)
 		expect wrongAud is Rejected(Unauthorized)
 	}
+
+	case "algorithm confusion and an unusable subject are refused" {
+		// `alg: none` and an HS256 token keyed with the JWKS public key
+		let alg <- api.POST("/release", Release { tag: "v1" }) by WrongAlgorithm
+		// an empty `sub` and a missing `sub`, even when the identity type is refined
+		let sub <- api.POST("/release", Release { tag: "v1" }) by NoSubject
+		expect alg is Rejected(Unauthorized)
+		expect sub is Rejected(Unauthorized)
+	}
 }
 ```
+
+`by WrongAlgorithm` and `by NoSubject` each present two tokens, one after the
+other, and the call reads the first outcome that is *not* the seam's refusal, or
+the refusal when every token was refused. So one `expect … is
+Rejected(Unauthorized)` fails if the seam admits any of them, and the failing
+outcome is the one the seam gave. The tokens are otherwise valid (`iss`, `aud`,
+`exp` and the signature are all right), so only the algorithm, or the `sub`, is
+at fault. The seam refuses a missing or empty `sub` before the handler runs, so
+the identity type's refinement (`String where NonEmpty`, say) is never asked
+about it.
 
 If the actor declares [`trustFrom`](/book/reference/actors/#trust-roots-from-the-environment)
 and the suite's [`env`](#env) sets that variable, the driver mints for, and

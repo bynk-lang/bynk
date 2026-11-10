@@ -9,14 +9,21 @@ type __BynkOidcMint = {
   claims: globalThis.Record<string, unknown>;
   // Which credential: signed by the published key (`valid`), by an unpublished
   // key with the same `kid` (`forged`), or published-key tokens whose `exp`,
-  // `iss` or `aud` the seam must refuse.
-  kind: "valid" | "forged" | "expired" | "wrongissuer" | "wrongaudience";
+  // `iss` or `aud` the seam must refuse. `algnone` and `alghs256` carry an
+  // otherwise valid payload under an algorithm the seam must refuse: `none`
+  // (no signature), and `HS256` keyed with the public key (algorithm
+  // confusion). `emptysub` and `nosub` are correctly signed with a `sub` the
+  // seam must refuse: empty, and absent.
+  kind: "valid" | "forged" | "expired" | "wrongissuer" | "wrongaudience" | "algnone" | "alghs256" | "emptysub" | "nosub";
 };
 interface __BynkOidcIssuer {
   kid: string;
   jwk: globalThis.Record<string, unknown>;
   signKey: CryptoKey;
   forgedKey: CryptoKey;
+  // The published public key, DER-encoded: what an algorithm-confusion attacker
+  // holds, and so what `alghs256` uses as its HMAC secret.
+  publicSpki: Uint8Array;
   jwksUris: Set<string>;
 }
 function __bynkOidcB64(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
@@ -58,7 +65,8 @@ async function __bynkOidcIssuerOf(): Promise<__BynkOidcIssuer> {
     const forged = await gen();
     const kid = "bynk-test-issuer";
     const jwk = { ...((await crypto.subtle.exportKey("jwk", pair.publicKey)) as globalThis.Record<string, unknown>), kid, alg: "ES256", use: "sig" };
-    const issuer: __BynkOidcIssuer = { kid, jwk, signKey: pair.privateKey, forgedKey: forged.privateKey, jwksUris: new Set() };
+    const publicSpki = new Uint8Array((await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer);
+    const issuer: __BynkOidcIssuer = { kid, jwk, signKey: pair.privateKey, forgedKey: forged.privateKey, publicSpki, jwksUris: new Set() };
     // Answer the Worker's JWKS fetch for the registered URLs; anything else
     // goes to the real `fetch`.
     const real = globalThis.fetch.bind(globalThis);
@@ -91,9 +99,20 @@ async function __bynkOidcToken(remote: boolean, trust: __BynkOidcTrust, o: __Byn
     iat: now,
     exp: o.kind === "expired" ? now - 3600 : now + 3600,
   };
-  const head = __bynkOidcText(JSON.stringify({ alg: "ES256", typ: "JWT", kid: issuer.kid }));
+  // `emptysub` and `nosub` are the only kinds whose `sub` is not the call's.
+  if (o.kind === "emptysub") payload.sub = "";
+  if (o.kind === "nosub") delete payload.sub;
+  const alg = o.kind === "algnone" ? "none" : o.kind === "alghs256" ? "HS256" : "ES256";
+  const head = __bynkOidcText(JSON.stringify({ alg, typ: "JWT", kid: issuer.kid }));
   const body = __bynkOidcText(JSON.stringify(payload));
   const signed = new TextEncoder().encode(`${head}.${body}`);
+  if (o.kind === "algnone") return `${head}.${body}.`;
+  if (o.kind === "alghs256") {
+    // Algorithm confusion: the public key, which the JWKS publishes, as the
+    // HMAC secret of a symmetric token.
+    const mac = await crypto.subtle.importKey("raw", issuer.publicSpki as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    return `${head}.${body}.${__bynkOidcB64(new Uint8Array(await crypto.subtle.sign("HMAC", mac, signed)))}`;
+  }
   // WebCrypto's ECDSA signature is the raw `r || s` a JWS carries.
   const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, o.kind === "forged" ? issuer.forgedKey : issuer.signKey, signed);
   return `${head}.${body}.${__bynkOidcB64(new Uint8Array(sig))}`;
