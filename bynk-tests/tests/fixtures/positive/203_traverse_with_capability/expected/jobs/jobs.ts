@@ -22,7 +22,7 @@ export const __FixedClockProvider = { token: __ClockToken, factory: () => new Fi
 
 export const stamps = {
   async call(names: readonly string[], deps: { Clock: Clock }): globalThis.Promise<Result<readonly number[], void>> {
-    const stamped = await traverse(names, async (name) => deps.Clock.now());
+    const stamped = await traverse(names, async (name: string) => deps.Clock.now());
     return Ok(stamped);
   },
 };

@@ -77,7 +77,7 @@ export class Inventory {
 
   async recentSkus(n: number, deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => __state.history.slice(globalThis.Math.max(0, __state.history.length - globalThis.Math.max(0, n))).reverse().map((__e) => __e.v)))().map((__x) => ((e) => e.sku)(__x))))();
+    return ((() => ((() => __state.history.slice(globalThis.Math.max(0, __state.history.length - globalThis.Math.max(0, n))).reverse().map((__e) => __e.v)))().map((__x) => ((e: ReserveEvent) => e.sku)(__x))))();
   }
 
   async countSince(t: number, deps: {}): globalThis.Promise<number> {

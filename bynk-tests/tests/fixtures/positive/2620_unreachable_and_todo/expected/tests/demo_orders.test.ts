@@ -245,7 +245,7 @@ async function test_a_parameter_named_todo_shadows_the_built_in() {
     const deps = __makeTestDeps();
     const { Ledger, Status, __makeLedger, awaits, bumps, effectGuards, firstArm, firsts, guard, guards, half, halves, label, labels, lambdas, pick, pickFirst, pickSecond, picks, reads, refund, refunds, shadowed, unwrap, unwraps, viaLambda } = __ns_demo_orders;
     type Status = __ns_demo_orders.Status;
-    if (!(shadowed((s) => (s).length) === 4)) { throw __bynkExpectFailure("tests/orders.test.bynk:61:12", 1405, 1437, "expect shadowed((s) => s.length()) == 4\n  expected: shadowed((s) => s.length()) == 4\n  actual:   " + __bynkShow((shadowed((s) => (s).length))) + " == " + __bynkShow((4))); }
+    if (!(shadowed((s: string) => (s).length) === 4)) { throw __bynkExpectFailure("tests/orders.test.bynk:61:12", 1405, 1437, "expect shadowed((s) => s.length()) == 4\n  expected: shadowed((s) => s.length()) == 4\n  actual:   " + __bynkShow((shadowed((s: string) => (s).length))) + " == " + __bynkShow((4))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

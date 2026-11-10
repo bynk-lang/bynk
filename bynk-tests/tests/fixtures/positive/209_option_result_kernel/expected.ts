@@ -6,7 +6,7 @@ import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMo
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export function doubledOr(o: Option<number>, fallback: number): number {
-  return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<number>, __f: (x: number) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(o, (n) => n * 2), fallback);
+  return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<number>, __f: (x: number) => number) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(o, (n: number) => n * 2), fallback);
 }
 
 export function halve(n: number): Option<number> {
@@ -26,7 +26,7 @@ export function present(o: Option<number>): boolean {
 }
 
 export function renumber(r: Result<number, string>): Result<number, string> {
-  return ((__r: Result<number, string>, __f: (x: number) => number) => __r.tag === "Ok" ? Ok(__f(__r.value)) : __r)(r, (n) => n);
+  return ((__r: Result<number, string>, __f: (x: number) => number) => __r.tag === "Ok" ? Ok(__f(__r.value)) : __r)(r, (n: number) => n);
 }
 
 export function positive(n: number): Result<number, string> {
@@ -34,11 +34,11 @@ export function positive(n: number): Result<number, string> {
 }
 
 export function chained(r: Result<number, string>): boolean {
-  return (((__r: Result<number, string>, __f: (e: string) => string) => __r.tag === "Err" ? Err(__f(__r.error)) : __r)(((__r: Result<number, string>, __f: (x: number) => Result<number, string>) => __r.tag === "Ok" ? __f(__r.value) : __r)(r, positive), (e) => e.concat("!")).tag === "Ok");
+  return (((__r: Result<number, string>, __f: (e: string) => string) => __r.tag === "Err" ? Err(__f(__r.error)) : __r)(((__r: Result<number, string>, __f: (x: number) => Result<number, string>) => __r.tag === "Ok" ? __f(__r.value) : __r)(r, positive), (e: string) => e.concat("!")).tag === "Ok");
 }
 
 export function viaLambda(r: Result<number, string>): Result<number, string> {
-  return ((__r: Result<number, string>, __f: (x: number) => Result<number, string>) => __r.tag === "Ok" ? __f(__r.value) : __r)(r, (n) => {
+  return ((__r: Result<number, string>, __f: (x: number) => Result<number, string>) => __r.tag === "Ok" ? __f(__r.value) : __r)(r, (n: number) => {
     const out: Result<number, string> = (n > 0 ? Ok(n) : Err("negative"));
     return out;
   });

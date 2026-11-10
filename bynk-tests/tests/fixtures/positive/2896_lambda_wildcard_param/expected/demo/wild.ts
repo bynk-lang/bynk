@@ -5,11 +5,11 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export function recover(r: Result<number, string>): Result<number, number> {
-  return ((__r: Result<number, string>, __f: (e: string) => number) => __r.tag === "Err" ? Err(__f(__r.error)) : __r)(r, (__wild93) => 0);
+  return ((__r: Result<number, string>, __f: (e: string) => number) => __r.tag === "Err" ? Err(__f(__r.error)) : __r)(r, (__wild93: string) => 0);
 }
 
 export function second(xs: readonly number[]): number {
-  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (a, __wild162) => a + 1);
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (a: number, __wild162: number) => a + 1);
 }
 
 export function constant(r: Result<number, string>): Result<number, number> {
@@ -17,7 +17,7 @@ export function constant(r: Result<number, string>): Result<number, number> {
 }
 
 export function pick(xs: readonly number[]): number {
-  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (__wild326, x) => x);
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, 0, (__wild326: number, x: number) => x);
 }
 
 export function applyTwo(f: (a0: number, a1: number) => number): number {
@@ -25,5 +25,5 @@ export function applyTwo(f: (a0: number, a1: number) => number): number {
 }
 
 export function one(): number {
-  return applyTwo((__wild439, __wild442) => 1);
+  return applyTwo((__wild439: number, __wild442: number) => 1);
 }

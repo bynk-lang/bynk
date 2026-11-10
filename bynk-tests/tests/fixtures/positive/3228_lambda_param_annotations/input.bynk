@@ -1,0 +1,53 @@
+// #3228: a lambda handed to a kernel method has its parameters annotated with
+// their checked types, so the emitted TypeScript passes `tsc --strict` without
+// the author annotating. Each kernel form below places the lambda where
+// TypeScript has no context to infer from: a spread element (`append`), an
+// immediately invoked arrow (`map`, `filter`, `flatMap`, `any`, `count`), a
+// typed fold callback, and an `Option` kernel.
+commons lambdas {
+  type Item = { sku: String, qty: Int }
+
+  fn adders(n: Int, acc: List[Int -> Int]) -> List[Int -> Int] {
+    acc.append((x) => x + n)
+  }
+
+  fn bump(xs: List[Int]) -> List[Int] {
+    xs.map((x) => x + 1)
+  }
+
+  fn big(xs: List[Int]) -> List[Int] {
+    xs.filter((x) => x > 1)
+  }
+
+  fn total(xs: List[Int]) -> Int {
+    xs.fold(0, (acc, x) => acc + x)
+  }
+
+  fn pairs(xs: List[Int]) -> List[Int] {
+    xs.flatMap((x) => [x, x])
+  }
+
+  fn anyBig(xs: List[Int]) -> Bool {
+    xs.any((x) => x > 1)
+  }
+
+  fn countBig(xs: List[Int]) -> Int {
+    xs.filter((x) => x > 1).count()
+  }
+
+  fn skus(items: List[Item]) -> List[String] {
+    items.map((i) => i.sku)
+  }
+
+  fn stock(items: List[Item]) -> Int {
+    items.fold(0, (acc, i) => acc + i.qty)
+  }
+
+  fn double(o: Option[Int]) -> Option[Int] {
+    o.map((n) => n * 2)
+  }
+
+  fn keep[A](xs: List[A], want: A -> Bool) -> List[A] {
+    xs.filter((x) => want(x))
+  }
+}

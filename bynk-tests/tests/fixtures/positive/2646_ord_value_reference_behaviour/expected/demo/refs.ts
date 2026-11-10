@@ -23,11 +23,11 @@ export const Level = {
 };
 
 export function top<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Option<T> {
-  return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x) => x)(__x); if (__cmp_T(__k, __m) > 0) __m = __k; } return Some(__m); })(xs);
+  return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x: T) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x: T) => x)(__x); if (__cmp_T(__k, __m) > 0) __m = __k; } return Some(__m); })(xs);
 }
 
 export function sorted<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): readonly T[] {
-  return [...xs].sort((__a: T, __b: T) => __cmp_T(((x) => x)(__a), ((x) => x)(__b)));
+  return [...xs].sort((__a: T, __b: T) => __cmp_T(((x: T) => x)(__a), ((x: T) => x)(__b)));
 }
 
 export function tops(xss: readonly (readonly number[])[]): readonly Option<number>[] {

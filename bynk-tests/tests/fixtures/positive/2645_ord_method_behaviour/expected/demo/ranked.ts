@@ -27,10 +27,10 @@ export interface Bag<A> {
 
 export const Bag = {
   largest<A>(self: Bag<A>, __cmp_A: (a: A, b: A) => number): Option<A> {
-    return ((__xs: readonly A[]) => { if (__xs.length === 0) return None; let __m = ((x) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x) => x)(__x); if (__cmp_A(__k, __m) > 0) __m = __k; } return Some(__m); })(self.items);
+    return ((__xs: readonly A[]) => { if (__xs.length === 0) return None; let __m = ((x: A) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x: A) => x)(__x); if (__cmp_A(__k, __m) > 0) __m = __k; } return Some(__m); })(self.items);
   },
   countAbove<A>(self: Bag<A>, floor: A, __cmp_A: (a: A, b: A) => number): number {
-    return ((self.items).filter((__x: A) => ((x) => __cmp_A(x, floor) > 0)(__x))).length;
+    return ((self.items).filter((__x: A) => ((x: A) => __cmp_A(x, floor) > 0)(__x))).length;
   },
   pickBigger<A, B>(self: Bag<A>, other: B, ok: boolean, __cmp_A: (a: A, b: A) => number, __cmp_B: (a: B, b: B) => number): boolean {
     return ok;
@@ -46,10 +46,10 @@ export interface Sorted<T> {
 
 export const Sorted = {
   smallest<T>(self: Sorted<T>, __cmp_T: (a: T, b: T) => number): Option<T> {
-    return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x) => x)(__x); if (__cmp_T(__k, __m) < 0) __m = __k; } return Some(__m); })(self.items);
+    return ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((x: T) => x)(__xs[0]); for (const __x of __xs) { const __k = ((x: T) => x)(__x); if (__cmp_T(__k, __m) < 0) __m = __k; } return Some(__m); })(self.items);
   },
   isBelow<T>(self: Sorted<T>, x: T, __cmp_T: (a: T, b: T) => number): boolean {
-    const __r0 = ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((y) => y)(__xs[0]); for (const __x of __xs) { const __k = ((y) => y)(__x); if (__cmp_T(__k, __m) < 0) __m = __k; } return Some(__m); })(self.items);
+    const __r0 = ((__xs: readonly T[]) => { if (__xs.length === 0) return None; let __m = ((y: T) => y)(__xs[0]); for (const __x of __xs) { const __k = ((y: T) => y)(__x); if (__cmp_T(__k, __m) < 0) __m = __k; } return Some(__m); })(self.items);
     switch (__r0.tag) {
       case "Some": {
         const m = __r0.value;

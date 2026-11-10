@@ -29,9 +29,9 @@ export function fromMillis(n: number): number {
 }
 
 export function earliest(ts: readonly number[]): Option<number> {
-  return ((__xs: readonly number[]) => { if (__xs.length === 0) return None; let __m = ((t) => t)(__xs[0]); for (const __x of __xs) { const __k = ((t) => t)(__x); if (__k < __m) __m = __k; } return Some(__m); })(ts);
+  return ((__xs: readonly number[]) => { if (__xs.length === 0) return None; let __m = ((t: number) => t)(__xs[0]); for (const __x of __xs) { const __k = ((t: number) => t)(__x); if (__k < __m) __m = __k; } return Some(__m); })(ts);
 }
 
 export function chronological(ts: readonly number[]): readonly number[] {
-  return [...ts].sort((__a: number, __b: number) => { const __ka = ((t) => t)(__a), __kb = ((t) => t)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; });
+  return [...ts].sort((__a: number, __b: number) => { const __ka = ((t: number) => t)(__a), __kb = ((t: number) => t)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; });
 }

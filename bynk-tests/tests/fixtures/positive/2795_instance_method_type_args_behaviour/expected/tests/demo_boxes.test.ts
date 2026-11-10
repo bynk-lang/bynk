@@ -66,7 +66,7 @@ async function test_an_explicit_argument_pins_a_method_type_parameter() {
     type Box<T> = __ns_demo_boxes.Box<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 3 };
-    const m = Box.mapped<number, string>(b, (n) => "n");
+    const m = Box.mapped<number, string>(b, (n: number) => "n");
     if (!(m.value === "n")) { throw __bynkExpectFailure("tests/demo/boxes.bynk:12:10", 291, 305, "expect m.value == \"n\"\n  expected: m.value == \"n\"\n  actual:   " + __bynkShow((m.value)) + " == " + __bynkShow(("n"))); }
     if (!(Box.get(m) === "n")) { throw __bynkExpectFailure("tests/demo/boxes.bynk:13:10", 315, 329, "expect m.get() == \"n\"\n  expected: m.get() == \"n\"\n  actual:   " + __bynkShow((Box.get(m))) + " == " + __bynkShow(("n"))); }
     return { pass: true };
@@ -104,7 +104,7 @@ async function test_the_explicit_form_agrees_with_inference() {
     type Box<T> = __ns_demo_boxes.Box<T>;
     const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const b = { value: 2 };
-    if (!(Box.mapped<number, number>(b, (n) => n + 1).value === Box.mapped(b, (n) => n + 1).value)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:23:10", 559, 624, "expect b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  expected: b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  actual:   " + __bynkShow((Box.mapped<number, number>(b, (n) => n + 1).value)) + " == " + __bynkShow((Box.mapped(b, (n) => n + 1).value))); }
+    if (!(Box.mapped<number, number>(b, (n: number) => n + 1).value === Box.mapped(b, (n: number) => n + 1).value)) { throw __bynkExpectFailure("tests/demo/boxes.bynk:23:10", 559, 624, "expect b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  expected: b.mapped[Int]((n) => n + 1).value == b.mapped((n) => n + 1).value\n  actual:   " + __bynkShow((Box.mapped<number, number>(b, (n: number) => n + 1).value)) + " == " + __bynkShow((Box.mapped(b, (n: number) => n + 1).value))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

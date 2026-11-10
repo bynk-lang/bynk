@@ -41,7 +41,7 @@ export const Line = {
 
 export function countBy<K, V>(xs: readonly V[], key: (a0: V) => K): ReadonlyMap<K, number> {
   const init: ReadonlyMap<K, number> = new globalThis.Map<K, number>();
-  return ((__xs: readonly V[], __acc: ReadonlyMap<K, number>, __f: (acc: ReadonlyMap<K, number>, x: V) => ReadonlyMap<K, number>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc, x) => {
+  return ((__xs: readonly V[], __acc: ReadonlyMap<K, number>, __f: (acc: ReadonlyMap<K, number>, x: V) => ReadonlyMap<K, number>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: ReadonlyMap<K, number>, x: V) => {
     const k = key(x);
     return __bynkMapInsert<K, number>(acc, k, getOr(acc, k, 0) + 1);
   });
@@ -49,9 +49,9 @@ export function countBy<K, V>(xs: readonly V[], key: (a0: V) => K): ReadonlyMap<
 
 export function index<K, V>(xs: readonly V[], key: (a0: V) => K): ReadonlyMap<K, V> {
   const init: ReadonlyMap<K, V> = new globalThis.Map<K, V>();
-  return ((__xs: readonly V[], __acc: ReadonlyMap<K, V>, __f: (acc: ReadonlyMap<K, V>, x: V) => ReadonlyMap<K, V>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc, x) => __bynkMapInsert<K, V>(acc, key(x), x));
+  return ((__xs: readonly V[], __acc: ReadonlyMap<K, V>, __f: (acc: ReadonlyMap<K, V>, x: V) => ReadonlyMap<K, V>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(xs, init, (acc: ReadonlyMap<K, V>, x: V) => __bynkMapInsert<K, V>(acc, key(x), x));
 }
 
 export function distinctIds(ls: readonly Line[]): readonly OrderId[] {
-  return __bynkDistinct((ls).map((__x: Line) => ((l) => l.id)(__x)));
+  return __bynkDistinct((ls).map((__x: Line) => ((l: Line) => l.id)(__x)));
 }

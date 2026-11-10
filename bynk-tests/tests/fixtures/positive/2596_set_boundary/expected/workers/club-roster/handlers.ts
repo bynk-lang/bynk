@@ -7,7 +7,7 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 export const members = {
   async call(extra: ReadonlySet<string>, deps: {}): globalThis.Promise<ReadonlySet<string>> {
-    return ((__xs: readonly string[], __acc: ReadonlySet<string>, __f: (acc: ReadonlySet<string>, x: string) => ReadonlySet<string>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(([...(extra)] as readonly string[]), new globalThis.Set<string>(["ada", "bo"]), (acc, x) => (new globalThis.Set<string>(acc).add(x) as ReadonlySet<string>));
+    return ((__xs: readonly string[], __acc: ReadonlySet<string>, __f: (acc: ReadonlySet<string>, x: string) => ReadonlySet<string>) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(([...(extra)] as readonly string[]), new globalThis.Set<string>(["ada", "bo"]), (acc: ReadonlySet<string>, x: string) => (new globalThis.Set<string>(acc).add(x) as ReadonlySet<string>));
   },
 };
 

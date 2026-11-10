@@ -63,7 +63,7 @@ export class Account {
   async deposit(amount: { readonly coefficient: bigint; readonly scale: number }, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (() => { __state.balance = ((b) => __bynkDecimalAdd(b, amount))(__state.balance); return undefined; })();
+      return (() => { __state.balance = ((b: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalAdd(b, amount))(__state.balance); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;

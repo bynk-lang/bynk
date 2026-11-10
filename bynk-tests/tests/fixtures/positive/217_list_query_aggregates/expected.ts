@@ -13,11 +13,11 @@ export const Item = {
 };
 
 export function sortedNames(items: readonly Item[]): readonly Item[] {
-  return [...items].sort((__a: Item, __b: Item) => { const __ka = ((i) => i.name)(__a), __kb = ((i) => i.name)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; });
+  return [...items].sort((__a: Item, __b: Item) => { const __ka = ((i: Item) => i.name)(__a), __kb = ((i: Item) => i.name)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; });
 }
 
 export function uniqueIds(items: readonly Item[]): readonly Item[] {
-  return ((__xs: readonly Item[]) => { const __seen = new globalThis.Set(); const __out: Item[] = []; for (const __x of __xs) { const __k = ((i) => i.id)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })(items);
+  return ((__xs: readonly Item[]) => { const __seen = new globalThis.Set(); const __out: Item[] = []; for (const __x of __xs) { const __k = ((i: Item) => i.id)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })(items);
 }
 
 export function uniqueInts(xs: readonly number[]): readonly number[] {
@@ -25,25 +25,25 @@ export function uniqueInts(xs: readonly number[]): readonly number[] {
 }
 
 export function ascending(xs: readonly number[]): readonly number[] {
-  return [...xs].sort((__a: number, __b: number) => { const __ka = ((x) => x)(__a), __kb = ((x) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; });
+  return [...xs].sort((__a: number, __b: number) => { const __ka = ((x: number) => x)(__a), __kb = ((x: number) => x)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; });
 }
 
 export function totalId(items: readonly Item[]): number {
-  return (items).reduce((__s: number, __x: Item) => __s + ((i) => i.id)(__x), 0);
+  return (items).reduce((__s: number, __x: Item) => __s + ((i: Item) => i.id)(__x), 0);
 }
 
 export function smallestId(items: readonly Item[]): Option<number> {
-  return ((__xs: readonly Item[]) => { if (__xs.length === 0) return None; let __m = ((i) => i.id)(__xs[0]); for (const __x of __xs) { const __k = ((i) => i.id)(__x); if (__k < __m) __m = __k; } return Some(__m); })(items);
+  return ((__xs: readonly Item[]) => { if (__xs.length === 0) return None; let __m = ((i: Item) => i.id)(__xs[0]); for (const __x of __xs) { const __k = ((i: Item) => i.id)(__x); if (__k < __m) __m = __k; } return Some(__m); })(items);
 }
 
 export function largestId(items: readonly Item[]): Option<number> {
-  return ((__xs: readonly Item[]) => { if (__xs.length === 0) return None; let __m = ((i) => i.id)(__xs[0]); for (const __x of __xs) { const __k = ((i) => i.id)(__x); if (__k > __m) __m = __k; } return Some(__m); })(items);
+  return ((__xs: readonly Item[]) => { if (__xs.length === 0) return None; let __m = ((i: Item) => i.id)(__xs[0]); for (const __x of __xs) { const __k = ((i: Item) => i.id)(__x); if (__k > __m) __m = __k; } return Some(__m); })(items);
 }
 
 export function meanId(items: readonly Item[]): Option<number> {
-  return ((__xs: readonly Item[]) => { if (__xs.length === 0) return None; let __s = 0; for (const __x of __xs) __s += ((i) => i.id)(__x); return Some(__s / __xs.length); })(items);
+  return ((__xs: readonly Item[]) => { if (__xs.length === 0) return None; let __s = 0; for (const __x of __xs) __s += ((i: Item) => i.id)(__x); return Some(__s / __xs.length); })(items);
 }
 
 export function meanDuration(ds: readonly number[]): Option<number> {
-  return ((__xs: readonly number[]) => { if (__xs.length === 0) return None; let __s = 0; for (const __x of __xs) __s += ((d) => d)(__x); return Some(globalThis.Math.round(__s / __xs.length)); })(ds);
+  return ((__xs: readonly number[]) => { if (__xs.length === 0) return None; let __s = 0; for (const __x of __xs) __s += ((d: number) => d)(__x); return Some(globalThis.Math.round(__s / __xs.length)); })(ds);
 }
