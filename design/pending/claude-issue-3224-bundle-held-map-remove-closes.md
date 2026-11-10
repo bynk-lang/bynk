@@ -1,5 +1,6 @@
 ---
 level: patch
+probes: ts_writes
 changelog: Under `bynk test`, `remove` on a held `Map[K, Connection]` now closes the connection the entry held before deleting it, as the Workers build does, so a case can observe the close with `TestConnection.closed()` ([#3224](https://github.com/bynk-lang/bynk/issues/3224))
 ---
 
