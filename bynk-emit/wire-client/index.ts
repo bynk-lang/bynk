@@ -972,6 +972,9 @@ const reportedUnknownStoredKeys = new globalThis.Set<string>();
 export function reportUnknownStoredKeys(agent: string, stored: object, zero: object): void {
   for (const key of globalThis.Object.keys(stored)) {
     if (key === "__v" || globalThis.Object.hasOwn(zero, key)) continue;
+    // An `@indexed` posting record of a legacy wholesale state: the map's handle rebuilds its postings.
+    const idx = key.indexOf("__idx_");
+    if (idx > 0 && globalThis.Object.hasOwn(zero, key.slice(0, idx))) continue;
     const id = `${agent}\u0000${key}`;
     if (reportedUnknownStoredKeys.has(id)) continue;
     reportedUnknownStoredKeys.add(id);

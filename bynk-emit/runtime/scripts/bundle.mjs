@@ -38,6 +38,7 @@ const MODULES = [
   "int",
   "errors",
   "storage",
+  "store",
   "entries",
   "boundary",
   "yaml",

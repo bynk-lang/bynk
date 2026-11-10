@@ -319,3 +319,94 @@ export class StoreLog<V> implements StoreLogHandle<V> {
     return [...this.items].reverse().map((e) => e.v);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The wire form (#3254). An agent's state is encoded to, and decoded from, a record
+// shaped like the stored one: each `Map`/`Set`/`Cache` a `Record`, each `Log` an array.
+// A `Record` cannot carry the insertion order of its integer-like keys (a JS object
+// enumerates those first, by value), so a record built here also notes its key order
+// beside it, and {@link entriesOf} reads it back in that order. A record that has no
+// noted order (one read from a stored wholesale record, or built by a migration step)
+// enumerates as an object does.
+
+const recordOrders = new WeakMap<object, readonly string[]>();
+
+/** A record holding `pairs`, with their order noted so {@link entriesOf} reads it back. */
+export function orderedRecord<T>(pairs: Iterable<readonly [string, T]>): Record<string, T> {
+  const record: Record<string, T> = {};
+  const keys: string[] = [];
+  for (const [k, v] of pairs) {
+    Object.defineProperty(record, k, { value: v, enumerable: true, writable: true, configurable: true });
+    keys.push(k);
+  }
+  recordOrders.set(record, keys);
+  return record;
+}
+
+/** The entries of a wire record: in their noted insertion order, else as an object enumerates. */
+export function entriesOf<T>(record: Readonly<Record<string, T>>): Array<[string, T]> {
+  const order = recordOrders.get(record);
+  if (order === undefined) return Object.entries(record);
+  // The noted order first, then any key added since (a handler's write into the joined record).
+  const noted = new Set(order);
+  const keys = [...order.filter((k) => Object.hasOwn(record, k)), ...Object.keys(record).filter((k) => !noted.has(k))];
+  return keys.map((k) => [k, record[k] as T]);
+}
+
+/** Note `order` as the insertion order of an existing wire record (a joined stored one). */
+export function noteOrder(record: object, order: readonly string[]): void {
+  recordOrders.set(record, order);
+}
+
+/**
+ * The entries of a stored map-shaped field: a `Record`, or the pair array a held map is
+ * stored as (a record cannot hold that map's order).
+ */
+export function wireEntries<T>(wire: Readonly<Record<string, T>> | ReadonlyArray<readonly [string, T]>): Array<[string, T]> {
+  return Array.isArray(wire) ? wire.map(([k, v]) => [k, v] as [string, T]) : entriesOf(wire as Readonly<Record<string, T>>);
+}
+
+/** A `Map`'s wire record, its values passed through `f` if given. */
+export function wireMap<V, W = V>(handle: StoreMap<V>, f?: (value: V) => W): Record<string, W> {
+  return orderedRecord(handle.entries().map(([k, v]) => [k, f === undefined ? (v as unknown as W) : f(v)] as const));
+}
+
+/** A `Set`'s wire record: each member `true`. */
+export function wireSet(handle: StoreSet): Record<string, boolean> {
+  return orderedRecord(handle.keys().map((k) => [k, true] as const));
+}
+
+/** A `Log`'s wire array, its values passed through `f` if given. */
+export function wireLog<V, W = V>(handle: StoreLog<V>, f?: (value: V) => W): Array<{ t: number; v: W }> {
+  return handle.entries().map((e) => (f === undefined ? { ...e } : { ...e, v: f(e.v) })) as Array<{ t: number; v: W }>;
+}
+
+/** The posting lists of one `@indexed` field, as a wholesale record holds them. */
+export function wirePostings(handle: StoreMap<unknown>, index: string): Record<string, string[]> {
+  return Object.fromEntries([...handle.postingsOf(index)].map(([by, pks]) => [by, [...pks]]));
+}
+
+/** A held `Map`'s wire form: key and connection id pairs, in insertion order. */
+export function wireHeld<V>(handle: StoreMap<V>): Array<[string, V]> {
+  return handle.entries().map(([k, v]) => [k, v] as [string, V]);
+}
+
+/** Fill an empty `Map` or `Cache` handle from its wire record, in wire order. */
+export function fillMap<V>(handle: StoreMap<V>, wire: Readonly<Record<string, V>>): void {
+  for (const [k, v] of entriesOf(wire)) handle.put(k, v);
+}
+
+/** Fill an empty `Set` handle from its wire record, in wire order. */
+export function fillSet(handle: StoreSet, wire: Readonly<Record<string, unknown>>): void {
+  for (const [k] of entriesOf(wire)) handle.add(k);
+}
+
+/** Fill an empty `Log` handle from its wire array. */
+export function fillLog<V>(handle: StoreLog<V>, wire: ReadonlyArray<LogEntry<V>>): void {
+  for (const e of wire) handle.append(e.v, e.t);
+}
+
+/** Fill an empty held `Map` handle from its stored pairs, or from an older stored record. */
+export function fillHeld<V>(handle: StoreMap<V>, wire: Readonly<Record<string, V>> | ReadonlyArray<readonly [string, V]>): void {
+  for (const [k, v] of wireEntries(wire)) handle.put(k, v);
+}
