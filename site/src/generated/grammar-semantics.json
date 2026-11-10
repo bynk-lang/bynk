@@ -934,6 +934,18 @@
       "summary": "A handler parameter is not a path parameter, `body`, `headers` or `query`."
     },
     {
+      "code": "bynk.http.form_body_not_record",
+      "summary": "The `body` of a `@form` handler is not a record type."
+    },
+    {
+      "code": "bynk.http.form_bool_without_default",
+      "summary": "A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning)."
+    },
+    {
+      "code": "bynk.http.form_field_not_stringy",
+      "summary": "A field of a `@form` body record has a type a form cannot carry."
+    },
+    {
       "code": "bynk.http.headers_wrong_type",
       "summary": "An HTTP handler's `headers` parameter is not typed `RequestHeaders`."
     },
