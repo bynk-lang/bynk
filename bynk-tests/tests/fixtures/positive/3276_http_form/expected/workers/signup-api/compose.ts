@@ -19,6 +19,12 @@ export function compose(env: Env) {
     async http_POST_search(body: handlers.Search) {
       return handlers.api.http_POST_search(body, deps);
     },
+    async http_POST_hook(body: handlers.Search) {
+      return handlers.api.http_POST_hook(body, deps);
+    },
+    async http_POST_priced(body: handlers.Priced) {
+      return handlers.api.http_POST_priced(body, deps);
+    },
     async http_POST_json(body: handlers.Search) {
       return handlers.api.http_POST_json(body, deps);
     },

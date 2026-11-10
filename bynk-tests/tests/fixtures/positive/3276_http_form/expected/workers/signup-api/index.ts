@@ -4,6 +4,7 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __formMediaTypeMatches, __formObject } from "../../__bynk_runtime/http.js";
+import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -37,6 +38,31 @@ export default {
       }
 
       {
+        if (method === "POST" && path === "/hook") {
+          __route = "POST /hook";
+          if (!__formMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __raw: string;
+          try {
+            __raw = await request.text();
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __secret = (env as unknown as globalThis.Record<string, unknown>)["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["HOOK_SECRET"];
+          if (typeof __secret !== "string") return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_api);
+          const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Hook-Sig"), null, null);
+          if (!__ok) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_api);
+          const __f = __formObject(__raw, [{ name: "q", kind: "string", list: false, option: false }]);
+          if (!__f.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__f.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const __r_body = handlers.__deserialise_Search(__f.value, "body");
+          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const body = __r_body.value;
+          const result = await surface.http_POST_hook(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
+      {
         if (method === "POST" && path === "/json") {
           __route = "POST /json";
           let __body_json: __JsonValue;
@@ -49,6 +75,27 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_json(body);
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
+      {
+        if (method === "POST" && path === "/priced") {
+          __route = "POST /priced";
+          if (!__formMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __raw: string;
+          try {
+            __raw = await request.text();
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __f = __formObject(__raw, [{ name: "price", kind: "decimal", list: false, option: false }, { name: "subscribed", kind: "bool", list: false, option: false }]);
+          if (!__f.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__f.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const __r_body = handlers.__deserialise_Priced(__f.value, "body");
+          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const body = __r_body.value;
+          const result = await surface.http_POST_priced(body);
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
@@ -126,7 +173,17 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
+      if (path === "/hook") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
       if (path === "/json") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/priced") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

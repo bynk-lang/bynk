@@ -18,6 +18,16 @@ type Search = {
 	q: String,
 }
 
+type Priced = {
+	price: Decimal = 0.00d,
+	subscribed: Gate,
+}
+
+type Gate = Bool
+
+// A webhook whose HMAC covers the form's octets as received.
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Hook-Sig") }
+
 service api from http {
 	// A form post: decoded, defaulted and validated before the handler runs.
 	@form
@@ -48,6 +58,18 @@ service api from http {
 	@limit(maxBody: 64)
 	on POST("/search") (body: Search) -> Effect[HttpResult[String]] by v: Visitor {
 		Ok(body.q)
+	}
+
+	// A signed webhook posting a form: the seam verifies the text, then it is decoded.
+	@form
+	on POST("/hook") (body: Search) -> Effect[HttpResult[String]] by Hook {
+		Ok("hook \(body.q)")
+	}
+
+	// An empty Decimal is absent, so the default applies.
+	@form
+	on POST("/priced") (body: Priced) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(body.price) \(body.subscribed)")
 	}
 
 	// The JSON route beside it is untouched.

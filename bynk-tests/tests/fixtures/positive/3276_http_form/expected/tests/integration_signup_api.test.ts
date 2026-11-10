@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __queryString, __requestHeaderPairs } from "../__bynk_runtime/http.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaders, __queryString, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_signup_api from "../workers/signup-api/handlers.js";
 import worker___ns_signup_api from "../workers/signup-api/index.js";
 
@@ -67,42 +67,120 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
+// #2135: the test-only `Signature` signer. It signs exactly what the Worker's
+// seam (`verifySignatureHmacSha256` in the runtime's `auth.ts`) verifies: an
+// HMAC-SHA256 over the raw body, or over `<timestamp>.<body>` when the actor
+// declares a timestamp header, sent as `sha256=<hex>`. The timestamp is in
+// seconds, `ageSecs` before now (a stale request is signed in the past). A `@raw`
+// route signs the octets it sends (`Uint8Array`), a JSON route the text.
+async function __bynkSignHmacSha256(body: string | Uint8Array, secret: string, timestamped: boolean, ageSecs: number): Promise<{ signature: string; timestamp: string }> {
+  const timestamp = String(Math.floor(Date.now() / 1000) - ageSecs);
+  const enc = new TextEncoder();
+  const octets = typeof body === "string" ? enc.encode(body) : body;
+  const prefix = timestamped ? enc.encode(`${timestamp}.`) : new Uint8Array(0);
+  const signed = new Uint8Array(prefix.length + octets.length);
+  signed.set(prefix, 0);
+  signed.set(octets, prefix.length);
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, signed as BufferSource));
+  let hex = "";
+  for (const b of mac) hex += b.toString(16).padStart(2, "0");
+  return { signature: `sha256=${hex}`, timestamp };
+}
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["HOOK_SECRET"] = "__bynk_test_secret";
 async function __sysdrive_api_http_POST_signup(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = __queryString(__ns_signup_api.__serialise_SignupForm(body)).slice(1);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signup`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/signup`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
   const __res = await __h.env.SIGNUP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_POST_signup(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/signup`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: body, });
+  const __req = new globalThis.Request(`https://test/signup`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: body, });
   const __res = await __h.env.SIGNUP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_api_http_PUT_profile_Param_owner(owner: string, body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = __queryString(__ns_signup_api.__serialise_Search(body)).slice(1);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/profile/${owner}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/profile/${owner}`, { method: "PUT", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
   const __res = await __h.env.SIGNUP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_PUT_profile_Param_owner(owner: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/profile/${owner}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: body, });
+  const __req = new globalThis.Request(`https://test/profile/${owner}`, { method: "PUT", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: body, });
   const __res = await __h.env.SIGNUP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_api_http_POST_search(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = __queryString(__ns_signup_api.__serialise_Search(body)).slice(1);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/search`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: __body, });
+  const __req = new globalThis.Request(`https://test/search`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
   const __res = await __h.env.SIGNUP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_POST_search(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/search`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: body, });
+  const __req = new globalThis.Request(`https://test/search`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_POST_hook(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = __queryString(__ns_signup_api.__serialise_Search(body)).slice(1);
+  const __sig = await __bynkSignHmacSha256(__body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "X-Hook-Sig": __sig.signature, }, body: __body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_POST_hook(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "X-Hook-Sig": __sig.signature, }, body: body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_POST_hook(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = __queryString(__ns_signup_api.__serialise_Search(body)).slice(1);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: __body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawnoauth_api_http_POST_hook(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", }, body: body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_POST_hook(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = __queryString(__ns_signup_api.__serialise_Search(body)).slice(1);
+  const __sig = await __bynkSignHmacSha256(__body, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? "") + "!"), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", "X-Hook-Sig": __sig.signature, }, body: __body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawforged_api_http_POST_hook(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __sig = await __bynkSignHmacSha256(body, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? "") + "!"), false, 0);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/hook`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/x-www-form-urlencoded", "X-Hook-Sig": __sig.signature, }, body: body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_POST_priced(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = __queryString(__ns_signup_api.__serialise_Priced(body)).slice(1);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/priced`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: __body, });
+  const __res = await __h.env.SIGNUP_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_POST_priced(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/priced`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), }, body: body, });
   const __res = await __h.env.SIGNUP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -402,6 +480,123 @@ async function test_a_form_body_over_the_cap_is_a_413() {
   }
 }
 
+async function test_an_empty_Decimal_is_absent_and_takes_its_default() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_priced("price=&subscribed=on", undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "0.00 true"))) { throw __bynkExpectFailure("tests/api.bynk:98:10", 3549, 3578, "expect r is Handled(Ok(\"0.00 true\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_filled_Decimal_reads_as_its_text() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_priced("price=1.50&subscribed=off", undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "1.50 false"))) { throw __bynkExpectFailure("tests/api.bynk:103:10", 3703, 3733, "expect r is Handled(Ok(\"1.50 false\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_route_answers_415_to_another_content_type() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_search("{\"q\":\"x\"}", __requestHeaders(["Content-Type: application/json"]), "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType"))) { throw __bynkExpectFailure("tests/api.bynk:108:10", 3910, 3948, "expect r is Rejected(UnsupportedMediaType(_))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_form_with_a_non_UTF_8_charset_is_a_415() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_search("q=x", __requestHeaders(["Content-Type: application/x-www-form-urlencoded; charset=iso-8859-1"]), "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType"))) { throw __bynkExpectFailure("tests/api.bynk:113:10", 4149, 4187, "expect r is Rejected(UnsupportedMediaType(_))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_no_content_type_is_a_415() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_api_http_POST_search("q=x", __requestHeaders(["Content-Type: text/plain"]), "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "UnsupportedMediaType"))) { throw __bynkExpectFailure("tests/api.bynk:118:10", 4329, 4367, "expect r is Rejected(UnsupportedMediaType(_))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_signed_webhook_form_is_verified__then_decoded() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const ok = await __sysdrive_api_http_POST_hook({ q: "go" }, undefined, "");
+    const wire = await __sysdrive_raw_api_http_POST_hook("q=wired", undefined, "");
+    if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "hook go"))) { throw __bynkExpectFailure("tests/api.bynk:124:10", 4538, 4557, "expect ok is Ok(\"hook go\")"); }
+    if (!(((__c: boolean) => __c)(wire.tag === "Handled" && wire.value.tag === "Ok" && wire.value.value === "hook wired"))) { throw __bynkExpectFailure("tests/api.bynk:125:10", 4567, 4600, "expect wire is Handled(Ok(\"hook wired\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_an_unsigned_or_forged_webhook_form_is_refused() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const n = { q: "go" };
+    const none = await __sysdrive_noauth_api_http_POST_hook(n, undefined, "");
+    const forged = await __sysdrive_forged_api_http_POST_hook(n, undefined, "");
+    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:132:10", 4791, 4821, "expect none is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:133:10", 4831, 4863, "expect forged is Rejected(Unauthorized)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -416,7 +611,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a typed form round-trips through the router", "absent keys take None and their defaults", "a checked checkbox sends on", "a Bool also reads true and off", "a Bool that is neither is a structural mismatch", "repeated keys fill a list", "an empty value is absent for an Option and a non-String, and empty for a String", "unknown keys are ignored", "a refinement violation is refused before the handler", "an age out of range is refused", "a non-numeric age is a structural mismatch", "a missing required field is a structural mismatch", "a repeated key on a single-valued field is refused", "an unknown enum variant is refused", "a path parameter and a form body together", "a capped form route reads its body through the counter", "a form body over the cap is a 413"];
+export const __bynkCases: readonly string[] = ["a typed form round-trips through the router", "absent keys take None and their defaults", "a checked checkbox sends on", "a Bool also reads true and off", "a Bool that is neither is a structural mismatch", "repeated keys fill a list", "an empty value is absent for an Option and a non-String, and empty for a String", "unknown keys are ignored", "a refinement violation is refused before the handler", "an age out of range is refused", "a non-numeric age is a structural mismatch", "a missing required field is a structural mismatch", "a repeated key on a single-valued field is refused", "an unknown enum variant is refused", "a path parameter and a form body together", "a capped form route reads its body through the counter", "a form body over the cap is a 413", "an empty Decimal is absent and takes its default", "a filled Decimal reads as its text", "a route answers 415 to another content type", "a form with a non-UTF-8 charset is a 415", "no content type is a 415", "a signed webhook form is verified, then decoded", "an unsigned or forged webhook form is refused"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -520,6 +715,48 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a form body over the cap is a 413")) {
     const started = __bynkCaseNow();
     const r = { name: "a form body over the cap is a 413", ...(await test_a_form_body_over_the_cap_is_a_413()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an empty Decimal is absent and takes its default")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an empty Decimal is absent and takes its default", ...(await test_an_empty_Decimal_is_absent_and_takes_its_default()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a filled Decimal reads as its text")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a filled Decimal reads as its text", ...(await test_a_filled_Decimal_reads_as_its_text()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a route answers 415 to another content type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a route answers 415 to another content type", ...(await test_a_route_answers_415_to_another_content_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a form with a non-UTF-8 charset is a 415")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a form with a non-UTF-8 charset is a 415", ...(await test_a_form_with_a_non_UTF_8_charset_is_a_415()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("no content type is a 415")) {
+    const started = __bynkCaseNow();
+    const r = { name: "no content type is a 415", ...(await test_no_content_type_is_a_415()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a signed webhook form is verified, then decoded")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a signed webhook form is verified, then decoded", ...(await test_a_signed_webhook_form_is_verified__then_decoded()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an unsigned or forged webhook form is refused")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an unsigned or forged webhook form is refused", ...(await test_an_unsigned_or_forged_webhook_form_is_refused()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

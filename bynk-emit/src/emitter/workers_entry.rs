@@ -2534,6 +2534,9 @@ fn query_leaf_kind(
     let of_base = |b: &BaseType| match b {
         BaseType::Int => "int",
         BaseType::Bool => "bool",
+        // #3276: a `Decimal` is read as text (its own codec parses it), but is not a
+        // plain `String`: a form's empty value is absent for it.
+        BaseType::Decimal => "decimal",
         _ => "string",
     };
     match r {
