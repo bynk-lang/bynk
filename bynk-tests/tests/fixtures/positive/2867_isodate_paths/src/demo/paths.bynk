@@ -8,7 +8,7 @@ type Day = String where IsoDate
 
 type Event = { on: String where IsoDate }
 
-fn decodeEvent(json: String) -> Result[Event, JsonError] {
+fn decodeEvent(json: String) -> Result[Event, DecodeError] {
   Json.decode[Event](json)
 }
 

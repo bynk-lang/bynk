@@ -317,7 +317,7 @@ adapter bynk.cloudflare {
 	---
 	type SqlReadError =
 		| Sql(error: SqlError)
-		| Decode(error: JsonError)
+		| Decode(error: DecodeError)
 
 	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with

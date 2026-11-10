@@ -3353,7 +3353,7 @@ pub fn type_ref_str(t: &TypeRef) -> String {
         TypeRef::History(t, _) => format!("History[{}]", type_ref_str(t)),
         TypeRef::Map(k, v, _) => format!("Map[{}, {}]", type_ref_str(k), type_ref_str(v)),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::Unit(_) => "()".to_string(),
         // v0.157 (ADR 0183): a user generic-type application, as written.
         TypeRef::App { name, args, .. } => format!(

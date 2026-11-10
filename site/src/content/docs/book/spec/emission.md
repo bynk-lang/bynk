@@ -567,7 +567,7 @@ used by the composition root, and on `bundle` the contexts compile together.
 
 One position remains deliberately *not* codec-checked, stated here rather than
 left to be discovered: the **runtime-owned error types** (`ValidationError`,
-`JsonError`, `HttpResult`, `QueueResult`) pass through uncoded. They are declared
+`DecodeError`, `HttpResult`, `QueueResult`) pass through uncoded. They are declared
 by the runtime rather than by a type declaration the emitter can walk, so there is
 no helper to generate; their JSON shape is fixed by the runtime, so the
 pass-through is unchecked rather than wrong.
@@ -968,14 +968,14 @@ module already has:
 
 `Json.encode(v)` lowers to `globalThis.JSON.stringify(__serialise_<T>(v))` for the
 value's checked type; `Json.decode[T](s)` to a typed IIFE that
-`JSON.parse`s (a throw becomes a `Malformed` `JsonError`), dispatches to
+`JSON.parse`s (a throw becomes a `Malformed` `DecodeError`), dispatches to
 `__deserialise_<T>`, and maps a `BoundaryError` into the uniform
 `kind`/`path`/`message` record (ADR 0047). The per-type
 `__serialise_`/`__deserialise_` helpers and any generic instantiations
 (`__deserialise_List_Order`, …) are emitted **module-locally** into each
 module whose code calls the codec — the same closure machinery as the
 workers boundary path, deduped against helpers that path already emitted.
-The codec runtime types (`JsonError`, `__JsonValue`, `__BoundaryError`) are
+The codec runtime types (`DecodeError`, `__JsonValue`, `__BoundaryError`) are
 imported only by modules that use the codec, so non-codec modules emit
 byte-identically to v0.22a.
 

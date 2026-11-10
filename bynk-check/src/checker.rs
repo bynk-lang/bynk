@@ -403,9 +403,9 @@ pub enum Ty {
     TestConnection(TyId),
     /// `ValidationError` — built-in error type.
     ValidationError,
-    /// `JsonError` — built-in JSON-decode error type (v0.22b). A uniform
+    /// `DecodeError` — built-in JSON-decode error type (v0.22b). A uniform
     /// record: `kind`/`path`/`message`, all `String`.
-    JsonError,
+    DecodeError,
     /// `()` — the unit type (v0.5).
     Unit,
     /// v0.45: a verified actor binding (`by name: Actor`). The inner type is
@@ -496,7 +496,7 @@ impl Ty {
             Ty::Connection(t) => format!("Connection[{}]", types.display(*t)),
             Ty::TestConnection(t) => format!("TestConnection[{}]", types.display(*t)),
             Ty::ValidationError => "ValidationError".to_string(),
-            Ty::JsonError => "JsonError".to_string(),
+            Ty::DecodeError => "DecodeError".to_string(),
             Ty::Unit => "()".to_string(),
             Ty::Actor(id) => format!("actor[{}]", types.display(*id)),
             Ty::ActorSum(members) => members
@@ -3288,13 +3288,13 @@ pub fn named_ty(decl: &TypeDecl, tys: &Types) -> TyId {
     named_ty_with_args(decl, Vec::new(), tys)
 }
 
-/// #2863: the note on `bynk.types.interpolation_non_scalar`. A `JsonError`
+/// #2863: the note on `bynk.types.interpolation_non_scalar`. A `DecodeError`
 /// has fields that interpolate, so its note points at them; any other type gets the
 /// list of scalar types and how to stringify `Bytes`, `Duration` and `Instant`.
 fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
     match &*tys.get(ty) {
-        Ty::JsonError => {
-            "a `JsonError` has no string form; interpolate its fields, e.g. `\"\\(e.kind) at \\(e.path): \\(e.message)\"`"
+        Ty::DecodeError => {
+            "a `DecodeError` has no string form; interpolate its fields, e.g. `\"\\(e.kind) at \\(e.path): \\(e.message)\"`"
         }
         Ty::ValidationError => {
             "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
@@ -3310,7 +3310,7 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
 /// (`{ key: K, value: V }`), so it flows through `unify`/`compatible`/`display`
 /// and the ADR 0183 non-boundary rule like any generic-record instantiation;
 /// its fields are resolved by name in `check_field_access` (it has no
-/// user-visible `TypeDecl`, like `JsonError`).
+/// user-visible `TypeDecl`, like `DecodeError`).
 pub fn map_entry_ty(k: TyId, v: TyId, tys: &Types) -> TyId {
     tys.intern(Ty::Named {
         name: MAP_ENTRY.to_string(),
@@ -3462,7 +3462,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Actor(_)
         | Ty::ActorSum(_) => return t,
@@ -3500,7 +3500,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Actor(_)
         | Ty::ActorSum(_) => false,
@@ -3621,7 +3621,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Actor(_)
         | Ty::ActorSum(_) => false,
@@ -3728,7 +3728,7 @@ pub(crate) fn unify(
             | Ty::TestConnection(_)
             | Ty::Connection(_)
             | Ty::ValidationError
-            | Ty::JsonError
+            | Ty::DecodeError
             | Ty::Unit
             | Ty::Actor(_)
             | Ty::ActorSum(_)
@@ -3798,7 +3798,7 @@ pub fn record_type_refs(
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }
@@ -3901,7 +3901,7 @@ fn first_unresolved_type_name<'a>(
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => None,
     }
 }
@@ -3995,7 +3995,7 @@ pub fn resolve_type_ref(
             return Some(named_ty_with_args(decl, args?, tys));
         }
         TypeRef::ValidationError(_) => Ty::ValidationError,
-        TypeRef::JsonError(_) => Ty::JsonError,
+        TypeRef::DecodeError(_) => Ty::DecodeError,
         TypeRef::Unit(_) => Ty::Unit,
     };
     Some(tys.intern(ty))
@@ -4085,7 +4085,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         (Ty::RequestQuery, Ty::RequestQuery) => true,
         (Ty::TokenClaims, Ty::TokenClaims) => true,
         (Ty::ValidationError, Ty::ValidationError) => true,
-        (Ty::JsonError, Ty::JsonError) => true,
+        (Ty::DecodeError, Ty::DecodeError) => true,
         (Ty::Unit, Ty::Unit) => true,
         // v0.20a: function types — **contravariant** in parameters, covariant
         // in the return type. `compatible(t, u, tys)` is "t usable where u is
@@ -4130,7 +4130,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::TestConnection(_)
             | Ty::Connection(_)
             | Ty::ValidationError
-            | Ty::JsonError
+            | Ty::DecodeError
             | Ty::Unit
             | Ty::Actor(_)
             | Ty::ActorSum(_)
@@ -5704,7 +5704,7 @@ pub(crate) fn rebrand_return_type(
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Actor(_)
         | Ty::ActorSum(_) => t,
@@ -5932,7 +5932,7 @@ fn structurally_compatible_inner(
         (Ty::Never, _) => true,
         (Ty::Base(a), Ty::Base(b)) => a == b,
         (Ty::ValidationError, Ty::ValidationError) => true,
-        (Ty::JsonError, Ty::JsonError) => true,
+        (Ty::DecodeError, Ty::DecodeError) => true,
         (Ty::Unit, Ty::Unit) => true,
         (Ty::Result(t1, e1), Ty::Result(t2, e2)) => {
             structurally_compatible_inner(*t1, *t2, arg_types, param_types, tys, visited)
@@ -6031,7 +6031,7 @@ fn structurally_compatible_inner(
             | Ty::TestConnection(_)
             | Ty::Connection(_)
             | Ty::ValidationError
-            | Ty::JsonError
+            | Ty::DecodeError
             | Ty::Unit
             | Ty::Actor(_)
             | Ty::ActorSum(_)

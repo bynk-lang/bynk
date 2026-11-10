@@ -154,7 +154,7 @@ fn canon_type_in(
             format!("HttpResult[{}]", canon_type_in(a, types, seen, subst, mode))
         }
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),

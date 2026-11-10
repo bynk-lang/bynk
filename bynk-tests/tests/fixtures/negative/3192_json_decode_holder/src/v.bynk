@@ -6,6 +6,6 @@ type Tree[A] =
 
 type Holder = { t: Tree[Int] }
 
-fn read(s: String) -> Result[Holder, JsonError] {
+fn read(s: String) -> Result[Holder, DecodeError] {
 	Json.decode[Holder](s)
 }

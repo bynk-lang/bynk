@@ -535,12 +535,12 @@ Four compiler-backed statics decode and encode JSON at a typed boundary:
 |---|---|---|
 | `Json.encode(v)` | `String` | serialise a checked value to a JSON string |
 | `Json.encodePlain(v)` | `String` | `encode` writing an `Option` as the value or `null`, as a non-Bynk API sends it (see [Plain JSON](#plain-json)) |
-| `Json.decode[T](s)` | `Result[T, JsonError]` | parse a JSON string into `T`, validating structure (and any refinements) |
-| `Json.decodeSql[T](s)` | `Result[T, JsonError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)) |
+| `Json.decode[T](s)` | `Result[T, DecodeError]` | parse a JSON string into `T`, validating structure (and any refinements) |
+| `Json.decodeSql[T](s)` | `Result[T, DecodeError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)) |
 
 `Json.decode[T]` takes an explicit type argument and validates the decoded value
 against `T` — including refined-type predicates — so untrusted JSON enters the
-program only as a fully-checked value. `JsonError` is the error it returns
+program only as a fully-checked value. `DecodeError` is the error it returns
 (malformed JSON, or a structural/refinement mismatch). See the guide
 [Decode untrusted JSON into a typed value](/book/guides/type-system/decode-json/).
 
@@ -585,8 +585,11 @@ Two refusals keep it honest. An `Option` whose payload can itself be `null`
 witness, which writes the tagged form, so encode at a concrete type. `Queue.sendValue`
 and the other typed capability writes stay tagged, because a Bynk consumer reads them.
 
-`JsonError` is a record of three `String` fields, so a failed decode can be
-explained in Bynk:
+`DecodeError` is a record of three `String` fields, so a failed decode can be
+explained in Bynk. It was called `JsonError` before it became the error type of
+every decoder: the old spelling still compiles, as the same type, with a
+`bynk.types.deprecated_json_error` warning whose fix rewrites it (`bynk fmt`
+rewrites it too). Its fields let a failed decode be explained in Bynk:
 
 | Field | Meaning |
 |---|---|
@@ -594,7 +597,7 @@ explained in Bynk:
 | `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
 | `message` | a human-readable description, such as `expected number, got string` |
 
-A `JsonError` has no string form, so `"\(e)"` is refused
+A `DecodeError` has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
 `"\(e.kind) at \(e.path): \(e.message)"` reads `StructuralMismatch at $.a:
 expected number, got string`. `kind` is a `String`, not a sum type, so compare it
@@ -849,7 +852,7 @@ fn save(page: Paginated[User]) -> String {
   Json.encode(page)                          // __serialise_Paginated_User
 }
 
-fn load(s: String) -> Result[Paginated[User], JsonError] {
+fn load(s: String) -> Result[Paginated[User], DecodeError] {
   Json.decode[Paginated[User]](s)            // __deserialise_Paginated_User
 }
 ```

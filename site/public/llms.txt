@@ -113,7 +113,7 @@ match found {                 // found : Option[Item]
   `Bool` (e.g. `if (mo is None) { 1 } else { 0 }`).
 - `let Ok(x) = r else { … }` binds on a match and runs the `else` block otherwise.
 - `unreachable(message: String)` and `todo(message: String)` fault when evaluated and have a bottom type that fits any position (a `match` arm, a function body); `todo` also warns (`bynk.fault.todo`). Shadowable, not keywords; there is no general `panic`.
-- `Json.decode[T](s) -> Result[T, JsonError]` and `Json.encode(v) -> String`.
+- `Json.decode[T](s) -> Result[T, DecodeError]` and `Json.encode(v) -> String`.
 
 ### Effects and capabilities
 
@@ -299,8 +299,8 @@ case "an over-limit request is denied" {
 
 ## Keywords
 
-**60** hard keywords — never usable as an identifier:
-`Bool` `Bytes` `Decimal` `Duration` `Effect` `Err` `Float` `Instant` `Int` `JsonError`
+**61** hard keywords — never usable as an identifier:
+`Bool` `Bytes` `Decimal` `DecodeError` `Duration` `Effect` `Err` `Float` `Instant` `Int` `JsonError`
 `None` `Ok` `Option` `Result` `Some` `String` `ValidationError` `actor`
 `adapter` `agent` `as` `binding` `capability` `commons` `consumes`
 `context` `cron` `do` `else` `ensures` `enum` `expect` `exports` `false` `fn`

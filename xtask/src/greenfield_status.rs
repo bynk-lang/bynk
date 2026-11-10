@@ -1596,7 +1596,7 @@ fn ast_importers(root: &Path) -> Probe {
 // --- Gated probe 9: emit_abi_shapes ---------------------------------------
 
 /// ADR 0310 D1's four emit-ABI shapes, as they surface as import names in the vendored
-/// bindings — the `Result`/`Option` tag layout plus `JsonError`, `Uuid`, `FetchError`.
+/// bindings — the `Result`/`Option` tag layout plus `DecodeError`, `Uuid`, `FetchError`.
 const EMIT_ABI: &[&str] = &[
     "Result",
     "Option",
@@ -1604,7 +1604,7 @@ const EMIT_ABI: &[&str] = &[
     "Err",
     "Some",
     "None",
-    "JsonError",
+    "DecodeError",
     "Uuid",
     "FetchError",
 ];

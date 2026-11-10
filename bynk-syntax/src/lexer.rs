@@ -120,9 +120,14 @@ pub enum TokenKind {
     Result,
     #[token("ValidationError")]
     ValidationError,
-    // v0.22b keyword
+    // v0.22b keyword (renamed from `JsonError`, ADR 0047 → the DecodeError rename)
+    #[token("DecodeError")]
+    DecodeError,
+    // The deprecated spelling of `DecodeError`: still lexed (and still reserved,
+    // so no program can declare a type of that name), parsed to the same type,
+    // and reported as a warning with an auto-fix by the parser.
     #[token("JsonError")]
-    JsonError,
+    JsonErrorDeprecated,
     // v0.2 keywords
     #[token("enum")]
     Enum,
@@ -450,7 +455,8 @@ impl TokenKind {
             Err => "`Err`",
             Result => "`Result`",
             ValidationError => "`ValidationError`",
-            JsonError => "`JsonError`",
+            DecodeError => "`DecodeError`",
+            JsonErrorDeprecated => "`JsonError`",
             Enum => "`enum`",
             Match => "`match`",
             Option => "`Option`",

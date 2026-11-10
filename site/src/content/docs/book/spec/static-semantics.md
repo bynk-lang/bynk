@@ -651,7 +651,7 @@ of `v` contains an `Option` whose payload can encode as `null`
 parameter (`bynk.json.encode_plain_generic`).
 
 **The typed JSON codec** (v0.22b, ADR 0045). `Json.encode(v) -> String` and
-`Json.decode[T](s) -> Result[T, JsonError]` are compiler-backed statics on
+`Json.decode[T](s) -> Result[T, DecodeError]` are compiler-backed statics on
 the built-in `Json` module: `encode` dispatches to the generated
 `__serialise_<T>` for the value's checked type; `decode` to `JSON.parse` +
 `__deserialise_<T>`. The **domain of `T`** (and of `encode`'s argument) is any
@@ -667,19 +667,22 @@ from the declaration and the codecs of its arguments, and agrees with the codec 
 a concrete instantiation. `decode`'s target is given
 explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
 `Json.decode[List[Order]]`) or inferred from an expected
-`Result[T, JsonError]`; with neither, `bynk.generics.uninferable_type_arg`.
+`Result[T, DecodeError]`; with neither, `bynk.generics.uninferable_type_arg`.
 `encode` is `-> String` but **throws on a value containing a non-finite
 `Float`** — the 0040 contract violation, documented rather than `Result`-ified
 (the program itself created that state). A user-declared type named `Json`
 shadows the built-in module.
 
-**`JsonError`** (v0.22b, ADR 0047). The decode error is a compiler-known
+**`DecodeError`** (v0.22b, ADR 0047). The decode error is a compiler-known
 record — `kind`, `path`, `message`, all `String` — putting a boundary
 failure in the program's hands for the first time (the `ValidationError`
 precedent). `kind` is `"Malformed"` for unparseable input, else the
 boundary kind (`"StructuralMismatch"`, `"RefinementViolation"`); `path` is
 the tracked field path (`$.items[2].qty`); decode failures are runtime
-values, never compile diagnostics.
+values, never compile diagnostics. The type was named `JsonError` until it
+became the error of every decoder (ADR 0047 is amended); `JsonError` remains a
+reserved, deprecated spelling of the same type, and a use of it is the warning
+`bynk.types.deprecated_json_error` with a machine-applicable fix.
 
 ```bynk
 commons store {
@@ -693,7 +696,7 @@ commons store {
 		Json.encode(i)
 	}
 
-	fn restore(s: String) -> Result[Item, JsonError] {
+	fn restore(s: String) -> Result[Item, DecodeError] {
 		Json.decode[Item](s)
 	}
 

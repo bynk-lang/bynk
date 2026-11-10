@@ -9,7 +9,7 @@ export interface ValidationError {
 // uniform, Bynk-inspectable record. `kind` is "Malformed" for a JSON.parse
 // failure, else the BoundaryError kind ("StructuralMismatch",
 // "RefinementViolation").
-export interface JsonError {
+export interface DecodeError {
   readonly kind: string;
   readonly path: string;
   readonly message: string;

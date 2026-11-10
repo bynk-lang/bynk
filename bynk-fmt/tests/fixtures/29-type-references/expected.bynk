@@ -55,7 +55,7 @@ commons demo.typerefs {
 		v
 	}
 
-	fn jerr(j: JsonError) -> JsonError {
+	fn jerr(j: DecodeError) -> DecodeError {
 		j
 	}
 

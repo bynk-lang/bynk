@@ -2052,10 +2052,10 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
                 "encodePlain",
                 "encodePlain(value) -> String - Option as `v` / `null`",
             ),
-            ("decode", "decode[T](s: String) -> Result[T, JsonError]"),
+            ("decode", "decode[T](s: String) -> Result[T, DecodeError]"),
             (
                 "decodeSql",
-                "decodeSql[T](s: String) -> Result[T, JsonError]",
+                "decodeSql[T](s: String) -> Result[T, DecodeError]",
             ),
         ],
     ),
@@ -3215,9 +3215,9 @@ pub fn value_member_candidates(
             Some("String — the URL the platform serves the asset at".to_string()),
         ));
     }
-    // `JsonError`'s three `String` fields (#2863). Compiler-known, so there is
+    // `DecodeError`'s three `String` fields (#2863). Compiler-known, so there is
     // no declaration to resolve them from.
-    if matches!(&*tys.get(ty), Ty::JsonError) {
+    if matches!(&*tys.get(ty), Ty::DecodeError) {
         for (name, doc) in [
             (
                 "kind",
@@ -4293,7 +4293,7 @@ fn Box.size(self) -> Int { 1 }
 
     #[test]
     fn value_member_candidates_lists_json_error_fields() {
-        let err = TYS.intern(Ty::JsonError);
+        let err = TYS.intern(Ty::DecodeError);
         let items = value_member_candidates(err, &TYS, "commons m {\n}\n", None);
         for f in ["kind", "path", "message"] {
             assert!(find(&items, f, CompletionKind::Field).is_some(), "{f}");

@@ -1,0 +1,2 @@
+# The deprecated `JsonError` spelling is a warning with an auto-fix, not an error.
+bynk.types.deprecated_json_error

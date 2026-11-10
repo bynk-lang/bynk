@@ -115,6 +115,7 @@
     "Bool",
     "Bytes",
     "Decimal",
+    "DecodeError",
     "Duration",
     "Effect",
     "Err",

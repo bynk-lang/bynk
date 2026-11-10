@@ -197,7 +197,7 @@ held under a canonical encoding the runtime derives from the value itself.
 ```bynk
 commons demo.codable
 
-fn roundTrip[T: Codable](v: T) -> Result[T, JsonError] {
+fn roundTrip[T: Codable](v: T) -> Result[T, DecodeError] {
 	Json.decode[T](Json.encode(v))
 }
 

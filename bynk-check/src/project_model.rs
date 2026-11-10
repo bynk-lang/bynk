@@ -5866,7 +5866,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }

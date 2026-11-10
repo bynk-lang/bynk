@@ -131,7 +131,7 @@ pub(super) fn emit_integration_module(
         "type Result",
         "type Option",
         "type ValidationError",
-        "type JsonError",
+        "type DecodeError",
         "type __JsonValue",
         "type __BoundaryError",
         "type __ServiceBinding",

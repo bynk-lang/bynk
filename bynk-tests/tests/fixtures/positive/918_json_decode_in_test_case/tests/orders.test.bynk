@@ -1,5 +1,5 @@
 // #914: `Json.decode[T]` inside a test-case body. The wrapper it lowers to names
-// `Result`, `JsonValue` and `JsonError` in its own signature and body, and the
+// `Result`, `JsonValue` and `DecodeError` in its own signature and body, and the
 // test module's runtime import list is emitted as a fixed set carrying none of
 // them — so those must reach the import line, which is what this fixture holds.
 //

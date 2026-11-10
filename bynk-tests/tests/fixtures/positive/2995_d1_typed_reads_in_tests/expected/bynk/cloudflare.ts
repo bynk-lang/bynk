@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../__bynk_runtime/boundary.js";
 
 import { FetchError, Request, Response } from "../bynk.js";
@@ -315,11 +315,11 @@ export const SqlError = {
  */
 export type SqlReadError =
     { readonly tag: "Sql"; readonly error: SqlError }
-  | { readonly tag: "Decode"; readonly error: JsonError };
+  | { readonly tag: "Decode"; readonly error: DecodeError };
 
 export const SqlReadError = {
   Sql: (error: SqlError): SqlReadError => ({ tag: "Sql", error }),
-  Decode: (error: JsonError): SqlReadError => ({ tag: "Decode", error }),
+  Decode: (error: DecodeError): SqlReadError => ({ tag: "Decode", error }),
 };
 
 /**
@@ -1071,7 +1071,7 @@ export function __deserialise_SqlReadError(json: __JsonValue, path: string = "$"
       return Ok({ tag: "Sql", error: __error } as SqlReadError);
     }
     case "Decode": {
-  const __error = obj["error"] as unknown as JsonError;
+  const __error = obj["error"] as unknown as DecodeError;
       return Ok({ tag: "Decode", error: __error } as SqlReadError);
     }
     default:

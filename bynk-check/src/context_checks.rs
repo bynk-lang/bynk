@@ -1981,7 +1981,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
             ts_type_ref_display(v)
         ),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::Unit(_) => "()".to_string(),
         // v0.157 (ADR 0183): render a generic-type application as written.
         TypeRef::App { name, args, .. } => format!(
@@ -5892,7 +5892,7 @@ pub fn reject_fn_types(
         | TypeRef::Named(_)
         | TypeRef::QueueResult(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }

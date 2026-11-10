@@ -2024,7 +2024,7 @@ impl Gate<'_> {
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => {}
         }
     }
@@ -2779,7 +2779,7 @@ fn check_type_ref_resolves_in(
             check_type_ref_resolves_in(v, types, type_params, errors);
             check_keyable(k, types, type_params, errors, KeyRole::MapKey);
         }
-        TypeRef::ValidationError(_) | TypeRef::JsonError(_) => {}
+        TypeRef::ValidationError(_) | TypeRef::DecodeError(_) => {}
         TypeRef::Unit(_) => {}
     }
 }

@@ -3366,10 +3366,10 @@ pub enum TypeRef {
     /// `ValidationError` — the built-in error type used by refined-type
     /// constructors (v0.1).
     ValidationError(Span),
-    /// `JsonError` — the built-in JSON-decode error type (v0.22b). A
+    /// `DecodeError` — the built-in JSON-decode error type (v0.22b). A
     /// uniform record (`kind`/`path`/`message`, all `String`) the codec
     /// maps `BoundaryError` variants and parse failures into.
-    JsonError(Span),
+    DecodeError(Span),
     /// `()` — the unit type (v0.5).
     Unit(Span),
     /// `A -> B` / `(A, B) -> C` / `() -> B` — a function type (v0.20a).
@@ -3411,7 +3411,7 @@ impl TypeRef {
             TypeRef::Connection(_, s) => *s,
             TypeRef::History(_, s) => *s,
             TypeRef::ValidationError(s) => *s,
-            TypeRef::JsonError(s) => *s,
+            TypeRef::DecodeError(s) => *s,
             TypeRef::Unit(s) => *s,
             TypeRef::Fn(_, _, s) => *s,
             TypeRef::App { span, .. } => *span,
@@ -3462,7 +3462,7 @@ pub fn stream_path(
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => None,
         }
     }
@@ -3563,7 +3563,7 @@ fn heads(t: &TypeRef, out: &mut Vec<String>) {
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }
@@ -3708,7 +3708,7 @@ pub fn recursive_generic_path(
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => None,
         }
     }
@@ -3799,7 +3799,7 @@ pub fn polymorphic_recursion_edges(
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => {}
         }
     }

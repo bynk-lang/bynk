@@ -3,7 +3,7 @@ Type application on a qualified static (v0.22b)
 ==========================
 
 commons p {
-	fn load(s: String) -> Result[Order, JsonError] {
+	fn load(s: String) -> Result[Order, DecodeError] {
 		Json.decode[Order](s)
 	}
 }

@@ -5,7 +5,7 @@ title: Decode untrusted JSON into a typed value
 and validated — Bynk value, with a typed error when it does not fit.
 
 `Json.decode[T](s)` parses a JSON string and checks it against `T`, returning a
-`Result[T, JsonError]`. The check covers both **shape** (the right fields and
+`Result[T, DecodeError]`. The check covers both **shape** (the right fields and
 base types) and any **refinements** on `T`, so untrusted JSON only ever enters
 your program as a value that already satisfies its type's invariants — the
 "make illegal states unrepresentable" idea, applied at the boundary.
@@ -19,7 +19,7 @@ commons orders {
 		qty: Int,
 	}
 
-	fn parse(raw: String) -> Result[Order, JsonError] {
+	fn parse(raw: String) -> Result[Order, DecodeError] {
 		Json.decode[Order](raw)
 	}
 }
@@ -41,7 +41,7 @@ commons registry {
 		description: Option[String],
 	}
 
-	fn parse(raw: String) -> Result[Repo, JsonError] {
+	fn parse(raw: String) -> Result[Repo, DecodeError] {
 		Json.decode[Repo](raw)
 	}
 }
@@ -106,7 +106,7 @@ commons orders {
 		qty: Quantity,
 	}
 
-	fn parse(raw: String) -> Result[Order, JsonError] {
+	fn parse(raw: String) -> Result[Order, DecodeError] {
 		Json.decode[Order](raw)
 	}
 }
@@ -118,7 +118,7 @@ everywhere downstream.
 
 ## Handle the result
 
-`JsonError` is an ordinary error type, so handle it like any other `Result` —
+`DecodeError` is an ordinary error type, so handle it like any other `Result` —
 propagate with `?`, or branch with `match`:
 
 ```bynk
@@ -128,7 +128,7 @@ commons orders {
 		qty: Int,
 	}
 
-	fn quantityOf(raw: String) -> Result[Int, JsonError] {
+	fn quantityOf(raw: String) -> Result[Int, DecodeError] {
 		let order = Json.decode[Order](raw)?
 		Ok(order.qty)
 	}
@@ -137,7 +137,7 @@ commons orders {
 
 ## Report why a decode failed
 
-A `JsonError` carries three `String` fields: `kind` (`Malformed`,
+A `DecodeError` carries three `String` fields: `kind` (`Malformed`,
 `StructuralMismatch` or `RefinementViolation`), `path` (where in the document,
 such as `$.qty`) and `message`. The error itself has no string form, so
 interpolate the fields:

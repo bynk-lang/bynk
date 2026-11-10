@@ -28,7 +28,7 @@ commons envelope {
     Json.encode(page)
   }
 
-  fn load(s: String) -> Result[Paginated[User], JsonError] {
+  fn load(s: String) -> Result[Paginated[User], DecodeError] {
     Json.decode[Paginated[User]](s)
   }
 
