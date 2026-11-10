@@ -1,12 +1,6 @@
----
-level: minor
-probes: ast_importers, ts_writes
-changelog: A direct self tail call runs in constant stack, emitted as a loop, for pure and `Effect` functions alike; `requires` is re-checked on each iteration, a function with `ensures` is not rewritten, and mutual and non-tail recursion keep a host-defined depth ([#3193](https://github.com/bynk-lang/bynk/issues/3193), [#3176](https://github.com/bynk-lang/bynk/issues/3176))
----
+# 0775 — A direct self tail call runs in constant stack
 
-## ADR: self-tail-calls-run-in-constant-stack
-title: A direct self tail call runs in constant stack
-summary: The emitter lowers a direct self tail call to a loop and the spec guarantees it, reversing the tail-call half of #2612
+- **Status:** Accepted (v0.527)
 
 **Context.** Bynk has no loop statement, so an accumulator-passing function is how
 a program writes the loop the collection kernel does not fit (a parser, a state
