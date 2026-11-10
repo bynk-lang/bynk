@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Expired `Cache` entries are deleted when an agent commits, no longer only hidden, so a `Cache` no longer grows without bound (per-entry storage, slice 4)
----
+# 0791 — Expired Cache entries are deleted at commit, by the clock the program read
 
-## ADR: cache-reaping-at-commit
-title: Expired Cache entries are deleted at commit, by the clock the program read
-summary: A commit deletes up to 64 expired entries of an agent's Cache fields, judged by the injected Clock the handler's Cache operations read, so reaping cannot be seen by a program and never runs on the runtime's own clock
+- **Status:** Accepted (v0.540)
 
 **Context.** `@ttl` on a `Cache` hides an expired entry on read (ADR 0113) but never deleted it, so a `Cache` keyed by many distinct keys grew until the agent ran out of room, whatever the entries' lifetimes. With each entry under a key of its own (per-entry storage, #3189) deleting one is a single write, and each entry's expiry is also a key (`x/<field>/<exp>/<key>`). Where and by which clock to delete had to be chosen. The runtime's own clock is wrong: a `Cache` operation reads the injected `Clock` capability, which `bynk test` replaces with a fake, and real time is later than every `exp` a fake clock stamped, so a reaper on the runtime's clock would delete entries the program still reads as live.
 

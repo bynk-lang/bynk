@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0791](0791-cache-reaping-at-commit.md) | **Expired Cache entries are deleted at commit, by the clock the program read** (v0.540) — A commit deletes up to 64 expired entries of an agent's Cache fields, judged by the injected Clock the handler's Cache operations read, so reaping cannot be seen by a program and never runs on the runtime's own clock | Accepted (v0.540) |
 | [0790](0790-each-implicit-workspace.md) | **An opt-in implicit workspace for a manifest-less directory of projects** (v0.539) — `--each` on `check` and `test` runs the immediate-subdirectory projects as a synthesised `members = ["*"]` workspace | Accepted (v0.539) |
 | [0789](0789-yaml-subset-parser.md) | **The YAML subset is parsed by a hand-written runtime module, tested against a corpus** (v0.538) — A pure ~15 KB runtime parser instead of an npm dependency; yaml-test-suite subset as the conformance corpus and `yaml` as a test-only oracle | Accepted (v0.538) |
 | [0788](0788-yaml-decode.md) | **Yaml.decode[T] reads YAML through the typed JSON decode path** (v0.538) — A compiler-known Yaml.decode static; YAML parses to the JSON-shaped tree, then the identical deserialise_<T>; core-schema resolution, distinct refusals, depth and size caps | Accepted (v0.538) |

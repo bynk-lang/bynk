@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.539**.
+written against **v0.540**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.540.0** | Expired `Cache` entries are deleted when an agent commits, no longer only hidden, so a `Cache` no longer grows without bound (per-entry storage, slice 4) |
 | **v0.539.5** | The emitter declares an agent's construction factory in `emit_agent_factory` and its history-property driver in `emit_agent_history_driver`, completing the split of `emit_agent` (#3167) |
 | **v0.539.4** | The project analysis collects each file's diagnostics, references, hints, locals, expression types and requirements into per-file scratch sinks before folding them together, the unit of output a later slice can reuse between editor rounds; no behaviour changes |
 | **v0.539.3** | `cargo xtask bench` also times a body-only edit (`lsp_body_edit`), the edit an incremental analysis is meant to make cheap, next to the signature-level one |
