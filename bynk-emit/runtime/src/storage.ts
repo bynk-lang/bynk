@@ -1,9 +1,48 @@
+// The Durable Object storage surface the runtime speaks. The single-key forms
+// are what every emitted agent uses today; the batched, ranged and transactional
+// forms are the per-entry storage track's (#3195, `design/tracks/per-entry-storage.md`).
+// They are the Cloudflare KV-API forms, so a real SQLite-backed object satisfies
+// this interface as it stands.
+export interface DurableObjectListOptions {
+  readonly prefix?: string;
+  // Inclusive lower bound.
+  readonly start?: string;
+  // Exclusive lower bound. Not used with `start`.
+  readonly startAfter?: string;
+  // Exclusive upper bound.
+  readonly end?: string;
+  readonly limit?: number;
+  readonly reverse?: boolean;
+}
+
+// The operations a `transaction` closure runs. Reads see the transaction's own
+// writes; nothing is visible outside until the closure returns.
+export interface DurableObjectTransaction {
+  get<T>(key: string): Promise<T | undefined>;
+  get<T>(keys: readonly string[]): Promise<Map<string, T>>;
+  put(key: string, value: unknown): Promise<void>;
+  put(entries: Readonly<Record<string, unknown>>): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  delete(keys: readonly string[]): Promise<number>;
+  list<T>(options?: DurableObjectListOptions): Promise<Map<string, T>>;
+  rollback(): void;
+}
+
 export interface DurableObjectStorage {
   get<T>(key: string): Promise<T | undefined>;
+  get<T>(keys: readonly string[]): Promise<Map<string, T>>;
   put(key: string, value: unknown): Promise<void>;
+  put(entries: Readonly<Record<string, unknown>>): Promise<void>;
   delete(key: string): Promise<boolean>;
-  list<T>(options?: { prefix?: string }): Promise<Map<string, T>>;
+  delete(keys: readonly string[]): Promise<number>;
+  list<T>(options?: DurableObjectListOptions): Promise<Map<string, T>>;
+  // Runs `closure` as one atomic unit: every write commits together when it
+  // returns, none when it throws or calls `rollback()`.
+  transaction<T>(closure: (txn: DurableObjectTransaction) => Promise<T>): Promise<T>;
 }
+
+/** Cloudflare's documented limit on keys per batched `get`, `put` or `delete`. */
+export const STORAGE_BATCH_LIMIT = 128;
 
 export interface DurableObjectState {
   readonly storage: DurableObjectStorage;
@@ -65,28 +104,207 @@ function cloneStored<T>(value: T): T {
  */
 export class InMemoryStorage implements DurableObjectStorage {
   private data = new Map<string, unknown>();
+  private inTransaction = false;
 
-  async get<T>(key: string): Promise<T | undefined> {
-    const value = this.data.get(key);
-    return (value === undefined ? undefined : cloneStored(value)) as T | undefined;
+  // Operation counts, so a behavioural test can assert that a handler's storage
+  // I/O does not grow with the size of the state (#3189). `keysRead` and
+  // `keysWritten` count keys, `reads` and `writes` count calls.
+  readonly stats = { reads: 0, writes: 0, lists: 0, transactions: 0, keysRead: 0, keysWritten: 0 };
+
+  resetStats(): void {
+    this.stats.reads = 0;
+    this.stats.writes = 0;
+    this.stats.lists = 0;
+    this.stats.transactions = 0;
+    this.stats.keysRead = 0;
+    this.stats.keysWritten = 0;
   }
 
-  async put(key: string, value: unknown): Promise<void> {
-    this.data.set(key, cloneStored(value));
+  /** The number of stored keys, for assertions about what a flush left behind. */
+  get size(): number {
+    return this.data.size;
   }
 
-  async delete(key: string): Promise<boolean> {
-    return this.data.delete(key);
-  }
-
-  async list<T>(options?: { prefix?: string }): Promise<Map<string, T>> {
-    const prefix = options?.prefix ?? "";
-    const out = new Map<string, T>();
-    for (const [k, v] of this.data) {
-      if (k.startsWith(prefix)) out.set(k, cloneStored(v) as T);
+  async get<T>(key: string): Promise<T | undefined>;
+  async get<T>(keys: readonly string[]): Promise<Map<string, T>>;
+  async get<T>(keyOrKeys: string | readonly string[]): Promise<T | undefined | Map<string, T>> {
+    if (typeof keyOrKeys === "string") {
+      this.stats.reads += 1;
+      this.stats.keysRead += 1;
+      const value = this.data.get(keyOrKeys);
+      return (value === undefined ? undefined : cloneStored(value)) as T | undefined;
     }
+    checkBatch("get", keyOrKeys.length);
+    this.stats.reads += 1;
+    this.stats.keysRead += keyOrKeys.length;
+    return readMany<T>(this.data, keyOrKeys);
+  }
+
+  async put(key: string, value: unknown): Promise<void>;
+  async put(entries: Readonly<Record<string, unknown>>): Promise<void>;
+  async put(keyOrEntries: string | Readonly<Record<string, unknown>>, value?: unknown): Promise<void> {
+    if (typeof keyOrEntries === "string") {
+      this.stats.writes += 1;
+      this.stats.keysWritten += 1;
+      this.data.set(keyOrEntries, cloneStored(value));
+      return;
+    }
+    const entries = Object.entries(keyOrEntries);
+    checkBatch("put", entries.length);
+    this.stats.writes += 1;
+    this.stats.keysWritten += entries.length;
+    for (const [k, v] of entries) this.data.set(k, cloneStored(v));
+  }
+
+  async delete(key: string): Promise<boolean>;
+  async delete(keys: readonly string[]): Promise<number>;
+  async delete(keyOrKeys: string | readonly string[]): Promise<boolean | number> {
+    if (typeof keyOrKeys === "string") {
+      this.stats.writes += 1;
+      this.stats.keysWritten += 1;
+      return this.data.delete(keyOrKeys);
+    }
+    checkBatch("delete", keyOrKeys.length);
+    this.stats.writes += 1;
+    this.stats.keysWritten += keyOrKeys.length;
+    let n = 0;
+    for (const k of keyOrKeys) if (this.data.delete(k)) n += 1;
+    return n;
+  }
+
+  async list<T>(options?: DurableObjectListOptions): Promise<Map<string, T>> {
+    this.stats.lists += 1;
+    const out = listFrom<T>(this.data, options);
+    this.stats.keysRead += out.size;
     return out;
   }
+
+  // Every write commits together when `closure` returns, and none when it throws
+  // or calls `rollback()`. A transaction cannot nest, and two cannot overlap on
+  // one storage: workerd's input gate keeps a transaction's reads and writes
+  // from interleaving with another event's, which an in-memory double reproduces
+  // by refusing the overlap instead of silently interleaving.
+  async transaction<T>(closure: (txn: DurableObjectTransaction) => Promise<T>): Promise<T> {
+    if (this.inTransaction) throw new Error("InMemoryStorage: transactions cannot overlap or nest");
+    this.inTransaction = true;
+    this.stats.transactions += 1;
+    const staged = new Map<string, unknown>(); // a value, or `undefined` for a delete
+    let rolledBack = false;
+    const view = (): Map<string, unknown> => {
+      const v = new Map(this.data);
+      for (const [k, x] of staged) {
+        if (x === undefined) v.delete(k);
+        else v.set(k, x);
+      }
+      return v;
+    };
+    const txn: DurableObjectTransaction = {
+      get: (async (keyOrKeys: string | readonly string[]) => {
+        const v = view();
+        if (typeof keyOrKeys === "string") {
+          const x = v.get(keyOrKeys);
+          return x === undefined ? undefined : cloneStored(x);
+        }
+        checkBatch("get", keyOrKeys.length);
+        return readMany(v, keyOrKeys);
+      }) as DurableObjectTransaction["get"],
+      put: (async (keyOrEntries: string | Readonly<Record<string, unknown>>, value?: unknown) => {
+        if (typeof keyOrEntries === "string") {
+          staged.set(keyOrEntries, cloneStored(value));
+          return;
+        }
+        const entries = Object.entries(keyOrEntries);
+        checkBatch("put", entries.length);
+        for (const [k, x] of entries) staged.set(k, cloneStored(x));
+      }) as DurableObjectTransaction["put"],
+      delete: (async (keyOrKeys: string | readonly string[]) => {
+        if (typeof keyOrKeys === "string") {
+          const had = view().has(keyOrKeys);
+          staged.set(keyOrKeys, undefined);
+          return had;
+        }
+        checkBatch("delete", keyOrKeys.length);
+        const v = view();
+        let n = 0;
+        for (const k of keyOrKeys) {
+          if (v.has(k)) n += 1;
+          staged.set(k, undefined);
+        }
+        return n;
+      }) as DurableObjectTransaction["delete"],
+      list: async <U,>(options?: DurableObjectListOptions) => listFrom<U>(view(), options),
+      rollback: () => {
+        rolledBack = true;
+      },
+    };
+    try {
+      const result = await closure(txn);
+      if (!rolledBack) {
+        let written = 0;
+        for (const [k, x] of staged) {
+          written += 1;
+          if (x === undefined) this.data.delete(k);
+          else this.data.set(k, x);
+        }
+        this.stats.writes += 1;
+        this.stats.keysWritten += written;
+      }
+      return result;
+    } finally {
+      this.inTransaction = false;
+    }
+  }
+}
+
+function checkBatch(op: string, n: number): void {
+  if (n > STORAGE_BATCH_LIMIT) {
+    throw new RangeError(
+      `Durable Object storage ${op}() supports up to ${STORAGE_BATCH_LIMIT} keys at a time, got ${n}`,
+    );
+  }
+}
+
+function readMany<T>(data: ReadonlyMap<string, unknown>, keys: readonly string[]): Map<string, T> {
+  const out = new Map<string, T>();
+  // Ascending key order, as the platform returns a batched get.
+  for (const k of [...keys].sort(utf8Compare)) {
+    const v = data.get(k);
+    if (v !== undefined) out.set(k, cloneStored(v) as T);
+  }
+  return out;
+}
+
+// Keys sort by their UTF-8 bytes, as Cloudflare documents: not by UTF-16 code
+// unit, which orders a character above U+FFFF before one in U+E000..U+FFFF.
+const encoder = new TextEncoder();
+export function utf8Compare(a: string, b: string): number {
+  if (a === b) return 0;
+  const x = encoder.encode(a);
+  const y = encoder.encode(b);
+  const n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i += 1) {
+    const d = (x[i] as number) - (y[i] as number);
+    if (d !== 0) return d;
+  }
+  return x.length - y.length;
+}
+
+function listFrom<T>(data: ReadonlyMap<string, unknown>, options?: DurableObjectListOptions): Map<string, T> {
+  const prefix = options?.prefix ?? "";
+  const keys: string[] = [];
+  for (const k of data.keys()) {
+    if (!k.startsWith(prefix)) continue;
+    if (options?.start !== undefined && utf8Compare(k, options.start) < 0) continue;
+    if (options?.startAfter !== undefined && utf8Compare(k, options.startAfter) <= 0) continue;
+    if (options?.end !== undefined && utf8Compare(k, options.end) >= 0) continue;
+    keys.push(k);
+  }
+  keys.sort(utf8Compare);
+  if (options?.reverse === true) keys.reverse();
+  const limited = options?.limit === undefined ? keys : keys.slice(0, options.limit);
+  const out = new Map<string, T>();
+  for (const k of limited) out.set(k, cloneStored(data.get(k)) as T);
+  return out;
 }
 
 export function makeTestState(name: string): DurableObjectState {
