@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `system` case can drive an `Oidc` route as `by WrongAlgorithm` (an `alg: none` token and an HS256 token keyed with the public key) and `by NoSubject` (an empty and a missing `sub`), each expected to read `Rejected(Unauthorized)`
-probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
----
+# 0783 — Two reserved failure principals for an Oidc route: WrongAlgorithm and NoSubject
 
-## ADR: oidc-algorithm-and-subject-failure-principals
-title: Two reserved failure principals for an Oidc route: WrongAlgorithm and NoSubject
-summary: Each presents two tokens, and the call reads the first outcome that is not the seam's refusal
+- **Status:** Accepted (v0.533)
 
 **Context.** The `system` driver is the issuer for an `Oidc` route (ADR 0749),
 and four failure principals let a suite check the seam's signature, `iss`, `aud`
