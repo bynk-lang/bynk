@@ -377,21 +377,21 @@ There are **806** codes in total.
 | `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
 | `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |
-| `bynk.event.duplicate_handler` | A `from Events` service declares more than one `on event` handler; it has exactly one. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
-| `bynk.event.emit_not_an_event` | `Events.emit[E]` named a type `E` that is declared in this context, but is not itself an `event` — only an `event` type may be emitted. |  | — |
-| `bynk.event.emit_outside_owner` | `Events.emit[E]` named an event `E` not declared in the emitting context — only an event's declaring context may emit it. |  | — |
-| `bynk.event.handler_param_type_mismatch` | An `on event(e: T)` handler's declared parameter type does not match its `from Events(E)` header's event type. |  | — |
+| [`bynk.event.duplicate_handler`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events` service declares more than one `on event` handler; it has exactly one. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
+| [`bynk.event.emit_not_an_event`](/book/guides/events/understand-events/#only-the-declaring-context-may-emit) | `Events.emit[E]` named a type `E` that is declared in this context, but is not itself an `event` — only an `event` type may be emitted. |  | — |
+| [`bynk.event.emit_outside_owner`](/book/guides/events/understand-events/#only-the-declaring-context-may-emit) | `Events.emit[E]` named an event `E` not declared in the emitting context — only an event's declaring context may emit it. |  | — |
+| [`bynk.event.handler_param_type_mismatch`](/book/guides/events/understand-events/#the-three-pieces) | An `on event(e: T)` handler's declared parameter type does not match its `from Events(E)` header's event type. |  | — |
 | `bynk.event.non_additive_schema_change` | An event's field shape changed in a way the schema registry cannot evolve additively — a field was removed, retyped, added without a default, or lost a default it previously had. Give the new shape a new event type name, or make the change additive. |  | — |
-| `bynk.event.outside_context` | An `event` was declared outside a context. |  | — |
+| [`bynk.event.outside_context`](/book/guides/events/understand-events/#the-three-pieces) | An `event` was declared outside a context. |  | — |
 | `bynk.event.pattern_duplicate_field` | A `from Events(E { ... })` subscription pattern listed the same field more than once. |  | — |
 | `bynk.event.pattern_type_mismatch` | A `from Events(E { ... })` subscription pattern field's matched value is not compatible with that field's declared type. |  | — |
 | `bynk.event.pattern_unknown_field` | A `from Events(E { ... })` subscription pattern named a field that `E` does not declare. |  | — |
 | `bynk.event.pattern_unknown_variant` | A `from Events(E { ... })` subscription pattern's variant value names a variant that does not exist on the field's declared sum type. |  | — |
 | `bynk.event.pattern_variant_payload` | A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload. |  | — |
-| `bynk.event.return_not_effect_unit` | An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
+| [`bynk.event.return_not_effect_unit`](/book/guides/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit) | An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
 | `bynk.event.schema_version_mismatch` | An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history. |  | — |
 | `bynk.event.unknown_annotation` | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
-| `bynk.event.unknown_subscription` | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
+| [`bynk.event.unknown_subscription`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.exec.unavailable` | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
 | `bynk.fixture.binary_content` | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
@@ -582,12 +582,12 @@ There are **806** codes in total.
 | `bynk.within.in_pure_context` | `e.within(d)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.within.outside_handler` | `e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.within.timed_out_not_in_scope` | `e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.ws.lifecycle_by_mismatch` | A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ). |  | — |
-| `bynk.ws.message_frame_param` | A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii). |  | — |
+| [`bynk.ws.lifecycle_by_mismatch`](/book/reference/websocket/#service-form) | A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ). |  | — |
+| [`bynk.ws.message_frame_param`](/book/reference/websocket/#service-form) | A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii). |  | — |
 | `bynk.ws.open_given_unsupported` | A WebSocket `on open` handler declares `given` capabilities — unsupported at v1, since on Workers the handler runs inside the connection-hosting Durable Object, which has no composition root to supply them (real-time track slice 3b). |  | — |
 | `bynk.ws.open_transfer_cross_file` | On the Workers target, a WebSocket `on open` handler transfers its `connection` to an agent declared in a different file of the same context — the open is hosted in the agent's Durable Object, which is emitted from the agent's own file, so the upgrade would never be handled; the service and the agent must share a file. |  | — |
 | `bynk.ws.open_transfer_key` | On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a constant of the context or of a commons it uses, or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own. |  | — |
-| `bynk.ws.open_transfer_shape` | A WebSocket `on open` handler does not transfer its `connection` into exactly one agent, so the Workers upgrade has no single Durable Object to route to (real-time track slice 3b). |  | — |
+| [`bynk.ws.open_transfer_shape`](/book/reference/websocket/#service-form) | A WebSocket `on open` handler does not transfer its `connection` into exactly one agent, so the Workers upgrade has no single Durable Object to route to (real-time track slice 3b). |  | — |
 | `bynk.ws.route_param_mismatch` | A WebSocket `on message`/`on close` route parameter does not match the `on open` parameter at the same position — route values are recovered positionally from the connection, so they must be a type-compatible prefix of the `on open` parameters (real-time track slice 3b-iii). |  | — |
 
 ## Parser
@@ -782,11 +782,11 @@ There are **806** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.service.missing_from` | A `from`-less service has a handler other than `on call`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.service.mixed_protocols` | A service mixes handler forms that do not match its `from <protocol>`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.service.outside_context` | A `service` was declared outside a context. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.service.return_not_effect` | A service handler's return type is not an `Effect`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.service.unknown_protocol` | A `from <protocol>` names an unknown protocol (e.g. a transport like Kafka). | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.service.missing_from`](/book/reference/grammar/#rule-service_protocol) | A `from`-less service has a handler other than `on call`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.service.mixed_protocols`](/book/reference/grammar/#rule-service_protocol) | A service mixes handler forms that do not match its `from <protocol>`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.service.outside_context`](/book/reference/grammar/#rule-service_decl) | A `service` was declared outside a context. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.service.return_not_effect`](/book/reference/grammar/#rule-service_decl) | A service handler's return type is not an `Effect`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.service.unknown_protocol`](/book/reference/grammar/#rule-service_protocol) | A `from <protocol>` names an unknown protocol (e.g. a transport like Kafka). | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.service.unknown_via_clause` | A `via <name>(...)` clause on a `from Events(...)` header named something other than `schema` — `via` clauses are a closed set, and only `via schema(...)` exists today. |  | — |
 | `bynk.service.websocket_header` | The `from websocket` header is malformed — it binds frame types as `websocket(in: <type>, out: <type>)` (real-time track slice 3). |  | — |
 | `bynk.service.websocket_multiple` | A context holds more than one `from websocket` service — at v1 the Workers upgrade routes by the `Upgrade: websocket` header alone, so one WebSocket service per context (real-time track slice 3b). |  | — |
