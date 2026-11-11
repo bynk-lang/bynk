@@ -67,7 +67,10 @@ pub struct Explain {
     /// A longer-form paragraph: what the rule is and, crucially, *why* it
     /// exists. This is the offline-complete answer — useful without network.
     pub blurb: &'static str,
-    /// A minimal example of the violation and its fix.
+    /// A minimal example of the violation and its fix: the offending line is
+    /// marked `✗` and the corrected one `✓` in a trailing comment. Written to be
+    /// read, so it may elide with `…`; `bynk-tests`' `explain_examples.rs` holds
+    /// every line of it to a compiled pair of whole programs (#3163).
     pub example: &'static str,
     /// The target Book page as a site-root-relative path, no extension and no
     /// trailing slash, e.g. `/book/reference/types`. Used verbatim as an
@@ -108,7 +111,8 @@ impl Explain {
 /// The curated explanations, keyed by code (DECISION B: highest-traffic,
 /// newcomer-facing codes first). Kept sorted by code; every `code` must be a
 /// real [`REGISTRY`] entry and every `page` an existing Book page — both
-/// enforced by `tests/diagnostics_registry.rs`.
+/// enforced by `tests/diagnostics_registry.rs`. Every `example` needs its
+/// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.cell.self_reference",
@@ -119,7 +123,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 retry) can see it. A `:=` is for a value that does not depend on what \
                 the cell held.",
         example: "count := count + 1                       // ✗ reads `count` while writing it\n\n\
-                  count.update((c) => c + 1)                // ✓ awaited, as an effect; the combiner gets the old value",
+                  let _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
     },
@@ -162,10 +166,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 reaches for, so a reader (and the compiler) can see a handler's \
                 full reach from its signature alone. Using a capability that is \
                 not in `given` is the missing half of that contract.",
-        example: "on get \"/now\" -> Text {           // ✗ uses Clock without declaring it\n    \
-                    Clock.now()\n}\n\n\
-                  on get \"/now\" given Clock -> Text { // ✓ declared, then used\n    \
-                    Clock.now()\n}",
+        example: "on call() -> Effect[()] {\n    \
+                    Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\n\
+                  on call() -> Effect[()] given Logger {   // ✓ declared, then used\n    \
+                    Logger.log(\"hi\")\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "",
     },
@@ -177,8 +181,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 context) before a handler can ask for it. This usually means a \
                 typo in the capability name, or a missing `uses`/`consumes` that \
                 would bring the capability into scope.",
-        example: "on get \"/\" given Clok -> Text { … }  // ✗ no capability named `Clok`\n\n\
-                  on get \"/\" given Clock -> Text { … }  // ✓ matches the declared capability",
+        example: "provides Greeter = Polite given Loger { … }    // ✗ no capability named `Loger`\n\n\
+                  provides Greeter = Polite given Logger { … }   // ✓ matches the declared capability",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
     },
@@ -189,7 +193,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 number it answers. It is not a type, so a status can't be stored or \
                 passed to a helper. Name the status where the response is built, and \
                 let a helper build the body.",
-        example: "fn refusal(status: ErrorStatus, msg: String) -> HttpResult[()] { … }   // ✗\n\n\
+        example: "let status = ErrorStatus.Forbidden                          // ✗ a status has no value here\n\n\
                   fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\n\
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
         page: "/book/reference/http",
@@ -203,12 +207,30 @@ pub const EXPLANATIONS: &[Explain] = &[
                 stop, so a raw route must have one: a `@limit(maxBody:)` on the \
                 handler, or a `limits { maxBody = … }` on the service.",
         example: "@raw(contentType: \"image/png\")           // ✗ no cap anywhere\n\
-                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }\n\n\
+                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n\
                   @raw(contentType: \"image/png\")           // ✓ capped\n\
                   @limit(maxBody: 5_000_000)\n\
-                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }",
+                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.par.store_write_in_closure",
+        blurb: "The closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+                once per element, all at once, so it may not write a `store` field, which is \
+                the rule a `par { … }` block already follows. Every `<-` is an await point, \
+                so a `get` then a `put` in the closure lets the other branches write in \
+                between, and their updates are lost. A single call such as `update` is atomic \
+                per key, but it is refused here too, so the two rules stay equal. Run the \
+                loop with `forEach` (or `traverseAll` / `traverseTry`), where each element \
+                finishes before the next starts, so a single-call `update` stays atomic. A store \
+                write reads the entry before it stages the write, so the sequential form \
+                reads one entry at a time; per-key atomicity is the reason for the rule. To \
+                keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
+        example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
+                  xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
+        page: "/book/reference/capabilities",
+        anchor: "par",
     },
     Explain {
         code: "bynk.parse.bare_expression_statement",
@@ -258,9 +280,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                     key name: String\n    \
                     store hits: Cell[Int]\n    \
                     on call withdraw() -> Effect[()] given Files { … }\n}\n\n\
-                  provides Takedown = Bucket given Clock {         // ✗ `withdraw` needs `Files`\n    \
-                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}\n\n\
-                  provides Takedown = Bucket given Clock, Files {  // ✓\n    \
+                  provides Takedown = Bucket given Clock {\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }   // ✗ `withdraw` needs `Files`\n}\n\n\
+                  provides Takedown = Bucket given Clock, Files {  // ✓ `Files` is listed\n    \
                     fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
         page: "/book/guides/effects-and-capabilities/compose-a-provider",
         anchor: "the-rules",
@@ -318,12 +340,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.resolve.missing_field",
-        blurb: "A record must be constructed with every one of its fields. Bynk \
-                records have no defaults and no partial construction: a value of a \
-                record type is only valid once all its fields are present, so a \
-                downstream reader never has to wonder whether a field was set. \
-                Omitting a field is therefore an error, not a fill-in-later.",
-        example: "type User = { name: Text, age: Int }\n\n\
+        blurb: "A record must be constructed with every field that has no default. \
+                There is no partial construction: a value of a record type is only \
+                valid once all its fields are present, so a downstream reader never \
+                has to wonder whether a field was set. Omitting a required field is \
+                therefore an error, not a fill-in-later. A field may be left out \
+                only when its declaration gives it a default, `field: T = expr`.",
+        example: "type User = { name: String, age: Int }\n\n\
                   User { name: \"Ada\" }            // ✗ missing `age`\n\
                   User { name: \"Ada\", age: 36 }   // ✓ every field present",
         page: "/book/reference/types",
@@ -331,13 +354,14 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.resolve.unknown_field",
-        blurb: "A field access names a field the record type does not have. A \
-                record's fields are fixed by its type declaration; only those \
-                names exist on the value. This is usually a typo in the field \
-                name, or an access meant for a different type.",
-        example: "type User = { name: Text }\n\n\
-                  user.nmae   // ✗ no field `nmae`\n\
-                  user.name   // ✓ the declared field",
+        blurb: "A record construction names a field the record type does not declare. \
+                A record's fields are fixed by its type declaration, and a literal may \
+                set only those. This is usually a typo in the field name, or a field \
+                meant for a different type. Reading a field a value does not have is \
+                the sibling code `bynk.types.unknown_field`.",
+        example: "type User = { name: String, age: Int }\n\n\
+                  User { name: \"Ada\", age: 36, admin: true }   // ✗ no field `admin`\n\
+                  User { name: \"Ada\", age: 36 }                // ✓ only the declared fields",
         page: "/book/reference/types",
         anchor: "record-types",
     },
@@ -361,8 +385,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 declared (with `type`), be one of Bynk's built-in types, or be \
                 brought into scope from another module before they can be named. \
                 An unknown type is usually a typo or a missing declaration/import.",
-        example: "fn greet(u: Usr) -> Text { … }   // ✗ no type `Usr`\n\
-                  fn greet(u: User) -> Text { … }  // ✓ the declared type",
+        example: "fn greet(u: Usr) -> String { … }   // ✗ no type `Usr`\n\
+                  fn greet(u: User) -> String { … }  // ✓ the declared type",
         page: "/book/reference/types",
         anchor: "",
     },
@@ -400,7 +424,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 says one is needed, and where a `match` is too complex for it to prove \
                 exhaustive it asks for `_` too.",
         example: "type Status = enum { Pending, Active, Done }\n\n\
-                  match s {\n    Pending => \"p\"\n    Active => \"a\"       // ✗ `Done` is not covered\n}\n\n\
+                  match s {                // ✗ `Done` is not covered\n    Pending => \"p\"\n    Active => \"a\"\n}\n\n\
                   match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",
@@ -2113,6 +2137,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
         &["par_stmt"],
     )),
+    d(
+        "bynk.par.store_write_in_closure",
+        "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
+    ),
     dg(
         "bynk.parse.bare_expression_statement",
         "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`.",
@@ -2841,8 +2869,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.resolve.unknown_field",
-        "Accessed a field the record does not have.",
-        &["field_access"],
+        "A record construction names a field the record type does not declare.",
+        &["record_construction"],
     ),
     dg(
         "bynk.resolve.unknown_function",

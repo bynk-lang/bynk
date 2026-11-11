@@ -235,7 +235,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -888,7 +888,7 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
 const ANALYTICS_SOURCE: &str = "context a.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Analytics }
+consumes bynk.cloudflare { Analytics, Version }
 
 capability Signups = Analytics
 
@@ -903,6 +903,12 @@ service api from http {
 \t\tOk(\"written\")
 \t}
 
+\ton GET(\"/version\") () -> Effect[HttpResult[String]] by Visitor given Signups, Version {
+\t\tlet v <- Version.current()
+\t\tlet _ <- Signups.write(DataPoint { index: None, blobs: [v.id], doubles: [] })
+\t\tif v.id == \"\" { Ok(\"no id\") } else { Ok(\"versioned\") }
+\t}
+
 \ton GET(\"/wide\") () -> Effect[HttpResult[String]] by Visitor given Signups {
 \t\tlet _ <- Signups.write(DataPoint { index: None, blobs: [], doubles: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0] })
 \t\tOk(\"written\")
@@ -915,13 +921,16 @@ fn workers_analytics_writes_on_workerd() {
     // P3b (#2582): `wrangler dev` binds `[[analytics_engine_datasets]]` and
     // drops the writes, so this shows the stanza and the binding agree and a
     // write within the limits goes through; a point over them is refused
-    // before the platform sees it.
+    // before the platform sees it. #3300: the same Worker reads `Version`,
+    // so `[version_metadata]` binds beside the dataset and its timestamp
+    // parses (a fault would be a 500).
     let Some((failures, log)) = run_smoke("a-smoke", "a", ANALYTICS_SOURCE, "/bare", 4, &|port| {
         check_steps(
             port,
             &[
                 ("/write/pro", 200, r#""written""#),
                 ("/bare", 200, r#""written""#),
+                ("/version", 200, r#""versioned""#),
                 ("/wide", 500, ""),
             ],
         )

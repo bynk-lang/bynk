@@ -1,0 +1,3 @@
+bynk.par.store_write_in_closure
+bynk.par.store_write_in_closure
+# exact

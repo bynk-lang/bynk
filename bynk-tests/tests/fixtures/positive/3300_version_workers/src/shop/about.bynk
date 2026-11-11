@@ -1,0 +1,24 @@
+context shop.about
+
+// #3300: a Worker that reaches `Version` only through a provider's `given`,
+// never from a handler, still declares `[version_metadata]`.
+
+consumes bynk
+consumes bynk.cloudflare { Version }
+
+capability Build {
+	fn label() -> Effect[String]
+}
+
+provides Build = VersionBuild given Version {
+	fn label() -> Effect[String] {
+		let v <- Version.current()
+		Effect.pure("build \(v.id)")
+	}
+}
+
+service info {
+	on call() -> Effect[String] given Build {
+		Build.label()
+	}
+}

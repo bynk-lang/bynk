@@ -1,0 +1,11 @@
+context demo.svc
+
+capability Logger {
+    fn log(message: String) -> Effect[()]
+}
+
+service noisy {
+    on call() -> Effect[()] {
+        Logger.log("hi")
+    }
+}

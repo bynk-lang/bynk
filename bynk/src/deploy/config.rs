@@ -957,6 +957,12 @@ pub(crate) fn synthesise_environment_block(
         );
     }
 
+    // #3300: the Version metadata binding, which names no resource, so it is
+    // the same in every environment; bindings are not inherited by `[env.*]`.
+    if let Some(version_metadata) = doc.get("version_metadata") {
+        env_block.insert("version_metadata".to_string(), version_metadata.clone());
+    }
+
     // P3 (#2342): the rate limiters, copied as the top level has them. The
     // push materialises this environment's `namespace_id`s into the top
     // level before this block is synthesised from it, so they are already
@@ -1204,6 +1210,9 @@ service = "payment"
 binding = "KV"
 id = "<KV_NAMESPACE_ID>" # set at deploy time
 
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [[durable_objects.bindings]]
 name = "ORDER_ENTITY"
 class_name = "OrderEntity"
@@ -1314,6 +1323,13 @@ max_batch_size = 10
             env["services"][0]["binding"].as_str(),
             Some("PAYMENT"),
             "the binding name carries over unqualified"
+        );
+        // #3300: bindings are not inherited, and Version metadata names no
+        // resource, so the environment repeats it as it is.
+        assert_eq!(
+            env["version_metadata"]["binding"].as_str(),
+            Some("CF_VERSION_METADATA"),
+            "the Version metadata binding is repeated, or `Version.current()` faults in the environment"
         );
         assert_eq!(
             env["services"][0]["service"].as_str(),

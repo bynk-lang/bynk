@@ -1,0 +1,12 @@
+context demo
+
+// #3300: `Version` is experimental, so using it needs `[unstable] allow`.
+
+consumes bynk.cloudflare { Version }
+
+service s {
+	on call() -> Effect[String] given Version {
+		let v <- Version.current()
+		Effect.pure(v.id)
+	}
+}

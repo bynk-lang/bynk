@@ -1,0 +1,11 @@
+context v
+
+type IntTree =
+    | Leaf
+    | Node(left: IntTree, value: Int, right: IntTree)
+
+service s {
+    on call(t: IntTree) -> Effect[Int] {
+        Effect.pure(1)
+    }
+}

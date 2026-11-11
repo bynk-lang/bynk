@@ -1,0 +1,27 @@
+context shop
+
+// #3297 / #3298: the program from the issue. `viaUpdate` is atomic per key but a
+// `par` block refuses `update`, so the closure refuses it too; `viaGetPut` loses
+// updates (three branches left the key at 1). Both are refused. The accepted
+// rewrite, a `forEach` with `update`, ends at 3 (positive fixture
+// `3298_par_closure_rewrite`, and `store_behaviour.rs`).
+
+agent Tally {
+  key id: String
+  store counts: Map[String, Int]
+
+  on call viaUpdate(n: Int) -> Effect[()] {
+    let _ <- counts.put("k", 0)
+    let _ <- [1, 2, 3].parTraverse((x: Int) => counts.update("k", (v) => v + 1))
+    Effect.pure(())
+  }
+
+  on call viaGetPut(n: Int) -> Effect[()] {
+    let _ <- counts.put("k", 0)
+    let _ <- [1, 2, 3].parTraverse((x: Int) => {
+      let o <- counts.get("k")
+      counts.put("k", o.getOrElse(0) + 1)
+    })
+    Effect.pure(())
+  }
+}

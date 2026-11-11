@@ -1,0 +1,11 @@
+context demo
+
+agent Tally {
+    key id: String
+
+    store counts: Map[String, Int]
+
+    on call bump(xs: List[Int]) -> Effect[()] {
+        xs.forEach((x: Int) => counts.update("k", (v) => v + 1))
+    }
+}

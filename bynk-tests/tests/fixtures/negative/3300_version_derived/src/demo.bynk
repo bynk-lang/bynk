@@ -1,0 +1,7 @@
+context demo
+
+// #3300: `Version` is bound once per Worker, so it has no named instances.
+
+consumes bynk.cloudflare { Version }
+
+capability Build = Version
