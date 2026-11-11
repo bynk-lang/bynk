@@ -2527,7 +2527,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "for all n: Int where n + 1 {   // ✗ an `Int`, not a `Bool`\n\n\
                   for all n: Int where n > 0 {   // ✓",
         page: "/book/reference/testing",
-        anchor: "property--for-all--generative-tests",
+        anchor: "property-for-all-generative-tests",
     },
     Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
