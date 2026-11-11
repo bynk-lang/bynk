@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A handler reads a `__Host-`/`__Secure-` cookie through a raw `cookies: RequestCookies` view, and `examples/sessions` sets and reads `__Host-sid` (#3277, closing slice)
-probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage, explained_codes
----
+# 0809 — A handler reads a prefixed cookie through a raw `cookies: RequestCookies` view
 
-## ADR: raw-request-cookies
-title: A handler reads a prefixed cookie through a raw `cookies: RequestCookies` view
-summary: Why the typed cookies record is not enough for `__Host-` names, and what the raw view is
+- **Status:** Accepted (v0.554)
 
 **Context.** The typed `cookies` record (ADR 0806) cannot name a cookie such as `__Host-sid`: a hyphen is not legal in a record field name. So a handler could set a `__Host-` or `__Secure-` cookie but could not read one back. Before this decision `examples/sessions` therefore used a plain `sid`; a general field-to-cookie-name mapping for the typed form is proposed separately as #3343.
 

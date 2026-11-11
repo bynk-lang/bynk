@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.553**.
+written against **v0.554**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.554.0** | A handler reads a `__Host-`/`__Secure-` cookie through a raw `cookies: RequestCookies` view, and `examples/sessions` sets and reads `__Host-sid` (#3277, closing slice) |
 | **v0.553.4** | The `bynk explain` example gate checks each example's layout as printed, so a block body printed flush left fails it |
 | **v0.553.3** | `bynk explain` covers twenty-two more codes under the actor and event prefixes |
 | **v0.553.2** | `bynk explain` covers 22 more `http` diagnostics, from request shape and cookies to CORS and caching |
