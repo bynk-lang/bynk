@@ -327,7 +327,7 @@ pub fn file_check_digest(
     h.feed_map("imported_from", imported_from.iter());
     // What `check_file_core` reads of `unit_info`.
     if let Some(info) = unit_info.get(name) {
-        h.feed("flattened", &info.flattened);
+        h.feed_map("flattened", info.flattened.iter());
         h.feed("cross_unit_facts", &info.table.cross_unit_facts());
     }
     h.feed_map(
@@ -379,10 +379,12 @@ pub fn file_check_digest(
     h.feed_set("uses_commons_type_names", uses_commons_type_names.iter());
     h.feed("visible_broken_names", visible_broken_names);
     h.feed("hidden_types", hidden_types);
-    h.feed("shadowed", shadowed);
+    h.feed("shadowed", &shadowed.sorted());
     h.feed("policy", &**policy);
     h.feed_map("private_imports", private_imports.iter());
-    h.feed("d1_sql", d1_sql);
+    // `D1Sql`'s `Debug` prints only database names; its content hash covers
+    // every migration the check read the schemas from.
+    h.feed("d1_sql", &d1_sql.as_ref().map(|d| d.digest()));
     h.0.finish()
 }
 

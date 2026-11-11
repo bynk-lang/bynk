@@ -5749,6 +5749,14 @@ pub struct ShadowedType {
 pub struct ShadowedReaches(HashMap<(String, String), ShadowedType>);
 
 impl ShadowedReaches {
+    /// The reaches in key order, so a rendering of them is the same for two equal
+    /// values however their `HashMap`s iterate (the language server hashes it).
+    pub(crate) fn sorted(&self) -> Vec<(&(String, String), &ShadowedType)> {
+        let mut v: Vec<_> = self.0.iter().collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
+    }
+
     /// No imported declaration reaches a shadowed type.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

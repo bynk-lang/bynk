@@ -204,12 +204,15 @@ fn analyse_with_memo(
     let Some(memo) = memo else {
         return bynk_ide::diagnose_project_with(roots, content, schema_lock);
     };
-    let mut memo = memo.lock().unwrap_or_else(|poisoned| {
-        let mut memo = poisoned.into_inner();
-        *memo = bynk_check::memo::AnalysisMemo::new();
-        memo
-    });
-    bynk_ide::diagnose_project_memoised(roots, content, schema_lock, &mut memo)
+    if memo.is_poisoned() {
+        // A panic mid-round may have left the memo half-updated: empty it, and
+        // clear the flag so later rounds keep what they learn instead of
+        // starting over every time.
+        *memo.lock().unwrap_or_else(|e| e.into_inner()) = bynk_check::memo::AnalysisMemo::new();
+        memo.clear_poison();
+    }
+    let mut guard = memo.lock().unwrap_or_else(|e| e.into_inner());
+    bynk_ide::diagnose_project_memoised(roots, content, schema_lock, &mut guard)
 }
 
 #[derive(Debug, Default)]
@@ -11264,5 +11267,58 @@ mod owner_cache_tests {
         );
         // Unparseable text: no owner, and the miss is remembered.
         assert_eq!(cached_owner_unit(&mut cache, &file("\u{1}\u{1}")), None);
+    }
+}
+
+#[cfg(test)]
+mod analysis_memo_tests {
+    use super::analyse_with_memo;
+    use bynk_check::memo::AnalysisMemo;
+    use std::sync::{Arc, Mutex};
+
+    /// #3243 S2.3b: a memo poisoned by a panic is emptied, and the poison is
+    /// cleared, so the rounds after it keep what they learn.
+    #[test]
+    fn a_poisoned_memo_is_emptied_and_then_works_again() {
+        let root =
+            std::env::temp_dir().join(format!("bynk-lsp-memo-poison-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("bynk.toml"), "").unwrap();
+        let src =
+            "context demo\n\nservice probe {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+        std::fs::write(root.join("demo.bynk"), src).unwrap();
+        let roots = bynk_ide::AnalysisRoots::SingleTree(root.clone());
+        let content = std::collections::HashMap::from([(root.join("demo.bynk"), src.to_string())]);
+
+        let memo = Arc::new(Mutex::new(AnalysisMemo::new()));
+        let round = |memo: &Arc<Mutex<AnalysisMemo>>| {
+            analyse_with_memo(&roots, &content, &bynk_ide::SchemaLock::Off, Some(memo));
+            memo.lock().unwrap().stats()
+        };
+        assert!(round(&memo).misses > 0, "the first round checks the file");
+        assert_eq!(round(&memo).misses, 0, "the second replays it");
+
+        // Poison it the way a panicking round would.
+        let poisoner = Arc::clone(&memo);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.lock().unwrap();
+            panic!("injected");
+        })
+        .join();
+        assert!(memo.is_poisoned());
+
+        let after = round(&memo);
+        assert!(!memo.is_poisoned(), "the poison is cleared");
+        assert!(
+            after.misses > 0,
+            "the recovered memo started empty: {after:?}"
+        );
+        assert_eq!(
+            round(&memo).misses,
+            0,
+            "and keeps what it learns afterwards"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

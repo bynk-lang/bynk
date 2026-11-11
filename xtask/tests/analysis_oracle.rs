@@ -152,6 +152,11 @@ fn examples_agree_cold_and_warm() {
             &mut memo,
             &format!("example {name}, warm"),
         );
+        // Nothing changed, so nothing is re-checked. A digest input that renders
+        // differently from one round to the next (a `HashMap`'s iteration order,
+        // say) would miss here, and would silently cost the memo its gain.
+        let warm = memo.stats();
+        assert_eq!(warm.misses, 0, "example {name}: {warm:?}");
     }
 }
 
