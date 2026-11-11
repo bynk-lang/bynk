@@ -6,7 +6,7 @@ import { __bynkSettleAll } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection } from "../../__bynk_runtime/connection.js";
@@ -95,7 +95,7 @@ export class Room {
   async join(name: Option<string>, conn: Connection<Frame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(name, "visitor")); const __new = __connIdOf(conn); const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<Frame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => { const __k = String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(name, "visitor")); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<Frame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -104,7 +104,7 @@ export class Room {
 
   async say(name: string, text: string, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await (async () => { await __bynkSettleAll(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<Frame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }).map((__x) => () => (async (c: Connection<Frame>) => (c).send({ text: `${String(name)}: ${String(text)}` }))(__x))); })();
+    const __r0 = await __bynkThen(__state.conns.values().flatMap((__cid) => { const __c = __resolveConnection<Frame>(this.state, __cid); return __c.tag === "Some" ? [__c.value] : []; }), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<Frame>) => (c).send({ text: `${String(name)}: ${String(text)}` }))(__x))); })());
     return undefined;
   }
 

@@ -6,7 +6,7 @@ import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 import type { Connection } from "./__bynk_runtime/connection.js";
@@ -89,20 +89,20 @@ export class Room {
 
   async fanout(text: string, deps: {}): globalThis.Promise<Result<readonly void[], string>> {
     const __state = await this.loadState();
-    return (async () => { const __out: void[] = []; for (const __x of __state.conns.values()) { const __r = await (async (c: Connection<ServerFrame>) => {
+    return __bynkThen(__state.conns.values(), (__q) => (async () => { const __out: void[] = []; for (const __x of __q) { const __r = await (async (c: Connection<ServerFrame>) => {
     await (c).send({ text: text });
     const r: Result<void, string> = Ok(undefined);
     return r;
-  })(__x); if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })();
+  })(__x); if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })());
   }
 
   async fanoutPar(text: string, deps: {}): globalThis.Promise<Result<readonly void[], string>> {
     const __state = await this.loadState();
-    return (async () => { const __rs = await __bynkSettleAll(__state.conns.values().map((__x) => () => (async (c: Connection<ServerFrame>) => {
+    return __bynkThen(__state.conns.values(), (__q) => (async () => { const __rs = await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => {
     await (c).send({ text: text });
     const r: Result<void, string> = Ok(undefined);
     return r;
-  })(__x))); const __out: void[] = []; for (const __r of __rs) { if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })();
+  })(__x))); const __out: void[] = []; for (const __r of __rs) { if (__r.tag === "Err") { return Err(__r.error); } __out.push(__r.value); } return Ok(__out); })());
   }
 
 }

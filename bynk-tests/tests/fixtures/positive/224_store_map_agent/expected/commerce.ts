@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -68,7 +68,7 @@ export class Cart {
   async add(sku: string, it: Item, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.items.put(String(sku), it), undefined);
+      const __r0 = await (async () => { await __state.items.put(String(sku), it); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -77,14 +77,14 @@ export class Cart {
 
   async lookup(sku: string, deps: {}): globalThis.Promise<Option<Item>> {
     const __state = await this.loadState();
-    const found = await (() => { const __k = String(sku); return __state.items.has(__k) ? Some(__state.items.get(__k)!) : None; })();
+    const found = await (async () => { const __k = String(sku); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
     return found;
   }
 
   async bump(sku: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(sku); if (!__state.items.has(__k)) { throw new globalThis.Error("Map.update: key absent"); } __state.items.put(__k, ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__state.items.get(__k)!)); return undefined; })();
+      const __r0 = await (async () => { const __k = String(sku); return __bynkThen(__state.items.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.items.get(__k), (__v) => __bynkThen(__state.items.put(__k, ((i: Item) => ({ ...i, qty: i.qty + 1 }))(__v!)), () => undefined)); }); })();
       return undefined;
     })();
     await this.commitState(__state);

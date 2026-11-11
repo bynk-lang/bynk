@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -80,7 +80,7 @@ export class Box {
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (__state.items.put(String(k), n), undefined);
+      return (async () => { await __state.items.put(String(k), n); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;
@@ -88,13 +88,13 @@ export class Box {
 
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))();
+    const all = await __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q);
     return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: string; readonly value: number }) => n + e.value);
   }
 
   async totalEff(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))();
+    const all = await __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q);
     return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
   }
 
@@ -155,7 +155,7 @@ export class ByKey {
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (__state.items.put(String(sku(k)), n), undefined);
+      return (async () => { await __state.items.put(String(sku(k)), n); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;
@@ -163,17 +163,17 @@ export class ByKey {
 
   async keys(deps: {}): globalThis.Promise<readonly Sku[]> {
     const __state = await this.loadState();
-    return ((() => __state.items.keys().map((__k) => (__k as Sku))))();
+    return __bynkThen(((() => __state.items.keys().map((__k) => (__k as Sku))))(), (__q) => __q);
   }
 
   async stale(deps: {}): globalThis.Promise<readonly Stale[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => __state.items.entries().map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))().filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x))))().map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))(), (__q) => __q.filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x)))))(), (__q) => __q.map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x)))))(), (__q) => __q);
   }
 
   async keyCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const ks = await ((() => __state.items.keys().map((__k) => (__k as Sku))))();
+    const ks = await __bynkThen(((() => __state.items.keys().map((__k) => (__k as Sku))))(), (__q) => __q);
     return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(ks, 0, (n: number, k: Sku) => n + 1);
   }
 
@@ -184,7 +184,7 @@ export class ByKey {
 
   async qty(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __k = String(sku(k)); return __state.items.has(__k) ? Some(__state.items.get(__k)!) : None; })();
+    return (async () => { const __k = String(sku(k)); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
   }
 
 }
@@ -247,7 +247,7 @@ export class Ledger {
       switch (__r0.tag) {
         case "Ok": {
           const acct = __r0.value;
-          return (__state.balances.put(String(acct), n), undefined);
+          return (async () => { await __state.balances.put(String(acct), n); return undefined; })();
         }
         case "Err": {
           return undefined;
@@ -261,12 +261,12 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly Acct[]> {
     const __state = await this.loadState();
-    return ((() => [...((() => __state.balances.keys().map((__k) => (globalThis.Number(__k) as Acct))))()].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
+    return __bynkThen(((() => __bynkThen(((() => __state.balances.keys().map((__k) => (globalThis.Number(__k) as Acct))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
   }
 
   async sum(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await ((() => __state.balances.entries().map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v }))))();
+    const all = await __bynkThen(((() => __state.balances.entries().map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v }))))(), (__q) => __q);
     return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
   }
 

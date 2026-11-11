@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf } from "../../__bynk_runtime/connection.js";
@@ -89,7 +89,7 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -103,7 +103,7 @@ export class Room {
       switch (held.tag) {
         case "Some": {
           const c = held.value;
-          const __r0 = await (async () => { const __k = String(u); const __new = __connIdOf(c); const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } __state.conns.put(__k, __new); return undefined; })();
+          const __r0 = await (async () => { const __k = String(u); const __new = __connIdOf(c); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
           return undefined;
         }
         case "None": {
@@ -119,7 +119,7 @@ export class Room {
   async leave(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(u); const __cid = __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } __state.conns.remove(__k); } return undefined; })();
+      const __r0 = await (async () => { const __k = String(u); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

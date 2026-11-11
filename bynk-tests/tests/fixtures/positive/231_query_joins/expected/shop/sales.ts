@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -95,17 +95,17 @@ export class Sales {
 
   async report(deps: {}): globalThis.Promise<readonly Joined[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of ((() => __state.orders.values()))()) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __state.lines.values().flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l: Line, o: Order) => ({ customer: o.customer, qty: l.qty }))(__t, __u)); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), async (__q) => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.orders.values()))())) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l: Line, o: Order) => ({ customer: o.customer, qty: l.qty }))(__t, __u)); }); })))(), (__q) => __q);
   }
 
   async withMissing(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of ((() => __state.orders.values()))()) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __state.lines.values().flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: Order) => ((l: Line, mo: Option<Order>) => l.qty)(__t, Some(__u))) : [((l: Line, mo: Option<Order>) => l.qty)(__t, None)]; }); }))().length;
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), async (__q) => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.orders.values()))())) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: Order) => ((l: Line, mo: Option<Order>) => l.qty)(__t, Some(__u))) : [((l: Line, mo: Option<Order>) => l.qty)(__t, None)]; }); })))(), (__q) => __q.length);
   }
 
   async totals(deps: {}): globalThis.Promise<readonly Tot[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __state.lines.values()) { const __k = String(((l: Line) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), (__q) => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __q) { const __k = String(((l: Line) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows); }); })))(), (__q) => __q);
   }
 
 }

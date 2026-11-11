@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -79,17 +79,17 @@ export class Shelf {
 
   async bySize(deps: {}): globalThis.Promise<readonly Bucket[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __state.rows.values()) { const __k = String(((r: readonly number[]) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n: number, rs: readonly (readonly number[])[]) => ({ size: n, rows: rs }))(((r: readonly number[]) => (r).length)(__rows[0]), __rows); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.rows.values(), (__q) => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __q) { const __k = String(((r: readonly number[]) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n: number, rs: readonly (readonly number[])[]) => ({ size: n, rows: rs }))(((r: readonly number[]) => (r).length)(__rows[0]), __rows); }); })))(), (__q) => __q);
   }
 
   async unique(deps: {}): globalThis.Promise<readonly (readonly number[])[]> {
     const __state = await this.loadState();
-    return ((() => (() => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of __state.rows.values()) { const __k = ((r: readonly number[]) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
+    return __bynkThen(((() => __bynkThen(__state.rows.values(), (__q) => (() => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of __q) { const __k = ((r: readonly number[]) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })())))(), (__q) => __q);
   }
 
   async paired(deps: {}): globalThis.Promise<readonly Pair[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of ((() => __state.spare.values()))()) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __state.rows.values().flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l: readonly number[], r: readonly number[]) => ({ left: l, right: r }))(__t, __u)); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.rows.values(), async (__q) => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.spare.values()))())) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l: readonly number[], r: readonly number[]) => ({ left: l, right: r }))(__t, __u)); }); })))(), (__q) => __q);
   }
 
 }

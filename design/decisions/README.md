@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0796](0796-async-ready-store-lowering.md) | **Store collection calls are awaited, and store queries chain through __bynkThen** (v0.544) — Every call the emitted code makes on a store handle is awaited and every store query runs its stages through a helper that serves a value or a promise, so a storage-backed handle can replace the in-memory one without a second change to the lowering | Accepted (v0.544) |
 | [0795](0795-lazy-storage-handles.md) | **Storage-backed collection handles read per entry and stage their writes** (v0.543) — LazyStoreMap, LazyStoreCache, LazyStoreSet and LazyStoreLog implement the in-memory handle interfaces over the layout-2 keys, with insertion-order, indexed and key-range reads, and a Log skew field so windows stay correct | Accepted (v0.543) |
 | [0794](0794-ordered-store-collection-handles.md) | **An agent's store collections are insertion-ordered handles** (v0.542.2) — A store collection is held as a handle backed by a JS `Map`, not a plain object, behind an interface every method of which may be asynchronous | Accepted (v0.542.2) |
 | [0793](0793-multipart-request-bodies.md) | **A `@multipart` handler annotation decodes a multipart body into a record with `File` parts** (v0.542) — The file part type, the caps and buffering, the parser, and the MalformedForm rejection that breaks exhaustive matches | Accepted (v0.542) |
