@@ -55,11 +55,11 @@ There are **806** codes in total.
 | [`bynk.capability.invalid_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`). | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.missing_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability lacks an option its base requires, such as a `Service` instance's `@worker`. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.not_provided` | On the Workers target, a capability a context requires has no provider in it. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
-| `bynk.capability.op_arity` | A capability operation was called with the wrong number of arguments. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.capability.outside_context` | A `capability` was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.op_arity`](/book/reference/capabilities/#declaring-a-capability) | A capability operation was called with the wrong number of arguments. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.outside_context`](/book/reference/capabilities/#declaring-a-capability) | A `capability` was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.provider_agent_cross_context` | On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | `bynk.capability.unknown_base` | A derived capability's base is not a capability the context consumes. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.capability.unknown_operation` | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.unknown_operation`](/book/reference/capabilities/#declaring-a-capability) | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.unknown_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability carries an option its base does not take. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 
 ## Cloudflare
@@ -148,8 +148,8 @@ There are **806** codes in total.
 |---|---|---|---|
 | `bynk.embed.binary_content` | An `embed` names a file with a NUL byte, so it is binary, not text. |  | — |
 | `bynk.embed.duplicate` | An `embed` name is declared more than once in the same unit. |  | — |
-| `bynk.embed.invalid_encoding` | An `embed` names a file that is not valid UTF-8. |  | — |
-| `bynk.embed.missing_file` | An `embed` names a file that is not in the project's `embeds/` folder. |  | — |
+| [`bynk.embed.invalid_encoding`](/book/reference/embeds/#what-the-text-is) | An `embed` names a file that is not valid UTF-8. |  | — |
+| [`bynk.embed.missing_file`](/book/reference/embeds/#declaring-an-embed) | An `embed` names a file that is not in the project's `embeds/` folder. |  | — |
 | `bynk.embed.needs_project` | A single-file build met an `embed` declaration, which needs a project's `embeds/` folder. |  | — |
 | `bynk.embed.outside_context_or_commons` | An `embed` declaration appears outside a context or commons. |  | — |
 | `bynk.embed.outside_embeds_dir` | An `embed` names a file outside the project's `embeds/` folder. |  | — |
@@ -285,15 +285,15 @@ There are **806** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.messages.format_mismatch` | A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales. |  | — |
-| `bynk.messages.incomplete` | A locale is missing a code the reference locale declares. |  | — |
-| `bynk.messages.invalid_locale_tag` | A `messages` block's locale tag is not a valid `LocaleTag` (e.g. `messages "xx"` where `xx` doesn't match the tag pattern). |  | — |
-| `bynk.messages.malformed_icu_syntax` | A message template's ICU placeholder syntax is invalid — unbalanced arm braces, an unknown format keyword, `#` outside a plural arm, a missing mandatory `other` arm, or an explicitly out-of-scope construct (`selectordinal`, `offset:`/`=N`, a CLDR skeleton). |  | — |
-| `bynk.messages.missing_locale_dependency` | A commons declaring `messages` doesn't `uses bynk.locale` and/or `uses bynk.locale.types`, which its generated `render` and the types its signature names need. |  | — |
-| `bynk.messages.missing_reference` | A message bundle has no `@reference` block. |  | — |
+| [`bynk.messages.format_mismatch`](/book/guides/localisation/format-with-icu/#what-the-compiler-checks) | A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales. |  | — |
+| [`bynk.messages.incomplete`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A locale is missing a code the reference locale declares. |  | — |
+| [`bynk.messages.invalid_locale_tag`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A `messages` block's locale tag is not a valid `LocaleTag` (e.g. `messages "xx"` where `xx` doesn't match the tag pattern). |  | — |
+| [`bynk.messages.malformed_icu_syntax`](/book/guides/localisation/format-with-icu/#what-the-compiler-checks) | A message template's ICU placeholder syntax is invalid — unbalanced arm braces, an unknown format keyword, `#` outside a plural arm, a missing mandatory `other` arm, or an explicitly out-of-scope construct (`selectordinal`, `offset:`/`=N`, a CLDR skeleton). |  | — |
+| [`bynk.messages.missing_locale_dependency`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A commons declaring `messages` doesn't `uses bynk.locale` and/or `uses bynk.locale.types`, which its generated `render` and the types its signature names need. |  | — |
+| [`bynk.messages.missing_reference`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A message bundle has no `@reference` block. |  | — |
 | `bynk.messages.multiple_reference` | A message bundle has more than one `@reference` block. |  | — |
-| `bynk.messages.outside_commons` | A `messages` declaration appears outside a commons. |  | — |
-| `bynk.messages.placeholder_mismatch` | A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's. |  | — |
+| [`bynk.messages.outside_commons`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A `messages` declaration appears outside a commons. |  | — |
+| [`bynk.messages.placeholder_mismatch`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's. |  | — |
 
 ## Observation
 
@@ -346,13 +346,13 @@ There are **806** codes in total.
 | `bynk.actor.unreachable_sum_arm` | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
 | `bynk.adapter.consumes_context` | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.adapter.consumes_requires_selection` | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.adapter.disallowed_item` | An `adapter` declared a `service`, `agent`, or other item it may not contain. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
+| [`bynk.adapter.disallowed_item`](/book/reference/adapters/#anatomy) | An `adapter` declared a `service`, `agent`, or other item it may not contain. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | `bynk.adapter.duplicate_binding` | An `adapter` declared more than one `binding` clause. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_duplicate` | An adapter `binding … includes [ … ]` list names one file more than once. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_kind` | An adapter `binding … includes [ … ]` entry is not a `.wasm` file; only WebAssembly modules can be included. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_missing` | An adapter `binding … includes [ … ]` entry names a file that could not be read. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_outside` | An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.adapter.no_binding` | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
+| [`bynk.adapter.no_binding`](/book/reference/adapters/#anatomy) | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | [`bynk.cell.self_reference`](/book/reference/agents/#reading-and-writing-state) | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
@@ -806,15 +806,15 @@ There are **806** codes in total.
 | `bynk.asset.duplicate` | An `asset` name is declared more than once in the same unit. |  | — |
 | `bynk.asset.invalid_at_path` | An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`. |  | — |
 | `bynk.asset.may_shadow_route` | A parameterised HTTP route matches a fixed asset path, so it never sees requests for that path (a warning). |  | Warning |
-| `bynk.asset.missing_file` | An `asset` names a file that is not in the project's `assets/` folder. |  | — |
+| [`bynk.asset.missing_file`](/book/reference/assets/#declaring-an-asset) | An `asset` names a file that is not in the project's `assets/` folder. |  | — |
 | `bynk.asset.needs_project` | A single-file build met an `asset` declaration; assets need a project build. |  | — |
 | `bynk.asset.not_served` | A deployable Bundle build met an `asset`; a Bundle ships no files, so its `.url` would not be served (a warning). |  | Warning |
-| `bynk.asset.outside_assets_dir` | An `asset` path does not name a file in the project's `assets/` folder. |  | — |
+| [`bynk.asset.outside_assets_dir`](/book/reference/assets/#declaring-an-asset) | An `asset` path does not name a file in the project's `assets/` folder. |  | — |
 | `bynk.asset.outside_context_or_commons` | An `asset` declaration appears outside a context or commons. |  | — |
 | `bynk.asset.path_conflict` | Two different asset files would be served at one fixed path by the same Worker. |  | — |
 | `bynk.asset.shadows_route` | A fixed asset path equals a literal HTTP route, which the platform-served asset makes unreachable. |  | — |
 | `bynk.asset.unreadable_file` | An `asset` names a file in the project's `assets/` folder that could not be read. |  | — |
-| `bynk.asset.unsafe_path` | An `asset` path is empty, absolute, or contains a `..` segment. |  | — |
+| [`bynk.asset.unsafe_path`](/book/reference/assets/#declaring-an-asset) | An `asset` path is empty, absolute, or contains a `..` segment. |  | — |
 
 ## Suites and cases
 

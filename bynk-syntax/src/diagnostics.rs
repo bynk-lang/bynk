@@ -268,6 +268,47 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "schemes",
     },
     Explain {
+        code: "bynk.adapter.disallowed_item",
+        blurb: "An adapter wraps foreign code, so it holds only what describes that boundary: \
+                capabilities, the types that cross it, external providers and helper functions. A \
+                `service`, an `agent` or an `actor` has behaviour, state and an address of its own, \
+                and those belong to a context. Move the item into a context that `consumes` the \
+                adapter's capability, and leave the adapter as an interface to the foreign code.",
+        example: "adapter tokens {\n\
+                  binding \"./tokens.binding.ts\"\n\
+                  provides Jwt = JoseJwt\n\
+                  service login {                       // ✗ an adapter may not declare a service\n\
+                    on call(x: Int) -> Effect[Int] { … }\n\
+                  }\n\
+                }\n\
+                \n\
+                adapter tokens {\n\
+                  binding \"./tokens.binding.ts\"\n\
+                  provides Jwt = JoseJwt                // ✓ capabilities and providers only\n\
+                }",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
+        code: "bynk.adapter.no_binding",
+        blurb: "An external provider, `provides Jwt = JoseJwt` with no body, is written in \
+                TypeScript, not Bynk. The adapter's `binding` clause names that TypeScript module, \
+                resolved relative to the adapter's source file, and the compiler reads it to wire \
+                the provider in. The code fires when the clause is missing, and when the named file \
+                cannot be read. Add `binding \"./tokens.binding.ts\"` and create the file, exporting \
+                a class named for the provider.",
+        example: "adapter tokens {                        // ✗ an external provider, but no binding clause\n\
+                  provides Jwt = JoseJwt\n\
+                }\n\
+                \n\
+                adapter tokens {\n\
+                  binding \"./tokens.binding.ts\"         // ✓ names the module that supplies JoseJwt\n\
+                  provides Jwt = JoseJwt\n\
+                }",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
         code: "bynk.agent.construction_arity",
         blurb: "An agent is addressed by its key, so constructing one takes exactly one \
                 argument: the value of its single `key` field. `Counter(\"a\")` names the \
@@ -427,6 +468,42 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "state-initialisation",
     },
     Explain {
+        code: "bynk.asset.missing_file",
+        blurb: "An `asset` is a file the build ships, and the compiler reads it to hash its contents \
+                into the asset's URL, so the file must exist when the project is built. The path is \
+                relative to the project root and must name a regular file; a symbolic link is not \
+                followed. Create the file under `assets/`, or correct the path. A file that exists \
+                but cannot be read is `bynk.asset.unreadable_file`.",
+        example: "asset style = \"assets/board.css\"        // ✗ no such file in the project\n\
+                asset style = \"assets/board.css\"        // ✓ once assets/board.css exists",
+        page: "/book/reference/assets",
+        anchor: "declaring-an-asset",
+    },
+    Explain {
+        code: "bynk.asset.outside_assets_dir",
+        blurb: "An asset is served to anyone who asks, without the Worker running, so it may come \
+                only from the project's `assets/` folder. If any path were allowed, a declaration \
+                could publish `.env` or a source file just by naming it. Move or copy the file into \
+                `assets/` and name it there. A path that is absolute or contains `..` is \
+                `bynk.asset.unsafe_path` instead.",
+        example: "asset style = \"styles/board.css\"        // ✗ not in the assets/ folder\n\
+                asset style = \"assets/board.css\"        // ✓",
+        page: "/book/reference/assets",
+        anchor: "declaring-an-asset",
+    },
+    Explain {
+        code: "bynk.asset.unsafe_path",
+        blurb: "An asset's path must stay inside the project: it may not be absolute and it may not \
+                contain a `..` segment. Assets are public, so a path that starts at the filesystem \
+                root or climbs out of the project could publish a file that was never meant to ship. \
+                Write the path relative to the project root, inside `assets/`. A relative path that \
+                is only outside `assets/` is `bynk.asset.outside_assets_dir`.",
+        example: "asset style = \"assets/../board.css\"     // ✗ a `..` segment\n\
+                asset style = \"assets/board.css\"        // ✓",
+        page: "/book/reference/assets",
+        anchor: "declaring-an-asset",
+    },
+    Explain {
         code: "bynk.boundary.structural_mismatch",
         blurb: "A value that crosses a context boundary, as an argument to a consumed context's \
                 service or as its result, is matched by shape, not by name. So where both \
@@ -520,6 +597,58 @@ pub const EXPLANATIONS: &[Explain] = &[
                   capability OrderEvents = Queue @name(\"order-events\")  // ✓",
         page: "/book/reference/capabilities",
         anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.capability.op_arity",
+        blurb: "A call to a capability operation passes exactly the parameters its declaration \
+                lists, so `Clock.now(1)` against `fn now() -> Effect[Int]` has one argument too \
+                many. Pass the declared number of arguments. If the operation really needs another \
+                parameter, add it to the capability's declaration and to every provider of it.",
+        example: "capability Clock {\n\
+                  fn now() -> Effect[Int]\n\
+                }\n\
+                \n\
+                Clock.now(1)                            // ✗ `now` takes no arguments\n\
+                Clock.now()                             // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.capability.outside_context",
+        blurb: "A capability is a typed interface to the outside world: a context declares it, \
+                provides it and asks for it in `given`, and the compiler wires the provider to the \
+                services that need it. A commons holds only pure declarations, so it cannot declare \
+                one. Move the capability into the context that uses it, or, for one several contexts \
+                share, into a context that exports it.",
+        example: "commons demo\n\
+                \n\
+                capability Logger {                     // ✗ a commons cannot declare a capability\n\
+                  fn log(message: String) -> Effect[()]\n\
+                }\n\
+                \n\
+                context demo\n\
+                \n\
+                capability Logger {                     // ✓ a context can\n\
+                  fn log(message: String) -> Effect[()]\n\
+                }",
+        page: "/book/reference/capabilities",
+        anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.capability.unknown_operation",
+        blurb: "A capability is an interface: its operations are exactly the `fn` signatures in its \
+                declaration, and a provider supplies nothing more. Calling `Clock.nope()` asks for \
+                an operation the capability does not declare, which usually means a misspelt name. \
+                Call one of the declared operations, or add the new operation to the capability and \
+                to each provider of it.",
+        example: "capability Clock {\n\
+                  fn now() -> Effect[Int]\n\
+                }\n\
+                \n\
+                Clock.nope()                            // ✗ `Clock` declares no `nope`\n\
+                Clock.now()                             // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "declaring-a-capability",
     },
     Explain {
         code: "bynk.capability.unknown_option",
@@ -768,6 +897,30 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "bynk build --target workers   # ✗ inbound email is not yet emitted for Workers\n\nbynk build --target bundle    # ✓ builds, and `bynk test` runs the suites",
         page: "/book/reference/inbound-email",
         anchor: "status",
+    },
+    Explain {
+        code: "bynk.embed.invalid_encoding",
+        blurb: "An `embed` becomes a `String`, which is Unicode text, so the file must be valid \
+                UTF-8. A file saved in another encoding, such as Latin-1, holds bytes that are not \
+                UTF-8 and cannot be read as text. Re-save it as UTF-8. A file that holds a NUL byte \
+                is binary and is `bynk.embed.binary_content`; a binary file belongs in `assets/`, as \
+                an `asset`.",
+        example: "embed shell = \"embeds/page.html\"        // ✗ the file is Latin-1, not UTF-8\n\
+                embed shell = \"embeds/page.html\"        // ✓ once the file is saved as UTF-8",
+        page: "/book/reference/embeds",
+        anchor: "what-the-text-is",
+    },
+    Explain {
+        code: "bynk.embed.missing_file",
+        blurb: "An `embed` compiles a file's text into the program as a `String`, so the file must \
+                exist when the project is built, or there is nothing to compile in. The path is \
+                relative to the project root and must name a regular file under `embeds/`; a \
+                symbolic link is not followed. Create the file, or correct the path. A file that \
+                exists but cannot be read is `bynk.embed.unreadable_file`.",
+        example: "embed shell = \"embeds/page.html\"        // ✗ no such file in the project\n\
+                embed shell = \"embeds/page.html\"        // ✓ once embeds/page.html exists",
+        page: "/book/reference/embeds",
+        anchor: "declaring-an-embed",
     },
     Explain {
         code: "bynk.exports.capability_not_provided",
@@ -1201,6 +1354,150 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Row = { id: String, note: Option[Option[String]] }\n\non GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ `Some(None)` and `None` both write `null`\n\ntype Row = { id: String, note: Option[String] }   // ✓",
         page: "/book/reference/types",
         anchor: "plain-json",
+    },
+    Explain {
+        code: "bynk.messages.format_mismatch",
+        blurb: "A placeholder that appears in the reference locale's template and in another \
+                locale's must be formatted the same way in both: plain `{n}`, `plural`, `select`, \
+                `number` or `date`. The caller supplies one kind of value for it, and an interface \
+                cannot sensibly be plural-aware in one language and plain in another. Use the same \
+                kind in every locale. The arms inside a `plural` or `select` may differ. A different \
+                placeholder name is `bynk.messages.placeholder_mismatch`.",
+        example: "messages \"en\" @reference {\n\
+                  \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"\n\
+                }\n\
+                \n\
+                messages \"fr\" {\n\
+                  \"cart.count\" => \"{n} articles\"        // ✗ plain here, plural in the reference\n\
+                  \"cart.count\" => \"{n, plural, one {# article} other {# articles}}\"  // ✓\n\
+                }",
+        page: "/book/guides/localisation/format-with-icu",
+        anchor: "what-the-compiler-checks",
+    },
+    Explain {
+        code: "bynk.messages.incomplete",
+        blurb: "Every locale is held to the reference locale: it must supply each code the reference \
+                declares, so that no locale silently lacks a message the reference has. The \
+                diagnostic is reported once per missing code, at the locale's block. Add the missing \
+                code to the locale. When you add a code to the reference, every other locale must \
+                follow. A code that is present with different placeholders is \
+                `bynk.messages.placeholder_mismatch`.",
+        example: "messages \"en\" @reference {\n\
+                  \"cart.empty\" => \"Your basket is empty.\"\n\
+                  \"cart.greeting\" => \"Hello, {name}!\"\n\
+                }\n\
+                \n\
+                messages \"fr\" {                         // ✗ lacks \"cart.greeting\"\n\
+                  \"cart.empty\" => \"Votre panier est vide.\"\n\
+                  \"cart.greeting\" => \"Bonjour, {name} !\"  // ✓ the code added\n\
+                }",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "adding-a-locale",
+    },
+    Explain {
+        code: "bynk.messages.invalid_locale_tag",
+        blurb: "A `messages` block's tag must be a `LocaleTag`: a well-formed BCP-47 tag in its \
+                canonical casing, such as `en`, `fr`, `pt-BR` or `zh-Hans-CN`. The compiler checks \
+                it because the runtime hands the tag to `Intl`, which throws on a malformed one, and \
+                `render` must never fail. So `pt-br` is refused where `pt-BR` is accepted, and so is \
+                a bare word such as `klingon`. Rewrite the tag in canonical form.",
+        example: "messages \"pt-br\" @reference {           // ✗ a region is upper-case\n\
+                  \"cart.empty\" => \"A sua cesta está vazia.\"\n\
+                }\n\
+                \n\
+                messages \"pt-BR\" @reference {           // ✓\n\
+                  \"cart.empty\" => \"A sua cesta está vazia.\"\n\
+                }",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "adding-a-locale",
+    },
+    Explain {
+        code: "bynk.messages.malformed_icu_syntax",
+        blurb: "A message template is checked as ICU MessageFormat at compile time, because a \
+                malformed one would otherwise fail only when a request rendered it. A `plural` or \
+                `select` must close its arm braces, use a known format keyword, give each arm a \
+                distinct key and have an `other` arm, which is used when no other arm matches; `#` \
+                stands for the number only inside a `plural` arm. Fix the template. Constructs the \
+                compiler does not support, such as `selectordinal` and `offset:`, are reported here \
+                too.",
+        example: "messages \"en\" @reference {\n\
+                  \"cart.count\" => \"{n, plural, one {# item}}\"  // ✗ no `other` arm\n\
+                  \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"  // ✓\n\
+                }",
+        page: "/book/guides/localisation/format-with-icu",
+        anchor: "what-the-compiler-checks",
+    },
+    Explain {
+        code: "bynk.messages.missing_locale_dependency",
+        blurb: "A commons that declares `messages` gets a generated `render`, whose signature names \
+                `LocaleTag` and `Message` and which falls back through `bynk.locale`. So that \
+                commons must `uses` both locale units, as the example shows; add whichever is \
+                missing. The context that uses the bundle should not `uses bynk.locale` itself: both \
+                export a `render`, which is `bynk.uses.name_conflict`.",
+        example: "commons shop.messages\n\
+                \n\
+                messages \"en\" @reference { … }          // ✗ no `uses` of bynk.locale\n\
+                \n\
+                uses bynk.locale                        // ✓ both lines are needed\n\
+                uses bynk.locale.types\n\
+                messages \"en\" @reference { … }",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "the-smallest-bundle",
+    },
+    Explain {
+        code: "bynk.messages.missing_reference",
+        blurb: "A message bundle is a set of locale blocks, and the compiler checks every locale \
+                against one of them, the reference, marked `@reference`. It is also the fallback \
+                when a requested locale is not declared. With no reference there is nothing to check \
+                the others against, so exactly one block per commons must carry the mark. Add \
+                `@reference` to the locale your strings are written in first. Two marked blocks are \
+                `bynk.messages.multiple_reference`.",
+        example: "messages \"en\" {                         // ✗ no block is marked @reference\n\
+                  \"cart.empty\" => \"Your basket is empty.\"\n\
+                }\n\
+                \n\
+                messages \"en\" @reference {              // ✓\n\
+                  \"cart.empty\" => \"Your basket is empty.\"\n\
+                }",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "the-smallest-bundle",
+    },
+    Explain {
+        code: "bynk.messages.outside_commons",
+        blurb: "A `messages` block is pure, stateless data, which is what a `commons` holds. A \
+                context carries services and state and an adapter wraps foreign code, and neither \
+                takes a bundle. Move the bundle into a commons, with the two `uses` lines it needs, \
+                and have the context `uses` that commons.",
+        example: "context shop.web\n\
+                \n\
+                messages \"en\" @reference { … }          // ✗ a context cannot hold a bundle\n\
+                \n\
+                commons shop.messages\n\
+                \n\
+                uses bynk.locale\n\
+                uses bynk.locale.types\n\
+                messages \"en\" @reference { … }          // ✓ a commons can",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "the-smallest-bundle",
+    },
+    Explain {
+        code: "bynk.messages.placeholder_mismatch",
+        blurb: "A caller supplies a message's arguments by name, so every locale's template for a \
+                code must use the same set of `{name}` placeholders as the reference locale's. A \
+                translation that renames, drops or adds one would ask for an argument the caller \
+                never passes. Order is free: translations may reorder placeholders to suit their \
+                grammar. Rename the placeholder to match the reference. A placeholder of the right \
+                name but a different ICU kind is `bynk.messages.format_mismatch`.",
+        example: "messages \"en\" @reference {\n\
+                  \"cart.greeting\" => \"Hello, {name}!\"\n\
+                }\n\
+                \n\
+                messages \"fr\" {\n\
+                  \"cart.greeting\" => \"Bonjour, {prenom} !\"  // ✗ the reference uses {name}\n\
+                  \"cart.greeting\" => \"Bonjour, {name} !\"    // ✓\n\
+                }",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "adding-a-locale",
     },
     Explain {
         code: "bynk.par.invalid_statement",
