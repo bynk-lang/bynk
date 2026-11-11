@@ -2137,7 +2137,7 @@ fn check_by_clause_contracts(
                     )
                     .with_note(
                         "name a declared `actor` or a prelude actor \
-                         (`Visitor`, `Scheduler`, `Producer`, `Caller`)",
+                         (`Visitor`, `Scheduler`, `Producer`, `Sender`, `Caller`)",
                     ),
                 );
             }

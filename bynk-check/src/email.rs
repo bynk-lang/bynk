@@ -64,17 +64,17 @@ pub fn address_problem(address: &str) -> Option<&'static str> {
 }
 
 /// The routing key two claims are compared by: the domain is
-/// case-insensitive, and so is the local part for routing purposes.
+/// case-insensitive, and so is the local part, deliberately: RFC 5321 allows a
+/// case-sensitive local part, but Email Routing matches addresses without
+/// regard to case, so two claims differing only in case would be one rule.
 fn claim_key(address: &str) -> String {
     address.to_ascii_lowercase()
 }
 
 /// Check every `from email` service of one context: address, handler shape and
 /// the one-service-per-address rule.
-pub fn check_email_services(
-    services: &HashMap<String, ServiceDecl>,
-    errors: &mut Vec<CompileError>,
-) {
+pub fn check_email_services(table: &crate::symbols::UnitTable, errors: &mut Vec<CompileError>) {
+    let services = &table.services;
     let mut first_claim: HashMap<String, Span> = HashMap::new();
     // Source order, so "first claimed here" is the earlier declaration.
     let mut ordered: Vec<&ServiceDecl> = services.values().collect();
@@ -127,8 +127,21 @@ pub fn check_email_services(
                 .with_label(messages[0].span, "the service's first `on message` handler"),
             );
         }
+        if messages.is_empty() {
+            errors.push(
+                CompileError::new(
+                    "bynk.email.missing_handler",
+                    service.name.span,
+                    format!(
+                        "the `from email` service `{}` has no `on message` handler — it needs exactly one",
+                        service.name.name
+                    ),
+                )
+                .with_note("write `on message(mail: InboundEmail) -> Effect[EmailVerdict] { … }`"),
+            );
+        }
         for handler in messages {
-            validate_handler(handler, errors);
+            validate_handler(handler, table, errors);
         }
     }
 }
@@ -142,14 +155,52 @@ pub(crate) fn check_service_protocols_and_email(
     tys: &std::sync::Arc<crate::checker::Types>,
 ) {
     crate::context_checks::check_service_protocols(table, types, errors, tys);
-    check_email_services(&table.services, errors);
+    check_email_services(table, errors);
+    check_sender_only_on_email(table, errors);
+}
+
+/// `Sender` yields the envelope sender of inbound mail, so (like `Caller`,
+/// which is `on call`'s) it is admissible only on a `from email` handler,
+/// though its `Internal` scheme is otherwise valid on cron, queue and events.
+fn check_sender_only_on_email(table: &crate::symbols::UnitTable, errors: &mut Vec<CompileError>) {
+    for service in table.services.values() {
+        if matches!(service.protocol, ServiceProtocol::Email { .. }) {
+            continue;
+        }
+        let handler_by = service.handlers.iter().filter_map(|h| h.by_clause.as_ref());
+        for by in handler_by.chain(service.default_by.as_ref()) {
+            let names_sender = by
+                .actors
+                .iter()
+                .any(|a| a.name == "Sender" && !table.actors.contains_key(&a.name));
+            if names_sender {
+                errors.push(
+                    CompileError::new(
+                        "bynk.actor.scheme_not_admissible",
+                        by.span,
+                        "the `Sender` actor is not admissible outside a `from email` service",
+                    )
+                    .with_note(
+                        "`Sender` carries the envelope sender of inbound mail; cron takes `Scheduler`, queue takes `Producer`",
+                    ),
+                );
+            }
+        }
+    }
 }
 
 /// `on message(mail: InboundEmail) -> Effect[EmailVerdict]`.
-fn validate_handler(handler: &Handler, errors: &mut Vec<CompileError>) {
+fn validate_handler(
+    handler: &Handler,
+    table: &crate::symbols::UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    // A type of the same name declared in this context is not the first-party
+    // one the Worker's `email()` entry builds and reads, so it does not count.
+    let first_party = |name: &str| !table.types.contains_key(name);
     match handler.params.as_slice() {
         [p] => {
-            if named(&p.type_ref) != Some(INBOUND_EMAIL) {
+            if named(&p.type_ref) != Some(INBOUND_EMAIL) || !first_party(INBOUND_EMAIL) {
                 errors.push(
                     CompileError::new(
                         "bynk.email.bad_params",
@@ -160,7 +211,7 @@ fn validate_handler(handler: &Handler, errors: &mut Vec<CompileError>) {
                         ),
                     )
                     .with_note(
-                        "import it: `consumes bynk.cloudflare { InboundEmail, EmailVerdict }`",
+                        "import it: `consumes bynk.cloudflare { InboundEmail, EmailVerdict }`; a type of that name declared in this context is not the first-party one",
                     ),
                 );
             }
@@ -179,7 +230,8 @@ fn validate_handler(handler: &Handler, errors: &mut Vec<CompileError>) {
     }
     let verdict = matches!(
         &handler.return_type,
-        TypeRef::Effect(inner, _) if named(inner) == Some(EMAIL_VERDICT)
+        TypeRef::Effect(inner, _)
+            if named(inner) == Some(EMAIL_VERDICT) && first_party(EMAIL_VERDICT)
     );
     if !verdict {
         errors.push(

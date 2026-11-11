@@ -28,7 +28,9 @@ not built yet. This record covers every decision, so slice 2 follows it.
   not a reserved word. Several services may exist, dispatched by the envelope
   recipient: an exact address wins over the catch-all, and a recipient no
   service claims is rejected with a fixed reason (slice 2). Two services
-  claiming the same address, compared case-insensitively, is
+  claiming the same address, compared case-insensitively (the local part too,
+  deliberately: RFC 5321 permits a case-sensitive one, but Email Routing matches
+  without regard to case, so two claims differing only in case are one rule), is
   `bynk.email.duplicate_address`; slice 1 checks this per context, and slice 2's
   routing emission, which sees every context, extends it across contexts. An
   address Email Routing would not match is `bynk.email.invalid_address`.
@@ -46,7 +48,9 @@ not built yet. This record covers every decision, so slice 2 follows it.
   forty sites for no gain. The cost is that a context imports them with
   `consumes bynk.cloudflare { … }`, and that the generated type lists of the
   fixtures that consume `bynk.cloudflare` move. The handler-shape check compares
-  the written type names; the body is then checked against the real declarations.
+  the written type names and refuses a context's own type of the same name, which
+  is not the one the Worker's `email()` entry will build; the body is then
+  checked against the real declarations.
 - **Variant names.** The four verdict names collide with no variant of
   `HttpResult`, `QueueResult` or any `bynk.cloudflare` export (a fixture uses
   them beside `SqlError`'s `Failed`, `EmailError`'s `SendFailed` and
@@ -67,7 +71,8 @@ not built yet. This record covers every decision, so slice 2 follows it.
   with a fixed reason and logged without the body. The message is untrusted
   input and needs a security review (R-16) and a fuzzed boundary. In slice 1
   `text`, `html` and `attachments` are fields a test builds.
-- **E. The actor.** `Sender` is the default actor of a `from email` handler:
+- **E. The actor.** `Sender` is the default actor of a `from email` handler, and admissible only
+  there (`bynk.actor.scheme_not_admissible` elsewhere, as for `Caller`):
   scheme `Internal` (the platform authenticates before the handler runs), and
   the only scheme admitted. Its identity is `SenderIdentity { address,
   dmarc: DmarcVerdict }`, the DMARC verdict read only from the first
@@ -101,9 +106,9 @@ not built yet. This record covers every decision, so slice 2 follows it.
   yet emitted for Workers (#3328 slice 2)") rather than half-working output.
   `bynk test` runs on the bundle target and is unaffected.
 
-**Consequences.** The set has seven members. The checker gains five codes
+**Consequences.** The set has seven members. The checker gains six codes
 (`bynk.email.invalid_address`, `duplicate_address`, `bad_params`,
-`return_not_email_verdict`, `duplicate_handler`) and the slice-1 refusal.
+`return_not_email_verdict`, `duplicate_handler`, `missing_handler`) and the slice-1 refusal.
 `bynk.cloudflare` exports six more types, so the golden type lists of the
 fixtures that consume it move. Editors: `email` completes after `from`,
 the verdict's names complete on `EmailVerdict.`, tree-sitter highlights `email`

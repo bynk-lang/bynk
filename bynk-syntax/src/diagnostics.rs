@@ -478,6 +478,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "addresses",
     },
     Explain {
+        code: "bynk.email.missing_handler",
+        blurb: "A `from email` service claims an address and decides each message sent to it, so it has exactly one `on message` handler. With none, nothing would answer mail to the address. Add the handler, or remove the service.",
+        example: "service support from email(\"support@shop.example\") {\n}   // ✗ nothing decides the mail\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "handler-form",
+    },
+    Explain {
         code: "bynk.email.return_not_email_verdict",
         blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
         example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
@@ -2515,6 +2522,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.email.invalid_address",
         "A `from email(\"…\")` binding is not a recipient address a service can claim.",
+    ),
+    d(
+        "bynk.email.missing_handler",
+        "A `from email` service declares no `on message` handler; it has exactly one.",
     ),
     d(
         "bynk.email.return_not_email_verdict",
