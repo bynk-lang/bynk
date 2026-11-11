@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` may not write a `store` (`bynk.par.store_write_in_closure`), extending the `par` block's rule that store writes stay sequential
-breaking: `parTraverse`, `parTraverseAll` and `parTraverseTry` closures that write an agent's `store` (`put`, `remove`, `update`, `upsert`, `add`, `append`, or `:=`) are now refused with `bynk.par.store_write_in_closure`: run the loop with `forEach` (or `traverseAll`/`traverseTry`), or do the writes after the parallel part.
----
+# 0797 — A `parTraverse`-family closure may not write a store
 
-## ADR: par-closure-store-write
-title: A `parTraverse`-family closure may not write a store
-summary: Track Q4's rule (store writes stay sequential) extends from `par { }` to the closures of `parTraverse`, `parTraverseAll` and `parTraverseTry`
+- **Status:** Accepted (v0.545)
 
 **Context.** A `par { }` block refuses a binding that is a store write (track Q4, `bynk.par.invalid_statement`), but the closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` was not checked. A closure that read a store field and then wrote it (`get` then `put`) lost updates across branches, because every `<-` is an await point and the branches interleave between the two calls: three branches incrementing one key left it at 1. A single-call `update` or `upsert` stayed atomic per key. Proposed in #3298, which refers to #3297. Related: ADR 0109 (the handler is the atomic unit; writes stage in memory), ADR 0171 and ADR 0679 (the `parTraverse` family and its settle-all semantics).
 
