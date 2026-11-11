@@ -115,6 +115,39 @@ impl Explain {
 /// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.agents.non_zeroable_state_field",
+        blurb: "A key that has never been used is initialised automatically the first time it is \
+                touched, so every `store Cell[T]` field needs a starting value. With no \
+                initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a \
+                record of zeroed fields), but only where that zero is a valid value of the type. \
+                An opaque type, a sum other than `Option`, and a refined type that rules its zero \
+                out have none, and the compiler will not invent a value that the type's own \
+                constructors might refuse. Say what \"not set yet\" means: wrap the type in \
+                `Option`, where `None` is the zero, or give the field an initialiser, \
+                `store name: Cell[T] = value`.",
+        example: "type Secret = opaque String\n\n\
+                  store secret: Cell[Secret]                // ✗ no zero value for an opaque type\n\n\
+                  store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
+        page: "/book/reference/agents",
+        anchor: "state-initialisation",
+    },
+    Explain {
+        code: "bynk.capability.instance_only",
+        blurb: "A few platform capabilities (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, \
+                `D1` and `EdgeCache`) are never used as the bare kind. Each stands for a \
+                particular resource of its own: a database, a bucket, a limiter with a limit \
+                and a window, a Worker. So you declare a named instance, \
+                `capability Orders = D1`, which gets a binding and a double of its own, and a \
+                handler asks for that instance in `given` instead of the kind. Two instances of \
+                one kind never share data. Some kinds need options on the instance, such as \
+                `RateLimit @limit(20) @period(60.seconds)`.",
+        example: "on call() -> Effect[()] given D1 {            // ✗ the bare kind names no database\n\n\
+                  capability Orders = D1\n\
+                  on call() -> Effect[()] given Orders {        // ✓ a named instance",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities-capability-x-k",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -185,6 +218,22 @@ pub const EXPLANATIONS: &[Explain] = &[
                   provides Greeter = Polite given Logger { … }   // ✓ matches the declared capability",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.held.consume_on_borrow",
+        blurb: "A held value such as a `Connection[F]` has exactly one owner, and the owner must \
+                dispose of it by storing, closing or handing it on. A closure that visits each \
+                stored connection (`forEach`, `parTraverse` and their variants) is only lent \
+                each one: it may `send`, which leaves the connection owned, but `close` or any \
+                transfer would be an owner's act performed on a value the closure does not own. A \
+                match guard borrows in the same \
+                way, because it runs before its arm is chosen. To close connections, remove \
+                them from the store, which closes them, in the owner's code and not in the \
+                closure.",
+        example: "conns.forEach((c: Connection[ServerFrame]) => c.close())                          // ✗ `c` is borrowed\n\n\
+                  conns.forEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: \"closing\" }))   // ✓ `send` does not consume",
+        page: "/book/reference/websocket",
+        anchor: "sending-and-broadcasting",
     },
     Explain {
         code: "bynk.http.error_status_position",
@@ -865,7 +914,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.invalid_option",
-        "A derived capability's option is not one string literal, is given twice, or (`@worker`) is not a Worker name outside the project.",
+        "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`).",
         &["capability_decl"],
     ),
     dg(
