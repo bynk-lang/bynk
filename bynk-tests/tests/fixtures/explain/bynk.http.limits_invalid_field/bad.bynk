@@ -1,0 +1,11 @@
+context api
+
+type Note = { text: String }
+
+service api from http {
+    limits { maxBody: "1MB" }
+
+    on POST("/notes") (body: Note) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok(body.text)
+    }
+}

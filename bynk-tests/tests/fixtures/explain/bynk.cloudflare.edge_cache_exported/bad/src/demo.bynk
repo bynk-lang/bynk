@@ -1,0 +1,17 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+exports capability { Takedown }
+
+capability Edge = EdgeCache
+
+capability Takedown {
+    fn take(path: String) -> Effect[Bool]
+}
+
+provides Takedown = Purging given Edge {
+    fn take(path: String) -> Effect[Bool] {
+        Edge.purge([path])
+    }
+}

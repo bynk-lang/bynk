@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.557.1** | `bynk explain` covers twenty-two more codes under the http and cloudflare prefixes |
 | **v0.557.0** | A record field may carry `@name("…")` before it, naming the key the field has on a request where that is not an identifier; this slice adds the syntax and its checks, and the request readers follow (#3343, slice 1) |
 | **v0.556.0** | An experimental `Postgres` instance kind in `bynk.cloudflare` reaches an existing Postgres database through Hyperdrive over postgres.js, with `all`, `first` and `run`, typed `PgValue` parameters and `PgError` outcomes |
 | **v0.555.1** | `bynk explain` explains twenty more codes under `contract`, `fixture`, `observe`, `property`, `stub`, `suite` and `test` (Refs #3163) |
