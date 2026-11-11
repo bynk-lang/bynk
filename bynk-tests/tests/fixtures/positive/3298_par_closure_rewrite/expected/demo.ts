@@ -6,7 +6,7 @@ import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -121,8 +121,8 @@ export class Tally {
   async incrementSequentially(x: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.counts.put(String("k"), 0), undefined);
-      const __r1 = await (async (__xs: readonly number[]) => { for (const __x of __xs) { await (async (i: number) => (() => { const __k = String("k"); if (!__state.counts.has(__k)) { throw new globalThis.Error("Map.update: key absent"); } __state.counts.put(__k, ((v: number) => v + 1)(__state.counts.get(__k)!)); return undefined; })())(__x); } })([1, 2, 3]);
+      const __r0 = await (async () => { await __state.counts.put(String("k"), 0); return undefined; })();
+      const __r1 = await (async (__xs: readonly number[]) => { for (const __x of __xs) { await (async (i: number) => (async () => { const __k = String("k"); return __bynkThen(__state.counts.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.counts.get(__k), (__v) => __bynkThen(__state.counts.put(__k, ((v: number) => v + 1)(__v!)), () => undefined)); }); })())(__x); } })([1, 2, 3]);
       return undefined;
     })();
     await this.commitState(__state);
@@ -132,13 +132,13 @@ export class Tally {
   async readConcurrently(x: number, deps: {}): globalThis.Promise<readonly number[]> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.counts.put(String("k"), 7), undefined);
+      const __r0 = await (async () => { await __state.counts.put(String("k"), 7); return undefined; })();
       const seen = await (async (__xs: readonly number[]) => await __bynkSettleAll(__xs.map((__x: number) => () => (async (i: number) => {
-    const o = await (() => { const __k = String("k"); return __state.counts.has(__k) ? Some(__state.counts.get(__k)!) : None; })();
+    const o = await (async () => { const __k = String("k"); return __bynkThen(__state.counts.has(__k), (__h) => __h ? __bynkThen(__state.counts.get(__k), (__v) => Some(__v!)) : None); })();
     const r: Result<number, string> = Ok(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(o, 0));
     return r;
   })(__x))))([1, 2]);
-      const __r1 = await (async () => { await __bynkSettleAll(((() => __state.counts.values()))().map((__x) => () => (async (v: number) => __makeHits("h").bump(v, deps))(__x))); })();
+      const __r1 = await __bynkThen(((() => __state.counts.values()))(), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (v: number) => __makeHits("h").bump(v, deps))(__x))); })());
       return [];
     })();
     await this.commitState(__state);
@@ -153,7 +153,7 @@ export class Tally {
 
   async read(x: number, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const o = await (() => { const __k = String("k"); return __state.counts.has(__k) ? Some(__state.counts.get(__k)!) : None; })();
+    const o = await (async () => { const __k = String("k"); return __bynkThen(__state.counts.has(__k), (__h) => __h ? __bynkThen(__state.counts.get(__k), (__v) => Some(__v!)) : None); })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(o, -1);
   }
 
