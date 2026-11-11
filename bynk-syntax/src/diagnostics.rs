@@ -1731,7 +1731,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "A case is identified by its description in the runner's output and \
                 in failure reports, so each description must be unique across the \
                 suites that test one unit. Two cases with the same description \
-                cannot be told apart. Rename one; the error points at the first.",
+                cannot be told apart. Rename one; the error is on the repeat, with a label at the first.",
         example: "// tests/ledger.test.bynk\n\
                   case \"an entry\" { … }\n\
                   case \"an entry\" { … }          // ✗ same description\n\
