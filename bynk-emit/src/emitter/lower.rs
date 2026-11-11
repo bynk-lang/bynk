@@ -2280,306 +2280,17 @@ fn lower_method_call(
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Lowered {
-    let tys = cx.commons().tys();
     let mut pre = Pre::new();
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(s);
     }
-    // v0.9: explicit `HttpResult.Variant(args)` construction. The
-    // checker has already recorded the expression's type — emit it
-    // directly through the runtime's HttpResult namespace.
-    //
-    // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` (the sink
-    // #1251 added) instead of `id.name == HTTP_RESULT` — closes the last
-    // real instance of R6.5's name-matched-receiver defect class this
-    // session's own P6.21 slices left open, since Decision C originally
-    // excluded this shape for lack of a `Callee` to read.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
-        )
-    {
-        cx.note_http_result();
-        let args_lowered = lower_http_variant_args(&method.name, args, &mut pre, cx);
-        return pre.finish(format!(
-            "HttpResult.{}({})",
-            method.name,
-            args_lowered.join(", ")
-        ));
-    }
-    // v0.20b: built-in collection statics — `List.empty()` /
-    // `Map.empty()`. The checker recorded the instantiated type;
-    // emit it explicitly so the TS value doesn't infer as `never[]`
-    // / `Map<unknown, unknown>` outside contextually-typed positions.
-    //
-    // P6.21 (partial, continued — the earlier #1247 attempt reverted this
-    // exact conversion after a zero-diff bless caught it silently dropping
-    // `Instant`/`Bytes` statics inside `.test.bynk` bodies; root-caused and
-    // fixed separately — `typecheck_case_body` now returns its own
-    // `callees` map instead of discarding it, so `Callee::Intrinsic` is
-    // populated for test-case bodies too): reads `Callee::Intrinsic` (P6.0)
-    // instead of `id.name == LIST || id.name == MAP` plus
-    // `!cx.commons().types.contains_key` — the checker's own
-    // `check_method_call` already resolves the identical shadowing question
-    // (`ctx.lookup(...).is_none() && !ctx.input.types.contains_key(...)`,
-    // `calls.rs`) before ever recording this `Callee`, closing a real gap
-    // the emitter's own guard left open: no `cx.is_local(&id.name)` check,
-    // unlike every other branch this session already converted.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
-        )
-        && args.is_empty()
-    {
-        match cx.commons().expr_ty(e.id).as_deref() {
-            // K6a (#2596).
-            Some(Ty::Set(t)) => {
-                return pre.finish(format!("new globalThis.Set<{}>()", ts_ty(*t, tys)));
-            }
-            Some(Ty::List(t)) => {
-                return pre.finish(format!(
-                    "([] as readonly {}[])",
-                    ts_array_elem(&ts_ty(*t, tys))
-                ));
-            }
-            Some(Ty::Map(k, v)) => {
-                return pre.finish(format!(
-                    "new globalThis.Map<{}, {}>()",
-                    ts_ty(*k, tys),
-                    ts_ty(*v, tys)
-                ));
-            }
-            _ => {}
-        }
-    }
-    // K6a (#2596): `Set.of(xs)` — a set of the list's elements; the first
-    // occurrence keeps its position.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
-        )
-        && args.len() == 1
-        && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
-    {
-        let t = *t;
-        let xs = pre.lower(&args[0], cx);
-        if !key_is_plain(t, tys) {
-            cx.runtime_use().note_key("__bynkSetOf");
-            return pre.finish(format!("__bynkSetOf<{}>({xs})", ts_ty(t, tys)));
-        }
-        return pre.finish(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
-    }
-    // v0.22b: the typed JSON codec (ADR 0045).
-    if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
+    // Intrinsic statics: scalar and collection constructors, then runtime values (#3167).
+    if let Some(s) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(s);
     }
-    // K6b (#2598): `Float.pi()` and `Float.e()`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
-        )
-        && args.is_empty()
-    {
-        let constant = if method.name == "pi" { "PI" } else { "E" };
-        return pre.finish(format!("globalThis.Math.{constant}"));
-    }
-    // v0.22a: the numeric parse statics — `Int.parse(s)` /
-    // `Float.parse(s)` (ADR 0048). #1657 (runtime-semantics track §3.4): the
-    // whole string must match a strict decimal grammar before `Number(…)` sees
-    // it. `Number` alone accepts surrounding whitespace, `0x`/`0b`/`0o` prefixes
-    // and (for `Int`) exponents, so `" 7 "`, `"0x10"` and `"1e3"` parsed. `Int`
-    // is `[+-]?digits`, then a safe integer (`+ 0` turns `-0` into `0`); `Float`
-    // is a decimal with an optional exponent, then finite (the 0040 posture).
-    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
-    // `id.name == INT || id.name == FLOAT` — see the `List`/`Map` branch
-    // above. `Int`/`Float` are lexically reserved (the parser only admits
-    // them here followed by `.`), so unlike `List`/`Map` this specific guard
-    // never had a real shadowing gap to close — converted for consistency
-    // with every other static-constructor branch in this function.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
-        )
-        && args.len() == 1
-    {
-        let s = pre.lower(&args[0], cx);
-        let (grammar, value, guard) = if id.name == INT {
-            (
-                "/^[+-]?[0-9]+$/",
-                "globalThis.Number(__s) + 0",
-                "globalThis.Number.isSafeInteger(__n)",
-            )
-        } else {
-            (
-                "/^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$/",
-                "globalThis.Number(__s)",
-                "globalThis.Number.isFinite(__n)",
-            )
-        };
-        return pre.finish(format!(
-            "((__s: string) => {{ if (!{grammar}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({s})"
-        ));
-    }
-    // v0.86 (ADR 0112): `Duration.millis(n)` — the runtime `Int`→`Duration`
-    // constructor. A `Duration` lowers to its milliseconds, so this is the
-    // identity on the argument.
-    //
-    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
-    // `id.name == DURATION` — see the `List`/`Map` branch above for why this
-    // closes a real shadowing gap the bare name check left open (the checker
-    // itself guards `ctx.lookup(DURATION).is_none()` before ever recording
-    // this `Callee`; the same applies to `Instant`/`Bytes`/`Stream` below).
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
-        )
-        && args.len() == 1
-    {
-        let inner = pre.lower(&args[0], cx);
-        return pre.finish(inner);
-    }
-    // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
-        )
-        && args.len() == 1
-    {
-        let s = pre.lower(&args[0], cx);
-        cx.note_time_ops();
-        return pre.finish(format!("__bynkInstantFromIso({s})"));
-    }
-    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
-    // its epoch milliseconds, so this is the identity on the argument.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
-        )
-        && args.len() == 1
-    {
-        let inner = pre.lower(&args[0], cx);
-        return pre.finish(inner);
-    }
-    // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
-    // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
-    // decode returning `Option` (`None` on invalid base64); `empty` is the
-    // zero octet sequence.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == BYTES)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("fromUtf8", 1) => {
-                let s = pre.lower(&args[0], cx);
-                return pre.finish(format!("new globalThis.TextEncoder().encode({s})"));
-            }
-            ("fromBase64", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes();
-                return pre.finish(format!("__bynkBytesFromBase64({s})"));
-            }
-            // #2016: the guarded hex and base64url decodes, `None` on bad input.
-            ("fromHex", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes_ops();
-                return pre.finish(format!("__bynkBytesFromHex({s})"));
-            }
-            ("fromBase64Url", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes_ops();
-                return pre.finish(format!("__bynkBytesFromBase64Url({s})"));
-            }
-            ("empty", 0) => {
-                return pre.finish("new globalThis.Uint8Array()".to_string());
-            }
-            _ => {}
-        }
-    }
-    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("parse", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_decimal("__bynkDecimalParse");
-                return pre.finish(format!("__bynkDecimalParse({s})"));
-            }
-            ("fromInt", 1) => {
-                let n = pre.lower(&args[0], cx);
-                cx.note_decimal("__bynkDecimalFromInt");
-                return pre.finish(format!("__bynkDecimalFromInt({n})"));
-            }
-            _ => {}
-        }
-    }
-    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        cx.note_token_claims();
-        return pre.finish(format!("__tokenClaims({xs})"));
-    }
-    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
-    // the runtime's headers view from `"name: value"` lines.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_headers();
-                return pre.finish(format!("__requestHeaders({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_headers();
-                return pre.finish("__requestHeaders([])".to_string());
-            }
-            _ => {}
-        }
-    }
-    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
-    // runtime's query view from `"name=value"` pairs.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_query();
-                return pre.finish(format!("__requestQuery({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_query();
-                return pre.finish("__requestQuery([])".to_string());
-            }
-            _ => {}
-        }
-    }
-    // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
-    // lowers to a host async iterable; `of` wraps a list as an async generator.
-    // Emitted inline (no runtime import), like the collection kernels.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
-        )
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        return pre.finish(format!(
-            "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
-        ));
+    if let Some(s) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
     // #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     // a derived `D1`. The checker wrote the statement (`SELECT` + the column
@@ -3434,6 +3145,328 @@ fn lower_method_call(
     // Instance call: UFCS lowering with the receiver as first arg.
     let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
     pre.finish(call)
+}
+
+/// Lower the built-in scalar and collection statics (`HttpResult.*`, `List.empty`, `Map.empty`, `Set.empty`/`of`, the JSON codec, `Float.pi`/`e`, the numeric parses, `Duration.millis`, `Instant.from*`), or `None` when the call is none of them. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_scalar_static_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.9: explicit `HttpResult.Variant(args)` construction. The
+    // checker has already recorded the expression's type — emit it
+    // directly through the runtime's HttpResult namespace.
+    //
+    // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` (the sink
+    // #1251 added) instead of `id.name == HTTP_RESULT` — closes the last
+    // real instance of R6.5's name-matched-receiver defect class this
+    // session's own P6.21 slices left open, since Decision C originally
+    // excluded this shape for lack of a `Callee` to read.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
+        )
+    {
+        cx.note_http_result();
+        let args_lowered = lower_http_variant_args(&method.name, args, pre, cx);
+        return Some(format!(
+            "HttpResult.{}({})",
+            method.name,
+            args_lowered.join(", ")
+        ));
+    }
+    // v0.20b: built-in collection statics — `List.empty()` /
+    // `Map.empty()`. The checker recorded the instantiated type;
+    // emit it explicitly so the TS value doesn't infer as `never[]`
+    // / `Map<unknown, unknown>` outside contextually-typed positions.
+    //
+    // P6.21 (partial, continued — the earlier #1247 attempt reverted this
+    // exact conversion after a zero-diff bless caught it silently dropping
+    // `Instant`/`Bytes` statics inside `.test.bynk` bodies; root-caused and
+    // fixed separately — `typecheck_case_body` now returns its own
+    // `callees` map instead of discarding it, so `Callee::Intrinsic` is
+    // populated for test-case bodies too): reads `Callee::Intrinsic` (P6.0)
+    // instead of `id.name == LIST || id.name == MAP` plus
+    // `!cx.commons().types.contains_key` — the checker's own
+    // `check_method_call` already resolves the identical shadowing question
+    // (`ctx.lookup(...).is_none() && !ctx.input.types.contains_key(...)`,
+    // `calls.rs`) before ever recording this `Callee`, closing a real gap
+    // the emitter's own guard left open: no `cx.is_local(&id.name)` check,
+    // unlike every other branch this session already converted.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
+        )
+        && args.is_empty()
+    {
+        match cx.commons().expr_ty(e.id).as_deref() {
+            // K6a (#2596).
+            Some(Ty::Set(t)) => {
+                return Some(format!("new globalThis.Set<{}>()", ts_ty(*t, tys)));
+            }
+            Some(Ty::List(t)) => {
+                return Some(format!(
+                    "([] as readonly {}[])",
+                    ts_array_elem(&ts_ty(*t, tys))
+                ));
+            }
+            Some(Ty::Map(k, v)) => {
+                return Some(format!(
+                    "new globalThis.Map<{}, {}>()",
+                    ts_ty(*k, tys),
+                    ts_ty(*v, tys)
+                ));
+            }
+            _ => {}
+        }
+    }
+    // K6a (#2596): `Set.of(xs)` — a set of the list's elements; the first
+    // occurrence keeps its position.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
+        )
+        && args.len() == 1
+        && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
+    {
+        let t = *t;
+        let xs = pre.lower(&args[0], cx);
+        if !key_is_plain(t, tys) {
+            cx.runtime_use().note_key("__bynkSetOf");
+            return Some(format!("__bynkSetOf<{}>({xs})", ts_ty(t, tys)));
+        }
+        return Some(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
+    }
+    // v0.22b: the typed JSON codec (ADR 0045).
+    if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
+        return Some(s);
+    }
+    // K6b (#2598): `Float.pi()` and `Float.e()`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
+        )
+        && args.is_empty()
+    {
+        let constant = if method.name == "pi" { "PI" } else { "E" };
+        return Some(format!("globalThis.Math.{constant}"));
+    }
+    // v0.22a: the numeric parse statics — `Int.parse(s)` /
+    // `Float.parse(s)` (ADR 0048). #1657 (runtime-semantics track §3.4): the
+    // whole string must match a strict decimal grammar before `Number(…)` sees
+    // it. `Number` alone accepts surrounding whitespace, `0x`/`0b`/`0o` prefixes
+    // and (for `Int`) exponents, so `" 7 "`, `"0x10"` and `"1e3"` parsed. `Int`
+    // is `[+-]?digits`, then a safe integer (`+ 0` turns `-0` into `0`); `Float`
+    // is a decimal with an optional exponent, then finite (the 0040 posture).
+    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
+    // `id.name == INT || id.name == FLOAT` — see the `List`/`Map` branch
+    // above. `Int`/`Float` are lexically reserved (the parser only admits
+    // them here followed by `.`), so unlike `List`/`Map` this specific guard
+    // never had a real shadowing gap to close — converted for consistency
+    // with every other static-constructor branch in this function.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
+        )
+        && args.len() == 1
+    {
+        let s = pre.lower(&args[0], cx);
+        let (grammar, value, guard) = if id.name == INT {
+            (
+                "/^[+-]?[0-9]+$/",
+                "globalThis.Number(__s) + 0",
+                "globalThis.Number.isSafeInteger(__n)",
+            )
+        } else {
+            (
+                "/^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$/",
+                "globalThis.Number(__s)",
+                "globalThis.Number.isFinite(__n)",
+            )
+        };
+        return Some(format!(
+            "((__s: string) => {{ if (!{grammar}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({s})"
+        ));
+    }
+    // v0.86 (ADR 0112): `Duration.millis(n)` — the runtime `Int`→`Duration`
+    // constructor. A `Duration` lowers to its milliseconds, so this is the
+    // identity on the argument.
+    //
+    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
+    // `id.name == DURATION` — see the `List`/`Map` branch above for why this
+    // closes a real shadowing gap the bare name check left open (the checker
+    // itself guards `ctx.lookup(DURATION).is_none()` before ever recording
+    // this `Callee`; the same applies to `Instant`/`Bytes`/`Stream` below).
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
+        )
+        && args.len() == 1
+    {
+        let inner = pre.lower(&args[0], cx);
+        return Some(inner);
+    }
+    // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
+        )
+        && args.len() == 1
+    {
+        let s = pre.lower(&args[0], cx);
+        cx.note_time_ops();
+        return Some(format!("__bynkInstantFromIso({s})"));
+    }
+    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
+    // its epoch milliseconds, so this is the identity on the argument.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
+        )
+        && args.len() == 1
+    {
+        let inner = pre.lower(&args[0], cx);
+        return Some(inner);
+    }
+    None
+}
+
+/// Lower the statics that build a runtime value (`Bytes.*`, `Decimal.*`, `TokenClaims.of`, `RequestHeaders.*`, `RequestQuery.*`, `Stream.of`), or `None` when the call is none of them. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_runtime_value_static_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
+    // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
+    // decode returning `Option` (`None` on invalid base64); `empty` is the
+    // zero octet sequence.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == BYTES)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("fromUtf8", 1) => {
+                let s = pre.lower(&args[0], cx);
+                return Some(format!("new globalThis.TextEncoder().encode({s})"));
+            }
+            ("fromBase64", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_bytes();
+                return Some(format!("__bynkBytesFromBase64({s})"));
+            }
+            // #2016: the guarded hex and base64url decodes, `None` on bad input.
+            ("fromHex", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_bytes_ops();
+                return Some(format!("__bynkBytesFromHex({s})"));
+            }
+            ("fromBase64Url", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_bytes_ops();
+                return Some(format!("__bynkBytesFromBase64Url({s})"));
+            }
+            ("empty", 0) => {
+                return Some("new globalThis.Uint8Array()".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("parse", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_decimal("__bynkDecimalParse");
+                return Some(format!("__bynkDecimalParse({s})"));
+            }
+            ("fromInt", 1) => {
+                let n = pre.lower(&args[0], cx);
+                cx.note_decimal("__bynkDecimalFromInt");
+                return Some(format!("__bynkDecimalFromInt({n})"));
+            }
+            _ => {}
+        }
+    }
+    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
+        && args.len() == 1
+    {
+        let xs = pre.lower(&args[0], cx);
+        cx.note_token_claims();
+        return Some(format!("__tokenClaims({xs})"));
+    }
+    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
+    // the runtime's headers view from `"name: value"` lines.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_headers();
+                return Some(format!("__requestHeaders({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_headers();
+                return Some("__requestHeaders([])".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
+    // runtime's query view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_query();
+                return Some(format!("__requestQuery({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_query();
+                return Some("__requestQuery([])".to_string());
+            }
+            _ => {}
+        }
+    }
+    // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
+    // lowers to a host async iterable; `of` wraps a list as an async generator.
+    // Emitted inline (no runtime import), like the collection kernels.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
+        )
+        && args.len() == 1
+    {
+        let xs = pre.lower(&args[0], cx);
+        return Some(format!(
+            "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
+        ));
+    }
+    None
 }
 
 /// The persisted-store receivers of a method call: a `store` field of the
