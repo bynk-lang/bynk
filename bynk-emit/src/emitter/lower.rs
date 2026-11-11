@@ -3714,11 +3714,11 @@ fn lower_store_held_map_call(
             // be dropped unclosed. Re-putting the same connection under its own
             // key (the same connection id) leaves it open.
             "put" => format!(
-                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = {m}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {m}.put(__k, __new); return undefined; }})()",
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = await {m}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} await {m}.put(__k, __new); return undefined; }})()",
                 a[0], a[1]
             ),
             "remove" => format!(
-                "(async () => {{ const __k = String({0}); const __cid = {m}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} {m}.remove(__k); }} return undefined; }})()",
+                "(async () => {{ const __k = String({0}); const __cid = await {m}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} await {m}.remove(__k); }} return undefined; }})()",
                 a[0]
             ),
             "contains" => format!("{m}.has(String({}))", a[0]),
@@ -3830,11 +3830,16 @@ fn lower_store_map_call(
                     .is_some_and(|v| v.starts_with("Connection<")) =>
             {
                 format!(
-                    "(async () => {{ const __k = {0}; const __new = {1}; const __old = {m}.get(__k); if (__old !== undefined && __old !== __new) {{ await __old.close(); }} {m}.put(__k, __new); return undefined; }})()",
+                    "(async () => {{ const __k = {0}; const __new = {1}; const __old = await {m}.get(__k); if (__old !== undefined && __old !== __new) {{ await __old.close(); }} await {m}.put(__k, __new); return undefined; }})()",
                     k, a[1]
                 )
             }
-            "put" => format!("({m}.put({}, {}), undefined)", k, a[1]),
+            // #3189: every handle call is awaited, so a handle backed by storage serves the
+            // same lowering as the in-memory one (which returns its values at once).
+            "put" => format!(
+                "(async () => {{ await {m}.put({}, {}); return undefined; }})()",
+                k, a[1]
+            ),
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
             // ordinary in-memory map of `TestConnection`s (the Workers build
             // persists connection ids instead and takes `lower_store_held_map_call`), so `remove` must still honour the §2.9 contract that it
@@ -3846,23 +3851,26 @@ fn lower_store_map_call(
                     .is_some_and(|v| v.starts_with("Connection<")) =>
             {
                 format!(
-                    "(async () => {{ const __k = {0}; const __o = {m}.get(__k); if (__o !== undefined) {{ await __o.close(); {m}.remove(__k); }} return undefined; }})()",
+                    "(async () => {{ const __k = {0}; const __o = await {m}.get(__k); if (__o !== undefined) {{ await __o.close(); await {m}.remove(__k); }} return undefined; }})()",
                     k
                 )
             }
-            "remove" => format!("({m}.remove({}), undefined)", k),
+            "remove" => format!(
+                "(async () => {{ await {m}.remove({}); return undefined; }})()",
+                k
+            ),
             "contains" => format!("{m}.has({})", k),
             "size" => format!("{m}.size()"),
             "get" => format!(
-                "(() => {{ const __k = {0}; return {m}.has(__k) ? Some({m}.get(__k)!) : None; }})()",
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __h ? __bynkThen({m}.get(__k), (__v) => Some(__v!)) : None); }})()",
                 k
             ),
             "update" => format!(
-                "(() => {{ const __k = {0}; if (!{m}.has(__k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} {m}.put(__k, ({1})({m}.get(__k)!)); return undefined; }})()",
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => {{ if (!__h) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} return __bynkThen({m}.get(__k), (__v) => __bynkThen({m}.put(__k, ({1})(__v!)), () => undefined)); }}); }})()",
                 k, a[1]
             ),
             "upsert" => format!(
-                "(() => {{ const __k = {0}; {m}.put(__k, ({2})({m}.has(__k) ? {m}.get(__k)! : ({1}))); return undefined; }})()",
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __bynkThen(__h ? {m}.get(__k) : ({1}), (__v) => __bynkThen({m}.put(__k, ({2})(__v!)), () => undefined))); }})()",
                 k, a[1], a[2]
             ),
             // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
@@ -3936,8 +3944,14 @@ fn lower_store_set_call(
             .map(|x| format!("String({x})"))
             .unwrap_or_default();
         return Some(match method.name.as_str() {
-            "add" => format!("({s}.add({}), undefined)", k),
-            "remove" => format!("({s}.remove({}), undefined)", k),
+            "add" => format!(
+                "(async () => {{ await {s}.add({}); return undefined; }})()",
+                k
+            ),
+            "remove" => format!(
+                "(async () => {{ await {s}.remove({}); return undefined; }})()",
+                k
+            ),
             "contains" => format!("{s}.has({})", k),
             "size" => format!("{s}.size()"),
             other => format!("(/* unsupported Set op {other} */ undefined)"),
@@ -3984,28 +3998,33 @@ fn lower_store_cache_call(
             .map(|x| format!("String({x})"))
             .unwrap_or_default();
         return Some(match method.name.as_str() {
-            "remove" => format!("({c}.remove({}), undefined)", k),
+            "remove" => format!(
+                "(async () => {{ await {c}.remove({}); return undefined; }})()",
+                k
+            ),
             "put" => format!(
-                "(async () => {{ const __now = {now}; {c}.put({0}, {{ v: {1}, exp: __now + {ttl} }}); return undefined; }})()",
+                "(async () => {{ const __now = {now}; await {c}.put({0}, {{ v: {1}, exp: __now + {ttl} }}); return undefined; }})()",
                 k, a[1]
             ),
             "get" => format!(
-                "(async () => {{ const __now = {now}; const __e = {c}.get({0}); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; }})()",
+                "(async () => {{ const __now = {now}; const __e = await {c}.get({0}); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; }})()",
                 k
             ),
             "contains" => format!(
-                "(async () => {{ const __now = {now}; const __e = {c}.get({0}); return __e !== undefined && __e.exp > __now; }})()",
+                "(async () => {{ const __now = {now}; const __e = await {c}.get({0}); return __e !== undefined && __e.exp > __now; }})()",
                 k
             ),
             "size" => {
-                format!("(async () => {{ const __now = {now}; return {c}.liveSize(__now); }})()")
+                format!(
+                    "(async () => {{ const __now = {now}; return await {c}.liveSize(__now); }})()"
+                )
             }
             "update" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __e = {c}.get(__k); if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} {c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}); return undefined; }})()",
+                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} return __bynkThen({c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}), () => undefined); }}); }})()",
                 k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __e = {c}.get(__k); const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); {c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}); return undefined; }})()",
+                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); return __bynkThen({c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}), () => undefined); }}); }})()",
                 k, a[1], a[2]
             ),
             other => format!("(/* unsupported Cache op {other} */ undefined)"),
@@ -4048,11 +4067,11 @@ fn lower_store_log_call(
         if method.name == "append" {
             let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
             let prune = match retain {
-                Some(ms) => format!(" {g}.prune(__now - {ms});"),
+                Some(ms) => format!(" await {g}.prune(__now - {ms});"),
                 None => String::new(),
             };
             return Some(format!(
-                "(async () => {{ const __now = {now}; {g}.append({0}, __now);{prune} return undefined; }})()",
+                "(async () => {{ const __now = {now}; await {g}.append({0}, __now);{prune} return undefined; }})()",
                 a[0]
             ));
         }
@@ -5911,13 +5930,22 @@ fn lower_query_method(
     let keyed = *keyed;
     let elem_el = ts_array_elem(elem_ts);
     let other_elem_el = ts_array_elem(other_elem_ts);
-    let thunk = |body: String| format!("(() => {body})");
+    // #3189: the source may be a promise (a handle backed by storage reads asynchronously), so
+    // every operation runs on it through `__bynkThen`, as `__q`. An in-memory handle's values
+    // arrive at once and the callback runs at once.
+    let orig = source;
+    let source = "__q".to_string();
+    let thunk = |body: String| format!("(() => __bynkThen({orig}, (__q) => {body}))");
+    let thunk_async = |body: String| format!("(() => __bynkThen({orig}, async (__q) => {body}))");
+    let terminal = |expr: String| format!("__bynkThen({orig}, (__q) => {expr})");
     Some(match (op, a) {
         // -- builders → a deferred thunk over the narrowed source --
         (QueryOp::Filter, [p]) => thunk(format!("{source}.filter((__x) => ({p})(__x))")),
         (QueryOp::Map, [f]) => thunk(format!("{source}.map((__x) => ({f})(__x))")),
         // storage flatMap: the fn returns a `Query` (a thunk) — invoke each.
-        (QueryOp::FlatMap, [f]) => thunk(format!("{source}.flatMap((__x) => ({f})(__x)())")),
+        (QueryOp::FlatMap, [f]) => thunk_async(format!(
+            "{{ const __parts = await globalThis.Promise.all({source}.map((__x) => ({f})(__x)())); return __parts.flat(); }}"
+        )),
         (QueryOp::SortBy, [key]) if let Some(cmp) = key_cmp => thunk(with_comparator(cmp, |c| {
             format!("[...{source}].sort((__a, __b) => {c}(({key})(__a), ({key})(__b)))")
         })),
@@ -5941,11 +5969,11 @@ fn lower_query_method(
         (QueryOp::GroupBy, [key, into]) if keyed => {
             thunk(format!("__bynkGroupBy({source}, {key}, {into})"))
         }
-        (QueryOp::JoinOn, [other, left, right, into]) if keyed => thunk(format!(
-            "__bynkJoinOn({source}, ({other})(), {left}, {right}, {into})"
+        (QueryOp::JoinOn, [other, left, right, into]) if keyed => thunk_async(format!(
+            "__bynkJoinOn({source}, await ({other})(), {left}, {right}, {into})"
         )),
-        (QueryOp::LeftJoin, [other, left, right, into]) if keyed => thunk(format!(
-            "__bynkLeftJoin({source}, ({other})(), {left}, {right}, {into})"
+        (QueryOp::LeftJoin, [other, left, right, into]) if keyed => thunk_async(format!(
+            "__bynkLeftJoin({source}, await ({other})(), {left}, {right}, {into})"
         )),
         (QueryOp::Distinct, []) => thunk(format!("[...new globalThis.Set({source})]")),
         // Review of #1460: narrowed, not deferred. A first attempt used
@@ -5974,14 +6002,14 @@ fn lower_query_method(
         // already call over `args[0]`'s checked type) — reused, not
         // re-derived, and threaded as a param rather than called here to
         // keep this function's own argument count under clippy's lint.
-        (QueryOp::JoinOn, [other, left, right, into]) => thunk(format!(
-            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of ({other})()) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {other_elem_ts}) => ({into})(__t, __u)); }}); }}"
+        (QueryOp::JoinOn, [other, left, right, into]) => thunk_async(format!(
+            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of (await ({other})())) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {other_elem_ts}) => ({into})(__t, __u)); }}); }}"
         )),
-        (QueryOp::LeftJoin, [other, left, right, into]) => thunk(format!(
-            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of ({other})()) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {other_elem_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }}"
+        (QueryOp::LeftJoin, [other, left, right, into]) => thunk_async(format!(
+            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of (await ({other})())) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {other_elem_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }}"
         )),
-        (QueryOp::Join, [other, on, into]) => thunk(format!(
-            "{{ const __b = ({other})(); return {source}.flatMap((__t) => __b.filter((__u) => ({on})(__t, __u)).map((__u) => ({into})(__t, __u))); }}"
+        (QueryOp::Join, [other, on, into]) => thunk_async(format!(
+            "{{ const __b = await ({other})(); return {source}.flatMap((__t) => __b.filter((__u) => ({on})(__t, __u)).map((__u) => ({into})(__t, __u))); }}"
         )),
         // Review of #1460: `__h`'s buckets hold `{source}`'s own rows
         // (`elem_ts`), the receiver's element type — same as `distinctBy`
@@ -5990,35 +6018,35 @@ fn lower_query_method(
             "{{ const __h: globalThis.Record<string, {elem_el}[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of {source}) {{ const __k = String(({key})(__t)); if (!(__k in __h)) {{ __h[__k] = []; __order.push(__k); }} __h[__k].push(__t); }} return __order.map((__k) => {{ const __rows = __h[__k]; return ({into})(({key})(__rows[0]), __rows); }}); }}"
         )),
         // -- terminals → read the source array (awaited at the `<-`) --
-        (QueryOp::Collect, []) => source,
-        (QueryOp::First, []) => format!(
+        (QueryOp::Collect, []) => terminal(source),
+        (QueryOp::First, []) => terminal(format!(
             "(() => {{ const __a = {source}; return __a.length > 0 ? Some(__a[0]) : None; }})()"
-        ),
-        (QueryOp::FirstOrElse, [default]) => format!(
+        )),
+        (QueryOp::FirstOrElse, [default]) => terminal(format!(
             "(() => {{ const __a = {source}; return __a.length > 0 ? __a[0] : ({default}); }})()"
-        ),
-        (QueryOp::Count, []) => format!("{source}.length"),
-        (QueryOp::Fold, [init, f]) => format!(
+        )),
+        (QueryOp::Count, []) => terminal(format!("{source}.length")),
+        (QueryOp::Fold, [init, f]) => terminal(format!(
             "(() => {{ let __acc = {init}; for (const __x of {source}) __acc = ({f})(__acc, __x); return __acc; }})()"
-        ),
-        (QueryOp::Any, [p]) => format!("{source}.some((__x) => ({p})(__x))"),
-        (QueryOp::All, [p]) => format!("{source}.every((__x) => ({p})(__x))"),
-        (QueryOp::Sum, [key]) => {
-            format!("{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)")
-        }
+        )),
+        (QueryOp::Any, [p]) => terminal(format!("{source}.some((__x) => ({p})(__x))")),
+        (QueryOp::All, [p]) => terminal(format!("{source}.every((__x) => ({p})(__x))")),
+        (QueryOp::Sum, [key]) => terminal(format!(
+            "{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)"
+        )),
         (QueryOp::Min | QueryOp::Max, [key]) if let Some(key_cmp) = key_cmp => {
             let op = if op == QueryOp::Min { "<" } else { ">" };
             with_comparator(key_cmp, |c| {
-                format!(
+                terminal(format!(
                     "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if ({c}(__k, __m) {op} 0) __m = __k; }} return Some(__m); }})()"
-                )
+                ))
             })
         }
         (QueryOp::Min | QueryOp::Max, [key]) => {
             let cmp = if op == QueryOp::Min { "<" } else { ">" };
-            format!(
+            terminal(format!(
                 "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})()"
-            )
+            ))
         }
         (QueryOp::Average, [key]) => {
             // Duration averages round to integer millis (checker result decides).
@@ -6033,21 +6061,19 @@ fn lower_query_method(
             } else {
                 "__s / __a.length"
             };
-            format!(
+            terminal(format!(
                 "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __s = 0; for (const __x of __a) __s += ({key})(__x); return Some({mean}); }})()"
-            )
+            ))
         }
-        (QueryOp::ForEach, [f]) => {
-            format!("(async () => {{ for (const __x of {source}) {{ await ({f})(__x); }} }})()")
-        }
+        (QueryOp::ForEach, [f]) => terminal(format!(
+            "(async () => {{ for (const __x of {source}) {{ await ({f})(__x); }} }})()"
+        )),
         // v0.107 (slice 4): the parallel broadcast form — issue the effectful fn over
         // every element concurrently and await them together, so one slow element
         // does not head-of-line-block the rest.
-        (QueryOp::ParTraverse, [f]) => {
-            format!(
-                "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
-            )
-        }
+        (QueryOp::ParTraverse, [f]) => terminal(format!(
+            "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
+        )),
         // v0.149 (ADR 0173): the collect-all terminals over a query/broadcast —
         // gather every `Result` outcome (an `Err` is a value, so nothing rejects).
         (QueryOp::TraverseAll, [f]) => {
@@ -6059,30 +6085,28 @@ fn lower_query_method(
                 _ => "any".to_string(),
             };
             let res_el = ts_array_elem(&res_ts);
-            format!(
+            terminal(format!(
                 "(async () => {{ const __out: {res_el}[] = []; for (const __x of {source}) {{ __out.push(await ({f})(__x)); }} return __out; }})()"
-            )
+            ))
         }
-        (QueryOp::ParTraverseAll, [f]) => {
-            format!(
-                "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
-            )
-        }
+        (QueryOp::ParTraverseAll, [f]) => terminal(format!(
+            "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
+        )),
         // v0.150 (ADR 0174): the short-circuit collect terminals — stop at the
         // first `Err`, returning `Result[List[U], E]`.
         (QueryOp::TraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
-            format!(
+            terminal(format!(
                 "(async () => {{ const __out: {u_el}[] = []; for (const __x of {source}) {{ const __r = await ({f})(__x); if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
-            )
+            ))
         }
         (QueryOp::ParTraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
-            format!(
+            terminal(format!(
                 "(async () => {{ const __rs = await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
-            )
+            ))
         }
         _ => return None,
     })

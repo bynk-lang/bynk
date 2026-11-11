@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreSet, __fillSet, __wireEntries, __wireSet } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -59,7 +59,7 @@ export class Audience {
   async join(who: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.members.add(String(who)), undefined);
+      const __r0 = await (async () => { await __state.members.add(String(who)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -69,7 +69,7 @@ export class Audience {
   async leave(who: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.members.remove(String(who)), undefined);
+      const __r0 = await (async () => { await __state.members.remove(String(who)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

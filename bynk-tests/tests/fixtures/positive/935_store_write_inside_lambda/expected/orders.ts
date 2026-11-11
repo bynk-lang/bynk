@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -68,7 +68,7 @@ export class Orders {
   async bulkAdd(items: readonly Order[], deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async (__xs: readonly Order[]) => { for (const __x of __xs) { await (async (o: Order) => (__state.orders.put(String(o.id), o), undefined))(__x); } })(items);
+      return (async (__xs: readonly Order[]) => { for (const __x of __xs) { await (async (o: Order) => (async () => { await __state.orders.put(String(o.id), o); return undefined; })())(__x); } })(items);
     })();
     await this.commitState(__state);
     return __result;

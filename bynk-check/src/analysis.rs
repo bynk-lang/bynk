@@ -146,7 +146,7 @@ use bynk_syntax::ast::{AgentDecl, ServiceDecl, TypeDecl};
 #[derive(Debug, Clone, Default)]
 pub struct ContextSequenceInfo {
     pub cross_context: crate::resolver::CrossContextInfo,
-    pub agents: HashMap<String, AgentDecl>,
+    pub agents: HashMap<String, Arc<AgentDecl>>,
 }
 
 /// #855: the per-unit slice of resolution the wire-contract peek needs —
@@ -163,7 +163,7 @@ pub struct ContextBoundaryInfo {
     /// the emitted `X-Bynk-Contract` constant cannot disagree.
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub services: HashMap<String, ServiceDecl>,
-    pub agents: HashMap<String, AgentDecl>,
+    pub agents: HashMap<String, Arc<AgentDecl>>,
 }
 
 /// v0.24: the analyse-mode result — every discovered file's analysed text
@@ -964,13 +964,9 @@ pub fn analyse_project_with_policy(
             &unit_tables,
         );
         cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        // `ContextSequenceInfo` owns plain `AgentDecl`s (it is read across crates);
-        // the checker's `Arc`-shared table is unwrapped here, once per context.
-        let agents: HashMap<String, AgentDecl> = table
-            .agents
-            .iter()
-            .map(|(k, v)| (k.clone(), AgentDecl::clone(v)))
-            .collect();
+        // Both infos share the table's `Arc`'d agents: they used to deep-clone every
+        // agent twice per context, the bulk of this loop's cost (#3243).
+        let agents: HashMap<String, Arc<AgentDecl>> = table.agents.clone();
         sequence_info.insert(
             name.clone(),
             ContextSequenceInfo {

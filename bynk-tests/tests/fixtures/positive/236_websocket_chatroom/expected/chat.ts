@@ -6,7 +6,7 @@ import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillHeld, __fillSet, __wireEntries, __wireHeld, __wireHeldOrder, __wireSet } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 import type { Connection } from "./__bynk_runtime/connection.js";
@@ -116,8 +116,8 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.members.add(String(u)), undefined);
-      const __r1 = await (async () => { const __k = String(u); const __new = conn; const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } __state.conns.put(__k, __new); return undefined; })();
+      const __r0 = await (async () => { await __state.members.add(String(u)); return undefined; })();
+      const __r1 = await (async () => { const __k = String(u); const __new = conn; const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } await __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -127,8 +127,8 @@ export class Room {
   async leave(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.members.remove(String(u)), undefined);
-      const __r1 = await (async () => { const __k = String(u); const __o = __state.conns.get(__k); if (__o !== undefined) { await __o.close(); __state.conns.remove(__k); } return undefined; })();
+      const __r0 = await (async () => { await __state.members.remove(String(u)); return undefined; })();
+      const __r1 = await (async () => { const __k = String(u); const __o = await __state.conns.get(__k); if (__o !== undefined) { await __o.close(); await __state.conns.remove(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -137,7 +137,7 @@ export class Room {
 
   async post(sender: UserId, text: string, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await (async () => { await __bynkSettleAll(__state.conns.values().map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })();
+    const __r0 = await __bynkThen(__state.conns.values(), (__q) => (async () => { await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })());
     return undefined;
   }
 

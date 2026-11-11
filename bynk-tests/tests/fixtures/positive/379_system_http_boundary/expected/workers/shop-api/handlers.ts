@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
@@ -80,7 +80,7 @@ export class Cart {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const item = { sku: sku };
-      const __r0 = await (__state.items.put(String(sku), item), undefined);
+      const __r0 = await (async () => { await __state.items.put(String(sku), item); return undefined; })();
       return item;
     })();
     await this.commitState(__state);
@@ -89,7 +89,7 @@ export class Cart {
 
   async size(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.items.values()))().length;
+    return __bynkThen(((() => __state.items.values()))(), (__q) => __q.length);
   }
 
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {
