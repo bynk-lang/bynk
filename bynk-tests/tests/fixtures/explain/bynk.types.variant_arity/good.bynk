@@ -1,0 +1,9 @@
+commons demo
+
+type Shape =
+  | Circle(radius: Int)
+  | Square(side: Int)
+
+fn make() -> Shape {
+    Circle(1)
+}

@@ -1,0 +1,7 @@
+commons limits
+
+fn base() -> Int {
+  10
+}
+
+const Limit: Int = base()

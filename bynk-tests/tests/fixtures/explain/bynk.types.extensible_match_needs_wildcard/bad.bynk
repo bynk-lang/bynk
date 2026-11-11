@@ -1,0 +1,15 @@
+context app.verbs
+
+consumes bynk { Method }
+
+fn verb(m: Method) -> String {
+    match m {
+        Get => "read"
+        Post => "write"
+        Put => "write"
+        Delete => "write"
+        Patch => "write"
+        Head => "read"
+        Options => "read"
+    }
+}

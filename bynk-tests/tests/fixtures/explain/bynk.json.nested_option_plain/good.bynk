@@ -1,0 +1,11 @@
+context api
+
+type Row = { id: String, note: Option[String] }
+
+service api from http {
+  json { options: plain }
+
+  on GET("/rows") () -> Effect[HttpResult[List[Row]]] by v: Visitor {
+    Ok([])
+  }
+}
