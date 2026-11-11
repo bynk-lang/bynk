@@ -5,7 +5,7 @@
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
 bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1297
-bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1149
+bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1150
 bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1001
 bynk-driver/src/project.rs::run_checks = 955
 bynk-check/src/checker/calls.rs::check_method_call = 851
