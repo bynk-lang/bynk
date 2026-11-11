@@ -194,41 +194,41 @@ There are **813** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.http.body_kind_conflict`](/book/reference/http/#raw-request-bodies) | A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`. |  | — |
-| `bynk.http.body_on_get_or_delete` | A GET or DELETE handler declares a `body` parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.body_on_get_or_delete`](/book/reference/http/#handler-form) | A GET or DELETE handler declares a `body` parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cache_bad_immutable` | A `@cache` annotation's `immutable` is not a `Bool` literal. |  | — |
 | [`bynk.http.cache_bad_max_age`](/book/reference/http/#caching) | A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal. |  | — |
-| `bynk.http.cache_bad_scope` | A `@cache` annotation's `scope` is not `public` or `private`. |  | — |
+| [`bynk.http.cache_bad_scope`](/book/reference/http/#caching) | A `@cache` annotation's `scope` is not `public` or `private`. |  | — |
 | `bynk.http.cache_duplicate` | A handler carries more than one `@cache` annotation. |  | — |
-| `bynk.http.cache_max_age_fractional_seconds` | A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds. |  | — |
+| [`bynk.http.cache_max_age_fractional_seconds`](/book/reference/http/#caching) | A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds. |  | — |
 | [`bynk.http.cache_on_non_get`](/book/reference/http/#caching) | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
-| `bynk.http.cache_public_reads_cookies` | A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cache_public_reads_cookies`](/book/reference/http/#caching) | A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cache_unknown_arg` | A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`). |  | — |
-| `bynk.http.cookie_host_prefix` | A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.cookie_partitioned_insecure` | A `partitioned` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.cookie_samesite_none_insecure` | A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookie_host_prefix`](/book/reference/http/#setting-cookies) | A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookie_partitioned_insecure`](/book/reference/http/#setting-cookies) | A `partitioned` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookie_samesite_none_insecure`](/book/reference/http/#setting-cookies) | A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cookie_script_readable` | A cookie literal sets `httpOnly: false`, so page scripts can read it (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
-| `bynk.http.cookie_secure_prefix` | A `__Secure-` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.cookies_field_not_stringy` | A field of an HTTP handler's `cookies` record has a type a cookie cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.cookies_wrong_type` | An HTTP handler's `cookies` parameter is not a record type. |  | — |
+| [`bynk.http.cookie_secure_prefix`](/book/reference/http/#setting-cookies) | A `__Secure-` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookies_field_not_stringy`](/book/reference/http/#cookies) | A field of an HTTP handler's `cookies` record has a type a cookie cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookies_wrong_type`](/book/reference/http/#cookies) | An HTTP handler's `cookies` parameter is not a record type. |  | — |
 | `bynk.http.cors_invalid_field` | A `cors` policy field (`headers`/`credentials`/`maxAge`) has the wrong value shape. |  | — |
-| `bynk.http.cors_invalid_origins` | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
-| `bynk.http.cors_not_http` | A `cors { }` policy appears on a service that is not `from http`. |  | — |
+| [`bynk.http.cors_invalid_origins`](/book/reference/http/#cors) | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
+| [`bynk.http.cors_not_http`](/book/reference/http/#cors) | A `cors { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.cors_unknown_field` | A `cors { }` policy declares a field outside the closed set. |  | — |
 | [`bynk.http.cors_wildcard_credentials`](/book/reference/http/#cors) | A `cors` policy combines `credentials: true` with the wildcard origin `["*"]`. |  | — |
-| `bynk.http.duplicate_rejected` | A `from http` service declares `on rejected` more than once. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
+| [`bynk.http.duplicate_rejected`](/book/reference/http/#rendering-rejections) | A `from http` service declares `on rejected` more than once. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
 | [`bynk.http.duplicate_route`](/book/reference/http/#handler-form) | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
 | [`bynk.http.extra_param`](/book/reference/http/#handler-form) | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.form_body_not_record` | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.form_body_not_record`](/book/reference/http/#form-bodies) | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.form_bool_without_default` | A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | `bynk.http.form_duplicate` | A handler carries more than one `@form` annotation. |  | — |
 | [`bynk.http.form_field_not_stringy`](/book/reference/http/#form-bodies) | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.form_on_bodyless` | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
+| [`bynk.http.form_on_bodyless`](/book/reference/http/#form-bodies) | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.form_on_sum_route` | A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself. |  | — |
 | `bynk.http.form_unknown_arg` | A `@form` annotation is given an argument; it takes none. |  | — |
 | `bynk.http.header_question_not_found` | `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`). |  | Warning |
-| `bynk.http.headers_wrong_type` | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.invalid_path` | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.headers_wrong_type`](/book/reference/http/#request-headers) | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.invalid_path`](/book/reference/http/#handler-form) | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.json_duplicate` | A handler carries more than one `@json` annotation. |  | — |
 | `bynk.http.json_invalid_arg` | A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`. |  | — |
 | `bynk.http.json_invalid_field` | A `json { }` policy's `options` is not `tagged` or `plain`. |  | — |
@@ -249,13 +249,13 @@ There are **813** codes in total.
 | `bynk.http.multipart_large_cap` | A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning). |  | Warning |
 | [`bynk.http.path_param_not_stringy`](/book/reference/http/#handler-form) | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.query_field_not_stringy`](/book/reference/http/#typed-query) | A field of an HTTP handler's `query` record has a type a query string cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.query_not_http` | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.query_not_http`](/book/reference/http/#request-query) | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.query_wrong_type`](/book/reference/http/#typed-query) | An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.raw_bad_content_type` | A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal. |  | — |
-| `bynk.http.raw_body_not_bytes` | The `body` of a `@raw` handler is not typed `Bytes`. |  | — |
+| [`bynk.http.raw_bad_content_type`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal. |  | — |
+| [`bynk.http.raw_body_not_bytes`](/book/reference/http/#raw-request-bodies) | The `body` of a `@raw` handler is not typed `Bytes`. |  | — |
 | [`bynk.http.raw_body_unbounded`](/book/reference/http/#raw-request-bodies) | A `@raw` route has no request-body cap (no `@limit` and no service `limits`). |  | — |
 | `bynk.http.raw_duplicate` | A handler carries more than one `@raw` annotation. |  | — |
-| `bynk.http.raw_error_status` | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
+| [`bynk.http.raw_error_status`](/book/reference/http/#error-bodies) | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
 | [`bynk.http.raw_on_bodyless`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.raw_unknown_arg` | A `@raw` annotation has an argument outside the closed set (`contentType`). |  | — |
 | [`bynk.http.rejected_signature`](/book/reference/http/#rendering-rejections) | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
@@ -265,7 +265,7 @@ There are **813** codes in total.
 | `bynk.http.security_not_http` | A `security { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.security_unknown_field` | A `security { }` policy declares a field outside the closed set. |  | — |
 | [`bynk.http.unbound_path_param`](/book/reference/http/#handler-form) | A `:name` route segment has no matching handler parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.unknown_handler_annotation` | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
+| [`bynk.http.unknown_handler_annotation`](/book/reference/http/#handler-form) | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
 
 ## Lexer
 

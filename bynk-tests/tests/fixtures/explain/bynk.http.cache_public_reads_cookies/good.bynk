@@ -1,0 +1,10 @@
+context api
+
+type Session = { sid: Option[String] }
+
+service api from http {
+    @cache(maxAge: 5.minutes, scope: private)
+    on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}
