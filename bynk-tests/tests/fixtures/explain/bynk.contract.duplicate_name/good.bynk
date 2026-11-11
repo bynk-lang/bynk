@@ -1,0 +1,8 @@
+commons demo.c
+
+fn inc(x: Int) -> Int
+  requires positive: x > 0
+  ensures bigger: result > x
+{
+  x + 1
+}
