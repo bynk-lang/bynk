@@ -276,9 +276,12 @@ a store field, an event or a call argument (`bynk.types.field_name_record_not_bo
 its JSON key is the field name. Two fields may not read the same name
 (`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
 (`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
-refused (`bynk.types.field_name_case_conflict`). This slice parses and checks the annotation; the
-request readers apply it in the next slices of
-[#3343](https://github.com/bynk-lang/bynk/issues/3343).
+refused (`bynk.types.field_name_case_conflict`). The request readers apply it: a
+`cookies`, `query` or `@form`/`@multipart` `body` record reads each renamed field from its wire
+key (the typed system-test drivers and `Form.encode` write it there, and the OpenAPI document
+and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
+follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
+([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
 
 ### Cookie and SameSite {#cookie}
 
