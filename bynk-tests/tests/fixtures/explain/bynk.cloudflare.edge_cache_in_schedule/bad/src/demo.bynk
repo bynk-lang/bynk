@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+service sweep from cron {
+    on schedule("0 * * * *") () -> Effect[Result[(), String]] given Edge {
+        let purged <- Edge.purge(["/dl/"])
+        if purged { Ok(()) } else { Err("refused") }
+    }
+}
