@@ -1,0 +1,7 @@
+context shop
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}
