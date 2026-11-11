@@ -1,0 +1,14 @@
+context demo
+
+agent Tally {
+    key id: String
+
+    store counts: Map[String, Int]
+
+    on call bump(xs: List[Int]) -> Effect[()] {
+        xs.parTraverse((x: Int) => {
+            let o <- counts.get("k")
+            counts.put("k", o.getOrElse(0) + 1)
+        })
+    }
+}
