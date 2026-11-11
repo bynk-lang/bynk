@@ -1,0 +1,6 @@
+commons demo
+
+fn run() -> Int {
+    let r = Ok(1)
+    1
+}

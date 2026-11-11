@@ -1,0 +1,10 @@
+context shop
+
+capability Clock {
+  fn now() -> Effect[Int]
+  fn zone() -> Effect[String]
+}
+
+provides Clock = Fixed {
+  fn now() -> Effect[Int] { Effect.pure(0) }
+}

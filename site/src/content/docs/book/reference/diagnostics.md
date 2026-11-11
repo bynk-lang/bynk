@@ -80,16 +80,16 @@ There are **806** codes in total.
 | `bynk.consumes.alias_conflict` | Two `consumes` aliases collide. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.capability_name_clash` | Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.name_conflict`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A `consumes` name collides with another name in scope. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.self_reference` | A context `consumes` itself. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.service_arity` | A consumed service was called with the wrong number of arguments. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.self_reference`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context `consumes` itself. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.service_arity`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A consumed service was called with the wrong number of arguments. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.signature_type_unconsumed` | A cross-context call reaches a service whose signature names a type the consumed context itself consumes from a third context, which the caller does not consume. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.target_is_commons` | `consumes` targets a `commons` instead of a context. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.target_is_commons`](/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module) | `consumes` targets a `commons` instead of a context. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_capability` | A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_conflict` | A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_repeated` | An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.type_alias_unknown_export` | `consumes U { T as Alias }` names a type `U` does not export. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.unknown_context` | `consumes` names a context that does not exist. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.unknown_service` | Called a service the consumed context does not declare. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.unknown_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | `consumes` names a context that does not exist. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.unknown_service`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | Called a service the consumed context does not declare. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 
 ## Contexts
 
@@ -133,12 +133,12 @@ There are **806** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.effect.bind_in_pure_context`](/book/guides/effects-and-capabilities/understand-the-capability-model/) | An `<-` bind was used in a pure (non-effectful) context. | [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
-| `bynk.effect.bind_on_non_effect` | An `<-` bind was applied to a non-`Effect` value. | [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
-| `bynk.effect.capability_in_pure_context` | A capability was used in a pure context. |  | — |
-| `bynk.effect.cross_context_in_pure_context` | A cross-context call was made in a pure context. |  | — |
-| `bynk.effect.do_in_pure_context` | A `do` statement was used in a pure (non-effectful) context. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
-| `bynk.effect.do_on_non_effect` | A `do` statement was applied to a non-`Effect` value. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
-| `bynk.effect.do_requires_unit` | A `do` statement was applied to a valued `Effect[T]`; `do` performs a unit effect, so a real result would be dropped — use `let _ <- e` instead. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
+| [`bynk.effect.bind_on_non_effect`](/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated) | An `<-` bind was applied to a non-`Effect` value. | [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
+| [`bynk.effect.capability_in_pure_context`](/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated) | A capability was used in a pure context. |  | — |
+| [`bynk.effect.cross_context_in_pure_context`](/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated) | A cross-context call was made in a pure context. |  | — |
+| [`bynk.effect.do_in_pure_context`](/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated) | A `do` statement was used in a pure (non-effectful) context. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
+| [`bynk.effect.do_on_non_effect`](/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated) | A `do` statement was applied to a non-`Effect` value. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
+| [`bynk.effect.do_requires_unit`](/book/guides/effects-and-capabilities/understand-the-capability-model/#why-effects-are-gated) | A `do` statement was applied to a valued `Effect[T]`; `do` performs a unit effect, so a real result would be dropped — use `let _ <- e` instead. | [`do_stmt`](/book/reference/grammar/#rule-do_stmt) | — |
 | [`bynk.effect.fn_value_in_pure_context`](/book/guides/effects-and-capabilities/understand-the-capability-model/) | An effectful function value was called in a pure context; like a capability call, it is legal only where the enclosing body is effectful. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.effect.unbound_effect`](/book/guides/effects-and-capabilities/understand-the-capability-model/) | An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658). |  | — |
 
@@ -172,10 +172,10 @@ There are **806** codes in total.
 | [`bynk.exports.capability_not_provided`](/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context) | An exported capability has no provider in its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | `bynk.exports.conflicting_visibility` | A type is exported with conflicting visibilities. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | `bynk.exports.derived_capability` | `exports capability` names a derived capability, whose instance stays with its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.exports.duplicate_export` | The same name is exported more than once. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.exports.duplicate_export`](/book/reference/types/#opaque-types) | The same name is exported more than once. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | `bynk.exports.duplicate_in_clause` | A name appears twice in one `exports` clause. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.exports.undeclared_capability` | `exports capability` names a capability that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.exports.undeclared_type` | `exports` names a type that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.exports.undeclared_capability`](/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context) | `exports capability` names a capability that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.exports.undeclared_type`](/book/reference/types/#opaque-types) | `exports` names a type that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 
 ## Given capabilities
 
@@ -409,7 +409,7 @@ There are **806** codes in total.
 | `bynk.generics.ambiguous_instantiation` | A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.generics.bound_on_capability_op` | A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
 | `bynk.generics.codable_op_return` | A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
-| `bynk.generics.duplicate_type_param` | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
+| [`bynk.generics.duplicate_type_param`](/book/reference/generics/#type-parameters) | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
 | `bynk.generics.generic_non_record` | A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.generics.generic_record_at_boundary` | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec. |  | — |
 | `bynk.generics.generic_sum_embeds` | A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
@@ -421,7 +421,7 @@ There are **806** codes in total.
 | [`bynk.generics.polymorphic_recursion`](/book/guides/type-system/recursive-generic-types/) | A generic type refers to itself with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`), or to a mutually recursive partner with an argument that wraps one of its own parameters (`Inner[List[T]]` inside `Outer[T]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a self-reference that passes the parameters through unchanged, and a partner applied to the declaration's own parameters or to types that mention none (of any arity), are accepted (#3192). |  | — |
 | [`bynk.generics.recursive_generic_at_boundary`](/book/guides/type-system/recursive-generic-types/#where-it-cannot-go-yet) | A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197). |  | — |
 | `bynk.generics.redundant_eq_bound` | A type parameter is declared both `Eq` and `Ord` (or `Eq` and `Key`); `Ord` and `Key` imply `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slices 1 and 2, warning). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | Warning |
-| `bynk.generics.type_arg_count` | A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183). | [`applied_type_ref`](/book/reference/grammar/#rule-applied_type_ref) | — |
+| [`bynk.generics.type_arg_count`](/book/reference/generics/#type-parameters) | A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183). | [`applied_type_ref`](/book/reference/grammar/#rule-applied_type_ref) | — |
 | [`bynk.generics.type_arg_mismatch`](/book/reference/generics/#type-parameters) | Inferred or explicit type arguments conflict, have the wrong arity, target a non-generic function, or a type parameter shadows a declared type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.generics.uninferable_type_arg`](/book/reference/generics/#the-expected-type-for-every-generic-call) | A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.generics.unknown_constraint`](/book/reference/generics/#bounds) | A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`. | [`type_param`](/book/reference/grammar/#rule-type_param) | — |
@@ -698,13 +698,13 @@ There are **806** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.provider.agent_call_undeclared_capability`](/book/guides/effects-and-capabilities/compose-a-provider/#the-rules) | A provider calls an agent handler that needs a capability the provider's `given` does not list. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.dependency_cycle` | Providers form a capability dependency cycle through `given`. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.extra_operation` | A `provides` block implements an operation not in the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.dependency_cycle`](/book/guides/effects-and-capabilities/compose-a-provider/#the-rules) | Providers form a capability dependency cycle through `given`. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.extra_operation`](/book/reference/capabilities/#providing-a-capability) | A `provides` block implements an operation not in the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.provider.generic_op_requires_external` | A Bynk-bodied `provides` implements a capability operation that declares its own type parameter — only an external (bodiless) provider can. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.missing_operation` | A `provides` block is missing a capability operation. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.missing_operation`](/book/reference/capabilities/#providing-a-capability) | A `provides` block is missing a capability operation. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.provider.outside_context` | `provides` was declared outside a context. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.signature_mismatch` | A `provides` operation's signature does not match the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.provider.unknown_capability` | `provides` names a capability that does not exist. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.signature_mismatch`](/book/reference/capabilities/#providing-a-capability) | A `provides` operation's signature does not match the capability. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.provider.unknown_capability`](/book/reference/capabilities/#providing-a-capability) | `provides` names a capability that does not exist. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 
 ## Queue
 
@@ -734,7 +734,7 @@ There are **806** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.resolve.ambiguous_variant` | A variant name is ambiguous across several sum types. |  | — |
+| [`bynk.resolve.ambiguous_variant`](/book/reference/types/#sum-types) | A variant name is ambiguous across several sum types. |  | — |
 | [`bynk.resolve.arity_mismatch`](/book/spec/static-semantics/) | A function was called with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.resolve.bad_const_initialiser`](/book/reference/constants/#what-an-initialiser-may-be) | A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_cycle`](/book/reference/constants/#what-an-initialiser-may-be) | Constants refer to each other in a cycle, so none of them has a value. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
@@ -744,7 +744,7 @@ There are **806** codes in total.
 | `bynk.resolve.duplicate_agent` | Two agents share a name. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.resolve.duplicate_capability` | Two capabilities share a name. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.resolve.duplicate_const` | Two constants share a name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.resolve.duplicate_field` | A record declares a field twice. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
+| [`bynk.resolve.duplicate_field`](/book/reference/types/#record-types) | A record, or one variant's payload, declares a field twice. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
 | `bynk.resolve.duplicate_field_init` | A record construction initialises a field twice. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.resolve.duplicate_fn` | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.resolve.duplicate_message_code` | A message bundle declares the same code twice in one block. |  | — |
@@ -756,20 +756,20 @@ There are **806** codes in total.
 | [`bynk.resolve.duplicate_type`](/book/spec/static-semantics/) | Two types share a name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.resolve.duplicate_variant` | A sum type declares a variant twice. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
 | `bynk.resolve.fn_without_call` | A function was referenced without being called. |  | — |
-| `bynk.resolve.let_shadows_fn` | A `let` binding shadows a function. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
-| `bynk.resolve.let_shadows_type` | A `let` binding shadows a type. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
+| [`bynk.resolve.let_shadows_fn`](/book/guides/program-structure/how-a-program-is-shaped/) | A `let` binding shadows a function. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
+| [`bynk.resolve.let_shadows_type`](/book/guides/program-structure/how-a-program-is-shaped/) | A `let` binding shadows a type. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
 | `bynk.resolve.method_unknown_type` | A method is defined on an unknown type. |  | — |
 | [`bynk.resolve.missing_field`](/book/reference/types/#record-types) | A record construction omits a required field. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | [`bynk.resolve.name_conflict`](/book/spec/static-semantics/) | Two declarations share a name. |  | — |
 | `bynk.resolve.not_a_record_type` | Record syntax was used on a non-record type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.resolve.opaque_record_construction` | An opaque type was constructed with record syntax. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
-| `bynk.resolve.param_as_function` | A value (such as a parameter) was called as a function. | [`call`](/book/reference/grammar/#rule-call) | — |
+| [`bynk.resolve.param_as_function`](/book/guides/program-structure/how-a-program-is-shaped/) | A value (such as a parameter) was called as a function. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.resolve.recursive_record_field`](/book/reference/types/#record-types) | A record directly contains a field of its own type. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
 | [`bynk.resolve.reserved_builtin_type`](/book/reference/keywords/#built-in-type-names) | A type declaration reuses a compiler-known built-in type name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.resolve.reserved_host_name` | A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals. | [`type_decl`](/book/reference/grammar/#rule-type_decl), [`fn_decl`](/book/reference/grammar/#rule-fn_decl), [`agent_decl`](/book/reference/grammar/#rule-agent_decl), [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.resolve.reserved_payload_field` | A sum variant declares a payload field named `kind`, the variant's wire discriminant. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
 | `bynk.resolve.self_outside_method` | `self` referenced outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
-| `bynk.resolve.type_as_function` | A type name was called as if it were a function. | [`call`](/book/reference/grammar/#rule-call) | — |
+| [`bynk.resolve.type_as_function`](/book/reference/types/#record-types) | A type name was called as if it were a function. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.resolve.type_in_expr` | A type name was used where a value is expected. |  | — |
 | [`bynk.resolve.unconsumed_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context's service was called, or its capability named in `given`, without a `consumes` declaration. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.resolve.unknown_field`](/book/reference/types/#record-types) | A record construction names a field the record type does not declare. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
@@ -854,12 +854,12 @@ There are **806** codes in total.
 | `bynk.types.asset_at_boundary` | An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead. |  | — |
 | [`bynk.types.bad_field_default`](/book/reference/types/#field-defaults) | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant of a type this context may construct (not a `uses`-sourced commons sum, which is `bynk.context.rebrand_construction`), `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter has no default, and a default may not hold for one instantiation only: for a record field that applies a user generic (`Page[String]`, or `Page[T]` inside a generic record; an event or old-state field may not) it is a closed-form value at the instantiated type, writing nothing of the enclosing record's own type parameters. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
 | [`bynk.types.call_arity`](/book/reference/types/) | A function value, a built-in `Map`/`Set`/`Cell`/`Cache`/`Log` operation, or `unreachable`/`todo` was called with the wrong number of arguments (a declared `fn` is `bynk.resolve.arity_mismatch`). | [`call`](/book/reference/grammar/#rule-call) | — |
-| `bynk.types.cannot_infer_option_type_param` | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
-| `bynk.types.cannot_infer_result_type_params` | The type parameters of a `Result` could not be inferred. |  | — |
+| [`bynk.types.cannot_infer_option_type_param`](/book/guides/type-system/result-and-optionals/#construct-values) | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
+| [`bynk.types.cannot_infer_result_type_params`](/book/guides/type-system/result-and-optionals/#construct-values) | The type parameters of a `Result` could not be inferred. |  | — |
 | [`bynk.types.catastrophic_regex`](/book/reference/types/#regular-expressions) | A `Matches` pattern, or a regex method's pattern, can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.claims_at_boundary`](/book/reference/actors/#reading-claims) | `TokenClaims` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | [`bynk.types.combinator_return_mismatch`](/book/reference/types/#built-in-generic-types) | A callback passed to a combinator (`map`/`andThen`/`flatMap`/`traverseAll`/…) returns the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
-| `bynk.types.constructor_arity` | A variant constructor got the wrong number of arguments. |  | — |
+| [`bynk.types.constructor_arity`](/book/reference/refined-types/) | `T.of` (or `T.unsafe`) on a refined or opaque type got the wrong number of arguments. |  | — |
 | `bynk.types.constructor_base_mismatch` | A `.of` constructor was given an argument of the wrong base type. |  | — |
 | `bynk.types.decimal_division_unscaled` | `/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622). |  | — |
 | `bynk.types.decimal_negation_too_large` | A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622). |  | — |
@@ -867,7 +867,7 @@ There are **806** codes in total.
 | `bynk.types.derives_automatic` | A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.derives_field_not_orderable` | A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.duplicate_example` | A refinement carries more than one `@example`. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.duplicate_literal_arm` | A `match` has two arms for the same literal value. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
+| [`bynk.types.duplicate_literal_arm`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` has two arms for the same literal value. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.duplicate_pattern_field` | A record pattern lists the same field twice. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.types.duplicate_variant_arm` | A `match` has two arms for the same variant. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.embeds_ambiguous` | A type is embedded by more than one variant of a sum, so `?`'s conversion would be ambiguous. |  | — |
@@ -875,25 +875,25 @@ There are **806** codes in total.
 | `bynk.types.embeds_variant_shape` | An `embeds E as V` target variant must have exactly one payload field, of type `E`. |  | — |
 | [`bynk.types.empty_range_pattern`](/book/reference/types/#range-patterns) | A range pattern or `via schema(...)` range has its bounds inverted (`lo > hi`), so it can never match. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
 | [`bynk.types.empty_refinement`](/book/reference/refined-types/#predicates) | A refinement admits no values (contradictory predicates). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.err_value_mismatch` | An `Err` payload has the wrong type. | [`err_expr`](/book/reference/grammar/#rule-err_expr) | — |
+| [`bynk.types.err_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | An `Err` payload has the wrong type. | [`err_expr`](/book/reference/grammar/#rule-err_expr) | — |
 | `bynk.types.example_not_literal` | An `@example` is not exactly one literal of the base type. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.example_on_named_field` | An `@example` on a field whose type is a named type (it belongs on the named type). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.example_unneeded` | An `@example` on a refinement `Val` can already generate (only `Matches` and `IsoDate` take one). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.example_violates` | An `@example` does not satisfy its refinement's predicates. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.extensible_match_needs_wildcard`](/book/reference/bynk-capabilities/#extensible-enums) | A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release. |  | — |
-| `bynk.types.field_access_on_non_record` | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
+| [`bynk.types.field_access_on_non_record`](/book/reference/types/#record-types) | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | `bynk.types.field_default_on_variant` | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
 | `bynk.types.field_refinement_not_base` | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_value_mismatch` | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
+| [`bynk.types.field_value_mismatch`](/book/reference/types/#record-types) | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.types.file_at_boundary` | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |
 | [`bynk.types.function_at_boundary`](/book/reference/types/) | A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary. | [`function_type_ref`](/book/reference/grammar/#rule-function_type_ref) | — |
-| `bynk.types.guard_not_bool` | A match-arm `if` guard is not a `Bool` expression. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
+| [`bynk.types.guard_not_bool`](/book/reference/types/#matching) | A match-arm `if` guard is not a `Bool` expression. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.headers_at_boundary` | `RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.held_at_boundary` | A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2). |  | — |
 | `bynk.types.held_not_comparable` | A held value (`Connection[F]`) is compared with `==`/`!=` — held values have identity, not value-equality (§2.9.3, real-time track slice 2). |  | — |
-| `bynk.types.if_branch_mismatch` | The branches of an `if` have different types. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
-| `bynk.types.if_non_bool_cond` | An `if` condition is not a `Bool`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
-| `bynk.types.if_without_else_requires_unit` | An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
+| [`bynk.types.if_branch_mismatch`](/book/spec/static-semantics/) | The branches of an `if` have different types. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
+| [`bynk.types.if_non_bool_cond`](/book/spec/static-semantics/) | An `if` condition is not a `Bool`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
+| [`bynk.types.if_without_else_requires_unit`](/book/spec/static-semantics/) | An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
 | [`bynk.types.interpolation_non_scalar`](/book/reference/grammar/#rule-string_interpolation) | An interpolation hole holds a value with no string form. |  | — |
 | [`bynk.types.invalid_regex`](/book/reference/types/#regular-expressions) | A `Matches` predicate, or a regex method's pattern (`containsRegex`, …), contains an invalid regular expression or malformed inline flags. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.inverted_range`](/book/reference/refined-types/#predicates) | An `InRange` predicate has its bounds inverted. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
@@ -908,13 +908,13 @@ There are **806** codes in total.
 | [`bynk.types.key_not_orderable`](/book/reference/types/#ordering-your-own-types) | A `sortBy`/`sortByDescending`/`min`/`max` key function does not return an orderable type. The key must be an `Ord` type, on a `List` and on a storage `Query` alike. |  | — |
 | [`bynk.types.lambda_mismatch`](/book/reference/grammar/#rule-lambda_expr) | A lambda's parameter count, parameter annotations, or body type do not match the expected function type. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | [`bynk.types.let_annotation_mismatch`](/book/reference/types/) | A `let` value does not match its type annotation. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
-| `bynk.types.list_element_mismatch` | A list-literal element has a different type from the list's element type. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
+| [`bynk.types.list_element_mismatch`](/book/reference/types/#built-in-generic-types) | A list-literal element has a different type from the list's element type. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
 | [`bynk.types.list_pattern_on_non_list`](/book/reference/types/#list-patterns) | A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`). | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | [`bynk.types.match_arm_mismatch`](/book/reference/types/#matching) | A `match` arm has a different type from the others. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.match_non_sum_discriminant` | `match` was applied to a value that is not a sum type. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
 | [`bynk.types.method_arity`](/book/reference/types/) | A method was called with the wrong number of arguments. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.types.method_not_found`](/book/reference/types/) | Called a method the type does not have. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.types.method_on_non_named_type` | A method was called on a built-in type that has no methods. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.types.method_on_non_named_type`](/book/reference/types/) | A method was called on a built-in type that has no methods. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.mixed_pattern_bindings` | A pattern mixes named and positional bindings. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.negative_length` | A length predicate was given a negative value. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.never_inferred`](/book/reference/types/#faults) | An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
@@ -924,9 +924,9 @@ There are **806** codes in total.
 | [`bynk.types.not_comparable`](/book/reference/operators/) | A value compared with `==`/`!=` contains a function, `Effect`, or `Query` somewhere inside it — those have no value equality, so the type is not equality-supporting (type-system §2.3.5, #1652). |  | — |
 | [`bynk.types.not_keyable`](/book/reference/types/#keys) | A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2). | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
 | [`bynk.types.not_orderable`](/book/reference/types/#ordering-your-own-types) | A value is ordered (`<`, `<=`, `>`, `>=`), or passed to an `Ord`-bounded parameter, but its type is not `Ord`. `Int`, `Float`, `String`, `Duration`, `Instant`, `Bytes`, `Option`/`List` of an orderable type, refined types over those, and types that declare `derives Ord` are; adding `derives Ord` is offered as a fix that is never applied automatically, because it makes declaration order significant (constrained-generics slice 1). |  | — |
-| `bynk.types.ok_value_mismatch` | An `Ok` payload has the wrong type. | [`ok_expr`](/book/reference/grammar/#rule-ok_expr) | — |
-| `bynk.types.opaque_raw_outside` | `.raw` on an opaque type was used outside its defining commons. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
-| `bynk.types.opaque_unsafe_outside` | `.unsafe` on an opaque type was used outside its defining context. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
+| [`bynk.types.ok_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | An `Ok` payload has the wrong type. | [`ok_expr`](/book/reference/grammar/#rule-ok_expr) | — |
+| [`bynk.types.opaque_raw_outside`](/book/reference/types/#opaque-types) | `.raw` on an opaque type was used outside its defining commons. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
+| [`bynk.types.opaque_unsafe_outside`](/book/reference/types/#opaque-types) | `.unsafe` on an opaque type was used outside its defining context. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | `bynk.types.or_pattern_binding_mismatch` | An or-pattern's alternatives don't all bind the same set of names. | [`match_arm`](/book/reference/grammar/#rule-match_arm), [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.or_pattern_type_mismatch` | An or-pattern's alternatives give a shared binding different types (or refinements). | [`match_arm`](/book/reference/grammar/#rule-match_arm), [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | [`bynk.types.pattern_arity`](/book/reference/types/#matching) | A pattern binds the wrong number of payload fields. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
@@ -935,10 +935,10 @@ There are **806** codes in total.
 | `bynk.types.polynomial_regex_capped` | A `Matches` pattern's matching time grows polynomially with input length, but a `MaxLength` or `Length` predicate bounds the input small enough for its degree (warning). | [`refinement`](/book/reference/grammar/#rule-refinement) | Warning |
 | `bynk.types.predicate_base_mismatch` | A predicate does not apply to the type's base (e.g. a string predicate on an `Int`). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.query_at_boundary` | A `Query` type appears in a storable or boundary-crossing position — a query is built and executed in place, never persisted or sent (ADR 0115). |  | — |
-| `bynk.types.question_error_mismatch` | `?` propagates an error type incompatible with the function's. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
-| `bynk.types.question_on_non_result` | `?` was applied to a non-`Result` value. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
+| [`bynk.types.question_error_mismatch`](/book/guides/type-system/result-and-optionals/) | `?` propagates an error type incompatible with the function's. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
+| [`bynk.types.question_on_non_result`](/book/guides/type-system/result-and-optionals/) | `?` was applied to a non-`Result` value. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | `bynk.types.question_option_outside_http` | `?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
-| `bynk.types.question_outside_result` | `?` used in a function that does not return a `Result`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
+| [`bynk.types.question_outside_result`](/book/guides/type-system/result-and-optionals/) | `?` used in a function that does not return a `Result`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | `bynk.types.range_pattern_on_non_int` | A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
 | `bynk.types.record_pattern_on_non_record` | A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in). | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | `bynk.types.regex_not_literal` | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -948,7 +948,7 @@ There are **806** codes in total.
 | `bynk.types.rounding_mode_position` | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |
 | `bynk.types.select_tail_has_select` | A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sequence_needs_result` | `sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.types.some_value_mismatch` | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
+| [`bynk.types.some_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
 | `bynk.types.sql_not_literal` | A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call), [`record_construction`](/book/reference/grammar/#rule-record_construction), [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | `bynk.types.sql_row_shape` | `Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sql_statement_at_boundary` | A `bynk.cloudflare` `SqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c). |  | — |
@@ -958,14 +958,14 @@ There are **806** codes in total.
 | [`bynk.types.uninferable_element_type`](/book/reference/types/#built-in-generic-types) | An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
 | `bynk.types.unknown_annotation` | An annotation after a refinement is not `@example`. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.unknown_field`](/book/reference/types/#record-types) | Referenced a field the record type does not declare. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
-| `bynk.types.unknown_pattern_field` | A pattern names a field the variant does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
+| [`bynk.types.unknown_pattern_field`](/book/reference/types/#matching) | A pattern names a field the variant does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.unknown_rounding_mode` | A `Decimal` `round` or `div` was not given a rounding mode written `RoundingMode.<mode>`; the modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` and `HalfEven` (#2622). |  | — |
 | `bynk.types.unknown_static_member` | Referenced an unknown static member on a type. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
-| `bynk.types.unknown_variant_in_pattern` | A pattern names a variant the sum type does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
+| [`bynk.types.unknown_variant_in_pattern`](/book/reference/types/#matching) | A pattern names a variant the sum type does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | [`bynk.types.unreachable_arm`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` arm is unreachable. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | [`bynk.types.variant_arity`](/book/reference/types/#sum-types) | A variant constructor got the wrong number of arguments for its payload fields (a pattern with the wrong number of bindings is `bynk.types.pattern_arity`). |  | — |
-| `bynk.types.variant_missing_payload` | A variant requiring a payload was used without one. |  | — |
-| `bynk.types.variant_payload_mismatch` | A variant payload has the wrong type. |  | — |
+| [`bynk.types.variant_missing_payload`](/book/reference/types/#sum-types) | A variant requiring a payload was used without one. |  | — |
+| [`bynk.types.variant_payload_mismatch`](/book/reference/types/#sum-types) | A variant payload has the wrong type. |  | — |
 
 ## Uses
 

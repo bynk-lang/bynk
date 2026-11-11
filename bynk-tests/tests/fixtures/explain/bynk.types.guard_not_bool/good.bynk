@@ -1,0 +1,13 @@
+commons demo
+
+type Shape =
+  | Circle(radius: Int)
+  | Dot
+
+fn label(s: Shape) -> String {
+    match s {
+        Circle(r) if r > 10 => "round"
+        Circle(_) => "small"
+        Dot => "dot"
+    }
+}

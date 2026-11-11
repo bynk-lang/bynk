@@ -1,0 +1,17 @@
+context shop
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = Fixed {
+  fn now() -> Effect[Int] { Effect.pure(0) }
+}
+
+service probe {
+  on call() -> Effect[Int] given Clock {
+    let t <- Clock.now()
+    let add: (Int) -> Int = (n) => n + t
+    Effect.pure(add(1))
+  }
+}
