@@ -29,10 +29,13 @@
 //! **File labels.** An example that spans files says which one each snippet is
 //! in with a comment-only line holding just a path, such as `// shop.bynk` or
 //! `// shop/till.bynk`: the file's path under the project's `src/`, or
-//! `// bynk.toml` for the manifest. The label applies until the next one. It is
-//! for the reader; the gate checks only that the file it names exists in the
-//! bad or the good project. A label is meaningful in the directory form only,
-//! and the gate refuses one in the file form.
+//! `// bynk.toml` for the manifest. The label applies until the next one, and
+//! the gate holds each line under it to that file: a line marked `✗` must be in
+//! the labelled file of the bad project, a `✓` line in the labelled file of the
+//! good one, and an unmarked line in either. A line before the first label may
+//! be in any file. A label must name a file that exists in the bad or the good
+//! project, and a label in the file form is refused, since it has no files to
+//! name.
 //!
 //! [`Explain::example`]: bynk_syntax::diagnostics::Explain::example
 
@@ -61,10 +64,12 @@ fn fixtures_root() -> PathBuf {
 
 /// One compile error: its code, the 1-indexed line it is reported on, and the
 /// text of the file that line is in (so the line can be matched to the example).
+/// `text` is `None` when the error names no source file, or one the build did
+/// not snapshot, so there is no line to read.
 struct Reported {
     code: String,
     line: usize,
-    text: String,
+    text: Option<String>,
 }
 
 /// One side of a fixture, the bad program or the good one: its source files as
@@ -84,7 +89,7 @@ fn errors_of(source: &str, tag: &str) -> Vec<Reported> {
             .map(|e| Reported {
                 code: e.category.to_string(),
                 line: bynk_syntax::span::line_col(source, e.span.start).0,
-                text: source.to_string(),
+                text: Some(source.to_string()),
             })
             .collect()
     };
@@ -132,11 +137,13 @@ fn project_errors(root: &Path) -> Vec<Reported> {
                 .source_path
                 .as_deref()
                 .and_then(|path| failure.snapshots.iter().find(|(p, _)| p == path))
-                .map(|(_, text)| text.clone())
-                .unwrap_or_default();
+                .map(|(_, text)| text.clone());
+            let start = attributed.error.span.start;
             Reported {
                 code: attributed.error.category.to_string(),
-                line: bynk_syntax::span::line_col(&text, attributed.error.span.start).0,
+                line: text
+                    .as_deref()
+                    .map_or(0, |t| bynk_syntax::span::line_col(t, start).0),
                 text,
             }
         })
@@ -288,6 +295,31 @@ fn side_has(side: &Side, code: &str) -> bool {
     side.files.iter().any(|(_, text)| has_line(text, code))
 }
 
+/// Whether `side` holds the example line `code` in the file `label` names, or
+/// in any file when the line has no label.
+fn side_has_in(side: &Side, label: Option<&str>, code: &str) -> bool {
+    let Some(label) = label else {
+        return side_has(side, code);
+    };
+    let want = labelled_path(label);
+    (side.files.iter()).any(|(path, text)| *path == want && has_line(text, code))
+}
+
+/// The file label in force at each code line of `example`, in step with
+/// [`example_lines`]: `None` before the first label.
+fn line_labels(example: &str) -> Vec<Option<&str>> {
+    let mut current = None;
+    let mut out = Vec::new();
+    for line in example.lines() {
+        if let Some(label) = file_label(line) {
+            current = Some(label);
+        } else if !code_of(line).is_empty() {
+            out.push(current);
+        }
+    }
+    out
+}
+
 /// A comment-only line that holds just a path is a file label (see the module
 /// doc): the path of a `.bynk` file under `src/`, or `bynk.toml`.
 fn file_label(line: &str) -> Option<&str> {
@@ -360,12 +392,20 @@ fn mark_failures(code: &str, lines: &[(&str, Option<bool>)], bad: &Side) -> Vec<
         }
     }
     let marked = |e: &Reported| {
+        let text = e.text.as_deref().unwrap_or_default();
         lines
             .iter()
             .filter(|(_, mark)| *mark == Some(true))
-            .any(|(want, _)| lines_matching(&e.text, want).contains(&e.line))
+            .any(|(want, _)| lines_matching(text, want).contains(&e.line))
     };
-    if !bad.errors.is_empty() && !bad.errors.iter().any(marked) {
+    if let Some(e) = bad.errors.iter().find(|e| e.text.is_none()) {
+        // Nothing to read a line from: say so, rather than blame the marks.
+        out.push(format!(
+            "{code}: {} reports `{}` with no source file to read its line from (no path, or \
+             one the build did not snapshot), so the gate cannot tell where it is",
+            bad.name, e.code
+        ));
+    } else if !bad.errors.is_empty() && !bad.errors.iter().any(marked) {
         let at: Vec<(&str, usize)> = bad.errors.iter().map(|e| (&*e.code, e.line)).collect();
         out.push(format!(
             "{code}: {} reports its errors at {at:?}, on no line the example marks `✗`",
@@ -376,15 +416,17 @@ fn mark_failures(code: &str, lines: &[(&str, Option<bool>)], bad: &Side) -> Vec<
 }
 
 /// The failures of the example's lines: each one is in the program its mark
-/// names, and none has nothing before its `…` to compare.
+/// names, in the file its label names if it has one, and none has nothing
+/// before its `…` to compare.
 fn line_failures(
     code: &str,
     lines: &[(&str, Option<bool>)],
+    labels: &[Option<&str>],
     bad: &Side,
     good: &Side,
 ) -> Vec<String> {
     let mut out = Vec::new();
-    for (line, mark) in lines {
+    for ((line, mark), label) in lines.iter().zip(labels) {
         if line
             .split_once('…')
             .is_some_and(|(before, _)| before.trim().is_empty())
@@ -394,17 +436,19 @@ fn line_failures(
             ));
             continue;
         }
+        let in_side = |side: &Side| side_has_in(side, *label, line);
         let (found, place) = match mark {
-            Some(true) => (side_has(bad, line), bad.name.clone()),
-            Some(false) => (side_has(good, line), good.name.clone()),
+            Some(true) => (in_side(bad), bad.name.clone()),
+            Some(false) => (in_side(good), good.name.clone()),
             None => (
-                side_has(bad, line) || side_has(good, line),
+                in_side(bad) || in_side(good),
                 format!("{} or {}", bad.name, good.name),
             ),
         };
         if !found {
+            let at = label.map_or(String::new(), |l| format!(" `{}` of", labelled_path(l)));
             out.push(format!(
-                "{code}: the example's line `{line}` is not in {place}"
+                "{code}: the example's line `{line}` is not in{at} {place}"
             ));
         }
     }
@@ -426,7 +470,13 @@ fn fixture_failures(code: &str, example: &str) -> Vec<String> {
     let lines = example_lines(example);
     let mut out = compile_failures(code, &bad, &good);
     out.extend(mark_failures(code, &lines, &bad));
-    out.extend(line_failures(code, &lines, &bad, &good));
+    out.extend(line_failures(
+        code,
+        &lines,
+        &line_labels(example),
+        &bad,
+        &good,
+    ));
     for why in label_failures(example, project, &bad, &good) {
         out.push(format!("{code}: {why}"));
     }
@@ -519,7 +569,7 @@ fn side(name: &str, files: &[(&str, &str)], errors: &[(&str, usize, &str)]) -> S
             .map(|(code, line, text)| Reported {
                 code: code.to_string(),
                 line: *line,
-                text: text.to_string(),
+                text: Some(text.to_string()),
             })
             .collect(),
     }
@@ -601,10 +651,11 @@ fn example_lines_are_found_in_any_file_of_a_project() {
         ("uses b", Some(false)),
         ("type A = Int", None),
     ];
-    assert!(line_failures("c", &lines, &bad, &good).is_empty());
+    let unlabelled = [None, None, None];
+    assert!(line_failures("c", &lines, &unlabelled, &bad, &good).is_empty());
     // A `✓` line only in the bad project is not found.
     let swapped = [("uses a", Some(false))];
-    assert_eq!(line_failures("c", &swapped, &bad, &good).len(), 1);
+    assert_eq!(line_failures("c", &swapped, &[None], &bad, &good).len(), 1);
 }
 
 #[test]
@@ -643,4 +694,53 @@ fn a_fixture_is_one_form_or_the_other() {
         assert!(why.contains("mixes the file form"), "{name}: {why}");
     }
     let _ = fs::remove_dir_all(&root);
+}
+
+/// The failures of one example against a bad and a good project.
+fn placed(example: &str, bad: &Side, good: &Side) -> Vec<String> {
+    let (lines, labels) = (example_lines(example), line_labels(example));
+    line_failures("c", &lines, &labels, bad, good)
+}
+
+#[test]
+fn a_labelled_line_must_be_in_the_file_its_label_names() {
+    let bad = side(
+        "bad/",
+        &[("src/a.bynk", "type A = Int"), ("src/b.bynk", "uses a")],
+        &[],
+    );
+    let good = side(
+        "good/",
+        &[("src/a.bynk", "uses a"), ("src/b.bynk", "type B = Int")],
+        &[],
+    );
+    let ok = "type A = Int\n// b.bynk\nuses a  // ✗\n// a.bynk\nuses a  // ✓";
+    assert_eq!(line_labels(ok), vec![None, Some("b.bynk"), Some("a.bynk")]);
+    assert!(placed(ok, &bad, &good).is_empty());
+    // `type A = Int` is in the bad project, but in `a.bynk`, not the labelled `b.bynk`.
+    let wrong_file = placed("// b.bynk\ntype A = Int  // ✗", &bad, &good);
+    assert_eq!(wrong_file.len(), 1, "{wrong_file:?}");
+    assert!(
+        wrong_file[0].contains("`src/b.bynk` of bad/"),
+        "{wrong_file:?}"
+    );
+    // `uses a` is in `b.bynk` of the bad project, not of the good one.
+    let wrong_side = placed("// b.bynk\nuses a  // ✓", &bad, &good);
+    assert_eq!(wrong_side.len(), 1, "{wrong_side:?}");
+    // Unmarked: either project's labelled file will do.
+    assert!(placed("// b.bynk\ntype B = Int", &bad, &good).is_empty());
+    assert_eq!(placed("// b.bynk\ntype A = Int", &bad, &good).len(), 1);
+    // A label on a file neither project has finds no line at all.
+    assert_eq!(placed("// c.bynk\nuses a", &bad, &good).len(), 1);
+}
+
+#[test]
+fn an_error_with_no_source_file_is_reported_as_such() {
+    let mut bad = side("bad/", &[], &[("c", 1, "x")]);
+    bad.errors[0].text = None;
+    let lines = [("x", Some(true)), ("y", Some(false))];
+    let out = mark_failures("c", &lines, &bad);
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert!(out[0].contains("no source file to read"), "{out:?}");
+    assert!(!out[0].contains("marks `✗`"), "{out:?}");
 }

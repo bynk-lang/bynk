@@ -110,7 +110,8 @@ Concretely, the implementing PR must, *where the increment touches them*:
   the good one must compile; and each line of the example must appear in the
   bad or the good program (`explain_examples.rs`). A multi-file example labels
   each snippet with a comment-only path line such as `// shop.bynk` (the file's
-  path under `src/`, or `// bynk.toml`). Warnings and
+  path under `src/`, or `// bynk.toml`), and the lines under a label must be in
+  that file. A blurb may name other codes in backticks, and each must be real. Warnings and
   internal codes may be left to the one-line registry summary. The `explained_codes` probe ratchets coverage
   upwards; the backlog is tracked in #3163.
 - **Keep examples consistent and compiling.** Snippets demonstrating the same

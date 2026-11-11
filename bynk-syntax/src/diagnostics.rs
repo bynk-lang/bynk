@@ -75,8 +75,10 @@ pub struct Explain {
     /// An example that spans files says which one each snippet is in with a
     /// comment-only line holding just a path: `// shop.bynk`, the file's path
     /// under the project's `src/` (`// shop/till.bynk` if nested), or
-    /// `// bynk.toml`. The label applies until the next; it is checked to name a
-    /// file of the fixture, and only a directory-form fixture may use one.
+    /// `// bynk.toml`. The label applies until the next, and the gate holds each
+    /// line under it to that file (the bad project's if marked `✗`, the good
+    /// project's if `✓`, either's if unmarked). A label must name a file of the
+    /// fixture, and only a directory-form fixture may use one.
     pub example: &'static str,
     /// The target Book page as a site-root-relative path, no extension and no
     /// trailing slash, e.g. `/book/reference/types`. Used verbatim as an
