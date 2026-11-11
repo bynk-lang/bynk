@@ -929,3 +929,24 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
     },
   };
 }
+
+/**
+ * Version metadata (#3300): Cloudflare's Version metadata binding, which
+ * `WorkersVersion` reads. `timestamp` is the version's creation time as an
+ * ISO-8601 string; `tag` is empty when the version has none.
+ */
+export interface WorkerVersionMetadata {
+  readonly id: string;
+  readonly tag: string;
+  readonly timestamp: string;
+}
+
+/**
+ * The Version metadata binding of a multi-Worker integration test participant,
+ * bound as its `env.CF_VERSION_METADATA`: a fixed version (id `"integration"`,
+ * no tag, created at the epoch), so a case's assertions do not depend on when
+ * it runs.
+ */
+export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
+  return { id: "integration", tag: "", timestamp: "1970-01-01T00:00:00.000Z" };
+}

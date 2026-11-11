@@ -328,6 +328,8 @@ on it unchanged.
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
   `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache`.
+  `Version` is not: a Worker has one Version metadata binding, so it is used
+  bare, with `given Version`.
 - Options follow the base as `@annotations`, from the kind's own set
   (`bynk.capability.unknown_option`), each one literal of the option's kind,
   given once (`bynk.capability.invalid_option`). `Kv` takes none. `Service`

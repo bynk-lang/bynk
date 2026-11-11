@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.545**.
+written against **v0.546**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.546.0** | `bynk.cloudflare.Version` (experimental) reports the running Worker version, the first one-per-Worker platform capability, bound as `[version_metadata]` only when reached |
 | **v0.545.0** | A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` may not write a `store` (`bynk.par.store_write_in_closure`), extending the `par` block's rule that store writes stay sequential |
 | **v0.544.1** | The project analysis shares each context's agent declarations with the sequence and boundary info it retains instead of deep-copying them twice per context, which shaves editor edit latency on projects with many agents |
 | **v0.544.0** | Store collection operations and store queries in emitted agents are written so a handle backed by storage can serve them, with no change to an agent's behaviour (per-entry storage, lazy-read slice, part 2a) |

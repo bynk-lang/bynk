@@ -479,6 +479,21 @@ pub enum ProviderNamespaces<'a> {
     },
 }
 
+/// #3300: how [`ProviderNamespaces::BareResources`]' walk records reaching
+/// one-per-Worker capability `cap` of `unit` in its `referenced_units`:
+/// `bynk.cloudflare#Version`. No unit is named with a `#`, so the marker never
+/// resolves to a platform, and the bare `KV` namespace stays tied to reaching
+/// the unit through `Kv`.
+pub fn bare_singleton_marker(unit: &str, cap: &str) -> String {
+    format!("{unit}#{cap}")
+}
+
+/// The `(unit, capability)` a [`bare_singleton_marker`] names, or `None` for a
+/// plain unit name.
+pub fn parse_bare_singleton_marker(entry: &str) -> Option<(&str, &str)> {
+    entry.split_once('#')
+}
+
 /// `new {ns}.{class}({args})` as a real [`bynk_ts::TsExpr::New`] node.
 pub fn new_call_ts_expr(ns: &str, class: &str, args: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::New {
@@ -617,7 +632,17 @@ pub fn instantiate_provider_ts_expr(
             ty: bynk_ts::TsType::named("never"),
         };
     }
-    referenced_units.insert(provider_ctx.to_string());
+    // #3300: the bare-resources walk records a one-per-Worker capability by
+    // itself ([`bare_singleton_marker`]), not by its unit, so reaching
+    // `Version` declares `[version_metadata]` and never the bare `KV`
+    // namespace that reaching the unit would imply.
+    if matches!(namespaces, ProviderNamespaces::BareResources)
+        && bynk_check::firstparty::singleton(provider_ctx, cap).is_some()
+    {
+        referenced_units.insert(bare_singleton_marker(provider_ctx, cap));
+    } else {
+        referenced_units.insert(provider_ctx.to_string());
+    }
     let Some(provider) = provider else {
         return new_call_ts_expr(&bodied_ns, cap, vec![]);
     };

@@ -71,7 +71,7 @@ class __Stub_Kv {
     return true;
   }
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -94,6 +94,7 @@ class __Stub_Kv {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a case stub beats the suite stub") {
       return Some("case");
     }
@@ -225,7 +226,7 @@ async function test_a_suite_stub_beats_the_double() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { store } = __ns_demo_prec;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -248,6 +249,7 @@ async function test_a_suite_stub_beats_the_double() {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:8:12", 296, 314, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
     if (!(((__obs.log["Kv.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/demo/prec.bynk:9:12", 326, 344, "expect Kv.put called once"); }
@@ -265,7 +267,7 @@ async function test_a_case_stub_beats_the_suite_stub() {
   try {
     const deps = __makeTestDeps("a case stub beats the suite stub");
     const { store } = __ns_demo_prec;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -288,6 +290,7 @@ async function test_a_case_stub_beats_the_suite_stub() {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("case")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:15:12", 479, 496, "expect r == Some(\"case\")\n  expected: r == Some(\"case\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("case")))); }
     return { pass: true };
@@ -304,7 +307,7 @@ async function test_a_later_case_sees_the_suite_stub_again() {
   try {
     const deps = __makeTestDeps();
     const { store } = __ns_demo_prec;
-    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue } = __ns_bynk_cloudflare;
+    const { DataPoint, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
@@ -327,6 +330,7 @@ async function test_a_later_case_sees_the_suite_stub_again() {
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await store.call("a", "1", deps);
     if (!(__bynkEq(r, Some("suite")))) { throw __bynkExpectFailure("tests/demo/prec.bynk:20:12", 597, 615, "expect r == Some(\"suite\")\n  expected: r == Some(\"suite\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Some("suite")))); }
     return { pass: true };

@@ -1,0 +1,38 @@
+context shop.status
+
+// #3300: `Version` is one binding per Worker, `[version_metadata]` bound as
+// `CF_VERSION_METADATA`, reached by a handler and through a local provider's
+// `given`. `Kv` is consumed but never used, so the Worker declares no
+// `[[kv_namespaces]]`: reaching `Version` must not imply the bare namespace.
+
+consumes bynk
+consumes bynk.cloudflare { Kv, Version, WorkerVersion }
+
+type Health = {
+	version: String,
+	tag: Option[String],
+}
+
+capability Reporter {
+	fn describe() -> Effect[String]
+}
+
+provides Reporter = VersionReporter given Version {
+	fn describe() -> Effect[String] {
+		let v <- Version.current()
+		Effect.pure("version \(v.id)")
+	}
+}
+
+service api from http {
+	on GET("/health") () -> Effect[HttpResult[Health]] by Visitor given Version {
+		let v <- Version.current()
+		Ok(Health { version: v.id, tag: v.tag })
+	}
+}
+
+service about {
+	on call() -> Effect[String] given Reporter {
+		Reporter.describe()
+	}
+}
