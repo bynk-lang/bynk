@@ -183,12 +183,12 @@ async function test_several_cookies__in_order() {
         switch (__d.tag) {
           case "Some": {
             const c = __d.value;
-            if (!(__bynkEq(c.httpOnly, false))) { throw __bynkExpectFailure("tests/api.bynk:44:12", 1061, 1080, "expect c.httpOnly == false\n  expected: c.httpOnly == false\n  actual:   " + __bynkShow((c.httpOnly)) + " == " + __bynkShow((false))); }
-            if (!(__bynkEq(c.path, "/app"))) { throw __bynkExpectFailure("tests/api.bynk:45:12", 1092, 1108, "expect c.path == \"/app\"\n  expected: c.path == \"/app\"\n  actual:   " + __bynkShow((c.path)) + " == " + __bynkShow(("/app"))); }
+            if (!(c.httpOnly)) { throw __bynkExpectFailure("tests/api.bynk:44:12", 1061, 1071, "expect c.httpOnly"); }
+            if (!(__bynkEq(c.path, "/app"))) { throw __bynkExpectFailure("tests/api.bynk:45:12", 1083, 1099, "expect c.path == \"/app\"\n  expected: c.path == \"/app\"\n  actual:   " + __bynkShow((c.path)) + " == " + __bynkShow(("/app"))); }
             return undefined;
           }
           case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:48:12", 1138, 1143, "expect false"); }
+            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:48:12", 1129, 1134, "expect false"); }
             return undefined;
           }
         }
@@ -213,13 +213,13 @@ async function test_a_cleared_cookie_is_sent_empty_and_expired() {
         switch (__d.tag) {
           case "Some": {
             const c = __d.value;
-            if (!(__bynkEq(c.name, "__Host-sid"))) { throw __bynkExpectFailure("tests/api.bynk:57:12", 1298, 1320, "expect c.name == \"__Host-sid\"\n  expected: c.name == \"__Host-sid\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("__Host-sid"))); }
-            if (!(__bynkEq(c.value, ""))) { throw __bynkExpectFailure("tests/api.bynk:58:12", 1332, 1345, "expect c.value == \"\"\n  expected: c.value == \"\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow((""))); }
-            if (!(__bynkEq(c.maxAge, Some(0)))) { throw __bynkExpectFailure("tests/api.bynk:59:12", 1357, 1384, "expect c.maxAge == Some(0.seconds)\n  expected: c.maxAge == Some(0.seconds)\n  actual:   " + __bynkShow((c.maxAge)) + " == " + __bynkShow((Some(0)))); }
+            if (!(__bynkEq(c.name, "__Host-sid"))) { throw __bynkExpectFailure("tests/api.bynk:57:12", 1289, 1311, "expect c.name == \"__Host-sid\"\n  expected: c.name == \"__Host-sid\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("__Host-sid"))); }
+            if (!(__bynkEq(c.value, ""))) { throw __bynkExpectFailure("tests/api.bynk:58:12", 1323, 1336, "expect c.value == \"\"\n  expected: c.value == \"\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow((""))); }
+            if (!(__bynkEq(c.maxAge, Some(0)))) { throw __bynkExpectFailure("tests/api.bynk:59:12", 1348, 1375, "expect c.maxAge == Some(0.seconds)\n  expected: c.maxAge == Some(0.seconds)\n  actual:   " + __bynkShow((c.maxAge)) + " == " + __bynkShow((Some(0)))); }
             return undefined;
           }
           case "None": {
-            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:62:12", 1414, 1419, "expect false"); }
+            if (!(false)) { throw __bynkExpectFailure("tests/api.bynk:62:12", 1405, 1410, "expect false"); }
             return undefined;
           }
         }
@@ -240,7 +240,7 @@ async function test_a_cookie_value_that_is_not_a_cookie_octet_faults_the_request
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_bad({ user: "a b" }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 1564, 1583, "expect r is ServerError(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 1555, 1574, "expect r is ServerError(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
