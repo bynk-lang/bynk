@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.550.8** | `bynk explain` explains twenty more codes for writing tests, under `expect`, `stub`, `suite`, `test` and `val` (Refs #3163) |
 | **v0.550.7** | `bynk explain` explains eighteen more codes under `cron`, `held`, `queue`, `record_spread`, `send` and `store` (Refs #3163) |
 | **v0.550.6** | `bynk explain` covers twenty more codes (`lex` and `parse` prefixes) |
 | **v0.550.5** | `bynk explain` explains 27 more codes across effect, provider, consumes, exports, resolve and generics (Refs #3163) |
