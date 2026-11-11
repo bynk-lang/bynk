@@ -859,8 +859,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 A `requires` or `ensures` contract is the always-on form.",
         example: "// demo/rules.bynk\n\
                   fn positive(n: Int) -> Bool {\n\
-                    expect n > 0           // ✗ not in a case\n\
-                    n > 0\n\
+                  \x20   expect n > 0           // ✗ not in a case\n\
+                  \x20   n > 0\n\
                   }\n\
                   \n\
                   // tests/rules.test.bynk\n\
