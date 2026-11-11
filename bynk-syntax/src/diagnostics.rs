@@ -275,16 +275,16 @@ pub const EXPLANATIONS: &[Explain] = &[
                 and those belong to a context. Move the item into a context that `consumes` the \
                 adapter's capability, and leave the adapter as an interface to the foreign code.",
         example: "adapter tokens {\n\
-                  binding \"./tokens.binding.ts\"\n\
-                  provides Jwt = JoseJwt\n\
-                  service login {                       // ✗ an adapter may not declare a service\n\
-                    on call(x: Int) -> Effect[Int] { … }\n\
-                  }\n\
+                \x20 binding \"./tokens.binding.ts\"\n\
+                \x20 provides Jwt = JoseJwt\n\
+                \x20 service login {                       // ✗ an adapter may not declare a service\n\
+                \x20   on call(x: Int) -> Effect[Int] { … }\n\
+                \x20 }\n\
                 }\n\
                 \n\
                 adapter tokens {\n\
-                  binding \"./tokens.binding.ts\"\n\
-                  provides Jwt = JoseJwt                // ✓ capabilities and providers only\n\
+                \x20 binding \"./tokens.binding.ts\"\n\
+                \x20 provides Jwt = JoseJwt                // ✓ capabilities and providers only\n\
                 }",
         page: "/book/reference/adapters",
         anchor: "anatomy",
@@ -298,12 +298,12 @@ pub const EXPLANATIONS: &[Explain] = &[
                 cannot be read. Add `binding \"./tokens.binding.ts\"` and create the file, exporting \
                 a class named for the provider.",
         example: "adapter tokens {                        // ✗ an external provider, but no binding clause\n\
-                  provides Jwt = JoseJwt\n\
+                \x20 provides Jwt = JoseJwt\n\
                 }\n\
                 \n\
                 adapter tokens {\n\
-                  binding \"./tokens.binding.ts\"         // ✓ names the module that supplies JoseJwt\n\
-                  provides Jwt = JoseJwt\n\
+                \x20 binding \"./tokens.binding.ts\"         // ✓ names the module that supplies JoseJwt\n\
+                \x20 provides Jwt = JoseJwt\n\
                 }",
         page: "/book/reference/adapters",
         anchor: "anatomy",
@@ -605,7 +605,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 many. Pass the declared number of arguments. If the operation really needs another \
                 parameter, add it to the capability's declaration and to every provider of it.",
         example: "capability Clock {\n\
-                  fn now() -> Effect[Int]\n\
+                \x20 fn now() -> Effect[Int]\n\
                 }\n\
                 \n\
                 Clock.now(1)                            // ✗ `now` takes no arguments\n\
@@ -623,13 +623,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "commons demo\n\
                 \n\
                 capability Logger {                     // ✗ a commons cannot declare a capability\n\
-                  fn log(message: String) -> Effect[()]\n\
+                \x20 fn log(message: String) -> Effect[()]\n\
                 }\n\
                 \n\
                 context demo\n\
                 \n\
                 capability Logger {                     // ✓ a context can\n\
-                  fn log(message: String) -> Effect[()]\n\
+                \x20 fn log(message: String) -> Effect[()]\n\
                 }",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
@@ -642,7 +642,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 Call one of the declared operations, or add the new operation to the capability and \
                 to each provider of it.",
         example: "capability Clock {\n\
-                  fn now() -> Effect[Int]\n\
+                \x20 fn now() -> Effect[Int]\n\
                 }\n\
                 \n\
                 Clock.nope()                            // ✗ `Clock` declares no `nope`\n\
@@ -1525,12 +1525,12 @@ pub const EXPLANATIONS: &[Explain] = &[
                 kind in every locale. The arms inside a `plural` or `select` may differ. A different \
                 placeholder name is `bynk.messages.placeholder_mismatch`.",
         example: "messages \"en\" @reference {\n\
-                  \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"\n\
+                \x20 \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"\n\
                 }\n\
                 \n\
                 messages \"fr\" {\n\
-                  \"cart.count\" => \"{n} articles\"        // ✗ plain here, plural in the reference\n\
-                  \"cart.count\" => \"{n, plural, one {# article} other {# articles}}\"  // ✓\n\
+                \x20 \"cart.count\" => \"{n} articles\"        // ✗ plain here, plural in the reference\n\
+                \x20 \"cart.count\" => \"{n, plural, one {# article} other {# articles}}\"  // ✓\n\
                 }",
         page: "/book/guides/localisation/format-with-icu",
         anchor: "what-the-compiler-checks",
@@ -1544,13 +1544,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                 follow. A code that is present with different placeholders is \
                 `bynk.messages.placeholder_mismatch`.",
         example: "messages \"en\" @reference {\n\
-                  \"cart.empty\" => \"Your basket is empty.\"\n\
-                  \"cart.greeting\" => \"Hello, {name}!\"\n\
+                \x20 \"cart.empty\" => \"Your basket is empty.\"\n\
+                \x20 \"cart.greeting\" => \"Hello, {name}!\"\n\
                 }\n\
                 \n\
                 messages \"fr\" {                         // ✗ lacks \"cart.greeting\"\n\
-                  \"cart.empty\" => \"Votre panier est vide.\"\n\
-                  \"cart.greeting\" => \"Bonjour, {name} !\"  // ✓ the code added\n\
+                \x20 \"cart.empty\" => \"Votre panier est vide.\"\n\
+                \x20 \"cart.greeting\" => \"Bonjour, {name} !\"  // ✓ the code added\n\
                 }",
         page: "/book/guides/localisation/declare-a-message-bundle",
         anchor: "adding-a-locale",
@@ -1563,11 +1563,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `render` must never fail. So `pt-br` is refused where `pt-BR` is accepted, and so is \
                 a bare word such as `klingon`. Rewrite the tag in canonical form.",
         example: "messages \"pt-br\" @reference {           // ✗ a region is upper-case\n\
-                  \"cart.empty\" => \"A sua cesta está vazia.\"\n\
+                \x20 \"cart.empty\" => \"A sua cesta está vazia.\"\n\
                 }\n\
                 \n\
                 messages \"pt-BR\" @reference {           // ✓\n\
-                  \"cart.empty\" => \"A sua cesta está vazia.\"\n\
+                \x20 \"cart.empty\" => \"A sua cesta está vazia.\"\n\
                 }",
         page: "/book/guides/localisation/declare-a-message-bundle",
         anchor: "adding-a-locale",
@@ -1582,8 +1582,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 compiler does not support, such as `selectordinal` and `offset:`, are reported here \
                 too.",
         example: "messages \"en\" @reference {\n\
-                  \"cart.count\" => \"{n, plural, one {# item}}\"  // ✗ no `other` arm\n\
-                  \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"  // ✓\n\
+                \x20 \"cart.count\" => \"{n, plural, one {# item}}\"  // ✗ no `other` arm\n\
+                \x20 \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"  // ✓\n\
                 }",
         page: "/book/guides/localisation/format-with-icu",
         anchor: "what-the-compiler-checks",
@@ -1614,11 +1614,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `@reference` to the locale your strings are written in first. Two marked blocks are \
                 `bynk.messages.multiple_reference`.",
         example: "messages \"en\" {                         // ✗ no block is marked @reference\n\
-                  \"cart.empty\" => \"Your basket is empty.\"\n\
+                \x20 \"cart.empty\" => \"Your basket is empty.\"\n\
                 }\n\
                 \n\
                 messages \"en\" @reference {              // ✓\n\
-                  \"cart.empty\" => \"Your basket is empty.\"\n\
+                \x20 \"cart.empty\" => \"Your basket is empty.\"\n\
                 }",
         page: "/book/guides/localisation/declare-a-message-bundle",
         anchor: "the-smallest-bundle",
@@ -1650,12 +1650,12 @@ pub const EXPLANATIONS: &[Explain] = &[
                 grammar. Rename the placeholder to match the reference. A placeholder of the right \
                 name but a different ICU kind is `bynk.messages.format_mismatch`.",
         example: "messages \"en\" @reference {\n\
-                  \"cart.greeting\" => \"Hello, {name}!\"\n\
+                \x20 \"cart.greeting\" => \"Hello, {name}!\"\n\
                 }\n\
                 \n\
                 messages \"fr\" {\n\
-                  \"cart.greeting\" => \"Bonjour, {prenom} !\"  // ✗ the reference uses {name}\n\
-                  \"cart.greeting\" => \"Bonjour, {name} !\"    // ✓\n\
+                \x20 \"cart.greeting\" => \"Bonjour, {prenom} !\"  // ✗ the reference uses {name}\n\
+                \x20 \"cart.greeting\" => \"Bonjour, {name} !\"    // ✓\n\
                 }",
         page: "/book/guides/localisation/declare-a-message-bundle",
         anchor: "adding-a-locale",
