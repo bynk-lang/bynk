@@ -1789,27 +1789,7 @@ pub fn phase_group(
             }
             let adapter = a.name.joined();
             let identity = pf.identity_path();
-            // ADR 0799 C: the toolchain pins its own npm packages exactly, and
-            // a project installs one version of each package, so an adapter
-            // may name such a package only at that version.
-            if let Some(pin) = crate::firstparty::FIRST_PARTY_NPM
-                .iter()
-                .find(|p| p.package == dep.package && p.version != dep.range)
-            {
-                errors.push_for(
-                    Some(&identity),
-                    CompileError::new(
-                        "bynk.requires.conflicting_range",
-                        dep.span,
-                        format!(
-                            "adapter `{adapter}` requires `{}` at `{}`, but the toolchain pins it at `{}`",
-                            dep.package, dep.range, pin.version
-                        ),
-                    )
-                    .with_note(
-                        "the toolchain's own binding uses this package at an exact version; an adapter that needs it must require that version",
-                    ),
-                );
+            if conflicts_with_first_party_pin(dep, &adapter, &identity, errors) {
                 continue;
             }
             if let Some(range) = npm_deps.get(&dep.package) {
@@ -1859,6 +1839,38 @@ pub fn phase_group(
         adapter_bindings,
         npm_deps,
     )
+}
+
+/// ADR 0799 C: the toolchain pins its own npm packages exactly, and a project
+/// installs one version of each package, so an adapter may name such a package
+/// only at that version. Reports `bynk.requires.conflicting_range` and says so.
+fn conflicts_with_first_party_pin(
+    dep: &bynk_syntax::ast::RequiresDep,
+    adapter: &str,
+    identity: &Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let Some(pin) = crate::firstparty::FIRST_PARTY_NPM
+        .iter()
+        .find(|p| p.package == dep.package && p.version != dep.range)
+    else {
+        return false;
+    };
+    errors.push_for(
+        Some(identity),
+        CompileError::new(
+            "bynk.requires.conflicting_range",
+            dep.span,
+            format!(
+                "adapter `{adapter}` requires `{}` at `{}`, but the toolchain pins it at `{}`",
+                dep.package, dep.range, pin.version
+            ),
+        )
+        .with_note(
+            "the toolchain's own binding uses this package at an exact version; an adapter that needs it must require that version",
+        ),
+    );
+    true
 }
 
 /// v0.20a: apply the function-type boundary confinement to every serialisable

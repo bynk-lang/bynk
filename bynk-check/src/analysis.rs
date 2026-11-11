@@ -647,9 +647,8 @@ fn analyse_project_inner(
         &unit_tables,
         &mut errors,
     );
-    // #2306: Workers-only as well.
-    // #3328: one service per address across the whole project.
     crate::email::phase_duplicate_addresses(&parsed, &groups, &kinds, &mut errors);
+    // #2306: Workers-only as well.
     project_model::phase_workers_ws_open_split(
         project_model::BuildTarget::Bundle,
         &parsed,

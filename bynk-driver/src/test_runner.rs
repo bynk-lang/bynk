@@ -948,24 +948,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             "could not write {}: {e}",
             out_js_root.join("package.json").display()
         );
-        if json {
-            crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
-        } else {
-            eprintln!("{program} test: {msg}");
-        }
-        return ExitCode::FAILURE;
+        return fail_run(program, json, stream, msg);
     }
 
-    // #3328: a Worker built for a `system` case may import a first-party npm
-    // package (`postal-mime`, for inbound email); `tsc` and Node resolve it from
-    // `out/node_modules`.
     if let Err(msg) = provision_npm_dependencies(&output_root, &out_js_root) {
-        if json {
-            crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
-        } else {
-            eprintln!("{program} test: {msg}");
-        }
-        return ExitCode::FAILURE;
+        return fail_run(program, json, stream, msg);
     }
 
     // Try a sequence of (program, prefix args) tsc invocations. In JSON mode the
@@ -1961,7 +1948,9 @@ mod output_within_tests {
     }
 }
 
-/// #3328: install the npm packages the emitted `package.json` lists (the
+/// #3328: a Worker built for a `system` case may import a first-party npm package
+/// (`postal-mime`, for inbound email), which `tsc` and Node resolve from
+/// `out/node_modules`. Install the npm packages the emitted `package.json` lists (the
 /// toolchain's own first-party ones, ADR 0799 C, and an adapter's), into
 /// `out/node_modules`, and make them resolvable from the compiled `out-js`.
 /// A tree that lists none needs nothing; one whose `node_modules` exists is left
@@ -1978,7 +1967,13 @@ fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<
                 .to_string()
         })?;
         let out = ProcCommand::new(npm)
-            .args(["install", "--no-audit", "--no-fund", "--ignore-scripts", "--silent"])
+            .args([
+                "install",
+                "--no-audit",
+                "--no-fund",
+                "--ignore-scripts",
+                "--silent",
+            ])
             .current_dir(output_root)
             .output()
             .map_err(|e| format!("could not run `npm install`: {e}"))?;
@@ -2003,4 +1998,14 @@ fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<
     std::os::unix::fs::symlink(&target, &link)
         .map_err(|e| format!("could not link {}: {e}", link.display()))?;
     Ok(())
+}
+
+/// Report a failure of the run itself (not of a case) and give the exit code.
+fn fail_run(program: &str, json: bool, stream: bool, msg: String) -> ExitCode {
+    if json {
+        crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
+    } else {
+        eprintln!("{program} test: {msg}");
+    }
+    ExitCode::FAILURE
 }

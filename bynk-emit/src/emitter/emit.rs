@@ -3039,11 +3039,15 @@ fn append_deps_field(
     deps_members.push(bynk_ts::TsTypeMember::prop(name, ty));
 }
 
-/// #3328: the structural type of the minted `SenderIdentity` in a handler's
-/// `deps`. Structural, so the handler module needs no import of the
+/// The type of `deps.identity` for a `Caller` or `Sender` handler. For `Sender`
+/// (#3328) it is the structural type of the minted `SenderIdentity`. Structural, so the handler module needs no import of the
 /// `bynk.cloudflare` declaration the checker typed `s.identity` by, and the
 /// declared interface is assignable to it.
-fn sender_identity_ts_type() -> bynk_ts::TsType {
+fn seam_identity_ts_type(seam: &ActorSeamIr) -> bynk_ts::TsType {
+    if !matches!(seam, ActorSeamIr::Sender(_)) {
+        // `Caller`: the calling context's name.
+        return bynk_ts::TsType::named("string");
+    }
     bynk_ts::TsType::Object(vec![
         bynk_ts::TsTypeMember::readonly_prop("address", bynk_ts::TsType::named("string")),
         bynk_ts::TsTypeMember::readonly_prop(
@@ -3387,12 +3391,10 @@ pub(crate) fn emit_service(
             }
             // v0.54: a Caller-binding call handler's deps carries the
             // caller's context name as its `CallerId` identity (a `string`).
-            ActorSeamIr::Caller(_) => {
-                append_deps_field(
-                    &mut deps_members,
-                    "identity",
-                    bynk_ts::TsType::named("string"),
-                );
+            // #3328: and a `Sender`-binding email handler's carries the minted
+            // `SenderIdentity` (see [`seam_identity_ts_type`]).
+            ActorSeamIr::Caller(_) | ActorSeamIr::Sender(_) => {
+                append_deps_field(&mut deps_members, "identity", seam_identity_ts_type(&seam));
             }
             // v0.52: a sum handler's deps carries the resolved-actor tagged
             // union (`who`), which the body `match`es. A binder-less sum is
@@ -3423,11 +3425,6 @@ pub(crate) fn emit_service(
                 append_deps_field(&mut deps_members, "who", call_sum_ts_type(members));
             }
             // A binder-less Bearer/Oidc, or no seam at all — nothing to widen.
-            // #3328: a `Sender`-binding email handler's deps carries the
-            // `SenderIdentity` the Worker's `email()` entry minted.
-            ActorSeamIr::Sender(_) => {
-                append_deps_field(&mut deps_members, "identity", sender_identity_ts_type());
-            }
             ActorSeamIr::Bearer(_) | ActorSeamIr::Oidc(_) | ActorSeamIr::None => {}
         }
         // v0.79: a handler whose body uses `~>` receives the execution context

@@ -762,7 +762,7 @@ fn workers_ratelimit_counts_on_workerd() {
 const QUEUE_SOURCE: &str = "context q.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Kv, Queue }
+consumes bynk.cloudflare { Kv, Queue, InboundEmail, EmailVerdict, EmailReply, DmarcVerdict, SenderIdentity }
 
 type Placed = {
 \tid: String,
@@ -822,6 +822,31 @@ service fulfilment from queue(\"q-smoke-orders\") {
 \t\tAck
 \t}
 }
+
+service intake from email(\"Support@Q.Example\") {
+\ton message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+\t\tif mail.subject == \"forward\" {
+\t\t\tForward(\"team@q.example\")
+\t\t} else if mail.subject == \"reject\" {
+\t\t\tReject(\"not wanted\")
+\t\t} else if mail.subject == \"reply\" {
+\t\t\tReply(EmailReply { text: Some(\"Thanks\") })
+\t\t} else if mail.subject == \"dmarc\" {
+\t\t\tif s.identity.dmarc == DmarcPass { Reject(\"dmarc pass\") } else { Reject(\"dmarc not pass\") }
+\t\t} else if mail.subject == \"fault\" {
+\t\t\tlet zero = mail.size - mail.size
+\t\t\tReject((10 / zero).toString())
+\t\t} else {
+\t\t\tAccept
+\t\t}
+\t}
+}
+
+service catchall from email(\"*@q.example\") {
+\ton message(mail: InboundEmail) -> Effect[EmailVerdict] {
+\t\tReject(\"no such mailbox\")
+\t}
+}
 ";
 
 #[test]
@@ -831,51 +856,61 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     // the generated consumer as the value its decoder expects, which is the
     // contract `WorkersQueue` exists to keep; text that is not JSON is refused
     // before anything is sent.
-    let Some((failures, log)) = run_smoke("q-smoke", "q", QUEUE_SOURCE, "/seen/boot", 3, &|port| {
-        let mut failures = check_steps(
-            port,
-            &[
-                ("/send/o-1", 200, r#""sent""#),
-                ("/later/o-2", 200, r#""sent""#),
-                ("/batch/o-3/o-4", 200, r#""sent""#),
-                // `sendValue` encodes at the call site and must reach the same
-                // consumer, decoded the same way, as `send(Json.encode(…))`.
-                ("/value/o-5", 200, r#""sent""#),
-                ("/valuelater/o-6", 200, r#""sent""#),
-                ("/valuebatch/o-7/o-8", 200, r#""sent""#),
-                ("/raw/not-json", 500, ""),
-            ],
-        );
-        // Local queues deliver in batches, after a timeout: poll.
-        let expected = [
-            ("o-1", "7"),
-            ("o-2", "8"),
-            ("o-3", "1"),
-            ("o-4", "2"),
-            ("o-5", "9"),
-            ("o-6", "10"),
-            ("o-7", "11"),
-            ("o-8", "12"),
-        ];
-        let deadline = Instant::now() + Duration::from_secs(60);
-        loop {
-            let seen = expected
-                .iter()
-                .map(|(id, _)| get(port, &format!("/seen/{id}")))
-                .collect::<Vec<_>>();
-            let all = seen.iter().zip(&expected).all(
+    let Some((failures, log)) = run_smoke_with(
+        "q-smoke",
+        "q",
+        QUEUE_SOURCE,
+        &[],
+        &install_npm_dependencies,
+        "/seen/boot",
+        3,
+        &|port| {
+            let mut failures = check_steps(
+                port,
+                &[
+                    ("/send/o-1", 200, r#""sent""#),
+                    ("/later/o-2", 200, r#""sent""#),
+                    ("/batch/o-3/o-4", 200, r#""sent""#),
+                    // `sendValue` encodes at the call site and must reach the same
+                    // consumer, decoded the same way, as `send(Json.encode(…))`.
+                    ("/value/o-5", 200, r#""sent""#),
+                    ("/valuelater/o-6", 200, r#""sent""#),
+                    ("/valuebatch/o-7/o-8", 200, r#""sent""#),
+                    ("/raw/not-json", 500, ""),
+                ],
+            );
+            // Local queues deliver in batches, after a timeout: poll.
+            let expected = [
+                ("o-1", "7"),
+                ("o-2", "8"),
+                ("o-3", "1"),
+                ("o-4", "2"),
+                ("o-5", "9"),
+                ("o-6", "10"),
+                ("o-7", "11"),
+                ("o-8", "12"),
+            ];
+            let deadline = Instant::now() + Duration::from_secs(60);
+            loop {
+                let seen = expected
+                    .iter()
+                    .map(|(id, _)| get(port, &format!("/seen/{id}")))
+                    .collect::<Vec<_>>();
+                let all = seen.iter().zip(&expected).all(
                 |(r, (_, total))| matches!(r, Ok((200, b)) if b.trim() == format!("\"{total}\"")),
             );
-            if all || Instant::now() > deadline {
-                if !all {
-                    failures.push(format!("not every message was consumed: {seen:?}"));
+                if all || Instant::now() > deadline {
+                    if !all {
+                        failures.push(format!("not every message was consumed: {seen:?}"));
+                    }
+                    break;
                 }
-                break;
+                std::thread::sleep(Duration::from_millis(500));
             }
-            std::thread::sleep(Duration::from_millis(500));
-        }
-        failures
-    }) else {
+            failures.extend(email_steps(port));
+            failures
+        },
+    ) else {
         return;
     };
     assert!(
@@ -883,6 +918,162 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
         "WorkersQueue on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
+    // #3328: what the platform's own handler did with each message, beside the
+    // outcomes the runtime applied.
+    for (what, line) in [
+        ("a forward", "Email handler forwarded message"),
+        ("a reply", "Email handler replied to sender"),
+        (
+            "a reject",
+            "Email handler rejected message with the following reason: \"not wanted\"",
+        ),
+    ] {
+        assert!(
+            log.contains(line),
+            "{what} is not in the wrangler log ({line:?}):\n{log}"
+        );
+    }
+    assert!(
+        !log.contains("SECRET"),
+        "nothing of a message may reach the log:\n{log}"
+    );
+}
+
+/// The Worker's `email()` export on workerd (#3328 slice 2): `POST
+/// /cdn-cgi/local/email` takes the envelope in the query and an RFC 5322 body,
+/// which must carry a `Message-ID`. Each case is `(subject, to, extra headers,
+/// expected status, a fragment the answer must hold)`.
+///
+/// The platform's own answer to a *throw* out of `email()` was observed, not
+/// asserted, because the runtime never lets one escape: a thrown error comes
+/// back as a `500` carrying the error's message and stack, and `wrangler dev`
+/// logs `Uncaught Error: <message>`. That is why a handler's fault is caught and
+/// rejected with a fixed reason instead (ADR 0805 G). Under `bynk dev` locally,
+/// DMARC and the one-reply rule are not enforced by the platform.
+fn email_steps(port: u16) -> Vec<String> {
+    let pass = "Authentication-Results: mx.cloudflare.net; dmarc=pass header.from=example.org\r\n";
+    let spoof = "Authentication-Results: mx.cloudflare.net; dmarc=fail\r\nAuthentication-Results: mx.cloudflare.net; dmarc=pass\r\n";
+    let cases: &[(&str, &str, &str, u16, &str)] = &[
+        (
+            "hello",
+            "support@q.example",
+            "",
+            200,
+            "successfully processed",
+        ),
+        (
+            "forward",
+            "support@q.example",
+            "",
+            200,
+            "successfully processed",
+        ),
+        (
+            "reply",
+            "support@q.example",
+            "",
+            200,
+            "successfully processed",
+        ),
+        ("reject", "support@q.example", "", 400, "not wanted"),
+        // The address is matched without regard to case, an exact one before the catch-all.
+        ("reject", "SUPPORT@Q.EXAMPLE", "", 400, "not wanted"),
+        // A catch-all takes the rest of its domain; another domain is unclaimed.
+        ("hello", "anyone@q.example", "", 400, "no such mailbox"),
+        (
+            "hello",
+            "nobody@elsewhere.example",
+            "",
+            400,
+            "recipient not accepted",
+        ),
+        // The DMARC verdict is Cloudflare's first header, never a later one.
+        ("dmarc", "support@q.example", "", 400, "dmarc not pass"),
+        ("dmarc", "support@q.example", pass, 400, "dmarc pass"),
+        ("dmarc", "support@q.example", spoof, 400, "dmarc not pass"),
+        // A handler fault is a fixed, non-revealing reject, not a throw.
+        (
+            "fault",
+            "support@q.example",
+            "",
+            400,
+            "message could not be processed",
+        ),
+    ];
+    let mut failures = Vec::new();
+    for (subject, to, extra, status, fragment) in cases {
+        let raw = format!(
+            "{extra}Message-ID: <smoke@example.org>\r\nFrom: a@example.org\r\nTo: {to}\r\nSubject: {subject}\r\n\r\nSECRET body\r\n"
+        );
+        match post_email(port, "a@example.org", to, &raw) {
+            Ok((s, b)) if s == *status && b.contains(fragment) => {}
+            Ok((s, b)) => failures.push(format!(
+                "email {subject:?} to {to}: {s} {b:?}, expected {status} holding {fragment:?}"
+            )),
+            Err(e) => failures.push(format!("email {subject:?} to {to}: {e}")),
+        }
+    }
+    failures
+}
+
+/// `POST /cdn-cgi/local/email` on `port`, as `(status, body)`.
+fn post_email(port: u16, from: &str, to: &str, raw: &str) -> Result<(u16, String), String> {
+    let addr = format!("127.0.0.1:{port}");
+    let mut stream = std::net::TcpStream::connect_timeout(
+        &addr.parse().map_err(|e| format!("{e}"))?,
+        Duration::from_secs(2),
+    )
+    .map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .map_err(|e| e.to_string())?;
+    let request = format!(
+        "POST /cdn-cgi/local/email?from={from}&to={to} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{raw}",
+        raw.len()
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|e| e.to_string())?;
+    let status = response
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| format!("unparseable response: {response:?}"))?;
+    let body = response
+        .split_once("\r\n\r\n")
+        .map(|(_, b)| b.to_string())
+        .unwrap_or_default();
+    Ok((status, body))
+}
+
+/// `prepare` for a smoke whose Worker imports an npm package (`postal-mime`, for
+/// inbound email): install the emitted `package.json`'s dependencies beside the
+/// Worker, as a project does before `wrangler dev`.
+fn install_npm_dependencies(dir: &Path) -> Option<String> {
+    let out = dir.parent()?.parent()?;
+    let npm = Command::new("npm")
+        .args([
+            "install",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+            "--silent",
+        ])
+        .current_dir(out)
+        .output();
+    match npm {
+        Ok(o) if o.status.success() => None,
+        Ok(o) => Some(format!(
+            "npm install failed: {}",
+            String::from_utf8_lossy(&o.stderr)
+        )),
+        Err(e) => Some(format!("could not run npm: {e}")),
+    }
 }
 
 /// #3301: the value the smoke seeds into the local Secrets Store. A test

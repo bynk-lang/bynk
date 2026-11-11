@@ -5795,8 +5795,7 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_message_driver(&self, service: &str) -> Option<String> {
         match &self.mode {
             BodyMode::IntegrationCase { system_jobs, .. }
-                if system_jobs.queue.contains(service)
-                    || system_jobs.email.contains(service) =>
+                if system_jobs.queue.contains(service) || system_jobs.email.contains(service) =>
             {
                 Some(format!("__sysdrive_message_{service}"))
             }

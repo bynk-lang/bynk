@@ -571,8 +571,13 @@ mod tests {
                 || text.ends_with("required-by = [\"acme/ledger:pay\"]\n")
         );
         assert_eq!(back.npm, lock.npm, "approval survives the round trip");
-        assert!(text.contains("range = \"4.1.4\"\nrequired-by = [\"bynk-std\"]\nfirst-party = true\n"));
-        assert!(!text.contains("first-party = true\napproved"), "a first-party row is never approved");
+        assert!(
+            text.contains("range = \"4.1.4\"\nrequired-by = [\"bynk-std\"]\nfirst-party = true\n")
+        );
+        assert!(
+            !text.contains("first-party = true\napproved"),
+            "a first-party row is never approved"
+        );
         assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
         assert!(text.contains(
             "[[registry]]\nname = \"acme-internal\"\nid = \"acme\"\nkey = \"ed25519-fp:abc\"\n"

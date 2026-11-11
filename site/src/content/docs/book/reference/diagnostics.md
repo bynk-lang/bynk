@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **806** codes in total.
+There are **805** codes in total.
 
 ## Agents
 
@@ -373,7 +373,6 @@ There are **806** codes in total.
 | [`bynk.email.duplicate_handler`](/book/reference/inbound-email/#handler-form) | A `from email` service declares more than one `on message` handler; it has exactly one. |  | — |
 | [`bynk.email.invalid_address`](/book/reference/inbound-email/#addresses) | A `from email("…")` binding is not a recipient address a service can claim. |  | — |
 | [`bynk.email.return_not_email_verdict`](/book/reference/inbound-email/#the-verdict) | An email `on message` handler does not return `Effect[EmailVerdict]`. |  | — |
-| [`bynk.email.workers_unsupported`](/book/reference/inbound-email/#status) | A `from email` service is built for the Workers target, whose `email()` entry is not emitted yet. |  | — |
 | `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
 | `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |

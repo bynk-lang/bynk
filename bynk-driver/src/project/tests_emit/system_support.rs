@@ -1579,10 +1579,9 @@ pub(super) fn emit_system_job_support(
                     continue;
                 };
                 let key = bynk_emit::emitter::queue_handler_method_name(sname, 0);
-                let param = h
-                    .params
-                    .first()
-                    .map_or("mail".to_string(), |p| bynk_emit::emitter::ts_ident(&p.name.name));
+                let param = h.params.first().map_or("mail".to_string(), |p| {
+                    bynk_emit::emitter::ts_ident(&p.name.name)
+                });
                 drivers.push(TsStmt::raw(
                     format!(
                         "async function __sysdrive_message_{sname}({param}: any) {{\n  const __h = __makeHarness();\n  return __bynkDeliverEmail<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({param}, (message, exec) => {worker}.email(message, {env}, exec));\n}}\n"

@@ -2522,10 +2522,9 @@ fn run_checks(
         &unit_tables,
         &mut errors,
     );
+    bynk_check::email::phase_duplicate_addresses(&parsed, &groups, &kinds, &mut errors);
     // #2306: on Workers, a WebSocket `on open` and the agent it transfers to
     // must share a file.
-    // #3328: one service per address across the whole project.
-    bynk_check::email::phase_duplicate_addresses(&parsed, &groups, &kinds, &mut errors);
     project_model::phase_workers_ws_open_split(
         target,
         &parsed,
@@ -3224,6 +3223,25 @@ fn run_checks(
     }
 }
 
+/// ADR 0799 C: a runtime module that imports a first-party npm package brings it,
+/// at its exact pin, into `package.json`.
+fn runtime_with_npm(
+    reached: &BTreeSet<(String, String)>,
+    mut npm_deps: std::collections::BTreeMap<String, String>,
+) -> (
+    Vec<(PathBuf, String)>,
+    std::collections::BTreeMap<String, String>,
+) {
+    let runtime_files = emitter::runtime_files::closure_files(reached);
+    let modules = runtime_files
+        .iter()
+        .filter_map(|(path, _)| path.file_stem().and_then(|m| m.to_str()));
+    for dep in firstparty::first_party_npm_for(modules) {
+        npm_deps.insert(dep.package.to_string(), dep.version.to_string());
+    }
+    (runtime_files, npm_deps)
+}
+
 /// Build-success tail (region 3): emit the composition/worker/runtime files
 /// and assemble the final `ProjectOutput`. Reached only on build mode with a
 /// clean error sink. Moved verbatim from the old pipeline; only the locals it
@@ -3918,16 +3936,8 @@ fn build_output(
             emitter::runtime_files::reached_in(program, &mut reached);
         }
     }
-    let mut npm_deps = npm_deps;
-    let runtime_files = emitter::runtime_files::closure_files(&reached);
+    let (runtime_files, npm_deps) = runtime_with_npm(&reached, npm_deps);
     for (path, source) in runtime_files {
-        // ADR 0799 C: a runtime module that imports a first-party npm package
-        // brings it, at its exact pin, into `package.json`.
-        if let Some(module) = path.file_stem().and_then(|m| m.to_str()) {
-            for dep in firstparty::first_party_npm_for([module]) {
-                npm_deps.insert(dep.package.to_string(), dep.version.to_string());
-            }
-        }
         compiled.push(StagedFile {
             output_path: path,
             document: Document::Ts(bynk_ts::TsProgram {

@@ -1173,7 +1173,9 @@ mod tests {
                 d.version
             );
         }
-        for range in ["^4.1.4", "~4.1.4", "4", "4.1", "*", "latest", ">=4.1.4", "4.x"] {
+        for range in [
+            "^4.1.4", "~4.1.4", "4", "4.1", "*", "latest", ">=4.1.4", "4.x",
+        ] {
             assert!(!super::is_exact_version(range), "{range}");
         }
         assert!(super::is_exact_version("4.1.4"));
