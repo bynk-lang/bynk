@@ -324,6 +324,14 @@ function __zeroOfCounterState(): CounterState { return { count: 0 }; }
 // loadState(): return stored ?? __zeroOfCounterState();
 ```
 
+A `store Map`, `Set`, `Cache` or `Log` field is held in the state as an
+**insertion-ordered handle** (`StoreMap`, `StoreSet`, `StoreCache`, `StoreLog`), not as a
+plain object: a JS object enumerates integer-like keys (`"2"`, `"10"`) ahead of every other
+key, by value, so it cannot keep the insertion order that [§6.2.3](/book/spec/static-semantics/)
+makes normative. A `Map` handle also holds the posting lists of its `@indexed` fields. The
+stored record is unchanged in form: each collection is written, and read back, in insertion
+order, on `bundle` and on `workers` alike.
+
 On `bundle` an agent is constructed against a per-agent `StateRegistry` (a
 serialised-key-to-state map, reset between tests); on `workers` it is a Durable
 Object addressed by the agent key. A single `makeAgent` helper selects the path

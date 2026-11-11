@@ -1,0 +1,97 @@
+context book
+
+capability Clock {
+  fn now() -> Effect[Instant]
+}
+
+provides Clock = FixedClock {
+  fn now() -> Effect[Instant] {
+    Instant.fromEpochMillis(0)
+  }
+}
+
+type Line = { order: String, sku: String }
+
+// #3254: a `store Map` enumerates in insertion order, integer-like keys included. A
+// plain JS object enumerates `"2"` and `"5"` before `"10"` and `"a"` whatever the
+// order they went in; the map is held as an ordered handle, so the order a handler
+// sees is the order the keys were put, in the same handler and after the state has
+// been stored and read back (each call below runs against a freshly loaded state).
+// A `Set` and a `Cache` are held the same way, so integer-like members keep working
+// across a reload.
+agent Book {
+  key id: String
+  store scores: Map[String, Int]
+  store lines: Map[String, Line] @indexed(by: order)
+  store seen: Set[String]
+  store hits: Cache[String, Int] @ttl(5.minutes)
+
+  on call put(k: String, v: Int) -> Effect[()] {
+    let _ <- scores.put(k, v)
+    ()
+  }
+
+  on call drop(k: String) -> Effect[()] {
+    let _ <- scores.remove(k)
+    ()
+  }
+
+  on call keys() -> Effect[List[String]] {
+    scores.keys.collect()
+  }
+
+  on call values() -> Effect[List[Int]] {
+    scores.values.collect()
+  }
+
+  // Put four keys in one handler, then read them back in the same handler.
+  on call seed() -> Effect[List[String]] {
+    let _ <- scores.put("10", 1)
+    let _ <- scores.put("2", 2)
+    let _ <- scores.put("a", 3)
+    let _ <- scores.put("5", 4)
+    scores.keys.collect()
+  }
+
+  on call addLine(k: String, order: String, sku: String) -> Effect[()] {
+    let _ <- lines.put(k, Line { order: order, sku: sku })
+    ()
+  }
+
+  on call skusOf(order: String) -> Effect[List[String]] {
+    lines.filter((l) => l.order == order).map((l) => l.sku).collect()
+  }
+
+  on call see(k: String) -> Effect[()] {
+    let _ <- seen.add(k)
+    ()
+  }
+
+  on call forget(k: String) -> Effect[()] {
+    let _ <- seen.remove(k)
+    ()
+  }
+
+  on call sawCount() -> Effect[Int] {
+    seen.size()
+  }
+
+  on call saw(k: String) -> Effect[Bool] {
+    seen.contains(k)
+  }
+
+  on call hit(k: String, v: Int) -> Effect[()] given Clock {
+    let _ <- hits.put(k, v)
+    ()
+  }
+
+  on call hitCount() -> Effect[Int] given Clock {
+    let n <- hits.size()
+    n
+  }
+
+  on call hitOf(k: String) -> Effect[Option[Int]] given Clock {
+    let r <- hits.get(k)
+    r
+  }
+}

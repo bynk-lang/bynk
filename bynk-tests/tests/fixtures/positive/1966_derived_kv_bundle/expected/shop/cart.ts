@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
@@ -38,21 +39,28 @@ export class CachedPrices implements Prices {
 export const __CachedPricesProvider = { token: __PricesToken, factory: (deps: { PriceCache: PriceCache }) => new CachedPrices(deps) };
 
 export interface CartState {
-  readonly lines: globalThis.Record<string, number>;
+  readonly lines: __StoreMap<number>;
 }
 
 const __CartRegistry = new __StateRegistry();
-function __zeroOfCartState(): CartState { return { lines: {} }; }
+function __zeroOfCartState(): CartState { return { lines: new __StoreMap<number>() }; }
 
 const __entryFieldsOfCart = [{ name: "lines", kind: "map" }] as const;
 
 function __rehydrateCartState(s: CartState, stored: CartState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const __k of globalThis.Object.keys(s.lines)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "lines", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.lines[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); s.lines[__k] = __r.value as unknown as (typeof s.lines)[string]; }
-  for (const __k of globalThis.Object.keys(s.lines)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lines as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "lines", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); ((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lines as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); }
+}
+
+function __hydrateCartState(s: CartState, stored: CartState): void {
+  const __z = __zeroOfCartState();
+  const __w = s as { -readonly [K in keyof CartState]: CartState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "lines")) { __fillMap(__z.lines, __r["lines"] as never); __w.lines = __z.lines; }
 }
 
 function __encodeCartState(s: CartState): globalThis.Record<string, unknown> {
-  return { ...s, lines: globalThis.Object.fromEntries(globalThis.Object.entries(s.lines).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, lines: __wireMap(s.lines, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
 export class Cart {
@@ -70,6 +78,7 @@ export class Cart {
     __reportUnknownStoredKeys("Cart", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateCartState(__merged, __wholesale);
+    __hydrateCartState(__merged, __wholesale);
     return __merged;
   }
 

@@ -75,7 +75,7 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   private readonly postings = new Map<string, Map<string, string[]>>();
   private nextRank = 0;
 
-  constructor(indexers: readonly Indexer<V>[] = []) {
+  constructor(indexers: ReadonlyArray<Indexer<V>> = []) {
     this.indexers = indexers;
     for (const ix of indexers) this.postings.set(ix.index, new Map());
   }
@@ -134,19 +134,19 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     return this.slots.size;
   }
 
-  keys(): readonly string[] {
+  keys(): string[] {
     return [...this.slots.keys()];
   }
 
-  values(): readonly V[] {
+  values(): V[] {
     return [...this.slots.values()].map((s) => s.value);
   }
 
-  entries(): ReadonlyArray<readonly [string, V]> {
+  entries(): Array<readonly [string, V]> {
     return [...this.slots].map(([k, s]) => [k, s.value] as const);
   }
 
-  byIndex(index: string, by: string): readonly V[] {
+  byIndex(index: string, by: string): V[] {
     const buckets = this.postings.get(index);
     // The indexes are fixed when the handle is built, so an unknown name is a lowering bug.
     if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
@@ -210,7 +210,7 @@ export class StoreSet implements StoreSetHandle {
     return this.members.size;
   }
 
-  keys(): readonly string[] {
+  keys(): string[] {
     return [...this.members];
   }
 }
@@ -288,34 +288,34 @@ export class StoreLog<V> implements StoreLogHandle<V> {
     return this.items.length;
   }
 
-  values(): readonly V[] {
+  values(): V[] {
     return this.items.map((e) => e.v);
   }
 
-  entries(): ReadonlyArray<LogEntry<V>> {
+  entries(): Array<LogEntry<V>> {
     return [...this.items];
   }
 
-  since(t: number): readonly V[] {
+  since(t: number): V[] {
     return this.items.filter((e) => e.t >= t).map((e) => e.v);
   }
 
-  before(t: number): readonly V[] {
+  before(t: number): V[] {
     return this.items.filter((e) => e.t < t).map((e) => e.v);
   }
 
-  between(from: number, to: number): readonly V[] {
+  between(from: number, to: number): V[] {
     return this.items.filter((e) => e.t >= from && e.t <= to).map((e) => e.v);
   }
 
-  recent(n: number): readonly V[] {
+  recent(n: number): V[] {
     return this.items
       .slice(Math.max(0, this.items.length - Math.max(0, n)))
       .reverse()
       .map((e) => e.v);
   }
 
-  reversed(): readonly V[] {
+  reversed(): V[] {
     return [...this.items].reverse().map((e) => e.v);
   }
 }
@@ -382,7 +382,7 @@ export function wireLog<V, W = V>(handle: StoreLog<V>, f?: (value: V) => W): Arr
 }
 
 /** The posting lists of one `@indexed` field, as a wholesale record holds them. */
-export function wirePostings(handle: StoreMap<unknown>, index: string): Record<string, string[]> {
+export function wirePostings<V>(handle: StoreMap<V>, index: string): Record<string, string[]> {
   return Object.fromEntries([...handle.postingsOf(index)].map(([by, pks]) => [by, [...pks]]));
 }
 

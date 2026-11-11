@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../../__bynk_runtime/agent.js";
@@ -11,21 +12,28 @@ import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../
 import { Crate, Size } from "./crate.js";
 
 export interface BinState {
-  readonly items: globalThis.Record<string, Crate>;
+  readonly items: __StoreMap<Crate>;
 }
 
 const __BinRegistry = new __StateRegistry();
-function __zeroOfBinState(): BinState { return { items: {} }; }
+function __zeroOfBinState(): BinState { return { items: new __StoreMap<Crate>() }; }
 
 const __entryFieldsOfBin = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateBinState(s: BinState, stored: BinState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Crate((s.items[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = __deserialise_Crate((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); }
+}
+
+function __hydrateBinState(s: BinState, stored: BinState): void {
+  const __z = __zeroOfBinState();
+  const __w = s as { -readonly [K in keyof BinState]: BinState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
 }
 
 function __encodeBinState(s: BinState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, __serialise_Crate(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Crate(__v)) };
 }
 
 export class Bin {
@@ -43,6 +51,7 @@ export class Bin {
     __reportUnknownStoredKeys("Bin", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBinState(__merged, __wholesale);
+    __hydrateBinState(__merged, __wholesale);
     return __merged;
   }
 
@@ -53,7 +62,7 @@ export class Bin {
   async put(c: Crate, deps: {}): globalThis.Promise<boolean> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.items, c.label, { value: c, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (__state.items.put(String(c.label), c), undefined);
       return true;
     })();
     await this.commitState(__state);
