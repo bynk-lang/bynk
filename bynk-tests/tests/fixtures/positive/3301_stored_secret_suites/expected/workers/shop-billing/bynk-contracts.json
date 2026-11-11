@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "signing": "6f9ccf3cbacc6147"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "signing": "Svc(\"signing\",P(\"body\",B(\"String\")),Ret(B(\"Bool\")))"
+  }
+}

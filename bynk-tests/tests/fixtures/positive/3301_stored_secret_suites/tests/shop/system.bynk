@@ -1,0 +1,9 @@
+// #3301: at `system`, each participant Worker binds its stored secrets too,
+// and a test never reads the account's store: the binding faults, naming
+// itself and never a value, so the deployed handler answers with an error.
+suite shop.billing as system {
+	case "an unstubbed binding is an error response" {
+		let r <- api.GET("/status") by Visitor
+		expect r is ServerError(_)
+	}
+}

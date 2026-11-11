@@ -951,6 +951,31 @@ export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
   return { id: "integration", tag: "", timestamp: "1970-01-01T00:00:00.000Z" };
 }
 
+/**
+ * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
+ * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
+ * value, so nothing that holds one may log it.
+ */
+export interface SecretsStoreSecret {
+  get(): Promise<string>;
+}
+
+/**
+ * The Secrets Store binding of a multi-Worker integration test participant,
+ * bound as its `env.<binding>`. A test never reaches the account's store, so
+ * `get` faults, naming the binding and never a value, until the case stubs the
+ * instance's `get`.
+ */
+export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStoreSecret {
+  return {
+    async get(): Promise<string> {
+      throw new globalThis.Error(
+        `bynk: Secrets Store binding \`${binding}\` has no value in a test, which never reads the account's store — add \`stub <Capability>.get() returns …\``,
+      );
+    },
+  };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, WorkerVersionMetadata as __WorkerVersionMetadata };

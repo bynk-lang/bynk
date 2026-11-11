@@ -1,0 +1,26 @@
+context shop.billing
+
+// #3301: a `StoredSecret` is one secret of an account-level Secrets Store,
+// bound as `SECRET_<NAME>` in a `[[secrets_store_secrets]]` entry. The deploy
+// links it (finding the store by name, and never creating either), so the
+// emitted config names the store and the secret and leaves the id to deploy.
+// `Kv` is consumed but never used, so no `[[kv_namespaces]]` is declared.
+
+consumes bynk
+consumes bynk.cloudflare { Kv, StoredSecret }
+
+capability StripeKey = StoredSecret @store("payments") @secret("stripe-live")
+capability WebhookKey = StoredSecret @store("payments") @secret("stripe-webhook")
+
+type Status = {
+	live: Bool,
+	hooked: Bool,
+}
+
+service api from http {
+	on GET("/status") () -> Effect[HttpResult[Status]] by Visitor given StripeKey, WebhookKey {
+		let key <- StripeKey.get()
+		let hook <- WebhookKey.get()
+		Ok(Status { live: key != "", hooked: hook != "" })
+	}
+}

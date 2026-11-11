@@ -1,0 +1,22 @@
+suite shop.billing
+
+// #3301: a test never reads the Secrets Store. `get()` faults until it is
+// stubbed, and a stubbed value is what the handler sees.
+
+case "an unstubbed secret faults" {
+	expect api.GET("/status") by Visitor faults
+}
+
+case "a stubbed secret is read" {
+	stub StripeKey.get() returns "sk_test_placeholder"
+	stub WebhookKey.get() returns ""
+	let r <- api.GET("/status") by Visitor
+	expect r is Ok(Status { live: true, hooked: false, .. })
+	expect StripeKey.get called once
+}
+
+case "a provider reaches the secret through its given" {
+	stub StripeKey.get() returns "sk_test_placeholder"
+	let ok <- signing.call("body")
+	expect ok == true
+}

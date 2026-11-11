@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { StoredSecret }
+
+// #3301: an instance names its store and its secret; there is no default.
+capability StripeKey = StoredSecret @store("payments")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

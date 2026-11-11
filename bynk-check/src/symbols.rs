@@ -770,6 +770,27 @@ impl DerivedInstance {
             .flatten()
     }
 
+    /// The Secrets Store a `StoredSecret` instance reads from (#3301), by the
+    /// name the account gives it; `None` for any other kind.
+    pub fn store(&self) -> Option<&str> {
+        self.is_stored_secret()
+            .then(|| self.option(crate::firstparty::STORED_SECRET_STORE_OPTION))
+            .flatten()
+    }
+
+    /// The secret a `StoredSecret` instance reads, by its name in its store;
+    /// `None` for any other kind.
+    pub fn stored_secret(&self) -> Option<&str> {
+        self.is_stored_secret()
+            .then(|| self.option(crate::firstparty::STORED_SECRET_SECRET_OPTION))
+            .flatten()
+    }
+
+    /// Whether this is a `StoredSecret` instance (#3301).
+    pub fn is_stored_secret(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "StoredSecret"
+    }
+
     /// The queue a `Queue` instance sends to (standard-library P2, #2578), as
     /// written, before `bynk deploy` environment-qualifies it; `None` for any
     /// other kind.

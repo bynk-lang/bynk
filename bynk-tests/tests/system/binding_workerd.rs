@@ -235,7 +235,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -885,12 +885,52 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     );
 }
 
+/// #3301: the value the smoke seeds into the local Secrets Store. A test
+/// value, never a credential.
+const LOCAL_SECRET_VALUE: &str = "workerd-smoke-secret";
+
+/// `prepare` for the smoke with a `StoredSecret`: create the secret the
+/// Worker reads in the local Secrets Store beside its configuration, where
+/// `wrangler dev` finds it. `None` on success.
+fn seed_local_secret(dir: &std::path::Path) -> Option<String> {
+    let created = tools::base_command("npx")
+        .args([
+            "-y",
+            wrangler::SPEC,
+            "secrets-store",
+            "secret",
+            "create",
+            "payments",
+            "--name",
+            "stripe-live",
+            "--scopes",
+            "workers",
+            "--value",
+            LOCAL_SECRET_VALUE,
+        ])
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .output();
+    match created {
+        Ok(out) if out.status.success() => None,
+        Ok(out) => Some(format!(
+            "could not seed the local Secrets Store: {}",
+            String::from_utf8_lossy(&out.stderr)
+        )),
+        Err(e) => Some(format!(
+            "could not run wrangler to seed the local Secrets Store: {e}"
+        )),
+    }
+}
+
 const ANALYTICS_SOURCE: &str = "context a.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Analytics, Version }
+consumes bynk.cloudflare { Analytics, Version, StoredSecret }
 
 capability Signups = Analytics
+capability StripeKey = StoredSecret @store(\"payments\") @secret(\"stripe-live\")
+capability MissingKey = StoredSecret @store(\"payments\") @secret(\"absent\")
 
 service api from http {
 \ton GET(\"/write/:plan\") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
@@ -909,6 +949,16 @@ service api from http {
 \t\tif v.id == \"\" { Ok(\"no id\") } else { Ok(\"versioned\") }
 \t}
 
+\ton GET(\"/secret\") () -> Effect[HttpResult[String]] by Visitor given StripeKey {
+\t\tlet key <- StripeKey.get()
+\t\tif key == \"workerd-smoke-secret\" { Ok(\"matched\") } else { Ok(\"different\") }
+\t}
+
+\ton GET(\"/missing\") () -> Effect[HttpResult[String]] by Visitor given MissingKey {
+\t\tlet key <- MissingKey.get()
+\t\tOk(\"read\")
+\t}
+
 \ton GET(\"/wide\") () -> Effect[HttpResult[String]] by Visitor given Signups {
 \t\tlet _ <- Signups.write(DataPoint { index: None, blobs: [], doubles: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0] })
 \t\tOk(\"written\")
@@ -924,23 +974,47 @@ fn workers_analytics_writes_on_workerd() {
     // before the platform sees it. #3300: the same Worker reads `Version`,
     // so `[version_metadata]` binds beside the dataset and its timestamp
     // parses (a fault would be a 500).
-    let Some((failures, log)) = run_smoke("a-smoke", "a", ANALYTICS_SOURCE, "/bare", 4, &|port| {
-        check_steps(
-            port,
-            &[
-                ("/write/pro", 200, r#""written""#),
-                ("/bare", 200, r#""written""#),
-                ("/version", 200, r#""versioned""#),
-                ("/wide", 500, ""),
-            ],
-        )
-    }) else {
+    //
+    // #3301: and a `StoredSecret`. `wrangler dev` reads a local Secrets
+    // Store, whose id is the store's name as written, and `prepare` seeds it
+    // the way a developer does (`wrangler secrets-store secret create`, no
+    // `--remote`, so no account or credentials are involved). The handler
+    // reports whether the value matched, never the value, and the log is
+    // checked not to hold it. A secret the local store lacks faults at the
+    // read, as the platform answers it, which is the platform fault the
+    // checker's `String` (not `Option`) result stands on.
+    let Some((failures, log)) = run_smoke_with(
+        "a-smoke",
+        "a",
+        ANALYTICS_SOURCE,
+        &[],
+        &seed_local_secret,
+        "/bare",
+        4,
+        &|port| {
+            check_steps(
+                port,
+                &[
+                    ("/write/pro", 200, r#""written""#),
+                    ("/bare", 200, r#""written""#),
+                    ("/version", 200, r#""versioned""#),
+                    ("/secret", 200, r#""matched""#),
+                    ("/missing", 500, ""),
+                    ("/wide", 500, ""),
+                ],
+            )
+        },
+    ) else {
         return;
     };
     assert!(
         failures.is_empty(),
         "WorkersAnalytics on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
+    );
+    assert!(
+        !log.contains(LOCAL_SECRET_VALUE),
+        "the wrangler log holds a Secrets Store value"
     );
 }
 

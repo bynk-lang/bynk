@@ -8,7 +8,8 @@
 // `WorkersAnalytics` (standard-library P3b, #2582) against a dataset fake,
 // `WorkersD1` (standard-library P4a, #2602) against a database fake,
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
-// `WorkersVersion` (#3300) against a Version metadata fake.
+// `WorkersVersion` (#3300) against a Version metadata fake, and
+// `WorkersStoredSecret` (#3301) against a Secrets Store secret fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -20,7 +21,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1237,4 +1238,37 @@ t("WorkersVersion.current: a missing binding or an unreadable timestamp faults",
   await assert.rejects(new WorkersVersion({}).current(), /\[version_metadata\]/);
   const bad = { CF_VERSION_METADATA: { id: "x", tag: "", timestamp: "yesterday" } };
   await assert.rejects(new WorkersVersion(bad).current(), /not a date/);
+});
+
+// #3301: `WorkersStoredSecret`, against a fake of Cloudflare's Secrets Store
+// secret binding: `{ get() }`, which resolves the secret's value.
+t("WorkersStoredSecret.get: reads the instance's own binding and returns the value unchanged", async () => {
+  const calls = [];
+  const secret = (value) => ({
+    async get() {
+      calls.push(value);
+      return value;
+    },
+  });
+  const env = { SECRET_STRIPE_KEY: secret("sk_one"), SECRET_WEBHOOK_KEY: secret("whsec_two") };
+  assert.equal(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get(), "sk_one");
+  assert.equal(await new WorkersStoredSecret(env, "SECRET_WEBHOOK_KEY").get(), "whsec_two");
+  // Each read goes to the platform; the provider keeps no copy.
+  assert.equal(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get(), "sk_one");
+  assert.deepEqual(calls, ["sk_one", "whsec_two", "sk_one"]);
+});
+
+t("WorkersStoredSecret.get: a missing binding names it and the stanza, and a platform refusal propagates", async () => {
+  await assert.rejects(
+    new WorkersStoredSecret({}, "SECRET_STRIPE_KEY").get(),
+    /requires a Secrets Store binding \(env\.SECRET_STRIPE_KEY\).*\[\[secrets_store_secrets\]\]/,
+  );
+  const refusing = {
+    SECRET_STRIPE_KEY: {
+      async get() {
+        throw new Error('Secret "stripe-live" not found');
+      },
+    },
+  };
+  await assert.rejects(new WorkersStoredSecret(refusing, "SECRET_STRIPE_KEY").get(), /not found/);
 });

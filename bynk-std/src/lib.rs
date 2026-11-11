@@ -418,6 +418,12 @@ pub struct Instantiable {
     /// well as through instances. `false` for a kind whose every use needs an
     /// option: a bare `Service` would name no Worker.
     pub bare: bool,
+    /// Whether the resource behind an instance belongs to the account, not to
+    /// the build (#3301, track D3): `bynk deploy` *links* to it (finds it,
+    /// records what it found, and fails when it is missing) and never creates
+    /// it. `StoredSecret` is the first such kind; a foreign `Service` Worker
+    /// behaves the same by its own code until it moves onto this flag.
+    pub linked: bool,
 }
 
 impl Instantiable {
@@ -504,6 +510,19 @@ pub const ANALYTICS_BINDING_PREFIX: &str = "ANALYTICS";
 /// #2602): `capability Orders = D1` binds as `D1_ORDERS`, a
 /// `[[d1_databases]]` entry whose `database_id` `bynk deploy` mints.
 pub const D1_BINDING_PREFIX: &str = "D1";
+
+/// The Worker binding prefix of a `StoredSecret` instance (#3301):
+/// `capability StripeKey = StoredSecret @store("payments") @secret("stripe-live")`
+/// binds as `SECRET_STRIPE_KEY`, a `[[secrets_store_secrets]]` entry.
+pub const STORED_SECRET_BINDING_PREFIX: &str = "SECRET";
+
+/// The option of a `StoredSecret` instance that names its Secrets Store, by
+/// the name the account gives it; `bynk deploy` resolves the id (#3301
+/// Decision C), so an id never appears in source.
+pub const STORED_SECRET_STORE_OPTION: &str = "store";
+
+/// The option of a `StoredSecret` instance that names the secret in its store.
+pub const STORED_SECRET_SECRET_OPTION: &str = "secret";
 
 /// The Worker binding of the `Version` capability (#3300): Cloudflare's
 /// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
@@ -600,6 +619,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersAnalytics",
             "WorkersD1",
             "WorkersVersion",
+            "WorkersStoredSecret",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -611,6 +631,7 @@ pub const UNITS: &[Unit] = &[
         // P2 (#2578): Queue too, until a first-party service has sent on it.
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // Version metadata (#3300) too, until a first-party service reports it.
+        // Secrets Store (#3301) too, until a first-party service reads one.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
         // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
@@ -624,6 +645,7 @@ pub const UNITS: &[Unit] = &[
             "Queue",
             "Analytics",
             "Version",
+            "StoredSecret",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -638,6 +660,7 @@ pub const UNITS: &[Unit] = &[
                 options: &[],
                 required: &[],
                 bare: true,
+                linked: false,
             },
             Instantiable {
                 capability: "Service",
@@ -645,6 +668,7 @@ pub const UNITS: &[Unit] = &[
                 options: &[(SERVICE_WORKER_OPTION, OptionKind::Str)],
                 required: &[SERVICE_WORKER_OPTION],
                 bare: false,
+                linked: false,
             },
             Instantiable {
                 capability: "R2",
@@ -652,6 +676,7 @@ pub const UNITS: &[Unit] = &[
                 options: &[(R2_JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
+                linked: false,
             },
             Instantiable {
                 capability: "RateLimit",
@@ -662,6 +687,7 @@ pub const UNITS: &[Unit] = &[
                 ],
                 required: &[RATELIMIT_LIMIT_OPTION, RATELIMIT_PERIOD_OPTION],
                 bare: false,
+                linked: false,
             },
             Instantiable {
                 capability: "Queue",
@@ -669,6 +695,7 @@ pub const UNITS: &[Unit] = &[
                 options: &[(QUEUE_NAME_OPTION, OptionKind::Str)],
                 required: &[QUEUE_NAME_OPTION],
                 bare: false,
+                linked: false,
             },
             Instantiable {
                 capability: "Analytics",
@@ -676,6 +703,7 @@ pub const UNITS: &[Unit] = &[
                 options: &[],
                 required: &[],
                 bare: false,
+                linked: false,
             },
             Instantiable {
                 capability: "D1",
@@ -683,6 +711,7 @@ pub const UNITS: &[Unit] = &[
                 options: &[],
                 required: &[],
                 bare: false,
+                linked: false,
             },
             Instantiable {
                 capability: "EdgeCache",
@@ -690,6 +719,18 @@ pub const UNITS: &[Unit] = &[
                 options: &[],
                 required: &[],
                 bare: false,
+                linked: false,
+            },
+            Instantiable {
+                capability: "StoredSecret",
+                binding_prefix: STORED_SECRET_BINDING_PREFIX,
+                options: &[
+                    (STORED_SECRET_STORE_OPTION, OptionKind::Str),
+                    (STORED_SECRET_SECRET_OPTION, OptionKind::Str),
+                ],
+                required: &[STORED_SECRET_STORE_OPTION, STORED_SECRET_SECRET_OPTION],
+                bare: false,
+                linked: true,
             },
         ],
         // Version metadata (#3300): the running Worker version's id, tag and
@@ -1295,7 +1336,8 @@ mod tests {
                 ("bynk.cloudflare", "Queue", "QUEUE"),
                 ("bynk.cloudflare", "Analytics", "ANALYTICS"),
                 ("bynk.cloudflare", "D1", "D1"),
-                ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE")
+                ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE"),
+                ("bynk.cloudflare", "StoredSecret", "SECRET")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1321,6 +1363,22 @@ mod tests {
         assert!(analytics.options.is_empty() && !analytics.bare);
         let edge = instantiable("bynk.cloudflare", "EdgeCache").expect("EdgeCache is instantiable");
         assert!(edge.options.is_empty() && !edge.bare);
+        // #3301: a stored secret names its store and its secret, both
+        // required, and is the one kind the deploy links and never creates.
+        let stored =
+            instantiable("bynk.cloudflare", "StoredSecret").expect("StoredSecret is instantiable");
+        assert_eq!(
+            stored.option_names().collect::<Vec<_>>(),
+            ["store", "secret"]
+        );
+        assert_eq!(stored.required, ["store", "secret"]);
+        assert!(!stored.bare && stored.linked);
+        let linked: Vec<&str> = UNITS
+            .iter()
+            .flat_map(|u| u.instantiable.iter().filter(|i| i.linked))
+            .map(|i| i.capability)
+            .collect();
+        assert_eq!(linked, ["StoredSecret"]);
         for u in UNITS {
             for i in u.instantiable {
                 assert!(
@@ -1370,6 +1428,7 @@ mod tests {
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
+                "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
