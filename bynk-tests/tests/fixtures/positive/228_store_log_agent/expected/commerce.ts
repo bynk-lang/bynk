@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
+import { __StoreLog, __fillLog, __wireLog } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -31,20 +32,27 @@ export class SystemClock implements Clock {
 export const __SystemClockProvider = { token: __ClockToken, factory: () => new SystemClock() };
 
 export interface InventoryState {
-  readonly history: globalThis.Array<{ t: number; v: ReserveEvent }>;
+  readonly history: __StoreLog<ReserveEvent>;
 }
 
 const __InventoryRegistry = new __StateRegistry();
-function __zeroOfInventoryState(): InventoryState { return { history: [] }; }
+function __zeroOfInventoryState(): InventoryState { return { history: new __StoreLog<ReserveEvent>() }; }
 
 const __entryFieldsOfInventory = [{ name: "history", kind: "log" }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "history")) for (const __e of s.history) { const __r = __deserialise_ReserveEvent((__e.v as unknown as __JsonValue), "history"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "history")) for (const __e of ((s as unknown as globalThis.Record<string, unknown>).history as ReadonlyArray<{ v: unknown }>)) { const __r = __deserialise_ReserveEvent((__e.v as unknown as __JsonValue), "history"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); __e.v = __r.value; }
+}
+
+function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
+  const __z = __zeroOfInventoryState();
+  const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "history")) { __fillLog(__z.history, __r["history"] as never); __w.history = __z.history; }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {
-  return { ...s, history: s.history.map((__e) => ({ ...__e, v: __serialise_ReserveEvent(__e.v) })) };
+  return { ...s, history: __wireLog(s.history, (__v) => __serialise_ReserveEvent(__v)) };
 }
 
 export class Inventory {
@@ -62,17 +70,18 @@ export class Inventory {
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
+    __hydrateInventoryState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: InventoryState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory);
+    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory, s);
   }
 
   async reserve(sku: string, qty: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); __state.history.push({ t: __now, v: { sku, qty } }); for (let __i = __state.history.length - 1; __i >= 0; __i--) { if (__state.history[__i].t < __now - 2592000000) __state.history.splice(__i, 1); } return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); __state.history.append({ sku, qty }, __now); __state.history.prune(__now - 2592000000); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -81,12 +90,12 @@ export class Inventory {
 
   async recentSkus(n: number, deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => __state.history.slice(globalThis.Math.max(0, __state.history.length - globalThis.Math.max(0, n))).reverse().map((__e) => __e.v)))().map((__x) => ((e: ReserveEvent) => e.sku)(__x))))();
+    return ((() => ((() => __state.history.recent(n)))().map((__x) => ((e: ReserveEvent) => e.sku)(__x))))();
   }
 
   async countSince(t: number, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.history.filter((__e) => __e.t >= (t)).map((__e) => __e.v)))().length;
+    return ((() => __state.history.since(t)))().length;
   }
 
 }

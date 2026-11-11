@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -29,21 +30,28 @@ export const Stale = {
 };
 
 export interface BoxState {
-  readonly items: globalThis.Record<string, number>;
+  readonly items: __StoreMap<number>;
 }
 
 const __BoxRegistry = new __StateRegistry();
-function __zeroOfBoxState(): BoxState { return { items: {} }; }
+function __zeroOfBoxState(): BoxState { return { items: new __StoreMap<number>() }; }
 
 const __entryFieldsOfBox = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateBoxState(s: BoxState, stored: BoxState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); }
+}
+
+function __hydrateBoxState(s: BoxState, stored: BoxState): void {
+  const __z = __zeroOfBoxState();
+  const __w = s as { -readonly [K in keyof BoxState]: BoxState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
 }
 
 function __encodeBoxState(s: BoxState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
 export class Box {
@@ -61,17 +69,18 @@ export class Box {
     __reportUnknownStoredKeys("Box", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoxState(__merged, __wholesale);
+    __hydrateBoxState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BoxState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBoxState(s), __entryFieldsOfBox);
+    await __commitStored(this, this.state.storage, __encodeBoxState(s), __entryFieldsOfBox, s);
   }
 
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (globalThis.Object.defineProperty(__state.items, k, { value: n, writable: true, enumerable: true, configurable: true }), undefined);
+      return (__state.items.put(String(k), n), undefined);
     })();
     await this.commitState(__state);
     return __result;
@@ -79,13 +88,13 @@ export class Box {
 
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))();
+    const all = await ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))();
     return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: string; readonly value: number }) => n + e.value);
   }
 
   async totalEff(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))();
+    const all = await ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))();
     return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
   }
 
@@ -96,21 +105,28 @@ export function __makeBox(key: string, env?: { BOX?: __DurableObjectNamespace })
 }
 
 export interface ByKeyState {
-  readonly items: globalThis.Record<string, number>;
+  readonly items: __StoreMap<number>;
 }
 
 const __ByKeyRegistry = new __StateRegistry();
-function __zeroOfByKeyState(): ByKeyState { return { items: {} }; }
+function __zeroOfByKeyState(): ByKeyState { return { items: new __StoreMap<number>() }; }
 
 const __entryFieldsOfByKey = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateByKeyState(s: ByKeyState, stored: ByKeyState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Sku((__k as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = __deserialise_Sku((__k as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); }
+}
+
+function __hydrateByKeyState(s: ByKeyState, stored: ByKeyState): void {
+  const __z = __zeroOfByKeyState();
+  const __w = s as { -readonly [K in keyof ByKeyState]: ByKeyState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
 }
 
 function __encodeByKeyState(s: ByKeyState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
 export class ByKey {
@@ -128,17 +144,18 @@ export class ByKey {
     __reportUnknownStoredKeys("ByKey", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateByKeyState(__merged, __wholesale);
+    __hydrateByKeyState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ByKeyState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeByKeyState(s), __entryFieldsOfByKey);
+    await __commitStored(this, this.state.storage, __encodeByKeyState(s), __entryFieldsOfByKey, s);
   }
 
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (globalThis.Object.defineProperty(__state.items, sku(k), { value: n, writable: true, enumerable: true, configurable: true }), undefined);
+      return (__state.items.put(String(sku(k)), n), undefined);
     })();
     await this.commitState(__state);
     return __result;
@@ -146,28 +163,28 @@ export class ByKey {
 
   async keys(deps: {}): globalThis.Promise<readonly Sku[]> {
     const __state = await this.loadState();
-    return ((() => globalThis.Object.keys(__state.items).map((__k) => (__k as Sku))))();
+    return ((() => __state.items.keys().map((__k) => (__k as Sku))))();
   }
 
   async stale(deps: {}): globalThis.Promise<readonly Stale[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))().filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x))))().map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x))))();
+    return ((() => ((() => ((() => __state.items.entries().map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))().filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x))))().map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x))))();
   }
 
   async keyCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const ks = await ((() => globalThis.Object.keys(__state.items).map((__k) => (__k as Sku))))();
+    const ks = await ((() => __state.items.keys().map((__k) => (__k as Sku))))();
     return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(ks, 0, (n: number, k: Sku) => n + 1);
   }
 
   async has(k: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return globalThis.Object.hasOwn(__state.items, sku(k));
+    return __state.items.has(String(sku(k)));
   }
 
   async qty(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __k = sku(k); return globalThis.Object.hasOwn(__state.items, __k) ? Some(__state.items[__k]) : None; })();
+    return (() => { const __k = String(sku(k)); return __state.items.has(__k) ? Some(__state.items.get(__k)!) : None; })();
   }
 
 }
@@ -177,20 +194,27 @@ export function __makeByKey(key: string, env?: { BY_KEY?: __DurableObjectNamespa
 }
 
 export interface LedgerState {
-  readonly balances: globalThis.Record<string, number>;
+  readonly balances: __StoreMap<number>;
 }
 
 const __LedgerRegistry = new __StateRegistry();
-function __zeroOfLedgerState(): LedgerState { return { balances: {} }; }
+function __zeroOfLedgerState(): LedgerState { return { balances: new __StoreMap<number>() }; }
 
 const __entryFieldsOfLedger = [{ name: "balances", kind: "map" }] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) for (const __k of globalThis.Object.keys(s.balances)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balances[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); s.balances[__k] = __r.value as unknown as (typeof s.balances)[string]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).balances as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); ((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] = __r.value; }
+}
+
+function __hydrateLedgerState(s: LedgerState, stored: LedgerState): void {
+  const __z = __zeroOfLedgerState();
+  const __w = s as { -readonly [K in keyof LedgerState]: LedgerState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "balances")) { __fillMap(__z.balances, __r["balances"] as never); __w.balances = __z.balances; }
 }
 
 function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown> {
-  return { ...s, balances: globalThis.Object.fromEntries(globalThis.Object.entries(s.balances).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, balances: __wireMap(s.balances, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
 export class Ledger {
@@ -208,11 +232,12 @@ export class Ledger {
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
+    __hydrateLedgerState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: LedgerState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger);
+    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger, s);
   }
 
   async open(a: number, n: number, deps: {}): globalThis.Promise<void> {
@@ -222,7 +247,7 @@ export class Ledger {
       switch (__r0.tag) {
         case "Ok": {
           const acct = __r0.value;
-          return (globalThis.Object.defineProperty(__state.balances, acct, { value: n, writable: true, enumerable: true, configurable: true }), undefined);
+          return (__state.balances.put(String(acct), n), undefined);
         }
         case "Err": {
           return undefined;
@@ -236,12 +261,12 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly Acct[]> {
     const __state = await this.loadState();
-    return ((() => [...((() => globalThis.Object.keys(__state.balances).map((__k) => (globalThis.Number(__k) as Acct))))()].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
+    return ((() => [...((() => __state.balances.keys().map((__k) => (globalThis.Number(__k) as Acct))))()].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
   }
 
   async sum(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await ((() => globalThis.Object.entries(__state.balances).map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v }))))();
+    const all = await ((() => __state.balances.entries().map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v }))))();
     return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
   }
 

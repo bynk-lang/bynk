@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -43,21 +44,28 @@ export class StoredPackages implements Packages {
 export const __StoredPackagesProvider = { token: __PackagesToken, factory: (deps: { Archives: Archives }) => new StoredPackages(deps) };
 
 export interface ProjectionState {
-  readonly stamps: globalThis.Record<string, number>;
+  readonly stamps: __StoreMap<number>;
 }
 
 const __ProjectionRegistry = new __StateRegistry();
-function __zeroOfProjectionState(): ProjectionState { return { stamps: {} }; }
+function __zeroOfProjectionState(): ProjectionState { return { stamps: new __StoreMap<number>() }; }
 
 const __entryFieldsOfProjection = [{ name: "stamps", kind: "map" }] as const;
 
 function __rehydrateProjectionState(s: ProjectionState, stored: ProjectionState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const __k of globalThis.Object.keys(s.stamps)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.stamps[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); s.stamps[__k] = __r.value as unknown as (typeof s.stamps)[string]; }
-  for (const __k of globalThis.Object.keys(s.stamps)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).stamps as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); ((s as unknown as globalThis.Record<string, unknown>).stamps as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stamps")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).stamps as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); }
+}
+
+function __hydrateProjectionState(s: ProjectionState, stored: ProjectionState): void {
+  const __z = __zeroOfProjectionState();
+  const __w = s as { -readonly [K in keyof ProjectionState]: ProjectionState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "stamps")) { __fillMap(__z.stamps, __r["stamps"] as never); __w.stamps = __z.stamps; }
 }
 
 function __encodeProjectionState(s: ProjectionState): globalThis.Record<string, unknown> {
-  return { ...s, stamps: globalThis.Object.fromEntries(globalThis.Object.entries(s.stamps).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, stamps: __wireMap(s.stamps, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
 export class Projection {
@@ -77,11 +85,12 @@ export class Projection {
     __reportUnknownStoredKeys("Projection", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateProjectionState(__merged, __wholesale);
+    __hydrateProjectionState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ProjectionState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeProjectionState(s), __entryFieldsOfProjection);
+    await __commitStored(this, this.state.storage, __encodeProjectionState(s), __entryFieldsOfProjection, s);
   }
 
   async touch(deps: { Indexes: Indexes }): globalThis.Promise<Option<R2Object>> {

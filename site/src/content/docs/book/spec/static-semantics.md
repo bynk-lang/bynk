@@ -1148,7 +1148,11 @@ the entries it changed. A load checks `__layout` on the raw stored record first,
 or not the project has the lock, and a marker this build does not know faults,
 `RehydrationViolation` with detail `NewerLayout` (a later build wrote the record). The
 faulting record is never decoded, merged or written back. A held `Map[K, Connection]`
-stays in the `"state"` record.
+stays in the `"state"` record, as the object it has always been (key to connection id), with
+its insertion order beside it, in a `<field>:order` array of keys (a key no field name can be) (an object cannot carry the
+order of its integer-like keys). A record with no order beside it, as an earlier build wrote
+it, is read in the order an object enumerates, and a build that predates the order reads the
+object and ignores the array.
 
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.
@@ -1910,6 +1914,44 @@ body, a `@raw` body and a multi-actor route (whose wrapper returns `PayloadTooLa
 `maxBody` is an `Int` byte count in this version; a byte `Size` literal is a named
 follow-on.
 
+**`@form`.** A handler annotation, `@form`, marks a handler's `body` as a form post
+(`application/x-www-form-urlencoded`). It is legal only on a `POST`/`PUT`/`PATCH`
+handler with a `body` (`bynk.http.form_on_bodyless`), at most once
+(`bynk.http.form_duplicate`), with no arguments (`bynk.http.form_unknown_arg`), and
+not together with `@raw` (`bynk.http.body_kind_conflict`) or a `by` clause that is a
+sum of actors (`bynk.http.form_on_sum_route`). The `body` MUST be a record
+(`bynk.http.form_body_not_record`) whose fields are each a string-constructible leaf
+(`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one),
+an `Option` of one, or a `List` of one (`bynk.http.form_field_not_stringy`); a `Bool`
+field with no default is a warning (`bynk.http.form_bool_without_default`). The
+router answers a missing or different `Content-Type` (parameters stripped, compared
+case-insensitively; a `charset` other than UTF-8 included) with a synthesised
+**`415 UnsupportedMediaType`** ahead of the auth seam and the body read. It reads the
+body as UTF-8 text under the route's cap, splits it into key/value pairs as the URL
+standard's `application/x-www-form-urlencoded` parser does, and reads the pairs into
+the record's JSON form field by field: unknown keys are ignored; a repeated key fills
+a `List` and is otherwise `StructuralMismatch`; an `Int` reads `-?[0-9]+` within the
+safe-integer range; a `Bool` reads `true`/`on` and `false`/`off`; an empty value is
+absent for an `Option` and for every leaf but `String`. The record's codec then
+applies refinements and defaults and a failure is a `400` whose `path` is rooted at
+`body`. See the HTTP reference.
+
+**`@multipart`.** A handler annotation, `@multipart`, marks a handler's `body` as a
+`multipart/form-data` upload. Its placement rules are `@form`'s, and it likewise excludes
+`@raw` and `@form` (`bynk.http.body_kind_conflict`). The `body` MUST be a record whose
+fields are form leaves, or `File` (the record `bynk` exports), or an `Option` or `List` of
+one. The route MUST have an effective `maxBody` (`bynk.http.multipart_body_unbounded`),
+and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
+`maxParts` are positive `Int` fields of `limits { }` and arguments of `@limit`
+(`bynk.http.limits_invalid_field`, `bynk.http.limit_bad_max_file`); in `@limit` they are legal
+only on a `@multipart` handler (`bynk.http.limit_on_non_multipart`). The router answers a
+`Content-Type` that is not `multipart/form-data` with the `415`, reads the body under the
+cap, and parses its parts: a part with a filename is a file, the rest are text parts read as
+a `@form` body's fields. A body that is not multipart is a `400` of kind `MalformedForm`; a
+part count over `maxParts`, or a file over `maxFile`, is a `413` of kind `PayloadTooLarge`;
+a part of the wrong kind for its field, or two files for a single `File`, is a
+`StructuralMismatch` at `body.<field>`.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
@@ -2421,7 +2463,8 @@ for has type `Effect[HttpOutcome[T]]` instead, where the handler returns
 Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
-PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String)`. Neither
+PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
+MalformedForm(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

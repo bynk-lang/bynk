@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 pub mod bench;
 pub mod editor_contract;
+pub mod fn_length;
 pub mod grammar;
 pub mod greenfield_status;
 pub mod manifest_schema;

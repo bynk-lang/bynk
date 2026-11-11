@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -74,7 +74,7 @@ export class Dial {
         throw __invariantViolation("Dial", "low_stays_low", "transition", "desk/plants.bynk:15:14");
       }
     }
-    await __commitStored(this, this.state.storage, __encodeDialState(s), __entryFieldsOfDial);
+    await __commitStored(this, this.state.storage, __encodeDialState(s), __entryFieldsOfDial, s);
   }
 
   async turn(deps: {}): globalThis.Promise<void> {
@@ -139,7 +139,7 @@ export class Plant {
         throw __invariantViolation("Plant", "seeds_must_grow", "transition", "desk/plants.bynk:32:14");
       }
     }
-    await __commitStored(this, this.state.storage, __encodePlantState(s), __entryFieldsOfPlant);
+    await __commitStored(this, this.state.storage, __encodePlantState(s), __entryFieldsOfPlant, s);
   }
 
   async kill(deps: {}): globalThis.Promise<void> {
@@ -206,7 +206,7 @@ export class Counter {
         throw __invariantViolation("Counter", "grows_count", "transition", "desk/plants.bynk:49:14");
       }
     }
-    await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter);
+    await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter, s);
   }
 
   async grow(deps: {}): globalThis.Promise<void> {

@@ -1,0 +1,2 @@
+bynk.http.form_field_not_stringy
+bynk.http.form_bool_without_default

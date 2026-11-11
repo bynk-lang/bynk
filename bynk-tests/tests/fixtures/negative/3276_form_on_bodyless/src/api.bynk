@@ -1,0 +1,10 @@
+context api
+
+type Q = { q: String }
+
+service api from http {
+  @form
+  on GET("/search") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

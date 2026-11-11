@@ -528,6 +528,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   switch (body.kind) {
     case "MalformedJson":
+    case "MalformedForm":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
       return str(body.details);
@@ -598,7 +599,7 @@ export async function renderRejection(
 // The `BoundaryError.kind`s the router emits when it refuses input *before* the
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
-const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "StructuralMismatch"]);
+const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "StructuralMismatch"]);
 
 // Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
 // parameters (`; charset=…`) are not part of the match, the comparison is
@@ -742,12 +743,50 @@ export function queryString(wire: JsonValue): string {
   return text === "" ? "" : `?${text}`;
 }
 
+/** #3276: a typed `@multipart` body's wire form (what the record's `serialise_*`
+ *  makes, a `File` being `{ filename, contentType, bytes: base64 }`) as the
+ *  `FormData` a request for it carries. Test drivers use it; `fields` says which
+ *  record fields are files. */
+export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): FormData {
+  const form = new FormData();
+  if (typeof wire !== "object" || wire === null || Array.isArray(wire)) return form;
+  const some = (v: JsonValue): JsonValue | undefined => {
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      if (v.kind === "None") return undefined;
+      if (v.kind === "Some") return v.value ?? undefined;
+    }
+    return v;
+  };
+  for (const f of fields) {
+    const value = wire[f.name];
+    if (value === undefined || value === null) continue;
+    for (const item of f.list && Array.isArray(value) ? value : [value]) {
+      const v = some(item);
+      if (v === undefined) continue;
+      if (f.kind === "file") {
+        const file = v as { filename: JsonValue; contentType: string; bytes: string };
+        const name = some(file.filename);
+        const raw = globalThis.atob(file.bytes);
+        const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+        form.append(f.name, new Blob([bytes], { type: file.contentType }), typeof name === "string" ? name : "");
+      } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+        if (typeof v.kind === "string") form.append(f.name, v.kind);
+      } else {
+        form.append(f.name, String(v));
+      }
+    }
+  }
+  return form;
+}
+
 /** #2854: how one field of a handler's typed `query` record reads off the wire. */
 export interface QueryField {
   readonly name: string;
   /** The field's leaf wire form: `Int` and `Bool` are parsed, an `enum` is a
-   *  unit variant named by the value, everything else is the text itself. */
-  readonly kind: "string" | "int" | "bool" | "enum";
+   *  unit variant named by the value, a `Decimal` and everything else is the text
+   *  itself (`"decimal"` differs from `"string"` only in that a form's empty value
+   *  is absent for it). A `"file"` is a `@multipart` file part. */
+  readonly kind: "string" | "decimal" | "int" | "bool" | "enum" | "file";
   readonly list: boolean;
   /** An `Option` field: a present value is wrapped in `Some`, so a value that
    *  reads like the envelope (`?kind=None`) is still the leaf's, not `None`. */
@@ -764,13 +803,40 @@ export function queryObject(
   request: Request,
   fields: readonly QueryField[],
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
-  const search = new URL(request.url).searchParams;
+  return fieldsObject(new URL(request.url).searchParams, fields, "query", false);
+}
+
+/** #3276 (decisions B-D): decode a form body (`application/x-www-form-urlencoded`)
+ *  into the JSON object a record's codec reads. The same reader as
+ *  [`queryObject`] — one table of leaf rules — with the two differences a
+ *  browser's form needs: a `Bool` also reads `on`/`off` (a checkbox's default
+ *  value), and an empty value (`name=`, what an unfilled input sends) is absent
+ *  for an `Option` and for every leaf but a plain `String`, which keeps `""` so a
+ *  `NonEmpty` refinement still fires. Errors name `body.<field>`. */
+export function formObject(
+  text: string,
+  fields: readonly QueryField[],
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
+  return fieldsObject(new URLSearchParams(text), fields, "body", true);
+}
+
+function fieldsObject(
+  search: URLSearchParams,
+  fields: readonly QueryField[],
+  prefix: string,
+  form: boolean,
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const out: Record<string, JsonValue> = {};
   const leaf = (kind: QueryField["kind"], raw: string): JsonValue => {
     switch (kind) {
       case "int":
         return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
       case "bool":
+        if (form) {
+          if (raw === "true" || raw === "on") return true;
+          if (raw === "false" || raw === "off") return false;
+          return raw;
+        }
         return raw === "true" ? true : raw === "false" ? false : raw;
       case "enum":
         return { kind: raw };
@@ -779,7 +845,10 @@ export function queryObject(
     }
   };
   for (const f of fields) {
-    const values = search.getAll(f.name);
+    // A browser sends an unfilled input as `name=`: absent, except for a plain
+    // `String`, whose `""` the field's own refinements judge.
+    const skipEmpty = form && (f.option || f.kind !== "string");
+    const values = search.getAll(f.name).filter((v) => !(skipEmpty && v === ""));
     if (values.length === 0) continue;
     if (f.list) {
       out[f.name] = values.map((v) => leaf(f.kind, v));
@@ -788,7 +857,7 @@ export function queryObject(
         ok: false,
         error: {
           kind: "StructuralMismatch",
-          path: `query.${f.name}`,
+          path: `${prefix}.${f.name}`,
           expected: "a single value",
           actual: `${values.length} values`,
         },
@@ -799,6 +868,155 @@ export function queryObject(
     }
   }
   return { ok: true, value: out };
+}
+
+/** #3276: whether `request`'s `Content-Type` is `multipart/form-data` (parameters
+ *  stripped, case-insensitive). The boundary parameter's presence is the parser's
+ *  to judge: a body with none is a `MalformedForm`, not a `415`. */
+export function multipartMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  return given !== null && given.split(";")[0].trim().toLowerCase() === "multipart/form-data";
+}
+
+/** What reading a multipart body gives: the JSON object the record's codec reads
+ *  (a file field holds an empty placeholder, so the codec sees its shape without
+ *  the file's bytes being copied into base64), and the real `File` values, which
+ *  the caller lays over the decoded record. */
+export type MultipartRead =
+  | { ok: true; value: JsonValue; files: Record<string, unknown> }
+  | { ok: false; status: 400 | 413; error: Record<string, JsonValue> };
+
+/** The per-request caps a `@multipart` route enforces. */
+export interface MultipartLimits {
+  readonly maxFile: number | null;
+  readonly maxParts: number;
+}
+
+const FILE_PLACEHOLDER: JsonValue = { filename: { kind: "None" }, contentType: "", bytes: "" };
+
+/** #3276 (decisions B-F): read a `multipart/form-data` body, already held whole
+ *  under the route's cap, into the record's JSON form plus its file parts. Text
+ *  parts follow the form rules ([`formObject`]); a part with a filename is a file,
+ *  and belongs to a `File` field. Too many parts, or a file over `maxFile`, is the
+ *  `413`; a body that is not multipart at all (no boundary, no closing one) is a
+ *  `MalformedForm`. */
+export async function multipartObject(
+  body: Uint8Array,
+  contentType: string,
+  fields: readonly QueryField[],
+  limits: MultipartLimits,
+): Promise<MultipartRead> {
+  const tooLarge = (details: string): MultipartRead => ({
+    ok: false,
+    status: 413,
+    error: { kind: "PayloadTooLarge", details },
+  });
+  let form: FormData;
+  try {
+    form = await new Request("https://multipart.invalid/", {
+      method: "POST",
+      headers: { "content-type": contentType },
+      body: body as BodyInit,
+    }).formData();
+  } catch {
+    return { ok: false, status: 400, error: { kind: "MalformedForm", details: "Invalid multipart body" } };
+  }
+  let parts = 0;
+  const search = new URLSearchParams();
+  const uploaded = new Map<string, File[]>();
+  // `forEach`, not `entries()`: the emitted project's `lib` has no `DOM.Iterable`.
+  const entries: [string, FormDataEntryValue][] = [];
+  form.forEach((value, name) => entries.push([name, value]));
+  for (const [name, value] of entries) {
+    if (++parts > limits.maxParts) {
+      return tooLarge(`more than ${limits.maxParts} parts`);
+    }
+    if (typeof value === "string") {
+      search.append(name, value);
+      continue;
+    }
+    if (limits.maxFile !== null && value.size > limits.maxFile) {
+      return tooLarge(`a file part is over ${limits.maxFile} bytes`);
+    }
+    // A browser sends an unchosen file input as a part with `filename=""` and no
+    // bytes. Node reads it as an empty `File`; workerd reads it as an empty string,
+    // handled with the text parts below. Either way it is no file.
+    if (value.name === "" && value.size === 0) continue;
+    const list = uploaded.get(name);
+    if (list === undefined) uploaded.set(name, [value]);
+    else list.push(value);
+  }
+  const mismatch = (name: string, expected: string, actual: string): MultipartRead => ({
+    ok: false,
+    status: 400,
+    error: { kind: "StructuralMismatch", path: `body.${name}`, expected, actual },
+  });
+  const textFields = fields.filter((f) => f.kind !== "file");
+  const fileNames = new Set(fields.filter((f) => f.kind === "file").map((f) => f.name));
+  // A file where a text field is declared (or a text value where a file is).
+  for (const name of uploaded.keys()) {
+    if (!fileNames.has(name) && textFields.some((f) => f.name === name)) {
+      return mismatch(name, "text", "a file");
+    }
+  }
+  for (const name of fileNames) {
+    if (search.getAll(name).some((v) => v !== "")) return mismatch(name, "a file", "text");
+  }
+  const text = fieldsObject(search, textFields, "body", true);
+  if (!text.ok) return { ok: false, status: 400, error: text.error as unknown as Record<string, JsonValue> };
+  const value = text.value as Record<string, JsonValue>;
+  const files: Record<string, unknown> = {};
+  for (const f of fields) {
+    if (f.kind !== "file") continue;
+    const got = uploaded.get(f.name) ?? [];
+    if (!f.list && got.length > 1) return mismatch(f.name, "a single file", `${got.length} files`);
+    const read = await Promise.all(
+      got.map(async (file) => ({
+        filename: file.name === "" ? { tag: "None" } : { tag: "Some", value: file.name },
+        contentType: file.type === "" ? "application/octet-stream" : file.type,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      })),
+    );
+    if (f.list) {
+      value[f.name] = read.map(() => FILE_PLACEHOLDER);
+      files[f.name] = read;
+    } else if (read.length === 1) {
+      value[f.name] = f.option ? { kind: "Some", value: FILE_PLACEHOLDER } : FILE_PLACEHOLDER;
+      files[f.name] = f.option ? { tag: "Some", value: read[0] } : read[0];
+    } else if (f.option) {
+      files[f.name] = { tag: "None" };
+    }
+  }
+  return { ok: true, value, files };
+}
+
+/** #3276 (decision H): whether `request`'s `Content-Type` is a form's. The media
+ *  type must be `application/x-www-form-urlencoded` (parameters stripped, case
+ *  insensitive) and a `charset` parameter, when present, must be UTF-8: the
+ *  decoder reads UTF-8 and nothing else, so another charset is a `415` rather
+ *  than silently mis-decoded text. */
+export function formMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  if (given === null) return false;
+  const [media, ...params] = given.split(";");
+  if (media.trim().toLowerCase() !== "application/x-www-form-urlencoded") return false;
+  for (const p of params) {
+    const eq = p.indexOf("=");
+    if (eq < 0 || p.slice(0, eq).trim().toLowerCase() !== "charset") continue;
+    const charset = p.slice(eq + 1).trim().replace(/^"(.*)"$/, "$1").toLowerCase();
+    if (charset !== "utf-8" && charset !== "utf8") return false;
+  }
+  return true;
+}
+
+/** #3276: a record's wire form (what the record's `serialise_*` makes) as a
+ *  form body — `a=1&b=x&b=y`, `""` when every field is absent. A list repeats its
+ *  key, an `Option` is its value or nothing, and an enum is its variant's name.
+ *  `Form.encode` and the test drivers use it; `queryString` is the same text
+ *  behind a `?`. */
+export function formString(wire: JsonValue): string {
+  const text = queryString(wire);
+  return text === "" ? "" : text.slice(1);
 }
 
 export async function responseToHttpOutcome<T>(
@@ -1146,5 +1364,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, requestHeaders as __requestHeaders, queryObject as __queryObject, queryString as __queryString, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formObject as __formObject, formString as __formString, queryObject as __queryObject, queryString as __queryString, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

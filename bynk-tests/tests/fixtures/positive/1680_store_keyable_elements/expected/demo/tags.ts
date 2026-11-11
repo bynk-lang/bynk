@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wireSet } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -36,23 +37,31 @@ export const UserId = {
 };
 
 export interface BoardState {
-  readonly owners: globalThis.Record<string, number>;
-  readonly tags: globalThis.Record<string, boolean>;
+  readonly owners: __StoreMap<number>;
+  readonly tags: __StoreSet;
 }
 
 const __BoardRegistry = new __StateRegistry();
-function __zeroOfBoardState(): BoardState { return { owners: {}, tags: {} }; }
+function __zeroOfBoardState(): BoardState { return { owners: new __StoreMap<number>(), tags: new __StoreSet() }; }
 
 const __entryFieldsOfBoard = [{ name: "owners", kind: "map" }, { name: "tags", kind: "set" }] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) for (const __k of globalThis.Object.keys(s.owners)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.owners[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); s.owners[__k] = __r.value as unknown as (typeof s.owners)[string]; }
-  for (const __k of globalThis.Object.keys(s.owners)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "owners"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
-  for (const __k of globalThis.Object.keys(s.tags)) { const __r = __deserialise_Tag((__k as unknown as __JsonValue), "tags"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).owners as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "owners", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).owners as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); ((s as unknown as globalThis.Record<string, unknown>).owners as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owners")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).owners as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "owners"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tags")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).tags as never)) { const __r = __deserialise_Tag((__k as unknown as __JsonValue), "tags"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+}
+
+function __hydrateBoardState(s: BoardState, stored: BoardState): void {
+  const __z = __zeroOfBoardState();
+  const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "owners")) { __fillMap(__z.owners, __r["owners"] as never); __w.owners = __z.owners; }
+  if (globalThis.Object.hasOwn(__r, "tags")) { __fillSet(__z.tags, __r["tags"] as never); __w.tags = __z.tags; }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
-  return { ...s, owners: globalThis.Object.fromEntries(globalThis.Object.entries(s.owners).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, owners: __wireMap(s.owners, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), tags: __wireSet(s.tags) };
 }
 
 export class Board {
@@ -70,17 +79,18 @@ export class Board {
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoardState(__merged, __wholesale);
+    __hydrateBoardState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BoardState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBoardState(s), __entryFieldsOfBoard);
+    await __commitStored(this, this.state.storage, __encodeBoardState(s), __entryFieldsOfBoard, s);
   }
 
   async tag(t: Tag, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.tags, t, { value: true, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (__state.tags.add(String(t)), undefined);
       return undefined;
     })();
     await this.commitState(__state);
@@ -89,14 +99,14 @@ export class Board {
 
   async hasTag(t: Tag, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    const r = await globalThis.Object.hasOwn(__state.tags, t);
+    const r = await __state.tags.has(String(t));
     return r;
   }
 
   async own(u: UserId, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.owners, u, { value: n, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (__state.owners.put(String(u), n), undefined);
       return undefined;
     })();
     await this.commitState(__state);
@@ -105,7 +115,7 @@ export class Board {
 
   async owned(u: UserId, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const r = await (() => { const __k = u; return globalThis.Object.hasOwn(__state.owners, __k) ? Some(__state.owners[__k]) : None; })();
+    const r = await (() => { const __k = String(u); return __state.owners.has(__k) ? Some(__state.owners.get(__k)!) : None; })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(r, 0);
   }
 

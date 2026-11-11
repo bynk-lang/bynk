@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -17,21 +18,28 @@ export const Reservation = {
 };
 
 export interface InventoryState {
-  readonly reservations: globalThis.Record<string, Reservation>;
+  readonly reservations: __StoreMap<Reservation>;
 }
 
 const __InventoryRegistry = new __StateRegistry();
-function __zeroOfInventoryState(): InventoryState { return { reservations: {} }; }
+function __zeroOfInventoryState(): InventoryState { return { reservations: new __StoreMap<Reservation>() }; }
 
 const __entryFieldsOfInventory = [{ name: "reservations", kind: "map" }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys(s.reservations)) { const __r = __deserialise_Reservation((s.reservations[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); s.reservations[__k] = __r.value as unknown as (typeof s.reservations)[string]; }
-  for (const __k of globalThis.Object.keys(s.reservations)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).reservations as object)) { const __r = __deserialise_Reservation((((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); ((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).reservations as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+}
+
+function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
+  const __z = __zeroOfInventoryState();
+  const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "reservations")) { __fillMap(__z.reservations, __r["reservations"] as never); __w.reservations = __z.reservations; }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {
-  return { ...s, reservations: globalThis.Object.fromEntries(globalThis.Object.entries(s.reservations).map(([__k, __v]) => [__k, __serialise_Reservation(__v)])) };
+  return { ...s, reservations: __wireMap(s.reservations, (__v) => __serialise_Reservation(__v)) };
 }
 
 export class Inventory {
@@ -49,52 +57,53 @@ export class Inventory {
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
+    __hydrateInventoryState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: InventoryState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory);
+    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory, s);
   }
 
   async bigQuantities(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return ((() => ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x))))().map((__x) => ((r: Reservation) => r.qty)(__x))))();
+    return ((() => ((() => __state.reservations.values().filter((__x) => ((r: Reservation) => r.qty > 0)(__x))))().map((__x) => ((r: Reservation) => r.qty)(__x))))();
   }
 
   async pageById(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => [...globalThis.Object.values(__state.reservations)].sort((__a, __b) => { const __ka = ((r: Reservation) => r.id)(__a), __kb = ((r: Reservation) => r.id)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().slice(globalThis.Math.max(0, 1))))().slice(0, globalThis.Math.max(0, 10))))();
+    return ((() => ((() => ((() => [...__state.reservations.values()].sort((__a, __b) => { const __ka = ((r: Reservation) => r.id)(__a), __kb = ((r: Reservation) => r.id)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().slice(globalThis.Math.max(0, 1))))().slice(0, globalThis.Math.max(0, 10))))();
   }
 
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return globalThis.Object.values(__state.reservations).reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0);
+    return __state.reservations.values().reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0);
   }
 
   async largest(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = globalThis.Object.values(__state.reservations); if (__a.length === 0) return None; let __m = ((r: Reservation) => r.qty)(__a[0]); for (const __x of __a) { const __k = ((r: Reservation) => r.qty)(__x); if (__k > __m) __m = __k; } return Some(__m); })();
+    return (() => { const __a = __state.reservations.values(); if (__a.length === 0) return None; let __m = ((r: Reservation) => r.qty)(__a[0]); for (const __x of __a) { const __k = ((r: Reservation) => r.qty)(__x); if (__k > __m) __m = __k; } return Some(__m); })();
   }
 
   async howMany(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x))))().length;
+    return ((() => __state.reservations.values().filter((__x) => ((r: Reservation) => r.qty > 0)(__x))))().length;
   }
 
   async anyBig(deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return globalThis.Object.values(__state.reservations).some((__x) => ((r: Reservation) => r.qty > 100)(__x));
+    return __state.reservations.values().some((__x) => ((r: Reservation) => r.qty > 100)(__x));
   }
 
   async pending(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    const q = (() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x)));
+    const q = (() => __state.reservations.values().filter((__x) => ((r: Reservation) => r.qty > 0)(__x)));
     return ((() => (() => { const __seen = new globalThis.Set(); const __out: Reservation[] = []; for (const __x of (q)()) { const __k = ((r: Reservation) => r.id)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
   }
 
   async firstBig(deps: {}): globalThis.Promise<Reservation> {
     const __state = await this.loadState();
-    return (() => { const __a = ((() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 50)(__x))))(); return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 }); })();
+    return (() => { const __a = ((() => __state.reservations.values().filter((__x) => ((r: Reservation) => r.qty > 50)(__x))))(); return __a.length > 0 ? __a[0] : ({ id: "none", qty: 0 }); })();
   }
 
 }

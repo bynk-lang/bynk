@@ -1,0 +1,13 @@
+context api
+
+type Q = { q: String }
+
+service api from http {
+  limits { maxBody: 1000 }
+
+  @raw(contentType: "image/png")
+  @form
+  on POST("/search") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(body.q)
+  }
+}

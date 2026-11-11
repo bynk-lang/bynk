@@ -1,0 +1,77 @@
+context signup.api
+
+type Email = String where Matches("^[^@]+@[^@]+$")
+type Age = Int where InRange(0, 150)
+type Plan = enum { Free, Pro }
+
+type SignupForm = {
+	email: Email,
+	age: Option[Age],
+	plan: Plan = Free,
+	tags: List[String] = [],
+	remember: Bool = false,
+	nickname: Option[String],
+	title: String = "",
+}
+
+type Search = {
+	q: String,
+}
+
+type Priced = {
+	price: Decimal = 0.00d,
+	subscribed: Bool = false,
+}
+
+// A webhook whose HMAC covers the form's octets as received.
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Hook-Sig") }
+
+service api from http {
+	// A form post: decoded, defaulted and validated before the handler runs.
+	@form
+	on POST("/signup") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor {
+		let age = match body.age {
+			Some(a) => "\(a)"
+			None => "-"
+		}
+		let nick = match body.nickname {
+			Some(n) => n
+			None => "-"
+		}
+		let plan = match body.plan {
+			Free => "free"
+			Pro => "pro"
+		}
+		Ok("\(body.email) \(age) \(plan) \(body.tags.length()) \(body.remember) \(nick) [\(body.title)]")
+	}
+
+	// A path parameter beside the form body.
+	@form
+	on PUT("/profile/:owner") (owner: String, body: Search) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(owner) \(body.q)")
+	}
+
+	// A form on a capped route: the body is read through the counting reader.
+	@form
+	@limit(maxBody: 64)
+	on POST("/search") (body: Search) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.q)
+	}
+
+	// A signed webhook posting a form: the seam verifies the text, then it is decoded.
+	@form
+	on POST("/hook") (body: Search) -> Effect[HttpResult[String]] by Hook {
+		Ok("hook \(body.q)")
+	}
+
+	// An empty Decimal is absent, so the default applies.
+	@form
+	on POST("/priced") (body: Priced) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(body.price) \(body.subscribed)")
+	}
+
+	// The JSON route beside it is untouched.
+	on POST("/json") (body: Search) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.q)
+	}
+}

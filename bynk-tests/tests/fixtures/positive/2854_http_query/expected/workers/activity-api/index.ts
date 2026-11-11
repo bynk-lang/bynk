@@ -73,7 +73,7 @@ export default {
       {
         if ((method === "GET" || method === "HEAD") && path === "/priced") {
           __route = "GET /priced";
-          const __q = __queryObject(request, [{ name: "price", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }]);
+          const __q = __queryObject(request, [{ name: "price", kind: "decimal", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_query = handlers.__deserialise_PriceFilter(__q.value, "query");
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

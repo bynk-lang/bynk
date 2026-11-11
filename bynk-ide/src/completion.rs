@@ -902,10 +902,20 @@ pub const SECURITY_FIELDS: &[(&str, &str)] = &[
 
 /// v0.142 (ADR 0165): the request-limits policy fields, offered at a field-name
 /// position inside a `limits { }` block. The closed set is this one.
-pub const LIMITS_FIELDS: &[(&str, &str)] = &[(
-    "maxBody",
-    "the maximum request body size in bytes (a positive `Int`)",
-)];
+pub const LIMITS_FIELDS: &[(&str, &str)] = &[
+    (
+        "maxBody",
+        "the maximum request body size in bytes (a positive `Int`)",
+    ),
+    (
+        "maxFile",
+        "the maximum size in bytes of one file part of a `@multipart` body (a positive `Int`)",
+    ),
+    (
+        "maxParts",
+        "the maximum number of parts of a `@multipart` body (a positive `Int`; default 64)",
+    ),
+];
 
 /// #2858: the response-JSON policy fields, offered at a field-name position
 /// inside a `json { }` block (and as `@json( … )` arguments). The closed set is
@@ -968,10 +978,20 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
 /// argument-name position inside `@limit( … )`. Its one arg is `maxBody`, the
 /// request-body byte ceiling above which a `413` is synthesised before the body
 /// is read.
-pub const LIMIT_ARGS: &[(&str, &str)] = &[(
-    "maxBody",
-    "the maximum request body size in bytes (a positive `Int`) — a `413` is synthesised past it",
-)];
+pub const LIMIT_ARGS: &[(&str, &str)] = &[
+    (
+        "maxBody",
+        "the maximum request body size in bytes (a positive `Int`) — a `413` is synthesised past it",
+    ),
+    (
+        "maxFile",
+        "on a `@multipart` route, the maximum size in bytes of one file part — a `413` past it",
+    ),
+    (
+        "maxParts",
+        "on a `@multipart` route, the maximum number of parts — a `413` past it",
+    ),
+];
 
 /// The `@raw` handler-annotation arguments, offered at an argument-name position
 /// inside `@raw( … )`. Its one arg is `contentType`, the media type the route accepts
