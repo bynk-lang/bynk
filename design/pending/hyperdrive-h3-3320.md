@@ -56,7 +56,14 @@ are out of scope) was accepted as recommended and is carried out as written:
   `+05:53:28`), each normalised to UTC. A text with no offset (a `timestamp`
   names no instant), `infinity`, a `BC` year, an expanded year and anything else
   is left as text for the codec to refuse, so the failure is a `PgDecode` naming
-  the field. Each form has a runtime test.
+  the field. That holds for a column as well as for server text because the
+  executor overrides postgres.js' date types: the driver parses `date`,
+  `timestamp` and `timestamptz` alike with `new Date(text)`, which would read a
+  zone-less `timestamp` as UTC, a `date` as midnight and an `infinity` as an
+  invalid date (written as `null`). Now only a finite `timestamptz` becomes a
+  `Date` (and ISO-8601, as ADR 0799 F says); the other three stay as the
+  server's text. A test builds the real driver's parsers to show each shape. Each
+  form has a runtime test.
 - **D. An `int8` is read at an `Int` field when it is a whole number within
   ±(2^53 − 1).** ADR 0799 F has `int8` arrive as a string so nothing past 2^53 is
   lost, which means the codec's `Int` rule (a JSON number) would refuse every

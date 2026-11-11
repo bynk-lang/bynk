@@ -328,3 +328,44 @@ test("the real default executor's transaction reports an unreachable host as a c
   assert.equal(out.failure.kind, "connection");
   assert.ok(!out.failure.message.includes("s3cr3t"));
 });
+
+// Review of #3372: the shape a date or time column really has in a row, through
+// the real postgres.js type parsers (no connection is made: `options.parsers` is
+// built from the `types` the executor passes).
+import postgres from "postgres";
+import { PG_DATE_TYPES } from "../src/postgres.ts";
+import { jsonRow } from "../src/postgres.ts";
+import { __bynkPgRow } from "../src/time.ts";
+
+test("a timestamp, a date and an infinity stay text and an Instant refuses them; a finite timestamptz is converted", () => {
+  const parsers = (postgres("postgres://u:p@127.0.0.1:1/db", { types: PG_DATE_TYPES }) as unknown as {
+    options: { parsers: Record<number, (text: string) => unknown> };
+  }).options.parsers;
+  const row = jsonRow({
+    tz: parsers[1184]!("2026-11-11 12:34:56.789+00"),
+    plain: parsers[1114]!("2026-11-11 12:34:56"),
+    day: parsers[1082]!("2026-11-11"),
+    inf: parsers[1184]!("infinity"),
+    ninf: parsers[1184]!("-infinity"),
+  });
+  assert.deepEqual(row, {
+    tz: "2026-11-11T12:34:56.789Z",
+    plain: "2026-11-11 12:34:56",
+    day: "2026-11-11",
+    inf: "infinity",
+    ninf: "-infinity",
+  });
+  __bynkPgRow(row, ["tz", "plain", "day", "inf", "ninf"], []);
+  assert.equal(row.tz, Date.UTC(2026, 10, 11, 12, 34, 56, 789));
+  // Left as text, so the codec refuses each of them rather than reading an instant.
+  assert.equal(row.plain, "2026-11-11 12:34:56");
+  assert.equal(row.day, "2026-11-11");
+  assert.equal(row.inf, "infinity");
+  assert.equal(row.ninf, "-infinity");
+});
+
+test("the executor opens its client with the date types", async () => {
+  const f = fake(() => rows([]));
+  await makePgExecute(f.factory)(URL_WITH_SECRET, "select 1", []);
+  assert.equal(f.opened[0]!.options.types, PG_DATE_TYPES);
+});

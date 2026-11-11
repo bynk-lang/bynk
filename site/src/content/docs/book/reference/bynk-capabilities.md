@@ -1031,8 +1031,10 @@ of the rows' text forms are read for you, and only in a typed read:
 - An `Instant` field reads a `timestamptz`'s ISO-8601 text and normalises it to
   UTC. The forms are the driver's (`2026-11-11T12:34:56.789Z`) and Postgres' own
   text (`2026-11-11 12:34:56.789+00`, `…+05:30`, `…-0800`, a fraction of up to six
-  digits, truncated to milliseconds). A text with no offset (a `timestamp`
-  names no instant), `infinity` and a `BC` year fail the decode. `Json.decode`
+  digits, truncated to milliseconds). A `timestamp` column (no zone, so no
+  instant), a `date` column, `infinity` and a `BC` year fail the decode, and a
+  `String` field reads each as the server's text: the executor keeps those as
+  text, and only a finite `timestamptz` is read as an instant. `Json.decode`
   still reads an `Instant` as epoch milliseconds, as before.
 
 #### Postgres transactions: `transaction`
@@ -1053,7 +1055,7 @@ Main.transaction([
 A `PgStatement` stays where it is built, as a `SqlStatement` does: it cannot be
 stored, sent, received or decoded (`bynk.types.sql_statement_at_boundary`), since
 one from outside would carry SQL that was never a literal. An empty list is
-`Ok([])` and opens no connection.
+`Ok([])` and opens no connection (a missing binding still faults first).
 
 `transaction` runs a list known up front. A read whose result decides a later
 write needs the transaction held open between them; Bynk does not offer that, so

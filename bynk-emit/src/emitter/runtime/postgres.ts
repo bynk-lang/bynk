@@ -93,6 +93,31 @@ interface PgTx {
 interface PgRows extends ReadonlyArray<Record<string, unknown>> {
   readonly count?: number | null;
 }
+/**
+ * How the driver reads the date and time types (Hyperdrive H3, #3320). postgres.js
+ * parses `date`, `timestamp` and `timestamptz` alike with `new Date(text)`, which
+ * would make a zone-less `timestamp` an instant (in the Worker's UTC) and a
+ * `date` midnight, and an `infinity` an invalid date (which `jsonColumn` writes
+ * as `null`). So only a finite `timestamptz` becomes a `Date` (and then ISO-8601,
+ * ADR 0799 F); a `timestamp`, a `date` and an infinite value stay as the
+ * server's text, which an `Instant` field refuses and a `String` field reads.
+ */
+export const PG_DATE_TYPES = (() => {
+  // The driver's own `date` serializer, kept so a `Date` parameter binds as it did.
+  const serialize = (x: unknown): string => (x instanceof Date ? x : new Date(x as string | number)).toISOString();
+  return {
+    // `date` and `timestamp`: the server's text, unparsed.
+    date: { to: 1184, from: [1082, 1114], serialize, parse: (text: string): string => text },
+    // `timestamptz`: a `Date`, unless it is `infinity` or `-infinity`.
+    timestamptz: {
+      to: 1184,
+      from: [1184],
+      serialize,
+      parse: (text: string): Date | string => (/infinity/i.test(text) ? text : new Date(text)),
+    },
+  };
+})();
+
 /** What `postgres(connectionString, options)` is, for a fake to stand in. */
 export type PgFactory = (connectionString: string, options: Record<string, unknown>) => PgSql;
 
@@ -215,7 +240,7 @@ export function jsonRow(row: Record<string, unknown>): Record<string, unknown> {
 export function makePgExecute(factory: PgFactory): PgExecute {
   // `max: 1`: one statement needs one connection. `fetch_types: false` is the
   // `workerd` build's default, written down so it is not left to it.
-  const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false });
+  const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false, types: PG_DATE_TYPES });
   const close = async (client: PgSql | undefined): Promise<void> => {
     if (client === undefined) return;
     try {

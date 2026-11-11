@@ -93,7 +93,9 @@ export function __bynkInstantFromIso(s: string): Option<number> {
 // milliseconds, a fraction past milliseconds truncated toward the earlier
 // instant. A form with no offset (a `timestamp`, which names no instant), the
 // special values `infinity` and `-infinity`, a `BC` year and anything else
-// is `null`.
+// is `null`. The driver keeps those as text (`PG_DATE_TYPES` in `postgres.ts`): only a
+// finite `timestamptz` reaches here as a `Date`'s ISO text, so a `timestamp`, a `date`
+// and an infinite value are refused by the `Instant` field, not read as UTC or `null`.
 const PG_TIMESTAMP =
   /^(\d{4})-(\d{2})-(\d{2})[ Tt](\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?:([Zz])|([+-])(\d{2})(?::?(\d{2})(?::?(\d{2}))?)?)$/;
 

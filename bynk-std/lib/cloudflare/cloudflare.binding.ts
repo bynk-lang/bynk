@@ -1143,7 +1143,8 @@ export class WorkersPostgres implements Postgres {
 
   // All of the statements, or none: one connection, one `sql.begin`, so the
   // first failure rolls back every earlier statement and the result is that
-  // statement's error. An empty list is `Ok([])` and opens no connection.
+  // statement's error. An empty list is `Ok([])` and opens no connection; the
+  // binding is still looked up first, so a missing one faults as for any call.
   async transaction(statements: readonly PgStatement[]): Promise<Result<PgRun[], PgError>> {
     const { connectionString, execute } = this.target();
     if (statements.length === 0) return Ok([]);
