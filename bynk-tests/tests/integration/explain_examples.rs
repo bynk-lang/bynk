@@ -37,6 +37,20 @@
 //! project, and a label in the file form is refused, since it has no files to
 //! name.
 //!
+//! **Layout.** The line comparison ignores indentation, so the example is also
+//! checked as `bynk explain` prints it, that is, the string after Rust has
+//! decoded it. Within a run of non-blank lines, a line inside a `{ … }` block
+//! must be indented past the line that opens the block, by any width, and the
+//! closing `}` must be back at that line's indentation. A blank line ends the
+//! run, so an example may leave a block open. One shape is not a nesting: a
+//! block opener marked `✗` directly followed, at the same indentation, by a
+//! block opener marked `✓` is the line and its replacement. This catches a
+//! body printed flush left, which happens when its indentation is written as
+//! source whitespace after a `\` line continuation: the continuation swallows
+//! it, so leading spaces are written `\x20`. For the same reason a source line
+//! of `EXPLANATIONS` holding only `\` prints no blank line, and is refused;
+//! a blank line is `\n\`.
+//!
 //! [`Explain::example`]: bynk_syntax::diagnostics::Explain::example
 
 use std::collections::BTreeSet;
@@ -243,19 +257,21 @@ fn code_of(line: &str) -> &str {
     }
 }
 
-/// The code lines of an example, each with its mark: `Some(true)` for a line
-/// whose comment carries `✗`, `Some(false)` for `✓`, `None` for neither.
+/// A line's mark: `Some(true)` if it carries `✗`, `Some(false)` for `✓`, and
+/// `None` for neither or both.
+fn mark_of(line: &str) -> Option<bool> {
+    match (line.contains('✗'), line.contains('✓')) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    }
+}
+
+/// The code lines of an example, each with its mark (see [`mark_of`]).
 fn example_lines(example: &str) -> Vec<(&str, Option<bool>)> {
     example
         .lines()
-        .map(|line| {
-            let mark = match (line.contains('✗'), line.contains('✓')) {
-                (true, false) => Some(true),
-                (false, true) => Some(false),
-                _ => None,
-            };
-            (code_of(line), mark)
-        })
+        .map(|line| (code_of(line), mark_of(line)))
         .filter(|(code, _)| !code.is_empty())
         .collect()
 }
@@ -455,6 +471,69 @@ fn line_failures(
     out
 }
 
+/// The width of a line's indentation, in columns.
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// Whether `line` is the `✓` form of the `✗` block opener `opener`: the two
+/// stand side by side at one indentation and both open a block, so the second
+/// replaces the first instead of sitting inside it.
+fn replaces_opener(opener: &str, line: &str) -> bool {
+    indent_of(opener) == indent_of(line)
+        && mark_of(opener) == Some(true)
+        && mark_of(line) == Some(false)
+        && code_of(line).ends_with('{')
+}
+
+/// The layout failures of an example as `bynk explain` prints it (see the
+/// module doc): within a run of non-blank lines, a line inside a `{ … }` block
+/// that is not indented past the line that opens the block, or a closing `}`
+/// that is not back at that line's column.
+///
+/// Like [`code_of`], this reads text, not tokens: a block opens on a line whose
+/// code ends in `{` and closes on one whose code starts with `}`.
+fn layout_failures(example: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    // The lines that open the blocks still open in the current run.
+    let mut open: Vec<&str> = Vec::new();
+    for line in example.lines() {
+        if line.trim().is_empty() {
+            open.clear();
+            continue;
+        }
+        let (indent, code) = (indent_of(line), code_of(line));
+        let opener = open.last().copied();
+        if code.starts_with('}') {
+            open.pop();
+            if let Some(opener) = opener.filter(|o| indent_of(o) != indent) {
+                out.push(format!(
+                    "the example's line `{}` closes the block `{}` opens, but is not at its \
+                     indentation",
+                    line.trim(),
+                    code_of(opener)
+                ));
+            }
+        } else if let Some(opener) = opener.filter(|o| indent_of(o) >= indent) {
+            if replaces_opener(opener, line) {
+                open.pop();
+            } else {
+                out.push(format!(
+                    "the example's line `{}` is inside the block `{}` opens, but is not \
+                     indented past it: write the indentation as `\\x20`, since a `\\` line \
+                     continuation swallows the spaces after it",
+                    line.trim(),
+                    code_of(opener)
+                ));
+            }
+        }
+        if code.ends_with('{') {
+            open.push(line);
+        }
+    }
+    out
+}
+
 /// Every failure of one explained code's fixture.
 fn fixture_failures(code: &str, example: &str) -> Vec<String> {
     let dir = fixtures_root().join(code);
@@ -478,6 +557,9 @@ fn fixture_failures(code: &str, example: &str) -> Vec<String> {
         &good,
     ));
     for why in label_failures(example, project, &bad, &good) {
+        out.push(format!("{code}: {why}"));
+    }
+    for why in layout_failures(example) {
         out.push(format!("{code}: {why}"));
     }
     out
@@ -555,6 +637,72 @@ fn marked_lines_are_compared_without_comment_or_indent() {
     // Nothing before the `…`: no line to hold the program to.
     assert!(!has_line("fn f() {\n  1\n}", "…"));
     assert_eq!(lines_matching("a\n  b // c\nb", "b"), vec![2, 3]);
+}
+
+#[test]
+fn a_block_body_is_indented_past_the_line_that_opens_it() {
+    // Two spaces or four per level, nested blocks, and a blank line all pass.
+    assert!(layout_failures("fn f() -> Int {\n  1\n}").is_empty());
+    let nested = "service s {\n    on call() -> Int {   // ✗ why\n        1\n    }\n}";
+    assert!(layout_failures(nested).is_empty());
+    assert!(layout_failures("fn f() -> Int { … }\nf(1)  // ✗\nf(2)  // ✓").is_empty());
+    // The regression (#3163): the body's indentation was written as source
+    // whitespace after a `\` continuation, so it prints flush left.
+    let flush = layout_failures("capability Clock {\nfn now() -> Int\n}");
+    assert_eq!(flush.len(), 1, "{flush:?}");
+    assert!(flush[0].contains("`fn now() -> Int`"), "{flush:?}");
+    assert!(flush[0].contains("`capability Clock {`"), "{flush:?}");
+    // Every line of the block is held, not only the first.
+    assert_eq!(layout_failures("fn f() {\n    a\nb\n}").len(), 1);
+    assert_eq!(layout_failures("a {\n  b {\n  c\n  }\n}").len(), 1);
+    // A comment does not hide the `{`, and a comment-only line is held too.
+    assert_eq!(layout_failures("fn f() {   // ✗ no\n1\n}").len(), 1);
+    assert_eq!(layout_failures("fn f() {\n// why\n    1\n}").len(), 1);
+    // The closer sits at the opener's column.
+    assert_eq!(layout_failures("fn f() {\n    1\n    }").len(), 1);
+    assert!(layout_failures("if a {\n  1\n} else {\n  2\n}").is_empty());
+    assert_eq!(layout_failures("if a {\n  1\n} else {\n2\n}").len(), 1);
+    // A blank line ends the run: an example may leave a block open.
+    assert!(layout_failures("service s {\n    on call() {   // ✗\n\nf()").is_empty());
+}
+
+#[test]
+fn a_marked_opener_may_stand_beside_its_replacement() {
+    // The `✗` header and the `✓` one, at one indentation: not a nesting.
+    let pair = "service s {\n    on a(t: T) {   // ✗ no\n    on a(t: U) {   // ✓ yes";
+    assert!(layout_failures(pair).is_empty());
+    // What follows the pair is inside the `✓` block.
+    assert_eq!(layout_failures(&format!("{pair}\n    f()")).len(), 1);
+    assert!(layout_failures(&format!("{pair}\n        f()\n    }}\n}}")).is_empty());
+    // Only that shape is let through: a flush-left body is not a replacement,
+    // whatever it is marked, and nor is an unmarked or reversed pair.
+    assert_eq!(layout_failures("fn f() {   // ✗\n1   // ✓").len(), 1);
+    assert_eq!(layout_failures("on a() {\non b() {   // ✓").len(), 1);
+    assert_eq!(layout_failures("on a() {   // ✓\non b() {   // ✗").len(), 1);
+    assert_eq!(
+        layout_failures("  on a() {   // ✗\non b() {   // ✓").len(),
+        1
+    );
+}
+
+/// A source line of `EXPLANATIONS` holding only `\` is a second continuation,
+/// swallowed with the first: it prints no blank line, though it reads as one.
+/// A separator is written `\n\` on its own line.
+#[test]
+fn no_explanation_separates_with_a_lone_continuation() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bynk-syntax/src/diagnostics.rs");
+    let source = fs::read_to_string(&path).expect("the diagnostics source is readable");
+    let lone: Vec<usize> = source
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == "\\")
+        .map(|(i, _)| i + 1)
+        .collect();
+    assert!(
+        lone.is_empty(),
+        "bynk-syntax/src/diagnostics.rs has a line holding only `\\` at {lone:?}: it prints \
+         nothing, so write `\\n\\` for a blank line"
+    );
 }
 
 fn side(name: &str, files: &[(&str, &str)], errors: &[(&str, usize, &str)]) -> Side {
