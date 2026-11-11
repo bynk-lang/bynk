@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
 changelog: `Form.decode[T](s)` and `Form.encode(v)` expose the `@form` mapping as a codec, so a `@raw` handler, a webhook or a test reads and writes form text with `DecodeError`s rooted at `$` (#3276, slice 3; closes #3276)
 ---
 
