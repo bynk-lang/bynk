@@ -406,7 +406,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Money = Int\ntype Money = String          // ✗ `Money` is already declared\n\n\
                   type Money = Int\ntype Label = String          // ✓ distinct names",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.missing_field",
@@ -434,7 +434,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   const Limit: Int = 3         // ✗ a function already has this name\n\n\
                   const Limit: Int = 3         // ✓ once the function is renamed `limit`",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.unknown_field",
