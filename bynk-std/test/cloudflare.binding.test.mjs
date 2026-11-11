@@ -1357,25 +1357,25 @@ t("WorkersEmail.send: an attachment goes as base64 text, with its disposition an
   assert.equal(typeof sent[0].attachments[0].content, "string");
 });
 
-t("WorkersEmail.send: each platform error code maps to its variant, any other to Failed", async () => {
+t("WorkersEmail.send: each platform error code maps to its variant, any other to SendFailed", async () => {
   const cases = [
     ["E_SENDER_NOT_VERIFIED", { tag: "SenderNotVerified" }],
     ["E_RECIPIENT_NOT_ALLOWED", { tag: "RecipientNotAllowed" }],
     ["E_RATE_LIMIT_EXCEEDED", { tag: "RateLimited" }],
     ["E_DAILY_LIMIT_EXCEEDED", { tag: "DailyLimit" }],
-    ["E_SOMETHING_NEW", { tag: "Failed", message: "boom" }],
+    ["E_SOMETHING_NEW", { tag: "SendFailed", message: "boom" }],
   ];
   for (const [code, variant] of cases) {
     const { env } = emailEnv(refusing(code, "boom"));
     assert.deepEqual(await new WorkersEmail(env, "EMAIL_MAIL").send(mail()), { tag: "Err", error: variant }, code);
   }
-  // An error with no code is a `Failed` too.
+  // An error with no code is a `SendFailed` too.
   const { env } = emailEnv(() => {
     throw new Error("network");
   });
   assert.deepEqual(await new WorkersEmail(env, "EMAIL_MAIL").send(mail()), {
     tag: "Err",
-    error: { tag: "Failed", message: "network" },
+    error: { tag: "SendFailed", message: "network" },
   });
 });
 

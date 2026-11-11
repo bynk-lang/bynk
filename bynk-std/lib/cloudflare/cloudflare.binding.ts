@@ -1005,7 +1005,7 @@ export class WorkersEmail implements Email {
       case "E_DAILY_LIMIT_EXCEEDED":
         return { tag: "DailyLimit" };
       default:
-        return { tag: "Failed", message: e instanceof Error ? e.message : String(e) };
+        return { tag: "SendFailed", message: e instanceof Error ? e.message : String(e) };
     }
   }
 

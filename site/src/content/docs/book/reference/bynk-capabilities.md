@@ -829,11 +829,10 @@ service orders from http {
 
 `Mail` binds as `env.EMAIL_MAIL`. `send` returns the platform's message id, or an
 `EmailError` for an outcome a handler acts on: `SenderNotVerified`,
-`RecipientNotAllowed`, `RateLimited`, `DailyLimit`, and `Failed(message)` for any
+`RecipientNotAllowed`, `RateLimited`, `DailyLimit`, and `SendFailed(message)` for any
 other platform error. Cloudflare has further error codes, so `EmailError` is
-extensible and a `match` over it needs a wildcard. `Failed` is also a variant of
-`SqlError`, so a bare `Failed(…)` in a pattern or a stub names that one: write
-`EmailError.Failed(…)` there.
+extensible and a `match` over it needs a wildcard. The catch-all is `SendFailed`,
+not `Failed`, so it never shares a name with `SqlError`'s variant.
 
 `EmailMessage` has `from`, `to`, `subject`, and optionally `cc`, `bcc`,
 `replyTo`, `text`, `html`, `attachments` (`EmailAttachment`: `filename`,

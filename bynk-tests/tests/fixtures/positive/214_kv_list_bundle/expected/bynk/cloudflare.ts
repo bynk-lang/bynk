@@ -368,7 +368,7 @@ export const EmailMessage = {
  * a recipient the instance's `@to` or `@allowedRecipients` (or the account)
  * does not permit; `RateLimited` and `DailyLimit` the per-second and
  * per-day sending limits. All are outcomes a handler can act on (retry
- * later, alert); `Failed` is any other refusal, with the platform's
+ * later, alert); `SendFailed` is any other refusal, with the platform's
  * message. Cloudflare has further error codes, so a `match` over this type
  * needs a wildcard.
  */
@@ -377,14 +377,14 @@ export type EmailError =
   | { readonly tag: "RecipientNotAllowed" }
   | { readonly tag: "RateLimited" }
   | { readonly tag: "DailyLimit" }
-  | { readonly tag: "Failed"; readonly message: string };
+  | { readonly tag: "SendFailed"; readonly message: string };
 
 export const EmailError = {
   SenderNotVerified: { tag: "SenderNotVerified" } as EmailError,
   RecipientNotAllowed: { tag: "RecipientNotAllowed" } as EmailError,
   RateLimited: { tag: "RateLimited" } as EmailError,
   DailyLimit: { tag: "DailyLimit" } as EmailError,
-  Failed: (message: string): EmailError => ({ tag: "Failed", message }),
+  SendFailed: (message: string): EmailError => ({ tag: "SendFailed", message }),
 };
 
 /**

@@ -13,12 +13,10 @@ case "a stub forces an error" {
 	expect a is Err(SenderNotVerified)
 }
 
-// `Failed` is also a `SqlError` variant, so a bare `Failed(…)` names that one:
-// the `EmailError` variant is written qualified.
 case "a stub forces a platform refusal with a message" {
-	stub Mail.send(_) returns Err(EmailError.Failed("down"))
+	stub Mail.send(_) returns Err(SendFailed("down"))
 	let c <- receipts.call("buyer@example.com")
-	expect c is Err(EmailError.Failed("down"))
+	expect c is Err(SendFailed("down"))
 }
 
 case "fifty recipients pass and fifty-one fault" {

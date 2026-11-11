@@ -370,7 +370,7 @@ export const EmailMessage = {
  * a recipient the instance's `@to` or `@allowedRecipients` (or the account)
  * does not permit; `RateLimited` and `DailyLimit` the per-second and
  * per-day sending limits. All are outcomes a handler can act on (retry
- * later, alert); `Failed` is any other refusal, with the platform's
+ * later, alert); `SendFailed` is any other refusal, with the platform's
  * message. Cloudflare has further error codes, so a `match` over this type
  * needs a wildcard.
  */
@@ -379,14 +379,14 @@ export type EmailError =
   | { readonly tag: "RecipientNotAllowed" }
   | { readonly tag: "RateLimited" }
   | { readonly tag: "DailyLimit" }
-  | { readonly tag: "Failed"; readonly message: string };
+  | { readonly tag: "SendFailed"; readonly message: string };
 
 export const EmailError = {
   SenderNotVerified: { tag: "SenderNotVerified" } as EmailError,
   RecipientNotAllowed: { tag: "RecipientNotAllowed" } as EmailError,
   RateLimited: { tag: "RateLimited" } as EmailError,
   DailyLimit: { tag: "DailyLimit" } as EmailError,
-  Failed: (message: string): EmailError => ({ tag: "Failed", message }),
+  SendFailed: (message: string): EmailError => ({ tag: "SendFailed", message }),
 };
 
 /**
@@ -822,8 +822,8 @@ export function __serialise_EmailError(value: EmailError): __JsonValue {
       return { kind: "RateLimited" };
     case "DailyLimit":
       return { kind: "DailyLimit" };
-    case "Failed": {
-      return { kind: "Failed", message: value.message as __JsonValue };
+    case "SendFailed": {
+      return { kind: "SendFailed", message: value.message as __JsonValue };
     }
   }
 }
@@ -843,12 +843,12 @@ export function __deserialise_EmailError(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "RateLimited" } as EmailError);
     case "DailyLimit":
       return Ok({ tag: "DailyLimit" } as EmailError);
-    case "Failed": {
+    case "SendFailed": {
   if (typeof obj["message"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
   }
   const __message = obj["message"];
-      return Ok({ tag: "Failed", message: __message } as EmailError);
+      return Ok({ tag: "SendFailed", message: __message } as EmailError);
     }
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });

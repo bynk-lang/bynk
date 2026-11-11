@@ -377,7 +377,7 @@ adapter bynk.cloudflare {
 	a recipient the instance's `@to` or `@allowedRecipients` (or the account)
 	does not permit; `RateLimited` and `DailyLimit` the per-second and
 	per-day sending limits. All are outcomes a handler can act on (retry
-	later, alert); `Failed` is any other refusal, with the platform's
+	later, alert); `SendFailed` is any other refusal, with the platform's
 	message. Cloudflare has further error codes, so a `match` over this type
 	needs a wildcard.
 	---
@@ -386,7 +386,7 @@ adapter bynk.cloudflare {
 		| RecipientNotAllowed
 		| RateLimited
 		| DailyLimit
-		| Failed(message: String)
+		| SendFailed(message: String)
 
 	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with

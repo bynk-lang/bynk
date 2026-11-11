@@ -19,10 +19,14 @@ of scope.
 
 - **A. Errors.** A platform refusal is a value: `send` returns
   `Result[String, EmailError]`, with `SenderNotVerified`, `RecipientNotAllowed`,
-  `RateLimited`, `DailyLimit` and `Failed(message)` for any other code
+  `RateLimited`, `DailyLimit` and `SendFailed(message)` for any other code
   (`EmailError` is extensible). Breaking a documented limit (51 recipients, 33
   attachments, 25 MiB, neither `text` nor `html`, 16 KB of custom headers)
-  faults before the call, as `Analytics.write` does.
+  faults before the call, as `Analytics.write` does. The catch-all is `SendFailed`,
+  not the proposal's `Failed`: `SqlError` already has a `Failed` variant in the
+  same unit, and a bare `Failed(…)` then resolved to `SqlError`'s with no
+  diagnostic, a trap for every user. Renamed on review of #3330; the name
+  resolution itself is a separate follow-up.
 - **B. Addresses** are `String`; a refinement can follow in a commons.
 - **C. Restrictions** are a closed set of instance annotations, `@to`,
   `@allowedRecipients` and `@allowedSenders`, written to `[[send_email]]`
@@ -59,9 +63,6 @@ of scope.
   `bynk.consumes.name_conflict`.
 
 **Consequences.** `bynk.cloudflare` exports three more types, so the generated
-type-import lists of existing fixtures move. A second `Failed` variant (also
-`SqlError`'s) means a bare `Failed(…)` names `SqlError`'s; `EmailError.Failed(…)`
-is written qualified. The bindings are repeated in each `[env.*]` block as they
-are. Rejected: a refined address type (a syntax rule the platform may not
+type-import lists of existing fixtures move. Rejected: a refined address type (a syntax rule the platform may not
 share); configuring a sender domain from the deploy (DNS belongs to the account);
 `ArrayBuffer` attachments (the simulator cannot serialise them).
