@@ -1,10 +1,6 @@
----
-level: patch
-changelog: The language server's per-file reuse digest hashes each shared declaration once per analysis round instead of once per file, trimming a warm editor round by about 9% on a 200-context project
----
+# 0803 — What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive
 
-## ADR: file-check-digest-reach
-title: What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive
+- **Status:** Accepted (v0.548.4)
 
 **Context.** ADR file-check-memo (#3299) keys a file's replayed check on a digest of everything the check read. Its "known limit" assumed a body edit re-checks the direct consumers of the edited context because the key includes the consumed declarations' bodies, and proposed two body-fact digests (#2719 needs-context, #1702 compared type parameters) to stop that. Measuring before building them showed the premise was wrong for the bench shapes.
 

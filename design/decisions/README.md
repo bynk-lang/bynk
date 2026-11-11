@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0803](0803-file-check-digest-reach.md) | **What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive** (v0.548.4) — What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive | Accepted (v0.548.4) |
 | [0802](0802-linked-account-resources-and-stored-secret.md) | **Account-level resources are linked by the deploy and never created, starting with Secrets Store secrets** (v0.548) — A `linked` flag on instantiable registry kinds, and `StoredSecret` over the Secrets Store binding | Accepted (v0.548) |
 | [0801](0801-lazy-load-and-commit.md) | **loadState attaches storage-backed collection handles to a current per-entry record, and commitState flushes what they staged** (v0.547) — A current-version per-entry agent record is read lazily (its Cells at once, each collection entry, posting, key range or page when a handler asks), a handler's writes stage in one overlay that commits with the record in one transaction, and a wholesale record, a record a migration step covers, and a held map keep the whole-record read | Accepted (v0.547) |
 | [0800](0800-file-check-memo.md) | **The language server replays an unchanged file's check instead of re-checking it** (v0.546.7) — The language server replays an unchanged file's check instead of re-checking it | Accepted (v0.546.7) |

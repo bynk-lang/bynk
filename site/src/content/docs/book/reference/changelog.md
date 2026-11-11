@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.548.4** | The language server's per-file reuse digest hashes each shared declaration once per analysis round instead of once per file, trimming a warm editor round by about 9% on a 200-context project |
 | **v0.548.3** | `bynk explain` gains compiled explanations for the held-value leak and use-after-consume, `par` statement, constant initialiser and cycle, reserved built-in type name, store operation and plain-JSON nested `Option` errors |
 | **v0.548.2** | `bynk explain` covers twelve more `bynk.types.*` codes, among them comparison and ordering, arity, patterns, field defaults and regexes |
 | **v0.548.1** | `bynk explain` now explains seven more codes (the effect, generics and given rules), each with a compiled bad/good example, and the `unknown_constraint` summary lists all four constraints (#3163) |
