@@ -7,8 +7,6 @@ changelog: Design record for Hyperdrive (H0), covering the Postgres driver, the 
 title: Hyperdrive H0 settles the Postgres driver, the compatibility date and the surface before H1 builds it
 summary: postgres.js pinned exactly; first-party npm dependencies need no approval row; the compatibility date moves past 2026-08-04 in a follow-up PR (H0b); `Postgres` and `MySql` kinds with their own value types; deploy reads the connection string from an environment variable
 
-- **Status:** Accepted
-
 **Context.** Hyperdrive, the route to an existing Postgres or MySQL database, is
 absent ([#3184](https://github.com/bynk-lang/bynk/issues/3184)). Two questions
 block it and nothing else depends on them: which driver the binding wraps, and
@@ -50,7 +48,8 @@ increment builds no surface; it fixes the ground so H1 is surface work only.
   statement. In postgres.js 3.4.5's `workerd` build, `sql.unsafe()` sets
   `prepare: false` by default (`cf/src/index.js`). A binding that takes its SQL
   as a literal string is on that path. The binding must therefore pass
-  `{ prepare: true }` on every `sql.unsafe` call, and H1 tests that it does.
+  `{ prepare: true }` on every `sql.unsafe` call, and H1 carries a binding test that fails if any `sql.unsafe` call omits it
+  (a fake `postgres` module asserting the options argument).
   `fetch_types: false` is already the default for the `workerd` build.
 
   Writing the wire protocol over `connect()` was rejected: it would be a
@@ -103,8 +102,20 @@ increment builds no surface; it fixes the ground so H1 is surface work only.
   It needs no ADR of its own: the one flag that moves changes nothing a Bynk
   program can observe.
 
+  **This moves the date out of the release cycle.** Part 3, step 1 reviews the
+  date at each release. H0b is instead driven by a feature that needs a runtime
+  default, and the ADR records that this is allowed: a feature that needs a
+  newer runtime default may move the date between releases, under Part 3's gate
+  (step 2) and record (step 3) unchanged. The next scheduled review then starts
+  from the date H0b set, and need not find a bump the rule does not cover.
+
 - **C. First-party npm dependencies: allowed, pinned to an exact version, no
-  approval row.** ADR 0575 approves fetched code; the first-party units ship
+  approval row. This amends ADR 0575**, which has every fetched adapter's npm
+  `requires` approved and exempts only the project's own. *First-party* means
+  a package that the toolchain itself emits into `out/package.json` for a
+  built-in binding declared in `bynk-std`'s first-party sources; an adapter in
+  any other package, fetched or not, is not first-party and stays under 0575.
+  ADR 0575 approves fetched code; the first-party units ship
   inside the toolchain the user already trusts, and an upgrade is a reviewed
   toolchain change. The dependency still appears in `out/package.json` and in
   `bynk.lock`'s `[[npm]]` rows, marked first-party and never `approved`, so it
