@@ -1,0 +1,6 @@
+commons demo
+
+fn run() -> Int {
+    let n: Int = 3
+    n
+}

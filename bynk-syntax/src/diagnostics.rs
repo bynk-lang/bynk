@@ -567,6 +567,58 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.bad_field_default",
+        blurb: "A field default, `field: T = expr`, is filled in whenever a literal leaves the \
+                field out and whenever a decoded body omits its key, so it has to be a fixed \
+                value that has a wire form. The compiler accepts a literal, a variant, \
+                `Some`, `None`, `Ok` or `Err`, a record or list literal, `Map.empty()`, \
+                `Set.empty()`, and `T.unsafe(lit)` for an opaque type. A call to your own \
+                function, or a read of a binding, is refused: a default has to be a value known \
+                when the program compiles, not something computed at every construction \
+                and decode. In a generic record, a field whose type is the type parameter itself cannot have a \
+                default at all, since one value cannot suit every instantiation. Write the \
+                value out as a literal, or drop the default and require the field.",
+        example: "fn three() -> Int { 3 }\n\n\
+                  type Config = {\n  retries: Int = three(),    // ✗ a call is not a static value\n}\n\n\
+                  type Config = {\n  retries: Int = 3,          // ✓ a literal\n}",
+        page: "/book/reference/types",
+        anchor: "field-defaults",
+    },
+    Explain {
+        code: "bynk.types.call_arity",
+        blurb: "A function value was called with a different number of arguments from the \
+                number its type declares. A parameter or local of type `(Int, Int) -> Int` \
+                takes exactly two, and the call is checked against that type, so the \
+                mismatch is reported where it is made. The same code covers the built-in \
+                operations of `Map`, `Set`, `Cell`, `Cache` and `Log`, and `unreachable` and \
+                `todo`, which each take one message. Pass exactly the declared number. A \
+                declared `fn` called with the wrong number of arguments is the separate code \
+                `bynk.resolve.arity_mismatch`, and a method is `bynk.types.method_arity`.",
+        example: "fn apply(f: (Int, Int) -> Int) -> Int {\n    f(1)       // ✗ `f` takes 2 arguments\n}\n\n\
+                  fn apply(f: (Int, Int) -> Int) -> Int {\n    f(1, 2)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.catastrophic_regex",
+        blurb: "A `Matches` pattern, and the pattern of a regex method such as \
+                `matchesRegex` or `replaceRegex`, is analysed when the program compiles. \
+                Patterns run with JavaScript's backtracking `RegExp`, and one in which a \
+                repetition can split the same text several ways takes exponential time on a \
+                crafted near miss, so a few dozen characters of input could stall a handler. \
+                Nested unbounded repetition such as `(a+)+` or `(a|aa)+` is refused, as is a \
+                backreference under an unbounded quantifier, an unbounded quantifier over a \
+                body that can match the empty string, and a pattern too large or complex to \
+                analyse. Rewrite it so each repetition has one way to match: `a+` for `(a+)+`, \
+                or a separator the repeated part cannot match, as in `[a-z]+(-[a-z]+)*`. \
+                Two adjacent repetitions that compete, as in `\\d*\\d*`, are the milder \
+                `bynk.types.polynomial_regex`.",
+        example: "type Code = String where Matches(\"(a+)+$\")    // ✗ nested unbounded repetition\n\n\
+                  type Code = String where Matches(\"a+$\")       // ✓ one way to match",
+        page: "/book/reference/types",
+        anchor: "regular-expressions",
+    },
+    Explain {
         code: "bynk.types.claims_at_boundary",
         blurb: "An `Oidc` actor's binder carries the verified token's claims (`who.claims`) for the \
                 handler that received the token. They are read there and never kept: a \
@@ -576,6 +628,71 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let repo = w.claims.get(\"repository\")            // ✓ keep the String",
         page: "/book/reference/actors",
         anchor: "reading-claims",
+    },
+    Explain {
+        code: "bynk.types.combinator_return_mismatch",
+        blurb: "The function given to a combinator must return the shape the combinator \
+                chains on. `Option.andThen` wants an `Option` back and `Result.andThen` a \
+                `Result` whose error type matches the receiver's, so that the result is \
+                flattened, not nested. `List.flatMap` wants a `List` and `Query.flatMap` a \
+                `Query`. The effectful iterators and `flatMapOk` and `flatMapErr` want an \
+                `Effect[Result[…]]`, and `Option.orElse` wants the receiver's own `Option` \
+                type. If your function returns a plain value, you want `map`, which wraps it \
+                for you. Otherwise wrap the value yourself, as `Some(n + 1)`, or fix the \
+                function's result. A callback of the wrong type for the combinator's own \
+                signature is `bynk.types.argument_mismatch`.",
+        example: "fn bump(o: Option[Int]) -> Option[Int] {\n    o.andThen((n) => n + 1)    // ✗ must return an `Option`, not an `Int`\n}\n\n\
+                  fn bump(o: Option[Int]) -> Option[Int] {\n    o.map((n) => n + 1)        // ✓ `map` wraps a plain value\n}",
+        page: "/book/reference/types",
+        anchor: "built-in-generic-types",
+    },
+    Explain {
+        code: "bynk.types.extensible_match_needs_wildcard",
+        blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
+                extensible: a minor release may add a variant. A `match` that names every \
+                variant they have today would then stop covering them, so the compiler asks \
+                for a wildcard arm now, and the `match` keeps compiling when a variant \
+                arrives. Listing every current variant is not enough. Add `_`, or `Err(_)` \
+                where the enum is wrapped, and put there whatever should happen for a \
+                variant you did not name. An enum of your own with the same name is not \
+                extensible; the rule follows the first-party enum. For an ordinary enum, a \
+                missing arm is `bynk.types.non_exhaustive_match`.",
+        example: "fn verb(m: Method) -> String {\n    match m {           // ✗ every variant, but no wildcard\n        Get => \"read\"\n        Post => \"write\"\n        Put => \"write\"\n        Delete => \"write\"\n        Patch => \"write\"\n        Head => \"read\"\n        Options => \"read\"\n    }\n}\n\n\
+                  fn verb(m: Method) -> String {\n    match m {\n        Get => \"read\"\n        _ => \"write\"       // ✓ also covers variants added later\n    }\n}",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "extensible-enums",
+    },
+    Explain {
+        code: "bynk.types.function_at_boundary",
+        blurb: "A function type can be written only where a value stays in the running \
+                program: as a `fn` or lambda parameter, a return, or a local. A value that is \
+                serialised, stored or sent has to be data, and a function has no wire form, so \
+                a function type in a record field, a sum payload, an event field, a service or \
+                agent handler signature, an agent key or store field, a capability operation \
+                or an actor identity is refused where it is written. Keep the function out of \
+                the type: pass it as a parameter to the `fn` that needs it, or store the data \
+                it is built from, such as a name or a number, and rebuild the behaviour on \
+                the other side.",
+        example: "type Job = {\n  name: String,\n  run: Int -> Int,    // ✗ a record field cannot hold a function\n}\n\n\
+                  fn run(j: Job, f: Int -> Int) -> Int {    // ✓ a parameter can\n    f(j.step)\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.interpolation_non_scalar",
+        blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
+                `Decimal`, or a refined type over one of them, and nothing else. A record or \
+                sum has no canonical text, and Bynk will not print an unreadable stand-in \
+                such as `[object Object]`. An opaque type hides its base, so use `.raw` \
+                first. Turn other values into a `String` yourself: `toHex()` or `toBase64()` \
+                on `Bytes`, `toString()` on a `Duration`, `toIso()` or `toString()` on an \
+                `Instant`, or interpolate the fields of a record, a `ValidationError` or a \
+                `DecodeError`.",
+        example: "type User = { name: String }\n\n\
+                  fn label(u: User) -> String {\n    \"user: \\(u)\"         // ✗ a record has no string form\n}\n\n\
+                  fn label(u: User) -> String {\n    \"user: \\(u.name)\"    // ✓ interpolate the field\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-string_interpolation",
     },
     Explain {
         code: "bynk.types.json_uncodable",
@@ -589,6 +706,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
         page: "/book/reference/types",
         anchor: "the-json-codec",
+    },
+    Explain {
+        code: "bynk.types.let_annotation_mismatch",
+        blurb: "A `let` with a type annotation declares what the binding is, and its value \
+                must have exactly that type. The annotation is the contract that later code \
+                reads, so a value of another type is refused at the `let`, not where it is \
+                later used. Nothing is converted for you: change the value, convert it \
+                explicitly, or correct the annotation if the value is what you meant. The \
+                same rule governs a function's declared return, which is \
+                `bynk.types.return_mismatch`.",
+        example: "fn run() -> Int {\n    let n: Int = \"three\"    // ✗ a `String`, annotated `Int`\n    n\n}\n\n\
+                  fn run() -> Int {\n    let n: Int = 3          // ✓\n    n\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
     Explain {
         code: "bynk.types.method_arity",
@@ -648,6 +779,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "exhaustiveness-and-reachability",
     },
     Explain {
+        code: "bynk.types.not_comparable",
+        blurb: "`==` and `!=` compare values structurally, which needs a value to compare. \
+                A function, an `Effect` and a `Query` are computations, and two of them have no \
+                equality. A type that holds one anywhere inside it, in a field, a payload, an \
+                element or a generic argument, is refused too. Compare what the computation \
+                produces, or the data it was built from. A `Stream` and a held connection have \
+                their own codes, `bynk.types.stream_not_comparable` and \
+                `bynk.types.held_not_comparable`.",
+        example: "fn same(f: Int -> Int, g: Int -> Int) -> Bool {\n    f == g          // ✗ functions have no equality\n}\n\n\
+                  fn same(f: Int -> Int, g: Int -> Int) -> Bool {\n    f(1) == g(1)    // ✓ compare what they produce\n}",
+        page: "/book/reference/operators",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.types.not_keyable",
         blurb: "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` \
                 or join, must be a `Key` type, one whose equal values can always be found \
@@ -660,6 +805,38 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn distinctPrices(xs: List[Int]) -> Int {\n    let seen: Set[Int] = Set.of(xs)      // ✓ `Int` is\n    seen.length()\n}",
         page: "/book/reference/types",
         anchor: "keys",
+    },
+    Explain {
+        code: "bynk.types.not_orderable",
+        blurb: "`<`, `<=`, `>` and `>=`, and a parameter declared `T: Ord`, need a type with \
+                a total order. `Int`, `Float`, `String`, `Duration`, `Instant` and `Bytes` have \
+                one, as do refined types over them, `Option` and `List` of an orderable type, \
+                and any type of your own that declares `derives Ord`. `Bool`, `Result`, `Map`, \
+                `Set` and functions do not. Your own types are not ordered by accident, \
+                because opting in makes declaration order significant: reordering the fields \
+                or variants changes how values sort. Add `derives Ord`, or compare a field \
+                that is already orderable. A `sortBy`, `min` or `max` key that cannot be \
+                ordered is `bynk.types.key_not_orderable`.",
+        example: "type Point = { x: Int, y: Int }\n\n\
+                  fn before(a: Point, b: Point) -> Bool {\n    a < b    // ✗ `Point` does not derive `Ord`\n}\n\n\
+                  type Point = { x: Int, y: Int } derives Ord    // ✓ ordered by `x`, then `y`",
+        page: "/book/reference/types",
+        anchor: "ordering-your-own-types",
+    },
+    Explain {
+        code: "bynk.types.pattern_type_mismatch",
+        blurb: "A pattern can only match values of the type it describes, so a pattern of \
+                another kind than the value being matched can never succeed and is refused. \
+                A literal pattern must have the scrutinee's type, so `\"one\"` cannot match an \
+                `Int`. A variant pattern needs a sum value, a record pattern needs that \
+                record, and a qualified pattern such as `Status.Active` must name the \
+                scrutinee's own type. Match on the type the value has, or convert the value \
+                before the `match`. A pattern with the wrong number of bindings is \
+                `bynk.types.pattern_arity`.",
+        example: "fn word(n: Int) -> String {\n    match n {\n        \"one\" => \"uno\"    // ✗ a `String` pattern, an `Int` scrutinee\n        _ => \"other\"\n    }\n}\n\n\
+                  fn word(n: Int) -> String {\n    match n {\n        1 => \"uno\"        // ✓\n        _ => \"other\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
     },
     Explain {
         code: "bynk.types.return_mismatch",
@@ -719,6 +896,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        _ => \"other\"            // ✓ the catch-all last\n    }\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.variant_arity",
+        blurb: "A variant is built like a call, with one argument for each payload field it \
+                declares, so `Circle(radius: Int)` takes one and a variant with no payload \
+                is written bare. A different number of arguments is refused at the \
+                construction. Pass one value for each declared field, or change the type \
+                declaration if the variant should carry more. The same code covers the \
+                built-in `QueueResult` and `HttpResult` constructors. A `match` arm with the \
+                wrong number of bindings is the separate code `bynk.types.pattern_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Square(side: Int)\n\n\
+                  fn make() -> Shape {\n    Circle(1, 2)    // ✗ `Circle` takes 1 argument\n}\n\n\
+                  fn make() -> Shape {\n    Circle(1)       // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "sum-types",
     },
 ];
 
@@ -3704,7 +3896,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.call_arity",
-        "A function value was applied with the wrong number of arguments.",
+        "A function value, a built-in `Map`/`Set`/`Cell`/`Cache`/`Log` operation, or `unreachable`/`todo` was called with the wrong number of arguments (a declared `fn` is `bynk.resolve.arity_mismatch`).",
         &["call"],
     ),
     dg(
@@ -4223,7 +4415,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.variant_arity",
-        "A variant constructor got the wrong number of payload values.",
+        "A variant constructor got the wrong number of arguments for its payload fields (a pattern with the wrong number of bindings is `bynk.types.pattern_arity`).",
     ),
     d(
         "bynk.types.variant_missing_payload",

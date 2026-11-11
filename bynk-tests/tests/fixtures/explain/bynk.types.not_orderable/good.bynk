@@ -1,0 +1,7 @@
+commons demo
+
+type Point = { x: Int, y: Int } derives Ord
+
+fn before(a: Point, b: Point) -> Bool {
+    a < b
+}

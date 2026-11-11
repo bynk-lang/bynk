@@ -1,0 +1,5 @@
+commons demo
+
+fn bump(o: Option[Int]) -> Option[Int] {
+    o.map((n) => n + 1)
+}

@@ -167,7 +167,7 @@
     },
     {
       "code": "bynk.types.call_arity",
-      "summary": "A function value was applied with the wrong number of arguments."
+      "summary": "A function value, a built-in `Map`/`Set`/`Cell`/`Cache`/`Log` operation, or `unreachable`/`todo` was called with the wrong number of arguments (a declared `fn` is `bynk.resolve.arity_mismatch`)."
     },
     {
       "code": "bynk.types.combinator_return_mismatch",

@@ -1,0 +1,10 @@
+commons demo
+
+type Job = {
+  name: String,
+  step: Int,
+}
+
+fn run(j: Job, f: Int -> Int) -> Int {
+    f(j.step)
+}
