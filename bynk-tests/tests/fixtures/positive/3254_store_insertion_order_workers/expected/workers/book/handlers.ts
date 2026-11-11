@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreCache, __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wirePostings, __wireSet } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -94,7 +94,7 @@ export class Book {
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.scores.put(String(k), v), undefined);
+      const __r0 = await (async () => { await __state.scores.put(String(k), v); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -104,7 +104,7 @@ export class Book {
   async drop(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.scores.remove(String(k)), undefined);
+      const __r0 = await (async () => { await __state.scores.remove(String(k)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -113,22 +113,22 @@ export class Book {
 
   async keys(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => __state.scores.keys()))();
+    return __bynkThen(((() => __state.scores.keys()))(), (__q) => __q);
   }
 
   async values(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return ((() => __state.scores.values()))();
+    return __bynkThen(((() => __state.scores.values()))(), (__q) => __q);
   }
 
   async seed(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.scores.put(String("10"), 1), undefined);
-      const __r1 = await (__state.scores.put(String("2"), 2), undefined);
-      const __r2 = await (__state.scores.put(String("a"), 3), undefined);
-      const __r3 = await (__state.scores.put(String("5"), 4), undefined);
-      return ((() => __state.scores.keys()))();
+      const __r0 = await (async () => { await __state.scores.put(String("10"), 1); return undefined; })();
+      const __r1 = await (async () => { await __state.scores.put(String("2"), 2); return undefined; })();
+      const __r2 = await (async () => { await __state.scores.put(String("a"), 3); return undefined; })();
+      const __r3 = await (async () => { await __state.scores.put(String("5"), 4); return undefined; })();
+      return __bynkThen(((() => __state.scores.keys()))(), (__q) => __q);
     })();
     await this.commitState(__state);
     return __result;
@@ -137,7 +137,7 @@ export class Book {
   async addLine(k: string, order: string, sku: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.lines.put(String(k), { order: order, sku: sku }), undefined);
+      const __r0 = await (async () => { await __state.lines.put(String(k), { order: order, sku: sku }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -146,13 +146,13 @@ export class Book {
 
   async skusOf(order: string, deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => __state.lines.byIndex("order", String(order))))().map((__x) => ((l: Line) => l.sku)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __state.lines.byIndex("order", String(order))))(), (__q) => __q.map((__x) => ((l: Line) => l.sku)(__x)))))(), (__q) => __q);
   }
 
   async see(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.seen.add(String(k)), undefined);
+      const __r0 = await (async () => { await __state.seen.add(String(k)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -162,7 +162,7 @@ export class Book {
   async forget(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.seen.remove(String(k)), undefined);
+      const __r0 = await (async () => { await __state.seen.remove(String(k)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -182,7 +182,7 @@ export class Book {
   async hit(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); __state.hits.put(String(k), { v: v, exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.hits.put(String(k), { v: v, exp: __now + 300000 }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -191,13 +191,13 @@ export class Book {
 
   async hitCount(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return __state.hits.liveSize(__now); })();
+    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return await __state.hits.liveSize(__now); })();
     return n;
   }
 
   async hitOf(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = __state.hits.get(String(k)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
+    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.hits.get(String(k)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
     return r;
   }
 

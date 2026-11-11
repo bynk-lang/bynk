@@ -5145,6 +5145,10 @@ pub(crate) fn agent_state_runtime_names(
     if textual_key {
         names.push("__wireEntries");
     }
+    // Store queries chain through it (#3189); an agent with no collection has none.
+    if !names.is_empty() {
+        names.push("__bynkThen");
+    }
     names
 }
 

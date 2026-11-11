@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wireSet } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -90,7 +90,7 @@ export class Board {
   async tag(t: Tag, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.tags.add(String(t)), undefined);
+      const __r0 = await (async () => { await __state.tags.add(String(t)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -106,7 +106,7 @@ export class Board {
   async own(u: UserId, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.owners.put(String(u), n), undefined);
+      const __r0 = await (async () => { await __state.owners.put(String(u), n); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -115,7 +115,7 @@ export class Board {
 
   async owned(u: UserId, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const r = await (() => { const __k = String(u); return __state.owners.has(__k) ? Some(__state.owners.get(__k)!) : None; })();
+    const r = await (async () => { const __k = String(u); return __bynkThen(__state.owners.has(__k), (__h) => __h ? __bynkThen(__state.owners.get(__k), (__v) => Some(__v!)) : None); })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(r, 0);
   }
 

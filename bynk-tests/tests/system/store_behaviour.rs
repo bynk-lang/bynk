@@ -1346,6 +1346,67 @@ for (const k of ["__proto__", "constructor"]) assert(!texts(k).includes("hi"), `
 console.log("ALL OK");
 "#;
 
+// Branches of one `parTraverse` that touch the same key (#3189, #3296). A single-call
+// `update` is atomic per key; a get then put across statements is not, and the count
+// it leaves is not a guarantee (#3297).
+const PAR_SOURCE: &str = "context shop\n\
+\n\
+agent Tally {\n\
+  key id: String\n\
+  store counts: Map[String, Int]\n\
+\n\
+  on call viaUpdate(n: Int) -> Effect[()] {\n\
+    let _ <- counts.put(\"k\", 0)\n\
+    let _ <- [1, 2, 3].parTraverse((x: Int) => counts.update(\"k\", (v) => v + 1))\n\
+    Effect.pure(())\n\
+  }\n\
+  on call viaGetPut(n: Int) -> Effect[()] {\n\
+    let _ <- counts.put(\"k\", 0)\n\
+    let _ <- [1, 2, 3].parTraverse((x: Int) => {\n\
+      let o <- counts.get(\"k\")\n\
+      counts.put(\"k\", o.getOrElse(0) + 1)\n\
+    })\n\
+    Effect.pure(())\n\
+  }\n\
+  on call read() -> Effect[Int] {\n\
+    let o <- counts.get(\"k\")\n\
+    Effect.pure(o.getOrElse(0))\n\
+  }\n\
+}\n";
+
+const PAR_DRIVER_TS: &str = r#"
+import { Tally } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState() {
+  const m = new Map<string, unknown>();
+  return {
+    storage: {
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
+    },
+  };
+}
+
+const t = new Tally(fakeState() as never);
+await t.viaUpdate(0, {});
+assert((await t.read({})) === 3, "three parTraverse updates on one key all count");
+
+// `viaGetPut` loses updates today (a get then a put across statements); no count is
+// asserted, so nobody reads one as intended behaviour. See #3297.
+await t.viaGetPut(0, {});
+
+console.log("ALL OK");
+"#;
+
 #[test]
 fn store_cell_agent_runtime_semantics() {
     verify("cell", SOURCE, DRIVER_TS);
@@ -1354,6 +1415,11 @@ fn store_cell_agent_runtime_semantics() {
 #[test]
 fn store_cell_update_runtime_semantics() {
     verify("cell_update", CELL_UPDATE_SOURCE, CELL_UPDATE_DRIVER_TS);
+}
+
+#[test]
+fn par_traverse_on_one_key_runtime_semantics() {
+    verify("par_key", PAR_SOURCE, PAR_DRIVER_TS);
 }
 
 #[test]

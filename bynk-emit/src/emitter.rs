@@ -6789,7 +6789,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         TypeRef::Query(t, _) => {
             let fn_ty = TsType::Fn {
                 params: vec![],
-                ret: Box::new(TsType::readonly_array(ts_type_ref_to_ts_type(t, qualify))),
+                ret: Box::new(query_result_ty(ts_type_ref_to_ts_type(t, qualify))),
             };
             TsType::named(format!("({})", bynk_ts::print_type(&fn_ty)))
         }
@@ -6965,7 +6965,10 @@ mod ts_type_ref_tests {
     #[test]
     fn query_wraps_the_whole_function_type_in_parens() {
         let r = TypeRef::Query(Box::new(named("Order")), sp());
-        assert_eq!(ts_type_ref(&r), "(() => readonly Order[])");
+        assert_eq!(
+            ts_type_ref(&r),
+            "(() => readonly Order[] | globalThis.Promise<readonly Order[]>)"
+        );
     }
 
     #[test]
@@ -7175,6 +7178,17 @@ pub mod type_renames {
     }
 }
 
+/// What a store `Query[T]`'s thunk produces: its elements, or a promise of them (#3189). A
+/// collection backed by storage reads asynchronously; one held in memory does not, and the
+/// query algebra chains through `__bynkThen` so it serves either.
+fn query_result_ty(elem: TsType) -> TsType {
+    let items = TsType::readonly_array(elem);
+    TsType::union(vec![
+        items.clone(),
+        TsType::named_with_args("globalThis.Promise", vec![items]),
+    ])
+}
+
 fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
     match &*tys.get(t) {
         // bynk internal error (finding #28, R4.3): `Ty::Error` records a
@@ -7231,7 +7245,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         Ty::Query(t) => {
             let fn_ty = TsType::Fn {
                 params: vec![],
-                ret: Box::new(TsType::readonly_array(ts_ty_to_ts_type(*t, tys))),
+                ret: Box::new(query_result_ty(ts_ty_to_ts_type(*t, tys))),
             };
             TsType::named(format!("({})", bynk_ts::print_type(&fn_ty)))
         }
@@ -7423,7 +7437,7 @@ mod ts_ty_tests {
         });
         assert_eq!(
             ts_ty(tys.intern(Ty::Query(order)), &tys),
-            "(() => readonly Order[])"
+            "(() => readonly Order[] | globalThis.Promise<readonly Order[]>)"
         );
     }
 

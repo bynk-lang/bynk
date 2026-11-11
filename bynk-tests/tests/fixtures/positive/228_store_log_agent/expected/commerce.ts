@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreLog, __fillLog, __wireLog } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -81,7 +81,7 @@ export class Inventory {
   async reserve(sku: string, qty: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); __state.history.append({ sku, qty }, __now); __state.history.prune(__now - 2592000000); return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.history.append({ sku, qty }, __now); await __state.history.prune(__now - 2592000000); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -90,12 +90,12 @@ export class Inventory {
 
   async recentSkus(n: number, deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => __state.history.recent(n)))().map((__x) => ((e: ReserveEvent) => e.sku)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __state.history.recent(n)))(), (__q) => __q.map((__x) => ((e: ReserveEvent) => e.sku)(__x)))))(), (__q) => __q);
   }
 
   async countSince(t: number, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.history.since(t)))().length;
+    return __bynkThen(((() => __state.history.since(t)))(), (__q) => __q.length);
   }
 
 }

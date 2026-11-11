@@ -6,7 +6,7 @@ import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpRecord, __bynkCmpSum } from "../
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -96,7 +96,7 @@ export class Board {
   async add(name: string, priority: Priority, due: number, score: number, div: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.jobs.put(String(name), { name: name, priority: priority, due: due, score: score, div: div }), undefined);
+      const __r0 = await (async () => { await __state.jobs.put(String(name), { name: name, priority: priority, due: due, score: score, div: div }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -105,32 +105,32 @@ export class Board {
 
   async byPriority(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...__state.jobs.values()].sort((__a, __b) => __c(((j: Job) => j.priority)(__a), ((j: Job) => j.priority)(__b))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((j: Job) => j.priority)(__a), ((j: Job) => j.priority)(__b))))(__bynkCmpSum(["Low", "Medium", "High"], {})))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byRank(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...__state.jobs.values()].sort((__a, __b) => __c(((j: Job) => ({ priority: j.priority, due: j.due }))(__a), ((j: Job) => ({ priority: j.priority, due: j.due }))(__b))))(__bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt]]))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((j: Job) => ({ priority: j.priority, due: j.due }))(__a), ((j: Job) => ({ priority: j.priority, due: j.due }))(__b))))(__bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt]])))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async topPriority(deps: {}): globalThis.Promise<Option<Priority>> {
     const __state = await this.loadState();
-    return ((__c) => (() => { const __a = __state.jobs.values(); if (__a.length === 0) return None; let __m = ((j: Job) => j.priority)(__a[0]); for (const __x of __a) { const __k = ((j: Job) => j.priority)(__x); if (__c(__k, __m) > 0) __m = __k; } return Some(__m); })())(__bynkCmpSum(["Low", "Medium", "High"], {}));
+    return ((__c) => __bynkThen(__state.jobs.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((j: Job) => j.priority)(__a[0]); for (const __x of __a) { const __k = ((j: Job) => j.priority)(__x); if (__c(__k, __m) > 0) __m = __k; } return Some(__m); })()))(__bynkCmpSum(["Low", "Medium", "High"], {}));
   }
 
   async lowestRank(deps: {}): globalThis.Promise<Option<Rank>> {
     const __state = await this.loadState();
-    return ((__c) => (() => { const __a = __state.jobs.values(); if (__a.length === 0) return None; let __m = ((j: Job) => ({ priority: j.priority, due: j.due }))(__a[0]); for (const __x of __a) { const __k = ((j: Job) => ({ priority: j.priority, due: j.due }))(__x); if (__c(__k, __m) < 0) __m = __k; } return Some(__m); })())(__bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt]]));
+    return ((__c) => __bynkThen(__state.jobs.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((j: Job) => ({ priority: j.priority, due: j.due }))(__a[0]); for (const __x of __a) { const __k = ((j: Job) => ({ priority: j.priority, due: j.due }))(__x); if (__c(__k, __m) < 0) __m = __k; } return Some(__m); })()))(__bynkCmpRecord([["priority", __bynkCmpSum(["Low", "Medium", "High"], {})], ["due", __bynkCmpInt]]));
   }
 
   async byScore(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...__state.jobs.values()].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__a), ((j: Job) => j.score / j.div)(__b)))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__a), ((j: Job) => j.score / j.div)(__b))))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async topTwo(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => ((() => ((__c) => [...__state.jobs.values()].sort((__a, __b) => __c(((j: Job) => j.priority)(__a), ((j: Job) => j.priority)(__b))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().slice(globalThis.Math.max(0, 1))))().slice(0, globalThis.Math.max(0, 2))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((j: Job) => j.priority)(__a), ((j: Job) => j.priority)(__b))))(__bynkCmpSum(["Low", "Medium", "High"], {})))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 2)))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
 }
