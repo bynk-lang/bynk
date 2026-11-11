@@ -498,6 +498,75 @@ export const SenderIdentity = {
 };
 
 /**
+ * A value bound to a `$n` parameter of a `Postgres` statement. `PgInteger`
+ * binds a whole number and `PgReal` a float; `PgText` binds text, `PgBytea` bytes
+ * and `PgBoolean` a flag. `PgTimestamp` binds an `Instant` as a `timestamptz`.
+ * `PgJson` binds JSON text and `PgNumeric` a decimal as text, each as text
+ * the server types from the column or cast it meets (`$1::jsonb`,
+ * `$2::numeric`), so neither loses a digit to a float. The variants carry the
+ * `Pg` prefix because a bare `Null`, `Integer`, `Real`, `Text` or `Boolean`
+ * would resolve to `SqlValue`'s, and `Json` and `Timestamp` to a built-in.
+ */
+export type PgValue =
+    { readonly tag: "PgNull" }
+  | { readonly tag: "PgInteger"; readonly value: number }
+  | { readonly tag: "PgReal"; readonly value: number }
+  | { readonly tag: "PgText"; readonly value: string }
+  | { readonly tag: "PgBytea"; readonly value: globalThis.Uint8Array }
+  | { readonly tag: "PgBoolean"; readonly value: boolean }
+  | { readonly tag: "PgTimestamp"; readonly value: number }
+  | { readonly tag: "PgJson"; readonly value: string }
+  | { readonly tag: "PgNumeric"; readonly value: string };
+
+export const PgValue = {
+  PgNull: { tag: "PgNull" } as PgValue,
+  PgInteger: (value: number): PgValue => ({ tag: "PgInteger", value }),
+  PgReal: (value: number): PgValue => ({ tag: "PgReal", value }),
+  PgText: (value: string): PgValue => ({ tag: "PgText", value }),
+  PgBytea: (value: globalThis.Uint8Array): PgValue => ({ tag: "PgBytea", value }),
+  PgBoolean: (value: boolean): PgValue => ({ tag: "PgBoolean", value }),
+  PgTimestamp: (value: number): PgValue => ({ tag: "PgTimestamp", value }),
+  PgJson: (value: string): PgValue => ({ tag: "PgJson", value }),
+  PgNumeric: (value: string): PgValue => ({ tag: "PgNumeric", value }),
+};
+
+/**
+ * What a `Postgres.run` changed: the rows the statement inserted, updated or
+ * deleted (or, for a `SELECT`, returned).
+ */
+export interface PgRun {
+  readonly rowCount: number;
+}
+
+export const PgRun = {
+};
+
+/**
+ * Why a `Postgres` statement failed, with the SQLSTATE where Postgres gave
+ * one. `PgConstraint` is an integrity-constraint violation (class `23`: a
+ * unique, not-null, check or foreign-key violation), an outcome a handler
+ * answers (with a `409`, say). `PgSerialization` is a serialization failure
+ * (`40001`), which a retry may clear. `PgConnection` is a connection that could not
+ * be made or was lost; its message names the driver's code and never the
+ * host or the connection string. `PgFailed` is anything else, with its SQLSTATE
+ * (empty when the driver reported none) and the database's message. Postgres has further failure
+ * kinds, so a `match` over this type needs a wildcard. The variants carry the
+ * `Pg` prefix because `Constraint` and `Failed` are `SqlError`'s.
+ */
+export type PgError =
+    { readonly tag: "PgConstraint"; readonly sqlstate: string; readonly message: string }
+  | { readonly tag: "PgSerialization"; readonly message: string }
+  | { readonly tag: "PgConnection"; readonly message: string }
+  | { readonly tag: "PgFailed"; readonly sqlstate: string; readonly message: string };
+
+export const PgError = {
+  PgConstraint: (sqlstate: string, message: string): PgError => ({ tag: "PgConstraint", sqlstate, message }),
+  PgSerialization: (message: string): PgError => ({ tag: "PgSerialization", message }),
+  PgConnection: (message: string): PgError => ({ tag: "PgConnection", message }),
+  PgFailed: (sqlstate: string, message: string): PgError => ({ tag: "PgFailed", sqlstate, message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -856,3 +925,39 @@ export interface Email {
 }
 
 export const __EmailToken: symbol = globalThis.Symbol("Email");
+
+/**
+ * A Postgres database reached through Cloudflare Hyperdrive, over postgres.js:
+ * SQL text and positional parameters (`$1`, `$2`, …) bound from `PgValue`s,
+ * never spliced into the text. The SQL is a string literal, so data reaches
+ * a statement only as a parameter. Used only through a named instance,
+ * `capability Main = Postgres`, which binds as `HYPERDRIVE_MAIN`, a
+ * `[[hyperdrive]]` entry; a bare `given Postgres` names no database and is
+ * refused. Experimental.
+ *
+ * `bynk deploy` does not create the Hyperdrive configuration yet. The
+ * generated `wrangler.toml` carries a placeholder `id`; create the
+ * configuration with `wrangler hyperdrive create` and put its id there, and
+ * for `bynk dev` set `localConnectionString` (see "Connect an existing
+ * Postgres database" in the Book).
+ *
+ * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+ * array of objects keyed by column name, `first` the first row as one object,
+ * or `None` when there is none. `int8` (`bigint`) and `numeric` arrive as
+ * strings, so nothing past 2^53 is lost; `timestamptz` as ISO-8601 text;
+ * `bytea` as base64 (a `Bytes` field decodes it); `json` and `jsonb` nested as
+ * JSON. A `boolean` arrives as `true` or `false`, not `0` or `1`.
+ *
+ * `run` executes a write and reports the rows it changed. Every operation
+ * gives a `PgError` rather than faulting. Each statement uses its own
+ * connection, opened and closed around it, and Cloudflare allows six
+ * simultaneous connections per Worker invocation, so a `par` over more than
+ * six queries waits for its turn.
+ */
+export interface Postgres {
+  all(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<string, PgError>>;
+  first(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<Option<string>, PgError>>;
+  run(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<PgRun, PgError>>;
+}
+
+export const __PostgresToken: symbol = globalThis.Symbol("Postgres");

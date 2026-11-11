@@ -1003,6 +1003,31 @@ export function makeIntegrationEmail(): SendEmail & { sent: Record<string, unkno
   };
 }
 
+/**
+ * Cloudflare's Hyperdrive binding (#3318): `env.<binding>`, whose
+ * `connectionString` the Postgres driver connects with. The string is a
+ * secret, so nothing that reads it may log it.
+ */
+export interface Hyperdrive {
+  readonly connectionString: string;
+}
+
+/**
+ * The Hyperdrive binding of a multi-Worker integration test participant, bound
+ * as its `env.<binding>`. A test never reaches a database, so reading its
+ * `connectionString` faults, naming the binding, until the case stubs the
+ * instance's operations (a stub answers before the binding is read).
+ */
+export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
+  return {
+    get connectionString(): string {
+      throw new globalThis.Error(
+        `bynk: Hyperdrive binding \`${binding}\` has no database in a test, which never reaches Postgres — add \`stub <Capability>.all(_, _) returns …\` (or \`first\` or \`run\`)`,
+      );
+    },
+  };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
-export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerVersionMetadata as __WorkerVersionMetadata };
+export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationEmail as __makeIntegrationEmail, makeIntegrationHyperdrive as __makeIntegrationHyperdrive, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret as __makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, Hyperdrive as __Hyperdrive, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, SecretsStoreSecret as __SecretsStoreSecret, SendEmail as __SendEmail, WorkerVersionMetadata as __WorkerVersionMetadata };

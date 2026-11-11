@@ -136,6 +136,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "outbound-email-email",
         &["send"],
     ),
+    (
+        "bynk.cloudflare",
+        "Postgres",
+        "postgres-databases-postgres",
+        &["all", "first", "run"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "add": "87fd1c77bfc8b5be",
+    "find": "8bbf56d0c2fea210",
+    "list": "cc98e6e1f3ec5782"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "add": "Svc(\"add\",P(\"name\",B(\"String\")),Ret(R(N(\"PgRun\"),N(\"PgError\"))))",
+    "find": "Svc(\"find\",P(\"id\",B(\"Int\")),Ret(R(O(B(\"String\")),N(\"PgError\"))))",
+    "list": "Svc(\"list\",Ret(R(B(\"String\"),N(\"PgError\"))))"
+  }
+}

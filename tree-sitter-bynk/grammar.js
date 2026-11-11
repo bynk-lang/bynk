@@ -451,6 +451,8 @@ module.exports = grammar({
 
     record_field: ($) =>
       seq(
+        // #3343: `@name("…")` before the field, the key it has on a request.
+        repeat(field("annotation", $.store_annotation)),
         field("name", $.identifier),
         ":",
         field("type", $._type_ref),

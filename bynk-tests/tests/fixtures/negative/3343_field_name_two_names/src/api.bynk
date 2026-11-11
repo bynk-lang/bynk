@@ -1,0 +1,11 @@
+context api
+
+type Filter = {
+  @name("page") @name("p") page: Option[Int],
+}
+
+service api from http {
+  on GET("/f") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

@@ -2942,6 +2942,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "Email" {
         out.push_str("\nEmits `[[send_email]]`, keyed by `name`, with the instance's `@to`, `@allowedRecipients` and `@allowedSenders` as `destination_address`, `allowed_destination_addresses` and `allowed_sender_addresses`. `bynk deploy` checks each `@allowedSenders` domain has Email Sending enabled on the account, and never configures one. A call that breaks a platform limit or sets a reserved header faults before it is sent.\n");
     }
+    // Hyperdrive H1 (#3318): a Postgres database through Hyperdrive.
+    if d.base.name == "Postgres" {
+        out.push_str("\nEmits `[[hyperdrive]]` with a placeholder `id`: a distinct instance of `Postgres`, reading the database behind the Hyperdrive configuration at `env.<binding>.connectionString`. `bynk deploy` does not create the configuration yet; create it with `wrangler hyperdrive create` and replace the `id`, and for `bynk dev` set `localConnectionString`. Each statement opens and closes its own connection.\n");
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }
