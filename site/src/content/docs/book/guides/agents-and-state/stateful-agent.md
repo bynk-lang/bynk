@@ -174,10 +174,11 @@ To route an equality filter through a maintained index, annotate the map with
 
 Each entry of every `Map`, `Set`, `Cache` and `Log`, and each `@indexed` posting, is
 stored under its own key, and a handler writes only the entries it changed, so what
-a handler writes follows what it touches. Reads are not lazy yet: every call loads
-every entry before the handler runs, so a handler's time and memory still grow with
-the size of the agent's state ([#3159](https://github.com/bynk-lang/bynk/issues/3159)
-tracks lazy reads). Keep the collections an agent holds small and bounded:
+a handler writes follows what it touches, and so does what it reads: a keyed read or
+write reads one entry, an `@indexed` equality filter reads the entries it names, and
+a `Log` window reads its range. A scan (`keys`, `values`, `entries`), a filter that is
+not an `@indexed` equality, a join or a group-by still reads the whole collection, so
+keep the collections an agent scans small and bounded:
 
 - key agents finely: one per customer, order or channel, not one per system;
 - bound a `Log` with `@retain(...)`; a `Cache`'s `@ttl(...)` hides expired entries

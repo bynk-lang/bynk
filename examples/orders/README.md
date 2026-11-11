@@ -20,9 +20,10 @@ What it shows:
   needs no clock), so `bynk test .` constructs it by key, drives its handlers,
   and asserts on the scalar aggregates directly.
 
-> **Size.** Each entry of an agent's collections is stored under its own key and a
-> handler writes only what it changed, but every call still loads the whole state
-> (reads are not lazy yet). The HTTP service here routes every
+> **Size.** Each entry of an agent's collections is stored under its own key, a
+> handler writes only what it changed, and it reads what it touches (a keyed read,
+> or the `@indexed` lines of one order), but the totals and the join scan the whole
+> collection. The HTTP service here routes every
 > order to the single `Book("default")` instance for brevity, which is the shape to
 > avoid in production: key the agent by customer, order or channel, or keep a large
 > table in D1. The Book's agents reference
