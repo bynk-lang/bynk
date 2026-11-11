@@ -1,0 +1,6 @@
+commons demo
+
+--------
+fn double(n: Int) -> Int { n * 2 }
+--------
+fn triple(n: Int) -> Int { n * 3 }

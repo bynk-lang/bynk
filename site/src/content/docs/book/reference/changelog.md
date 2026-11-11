@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.550.6** | `bynk explain` covers twenty more codes (`lex` and `parse` prefixes) |
 | **v0.550.5** | `bynk explain` explains 27 more codes across effect, provider, consumes, exports, resolve and generics (Refs #3163) |
 | **v0.550.4** | `bynk explain` explains twenty-four more `types` codes (`if`, `?`, constructors, patterns, opaque types, inference) (Refs #3163) |
 | **v0.550.3** | `bynk explain` covers fifteen more codes, in the `service`, `event` and `ws` families |

@@ -1,0 +1,9 @@
+commons demo
+
+type Account = { type: String, id: String }
+
+fn kind(a: Account) -> String {
+    match a {
+        Account { type: type_, .. } => type_
+    }
+}

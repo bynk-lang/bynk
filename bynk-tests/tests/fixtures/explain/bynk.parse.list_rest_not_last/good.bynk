@@ -1,0 +1,8 @@
+commons demo
+
+fn second(xs: List[Int]) -> Int {
+    match xs {
+        [_, b, ..] => b
+        _ => 0
+    }
+}
