@@ -51,7 +51,11 @@ suite upload.api as system {
 	case "an avatar is accepted" {
 		let r <- api.POST("/avatar", Upload {
 			title: "me",
-			avatar: File { filename: Some("me.png"), contentType: "image/png", bytes: Bytes.fromUtf8("png") },
+			avatar: File {
+				filename: Some("me.png"),
+				contentType: "image/png",
+				bytes: Bytes.fromUtf8("png"),
+			},
 		})
 		expect r is Handled(Created(_))
 	}

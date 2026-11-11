@@ -47,7 +47,12 @@ encoding, so a mismatch fails the case:
 ```bynk,fragment
 suite signup.api as system {
 	case "a signup is accepted" {
-		let r <- api.POST("/signup", Signup { email: "a@b.c", plan: Free, tags: [], remember: false })
+		let r <- api.POST("/signup", Signup {
+			email: "a@b.c",
+			plan: Free,
+			tags: [],
+			remember: false,
+		})
 		expect r is Handled(Created(_))
 	}
 
