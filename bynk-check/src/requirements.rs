@@ -130,7 +130,7 @@ pub type FileRequirements = HashMap<PathBuf, Vec<Requirement>>;
 
 /// Records capability requirements per file. A fresh sink records nothing until
 /// [`enter_file`](Self::enter_file) attributes it.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RequirementSink {
     files: FileRequirements,
     /// #2469: per-file capability paths, built after a unit's bodies are checked.

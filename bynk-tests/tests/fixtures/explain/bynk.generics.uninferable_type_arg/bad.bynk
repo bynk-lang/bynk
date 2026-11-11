@@ -1,0 +1,10 @@
+commons demo
+
+fn none[T]() -> Option[T] {
+    None
+}
+
+fn use() -> Int {
+    let x = none()
+    0
+}

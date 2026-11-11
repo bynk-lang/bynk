@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -49,6 +50,8 @@ function __encodeInventoryState(s: InventoryState): globalThis.Record<string, un
   return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)) };
 }
 
+const __lazyFieldsOfInventory = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Item((__w as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Item; return __serialise_Item(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); } }] as const;
+
 export class Inventory {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -59,12 +62,12 @@ export class Inventory {
     const stored = await this.state.storage.get<InventoryState>("state");
     if (stored === undefined) return __zeroOfInventoryState();
     __checkStoredLayout("Inventory", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfInventoryState();
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
-    __hydrateInventoryState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfInventory); } else { __hydrateInventoryState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -74,12 +77,12 @@ export class Inventory {
 
   async rows(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
   }
 
   async bigRows(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q.filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((e: { readonly key: string; readonly value: Item }) => e.key)(__a), __kb = ((e: { readonly key: string; readonly value: Item }) => e.key)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q.filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((e: { readonly key: string; readonly value: Item }) => e.key)(__a), __kb = ((e: { readonly key: string; readonly value: Item }) => e.key)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
   }
 
   async skus(deps: {}): globalThis.Promise<readonly string[]> {
@@ -94,12 +97,12 @@ export class Inventory {
 
   async hasSku(sku: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q.some((__x) => ((e: { readonly key: string; readonly value: Item }) => e.key === sku)(__x)));
+    return __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q.some((__x) => ((e: { readonly key: string; readonly value: Item }) => e.key === sku)(__x)));
   }
 
   async pending(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    const q = (() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v })));
+    const q = (() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v }))));
     return __bynkThen(((() => __bynkThen(((() => __bynkThen((q)(), (__q) => __q.filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x)))))(), (__q) => __q.map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x)))))(), (__q) => __q);
   }
 
@@ -133,6 +136,8 @@ function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown>
   return { ...s, balances: __wireMap(s.balances, (__v) => __serialise_Item(__v)) };
 }
 
+const __lazyFieldsOfLedger = [{ name: "balances", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Item((__w as unknown as __JsonValue), "balances"); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Item; return __serialise_Item(__v); } }] as const;
+
 export class Ledger {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -143,12 +148,12 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
-    __hydrateLedgerState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfLedger); } else { __hydrateLedgerState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -158,12 +163,12 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __state.balances.keys().map((__k) => globalThis.Number(__k))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: number) => k)(__a), __kb = ((k: number) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.balances.keys(), (__ks) => __ks.map((__k) => globalThis.Number(__k)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: number) => k)(__a), __kb = ((k: number) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
   }
 
   async maxAccount(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __state.balances.entries().map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v }))))(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]); for (const __x of __a) { const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x); if (__k > __m) __m = __k; } return Some(__m); })());
+    return __bynkThen(((() => __bynkThen(__state.balances.entries(), (__es) => __es.map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v })))))(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]); for (const __x of __a) { const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x); if (__k > __m) __m = __k; } return Some(__m); })());
   }
 
 }

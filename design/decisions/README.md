@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0800](0800-file-check-memo.md) | **The language server replays an unchanged file's check instead of re-checking it** (v0.546.7) — The language server replays an unchanged file's check instead of re-checking it | Accepted (v0.546.7) |
 | [0799](0799-hyperdrive-h0-driver-date-surface.md) | **Hyperdrive H0 settles the Postgres driver, the compatibility date and the surface before H1 builds it** (v0.546.3) — postgres.js pinned exactly; first-party npm dependencies need no approval row; the compatibility date moves past 2026-08-04 in a follow-up PR (H0b); `Postgres` and `MySql` kinds with their own value types; deploy reads the connection string from an environment variable | Accepted (v0.546.3) |
 | [0798](0798-one-per-worker-platform-capabilities.md) | **One-per-Worker platform capabilities are used bare and bound only when reached** (v0.546) — A registry kind for bindings a Worker has once, starting with `Version` over Version metadata | Accepted (v0.546) |
 | [0797](0797-par-closure-store-write.md) | **A `parTraverse`-family closure may not write a store** (v0.545) — Track Q4's rule (store writes stay sequential) extends from `par { }` to the closures of `parTraverse`, `parTraverseAll` and `parTraverseTry` | Accepted (v0.545) |

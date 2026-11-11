@@ -56,6 +56,11 @@ mod stub {
     pub struct D1Sql;
 
     impl D1Sql {
+        /// There is no schema on `wasm32`, so nothing differs between builds.
+        pub fn digest(&self) -> u64 {
+            0
+        }
+
         pub fn build(_: &D1Migrations, _: &mut ErrorSink) -> Option<Arc<D1Sql>> {
             None
         }
@@ -100,6 +105,11 @@ mod native {
         /// A database in neither map has no migrations, and only its parameter
         /// counts are checked (#3126).
         pub(super) migrated: std::collections::HashSet<String>,
+        /// A hash of every database's name and migration contents, in order: what
+        /// a file's check read of this value (the language server's file-check
+        /// digest takes it, #3243). `Debug` prints only the database names, so it
+        /// is not enough to tell two builds apart.
+        digest: u64,
     }
 
     impl std::fmt::Debug for D1Sql {
@@ -187,7 +197,27 @@ mod native {
         h.finish()
     }
 
+    /// A hash of every database's name and migration files, in database order.
+    fn migrations_digest(migrations: &D1Migrations) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for (database, files) in migrations {
+            database.hash(&mut h);
+            files.len().hash(&mut h);
+            for file in files {
+                file.name.hash(&mut h);
+                file.sql.hash(&mut h);
+            }
+        }
+        h.finish()
+    }
+
     impl D1Sql {
+        /// What a check read of this value: see the field's note.
+        pub fn digest(&self) -> u64 {
+            self.digest
+        }
+
         /// Apply every database's migrations to its own in-memory SQLite. One
         /// that fails is reported as a warning at its file, and the database is
         /// left out. Always `Some`: a database with no migrations still has its
@@ -235,7 +265,12 @@ mod native {
                 }
                 schemas.insert(database.clone(), conn);
             }
-            Some(Arc::new(D1Sql { schemas, migrated }))
+            let digest = migrations_digest(migrations);
+            Some(Arc::new(D1Sql {
+                schemas,
+                migrated,
+                digest,
+            }))
         }
 
         /// Check every literal statement the unit's call sites recorded.

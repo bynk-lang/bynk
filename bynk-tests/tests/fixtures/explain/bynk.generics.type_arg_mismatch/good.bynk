@@ -1,0 +1,9 @@
+commons demo
+
+fn pick[T](a: T, b: T) -> T {
+    a
+}
+
+fn use() -> Int {
+    pick(1, 2)
+}

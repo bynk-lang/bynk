@@ -30,7 +30,7 @@ pub type FileExprTypes = HashMap<PathBuf, Vec<(Span, TyId)>>;
 
 /// Records per-file expression types. A fresh sink records nothing until
 /// [`enter_file`](Self::enter_file) attributes it.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ExprTypeSink {
     files: FileExprTypes,
     file: Option<PathBuf>,

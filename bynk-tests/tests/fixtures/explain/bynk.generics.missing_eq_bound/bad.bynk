@@ -1,0 +1,5 @@
+commons demo
+
+fn same[T](a: T, b: T) -> Bool {
+    a == b
+}

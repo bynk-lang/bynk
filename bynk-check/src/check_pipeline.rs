@@ -224,6 +224,170 @@ pub fn prepare_unit_check_ctx(
     }
 }
 
+/// A hasher that `Debug` output can be streamed into, so a value is hashed
+/// without first being rendered to a `String`.
+struct DebugHasher(std::collections::hash_map::DefaultHasher);
+
+impl std::fmt::Write for DebugHasher {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        use std::hash::Hash;
+        s.hash(&mut self.0);
+        Ok(())
+    }
+}
+
+impl DebugHasher {
+    fn feed(&mut self, label: &str, value: &dyn std::fmt::Debug) {
+        use std::fmt::Write;
+        use std::hash::Hash;
+        label.hash(&mut self.0);
+        let _ = write!(self, "{value:?}");
+    }
+
+    /// A map in key order: `HashMap` iteration order is per-instance, so two
+    /// equal maps must not hash differently.
+    fn feed_map<'a, K: Ord + std::fmt::Debug + 'a, V: std::fmt::Debug + 'a>(
+        &mut self,
+        label: &str,
+        entries: impl IntoIterator<Item = (&'a K, &'a V)>,
+    ) {
+        let mut entries: Vec<_> = entries.into_iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+        self.feed(label, &entries);
+    }
+
+    fn feed_set<'a, T: Ord + std::fmt::Debug + 'a>(
+        &mut self,
+        label: &str,
+        items: impl IntoIterator<Item = &'a T>,
+    ) {
+        let mut items: Vec<_> = items.into_iter().collect();
+        items.sort();
+        self.feed(label, &items);
+    }
+}
+
+/// #3243 S2.3b: a digest of **everything [`check_file_core`] reads**, so a file's
+/// checked output can be kept from one language-server round to the next and
+/// replayed when this value is unchanged.
+///
+/// It is a content hash (rendered `Debug`, which includes every span and
+/// `FileId`), not a pointer: the parse cache hands out freshly built decls each
+/// round, so identity does not survive. Span-inclusive on purpose: a diagnostic
+/// may carry a label that points into another file at an offset, and an
+/// upstream edit that moves a declaration moves that offset.
+///
+/// The unit's own table is not rendered: `phase_symbol_tables` builds it from
+/// the unit's own files, whose text is hashed (`unit_files_digest`), so only the
+/// parts filled in from other units are taken
+/// (`UnitTable::cross_unit_facts`).
+///
+/// **Adding an input to `check_file_core` or to [`UnitCheckCtx`] means adding it
+/// here.** [`UnitCheckCtx`] and [`UnitTable`] are destructured exhaustively, so a
+/// new field of either is a compile error until it is classified;
+/// `check_file_core`'s own parameters are the same list as this function's.
+#[allow(clippy::too_many_arguments)]
+pub fn file_check_digest(
+    name: &str,
+    kind: UnitKind,
+    pf: &ParsedFile,
+    unit_files_digest: u64,
+    unit_info: &BTreeMap<String, UnitInfo>,
+    combined_types: &HashMap<String, Arc<TypeDecl>>,
+    combined_fns: &HashMap<String, Arc<bynk_syntax::ast::FnDecl>>,
+    combined_methods: &HashMap<String, ResolverMethodTable>,
+    local_names: &HashSet<String>,
+    local_methods_for_type: &HashMap<String, Vec<bynk_syntax::ast::FnDecl>>,
+    consumed_types: &HashMap<String, ConsumedType>,
+    imported_from: &HashMap<String, String>,
+    ctx: &UnitCheckCtx,
+) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = DebugHasher(std::collections::hash_map::DefaultHasher::new());
+    // The file, and the unit's other files: a label may point into a sibling.
+    h.feed(
+        "file",
+        &(
+            pf.identity_path(),
+            pf.abs_path(),
+            pf.kind(),
+            pf.is_synthetic(),
+        ),
+    );
+    pf.source().hash(&mut h.0);
+    h.feed("unit", &(name, kind));
+    unit_files_digest.hash(&mut h.0);
+    // The composed symbol space.
+    h.feed_map("types", combined_types.iter());
+    h.feed_map("fns", combined_fns.iter());
+    h.feed("methods", &crate::symbols::sorted_methods(combined_methods));
+    h.feed_set("local_names", local_names.iter());
+    h.feed_map("local_methods", local_methods_for_type.iter());
+    h.feed_map("consumed", consumed_types.iter());
+    h.feed_map("imported_from", imported_from.iter());
+    // What `check_file_core` reads of `unit_info`.
+    if let Some(info) = unit_info.get(name) {
+        h.feed_map("flattened", info.flattened.iter());
+        h.feed("cross_unit_facts", &info.table.cross_unit_facts());
+    }
+    h.feed_map(
+        "assets",
+        crate::assets::compose_unit_assets(name, unit_info).iter(),
+    );
+    h.feed_map(
+        "embeds",
+        crate::embeds::compose_unit_embeds(name, unit_info).iter(),
+    );
+    h.feed_map(
+        "consts",
+        crate::consts::compose_unit_consts(name, unit_info).iter(),
+    );
+    h.feed_map(
+        "shadowed_imports",
+        crate::project_model::shadowed_imports(name, unit_info).iter(),
+    );
+    // The unit's prelude. Exhaustive: a new field must be named here.
+    let UnitCheckCtx {
+        cross_context_views,
+        uses_commons_type_names,
+        visible_broken_names,
+        hidden_types,
+        shadowed,
+        policy,
+        private_imports,
+        d1_sql,
+    } = ctx;
+    if let Some((unit_tables, unit_uses, unit_consumes, unit_consumes_aliases)) =
+        cross_context_views.as_deref()
+    {
+        // `check_file_core` reads the views only through these two derivations.
+        let mut cci = build_cross_context_info(
+            name,
+            unit_consumes,
+            unit_consumes_aliases,
+            unit_uses,
+            unit_tables,
+        );
+        cci.flattened_caps = unit_info[name].flattened.clone();
+        // Maps of maps: its own `Debug` would print hash order.
+        h.feed("cross_context", &crate::oracle::cross_context(&cci));
+        h.feed_map(
+            "subscriber_types",
+            combined_types_for(name, unit_tables, unit_uses).iter(),
+        );
+    }
+    h.feed_set("uses_commons_type_names", uses_commons_type_names.iter());
+    h.feed("visible_broken_names", visible_broken_names);
+    h.feed("hidden_types", hidden_types);
+    h.feed("shadowed", &shadowed.sorted());
+    h.feed("policy", &**policy);
+    h.feed_map("private_imports", private_imports.iter());
+    // `D1Sql`'s `Debug` prints only database names; its content hash covers
+    // every migration the check read the schemas from.
+    h.feed("d1_sql", &d1_sql.as_ref().map(|d| d.digest()));
+    h.0.finish()
+}
+
 /// The clean-path output of [`check_file_core`]: the typed, fully-checked
 /// unit plus the per-file cross-context info that produced it — a
 /// `Mode::Build` caller needs both to reach `certify`+`emit_unit` (`emit_unit`

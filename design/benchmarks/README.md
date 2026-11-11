@@ -84,6 +84,7 @@ the timed edits:
 | `lsp_edit_levels` | `file`, `unit`, `definition`, `project`: where a warm edit's analysis time goes, by R3.13's query levels |
 | `lsp_first_round_levels` | the same for the cold first round |
 | `lsp_edit_outside_analysis_ms` | the edit-to-diagnostics time not spent in the analysis (the server's own work around it) |
+| `lsp_peak_rss_mb` | the language server's peak resident set over the whole run (`VmHWM`, Linux only): what retained analysis state costs in memory |
 
 The levels partition the analysis call. *file* is discovery and parse through the
 shared cache; *unit* is grouping, symbol tables, `uses`/`consumes` resolution and
