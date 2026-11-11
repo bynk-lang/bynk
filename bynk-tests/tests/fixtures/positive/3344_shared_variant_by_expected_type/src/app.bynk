@@ -6,6 +6,30 @@ context app
 
 consumes mail { Mailer, MailError, DbError }
 
+// Two local sums share the nullary `Red`.
+type Paint = | Red | Blue
+type Light = | Red | Amber
+
+const DEFAULT_PAINT: Paint = Red
+
+fn light() -> Light {
+  Red
+}
+
+fn paintName(p: Paint) -> String {
+  match p {
+    Red => "red paint"
+    Blue => "blue paint"
+  }
+}
+
+fn lightName(l: Light) -> String {
+  match l {
+    Red => "red light"
+    Amber => "amber light"
+  }
+}
+
 fn mailFailure() -> Result[Int, MailError] {
   Err(Failed("mail"))
 }
@@ -46,6 +70,7 @@ service local {
       Err(e) => describe(e)
     }
     let viaParam = describe(Failed("arg"))
-    "\(m) / \(describeDb(dbFailure())) / \(viaParam)"
+    let p: Paint = Red
+    "\(m) / \(describeDb(dbFailure())) / \(viaParam) / \(paintName(p)) / \(lightName(light())) / \(paintName(DEFAULT_PAINT))"
   }
 }

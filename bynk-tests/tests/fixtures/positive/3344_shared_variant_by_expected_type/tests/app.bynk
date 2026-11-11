@@ -6,7 +6,7 @@ case "a stubbed bare variant builds the operation's error sum" {
   expect r == "mail: down"
 }
 
-case "return type, annotation and parameter each pick the sum" {
+case "return type, annotation, parameter and constant each pick the sum" {
   let r <- local.call()
-  expect r == "mail: mail / db: db / mail: arg"
+  expect r == "mail: mail / db: db / mail: arg / red paint / red light / red paint"
 }

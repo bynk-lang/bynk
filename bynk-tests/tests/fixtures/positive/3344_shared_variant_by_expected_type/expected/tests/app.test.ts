@@ -43,7 +43,9 @@ class __Stub_Mailer {
     return true;
   }
   async send(to: string): globalThis.Promise<Result<string, __ns_mail.MailError>> {
-    const { dbFailure, describe, describeDb, mailFailure } = __ns_app;
+    const { Light, Paint, dbFailure, describe, describeDb, light, lightName, mailFailure, paintName } = __ns_app;
+    type Light = __ns_app.Light;
+    type Paint = __ns_app.Paint;
     const { DbError, MailError } = __ns_mail;
     type DbError = __ns_mail.DbError;
     type MailError = __ns_mail.MailError;
@@ -82,7 +84,9 @@ function __makeTestDeps(__case?: string) {
 async function test_a_stubbed_bare_variant_builds_the_operation_s_error_sum() {
   try {
     const deps = __makeTestDeps("a stubbed bare variant builds the operation's error sum");
-    const { dbFailure, describe, describeDb, go, local, mailFailure } = __ns_app;
+    const { DEFAULT_PAINT, Light, Paint, dbFailure, describe, describeDb, go, light, lightName, local, mailFailure, paintName } = __ns_app;
+    type Light = __ns_app.Light;
+    type Paint = __ns_app.Paint;
     const { DbError, MailError } = __ns_mail;
     type DbError = __ns_mail.DbError;
     type MailError = __ns_mail.MailError;
@@ -98,15 +102,17 @@ async function test_a_stubbed_bare_variant_builds_the_operation_s_error_sum() {
 }
 
 // case tier: unit
-async function test_return_type__annotation_and_parameter_each_pick_the_sum() {
+async function test_return_type__annotation__parameter_and_constant_each_pick_the_sum() {
   try {
     const deps = __makeTestDeps();
-    const { dbFailure, describe, describeDb, go, local, mailFailure } = __ns_app;
+    const { DEFAULT_PAINT, Light, Paint, dbFailure, describe, describeDb, go, light, lightName, local, mailFailure, paintName } = __ns_app;
+    type Light = __ns_app.Light;
+    type Paint = __ns_app.Paint;
     const { DbError, MailError } = __ns_mail;
     type DbError = __ns_mail.DbError;
     type MailError = __ns_mail.MailError;
     const r = await local.call(deps);
-    if (!(r === "mail: mail / db: db / mail: arg")) { throw __bynkExpectFailure("tests/app.bynk:11:10", 278, 316, "expect r == \"mail: mail / db: db / mail: arg\"\n  expected: r == \"mail: mail / db: db / mail: arg\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("mail: mail / db: db / mail: arg"))); }
+    if (!(r === "mail: mail / db: db / mail: arg / red paint / red light / red paint")) { throw __bynkExpectFailure("tests/app.bynk:11:10", 288, 362, "expect r == \"mail: mail / db: db / mail: arg / red paint / red light / red paint\"\n  expected: r == \"mail: mail / db: db / mail: arg / red paint / red light / red paint\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("mail: mail / db: db / mail: arg / red paint / red light / red paint"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -130,7 +136,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a stubbed bare variant builds the operation's error sum", "return type, annotation and parameter each pick the sum"];
+export const __bynkCases: readonly string[] = ["a stubbed bare variant builds the operation's error sum", "return type, annotation, parameter and constant each pick the sum"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -141,9 +147,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("return type, annotation and parameter each pick the sum")) {
+  if (want("return type, annotation, parameter and constant each pick the sum")) {
     const started = __bynkCaseNow();
-    const r = { name: "return type, annotation and parameter each pick the sum", ...(await test_return_type__annotation_and_parameter_each_pick_the_sum()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "return type, annotation, parameter and constant each pick the sum", ...(await test_return_type__annotation__parameter_and_constant_each_pick_the_sum()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

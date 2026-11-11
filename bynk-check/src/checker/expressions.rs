@@ -1855,11 +1855,6 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
     }
 }
 
-/// #593: the type of a payload-less variant (`Nil`, or `Opt.Nil`). For a
-/// non-generic sum this is just the named type. For a generic sum the variant
-/// carries no arguments to infer from, so the binding's expected type is the
-/// only ground — `let o: Opt[Int] = Nil`. With no such expectation the type
-/// arguments are uninferable.
 /// #3344: the sum a bare variant name builds. One sum in scope declaring the
 /// name is it; when several do (two enums of one consumed unit sharing
 /// `Failed`, say), the expected type picks the one it names, so
@@ -1919,11 +1914,16 @@ pub(crate) fn ambiguous_variant_error<D: AsRef<TypeDecl>>(
         ),
     )
     .with_note(
-        "nothing here expects one of these types; an annotated `let`, a parameter, a \
-         return type, a `match` scrutinee or a `stub`'s operation would pick the sum",
+        "the expected type here names none of these sums; an annotated `let`, a \
+         parameter, a return type or a `stub`'s operation naming one would pick it",
     )
 }
 
+/// #593: the type of a payload-less variant (`Nil`, or `Opt.Nil`). For a
+/// non-generic sum this is just the named type. For a generic sum the variant
+/// carries no arguments to infer from, so the binding's expected type is the
+/// only ground — `let o: Opt[Int] = Nil`. With no such expectation the type
+/// arguments are uninferable.
 pub(crate) fn nullary_variant_ty(
     owner: &TypeDecl,
     variant_name: &str,

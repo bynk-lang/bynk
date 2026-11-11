@@ -3433,6 +3433,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // #3344: a name several sums declare is settled by the
                 // expected type, which only the checker knows; it reports
                 // `bynk.resolve.ambiguous_variant` when nothing picks one.
+                // Every position this walk covers is also typed by the
+                // checker (`fn`/method bodies, constants, field defaults),
+                // as are the handler, agent and test bodies it never walks.
             } else if cx.declared_caps.contains(&id.name) {
                 cx.errors.push(
                     CompileError::new(

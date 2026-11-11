@@ -8,6 +8,55 @@ import { DbError, MailError } from "./mail.js";
 
 import * as mail from "./mail.js";
 
+export type Paint =
+    { readonly tag: "Red" }
+  | { readonly tag: "Blue" };
+
+export const Paint = {
+  Red: { tag: "Red" } as Paint,
+  Blue: { tag: "Blue" } as Paint,
+};
+
+export type Light =
+    { readonly tag: "Red" }
+  | { readonly tag: "Amber" };
+
+export const Light = {
+  Red: { tag: "Red" } as Light,
+  Amber: { tag: "Amber" } as Light,
+};
+
+var __const_DEFAULT_PAINT: { v: Paint } | undefined;
+export function DEFAULT_PAINT(): Paint { return (__const_DEFAULT_PAINT ??= { v: Paint.Red }).v; }
+
+export function light(): Light {
+  return Light.Red;
+}
+
+export function paintName(p: Paint): string {
+  switch (p.tag) {
+    case "Red": {
+      return "red paint";
+    }
+    case "Blue": {
+      return "blue paint";
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+export function lightName(l: Light): string {
+  switch (l.tag) {
+    case "Red": {
+      return "red light";
+    }
+    case "Amber": {
+      return "amber light";
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
 export function mailFailure(): Result<number, MailError> {
   return Err(MailError.Failed("mail"));
 }
@@ -76,7 +125,8 @@ export const local = {
     throw new globalThis.Error("non-exhaustive match");
   })(mailFailure());
     const viaParam = describe(MailError.Failed("arg"));
-    return `${String(m)} / ${String(describeDb(dbFailure()))} / ${String(viaParam)}`;
+    const p: Paint = Paint.Red;
+    return `${String(m)} / ${String(describeDb(dbFailure()))} / ${String(viaParam)} / ${String(paintName(p))} / ${String(lightName(light()))} / ${String(paintName(DEFAULT_PAINT()))}`;
   },
 };
 

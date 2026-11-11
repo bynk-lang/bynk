@@ -1,0 +1,2 @@
+bynk.types.variant_missing_payload
+variant `Failed` of `MailError` has a payload
