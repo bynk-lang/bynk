@@ -3,7 +3,9 @@ context demo
 // #3298: how far the check sees. A write in a closure over a store `Query`
 // receiver, in a lambda nested inside the closure, and in a lambda bound to a
 // name and passed by name, called inside the closure, or aliased are all refused;
-// a lambda parameter that shadows the name is not.
+// a lambda parameter that shadows the name is not. The record is by name, not by
+// scope, so rebinding the name to a non-writing lambda in an inner block does not
+// hide the outer writer: `rebound` is refused.
 
 agent Tally {
   key id: String
@@ -43,6 +45,16 @@ agent Tally {
     let f = (x: Int) => counts.put("k", x)
     let _ <- [1, 2, 3].forEach(f)
     let _ <- [1, 2, 3].parTraverse((f: Int) => Effect.pure(()))
+    Effect.pure(())
+  }
+
+  on call rebound(n: Int) -> Effect[()] {
+    let f = (x: Int) => counts.put("k", x)
+    let _ <- [1, 2, 3].forEach((x: Int) => {
+      let f = (y: Int) => Effect.pure(())
+      f(x)
+    })
+    let _ <- [1, 2, 3].parTraverse(f)
     Effect.pure(())
   }
 }

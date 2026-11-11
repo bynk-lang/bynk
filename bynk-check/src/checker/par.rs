@@ -497,20 +497,19 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: 
     }
 }
 
-/// #3298: after a `let` is typed, remember (or forget) that its name is a lambda
-/// that writes a store, so passing it by name to `parTraverse` is refused too.
+/// #3298: after a `let` is typed, remember that its name is a lambda that writes
+/// a store (or a bare alias of one), so using that name in a `parTraverse`
+/// closure is refused. An entry is never removed: the record is by name, not by
+/// scope, so a rebinding in an inner block cannot hide an outer writer. The cost
+/// is a refusal that errs the safe way, when a name once bound to a writing
+/// lambda is later rebound to something else in the same body and still used in
+/// a closure.
 pub(super) fn note_let_lambda(l: &LetStmt, ctx: &mut Ctx) {
-    // A lambda that writes, or a bare alias of a name already recorded.
     let write = lambda_store_write(&l.value, ctx).or_else(|| match &l.value.kind {
         ExprKind::Ident(id) => ctx.store_writing_lambdas.get(&id.name).cloned(),
         _ => None,
     });
-    match write {
-        Some(write) => {
-            ctx.store_writing_lambdas.insert(l.name.name.clone(), write);
-        }
-        None => {
-            ctx.store_writing_lambdas.remove(&l.name.name);
-        }
+    if let Some(write) = write {
+        ctx.store_writing_lambdas.insert(l.name.name.clone(), write);
     }
 }
