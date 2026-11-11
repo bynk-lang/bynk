@@ -530,18 +530,18 @@ mod tests {
                     first_party: false,
                 },
                 LockedNpm {
-                    package: "stripe".into(),
-                    range: "^14.2.0".into(),
-                    required_by: vec!["acme/ledger:pay".into()],
-                    approved: false,
-                    first_party: false,
-                },
-                LockedNpm {
                     package: "postal-mime".into(),
                     range: "4.1.4".into(),
                     required_by: vec!["bynk-std".into()],
                     approved: false,
                     first_party: true,
+                },
+                LockedNpm {
+                    package: "stripe".into(),
+                    range: "^14.2.0".into(),
+                    required_by: vec!["acme/ledger:pay".into()],
+                    approved: false,
+                    first_party: false,
                 },
             ],
             packages: vec![
