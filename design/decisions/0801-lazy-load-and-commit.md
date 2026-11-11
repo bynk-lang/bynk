@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes, verbatim_sites
-changelog: An agent's `store Map`, `Set`, `Cache` and `Log` fields are read from storage as a handler touches them, and written back as the entries it changed, so a handler's storage cost no longer grows with the size of a collection (per-entry storage, lazy-read slice, part 2b)
----
+# 0801 — loadState attaches storage-backed collection handles to a current per-entry record, and commitState flushes what they staged
 
-## ADR: lazy-load-and-commit
-title: loadState attaches storage-backed collection handles to a current per-entry record, and commitState flushes what they staged
-summary: A current-version per-entry agent record is read lazily (its Cells at once, each collection entry, posting, key range or page when a handler asks), a handler's writes stage in one overlay that commits with the record in one transaction, and a wholesale record, a record a migration step covers, and a held map keep the whole-record read
+- **Status:** Accepted (v0.547)
 
 **Context.** The writer (#3263) already stores each entry and posting under its own key and commits only what changed, but `loadState` listed and joined every key into a wholesale-shaped record, so a handler's read cost, and its commit's CPU, grew with the size of every collection. The in-memory handles (#3254), the awaited lowering (#3296) and the storage-backed handles (#3295) made the swap possible without another lowering change. This is the swap (Decision F of #3189).
 
