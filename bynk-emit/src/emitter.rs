@@ -74,6 +74,7 @@ pub mod secrets;
 pub mod serialisation;
 pub mod toml_doc;
 pub(crate) mod workers;
+pub(crate) mod workers_email;
 pub(crate) mod workers_entry;
 pub mod wrangler;
 

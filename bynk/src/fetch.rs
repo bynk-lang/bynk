@@ -699,14 +699,34 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
             }
         }
     }
-    rows.into_iter()
+    let mut out: Vec<LockedNpm> = rows
+        .into_iter()
         .map(|((package, range), by)| LockedNpm {
             package,
             range,
             required_by: by.into_iter().collect(),
             approved: false,
+            first_party: false,
         })
-        .collect()
+        .collect();
+    out.extend(first_party_rows());
+    out
+}
+
+/// ADR 0799 C: the toolchain's own npm dependencies, one `first-party` row
+/// each, required by `bynk-std`. They never need approval (see
+/// [`bynk_check::firstparty::FirstPartyNpm`]). Like an adapter's, a row records
+/// what *could* enter a build.
+fn first_party_rows() -> impl Iterator<Item = LockedNpm> {
+    bynk_check::firstparty::FIRST_PARTY_NPM
+        .iter()
+        .map(|d| LockedNpm {
+            package: d.package.to_string(),
+            range: d.version.to_string(),
+            required_by: vec!["bynk-std".to_string()],
+            approved: false,
+            first_party: true,
+        })
 }
 
 /// #2296 (decisions A, C): settle each row's approval. A row the lock already
@@ -728,6 +748,10 @@ fn approvals(
             .is_some_and(|p| p.source.starts_with("path+"))
     };
     for row in &mut rows {
+        if row.first_party {
+            // The toolchain's own: visible in the lock, never gated.
+            continue;
+        }
         let before = existing
             .npm
             .iter()

@@ -9,17 +9,13 @@
 //! by `bynk.cloudflare`, so the handler-shape checks compare type *names*; the
 //! body is then type-checked against the real declarations like any other.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-use bynk_syntax::ast::{
-    CommonsItem, Handler, HandlerKind, ServiceDecl, ServiceProtocol, SourceUnit, TypeRef,
-};
+use bynk_syntax::ast::{Handler, HandlerKind, ServiceDecl, ServiceProtocol, TypeRef};
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
 use crate::context_checks::ts_type_ref_display;
-use crate::project_model::{BuildTarget, ErrorSink};
-use bynk_project::{ParsedFile, UnitKind};
 
 /// The first-party type a `from email` handler receives.
 pub const INBOUND_EMAIL: &str = "InboundEmail";
@@ -241,50 +237,6 @@ fn named(t: &TypeRef) -> Option<&str> {
     match t {
         TypeRef::Named(id) => Some(id.name.as_str()),
         _ => None,
-    }
-}
-
-/// Slice 1 builds the surface and the test vertical; the Workers `email()`
-/// export is slice 2 (ADR 0131's split, as `from websocket`'s was). Until
-/// then a deployable Workers build of a `from email` service is refused
-/// rather than emitted half-working.
-pub fn phase_workers_email_unsupported(
-    target: BuildTarget,
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    kinds: &BTreeMap<String, UnitKind>,
-    errors: &mut ErrorSink,
-) {
-    if target != BuildTarget::Workers {
-        return;
-    }
-    for (name, indices) in groups {
-        if kinds.get(name) != Some(&UnitKind::Context) {
-            continue;
-        }
-        for &i in indices {
-            let SourceUnit::Context(ctx) = &parsed[i].unit() else {
-                continue;
-            };
-            for item in &ctx.items {
-                let CommonsItem::Service(s) = item else {
-                    continue;
-                };
-                if matches!(s.protocol, ServiceProtocol::Email { .. }) {
-                    errors.push_for(
-                        Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.email.workers_unsupported",
-                            s.name.span,
-                            "inbound email is not yet emitted for Workers (#3328 slice 2)",
-                        )
-                        .with_note(
-                            "a `from email` service runs in a suite today (`support.message(…)`); build for `--target bundle`, or wait for the Workers mapping",
-                        ),
-                    );
-                }
-            }
-        }
     }
 }
 

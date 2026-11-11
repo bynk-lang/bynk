@@ -1789,6 +1789,29 @@ pub fn phase_group(
             }
             let adapter = a.name.joined();
             let identity = pf.identity_path();
+            // ADR 0799 C: the toolchain pins its own npm packages exactly, and
+            // a project installs one version of each package, so an adapter
+            // may name such a package only at that version.
+            if let Some(pin) = crate::firstparty::FIRST_PARTY_NPM
+                .iter()
+                .find(|p| p.package == dep.package && p.version != dep.range)
+            {
+                errors.push_for(
+                    Some(&identity),
+                    CompileError::new(
+                        "bynk.requires.conflicting_range",
+                        dep.span,
+                        format!(
+                            "adapter `{adapter}` requires `{}` at `{}`, but the toolchain pins it at `{}`",
+                            dep.package, dep.range, pin.version
+                        ),
+                    )
+                    .with_note(
+                        "the toolchain's own binding uses this package at an exact version; an adapter that needs it must require that version",
+                    ),
+                );
+                continue;
+            }
             if let Some(range) = npm_deps.get(&dep.package) {
                 if *range != dep.range {
                     let (first_adapter, first_path, first_span) = &first_dep[&dep.package];
@@ -4751,7 +4774,6 @@ pub fn phase_workers_unprovided_capabilities(
     unit_tables: &HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
-    crate::email::phase_workers_email_unsupported(target, parsed, groups, kinds, errors);
     if target != BuildTarget::Workers {
         return;
     }

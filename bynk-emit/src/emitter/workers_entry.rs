@@ -32,7 +32,7 @@ use bynk_ts::{
 // this track's own established per-file scoping (each Arc C slice's own
 // helpers are added narrowly, not factored into a shared cross-file module).
 
-fn ident(s: impl Into<String>) -> TsExpr {
+pub(super) fn ident(s: impl Into<String>) -> TsExpr {
     TsExpr::Ident(s.into())
 }
 
@@ -69,7 +69,7 @@ fn index_expr(object: TsExpr, idx: TsExpr) -> TsExpr {
     }
 }
 
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+pub(super) fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
     TsExpr::Call {
         callee: Box::new(callee),
         args,
@@ -143,7 +143,7 @@ fn return_(expr: Option<TsExpr>) -> TsStmt {
     TsStmt::return_stmt(expr, None)
 }
 
-fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
+pub(super) fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
     TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
 }
 
@@ -1856,6 +1856,18 @@ pub fn emit_worker_entry(
             &fault_exec_params,
             &other_compose_args,
             &runtime_use,
+        ));
+    }
+
+    // #3328: inbound email (`from email`) entry point: `email(message, env, ctx)`.
+    let email_routes = super::workers_email::collect_routes(table);
+    if !email_routes.is_empty() {
+        imports.extend(super::workers_email::RUNTIME_IMPORTS.map(String::from));
+        header_decls.push(super::workers_email::platform_import());
+        default_entries.push(super::workers_email::emit_email_handler(
+            &email_routes,
+            &fault_exec_params,
+            &other_compose_args,
         ));
     }
 

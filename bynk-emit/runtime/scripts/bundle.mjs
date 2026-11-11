@@ -47,6 +47,7 @@ const MODULES = [
   "httpresult",
   "http",
   "queue",
+  "email",
   "agent",
   "auth",
   "connection",

@@ -83,7 +83,7 @@ pub use bynk_emit::emit_model::{
     TestLocation, WORKER_ASSETS_DIR, is_worker_asset_path, is_worker_migration_path,
     node_wasm_shim, sibling_path, wasm_shim_path, worker_assets_dir,
 };
-use bynk_emit::emit_model::{WASM_MODULES_DTS, worker_reaches_wasm_module, workers_wasm_shim};
+use bynk_emit::emit_model::{CLOUDFLARE_EMAIL_DTS, WASM_MODULES_DTS, worker_reaches_wasm_module, workers_wasm_shim};
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use diagnostics::*;
@@ -3904,16 +3904,24 @@ fn build_output(
         });
     }
 
-    // `package.json`: always `"type": "module"` (#2148), so the emitted
-    // tsconfig's `module: NodeNext` checks and builds the output as the ES
-    // modules it is, under Node's ESM rules; plus the adapter-declared npm
-    // dependencies when there are any (v0.17).
-    compiled.push(StagedFile {
-        output_path: PathBuf::from("package.json"),
-        document: Document::Json(render_package_json(&npm_deps)),
-        source_map: None,
-        debug_metadata: None,
-    });
+    // #3328: a Worker whose `email()` entry imports `cloudflare:email` ships the
+    // declaration that lets `tsc` resolve it.
+    if compiled.iter().any(|f| {
+        matches!(&f.document, Document::Ts(p) if p.import_specifiers().contains(&"cloudflare:email"))
+    }) {
+        compiled.push(StagedFile {
+            output_path: PathBuf::from("cloudflare-email.d.ts"),
+            document: Document::Ts(bynk_ts::TsProgram {
+                stmts: vec![bynk_ts::TsStmt::verbatim(
+                    bynk_ts::VerbatimOrigin::NotYetConverted,
+                    CLOUDFLARE_EMAIL_DTS.to_string(),
+                    None,
+                )],
+            }),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
 
     // Runtime (ADR 0615): exactly the modules the emitted files import, closed
     // over the modules' own imports, under `__bynk_runtime/` at the root of
@@ -3926,7 +3934,15 @@ fn build_output(
             emitter::runtime_files::reached_in(program, &mut reached);
         }
     }
+    let mut npm_deps = npm_deps;
     for (path, source) in emitter::runtime_files::closure_files(&reached) {
+        // ADR 0799 C: a runtime module that imports a first-party npm package
+        // brings it, at its exact pin, into `package.json`.
+        if let Some(module) = path.file_stem().and_then(|m| m.to_str()) {
+            for dep in firstparty::first_party_npm_for([module]) {
+                npm_deps.insert(dep.package.to_string(), dep.version.to_string());
+            }
+        }
         compiled.push(StagedFile {
             output_path: path,
             document: Document::Ts(bynk_ts::TsProgram {
@@ -3940,6 +3956,16 @@ fn build_output(
             debug_metadata: None,
         });
     }
+    // `package.json`: always `"type": "module"` (#2148), so the emitted
+    // tsconfig's `module: NodeNext` checks and builds the output as the ES
+    // modules it is, under Node's ESM rules; plus the adapter-declared npm
+    // dependencies when there are any (v0.17).
+    compiled.push(StagedFile {
+        output_path: PathBuf::from("package.json"),
+        document: Document::Json(render_package_json(&npm_deps)),
+        source_map: None,
+        debug_metadata: None,
+    });
     compiled.push(StagedFile {
         output_path: PathBuf::from("tsconfig.json"),
         document: Document::Json(emitter::emit_tsconfig()),

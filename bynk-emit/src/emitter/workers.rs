@@ -457,6 +457,14 @@ pub fn emit_worker_compose(
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
     runtime_imports.extend(platform_binding_type_imports(bindings));
     runtime_imports.push("type __ServiceBinding".to_string());
+    // #3328: an email handler's compose wrapper takes the minted identity.
+    if table
+        .services
+        .values()
+        .any(|s| matches!(s.protocol, ServiceProtocol::Email { .. }))
+    {
+        runtime_imports.push("type __SenderIdentity".to_string());
+    }
     if has_bearer || has_sum || has_oidc {
         runtime_imports.push("HttpResult".to_string());
     }
@@ -742,6 +750,7 @@ pub fn emit_worker_compose(
                             ));
                         }
                         bynk_model::ActorSeamIr::Caller(_)
+                        | bynk_model::ActorSeamIr::Sender(_)
                         | bynk_model::ActorSeamIr::CallSum(_)
                         | bynk_model::ActorSeamIr::None => {
                             return_entries.push(emit_http_wrapper(sname, h, method, &path, None));
@@ -764,7 +773,13 @@ pub fn emit_worker_compose(
                     if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
                         continue;
                     }
-                    return_entries.push(emit_queue_wrapper(sname, queue_idx, h));
+                    let email = matches!(service.protocol, ServiceProtocol::Email { .. });
+                    return_entries.push(emit_queue_wrapper(
+                        sname,
+                        queue_idx,
+                        h,
+                        email.then_some(&table.actors),
+                    ));
                     queue_idx += 1;
                 }
                 bynk_model::IrHandlerKind::Open => {
@@ -1382,14 +1397,23 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
     }
 }
 
-fn emit_queue_wrapper(sname: &str, queue_idx: usize, h: &Handler) -> TsObjectEntry {
+/// The compose wrapper of a `from queue` or `from email` `on message` handler.
+/// `email` is `Some(actors)` for the latter: the Worker's `email()` entry
+/// passes the minted `SenderIdentity` as a second argument, which a handler
+/// that binds it (`by s: Sender`) reads through `deps.identity`.
+fn emit_queue_wrapper(
+    sname: &str,
+    queue_idx: usize,
+    h: &Handler,
+    email: Option<&HashMap<String, ActorDecl>>,
+) -> TsObjectEntry {
     let method_key = crate::emitter::queue_handler_method_name(sname, queue_idx);
     // The queue handler takes its message parameter; forward it with deps. P7.2:
     // `workers_entry.rs`'s queue() dispatch always calls `deserialise_call` against
     // this same declared type before forwarding `__r.value` here — codec-matched,
     // safe to type for real. (No param at all when the handler declares none, in
     // which case this list — and the corresponding entry-side msg_type — is empty.)
-    let params: Vec<TsParam> = h
+    let mut params: Vec<TsParam> = h
         .params
         .iter()
         .map(|p| TsParam {
@@ -1403,7 +1427,21 @@ fn emit_queue_wrapper(sname: &str, queue_idx: usize, h: &Handler) -> TsObjectEnt
         .iter()
         .map(|p| ident(wire_ident(&p.name.name)))
         .collect();
-    call_args.push(ident("deps"));
+    match email {
+        Some(actors) => {
+            params.push(TsParam {
+                name: "__sender".to_string(),
+                ty: Some(TsType::named("__SenderIdentity")),
+                optional: false,
+            });
+            if bynk_check::actors::sender_binder_for(h, actors).is_some() {
+                call_args.push(deps_spread_with("identity", ident("__sender")));
+            } else {
+                call_args.push(ident("deps"));
+            }
+        }
+        None => call_args.push(ident("deps")),
+    }
     TsObjectEntry::Method {
         name: method_key.clone(),
         is_async: true,

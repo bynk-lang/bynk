@@ -3039,6 +3039,33 @@ fn append_deps_field(
     deps_members.push(bynk_ts::TsTypeMember::prop(name, ty));
 }
 
+/// #3328: the first line of a `Sender`-binding handler's body. The Worker's
+/// `email()` entry always supplies `deps.identity`; a suite does not, and gets
+/// the envelope sender with no DMARC verdict (`DmarcNone`).
+fn sender_identity_prologue(mail: &str) -> String {
+    format!(
+        "{}deps = {{ ...deps, identity: deps.identity ?? {{ address: {mail}.from, dmarc: {{ tag: \"DmarcNone\" }} }} }};\n",
+        " ".repeat(INDENT_STEP * 2)
+    )
+}
+
+/// #3328: the structural type of the minted `SenderIdentity` in a handler's
+/// `deps`. Structural, so the handler module needs no import of the
+/// `bynk.cloudflare` declaration the checker typed `s.identity` by, and the
+/// declared interface is assignable to it.
+fn sender_identity_ts_type() -> bynk_ts::TsType {
+    bynk_ts::TsType::Object(vec![
+        bynk_ts::TsTypeMember::readonly_prop("address", bynk_ts::TsType::named("string")),
+        bynk_ts::TsTypeMember::readonly_prop(
+            "dmarc",
+            bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+                "tag",
+                bynk_ts::TsType::named("string"),
+            )]),
+        ),
+    ])
+}
+
 /// #1481: returns one real [`bynk_ts::TsStmt`] (was `out: &mut String`) — a
 /// `Raw` carrier for the whole `export const {name} = { ... };` object
 /// literal (Decision C, the same posture `emit_provider` (#1480) already
@@ -3210,7 +3237,7 @@ pub(crate) fn emit_service(
         // other three are mutually exclusive by construction.
         let seam = lower_actor_seam_ir(handler, &ctx.actors);
         let deps_identity_binder = match &seam {
-            ActorSeamIr::Caller(binder) => Some(binder.clone()),
+            ActorSeamIr::Caller(binder) | ActorSeamIr::Sender(binder) => Some(binder.clone()),
             ActorSeamIr::Bearer(s) => s.binder.clone(),
             ActorSeamIr::Oidc(s) => s.binder.clone(),
             ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
@@ -3303,6 +3330,16 @@ pub(crate) fn emit_service(
             // the post-insert `body_out` handed to it below) still resolves
             // each statement to its own real line rather than one line too
             // early.
+            body_smb.borrow_mut().shift_checkpoints(prologue.len());
+        }
+        // #3328: a `by s: Sender` handler run without the Worker's `email()`
+        // entry (a suite, a direct call) has no minted identity, so it reads the
+        // sender as the message's own envelope with no DMARC verdict.
+        if let ActorSeamIr::Sender(_) = &seam
+            && let Some((param_name, _)) = ir_params.first()
+        {
+            let prologue = sender_identity_prologue(&ts_ident(param_name));
+            body_out.insert_str(0, &prologue);
             body_smb.borrow_mut().shift_checkpoints(prologue.len());
         }
         // Events track, slice 4 (spine #936): a `via schema(N)` guard,
@@ -3406,6 +3443,11 @@ pub(crate) fn emit_service(
                 append_deps_field(&mut deps_members, "who", call_sum_ts_type(members));
             }
             // A binder-less Bearer/Oidc, or no seam at all — nothing to widen.
+            // #3328: a `Sender`-binding email handler's deps carries the
+            // `SenderIdentity` the Worker's `email()` entry minted.
+            ActorSeamIr::Sender(_) => {
+                append_deps_field(&mut deps_members, "identity", sender_identity_ts_type());
+            }
             ActorSeamIr::Bearer(_) | ActorSeamIr::Oidc(_) | ActorSeamIr::None => {}
         }
         // v0.79: a handler whose body uses `~>` receives the execution context

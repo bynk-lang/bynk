@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@types/node": "26.6.6",
+    "postal-mime": "4.1.4",
     "typescript": "7.0.2",
     "yaml": "2.8.1"
   }
