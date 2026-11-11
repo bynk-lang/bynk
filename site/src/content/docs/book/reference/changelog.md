@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.549.1** | `bynk explain` covers fifteen more `bynk.types.*` codes (patterns, lambdas, regexes, refinements, ordering and boundary types) |
 | **v0.549.0** | `bynk.cloudflare.Email` (experimental) sends mail through Email Service from a named instance, with typed send errors; `bynk deploy` checks each `@allowedSenders` domain and never configures one |
 | **v0.548.5** | `bynk explain` examples may span several files, and four more codes are explained with them (`uses.name_conflict`, `visibility.private_item`, `opaque_inspection`, `capability.invalid_option`) |
 | **v0.548.4** | The language server's per-file reuse digest hashes each shared declaration once per analysis round instead of once per file, trimming a warm editor round by about 9% on a 200-context project |
