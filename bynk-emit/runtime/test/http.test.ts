@@ -29,6 +29,8 @@ import {
   formMediaTypeMatches,
   formObject,
   formString,
+  multipartMediaTypeMatches,
+  multipartObject,
   queryObject,
   queryString,
   renderRejection,
@@ -1013,6 +1015,113 @@ test("formString: the record's wire form as a body; formObject reads it back", (
     ok: true,
     value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
   });
+});
+
+// #3276: a `@multipart` body.
+const enc = new TextEncoder();
+const mp = (...parts: string[]) => enc.encode(parts.join("") + "--B--\r\n");
+const textPart = (name: string, value: string) =>
+  `--B\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
+const filePart = (name: string, filename: string, body: string, type?: string) =>
+  `--B\r\nContent-Disposition: form-data; name="${name}"; filename="${filename}"\r\n` +
+  (type ? `Content-Type: ${type}\r\n` : "") +
+  `\r\n${body}\r\n`;
+const CT = "multipart/form-data; boundary=B";
+const lim = { maxFile: null, maxParts: 64 };
+const FILE = (name: string, list = false, option = false) => ({ name, kind: "file", list, option }) as const;
+
+test("multipartObject: text parts follow the form rules and file parts become Files", async () => {
+  const body = mp(
+    textPart("title", "hi"),
+    textPart("age", ""),
+    textPart("tags", "a"),
+    textPart("tags", "b"),
+    filePart("photo", "a b.png", "PNG", "image/png"),
+  );
+  const r = await multipartObject(body, CT, [F("title", "string"), F("age", "int", false, true), F("tags", "string", true), FILE("photo")], lim);
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.deepEqual((r.value as Record<string, unknown>).title, "hi");
+  assert.equal("age" in (r.value as object), false);
+  assert.deepEqual((r.value as Record<string, unknown>).tags, ["a", "b"]);
+  const photo = r.files.photo as { filename: unknown; contentType: string; bytes: Uint8Array };
+  assert.deepEqual(photo.filename, { tag: "Some", value: "a b.png" });
+  assert.equal(photo.contentType, "image/png");
+  assert.equal(new TextDecoder().decode(photo.bytes), "PNG");
+  // The codec sees a placeholder, not the bytes.
+  assert.deepEqual((r.value as Record<string, unknown>).photo, { filename: { kind: "None" }, contentType: "", bytes: "" });
+});
+
+test("multipartObject: a file part with no content type reads as the runtime's default for one", async () => {
+  // workerd reports none (read as application/octet-stream); Node's undici reports
+  // text/plain (RFC 7578's default for a part). Browsers always send one.
+  const r = await multipartObject(mp(filePart("f", "x.bin", "abc")), CT, [FILE("f")], lim);
+  assert.equal(r.ok, true);
+  if (r.ok) assert.match((r.files.f as { contentType: string }).contentType, /^(application\/octet-stream|text\/plain)$/);
+});
+
+test("multipartObject: a part with no filename for a File field is a structural mismatch", async () => {
+  const r = await multipartObject(mp(textPart("f", "hello")), CT, [FILE("f")], lim);
+  assert.deepEqual(r, {
+    ok: false,
+    status: 400,
+    error: { kind: "StructuralMismatch", path: "body.f", expected: "a file", actual: "text" },
+  });
+});
+
+test("multipartObject: a file for a text field is a structural mismatch", async () => {
+  const r = await multipartObject(mp(filePart("t", "a.txt", "x")), CT, [F("t", "string")], lim);
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.deepEqual(r.error, { kind: "StructuralMismatch", path: "body.t", expected: "text", actual: "a file" });
+});
+
+test("multipartObject: an unchosen file input (filename=\"\") is no file, in either runtime's reading", async () => {
+  const r = await multipartObject(mp(filePart("f", "", "")), CT, [FILE("f", false, true)], lim);
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.deepEqual(r.files.f, { tag: "None" });
+    assert.equal("f" in (r.value as object), false);
+  }
+  const req = await multipartObject(mp(filePart("f", "", "")), CT, [FILE("f")], lim);
+  assert.equal(req.ok, true);
+  if (req.ok) assert.equal("f" in (req.value as object), false);
+});
+
+test("multipartObject: repeated parts fill a List, and are refused for a single File", async () => {
+  const two = mp(filePart("f", "a.txt", "1"), filePart("f", "b.txt", "2"));
+  const list = await multipartObject(two, CT, [FILE("f", true)], lim);
+  assert.equal(list.ok, true);
+  if (list.ok) {
+    assert.equal((list.files.f as unknown[]).length, 2);
+    assert.equal((list.value as Record<string, unknown[]>).f.length, 2);
+  }
+  const single = await multipartObject(two, CT, [FILE("f")], lim);
+  assert.equal(single.ok, false);
+  if (!single.ok) assert.deepEqual(single.error, { kind: "StructuralMismatch", path: "body.f", expected: "a single file", actual: "2 files" });
+});
+
+test("multipartObject: a file over maxFile and more than maxParts are 413s", async () => {
+  const big = await multipartObject(mp(filePart("f", "a.bin", "12345")), CT, [FILE("f")], { maxFile: 4, maxParts: 64 });
+  assert.deepEqual(big, { ok: false, status: 413, error: { kind: "PayloadTooLarge", details: "a file part is over 4 bytes" } });
+  const many = await multipartObject(mp(textPart("a", "1"), textPart("b", "2"), textPart("c", "3")), CT, [F("a", "string")], { maxFile: null, maxParts: 2 });
+  assert.deepEqual(many, { ok: false, status: 413, error: { kind: "PayloadTooLarge", details: "more than 2 parts" } });
+});
+
+test("multipartObject: no boundary, or a body that never closes, is MalformedForm", async () => {
+  const body = mp(textPart("a", "1"));
+  const noBoundary = await multipartObject(body, "multipart/form-data", [F("a", "string")], lim);
+  assert.deepEqual(noBoundary, { ok: false, status: 400, error: { kind: "MalformedForm", details: "Invalid multipart body" } });
+  const truncated = await multipartObject(enc.encode("--B\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\nhello"), CT, [F("a", "string")], lim);
+  assert.equal(truncated.ok, false);
+  if (!truncated.ok) assert.equal(truncated.error.kind, "MalformedForm");
+});
+
+test("multipartMediaTypeMatches: the media type only; a missing boundary is the parser's call", () => {
+  const req = (ct: string | null) => new Request("https://x.test/", { method: "POST", headers: ct === null ? {} : { "content-type": ct } });
+  assert.equal(multipartMediaTypeMatches(req(CT)), true);
+  assert.equal(multipartMediaTypeMatches(req("Multipart/Form-Data")), true);
+  assert.equal(multipartMediaTypeMatches(req("application/x-www-form-urlencoded")), false);
+  assert.equal(multipartMediaTypeMatches(req(null)), false);
 });
 
 test("requestQuery: get, all and params read the raw string", () => {

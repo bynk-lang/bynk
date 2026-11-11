@@ -1300,7 +1300,29 @@ impl LimitsPolicy {
             _ => None,
         }
     }
+
+    /// #3276: the service-wide per-file ceiling of a `@multipart` route, in bytes
+    /// (`maxFile:`); `None` leaves a file part bounded by the body cap alone.
+    pub fn max_file(&self) -> Option<i64> {
+        match self.field("maxFile").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if *value > 0 => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// #3276: the service-wide ceiling on the parts of one `@multipart` request
+    /// (`maxParts:`); `None` takes [`DEFAULT_MAX_PARTS`].
+    pub fn max_parts(&self) -> Option<i64> {
+        match self.field("maxParts").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if *value > 0 => Some(*value),
+            _ => None,
+        }
+    }
 }
+
+/// #3276: the parts a `@multipart` request may carry when no `maxParts` says
+/// otherwise.
+pub const DEFAULT_MAX_PARTS: i64 = 64;
 
 /// How an `Option` is written in an HTTP response body (#2858).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1806,6 +1828,28 @@ impl Handler {
             .iter()
             .find_map(|arg| match (&arg.label, &arg.value.kind) {
                 (Some(l), ExprKind::IntLit { value, .. }) if l.name == "maxBody" && *value > 0 => {
+                    Some(*value)
+                }
+                _ => None,
+            })
+    }
+
+    /// #3276: the handler's own `@limit(maxFile:)` per-file byte cap, if any.
+    pub fn limit_max_file(&self) -> Option<i64> {
+        self.limit_int_arg("maxFile")
+    }
+
+    /// #3276: the handler's own `@limit(maxParts:)` part-count cap, if any.
+    pub fn limit_max_parts(&self) -> Option<i64> {
+        self.limit_int_arg("maxParts")
+    }
+
+    fn limit_int_arg(&self, name: &str) -> Option<i64> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "limit")?;
+        ann.args
+            .iter()
+            .find_map(|arg| match (&arg.label, &arg.value.kind) {
+                (Some(l), ExprKind::IntLit { value, .. }) if l.name == name && *value > 0 => {
                     Some(*value)
                 }
                 _ => None,

@@ -81,7 +81,7 @@ pub use events_fanout::emit_events_fanout_do;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers::emit_worker_compose;
-pub use workers_entry::{emit_worker_entry, table_has_plain_json};
+pub use workers_entry::{emit_worker_entry, form_body_specs, table_has_plain_json};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;
@@ -4223,6 +4223,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.multipart_form() {
+            parts.extend(
+                MULTIPART_FORM_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.eq() {
             parts.extend(EQ_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
         }
@@ -4370,6 +4377,11 @@ fn write_header_single(
         } else {
             ""
         };
+        let multipart_form_imports = if runtime_use.multipart_form() {
+            MULTIPART_FORM_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #1652: the structural-equality walker, imported only when a
         // non-primitive `==`/`!=` lowered to it.
         let eq_imports = if runtime_use.eq() {
@@ -4400,7 +4412,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4423,6 +4435,9 @@ pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
 /// query driver turn a record's wire form into a query string with.
 pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
+
+/// #3276: the `FormData` a system driver sends a typed `@multipart` body as.
+pub const MULTIPART_FORM_RUNTIME_IMPORTS: &str = ", __multipartForm";
 /// #2854: the key suffix under which a route's typed `query` (position and
 /// declared type) sits in the same per-route map as its body param.
 pub const QUERY_ROUTE_SUFFIX: &str = "?query";

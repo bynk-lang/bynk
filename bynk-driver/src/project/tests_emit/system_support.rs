@@ -724,7 +724,41 @@ pub(super) fn emit_system_http_support(
             // #3276: a `@form` route takes its body as a urlencoded form, written from
             // the typed record the way a browser would send it.
             let is_form = h.annotations.iter().any(|a| a.name.name == "form");
+            // #3276: a `@multipart` route takes its body as a `FormData`, whose
+            // boundary the request sets with its own `content-type`.
+            let is_multipart = h.annotations.iter().any(|a| a.name.name == "multipart");
             let (body_stmt, body_init): (Option<TsStmt>, &str) = match body_arg {
+                Some(p) if is_multipart => {
+                    runtime_use.note_multipart_form();
+                    let ser = bynk_ts::print_expr(
+                        &bynk_emit::emitter::serialisation::serialise_expr_via(
+                            &p.type_ref,
+                            &bynk_emit::emitter::ts_ident(&p.name.name),
+                            &type_ns,
+                            runtime_use,
+                        ),
+                    );
+                    let specs = bynk_emit::emitter::form_body_specs(h, &table.types)
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|(name, kind, list, option)| {
+                            format!(
+                                "{{ name: {name:?}, kind: {kind:?}, list: {list}, option: {option} }}"
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let stmt = TsStmt::const_stmt(
+                        TsBindingName::Ident("__body".to_string()),
+                        None,
+                        call(
+                            ident("__multipartForm"),
+                            vec![ident(ser), ident(format!("[{specs}] as const"))],
+                        ),
+                        None,
+                    );
+                    (Some(stmt), "body: __body, ")
+                }
                 Some(p) if is_form => {
                     runtime_use.note_query_string();
                     let ser = bynk_ts::print_expr(
@@ -828,6 +862,7 @@ pub(super) fn emit_system_http_support(
                 .collect();
             let content_type = match (body_arg.is_some(), raw_type) {
                 (true, Some(ct)) => format!("\"content-type\": {ct:?}, "),
+                (true, None) if is_multipart => String::new(),
                 (true, None) if is_form => {
                     "\"content-type\": \"application/x-www-form-urlencoded\", ".to_string()
                 }
@@ -913,6 +948,11 @@ pub(super) fn emit_system_http_support(
                 // case probes it, and a `"*/*"` route still takes the text.
                 let raw_content_type = if raw_type.is_some() {
                     "\"content-type\": \"text/plain; charset=utf-8\", ".to_string()
+                } else if is_multipart && body_arg.is_some() {
+                    // A `Wire` body is the multipart text itself, framed with this
+                    // boundary (`--bynk-boundary`).
+                    "\"content-type\": \"multipart/form-data; boundary=bynk-boundary\", "
+                        .to_string()
                 } else {
                     content_type.clone()
                 };

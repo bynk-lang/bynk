@@ -629,7 +629,13 @@ fn request_body_of(
     }
     let shape = wire::wire_ref(ty, r.types);
     // #3276: a `@form` route's body is the same record under the form media type.
-    let media = if handler.annotations.iter().any(|a| a.name.name == "form") {
+    let media = if handler
+        .annotations
+        .iter()
+        .any(|a| a.name.name == "multipart")
+    {
+        "multipart/form-data"
+    } else if handler.annotations.iter().any(|a| a.name.name == "form") {
         "application/x-www-form-urlencoded"
     } else {
         "application/json"

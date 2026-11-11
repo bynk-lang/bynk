@@ -1889,7 +1889,11 @@ pub fn check_function_type_boundary_items(
                             );
                             continue;
                         }
-                        if !type_ref_is_held(&p.type_ref) && !http_headers {
+                        // #3276: a `@multipart` handler's `body` is where its `File`
+                        // parts are received.
+                        let multipart_body = p.name.name == "body"
+                            && h.annotations.iter().any(|a| a.name.name == "multipart");
+                        if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
                             reject_fn_types(
                                 &p.type_ref,
                                 "a service handler signature",

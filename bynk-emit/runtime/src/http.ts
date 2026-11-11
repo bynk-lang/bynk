@@ -528,6 +528,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   switch (body.kind) {
     case "MalformedJson":
+    case "MalformedForm":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
       return str(body.details);
@@ -598,7 +599,7 @@ export async function renderRejection(
 // The `BoundaryError.kind`s the router emits when it refuses input *before* the
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
-const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "StructuralMismatch"]);
+const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "StructuralMismatch"]);
 
 // Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
 // parameters (`; charset=…`) are not part of the match, the comparison is
@@ -742,14 +743,50 @@ export function queryString(wire: JsonValue): string {
   return text === "" ? "" : `?${text}`;
 }
 
+/** #3276: a typed `@multipart` body's wire form (what the record's `serialise_*`
+ *  makes, a `File` being `{ filename, contentType, bytes: base64 }`) as the
+ *  `FormData` a request for it carries. Test drivers use it; `fields` says which
+ *  record fields are files. */
+export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): FormData {
+  const form = new FormData();
+  if (typeof wire !== "object" || wire === null || Array.isArray(wire)) return form;
+  const some = (v: JsonValue): JsonValue | undefined => {
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      if (v.kind === "None") return undefined;
+      if (v.kind === "Some") return v.value ?? undefined;
+    }
+    return v;
+  };
+  for (const f of fields) {
+    const value = wire[f.name];
+    if (value === undefined || value === null) continue;
+    for (const item of f.list && Array.isArray(value) ? value : [value]) {
+      const v = some(item);
+      if (v === undefined) continue;
+      if (f.kind === "file") {
+        const file = v as { filename: JsonValue; contentType: string; bytes: string };
+        const name = some(file.filename);
+        const raw = globalThis.atob(file.bytes);
+        const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+        form.append(f.name, new Blob([bytes], { type: file.contentType }), typeof name === "string" ? name : "");
+      } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+        if (typeof v.kind === "string") form.append(f.name, v.kind);
+      } else {
+        form.append(f.name, String(v));
+      }
+    }
+  }
+  return form;
+}
+
 /** #2854: how one field of a handler's typed `query` record reads off the wire. */
 export interface QueryField {
   readonly name: string;
   /** The field's leaf wire form: `Int` and `Bool` are parsed, an `enum` is a
    *  unit variant named by the value, a `Decimal` and everything else is the text
    *  itself (`"decimal"` differs from `"string"` only in that a form's empty value
-   *  is absent for it). */
-  readonly kind: "string" | "decimal" | "int" | "bool" | "enum";
+   *  is absent for it). A `"file"` is a `@multipart` file part. */
+  readonly kind: "string" | "decimal" | "int" | "bool" | "enum" | "file";
   readonly list: boolean;
   /** An `Option` field: a present value is wrapped in `Some`, so a value that
    *  reads like the envelope (`?kind=None`) is still the leaf's, not `None`. */
@@ -831,6 +868,126 @@ function fieldsObject(
     }
   }
   return { ok: true, value: out };
+}
+
+/** #3276: whether `request`'s `Content-Type` is `multipart/form-data` (parameters
+ *  stripped, case-insensitive). The boundary parameter's presence is the parser's
+ *  to judge: a body with none is a `MalformedForm`, not a `415`. */
+export function multipartMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  return given !== null && given.split(";")[0].trim().toLowerCase() === "multipart/form-data";
+}
+
+/** What reading a multipart body gives: the JSON object the record's codec reads
+ *  (a file field holds an empty placeholder, so the codec sees its shape without
+ *  the file's bytes being copied into base64), and the real `File` values, which
+ *  the caller lays over the decoded record. */
+export type MultipartRead =
+  | { ok: true; value: JsonValue; files: Record<string, unknown> }
+  | { ok: false; status: 400 | 413; error: Record<string, JsonValue> };
+
+/** The per-request caps a `@multipart` route enforces. */
+export interface MultipartLimits {
+  readonly maxFile: number | null;
+  readonly maxParts: number;
+}
+
+const FILE_PLACEHOLDER: JsonValue = { filename: { kind: "None" }, contentType: "", bytes: "" };
+
+/** #3276 (decisions B-F): read a `multipart/form-data` body, already held whole
+ *  under the route's cap, into the record's JSON form plus its file parts. Text
+ *  parts follow the form rules ([`formObject`]); a part with a filename is a file,
+ *  and belongs to a `File` field. Too many parts, or a file over `maxFile`, is the
+ *  `413`; a body that is not multipart at all (no boundary, no closing one) is a
+ *  `MalformedForm`. */
+export async function multipartObject(
+  body: Uint8Array,
+  contentType: string,
+  fields: readonly QueryField[],
+  limits: MultipartLimits,
+): Promise<MultipartRead> {
+  const tooLarge = (details: string): MultipartRead => ({
+    ok: false,
+    status: 413,
+    error: { kind: "PayloadTooLarge", details },
+  });
+  let form: FormData;
+  try {
+    form = await new Request("https://multipart.invalid/", {
+      method: "POST",
+      headers: { "content-type": contentType },
+      body: body as BodyInit,
+    }).formData();
+  } catch {
+    return { ok: false, status: 400, error: { kind: "MalformedForm", details: "Invalid multipart body" } };
+  }
+  let parts = 0;
+  const search = new URLSearchParams();
+  const uploaded = new Map<string, File[]>();
+  // `forEach`, not `entries()`: the emitted project's `lib` has no `DOM.Iterable`.
+  const entries: [string, FormDataEntryValue][] = [];
+  form.forEach((value, name) => entries.push([name, value]));
+  for (const [name, value] of entries) {
+    if (++parts > limits.maxParts) {
+      return tooLarge(`more than ${limits.maxParts} parts`);
+    }
+    if (typeof value === "string") {
+      search.append(name, value);
+      continue;
+    }
+    if (limits.maxFile !== null && value.size > limits.maxFile) {
+      return tooLarge(`a file part is over ${limits.maxFile} bytes`);
+    }
+    // A browser sends an unchosen file input as a part with `filename=""` and no
+    // bytes. Node reads it as an empty `File`; workerd reads it as an empty string,
+    // handled with the text parts below. Either way it is no file.
+    if (value.name === "" && value.size === 0) continue;
+    const list = uploaded.get(name);
+    if (list === undefined) uploaded.set(name, [value]);
+    else list.push(value);
+  }
+  const mismatch = (name: string, expected: string, actual: string): MultipartRead => ({
+    ok: false,
+    status: 400,
+    error: { kind: "StructuralMismatch", path: `body.${name}`, expected, actual },
+  });
+  const textFields = fields.filter((f) => f.kind !== "file");
+  const fileNames = new Set(fields.filter((f) => f.kind === "file").map((f) => f.name));
+  // A file where a text field is declared (or a text value where a file is).
+  for (const name of uploaded.keys()) {
+    if (!fileNames.has(name) && textFields.some((f) => f.name === name)) {
+      return mismatch(name, "text", "a file");
+    }
+  }
+  for (const name of fileNames) {
+    if (search.getAll(name).some((v) => v !== "")) return mismatch(name, "a file", "text");
+  }
+  const text = fieldsObject(search, textFields, "body", true);
+  if (!text.ok) return { ok: false, status: 400, error: text.error as unknown as Record<string, JsonValue> };
+  const value = text.value as Record<string, JsonValue>;
+  const files: Record<string, unknown> = {};
+  for (const f of fields) {
+    if (f.kind !== "file") continue;
+    const got = uploaded.get(f.name) ?? [];
+    if (!f.list && got.length > 1) return mismatch(f.name, "a single file", `${got.length} files`);
+    const read = await Promise.all(
+      got.map(async (file) => ({
+        filename: file.name === "" ? { tag: "None" } : { tag: "Some", value: file.name },
+        contentType: file.type === "" ? "application/octet-stream" : file.type,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      })),
+    );
+    if (f.list) {
+      value[f.name] = read.map(() => FILE_PLACEHOLDER);
+      files[f.name] = read;
+    } else if (read.length === 1) {
+      value[f.name] = f.option ? { kind: "Some", value: FILE_PLACEHOLDER } : FILE_PLACEHOLDER;
+      files[f.name] = f.option ? { tag: "Some", value: read[0] } : read[0];
+    } else if (f.option) {
+      files[f.name] = { tag: "None" };
+    }
+  }
+  return { ok: true, value, files };
 }
 
 /** #3276 (decision H): whether `request`'s `Content-Type` is a form's. The media

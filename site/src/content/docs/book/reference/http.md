@@ -264,7 +264,7 @@ variant, so there the same response reads as `Conflict(_)`.
 
 The router refuses some requests before any handler runs: a `400` for a body or
 path parameter that fails to parse or validate, a `405` for a method the path
-doesn't declare, a `413` for a body over its cap, a `415` for a `@raw` or `@form` route's
+doesn't declare, a `413` for a body over its cap, a `415` for a `@raw`, `@form` or `@multipart` route's
 other content type, and a `401` from a `Signature` seam. Each answers in Bynk's own
 shape, `{ "kind": …, "details": … }` or no body. A service whose contract says
 otherwise renders them itself with `on rejected`:
@@ -281,7 +281,7 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 
 `why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
 `RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
-`UnsupportedMediaType(detail)`, `MethodNotAllowed` or `Unauthorized`.
+`UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
 `RawError` of that status; the router keeps its other headers (the `Allow` of a
@@ -813,6 +813,82 @@ the text a browser would send (`Wire("email=nope")`). At the `unit` and
 `integration` tiers the record reaches the handler directly. See
 [Sending a form](/book/reference/testing/#sending-a-form).
 
+## Multipart bodies
+
+`@multipart` marks a handler's `body` as a **browser upload** (`multipart/form-data`)
+and decodes it into a record at the boundary: text parts as a [`@form`](#form-bodies)
+body's fields, and file parts as [`File`](/book/reference/types/#file) values. The route is
+buffered whole under a body cap, and the parts are parsed from that buffer.
+
+```bynk,ignore
+consumes bynk { File }
+
+type Upload = {
+  caption: Option[String],
+  photo:   File,
+  extras:  List[File] = [],
+}
+
+service site from http {
+  limits { maxBody: 20_000_000, maxFile: 5_000_000 }
+
+  @multipart
+  on POST("/avatar") (body: Upload) -> Effect[HttpResult[()]] by u: User given Photos {
+    let _ <- Photos.put(u.identity, body.photo.bytes)
+    NoContent
+  }
+}
+```
+
+A `File` is the record `bynk` exports: `filename: Option[String]` (`None` for a part
+with no filename), `contentType: String` (what the client claimed) and `bytes: Bytes`
+(the whole part; its size is `bytes.length()`). Both the name and the type are
+**client-controlled**: never use `filename` as a storage key or a path, and do not
+trust `contentType` as proof of what the bytes are. A part with no `Content-Type` reads
+as `application/octet-stream` on Workers; the local Node runner reports `text/plain`
+for it, so a handler should not branch on that case.
+
+- **The annotation.** `@multipart` follows `@form`'s placement rules
+  (`bynk.http.form_on_bodyless`, `form_duplicate`, `form_unknown_arg`,
+  `form_on_sum_route`) and excludes `@raw` and `@form` (`bynk.http.body_kind_conflict`).
+  The `body` is a record whose fields are the form leaves, or a `File`, optionally in an
+  `Option` or a `List` (a repeated part); keys are flat
+  (`bynk.http.form_field_not_stringy`).
+- **A cap is required.** The body is held in memory with a parsed copy beside it, so a
+  `@multipart` route needs an effective `maxBody`, from `@limit` or the service's
+  `limits { }` (`bynk.http.multipart_body_unbounded`). A cap over 32 MiB is a warning
+  (`bynk.http.multipart_large_cap`): a Worker has 128 MB for everything it does, and the
+  platform's own request-body ceiling depends on the zone's plan.
+- **Caps on the parts.** `maxFile` (bytes in one file part) and `maxParts` (parts in the
+  request, 64 unless set) join `maxBody` in `limits { }` and `@limit(…)`; the route's
+  `@limit` wins. `maxFile` and `maxParts` in `@limit` are only valid on a `@multipart`
+  route (`bynk.http.limit_on_non_multipart`), and must be positive `Int`s
+  (`bynk.http.limit_bad_max_file`). Past either cap is a `413`, as `maxBody` is.
+- **`415`, `400` and `413`.** Another `Content-Type` is a `415`. A body that is not
+  multipart (no `boundary`, or one that never closes) is a `400` `MalformedForm`
+  (a [`BoundaryRejection`](#rendering-rejections)). A text part for a `File` field, a
+  file for a text field, or two files for a single `File` is a `400` `StructuralMismatch`
+  naming `body.<field>`; the text parts' refinements are checked as for a form.
+- **Unchosen file inputs.** A browser sends an unchosen `<input type="file">` as a part
+  with `filename=""` and no bytes. It is no file: an `Option[File]` is `None`, a `List`
+  gets no element, and a required `File` is missing.
+- **A `File` stays in the handler.** It is refused anywhere it would be persisted or sent: an
+  agent's store, a handler's parameter or result, an event, a call argument
+  (`bynk.types.file_at_boundary`). A record field or the `@multipart` body itself may name one,
+  which is how a body names its parts. Take the `bytes` and store those.
+- **`maxParts` bounds what the handler sees,** not the cost of parsing: the whole capped body is
+  parsed first, so `maxBody` is the guard against an oversized upload.
+- **Where the bytes go.** The handler holds the file as `Bytes`, so `R2.put(key, f.bytes)`
+  stores it. A body over the cap is refused, so a large upload does not fit here:
+  streaming a part into the handler is
+  [#3180](https://github.com/bynk-lang/bynk/issues/3180)'s third slice.
+- **Signatures and sums.** A `Signature` actor signs the octets as received; a `by` that
+  is a sum of actors is refused.
+
+In a `system` test a typed `body` is sent as the `FormData` its record encodes to, with a
+`Blob` per `File`; a `Wire(…)` body is the multipart text itself, framed with the boundary
+`bynk-boundary` (`--bynk-boundary\r\n…`).
+
 ## CORS
 
 A `from http` service is **same-origin** by default: a browser page served from a
@@ -981,6 +1057,8 @@ The wire behaviour, for a body-taking route with an effective cap of `N` bytes:
 | Field | Meaning | Default |
 |---|---|---|
 | `maxBody` | The byte ceiling for the service's body-taking routes, as a positive `Int` byte count. | — (no cap) |
+| `maxFile` | The byte ceiling for one file part of a [`@multipart`](#multipart-bodies) body. | the body cap |
+| `maxParts` | The most parts one `@multipart` request may carry. | 64 |
 
 ### The `@limit` override
 
@@ -991,6 +1069,7 @@ once per handler:
 | Field | Meaning | Default |
 |---|---|---|
 | `maxBody` | The byte ceiling for this route, as a positive `Int` byte count. Overrides `limits { maxBody }`. | — |
+| `maxFile`, `maxParts` | A `@multipart` route's own file and part-count caps; override `limits { maxFile }` and `limits { maxParts }`. | — |
 
 ### Precedence and the opt-in posture
 
@@ -1029,8 +1108,8 @@ test the `413` is observable as `Rejected(PayloadTooLarge(_))`.
 
 A `limits { }` block is only valid on a `from http` service
 (`bynk.http.limits_not_http`), and a service declares at most one
-(`bynk.parse.duplicate_limits`). The section's only field is `maxBody`
-(`bynk.http.limits_unknown_field`), which MUST be a positive `Int`
+(`bynk.parse.duplicate_limits`). The section's fields are `maxBody`, `maxFile` and `maxParts`
+(`bynk.http.limits_unknown_field`), each of which MUST be a positive `Int`
 (`bynk.http.limits_invalid_field`). A `@limit` on a `GET`/`DELETE` (a bodyless
 method) is `bynk.http.limit_on_bodyless`; a duplicate `@limit` on one handler is
 `bynk.http.limit_duplicate`; any argument other than `maxBody` is
@@ -1134,7 +1213,7 @@ flowchart TD
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
 on method **and** path. On a match, path parameters are bound and a typed
-[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw` or `@form` route's
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an

@@ -317,6 +317,17 @@ with a `Content-Type` line replaces it, which is how a case probes the route's `
 (On a [`@raw`](/book/reference/http/#raw-request-bodies) route, a `Wire` body is sent as
 `text/plain` instead, which is how a case probes the `415`.)
 
+### Sending a multipart body {#sending-a-multipart-body}
+
+A [`@multipart`](/book/reference/http/#multipart-bodies) route's `body` record is passed
+like a form's. A `File` is a record literal (`File { filename: Some("a.png"), contentType:
+"image/png", bytes: png }`). At `unit` and `integration` the record reaches the handler as it
+is; at `system` the driver sends it as the `FormData` it encodes to, a `Blob` per `File`.
+A `Wire(…)` body is the multipart text itself, framed with the boundary `bynk-boundary`, so
+a case can send what a browser would, and observe the boundary's rejections:
+`Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(PayloadTooLarge(_))`
+for a file over `maxFile` or too many parts.
+
 ### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
 
 A handler that declares a [`query`](/book/reference/http/#query-strings) takes it as
@@ -521,6 +532,7 @@ BoundaryRejection = RefinementViolation(detail: String)
                   | MethodNotAllowed
                   | PayloadTooLarge(detail: String)
                   | UnsupportedMediaType(detail: String)
+                  | MalformedForm(detail: String)
 ```
 
 `Rejected` means the request was refused before the handler ran. `Handled`

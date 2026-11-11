@@ -450,6 +450,26 @@ fn http_responses(
     }
     // #3276: a `@form` route answers `415` to any other `Content-Type`, and `413`
     // to a body over its cap, before the handler runs.
+    let multipart = handler
+        .annotations
+        .iter()
+        .any(|a| a.name.name == "multipart");
+    if multipart {
+        out.push(HttpResponse {
+            status: 415,
+            variant: "UnsupportedMediaType".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the request's Content-Type is not `multipart/form-data`",
+            },
+        });
+        out.push(HttpResponse {
+            status: 413,
+            variant: "PayloadTooLarge".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the body, a file part or the part count is over the route's cap",
+            },
+        });
+    }
     if handler.annotations.iter().any(|a| a.name.name == "form") {
         out.push(HttpResponse {
             status: 415,

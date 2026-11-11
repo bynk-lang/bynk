@@ -4542,15 +4542,27 @@ fn validate_limits_policy(
     // Field names are a closed set; flag anything else (the parser accepts any
     // name, per the CORS / security / annotation precedent).
     for field in &policy.fields {
-        if field.name.name != "maxBody" {
+        if !matches!(field.name.name.as_str(), "maxBody" | "maxFile" | "maxParts") {
             errors.push(
                 CompileError::new(
                     "bynk.http.limits_unknown_field",
                     field.name.span,
                     format!("unknown `limits` field `{}`", field.name.name),
                 )
-                .with_note("the only field is `maxBody`"),
+                .with_note("the fields are `maxBody`, and (for `@multipart` routes) `maxFile` and `maxParts`"),
             );
+        }
+    }
+    // #3276: `maxFile` and `maxParts` are positive `Int` counts too.
+    for name in ["maxFile", "maxParts"] {
+        if let Some(expr) = policy.field(name)
+            && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if *n > 0)
+        {
+            errors.push(CompileError::new(
+                "bynk.http.limits_invalid_field",
+                expr.span,
+                format!("`limits` `{name}` must be a positive `Int` literal"),
+            ));
         }
     }
 
@@ -4889,14 +4901,20 @@ fn validate_http_handler(
             validate_query_param(p, types, errors);
         }
         // #3276: the `body` of a `@form` handler is a record of form leaves.
-        if is_body && handler.annotations.iter().any(|a| a.name.name == "form") {
-            validate_form_body(p, types, errors);
+        if is_body
+            && let Some(kind) = handler
+                .annotations
+                .iter()
+                .find(|a| matches!(a.name.name.as_str(), "form" | "multipart"))
+                .map(|a| a.name.name.as_str())
+        {
+            validate_form_body(p, kind, types, errors);
             if let Some(by) = handler.by_clause.as_ref().filter(|b| b.is_sum()) {
                 errors.push(
                     CompileError::new(
                         "bynk.http.form_on_sum_route",
                         by.span,
-                        "a `@form` route cannot take a sum of actors",
+                        format!("a `@{kind}` route cannot take a sum of actors"),
                     )
                     .with_note(
                         "a multi-actor route reads and verifies the body as JSON itself; name one actor, or split the route",
@@ -5140,7 +5158,14 @@ fn validate_handler_annotations(
                     );
                     continue;
                 }
-                validate_limit_args(ann, errors);
+                validate_limit_args(
+                    ann,
+                    handler
+                        .annotations
+                        .iter()
+                        .any(|a| a.name.name == "multipart"),
+                    errors,
+                );
             }
             "raw" => {
                 if seen_raw {
@@ -5199,32 +5224,36 @@ fn validate_handler_annotations(
                     );
                 }
             }
-            "form" => {
+            kind @ ("form" | "multipart") => {
+                // #3276: `@form` and `@multipart` each fix the wire format of the
+                // one `body`: a urlencoded form, or a `multipart/form-data` one.
                 if seen_form {
                     errors.push(CompileError::new(
                         "bynk.http.form_duplicate",
                         ann.span,
-                        "a handler carries at most one `@form` annotation",
+                        format!("a handler carries at most one `@{kind}` annotation"),
                     ));
                     continue;
                 }
                 seen_form = true;
-                if let Some(other) = body_kind.filter(|k| *k != "form") {
-                    errors.push(body_kind_conflict(ann, "form", other));
+                if let Some(other) = body_kind.filter(|k| *k != kind) {
+                    errors.push(body_kind_conflict(ann, kind, other));
                     continue;
                 }
-                body_kind = Some("form");
+                body_kind = Some(kind);
                 let has_body = handler.params.iter().any(|p| p.name.name == "body");
                 if !is_body_method || !has_body {
                     errors.push(
                         CompileError::new(
                             "bynk.http.form_on_bodyless",
                             ann.span,
-                            "`@form` is only valid on a POST/PUT/PATCH `on http` route with a `body` parameter",
+                            format!(
+                                "`@{kind}` is only valid on a POST/PUT/PATCH `on http` route with a `body` parameter"
+                            ),
                         )
-                        .with_note(
-                            "a form body is the `body` parameter of a body-taking route, decoded from `application/x-www-form-urlencoded`",
-                        ),
+                        .with_note(format!(
+                            "a {kind} body is the `body` parameter of a body-taking route"
+                        )),
                     );
                     continue;
                 }
@@ -5233,10 +5262,40 @@ fn validate_handler_annotations(
                         CompileError::new(
                             "bynk.http.form_unknown_arg",
                             arg.span,
-                            "`@form` takes no arguments",
+                            format!("`@{kind}` takes no arguments"),
+                        )
+                        .with_note(format!(
+                            "write `@{kind}`: the media type is fixed, and the caps are `@limit` and `limits {{ }}`"
+                        )),
+                    );
+                }
+                // A multipart body is held in memory beside its parsed copy, so
+                // it must be bounded, as a `@raw` one is.
+                if kind == "multipart" && handler.limit_max_body().or(service_cap).is_none() {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.multipart_body_unbounded",
+                            ann.span,
+                            "a `@multipart` route needs a request-body cap",
                         )
                         .with_note(
-                            "write `@form`: the media type is fixed, and the caps are `@limit` and `limits { }`",
+                            "add `@limit(maxBody: …)` to the handler or `limits { maxBody: … }` to the service; a multipart body is buffered whole, so an unbounded upload is the denial of service ADR 0165 exists to stop",
+                        ),
+                    );
+                } else if kind == "multipart"
+                    && handler
+                        .limit_max_body()
+                        .or(service_cap)
+                        .is_some_and(|cap| cap > MULTIPART_LARGE_CAP)
+                {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.multipart_large_cap",
+                            ann.span,
+                            "this `@multipart` route's body cap is over 32 MiB",
+                        )
+                        .with_note(
+                            "the body is buffered with a parsed copy beside it, and a Worker has 128 MB for everything; lower `maxBody`, or hold large uploads to a presigned or multipart-to-R2 flow",
                         ),
                     );
                 }
@@ -5270,7 +5329,7 @@ fn validate_handler_annotations(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form` and `@json`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),
@@ -5279,6 +5338,10 @@ fn validate_handler_annotations(
         }
     }
 }
+
+/// #3276: the body cap above which a `@multipart` route is warned about: a quarter
+/// of a Worker's 128 MB isolate, since the body is buffered with a parsed copy.
+const MULTIPART_LARGE_CAP: i64 = 32 * 1024 * 1024;
 
 /// #3276: the diagnostic for a handler that declares two request-body wire formats
 /// (`@raw` with `@form`): each fixes how the one `body` is read, so they exclude
@@ -5289,7 +5352,7 @@ fn body_kind_conflict(ann: &Annotation, this: &str, other: &str) -> CompileError
         ann.span,
         format!("a handler cannot carry both `@{other}` and `@{this}`"),
     )
-    .with_note("`@raw` and `@form` each fix the wire format of the one `body` parameter; use one")
+    .with_note("`@raw`, `@form` and `@multipart` each fix the wire format of the one `body` parameter; use one")
 }
 
 /// #3276: whether `r` is a `Bool`, or a refined or opaque type over one (the
@@ -5306,6 +5369,87 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     }
 }
 
+/// #3276: whether `name` is the `File` record `bynk` exports, found by its
+/// declaration's first-party span (as `is_crypto_key_type` finds a key), so a
+/// user type that happens to be called `File` is not mistaken for it.
+pub fn is_std_file_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    name == "File"
+        && types.get(name).is_some_and(|decl| {
+            crate::firstparty::unit(bynk_std::BYNK_UNIT).is_some_and(|unit| {
+                decl.span.file == crate::project_model::firstparty_file_id(unit)
+            })
+        })
+}
+
+/// #3276: whether `r` is a `@multipart` file field: `File`, or an `Option` or a
+/// `List` of it (one layer, as a form leaf is). `File` is the record `bynk`
+/// exports (`consumes bynk { File }`).
+fn is_file_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    let named = |t: &TypeRef| matches!(t, TypeRef::Named(id) if is_std_file_type(&id.name, types));
+    match r {
+        TypeRef::Option(inner, _) | TypeRef::List(inner, _) => named(inner),
+        other => named(other),
+    }
+}
+
+/// #3276: the field path by which `t` reaches a `File`, if it does: `Some(vec![])`
+/// for a `File` itself, otherwise the record fields (or sum payloads) through
+/// which a type carries one, as [`bynk_syntax::ast::stream_path`] does a stream.
+fn file_path(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> Option<Vec<String>> {
+    fn walk(
+        t: &TypeRef,
+        types: &HashMap<String, Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<String>> {
+        match t {
+            TypeRef::Named(id) if is_std_file_type(&id.name, types) => Some(Vec::new()),
+            TypeRef::Named(id) => named(&id.name, types, visited),
+            TypeRef::App { name, args, .. } => named(&name.name, types, visited)
+                .or_else(|| args.iter().find_map(|a| walk(a, types, visited))),
+            TypeRef::Option(a, _) | TypeRef::List(a, _) | TypeRef::Set(a, _) => {
+                walk(a, types, visited)
+            }
+            TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+                walk(a, types, visited).or_else(|| walk(b, types, visited))
+            }
+            _ => None,
+        }
+    }
+    fn named(
+        name: &str,
+        types: &HashMap<String, Arc<TypeDecl>>,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Option<Vec<String>> {
+        if !visited.insert(name.to_string()) {
+            return None;
+        }
+        let decl = types.get(name)?;
+        let found = match &decl.body {
+            TypeBody::Record(r) => r.fields.iter().find_map(|f| {
+                walk(&f.type_ref, types, visited).map(|mut p| {
+                    p.insert(0, f.name.name.clone());
+                    p
+                })
+            }),
+            TypeBody::Sum(s) => s.variants.iter().find_map(|v| {
+                v.payload.iter().find_map(|f| {
+                    walk(&f.type_ref, types, visited).map(|mut p| {
+                        p.insert(0, f.name.name.clone());
+                        p
+                    })
+                })
+            }),
+            _ => None,
+        };
+        visited.remove(name);
+        found
+    }
+    walk(t, types, &mut std::collections::HashSet::new())
+}
+
 /// #3276: the `body` of a `@form` handler is a record whose fields are each a
 /// form leaf: the typed `query` set (a `String`, `Int`, `Bool` or `Decimal`, a
 /// refined or opaque type over one, an enum), optionally in an `Option` or a
@@ -5313,9 +5457,11 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
 /// defaulted is a warning: an unchecked checkbox sends nothing.
 fn validate_form_body(
     p: &Param,
+    kind: &str,
     types: &HashMap<String, Arc<TypeDecl>>,
     errors: &mut Vec<CompileError>,
 ) {
+    let multipart = kind == "multipart";
     let record = match &p.type_ref {
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
             Some(TypeBody::Record(r)) => Some(r),
@@ -5329,7 +5475,7 @@ fn validate_form_body(
                 "bynk.http.form_body_not_record",
                 p.type_ref.span(),
                 format!(
-                    "the `body` of a `@form` handler must be a record type (got `{}`)",
+                    "the `body` of a `@{kind}` handler must be a record type (got `{}`)",
                     ts_type_ref_display(&p.type_ref),
                 ),
             )
@@ -5340,20 +5486,23 @@ fn validate_form_body(
         return;
     };
     for f in &record.fields {
-        if !is_query_field_type(&f.type_ref, types) {
+        let is_file = multipart && is_file_field_type(&f.type_ref, types);
+        if !is_file && !is_query_field_type(&f.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.form_field_not_stringy",
                     f.type_ref.span(),
                     format!(
-                        "field `{}` of the `@form` body record has type `{}`, which a form cannot carry",
+                        "field `{}` of the `@{kind}` body record has type `{}`, which a {kind} body cannot carry",
                         f.name.name,
                         ts_type_ref_display(&f.type_ref),
                     ),
                 )
-                .with_note(
-                    "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key); form keys are flat, so a nested record is not allowed",
-                ),
+                .with_note(if multipart {
+                    "a multipart field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, or a `File`, optionally in an `Option` or a `List` (a repeated part); keys are flat, so a nested record is not allowed"
+                } else {
+                    "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key); form keys are flat, so a nested record is not allowed"
+                }),
             );
         } else if f.init.is_none() && is_bool_leaf(&f.type_ref, types) {
             errors.push(
@@ -5361,7 +5510,7 @@ fn validate_form_body(
                     "bynk.http.form_bool_without_default",
                     f.type_ref.span(),
                     format!(
-                        "`Bool` field `{}` of a `@form` body has no default, so an unchecked checkbox is a `400`",
+                        "`Bool` field `{}` of a `@{kind}` body has no default, so an unchecked checkbox is a `400`",
                         f.name.name,
                     ),
                 )
@@ -5488,22 +5637,50 @@ fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
 /// a diagnostic; the vocabulary is closed. A route `@limit` overrides the service
 /// `limits { }` default at emit time. There is no `Size` literal yet, so the byte
 /// count is a plain `Int` (DECISION C).
-fn validate_limit_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<CompileError>) {
     let mut max_body: Option<&AnnotationArg> = None;
+    let mut multipart_args = 0;
     for arg in &ann.args {
         match arg.label.as_ref().map(|l| l.name.as_str()) {
             Some("maxBody") => max_body = Some(arg),
+            // #3276: the per-file and part-count caps of a `@multipart` route.
+            Some(name @ ("maxFile" | "maxParts")) => {
+                multipart_args += 1;
+                if !is_multipart {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.limit_on_non_multipart",
+                            arg.span,
+                            format!("`@limit` `{name}` is only valid on a `@multipart` route"),
+                        )
+                        .with_note(
+                            "a per-file or part-count cap governs the parts of a multipart body",
+                        ),
+                    );
+                } else if !matches!(&arg.value.kind, ExprKind::IntLit { value: n, .. } if *n > 0) {
+                    errors.push(CompileError::new(
+                        "bynk.http.limit_bad_max_file",
+                        arg.span,
+                        format!("`@limit` `{name}` must be a positive `Int` literal"),
+                    ));
+                }
+            }
             _ => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.limit_unknown_arg",
                         arg.span,
-                        "`@limit` accepts only the `maxBody:` argument",
+                        "`@limit` accepts only the `maxBody:` argument (and, on a `@multipart` route, `maxFile:` and `maxParts:`)",
                     )
                     .with_note("write `@limit(maxBody: 26_214_400)`"),
                 );
             }
         }
+    }
+    // A `@limit` that only tightens a multipart route's file or part caps may leave
+    // `maxBody` to the service's `limits { }`.
+    if max_body.is_none() && multipart_args > 0 {
+        return;
     }
     // `maxBody` is required and must be a *positive* `Int` literal — a byte count.
     match max_body.map(|a| &a.value.kind) {
@@ -6038,9 +6215,19 @@ pub fn reject_fn_types(
                 ),
             );
         }
+        // #3276: a `File` is a file part of a `@multipart` request, held in
+        // memory for the handler that receives it. A record field or sum payload
+        // may carry one (that is how a `@multipart` body names its parts), but it
+        // is never persisted, sent across a boundary or returned.
+        TypeRef::Named(id) if !stream_passes(what) && is_std_file_type(&id.name, types) => {
+            errors.push(file_at_boundary(&id.name, &[], id.span, what));
+        }
         // K-streams (#2623): a record or sum that carries a stream, at any
         // depth, is non-boundary like the stream.
         TypeRef::Named(id) if !stream_passes(what) => {
+            if let Some(path) = file_path(r, types) {
+                errors.push(file_at_boundary(&id.name, &path, id.span, what));
+            }
             if let Some(path) = bynk_syntax::ast::stream_path(r, types) {
                 errors.push(stream_carrying_at_boundary(&id.name, &path, id.span, what));
             }
@@ -6056,6 +6243,31 @@ pub fn reject_fn_types(
         | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
+}
+
+/// #3276: `bynk.types.file_at_boundary` for a `File`, or a type that carries one,
+/// at a position that persists or sends it.
+fn file_at_boundary(name: &str, path: &[String], span: Span, what: &str) -> CompileError {
+    let reach = if path.is_empty() {
+        String::new()
+    } else {
+        let chain = path
+            .iter()
+            .map(|f| format!("`{f}`"))
+            .collect::<Vec<_>>()
+            .join(", then ");
+        format!(" (it is reached through {chain})")
+    };
+    CompileError::new(
+        "bynk.types.file_at_boundary",
+        span,
+        format!(
+            "`{name}` cannot appear in {what} — it holds a file part of a multipart request in memory, never persisted, sent across a boundary or returned{reach}"
+        ),
+    )
+    .with_note(
+        "take the part's `bytes` (and `filename`, `contentType`) in the `@multipart` handler and store them where they belong, as `R2.put(key, f.bytes)` does",
+    )
 }
 
 /// K-streams (#2623): the positions a `Stream` may appear in. A capability
