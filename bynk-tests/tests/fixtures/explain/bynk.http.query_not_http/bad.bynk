@@ -1,0 +1,7 @@
+context api
+
+service ticker from cron {
+    on schedule("*/5 * * * *") (query: RequestQuery) -> Effect[Result[(), String]] {
+        Ok(())
+    }
+}

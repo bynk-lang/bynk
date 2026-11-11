@@ -1,0 +1,14 @@
+context mailer
+
+type Region =
+  | Domestic
+  | International
+  | Refunded(reason: String)
+
+event Paid = { id: String, region: Region }
+
+service onPaid from Events(Paid { region: Region.Refunded, .. }) {
+  on event(e: Paid) -> Effect[()] {
+    Effect.pure(())
+  }
+}

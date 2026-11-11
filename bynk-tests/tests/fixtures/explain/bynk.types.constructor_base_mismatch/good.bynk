@@ -1,0 +1,7 @@
+commons demo
+
+type Reps = Int where InRange(1, 100)
+
+fn parse(n: Int) -> Result[Reps, ValidationError] {
+    Reps.of(n)
+}

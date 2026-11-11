@@ -1,0 +1,9 @@
+context shop
+
+actor Hook { auth = Signature(secret = "WEBHOOK_KEY", header = "X-Sig") }
+
+service api from http {
+  on POST("/x") () -> Effect[HttpResult[String]] by Hook {
+    Ok("x")
+  }
+}
