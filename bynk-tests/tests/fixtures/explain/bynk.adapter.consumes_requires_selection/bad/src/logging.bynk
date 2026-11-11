@@ -1,0 +1,11 @@
+adapter logging {
+  binding "./logging.binding.ts"
+
+  exports capability { Log }
+
+  capability Log {
+    fn info(msg: String) -> Effect[()]
+  }
+
+  provides Log = ConsoleLog
+}

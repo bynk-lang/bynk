@@ -198,6 +198,55 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.actor.foreign_context_name_unkeyable",
+        blurb: "A foreign caller signs its calls under a key named from the context's name, `BYNK_CALL_TO_<CONTEXT>`. The name must therefore be lower-case letters and digits in dot-separated segments, each starting with a letter, with single underscores between runs: no `__`, and no trailing `_`. Rename the context, or move the foreign actor to one whose name qualifies.",
+        example: "context shop.orders_\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✗ no key can be named from `shop.orders_`\n\ncontext shop.orders\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.foreign_duplicate_secret",
+        blurb: "A context tells its foreign callers apart by the secret their calls are signed under, and `bynk deploy` mints one secret per name. Two actors on one secret could each pass for the other, so a foreign actor's secret may be no other actor's. Give each its own variable.",
+        example: "actor Legacy { auth = Foreign(secret = \"SHARED_KEY\") }\nactor Ledger { auth = Foreign(secret = \"SHARED_KEY\") }          // ✗ `Legacy` already uses it\n\nactor Ledger { auth = Foreign(secret = \"LEDGER_CALL_KEY\") }     // ✓ its own variable",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.foreign_identity_unsupported",
+        blurb: "A `Foreign` actor is its own identity: a handler tells foreign callers apart by matching on its `by` sum, not by a value carried in. So `identity` is refused, where a `Bearer` actor takes one from its token. Remove it.",
+        example: "type Who = String where NonEmpty\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\"), identity = Who }   // ✗ the actor is the identity\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }                   // ✓",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.foreign_missing_secret",
+        blurb: "A `Foreign` actor is a caller that is not Bynk. Its calls are signed, and the context checks each one against a secret, so the actor must name the environment variable that holds it. The string is the variable's name, never the key, and `bynk deploy` mints the key and sets it. With no name the context has nothing to check a call against. A secret that is not a string is `bynk.actor.foreign_secret_not_string`.",
+        example: "actor Legacy { auth = Foreign }                                // ✗ no secret named\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }    // ✓ the env var that holds the key",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.foreign_name_is_context_name",
+        blurb: "A foreign caller sends its actor's name as its caller, and a Bynk context's name is lower case. An actor named like a context could pass for one. Start the actor's name with a capital letter.",
+        example: "actor legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✗ reads as a context name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✓ capitalised",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.foreign_reserved_secret",
+        blurb: "`bynk deploy` mints the keys that Bynk contexts sign their calls to each other with, and names them `BYNK_CALL_FROM_…` and `BYNK_CALL_TO_…`. A foreign caller's secret in that range could collide with one of them, so those names are kept for contexts. Pick another name, such as `LEGACY_CALL_KEY`.",
+        example: "actor Legacy { auth = Foreign(secret = \"BYNK_CALL_FROM_LEGACY\") }   // ✗ a `BYNK_CALL_` key name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }         // ✓ any other name",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.foreign_secret_not_string",
+        blurb: "A `Foreign` actor's `secret` is the name of an environment variable, so it is written as a string. A number or any other expression names no variable. Put the variable's name in quotes. A `secret` left out altogether is `bynk.actor.foreign_missing_secret`.",
+        example: "actor Legacy { auth = Foreign(secret = 42) }                   // ✗ not a variable name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }    // ✓ a string",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
         code: "bynk.actor.identity_not_sealed",
         blurb: "An actor's identity is a value only its context can mint, from a verified token or caller, so its type has to be one that context owns. A built-in such as `Int`, or a type from another context, could be built by anyone, so the identity would prove nothing. Declare the identity as a type in this context, such as `type PrincipalId = Int where NonNegative`, and name that.",
         example: "actor Principal { auth = Internal, identity = Int }   // ✗ `Int` is not owned by this context\n\ntype PrincipalId = Int where NonNegative\nactor Principal { auth = Internal, identity = PrincipalId }   // ✓ minted only here",
@@ -263,6 +312,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.actor.oidc_trust_from_is_secret",
+        blurb: "`trustFrom` names a variable that holds trust roots as JSON. A variable an actor uses as its `secret` holds a signing key, and one variable cannot be both. Give `trustFrom` a variable of its own.",
+        example: "type UserId = String where NonEmpty\ntype WorkloadId = String where NonEmpty\n\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"JWT_KEY\"), identity = WorkloadId }   // ✗ `JWT_KEY` is a key\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "trust-roots-from-the-environment",
+    },
+    Explain {
+        code: "bynk.actor.oidc_trust_from_not_string",
+        blurb: "`trustFrom` names an environment variable whose JSON, when set, replaces the actor's declared trust roots at run time, as in a test or staging deployment. A variable is named by a string, so a number or other expression names nothing. Write the variable's name in quotes.",
+        example: "type WorkloadId = String where NonEmpty\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = 5), identity = WorkloadId }   // ✗ not a name\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "trust-roots-from-the-environment",
+    },
+    Explain {
         code: "bynk.actor.outside_context",
         blurb: "An `actor` says who may call a handler and what the compiler then knows about them. Only a context has handlers, and an actor's identity is sealed to the context that declares it, so only a context may declare one. A `commons` is shared code that other units `uses`. Move the `actor` into the context whose services take it.",
         example: "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
@@ -310,6 +373,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20   Ok(())\n\
                   \x20 }\n\
                   }",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.signature_identity_unsupported",
+        blurb: "A signature shows that a request is authentic, not who sent it, so a `Signature` actor has no principal to give an identity. The event is the handler's `body`. Remove `identity`. For an actor that carries a principal, see `bynk.actor.bearer_identity_not_string_constructible`.",
+        example: "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\"), identity = String }   // ✗ no principal\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }                       // ✓",
         page: "/book/reference/actors",
         anchor: "schemes",
     },
@@ -387,6 +457,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.adapter.consumes_context",
+        blurb: "Adapter dependencies run from adapter to adapter. An adapter sits at the host boundary and is wired in process beside its binding, but a context is a deployment unit with services of its own, so it cannot be consumed from there. Consume a capability that another adapter exports, or put the code that needs a context in a context.",
+        example: "// logging.bynk\ncontext logging { … }\n\n// tokens.bynk\nadapter tokens {\n  consumes logging { Log }    // ✗ `logging` is a context\n}\n\n// logging.bynk\nadapter logging { … }         // ✓ an adapter, so it may be consumed",
+        page: "/book/reference/adapters",
+        anchor: "adapter-dependencies",
+    },
+    Explain {
+        code: "bynk.adapter.consumes_requires_selection",
+        blurb: "An adapter depends on another adapter's capabilities, never on its services, so its `consumes` must say which: `consumes logging { Log }`. The whole-unit form and `as Alias` belong to contexts. Braces that select only types are refused too, since they name no capability. List the capabilities the adapter needs.",
+        example: "adapter tokens {\n  consumes logging              // ✗ which capabilities?\n}\n\nadapter tokens {\n  consumes logging { Log }      // ✓ the capabilities it needs\n}",
+        page: "/book/reference/adapters",
+        anchor: "adapter-dependencies",
+    },
+    Explain {
         code: "bynk.adapter.disallowed_item",
         blurb: "An adapter wraps foreign code, so it holds only what describes that boundary: \
                 capabilities, the types that cross it, external providers and helper functions. A \
@@ -409,6 +493,41 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "anatomy",
     },
     Explain {
+        code: "bynk.adapter.duplicate_binding",
+        blurb: "An adapter's `binding` names the one TypeScript module that supplies its external providers, so there is one clause. With two, the compiler would have no way to say which module a provider comes from. Merge them into one clause; the module it names can import whatever others it needs.",
+        example: "adapter weather {\n  binding \"./station.binding.ts\"\n  binding \"./extra.binding.ts\"      // ✗ an adapter has one binding\n}\n\nadapter weather {\n  binding \"./station.binding.ts\"    // ✓ one clause\n}",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
+        code: "bynk.adapter.include_duplicate",
+        blurb: "Each module is listed once: the compiler generates one loader, `./x.wasm.js`, per file. Two entries for one file add nothing, and `./a.wasm` and `a.wasm` are the same file once the path is normalised. Remove the repeat, or correct the name if a different module was meant.",
+        example: "adapter math {\n  binding \"./math.binding.ts\" includes [\"./a.wasm\", \"a.wasm\"]    // ✗ the same file twice\n}\n\nadapter math {\n  binding \"./math.binding.ts\" includes [\"./a.wasm\"]              // ✓ listed once\n}",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
+        code: "bynk.adapter.include_kind",
+        blurb: "`includes` is for WebAssembly modules. The compiler generates a loader for each, `./x.wasm.js`, that gives the binding a compiled module, and it picks them by the `.wasm` extension. Any other file has no such loader. Name a `.wasm` module.",
+        example: "adapter math {\n  binding \"./math.binding.ts\" includes [\"./data.bin\"]    // ✗ not a `.wasm` file\n}\n\nadapter math {\n  binding \"./math.binding.ts\" includes [\"./adder.wasm\"]   // ✓ a WebAssembly module\n}",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
+        code: "bynk.adapter.include_missing",
+        blurb: "`includes` ships WebAssembly modules beside the binding, so each file it names has to exist: the path is read relative to the adapter's source file. A misspelt name, or a module left out of the tree, is the usual cause. Correct the path, or add the file.",
+        example: "adapter math {\n  binding \"./math.binding.ts\" includes [\"./absent.wasm\"]    // ✗ no such file beside the adapter\n}\n\nadapter math {\n  binding \"./math.binding.ts\" includes [\"./adder.wasm\"]     // ✓ the module exists\n}",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
+        code: "bynk.adapter.include_outside",
+        blurb: "An included module is part of the adapter's own tree, and, for a dependency, of the tree the lock checksums. So each path is relative to the adapter's file and stays inside its directory: no absolute path, and no `..`. Move the module into the adapter's directory, or a subdirectory of it, and name it from there.",
+        example: "adapter math {\n  binding \"./math.binding.ts\" includes [\"../shared.wasm\"]    // ✗ leaves the adapter's directory\n}\n\nadapter math {\n  binding \"./math.binding.ts\" includes [\"./adder.wasm\"]       // ✓ inside it\n}",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
         code: "bynk.adapter.no_binding",
         blurb: "An external provider, `provides Jwt = JoseJwt` with no body, is written in \
                 TypeScript, not Bynk. The adapter's `binding` clause names that TypeScript module, \
@@ -424,6 +543,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                 \x20 binding \"./tokens.binding.ts\"         // ✓ names the module that supplies JoseJwt\n\
                 \x20 provides Jwt = JoseJwt\n\
                 }",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
+    },
+    Explain {
+        code: "bynk.adapter.provider_has_body",
+        blurb: "An adapter wraps code written in TypeScript. Its provider has no body: `provides Jwt = JoseJwt`, and the binding exports a class of that name. A Bynk body would be a second implementation beside the binding's. Remove the body and implement the operations in the binding, or, for a provider written in Bynk, move it to a context. An external provider in a context is `bynk.context.external_provider`.",
+        example: "adapter tokens {\n  binding \"./tokens.binding.ts\"\n\n  capability Jwt {\n    fn sign(secret: String) -> Effect[String]\n  }\n\n  provides Jwt = JoseJwt {          // ✗ the binding supplies it\n    fn sign(secret: String) -> Effect[String] { secret }\n  }\n}\n\nadapter tokens {\n  binding \"./tokens.binding.ts\"\n\n  capability Jwt {\n    fn sign(secret: String) -> Effect[String]\n  }\n\n  provides Jwt = JoseJwt            // ✓ no body\n}",
         page: "/book/reference/adapters",
         anchor: "anatomy",
     },
@@ -653,6 +779,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "across-a-context-boundary",
     },
     Explain {
+        code: "bynk.capability.base_not_instantiable",
+        blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only the resource kinds listed in the Book have instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
+        example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n  on call() -> Effect[Instant] given Clock {   // ✓ use it bare\n    Clock.now()\n  }\n}",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.capability.derived_outside_context",
+        blurb: "A derived capability is an instance of a platform resource, and the resource's data belongs to a context. An adapter only describes a boundary to foreign code, so it has no data to own. Declare the instance in a context that selects the base with `consumes`.",
+        example: "adapter cache {\n  binding \"./cache.binding.ts\"\n  consumes bynk.cloudflare { Kv }\n  capability Sessions = Kv    // ✗ an adapter cannot own an instance\n}\n\ncontext cache {\n  consumes bynk.cloudflare { Kv }\n  capability Sessions = Kv    // ✓ a context owns its data\n}",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.capability.instance_only",
         blurb: "A few platform capabilities (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, \
                 `D1` and `EdgeCache`) are never used as the bare kind. Each stands for a \
@@ -752,6 +892,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                 }",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.capability.unknown_base",
+        blurb: "`capability Sessions = Kv` makes a separate instance of a platform capability, so the base has to be one the context has selected: `consumes bynk.cloudflare { Kv }`. A name that is not selected is a misspelling, or a `consumes` that was left out. Correct the name, or select the capability.",
+        example: "consumes bynk.cloudflare { Kv }\n\ncapability Sessions = Kvv   // ✗ no capability `Kvv` is selected\n\ncapability Sessions = Kv    // ✓ the one that is",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
     },
     Explain {
         code: "bynk.capability.unknown_operation",
@@ -1290,6 +1437,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "exports opaque { OrderId }\nexports transparent { OrderId }    // ✗ already exported `opaque`\n\ntype OrderId = String where Matches(\"ORD-[0-9]+\")\n\nexports opaque { OrderId }         // ✓ one visibility",
         page: "/book/reference/types",
         anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.exports.derived_capability",
+        blurb: "A derived capability is an instance of a platform resource, such as a KV namespace, and its data belongs to the context that declares it. Exporting it would let another context read and write that data directly. Keep it out of `exports capability`; another context reaches the data through this context's services.",
+        example: "exports capability { Sessions }\n\ncapability Sessions = Kv   // ✗ an instance cannot be exported\n\ncapability Sessions = Kv   // ✓ private to this context",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
     },
     Explain {
         code: "bynk.exports.duplicate_export",

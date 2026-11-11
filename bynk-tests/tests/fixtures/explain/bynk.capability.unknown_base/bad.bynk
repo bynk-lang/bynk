@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kvv
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}

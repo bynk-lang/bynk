@@ -1,0 +1,9 @@
+context demo
+
+actor Legacy { auth = Foreign(secret = "BYNK_CALL_FROM_LEGACY") }
+
+service ping {
+  on call(n: Int) -> Effect[Int] by Legacy {
+    n
+  }
+}
