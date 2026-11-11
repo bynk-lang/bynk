@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.550.2** | `bynk explain` explains sixteen more codes under `actor` and `agent` (Refs #3163) |
+| **v0.550.1** | `bynk explain` explains eighteen more `http` codes (routes, path and query parameters, request bodies, `@cache`, `@limit`, `cors`, `on rejected`) (Refs #3163) |
 | **v0.550.0** | A service can receive email, `service support from email("support@shop.example")`, with an `on message(mail: InboundEmail) -> Effect[EmailVerdict]` handler tested in a suite; the Workers mapping follows (#3328 slice 1) |
 | **v0.549.4** | Every emitted Worker now targets compatibility date `2026-08-04`, with Node.js compatibility on by default, and the minimum `wrangler` is 4.120.1 (#3317) |
 | **v0.549.3** | `bynk explain` covers twelve more codes (`agents`, `effect`, `given`, `par`, `resolve`, `send` and `store` prefixes) |
