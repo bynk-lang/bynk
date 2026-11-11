@@ -1553,7 +1553,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.generics.generic_record_at_boundary",
         blurb: "`Val[T]` fabricates a value for a test from the declaration of `T`, and does not yet do so for a generic type, whether bare, `Val[Box]`, or applied, `Val[Box[Int]]`. Build the value with a record literal instead, giving each field the value the test needs.",
-        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it\n",
+        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
         page: "/book/reference/testing",
         anchor: "val",
     },
