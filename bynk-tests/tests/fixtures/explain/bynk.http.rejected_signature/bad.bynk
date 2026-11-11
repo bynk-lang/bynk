@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on rejected(why: String) -> Effect[HttpResult[()]] {
+        RawError(BadRequest, Bytes.fromUtf8("bad"), "text/plain")
+    }
+}
