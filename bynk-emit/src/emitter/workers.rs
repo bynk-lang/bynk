@@ -894,6 +894,12 @@ pub fn emit_worker_compose(
             crate::emitter::QUERY_STRING_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.form_codec() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::FORM_CODEC_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.multipart_form() {
         append_missing_bindings(
             &mut runtime_imports,

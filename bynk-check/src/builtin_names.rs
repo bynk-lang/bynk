@@ -8,6 +8,8 @@ pub mod types {
     pub const JSON: &str = "Json";
     /// #3214: the YAML decoder, `Yaml.decode[T]`, beside `Json`.
     pub const YAML: &str = "Yaml";
+    /// #3276: the form codec, `Form.decode[T]` / `Form.encode(v)`, beside `Json`.
+    pub const FORM: &str = "Form";
     pub const LIST: &str = "List";
     pub const MAP: &str = "Map";
     /// K6a (#2596): the built-in immutable set.
@@ -92,6 +94,7 @@ mod tests {
     fn constants_hold_expected_values() {
         assert_eq!(types::JSON, "Json");
         assert_eq!(types::YAML, "Yaml");
+        assert_eq!(types::FORM, "Form");
         assert_eq!(types::HTTP_RESULT, "HttpResult");
         assert_eq!(methods::OF, "of");
         assert_eq!(methods::FOLD_EFF, "foldEff");

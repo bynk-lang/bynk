@@ -1,0 +1,41 @@
+suite forms.codec {
+	case "a form decodes through the record's codec" {
+		let r <- readForm.call("email=a%40b.c&age=41&tags=x&tags=y&remember=on")
+		expect r == "a@b.c 41 2 true"
+	}
+
+	case "an unfilled input is absent, as at the router" {
+		let r <- readForm.call("email=a%40b.c&age=&remember=off")
+		expect r == "a@b.c - 0 false"
+	}
+
+	case "a refinement failure names its path" {
+		let r <- readForm.call("email=nope")
+		expect r == "$.email"
+	}
+
+	case "a field that is not a number names its path, as Json.decode does for an Option" {
+		let r <- readForm.call("email=a%40b.c&age=forty")
+		expect r == "$.age.value"
+	}
+
+	case "a repeated single value names its path" {
+		let r <- readForm.call("email=a%40b.c&age=1&age=2")
+		expect r == "$.age"
+	}
+
+	case "a missing required field names its path" {
+		let r <- readForm.call("age=3")
+		expect r == "$.email"
+	}
+
+	case "encode writes the flat form a router reads" {
+		let r <- writeForm.call("a@b.c", ["x", "y z"])
+		expect r == "email=a%40b.c&age=41&plan=Pro&tags=x&tags=y+z&remember=true"
+	}
+
+	case "decode inverts encode" {
+		let r <- roundTrip.call("email=a%40b.c&age=41&plan=Pro&tags=x&tags=y&remember=on")
+		expect r
+	}
+}

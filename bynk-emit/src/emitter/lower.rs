@@ -4573,6 +4573,36 @@ fn lower_json_codec_call(
         let arg = pre.lower(&args[0], cx);
         return Some(pre.finish(format!("({decoder})({arg})")));
     }
+    // #3276 (decision G): `Form.decode[T](text)` reads the text as the router reads
+    // a `@form` body, then decodes through `T`'s codec; `Form.encode(v)` writes the
+    // form text such a route reads.
+    if matches!(
+        cx.commons().callees.get(&e.id),
+        Some(Callee::Intrinsic { ns, .. }) if *ns == FORM
+    ) && args.len() == 1
+    {
+        if method.name == "decode"
+            && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+            && let Some(decoder) = json_decoder_fn(t, DecodeSource::Form, cx)
+        {
+            let arg = pre.lower(&args[0], cx);
+            return Some(pre.finish(format!("({decoder})({arg})")));
+        }
+        if method.name == "encode"
+            && let Some(text) = json_encode_text(&mut pre, &args[0], cx, false)
+        {
+            cx.runtime_use().note_form_codec();
+            // `json_encode_text` is `JSON.stringify(<wire value>)`: the form text is the
+            // same wire value, written flat.
+            let wire = text
+                .strip_prefix("globalThis.JSON.stringify(")
+                .and_then(|t| t.strip_suffix(')'))
+                .map(str::to_string);
+            if let Some(wire) = wire {
+                return Some(pre.finish(format!("__formString({wire})")));
+            }
+        }
+    }
     if matches!(
         cx.commons().callees.get(&e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
@@ -4613,6 +4643,8 @@ enum DecodeSource {
     Sql,
     /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
     Yaml,
+    /// #3276, `Form.decode`: the text is a form body, read by the router's own rules.
+    Form,
 }
 
 /// The arrow function that decodes text into `t`:
@@ -4671,7 +4703,15 @@ fn json_decoder_fn(
     };
     // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
     // are already positioned `DecodeError`s.
-    let parse = if source == DecodeSource::Yaml {
+    let parse = if source == DecodeSource::Form {
+        cx.runtime_use().note_form_codec();
+        let specs = form_specs_literal(t, cx)?;
+        format!(
+            "const __p = __formDecode(__s, {specs}); \
+             if (__p.tag === \"Err\") return Err(__p.error); \
+             const __j: __JsonValue = __p.value; "
+        )
+    } else if source == DecodeSource::Yaml {
         cx.runtime_use().note_yaml();
         "const __p = __bynkYamlParse(__s); \
          if (__p.tag === \"Err\") return Err(__p.error); \
@@ -4693,6 +4733,29 @@ fn json_decoder_fn(
          path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", \
          message: __be.kind === \"StructuralMismatch\" ? `expected ${{__be.expected}}, got ${{String(__be.actual)}}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details }}); }}"
     ))
+}
+
+/// #3276: the field table `Form.decode[T]` hands the form reader, as the TS array
+/// literal of `{ name, kind, list, option }` the router's `@form` path builds. `None`
+/// when `t` is not a record of the module's types.
+fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<String> {
+    use bynk_syntax::ast::TypeBody;
+    let tys = cx.commons().tys();
+    let Ty::Named { name, .. } = &*tys.get(t) else {
+        return None;
+    };
+    let decl = cx.commons().types.get(name.as_str())?;
+    let TypeBody::Record(rec) = &decl.body else {
+        return None;
+    };
+    let specs = super::workers_entry::record_field_specs(rec, &cx.commons().types, false);
+    let items: Vec<String> = specs
+        .iter()
+        .map(|(name, kind, list, option)| {
+            format!("{{ name: {name:?}, kind: {kind:?}, list: {list}, option: {option} }}")
+        })
+        .collect();
+    Some(format!("[{}]", items.join(", ")))
 }
 
 /// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with

@@ -172,7 +172,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
     match typed.callees.get(&e.id) {
         Some(Callee::Intrinsic { ns, op })
             if (*ns == crate::builtin_names::types::JSON
-                || *ns == crate::builtin_names::types::YAML)
+                || *ns == crate::builtin_names::types::YAML
+                || *ns == crate::builtin_names::types::FORM)
                 && matches!(op.as_str(), "decode" | "decodeSql") =>
         {
             match typed.expr_ty(e.id).as_deref() {
@@ -5010,7 +5011,7 @@ fn is_query_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
 
 /// #2854: whether `r` is a legal field type of a typed `query` record: a leaf,
 /// an `Option` of one, or a `List` of one (a key repeated).
-fn is_query_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub(crate) fn is_query_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match r {
         TypeRef::Option(inner, _) | TypeRef::List(inner, _) => is_query_leaf(inner, types),
         other => is_query_leaf(other, types),

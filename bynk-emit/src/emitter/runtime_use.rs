@@ -124,6 +124,8 @@ pub struct RuntimeUse {
     query_string: Cell<bool>,
     /// #3276: a typed `@multipart` body becomes a `FormData` (`__multipartForm`).
     multipart_form: Cell<bool>,
+    /// #3276: `Form.decode`/`Form.encode` lower to the form codec (`__formDecode`, `__formString`).
+    form_codec: Cell<bool>,
     /// #2854: a system-tier driver sends a test's query (`__requestQuerySearch`).
     request_query_search: Cell<bool>,
     /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
@@ -280,6 +282,16 @@ impl RuntimeUse {
     }
 
     /// Record that a typed query becomes a query string (#2854).
+    pub fn note_form_codec(&self) {
+        self.form_codec.set(true);
+    }
+
+    /// Whether the form codec helpers must be imported (#3276).
+    pub fn form_codec(&self) -> bool {
+        self.form_codec.get()
+    }
+
+    /// Record that a typed `@multipart` body becomes a `FormData` (#3276).
     pub fn note_multipart_form(&self) {
         self.multipart_form.set(true);
     }

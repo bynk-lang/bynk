@@ -26,6 +26,7 @@ import {
   requestHeaderPairs,
   requestQuery,
   requestQuerySearch,
+  formDecode,
   formMediaTypeMatches,
   formObject,
   formString,
@@ -1175,4 +1176,15 @@ test("a revalidation for one query is not answered 304 for another", async () =>
 test("queryObject: an Option field wraps a present value, so `None` is not the envelope", () => {
   const r = queryObject(queryRequest("?kind=None"), [{ name: "kind", kind: "enum", list: false, option: true }]);
   assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: { kind: "None" } } } });
+});
+
+test("formDecode: reads a form as formObject does, with a $-rooted DecodeError", () => {
+  const ok = formDecode("email=a%40b.c&tags=x&tags=y", [F("email", "string"), F("tags", "string", true)]);
+  assert.deepEqual(ok, { tag: "Ok", value: { email: "a@b.c", tags: ["x", "y"] } });
+  const bad = formDecode("age=1&age=2", [F("age", "int")]);
+  assert.equal(bad.tag, "Err");
+  assert.deepEqual(bad.tag === "Err" ? { kind: bad.error.kind, path: bad.error.path } : null, {
+    kind: "StructuralMismatch",
+    path: "$.age",
+  });
 });

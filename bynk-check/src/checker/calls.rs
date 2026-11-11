@@ -3014,7 +3014,7 @@ pub(crate) fn check_method_call(
         || ctx.root_ident_is_store_field(receiver)
         || flatten_ident_chain(receiver).is_none();
     let type_args_pending = !type_args.is_empty()
-        && !matches!(&receiver.kind, ExprKind::Ident(id) if (id.name == JSON || id.name == YAML)
+        && !matches!(&receiver.kind, ExprKind::Ident(id) if (id.name == JSON || id.name == YAML || id.name == FORM)
             && !ctx.input.types.contains_key(id.name.as_str()))
         && !receiver_is_capability
         && !receiver_is_generic_static(receiver, method, ctx);
@@ -3307,6 +3307,21 @@ pub(crate) fn check_method_call(
             },
         );
         return check_json_static(YAML, method, type_args, args, span, expected, ctx);
+    }
+    // #3276: `Form.decode[T]` / `Form.encode(v)`, the form-body mapping as a codec.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == FORM
+        && ctx.lookup(FORM).is_none()
+        && !ctx.input.types.contains_key(FORM)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: FORM,
+                op: method.name.clone(),
+            },
+        );
+        return check_json_static(FORM, method, type_args, args, span, expected, ctx);
     }
     // v0.100: the `Stream.of(xs)` static constructor (real-time track slice 0).
     if let ExprKind::Ident(id) = &receiver.kind

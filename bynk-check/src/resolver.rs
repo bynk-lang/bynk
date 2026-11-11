@@ -3806,6 +3806,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Float"
                         | "Json"
                         | "Yaml"
+                        | "Form"
                         | "Duration"
                         | "Instant"
                         | "Stream"
@@ -3825,6 +3826,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     "Json" => &["encode", "encodePlain", "decode", "decodeSql"],
                     // #3214: decode only; there is no `Yaml.encode`.
                     "Yaml" => &["decode"],
+                    // #3276: the form codec.
+                    "Form" => &["decode", "encode"],
                     // v0.86 (ADR 0112): `Duration.millis(n)`.
                     "Duration" => &["millis"],
                     // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)`; K3

@@ -10,6 +10,8 @@ schedules, queue messages, and WebSocket connections.
 - [Process a queued message](/book/guides/entry-points/queue/)
 - [Handle a WebSocket connection](/book/guides/entry-points/websocket/)
 - [Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/)
+- [Accept an HTML form](/book/guides/entry-points/accept-a-form/)
+- [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
 
 **See also:** [Reference — HTTP](/book/reference/http/),
 [Cron](/book/reference/cron/), [Queue](/book/reference/queue/),
