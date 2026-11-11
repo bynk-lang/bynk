@@ -1,0 +1,12 @@
+context mailer
+
+consumes orders
+consumes bynk { Events }
+
+event Sent = { id: String }
+
+service notify {
+  on call() -> Effect[()] given Events {
+    Events.emit[Sent](Sent { id: "x" })
+  }
+}

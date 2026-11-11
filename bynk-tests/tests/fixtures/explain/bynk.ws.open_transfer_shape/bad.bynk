@@ -1,0 +1,14 @@
+context chat
+
+type RoomId = opaque String
+type UserId = opaque String
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+service gateway from websocket(in: Frame, out: Frame) {
+  on open (room: RoomId) -> Effect[()] by user: Member {
+    let _ <- connection.close()
+    ()
+  }
+}

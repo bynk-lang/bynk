@@ -1,0 +1,5 @@
+context orders
+
+exports transparent { Paid }
+
+event Paid = { id: String }
