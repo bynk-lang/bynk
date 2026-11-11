@@ -606,8 +606,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 Patterns run with JavaScript's backtracking `RegExp`, and one in which a \
                 repetition can split the same text several ways takes exponential time on a \
                 crafted near miss, so a few dozen characters of input could stall a handler. \
-                Nested unbounded repetition such as `(a+)+` or `(a|aa)+` is refused, as is a \
-                backreference under an unbounded quantifier, an unbounded quantifier over a \
+                Nested or ambiguous repetition, such as `(a+)+` or `(a|aa)+`, is refused, \
+                bounded or not, as is a backreference under an unbounded quantifier, an unbounded quantifier over a \
                 body that can match the empty string, and a pattern too large or complex to \
                 analyse. Rewrite it so each repetition has one way to match: `a+` for `(a+)+`, \
                 or a separator the repeated part cannot match, as in `[a-z]+(-[a-z]+)*`. \
@@ -674,7 +674,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 it is built from, such as a name or a number, and rebuild the behaviour on \
                 the other side.",
         example: "type Job = {\n  name: String,\n  run: Int -> Int,    // ✗ a record field cannot hold a function\n}\n\n\
-                  fn run(j: Job, f: Int -> Int) -> Int {    // ✓ a parameter can\n    f(j.step)\n}",
+                  type Job = {\n  name: String,\n  step: Int,\n}\n\nfn run(j: Job, f: Int -> Int) -> Int {    // ✓ a parameter can\n    f(j.step)\n}",
         page: "/book/reference/types",
         anchor: "",
     },
