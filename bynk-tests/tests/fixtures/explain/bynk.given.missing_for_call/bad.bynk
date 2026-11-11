@@ -1,0 +1,19 @@
+context shop
+
+capability Logger {
+  fn error(message: String) -> Effect[()]
+}
+
+provides Logger = NullLogger {
+  fn error(message: String) -> Effect[()] {}
+}
+
+fn warn(what: String) -> Effect[()] given Logger {
+  Logger.error(what)
+}
+
+service api {
+  on call(sku: String) -> Effect[()] {
+    warn(sku)
+  }
+}

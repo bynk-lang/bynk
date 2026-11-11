@@ -1,0 +1,14 @@
+context shop
+
+agent Counter {
+  key id: String
+  store n: Cell[Int] = 0
+  on call bump() -> Effect[()] { n.update((x) => x + 1) }
+}
+
+service s {
+  on call() -> Effect[()] {
+    do Counter("k").bump()
+    Effect.pure(())
+  }
+}

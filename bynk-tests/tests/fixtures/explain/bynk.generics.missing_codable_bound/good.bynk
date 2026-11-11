@@ -1,0 +1,5 @@
+commons demo
+
+fn encode[T: Codable](v: T) -> String {
+  Json.encode(v)
+}

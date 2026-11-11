@@ -161,6 +161,84 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "reading-and-writing-state",
     },
     Explain {
+        code: "bynk.effect.fn_value_in_pure_context",
+        blurb: "Calling a function value whose type returns `Effect[T]` is an effect, just as calling a \
+                capability is, and effects are only allowed in a body that is itself effectful, one \
+                whose return type is an `Effect`. Bynk makes effects explicit so that a function's \
+                signature tells you whether it can touch the outside world: a function that returns a \
+                plain `Int` is pure and can be reasoned about as such. A call through a parameter \
+                would hide an effect behind that signature, so it is refused. Either make the function \
+                return `Effect[T]` and bind the call with `<-`, or take a pure function instead. A \
+                capability call from a handler that has not declared it is a different mistake, \
+                `bynk.given.undeclared_capability`.",
+        example: "fn sneak(f: Int -> Effect[Int], x: Int) -> Int {\n    \
+                    let y = f(x)                          // ✗ an effect inside a pure function\n    \
+                    x\n}\n\n\
+                  fn sneak(f: Int -> Effect[Int], x: Int) -> Effect[Int] {   // ✓ the function is effectful\n    \
+                    let y <- f(x)\n    \
+                    Effect.pure(y)\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.effect.unbound_effect",
+        blurb: "Bynk starts an effectful call as soon as it is built, so an `Effect[T]` that is built and then \
+                dropped still runs, unawaited, racing every statement after it, and nothing in the \
+                program shows it. Effects are meant to happen in the order you wrote them, so in an \
+                effectful body an `Effect` value must be bound with `let x <- …`, run with `do …` (for \
+                an `Effect[()]`), or returned as the body's value. The error fires where an `Effect` is \
+                built in a value position that cannot await it: the right-hand side of a plain `let` \
+                (including `let _ = …`), a list element, and the payload of `Some`, `Ok`, `Err`, a \
+                variant or a record field. An argument to another call is left alone, because the \
+                parameter decides what happens to it. If you want the result, use `<-`; if only the \
+                effect, use `do`.",
+        example: "on call() -> Effect[()] {\n    \
+                    let e = Counter(\"k\").bump()       // ✗ started, never awaited\n    \
+                    Effect.pure(())\n}\n\n\
+                  on call() -> Effect[()] {\n    \
+                    do Counter(\"k\").bump()           // ✓ run in order\n    \
+                    Effect.pure(())\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.generics.method_on_generic_type",
+        blurb: "A static method on a generic type (one with no `self`) is generic over the type's parameters, and \
+                a call has to be able to fix each of them: from its arguments, from the type the call is \
+                expected to have, or from explicit type arguments. If the method's parameter and return \
+                types never mention one of the type's parameters, nothing in a call can determine it, so \
+                the declaration is refused once, here, rather than every call being ambiguous. Mention \
+                the parameter in the signature, or make the method a free function. An instance method \
+                (with `self`) is not affected, since the receiver carries the type. A call that leaves a \
+                parameter open anyway is `bynk.generics.uninferable_type_arg`.",
+        example: "type Box[T] = { value: T }\n\n\
+                  fn Box.empty() -> Box[Int] {              // ✗ never mentions `T`\n    \
+                    Box { value: 0 }\n}\n\n\
+                  fn Box.empty() -> Box[Option[T]] {        // ✓ `T` appears in the return type\n    \
+                    Box { value: None }\n}",
+        page: "/book/reference/generics",
+        anchor: "static-methods-on-generic-types",
+    },
+    Explain {
+        code: "bynk.generics.missing_codable_bound",
+        blurb: "`Json.encode` and `Json.decode` work only on types that cross the JSON boundary, and a type \
+                parameter might be a function, an `Effect` or another type that does not. So a type \
+                parameter that is encoded or decoded, or passed to a `Codable`-bounded parameter of \
+                another generic or of a capability operation, must be declared `T: Codable` (or \
+                `where A: Codable` for a receiver type's parameter), and a call must instantiate it with a \
+                type that is `Codable`. At run time the bound costs a hidden codec argument, so a refined \
+                type is still revalidated on decode. `Codable` does not imply `Eq`, so the diagnostic's \
+                fix writes `T: Eq + Codable` beside an existing `Eq`. It is the `Json` counterpart of \
+                `bynk.generics.missing_eq_bound`, `bynk.generics.missing_ord_bound` and \
+                `bynk.generics.missing_key_bound`.",
+        example: "fn encode[T](v: T) -> String {\n    \
+                    Json.encode(v)                  // ✗ `T` could be a function\n}\n\n\
+                  fn encode[T: Codable](v: T) -> String {\n    \
+                    Json.encode(v)                  // ✓ the bound is in the signature\n}",
+        page: "/book/reference/generics",
+        anchor: "codable",
+    },
+    Explain {
         code: "bynk.generics.missing_eq_bound",
         blurb: "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. \
                 A type parameter stands for any type, and some types cannot be compared: a function, an \
@@ -188,6 +266,24 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn single[K: Key](k: K) -> Map[K, Int] {            // ✓ declared\n    Map.empty().insert(k, 1)\n}",
         page: "/book/reference/generics",
         anchor: "key",
+    },
+    Explain {
+        code: "bynk.generics.missing_ord_bound",
+        blurb: "`<`, `<=`, `>` and `>=` work on a type parameter only if the function says so with an `Ord` bound. \
+                A type parameter stands for any type, and many types have no total order: a function, an \
+                `Effect`, a `Bool`, a record that does not `derives Ord`. The bound puts the requirement \
+                in the signature, where a caller, hover and signature help can see it, and a call must \
+                instantiate it with an orderable type. The same rule covers an ordering key and a \
+                parameter passed on to an `Ord`-bounded parameter of another generic, so the bound \
+                appears at every link of a chain of calls. Declare `T: Ord`; it implies `Eq`, so an \
+                existing `Eq` is replaced (`T: Eq + Ord` is only a warning). The diagnostic's fix adds \
+                the bound.",
+        example: "fn bigger[T](a: T, b: T) -> Bool {\n    \
+                    a > b                            // ✗ `T` has no order\n}\n\n\
+                  fn bigger[T: Ord](a: T, b: T) -> Bool {\n    \
+                    a > b                            // ✓ the bound is in the signature\n}",
+        page: "/book/reference/generics",
+        anchor: "ord",
     },
     Explain {
         code: "bynk.generics.polymorphic_recursion",
@@ -249,6 +345,42 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let x = none[Int]()               // ✓ given explicitly",
         page: "/book/reference/generics",
         anchor: "the-expected-type-for-every-generic-call",
+    },
+    Explain {
+        code: "bynk.generics.unknown_constraint",
+        blurb: "A bound after a type parameter, `T: C`, must name one of the four constraints Bynk has: `Eq`, \
+                `Ord`, `Key` and `Codable`. There are no user-defined constraints or interfaces, so a name \
+                like `Hashable` or `Comparable` is refused rather than silently ignored; ignoring it \
+                would let a function compile that promised more than the compiler could check. The same \
+                code is reported for a `derives` clause that names anything but `Ord`; naming `Eq`, \
+                `Key` or `Codable` there is `bynk.types.derives_automatic`, because they hold \
+                automatically. Pick the constraint that matches what the body does: `Eq` for `==`, `Ord` \
+                for ordering, `Key` for a `Map` key or `Set` element, `Codable` for `Json`.",
+        example: "fn first[A: Hashable](x: A) -> A {       // ✗ `Hashable` is not a constraint\n    \
+                    x\n}\n\n\
+                  fn first[A: Key](x: A) -> A {            // ✓ one of `Eq`, `Ord`, `Key`, `Codable`\n    \
+                    x\n}",
+        page: "/book/reference/generics",
+        anchor: "bounds",
+    },
+    Explain {
+        code: "bynk.given.missing_for_call",
+        blurb: "A free function in a context may declare `given`, and then uses those capabilities as a handler \
+                does. Because a `given` clause is the honest statement of everything a body can reach, a \
+                caller has to account for what its callee reaches: a call to, or a reference to, such a \
+                function must occur in a body whose own `given` includes every one of the callee's. \
+                Otherwise a handler's signature would hide capabilities it uses in effect. The rule is \
+                checked at every call, so it holds along a whole chain of calls, and the call counts as \
+                a use of the callee's capabilities. Add the missing capabilities to the caller's \
+                `given`; the error names which ones. Using a capability directly, without declaring \
+                it, is `bynk.given.undeclared_capability`.",
+        example: "fn warn(what: String) -> Effect[()] given Logger { … }\n\n\
+                  on call(sku: String) -> Effect[()] {\n    \
+                    warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\n\
+                  on call(sku: String) -> Effect[()] given Logger {   // ✓ declared on the caller\n    \
+                    warn(sku)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "capabilities-in-functions",
     },
     Explain {
         code: "bynk.given.undeclared_capability",
@@ -1765,7 +1897,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.unknown_constraint",
-        "A bound names something that is not a constraint; `Eq` is the only one.",
+        "A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`.",
         &["type_param"],
     ),
     dg(
