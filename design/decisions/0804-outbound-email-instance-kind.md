@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: `bynk.cloudflare.Email` (experimental) sends mail through Email Service from a named instance, with typed send errors; `bynk deploy` checks each `@allowedSenders` domain and never configures one
----
+# 0804 — Outbound email is an `Email` instance kind over `send_email`, with typed send errors
 
-## ADR: outbound-email-instance-kind
-title: Outbound email is an `Email` instance kind over `send_email`, with typed send errors
-summary: A list-valued instance option, a binding that checks limits before the call, and a deploy-side sender-domain check
+- **Status:** Accepted (v0.549)
 
 **Context.** A Worker could not send transactional mail from Bynk. Cloudflare's
 `send_email` binding (Email Service) takes a message builder and returns

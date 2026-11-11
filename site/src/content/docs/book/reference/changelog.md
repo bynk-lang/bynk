@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.548**.
+written against **v0.549**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.549.0** | `bynk.cloudflare.Email` (experimental) sends mail through Email Service from a named instance, with typed send errors; `bynk deploy` checks each `@allowedSenders` domain and never configures one |
 | **v0.548.5** | `bynk explain` examples may span several files, and four more codes are explained with them (`uses.name_conflict`, `visibility.private_item`, `opaque_inspection`, `capability.invalid_option`) |
 | **v0.548.4** | The language server's per-file reuse digest hashes each shared declaration once per analysis round instead of once per file, trimming a warm editor round by about 9% on a 200-context project |
 | **v0.548.3** | `bynk explain` gains compiled explanations for the held-value leak and use-after-consume, `par` statement, constant initialiser and cycle, reserved built-in type name, store operation and plain-JSON nested `Option` errors |
