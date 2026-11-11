@@ -48,8 +48,9 @@
 //! body printed flush left, which happens when its indentation is written as
 //! source whitespace after a `\` line continuation: the continuation swallows
 //! it, so leading spaces are written `\x20`. For the same reason a source line
-//! of `EXPLANATIONS` holding only `\` prints no blank line, and is refused;
-//! a blank line is `\n\`.
+//! holding only `\` prints no blank line, and is refused anywhere in
+//! `diagnostics.rs`; a blank line is `\n\`. The layout needs no fixture, so it
+//! is reported even for a code whose fixture fails to load.
 //!
 //! [`Explain::example`]: bynk_syntax::diagnostics::Explain::example
 
@@ -536,18 +537,29 @@ fn layout_failures(example: &str) -> Vec<String> {
 
 /// Every failure of one explained code's fixture.
 fn fixture_failures(code: &str, example: &str) -> Vec<String> {
+    // The layout needs no fixture, so it is reported even when one fails to load.
+    let mut out: Vec<String> = layout_failures(example)
+        .iter()
+        .map(|why| format!("{code}: {why}"))
+        .collect();
     let dir = fixtures_root().join(code);
     let project = match fixture_form(&dir) {
         Ok(project) => project,
-        Err(why) => return vec![format!("{code}: {} {why}", dir.display())],
+        Err(why) => {
+            out.push(format!("{code}: {} {why}", dir.display()));
+            return out;
+        }
     };
     let load = |which| load_side(&dir, project, which, code);
     let (bad, good) = match (load("bad"), load("good")) {
         (Ok(bad), Ok(good)) => (bad, good),
-        (Err(why), _) | (_, Err(why)) => return vec![format!("{code}: {why}")],
+        (Err(why), _) | (_, Err(why)) => {
+            out.push(format!("{code}: {why}"));
+            return out;
+        }
     };
     let lines = example_lines(example);
-    let mut out = compile_failures(code, &bad, &good);
+    out.extend(compile_failures(code, &bad, &good));
     out.extend(mark_failures(code, &lines, &bad));
     out.extend(line_failures(
         code,
@@ -557,9 +569,6 @@ fn fixture_failures(code: &str, example: &str) -> Vec<String> {
         &good,
     ));
     for why in label_failures(example, project, &bad, &good) {
-        out.push(format!("{code}: {why}"));
-    }
-    for why in layout_failures(example) {
         out.push(format!("{code}: {why}"));
     }
     out
@@ -667,6 +676,14 @@ fn a_block_body_is_indented_past_the_line_that_opens_it() {
 }
 
 #[test]
+fn the_layout_is_reported_when_the_fixture_fails_to_load() {
+    let out = fixture_failures("bynk.no.such_code", "fn f() {\n1\n}");
+    assert_eq!(out.len(), 2, "{out:?}");
+    assert!(out[0].contains("not indented past it"), "{out:?}");
+    assert!(out[1].contains("has no fixture"), "{out:?}");
+}
+
+#[test]
 fn a_marked_opener_may_stand_beside_its_replacement() {
     // The `✗` header and the `✓` one, at one indentation: not a nesting.
     let pair = "service s {\n    on a(t: T) {   // ✗ no\n    on a(t: U) {   // ✓ yes";
@@ -685,11 +702,12 @@ fn a_marked_opener_may_stand_beside_its_replacement() {
     );
 }
 
-/// A source line of `EXPLANATIONS` holding only `\` is a second continuation,
-/// swallowed with the first: it prints no blank line, though it reads as one.
-/// A separator is written `\n\` on its own line.
+/// A source line holding only `\` is a second continuation, swallowed with the
+/// first: it prints no blank line, though it reads as one. That holds in any
+/// string literal, so the whole of `diagnostics.rs` is scanned, not only
+/// `EXPLANATIONS`. A separator is written `\n\` on its own line.
 #[test]
-fn no_explanation_separates_with_a_lone_continuation() {
+fn no_diagnostics_string_separates_with_a_lone_continuation() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bynk-syntax/src/diagnostics.rs");
     let source = fs::read_to_string(&path).expect("the diagnostics source is readable");
     let lone: Vec<usize> = source

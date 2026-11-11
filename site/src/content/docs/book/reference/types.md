@@ -756,6 +756,31 @@ The size limit is the HTTP body limit. `Json.decode` has no size limit of its ow
 An error from the typed step after parsing (`StructuralMismatch`,
 `RefinementViolation`) names its field path exactly as it does for JSON.
 
+### `Form.decode` and `Form.encode` {#form-codec}
+
+`Form.decode[T](s)` and `Form.encode(v)` are the [`@form`](/book/reference/http/#form-bodies)
+mapping as a codec, for a `@raw` handler, a webhook, a test, or an outbound request that
+sends a form.
+
+| Form | Type | Purpose |
+|---|---|---|
+| `Form.decode[T](s)` | `Result[T, DecodeError]` | read form text (`a=1&b=2`) into `T`, by the rules a `@form` route applies |
+| `Form.encode(v)` | `String` | write `v` as the flat form text such a route reads |
+
+`T` is a record whose fields a form can carry (the same set as a `@form` body:
+`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one,
+optionally in an `Option` or a `List`); anything else is refused
+(`bynk.types.form_uncodable`). The reading is the router's: repeated keys fill a `List`,
+an unfilled input is absent, a `Bool` reads `on`/`off` as well as `true`/`false`, and the
+record's own codec then applies defaults and refinements. A failure is a `DecodeError`
+whose `path` is rooted at `$` (`$.email`, and `$.age.value` for an `Option` field, as
+`Json.decode` writes it) where a `@form` route's `400` would say `body.email`. `T` is
+inferred from an expected `Result[T, DecodeError]`, as for `Json.decode`.
+
+`Form.encode` writes each field under its name, a `List` as a repeated key, an `Option`
+as its value or nothing, and an enum as its variant's name. `Form.decode(Form.encode(v))`
+gives back `v`. There is no `Multipart.decode`: a `File` part has no useful text form.
+
 ## Deliberate faults: `unreachable` and `todo` {#faults}
 
 Two ambient built-in functions raise a fault on purpose. Both take a `String`

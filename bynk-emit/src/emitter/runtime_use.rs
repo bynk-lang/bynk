@@ -126,6 +126,8 @@ pub struct RuntimeUse {
     query_string: Cell<bool>,
     /// #3276: a typed `@multipart` body becomes a `FormData` (`__multipartForm`).
     multipart_form: Cell<bool>,
+    /// #3276: `Form.decode`/`Form.encode` lower to the form codec (`__formDecode`, `__formString`).
+    form_codec: Cell<bool>,
     /// #3277: a typed `cookies` record becomes a `Cookie` header (`__cookieString`).
     cookie_string: Cell<bool>,
     /// #3277: a case reads the cookies of an `HttpResult`, so names the `bynk` `Cookie` type.
@@ -315,6 +317,17 @@ impl RuntimeUse {
         self.cookie_string.get()
     }
 
+    /// Record that `Form.decode`/`Form.encode` use the form codec (#3276).
+    pub fn note_form_codec(&self) {
+        self.form_codec.set(true);
+    }
+
+    /// Whether the form codec helpers must be imported (#3276).
+    pub fn form_codec(&self) -> bool {
+        self.form_codec.get()
+    }
+
+    /// Record that a typed `@multipart` body becomes a `FormData` (#3276).
     pub fn note_multipart_form(&self) {
         self.multipart_form.set(true);
     }
