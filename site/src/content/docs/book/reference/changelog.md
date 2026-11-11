@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.547**.
+written against **v0.548**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,12 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.548.5** | `bynk explain` examples may span several files, and four more codes are explained with them (`uses.name_conflict`, `visibility.private_item`, `opaque_inspection`, `capability.invalid_option`) |
+| **v0.548.4** | The language server's per-file reuse digest hashes each shared declaration once per analysis round instead of once per file, trimming a warm editor round by about 9% on a 200-context project |
+| **v0.548.3** | `bynk explain` gains compiled explanations for the held-value leak and use-after-consume, `par` statement, constant initialiser and cycle, reserved built-in type name, store operation and plain-JSON nested `Option` errors |
+| **v0.548.2** | `bynk explain` covers twelve more `bynk.types.*` codes, among them comparison and ordering, arity, patterns, field defaults and regexes |
+| **v0.548.1** | `bynk explain` now explains seven more codes (the effect, generics and given rules), each with a compiled bad/good example, and the `unknown_constraint` summary lists all four constraints (#3163) |
+| **v0.548.0** | `bynk.cloudflare.StoredSecret` (experimental) reads one Secrets Store secret through a named instance; `bynk deploy` links the store and the secret and never creates them |
 | **v0.547.0** | An agent's `store Map`, `Set`, `Cache` and `Log` fields are read from storage as a handler touches them, and written back as the entries it changed, so a handler's storage cost no longer grows with the size of a collection (per-entry storage, lazy-read slice, part 2b) |
 | **v0.546.7** | The language server keeps each file's checked output between analysis rounds and replays it when nothing the check read has changed, cutting edit-to-diagnostics latency on large projects (linked 200 contexts about 17% faster) for about 20% more server memory, linear in the number of files; `bynk check` and builds are unchanged |
 | **v0.546.6** | `bynk explain` gains compiled-example explanations for the generics bound, inference and mismatch codes and the name-resolution codes (unknown function, static member, name conflict, duplicate type) |

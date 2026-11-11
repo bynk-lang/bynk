@@ -40,6 +40,19 @@ struct WranglerConfig {
     /// instances.
     #[serde(default)]
     analytics_engine_datasets: Vec<AnalyticsDatasetBinding>,
+    /// #3301: the `[[secrets_store_secrets]]` of the `StoredSecret` instances.
+    #[serde(default)]
+    secrets_store_secrets: Vec<StoredSecretBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StoredSecretBinding {
+    /// `SECRET_<SNAKE>`: the instance's binding.
+    binding: String,
+    /// In a freshly generated config, the store's *name*, which `bynk deploy`
+    /// replaces with the id it resolves.
+    store_id: String,
+    secret_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -154,6 +167,19 @@ pub(crate) struct AnalyticsDecl {
     pub(crate) name: String,
 }
 
+/// #3301: one `StoredSecret` instance, as the emitted config declares it.
+/// Linked, never created: the store and the secret belong to the account, so
+/// the deploy resolves the store's id and checks the secret is there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StoredSecretDecl {
+    /// `SECRET_<SNAKE>`, the key the ledger records the link under.
+    pub(crate) binding: String,
+    /// The Secrets Store's name, as `@store` wrote it.
+    pub(crate) store: String,
+    /// The secret's name in the store, as `@secret` wrote it.
+    pub(crate) secret: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct D1DatabaseBinding {
     /// `D1_<SNAKE>`: the instance's binding.
@@ -248,6 +274,12 @@ pub(crate) struct Resources {
     /// P3b (#2582): the datasets of the `Analytics` instances, in binding
     /// order. Listed in the plan and environment-qualified, nothing more.
     pub(crate) analytics_datasets: Vec<AnalyticsDecl>,
+    /// #3301: the secrets of the `StoredSecret` instances, in binding order.
+    /// Linked: the store's id is resolved and the secret's presence checked
+    /// on every deploy, the id recorded in the ledger and written into the
+    /// config before the push; nothing is created, and nothing is deleted
+    /// when an instance goes.
+    pub(crate) stored_secrets: Vec<StoredSecretDecl>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -314,6 +346,7 @@ impl Default for Resources {
             d1_databases: Vec::new(),
             ratelimits: Vec::new(),
             analytics_datasets: Vec::new(),
+            stored_secrets: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -498,6 +531,16 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     analytics_datasets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut stored_secrets: Vec<StoredSecretDecl> = parsed
+        .secrets_store_secrets
+        .into_iter()
+        .map(|s| StoredSecretDecl {
+            binding: s.binding,
+            store: s.store_id,
+            secret: s.secret_name,
+        })
+        .collect();
+    stored_secrets.sort_by(|a, b| a.binding.cmp(&b.binding));
     let worker_dir = config
         .parent()
         .ok_or_else(|| "configuration has no directory".to_string())?;
@@ -548,6 +591,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         d1_databases,
         ratelimits,
         analytics_datasets,
+        stored_secrets,
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -803,6 +847,26 @@ pub(crate) fn materialise_d1_databases(
     std::fs::write(path, patched).is_ok()
 }
 
+/// #3301: materialise each linked `StoredSecret`'s store id into the generated
+/// config at `path`, by binding. A named environment's block copies the stanza
+/// from here ([`synthesise_environment_block`]).
+pub(crate) fn materialise_stored_secret_stores(
+    path: &Path,
+    stores: &BTreeMap<String, String>,
+) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(patched) = bynk_emit::emitter::wrangler::materialise_stored_secret_stores(&text, stores)
+    else {
+        return false;
+    };
+    if patched == text {
+        return true;
+    }
+    std::fs::write(path, patched).is_ok()
+}
+
 /// P5 (#2323): why `name` cannot be an R2 bucket's, or `None` when it can.
 /// R2 takes 3 to 63 characters of lowercase letters, digits and hyphens, not
 /// starting or ending with a hyphen. Checked at plan time, so a derived name
@@ -957,6 +1021,14 @@ pub(crate) fn synthesise_environment_block(
         );
     }
 
+    // #3301: each stored secret as the deploy linked it, with the store's id
+    // (`materialise_stored_secret_stores` runs first). The store is the
+    // account's, so its name carries over as written, with no environment
+    // suffix; bindings are not inherited by `[env.*]`.
+    if let Some(secrets) = doc.get("secrets_store_secrets") {
+        env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
+    }
+
     // #3300: the Version metadata binding, which names no resource, so it is
     // the same in every environment; bindings are not inherited by `[env.*]`.
     if let Some(version_metadata) = doc.get("version_metadata") {
@@ -1103,6 +1175,19 @@ pub(crate) mod tests {
                 .collect();
             self
         }
+        /// Derived `StoredSecret` instances, as `(binding, store, secret)`
+        /// (#3301).
+        pub(crate) fn stored_secrets(mut self, secrets: &[(&str, &str, &str)]) -> Self {
+            self.stored_secrets = secrets
+                .iter()
+                .map(|(binding, store, secret)| StoredSecretDecl {
+                    binding: binding.to_string(),
+                    store: store.to_string(),
+                    secret: secret.to_string(),
+                })
+                .collect();
+            self
+        }
         /// Derived `D1` instances, as `(binding, derived name)` (P4a, #2602).
         pub(crate) fn d1_databases(mut self, databases: &[(&str, &str)]) -> Self {
             self.d1_databases = databases
@@ -1212,6 +1297,11 @@ id = "<KV_NAMESPACE_ID>" # set at deploy time
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
+
+[[secrets_store_secrets]]
+binding = "SECRET_STRIPE_KEY"
+store_id = "0b5e1c2a3d4f45678901234567890abc" # the id the deploy resolved
+secret_name = "stripe-live"
 
 [[durable_objects.bindings]]
 name = "ORDER_ENTITY"
@@ -1324,6 +1414,17 @@ max_batch_size = 10
             Some("PAYMENT"),
             "the binding name carries over unqualified"
         );
+        // #3301: bindings are not inherited, so the environment repeats the
+        // linked secret with the store id the deploy resolved, or a Worker in
+        // the environment has no `SECRET_STRIPE_KEY` to read.
+        let secrets = env["secrets_store_secrets"].as_array().unwrap();
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0]["binding"].as_str(), Some("SECRET_STRIPE_KEY"));
+        assert_eq!(
+            secrets[0]["store_id"].as_str(),
+            Some("0b5e1c2a3d4f45678901234567890abc")
+        );
+        assert_eq!(secrets[0]["secret_name"].as_str(), Some("stripe-live"));
         // #3300: bindings are not inherited, and Version metadata names no
         // resource, so the environment repeats it as it is.
         assert_eq!(

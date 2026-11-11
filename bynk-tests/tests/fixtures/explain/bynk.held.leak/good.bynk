@@ -1,0 +1,7 @@
+commons room {
+  type ServerFrame = { text: String }
+
+  fn finish(c: Connection[ServerFrame]) -> Effect[()] {
+    c.close()
+  }
+}

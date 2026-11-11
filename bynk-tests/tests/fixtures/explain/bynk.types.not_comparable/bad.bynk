@@ -1,0 +1,5 @@
+commons demo
+
+fn same(f: Int -> Int, g: Int -> Int) -> Bool {
+    f == g
+}

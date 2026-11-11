@@ -224,6 +224,11 @@ pub(super) fn context_bindings(
                     capability,
                     queue: d.queue().unwrap_or_default().to_string(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "StoredSecret") => BindingSource::StoredSecret {
+                    capability,
+                    store: d.store().unwrap_or_default().to_string(),
+                    secret: d.stored_secret().unwrap_or_default().to_string(),
+                },
                 (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
                 (unit, base) => {
                     unreachable!("`{unit}.{base}` is instantiable but has no binding kind")

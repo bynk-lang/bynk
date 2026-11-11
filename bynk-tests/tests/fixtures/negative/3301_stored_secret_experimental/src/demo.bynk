@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { StoredSecret }
+
+// #3301: `StoredSecret` is experimental, so using it needs `[unstable] allow`.
+capability StripeKey = StoredSecret @store("payments") @secret("stripe-live")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

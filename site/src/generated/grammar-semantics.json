@@ -167,7 +167,7 @@
     },
     {
       "code": "bynk.types.call_arity",
-      "summary": "A function value was applied with the wrong number of arguments."
+      "summary": "A function value, a built-in `Map`/`Set`/`Cell`/`Cache`/`Log` operation, or `unreachable`/`todo` was called with the wrong number of arguments (a declared `fn` is `bynk.resolve.arity_mismatch`)."
     },
     {
       "code": "bynk.types.combinator_return_mismatch",
@@ -185,7 +185,7 @@
     },
     {
       "code": "bynk.capability.invalid_option",
-      "summary": "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`)."
+      "summary": "A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`)."
     },
     {
       "code": "bynk.capability.missing_option",
@@ -1783,7 +1783,7 @@
   "type_param": [
     {
       "code": "bynk.generics.unknown_constraint",
-      "summary": "A bound names something that is not a constraint; `Eq` is the only one."
+      "summary": "A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`."
     }
   ],
   "uses_decl": [
@@ -1793,7 +1793,7 @@
     },
     {
       "code": "bynk.uses.name_conflict",
-      "summary": "A `uses` name collides with another name, a value crosses between a unit's code and an imported declaration's position whose type the unit shadows, or a reference names an import the unit's own declaration shadows."
+      "summary": "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
     },
     {
       "code": "bynk.uses.self_reference",

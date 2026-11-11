@@ -1430,7 +1430,8 @@ and `expect` apply to it unchanged. The rules:
 - `K` MUST be a capability the unit selects with `consumes U { K }`
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache` have them
+  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache` and
+  `StoredSecret` have them
   (`bynk.capability.base_not_instantiable`). `Version` is bound once per Worker
   and has none: it is used bare (#3300).
 - Each `@annotation` MUST be one of `K`'s instance options
@@ -1449,7 +1450,11 @@ and `expect` apply to it unchanged. The rules:
   digits or `-`, starting and ending with a letter or digit
   (`bynk.capability.invalid_option`): the queue the instance sends to
   (standard-library P2, #2578). `Analytics` takes none (standard-library P3b,
-  #2582).
+  #2582). `StoredSecret` requires `@store("name")` and `@secret("name")`, each
+  1 to 255 letters, digits, `-` or `_` (`bynk.capability.invalid_option`): the
+  Secrets Store and the secret in it. A `StoredSecret` is a *linked* resource
+  (#3301): it belongs to the account, so a deploy resolves and checks it and
+  never creates it.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
   `Queue`, `Analytics` and `EdgeCache` are such kinds.

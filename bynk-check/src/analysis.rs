@@ -369,6 +369,7 @@ fn check_or_replay(
         inputs.consumed_types,
         inputs.imported_from,
         inputs.ctx,
+        memo.decls_mut(),
     );
     let path = pf.identity_path();
     if let Some(record) = memo.lookup(&path, digest) {

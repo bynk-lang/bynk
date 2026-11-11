@@ -30,6 +30,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::analysis::{ProjectAnalysis, analyse_project_cached};
+use crate::check_pipeline::DeclDigests;
 use crate::checker::{TypedCommons, Types};
 use crate::expr_types::ExprTypeSink;
 use crate::hints::HintSink;
@@ -78,6 +79,9 @@ pub struct MemoStats {
     pub type_table_len: usize,
     /// Rounds in which the growth policy dropped the memo.
     pub resets: usize,
+    /// Distinct shared declarations hashed in the round (their digests are
+    /// dropped when it ends).
+    pub decls_hashed: usize,
 }
 
 /// State reused between rounds. One per project, owned by the language server.
@@ -87,6 +91,9 @@ pub struct AnalysisMemo {
     /// Paths looked up this round; the rest are dropped when it ends.
     seen: HashSet<PathBuf>,
     baseline: usize,
+    /// Each shared declaration's digest, for the round in progress only (see
+    /// [`crate::check_pipeline::DeclDigests`]); emptied when a round begins.
+    decls: DeclDigests,
     growth_factor: usize,
     min_reset_len: usize,
     stats: MemoStats,
@@ -109,6 +116,7 @@ impl Default for AnalysisMemo {
             entries: HashMap::new(),
             seen: HashSet::new(),
             baseline: 0,
+            decls: DeclDigests::default(),
             growth_factor: GROWTH_FACTOR,
             min_reset_len: MIN_RESET_LEN,
             stats: MemoStats::default(),
@@ -149,6 +157,14 @@ impl AnalysisMemo {
             ..MemoStats::default()
         };
         self.seen.clear();
+        // `end_round` already emptied it; a round that did not end would leave
+        // addresses that a new allocation could reuse.
+        debug_assert_eq!(
+            self.decls.len(),
+            0,
+            "the previous round's digests were kept"
+        );
+        self.decls = DeclDigests::default();
         if self.types.len() > self.min_reset_len
             && self.types.len() > self.growth_factor * self.baseline
         {
@@ -157,6 +173,11 @@ impl AnalysisMemo {
             self.baseline = 0;
             self.stats.resets += 1;
         }
+    }
+
+    /// The round's declaration digests.
+    pub(crate) fn decls_mut(&mut self) -> &mut DeclDigests {
+        &mut self.decls
     }
 
     /// The record for `path` if its digest is unchanged.
@@ -189,6 +210,11 @@ impl AnalysisMemo {
         }
         self.stats.entries = self.entries.len();
         self.stats.type_table_len = self.types.len();
+        // The declaration digests are keyed by address and valid only while the
+        // round's tables pin the `Arc`s: drop them with the round, so no later
+        // allocation at a reused address can be handed a stale hash.
+        self.stats.decls_hashed = self.decls.len();
+        self.decls = DeclDigests::default();
     }
 }
 
@@ -208,6 +234,38 @@ pub fn analyse_project_memoised(
 mod tests {
     use super::*;
     use crate::analysis::analyse_project;
+
+    /// #3243 S2.4a: the per-round declaration digests are keyed by address, so they
+    /// must not outlive the round that pins the `Arc`s: a later allocation at a
+    /// reused address would be handed a stale hash.
+    #[test]
+    fn a_round_leaves_no_declaration_digests_behind() {
+        let root = std::env::temp_dir().join(format!("bynk-memo-decls-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let src = |name: &str| {
+            format!(
+                "context {name}\n\ntype Row = {{\n  id: String,\n  qty: Int,\n}}\n\nservice probe {{\n  on call(n: Int) -> Effect[Int] {{\n    Effect.pure(n)\n  }}\n}}\n"
+            )
+        };
+        let mut overlay = HashMap::new();
+        for name in ["alpha", "beta"] {
+            let path = root.join(format!("{name}.bynk"));
+            std::fs::write(&path, src(name)).unwrap();
+            overlay.insert(path, src(name));
+        }
+        let roots = Roots::Single(root.clone());
+        let mut memo = AnalysisMemo::new();
+        for round in 0..3 {
+            analyse_project_memoised(&roots, &overlay, &SchemaLock::Off, &mut memo);
+            assert!(
+                memo.stats().decls_hashed > 0,
+                "round {round} hashed the declarations it shares"
+            );
+            assert_eq!(memo.decls.len(), 0, "round {round} ended with digests held");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn plain_analysis_does_not_touch_a_memo() {

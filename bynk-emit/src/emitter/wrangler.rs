@@ -380,6 +380,9 @@ pub fn emit_wrangler_toml(
                 }
                 TomlBlock::array_table("d1_databases", entries)
             }
+            BindingSource::StoredSecret { store, secret, .. } => {
+                stored_secret_block(name, store, secret)
+            }
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -582,6 +585,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::D1Database { .. }))
             .cloned(),
     );
+    // #3301: the Secrets Store secrets, after the databases.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::StoredSecret { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -627,6 +637,25 @@ pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<Wo
         .collect()
 }
 
+/// #3301: the `[[secrets_store_secrets]]` entry of a `StoredSecret`: the secret
+/// in the store the declaration names. The store is written as its name, which
+/// doubles as its local id under `bynk dev`; `bynk deploy` links it (never
+/// creating it) and replaces the name with the id it resolves.
+fn stored_secret_block(binding: TomlValue, store: &str, secret: &str) -> TomlBlock {
+    TomlBlock::array_table(
+        "secrets_store_secrets",
+        vec![
+            TomlEntry::kv("binding", binding),
+            TomlEntry::with_comment(
+                "store_id",
+                TomlValue::str(store.to_string()),
+                "the store's name; its id is set at deploy time",
+            ),
+            TomlEntry::kv("secret_name", TomlValue::str(secret.to_string())),
+        ],
+    )
+}
+
 /// A test of a binding's kind (`|s| matches!(s, BindingSource::Kv)`), as
 /// the tables pairing each platform-resource kind with what it needs use.
 pub type BindingKind = fn(&BindingSource) -> bool;
@@ -642,6 +671,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::QueueProducer { .. } => "__QueueProducer",
         BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
         BindingSource::D1Database { .. } => "__D1Database",
+        BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             other => unreachable!("singleton `{other}` has no `env` type"),
@@ -908,6 +938,65 @@ pub fn materialise_d1_databases(
                     set_string_preserving_decor(item, &value);
                     changed = true;
                 }
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
+/// #3301: a generated `wrangler.toml`'s `[[secrets_store_secrets]]` entries as
+/// `(binding, store_id, secret_name)`, in file order; an entry missing any is
+/// skipped. In a freshly generated file `store_id` is the store's *name*.
+pub fn stored_secret_entries(text: &str) -> Result<Vec<(String, String, String)>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("secrets_store_secrets")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some((
+                t.get("binding")?.as_str()?.to_string(),
+                t.get("store_id")?.as_str()?.to_string(),
+                t.get("secret_name")?.as_str()?.to_string(),
+            ))
+        })
+        .collect())
+}
+
+/// #3301: point `[[secrets_store_secrets]]` entries at their stores' ids,
+/// structurally, by binding. Unchanged text when nothing differs.
+pub fn materialise_stored_secret_stores(
+    text: &str,
+    stores: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("secrets_store_secrets")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some(id) = entry
+                .get("binding")
+                .and_then(|b| b.as_str())
+                .and_then(|b| stores.get(b))
+            else {
+                continue;
+            };
+            if let Some(item) = entry.get_mut("store_id")
+                && item.as_str() != Some(id.as_str())
+            {
+                set_string_preserving_decor(item, id);
+                changed = true;
             }
         }
     }

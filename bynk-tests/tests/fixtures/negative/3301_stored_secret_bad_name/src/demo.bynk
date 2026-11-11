@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { StoredSecret }
+
+// #3301: a name is letters, digits, `-` and `_`.
+capability StripeKey = StoredSecret @store("payments") @secret("stripe live")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

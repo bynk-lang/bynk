@@ -280,6 +280,61 @@ fn explanations_reference_real_codes_and_are_sorted() {
     );
 }
 
+/// The diagnostic codes a blurb names: each backtick span that is exactly
+/// `bynk.<category>.<name>`, lower-case with underscores. A longer or
+/// capitalised path (`bynk.cloudflare.RateLimit`, a unit and a capability) is
+/// not a code, and nor is a code in running text without backticks.
+fn codes_named_in(blurb: &str) -> Vec<&str> {
+    let is_part = |p: &str| {
+        !p.is_empty()
+            && p.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    };
+    blurb
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|span| {
+            let parts: Vec<&str> = span.split('.').collect();
+            parts.len() == 3 && parts[0] == "bynk" && parts[1..].iter().all(|p| is_part(p))
+        })
+        .collect()
+}
+
+/// A blurb cross-references sibling codes in backticks; each must be a real
+/// registry code, so a rename or a typo cannot leave a dangling reference.
+#[test]
+fn explanation_blurbs_name_only_real_codes() {
+    let registered: BTreeSet<&str> = REGISTRY.iter().map(|d| d.code).collect();
+    let dangling: Vec<String> = EXPLANATIONS
+        .iter()
+        .flat_map(|e| {
+            let registered = &registered;
+            codes_named_in(e.blurb)
+                .into_iter()
+                .filter(move |c| !registered.contains(c))
+                .map(move |c| format!("`{}` names `{c}`", e.code))
+        })
+        .collect();
+    assert!(
+        dangling.is_empty(),
+        "an EXPLANATIONS blurb names a code that is not in REGISTRY \
+         (bynk-syntax/src/diagnostics.rs):\n  {}",
+        dangling.join("\n  ")
+    );
+}
+
+#[test]
+fn blurb_codes_are_read_from_backtick_spans_only() {
+    let blurb = "like `bynk.generics.missing_eq_bound`, not bynk.a.b or \
+                 `bynk.cloudflare.RateLimit` or `bynk.crypto` or `bynk.a.b.c`, \
+                 but `bynk.x1.y_2` and `Json.decode`";
+    assert_eq!(
+        codes_named_in(blurb),
+        vec!["bynk.generics.missing_eq_bound", "bynk.x1.y_2"]
+    );
+}
+
 /// The code→page mapping is guarded against Book-page moves and anchor renames:
 /// each explanation's target page must exist on disk and, when an anchor is
 /// given, a heading with that slug must be present. (The generated diagnostics

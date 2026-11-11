@@ -106,6 +106,12 @@ struct ContextPlan<'a> {
     /// first write, and Bynk never deletes one.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     datasets: Vec<PlanDataset<'a>>,
+    /// #3301: one line per Secrets Store secret the Worker reads, in binding
+    /// order. Linked: found on the account before the push, never created,
+    /// never deleted. Whether it exists is asked after authenticating, so the
+    /// plan, which stays offline under `--dry-run`, does not claim it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    stored_secrets: Vec<PlanStoredSecret<'a>>,
     /// #1796: one line per Durable Object class the push declares in
     /// `exports`, in class-name order. Empty for a context with no agent and
     /// no events fan-out.
@@ -144,6 +150,15 @@ struct ContextPlan<'a> {
     /// Interop I5 (#1972): its Service Bindings to Workers outside the
     /// project, in binding order. Bound, never provisioned.
     foreign_services: Vec<PlanForeignService<'a>>,
+}
+
+/// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
+/// neither creates nor changes the store or the secret.
+#[derive(Debug, Serialize)]
+struct PlanStoredSecret<'a> {
+    binding: &'a str,
+    store: &'a str,
+    secret: &'a str,
 }
 
 /// Interop I5 (#1972): one Service Binding to a foreign Worker. No action:
@@ -917,6 +932,12 @@ pub fn run(
     }) {
         eprintln!("{warning}");
     }
+    // #3301: a stored secret is linked, never created, so a missing store or
+    // secret stops the run here, before the confirmation and before anything
+    // is provisioned or pushed.
+    let Some(linked_stores) = link_for_run(&order, &resources) else {
+        return ExitCode::FAILURE;
+    };
     // State-migrations S3 (#2248): a deletion is confirmed by name, apart
     // from — and before — the ordinary confirmation.
     if !confirm_deletions(&plan, &opts.confirm_delete, &lock) {
@@ -1056,14 +1077,7 @@ pub fn run(
     // Shared across the loop so two contexts wanting the same secret prompt
     // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
     let mut resolved_secrets = BTreeMap::new();
-    // #2055: a first deploy's secrets file that a SIGKILLed run left behind
-    // goes before this run might write one of its own.
-    let stale_removed = sweep_stale_upload_dirs(&std::env::temp_dir());
-    if stale_removed > 0 {
-        eprintln!(
-            "bynk: removed {stale_removed} secrets file(s) an interrupted deploy left in the temp directory"
-        );
-    }
+    sweep_and_report_stale_uploads();
     for (i, worker) in order.iter().enumerate() {
         if order.len() > 1 {
             eprint!(
@@ -1094,6 +1108,7 @@ pub fn run(
             &opts.wrangler_args,
             &opts.environment,
             live_kv_ids.as_ref(),
+            &linked_stores,
         ) {
             Ok(Pushed::Ok) => {
                 // v0.177 (#643): record what this Worker now *provides*, so a
@@ -1235,6 +1250,17 @@ pub fn run(
         }
     }
     ExitCode::SUCCESS
+}
+
+/// #2055: a first deploy's secrets file that a SIGKILLed run left behind goes
+/// before this run might write one of its own.
+fn sweep_and_report_stale_uploads() {
+    let stale_removed = sweep_stale_upload_dirs(&std::env::temp_dir());
+    if stale_removed > 0 {
+        eprintln!(
+            "bynk: removed {stale_removed} secrets file(s) an interrupted deploy left in the temp directory"
+        );
+    }
 }
 
 /// Interop I5 (#1972): a warning for each foreign Worker that the pushed
@@ -1953,6 +1979,13 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         dataset.dataset, dataset.binding
                     ));
                 }
+                // #3301: linked, not provisioned — the account owns both.
+                for secret in &context.stored_secrets {
+                    out.push_str(&format!(
+                        "stored secret {} {} in store {} (linked; not created)\n",
+                        secret.binding, secret.secret, secret.store
+                    ));
+                }
                 // Interop I5 (#1972): bound, not provisioned — the Worker is
                 // not Bynk's, so the line says so rather than an action.
                 for service in &context.foreign_services {
@@ -2164,6 +2197,15 @@ pub(crate) fn derive_plan<'a>(
                         .map(|dataset| PlanDataset {
                             binding: &dataset.binding,
                             dataset: analytics_dataset_name(environment, &dataset.name),
+                        })
+                        .collect(),
+                    stored_secrets: declared
+                        .stored_secrets
+                        .iter()
+                        .map(|s| PlanStoredSecret {
+                            binding: &s.binding,
+                            store: &s.store,
+                            secret: &s.secret,
                         })
                         .collect(),
                     durable_objects: declared
@@ -3047,6 +3089,43 @@ pub(crate) mod tests {
         )]);
         assert!(r2_bucket_problem(&staging, &lock, "staging").is_some());
         assert!(r2_bucket_problem(&staging, &lock, "default").is_none());
+    }
+
+    // ---- #3301: Secrets Store secrets are linked, never created ----
+
+    #[test]
+    fn a_stored_secret_is_a_linked_plan_line_with_no_action() {
+        let resources = project(vec![(
+            "shop-billing",
+            Resources::default().stored_secrets(&[(
+                "SECRET_STRIPE_KEY",
+                "payments",
+                "stripe-live",
+            )]),
+        )]);
+        let order = names(&["shop-billing"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "stored secret SECRET_STRIPE_KEY stripe-live in store payments (linked; not created)\ndeploy shop-billing\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["stored_secrets"],
+            serde_json::json!([{
+                "binding": "SECRET_STRIPE_KEY",
+                "store": "payments",
+                "secret": "stripe-live"
+            }])
+        );
+        // A project without one has no such key, so the machine surface of
+        // every existing project is unchanged.
+        let plain = project(vec![("shop-billing", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("stored_secrets").is_none());
     }
 
     // ---- interop I5 (#1972): Service Bindings to foreign Workers ----

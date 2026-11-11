@@ -1,0 +1,7 @@
+commons demo
+
+fn three() -> Int { 3 }
+
+type Config = {
+  retries: Int = three(),
+}

@@ -1,0 +1,7 @@
+commons demo
+
+type Box[T] = { value: T }
+
+fn Box.empty() -> Box[Option[T]] {
+  Box { value: None }
+}

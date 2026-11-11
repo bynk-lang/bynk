@@ -1,0 +1,4 @@
+commons limits
+
+const First: Int = Second
+const Second: Int = First
