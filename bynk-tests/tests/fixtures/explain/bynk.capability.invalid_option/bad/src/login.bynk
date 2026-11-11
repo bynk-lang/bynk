@@ -1,0 +1,11 @@
+context login
+
+consumes bynk.cloudflare { RateLimit }
+
+capability LoginLimit = RateLimit @limit(20) @period(30.seconds)
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

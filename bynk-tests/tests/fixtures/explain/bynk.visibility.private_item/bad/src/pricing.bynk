@@ -1,0 +1,11 @@
+commons pricing
+
+type Item = { price: Int, qty: Int }
+
+fn total(items: List[Item]) -> Int {
+  items.fold(0, (acc, i) => acc + lineTotal(i))
+}
+
+private fn lineTotal(i: Item) -> Int {
+  i.price * i.qty
+}

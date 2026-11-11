@@ -102,11 +102,15 @@ Concretely, the implementing PR must, *where the increment touches them*:
 - **Ship an explanation with each new error code.** A new *error* diagnostic
   code gets a curated `bynk explain` entry (`EXPLANATIONS` in
   `bynk-syntax/src/diagnostics.rs`): why the rule exists and a before-and-after
-  example. The example is backed by a compiled pair,
-  `bynk-tests/tests/fixtures/explain/<code>/bad.bynk` and `good.bynk`: the first
-  must fail with that code alone, reported on a line the example marks `✗`,
-  the second must compile, and each line of the example must appear in one of
-  them (`explain_examples.rs`). Warnings and
+  example. The example is backed by a compiled pair under
+  `bynk-tests/tests/fixtures/explain/<code>/`: `bad.bynk` and `good.bynk`, or,
+  when the rule needs a second unit or a `bynk.toml`, project trees `bad/` and
+  `good/` (never a mixture). The bad one must fail with that code alone,
+  reported, in the file the compiler names, on a line the example marks `✗`;
+  the good one must compile; and each line of the example must appear in the
+  bad or the good program (`explain_examples.rs`). A multi-file example labels
+  each snippet with a comment-only path line such as `// shop.bynk` (the file's
+  path under `src/`, or `// bynk.toml`). Warnings and
   internal codes may be left to the one-line registry summary. The `explained_codes` probe ratchets coverage
   upwards; the backlog is tracked in #3163.
 - **Keep examples consistent and compiling.** Snippets demonstrating the same
