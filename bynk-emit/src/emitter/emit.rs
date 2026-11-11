@@ -6632,6 +6632,55 @@ struct AgentPersistFns {
     lazy_fields: Option<String>,
 }
 
+/// The function `loadState` calls to fill a record's collections into the zero state's handles
+/// (#3254): one fill per collection field, from the stored record.
+fn hydrate_fn_decl(
+    a: &AgentDecl,
+    layout: &AgentStoreLayout,
+    hydrate_fn: &str,
+    zero_fn: &str,
+) -> bynk_ts::TsStmt {
+    let state_ty = format!("{}State", a.name.name);
+    let held_names_all: HashSet<&str> = held_map_fields(a)
+        .into_iter()
+        .map(|(n, _)| n.name.as_str())
+        .collect();
+    let mut fills = String::new();
+    let mut fill = |name: &str, with: &str| {
+        // A held map's insertion order is stored beside its record, as `<field>:order`.
+        let order = if with == "__fillHeld" {
+            format!(", __r[\"{name}:order\"] as never")
+        } else {
+            String::new()
+        };
+        fills.push_str(&format!(
+            "  if (globalThis.Object.hasOwn(__r, \"{name}\")) {{ {with}(__z.{name}, __r[\"{name}\"] as never{order}); __w.{name} = __z.{name}; }}\n"
+        ));
+    };
+    for (name, _) in &layout.store_map_fields {
+        let held = held_names_all.contains(name.name.as_str());
+        fill(&name.name, if held { "__fillHeld" } else { "__fillMap" });
+    }
+    for (name, _) in &layout.held_maps {
+        fill(&name.name, "__fillHeld");
+    }
+    for (name, _) in &layout.store_set_fields {
+        fill(&name.name, "__fillSet");
+    }
+    for (name, _, _) in &layout.store_cache_fields {
+        fill(&name.name, "__fillMap");
+    }
+    for (name, _, _) in &layout.store_log_fields {
+        fill(&name.name, "__fillLog");
+    }
+    bynk_ts::TsStmt::raw(
+        format!(
+            "function {hydrate_fn}(s: {state_ty}, stored: {state_ty}): void {{\n  const __z = {zero_fn}();\n  const __w = s as {{ -readonly [K in keyof {state_ty}]: {state_ty}[K] }};\n  const __r = stored as unknown as globalThis.Record<string, unknown>;\n{fills}}}\n"
+        ),
+        None,
+    )
+}
+
 /// The functions that guard an agent's stored state across a deploy (#3167): the
 /// rehydration check `loadState` runs, the wire-format encoder, and the
 /// migration step chain for a stored layout from an older schema version.
@@ -6917,43 +6966,7 @@ fn emit_agent_state_persistence(
     // in the order the record notes. A collection the record lacks stays the empty zero.
     let hydrate_fn = format!("__hydrate{}State", a.name.name);
     if has_collections {
-        let mut fills = String::new();
-        let mut fill = |name: &str, with: &str| {
-            // A held map's insertion order is stored beside its record, as `<field>:order`.
-            let order = if with == "__fillHeld" {
-                format!(", __r[\"{name}:order\"] as never")
-            } else {
-                String::new()
-            };
-            fills.push_str(&format!(
-                "  if (globalThis.Object.hasOwn(__r, \"{name}\")) {{ {with}(__z.{name}, __r[\"{name}\"] as never{order}); __w.{name} = __z.{name}; }}\n"
-            ));
-        };
-        for (name, _) in store_map_fields {
-            if held_names_all.contains(name.name.as_str()) {
-                fill(&name.name, "__fillHeld");
-            } else {
-                fill(&name.name, "__fillMap");
-            }
-        }
-        for (name, _) in held_maps {
-            fill(&name.name, "__fillHeld");
-        }
-        for (name, _) in store_set_fields {
-            fill(&name.name, "__fillSet");
-        }
-        for (name, _, _) in store_cache_fields {
-            fill(&name.name, "__fillMap");
-        }
-        for (name, _, _) in store_log_fields {
-            fill(&name.name, "__fillLog");
-        }
-        stmts.push(bynk_ts::TsStmt::raw(
-            format!(
-                "function {hydrate_fn}(s: {state_ty}, stored: {state_ty}): void {{\n  const __z = {zero_fn}();\n  const __w = s as {{ -readonly [K in keyof {state_ty}]: {state_ty}[K] }};\n  const __r = stored as unknown as globalThis.Record<string, unknown>;\n{fills}}}\n"
-            ),
-            None,
-        ));
+        stmts.push(hydrate_fn_decl(a, layout, &hydrate_fn, zero_fn));
     }
     if has_encode {
         // #1649: the wire-shape encoder `commitState` writes through. Every
