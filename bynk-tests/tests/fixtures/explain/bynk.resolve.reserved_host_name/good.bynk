@@ -1,0 +1,3 @@
+commons demo
+
+type Counter = { n: Int }

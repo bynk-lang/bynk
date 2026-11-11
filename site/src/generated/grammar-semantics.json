@@ -1741,7 +1741,7 @@
   "type_decl": [
     {
       "code": "bynk.generics.generic_non_record",
-      "summary": "A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197)."
+      "summary": "A `type` declaration carries type parameters on a refined, opaque or alias body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197)."
     },
     {
       "code": "bynk.generics.generic_sum_embeds",
