@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.551.1** | `bynk explain` covers eighteen more codes under the adapter, asset, capability, embed and messages prefixes |
 | **v0.551.0** | A handler reads cookies through a typed `cookies: T` parameter and sets them with `Cookie`, `SameSite`, `withCookie`, `clearCookie` and `cookies()` on an `HttpResult` (#3277, slices 1 and 2; #3181 stays open for signing and the actor scheme) |
 | **v0.550.8** | `bynk explain` explains twenty more codes for writing tests, under `expect`, `stub`, `suite`, `test` and `val` (Refs #3163) |
 | **v0.550.7** | `bynk explain` explains eighteen more codes under `cron`, `held`, `queue`, `record_spread`, `send` and `store` (Refs #3163) |
