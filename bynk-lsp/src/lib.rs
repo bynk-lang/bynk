@@ -193,6 +193,25 @@ fn cached_owner_unit<'c>(
 /// slice D, now one set per discovered project root. Every request routes by
 /// URI (via `resolve_root`) to its owning entry, so two projects analyse,
 /// version, and publish independently.
+/// One project's analysis round, through its memo when it has one (#3243 S2.3b).
+/// A memo poisoned by a panic in an earlier round is dropped, not trusted.
+fn analyse_with_memo(
+    roots: &bynk_ide::AnalysisRoots,
+    content: &std::collections::HashMap<PathBuf, String>,
+    schema_lock: &bynk_ide::SchemaLock,
+    memo: Option<&std::sync::Mutex<bynk_check::memo::AnalysisMemo>>,
+) -> bynk_ide::ProjectDiagnostics {
+    let Some(memo) = memo else {
+        return bynk_ide::diagnose_project_with(roots, content, schema_lock);
+    };
+    let mut memo = memo.lock().unwrap_or_else(|poisoned| {
+        let mut memo = poisoned.into_inner();
+        *memo = bynk_check::memo::AnalysisMemo::new();
+        memo
+    });
+    bynk_ide::diagnose_project_memoised(roots, content, schema_lock, &mut memo)
+}
+
 #[derive(Debug, Default)]
 struct ProjectState {
     /// Parsed `bynk.toml` configuration for this root. Defaults for missing
@@ -822,28 +841,7 @@ impl Backend {
                 panic!("injected analysis panic");
             }
             let content = crate::content::sweep_project_content(&roots, &overlay);
-            match memo {
-                // A poisoned memo (a panic mid-round) is dropped, not trusted.
-                Some(memo) => match memo.lock() {
-                    Ok(mut memo) => bynk_ide::diagnose_project_memoised(
-                        &roots,
-                        &content,
-                        &schema_lock,
-                        &mut memo,
-                    ),
-                    Err(poisoned) => {
-                        let mut memo = poisoned.into_inner();
-                        *memo = bynk_check::memo::AnalysisMemo::new();
-                        bynk_ide::diagnose_project_memoised(
-                            &roots,
-                            &content,
-                            &schema_lock,
-                            &mut memo,
-                        )
-                    }
-                },
-                None => bynk_ide::diagnose_project_with(&roots, &content, &schema_lock),
-            }
+            analyse_with_memo(&roots, &content, &schema_lock, memo.as_deref())
         })
         .await;
         let result = match joined {

@@ -315,24 +315,73 @@ fn bailed(
     }
 }
 
+/// What [`check_file_core`] reads for every file of one unit, bundled: the unit's
+/// composed symbol space and prelude. [`crate::check_pipeline::file_check_digest`]
+/// hashes the same list.
+struct UnitCheckInputs<'a> {
+    name: &'a str,
+    kind: UnitKind,
+    unit_info: &'a BTreeMap<String, UnitInfo>,
+    combined_types: &'a HashMap<String, Arc<TypeDecl>>,
+    combined_fns: &'a HashMap<String, Arc<bynk_syntax::ast::FnDecl>>,
+    combined_methods: &'a HashMap<String, crate::resolver::MethodTable>,
+    local_names: &'a HashSet<String>,
+    local_methods_for_type: &'a HashMap<String, Vec<bynk_syntax::ast::FnDecl>>,
+    consumed_types: &'a HashMap<String, ConsumedType>,
+    imported_from: &'a HashMap<String, String>,
+    ctx: &'a crate::check_pipeline::UnitCheckCtx,
+    tys: &'a Arc<Types>,
+}
+
+/// A hash of what a unit's files say, folded into each file's digest.
+fn unit_files_digest(indices: &[usize], parsed: &[ParsedFile]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for &i in indices {
+        parsed[i].identity_path().hash(&mut h);
+        parsed[i].source().hash(&mut h);
+    }
+    h.finish()
+}
+
+/// One file's output: replayed from `memo` when its digest is unchanged, checked
+/// (and kept) otherwise. Without a memo it is just the check.
+fn check_or_replay(
+    memo: Option<&mut crate::memo::AnalysisMemo>,
+    unit_files_digest: Option<u64>,
+    inputs: &UnitCheckInputs<'_>,
+    pf: &ParsedFile,
+) -> crate::memo::FileRecord {
+    let (Some(memo), Some(unit_files_digest)) = (memo, unit_files_digest) else {
+        return check_one_file(inputs, pf);
+    };
+    let digest = crate::check_pipeline::file_check_digest(
+        inputs.name,
+        inputs.kind,
+        pf,
+        unit_files_digest,
+        inputs.unit_info,
+        inputs.combined_types,
+        inputs.combined_fns,
+        inputs.combined_methods,
+        inputs.local_names,
+        inputs.local_methods_for_type,
+        inputs.consumed_types,
+        inputs.imported_from,
+        inputs.ctx,
+    );
+    let path = pf.identity_path();
+    if let Some(record) = memo.lookup(&path, digest) {
+        return record;
+    }
+    let record = check_one_file(inputs, pf);
+    memo.store(path, digest, record.clone());
+    record
+}
+
 /// Check one file into its own scratch sinks (#3243 S2.3), returning everything it
 /// produced. Today's per-file unit of work; the memo keeps these between rounds.
-#[allow(clippy::too_many_arguments)]
-fn check_one_file(
-    name: &str,
-    kind: UnitKind,
-    pf: &ParsedFile,
-    unit_info: &BTreeMap<String, UnitInfo>,
-    combined_types: &HashMap<String, Arc<TypeDecl>>,
-    combined_fns: &HashMap<String, Arc<bynk_syntax::ast::FnDecl>>,
-    combined_methods: &HashMap<String, crate::resolver::MethodTable>,
-    local_names: &HashSet<String>,
-    local_methods_for_type: &HashMap<String, Vec<bynk_syntax::ast::FnDecl>>,
-    consumed_types: &HashMap<String, ConsumedType>,
-    imported_from: &HashMap<String, String>,
-    ctx: &crate::check_pipeline::UnitCheckCtx,
-    tys: &Arc<Types>,
-) -> crate::memo::FileRecord {
+fn check_one_file(inputs: &UnitCheckInputs<'_>, pf: &ParsedFile) -> crate::memo::FileRecord {
     let mut errors = ErrorSink::new();
     let mut refs = RefSink::new();
     let mut hints = HintSink::new();
@@ -340,25 +389,25 @@ fn check_one_file(
     let mut exprs = ExprTypeSink::new();
     let mut requirements = RequirementSink::new();
     let typed = check_file_core(
-        name,
-        kind,
+        inputs.name,
+        inputs.kind,
         pf,
-        unit_info,
-        combined_types,
-        combined_fns,
-        combined_methods,
-        local_names,
-        local_methods_for_type,
-        consumed_types,
-        imported_from,
-        ctx,
+        inputs.unit_info,
+        inputs.combined_types,
+        inputs.combined_fns,
+        inputs.combined_methods,
+        inputs.local_names,
+        inputs.local_methods_for_type,
+        inputs.consumed_types,
+        inputs.imported_from,
+        inputs.ctx,
         &mut errors,
         &mut refs,
         &mut hints,
         &mut locals,
         &mut exprs,
         &mut requirements,
-        tys,
+        inputs.tys,
     )
     .map(|crate::check_pipeline::FileCheckResult { typed, .. }| {
         // This entry point never emits — every clean file's exit is the
@@ -883,74 +932,24 @@ fn analyse_project_inner(
         let mut checked: Vec<Arc<crate::checker::TypedCommons>> = Vec::new();
         // #3243 S2.3b: what the unit's files say, for the digest of each (a
         // diagnostic's label can point into a sibling).
-        let unit_files_digest = memo.as_ref().map(|_| {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            for &i in indices {
-                parsed[i].identity_path().hash(&mut h);
-                parsed[i].source().hash(&mut h);
-            }
-            h.finish()
-        });
+        let unit_files_digest = memo.as_ref().map(|_| unit_files_digest(indices, &parsed));
+        let inputs = UnitCheckInputs {
+            name,
+            kind,
+            unit_info: &unit_info,
+            combined_types: &combined_types,
+            combined_fns: &combined_fns,
+            combined_methods: &combined_methods,
+            local_names: &local_names,
+            local_methods_for_type: &local_methods_for_type,
+            consumed_types: &consumed_types,
+            imported_from: &imported_from,
+            ctx: &ctx,
+            tys,
+        };
         for &i in indices {
-            let pf = &parsed[i];
-            let path = pf.identity_path();
-            let digest = unit_files_digest.map(|ufd| {
-                crate::check_pipeline::file_check_digest(
-                    name,
-                    kind,
-                    pf,
-                    ufd,
-                    &unit_info,
-                    &combined_types,
-                    &combined_fns,
-                    &combined_methods,
-                    &local_names,
-                    &local_methods_for_type,
-                    &consumed_types,
-                    &imported_from,
-                    &ctx,
-                )
-            });
-            let record = match (memo.as_deref_mut(), digest) {
-                (Some(m), Some(d)) => match m.lookup(&path, d) {
-                    Some(record) => record,
-                    None => {
-                        let record = check_one_file(
-                            name,
-                            kind,
-                            pf,
-                            &unit_info,
-                            &combined_types,
-                            &combined_fns,
-                            &combined_methods,
-                            &local_names,
-                            &local_methods_for_type,
-                            &consumed_types,
-                            &imported_from,
-                            &ctx,
-                            tys,
-                        );
-                        m.store(path, d, record.clone());
-                        record
-                    }
-                },
-                _ => check_one_file(
-                    name,
-                    kind,
-                    pf,
-                    &unit_info,
-                    &combined_types,
-                    &combined_fns,
-                    &combined_methods,
-                    &local_names,
-                    &local_methods_for_type,
-                    &consumed_types,
-                    &imported_from,
-                    &ctx,
-                    tys,
-                ),
-            };
+            let record =
+                check_or_replay(memo.as_deref_mut(), unit_files_digest, &inputs, &parsed[i]);
             let crate::memo::FileRecord {
                 errors: file_errors,
                 refs: file_refs,
