@@ -141,7 +141,7 @@ as a plain value keeps its pure-collection methods).
 |---|---|---|
 | `Map[K, V]` | `put`/`get`/`update`/`upsert`/`remove`/`contains`/`size` | `update` on an absent key faults — use `upsert` for default-if-absent |
 | `Set[T]` | `add`/`remove`/`contains`/`size` | `add` is idempotent; `remove` of an absent member is a no-op |
-| `Cache[K, V]` | the `Map` op set, with per-entry TTL expiry | requires `@ttl`; an expired entry reads as absent (check-on-read, needs `given Clock`) and is deleted when a handler that uses the `Cache` commits |
+| `Cache[K, V]` | the `Map` op set, with per-entry TTL expiry | requires `@ttl`; an expired entry reads as absent (check-on-read, needs `given Clock`) and is deleted when a handler that uses a `Cache` commits (at most 64 per commit, shared by all the agent's `Cache` fields) |
 | `Log[T]` | `append`; lazy `Query` reads via `since`/`before`/`between`/`recent`/`reversed` | `append` stamps the time (`given Clock`); the window roots take explicit `Instant`s, so reads need no clock |
 
 A `Map`'s or `Cache`'s key and a `Set`'s element must be `String`, `Int`, or a
@@ -171,27 +171,43 @@ storage limit for one object instead. A handler writes only the entries it chang
 so the storage it writes is proportional to what it touches, not to the size of the
 state.
 
-Reads are not lazy yet. Every call still loads every entry of every collection the
-agent declares before the handler runs, and a commit still compares the state it
-read with the state it produced, so the time and memory a handler takes still grow
-with the size of the agent's state; only the writes are bounded. Lazy and indexed
-reads are the planned next step ([#3159](https://github.com/bynk-lang/bynk/issues/3159)).
-An agent stored the earlier way (one value) is read as it is and split into entries
-by its next write, in one transaction; `bynk migrate sweep` does that for every
-instance.
+Reads follow what a handler touches too. A call reads the `Cell` record at once, and
+a collection only as the handler asks for it: `get`, `contains`, `put`, `update`,
+`upsert` and `remove` of one key read that one entry; an equality filter on an
+[`@indexed`](#indexed-routing) field reads the posting list for that value and the
+entries it names; a `Log` window (`since`, `before`, `between`, `recent`) reads that
+range of keys; `size` reads one count. A handler's writes stay in memory until it
+returns and are committed with the `Cell` record in one transaction, so a handler
+that faults writes nothing. What still reads a whole collection is a scan: `keys`,
+`values` or `entries`, a filter that is not an `@indexed` equality, a join, a
+group-by or an aggregate. Those read every entry in pages, so their cost still
+grows with the size of the collection. Operations on one key (`update`, `upsert`,
+`put`, `remove`) run one after another per key, so concurrent branches of a handler
+cannot lose an update to each other's write of the same key.
+
+A value stored the earlier way (the whole collection in one record), or a record a
+`migrate from` step still covers, is read whole and split into entries by its next
+write, in one transaction; `bynk migrate sweep` does that for every instance. An
+agent with a `Map` of live connections (a held `Map`) also keeps its collection in
+the record and reads it whole.
+
+A stored value is decoded and checked when it is read, not when the call starts, so
+an entry that no longer decodes (or a refined `Map` key or `Set` element that no
+longer satisfies its refinement) faults with a rehydration violation when a handler
+first reaches it, and a handler that never touches it does not.
 
 Design for it:
 
 - **Key agents finely.** One agent per customer, order or channel, not one per
   system: a collection that grows with your data belongs *across* agent instances,
-  not inside one, while every call still loads the whole of it.
+  not inside one, because a scan, a join or a group-by still reads the whole of it.
 - **Bound a `Log` with `@retain`**, which prunes old entries as you append. A
   `Cache` entry past its `@ttl` reads as absent, and the commit of any handler that
-  uses the `Cache` deletes up to 64 expired entries (oldest first, judged by the
-  clock the handler read), so a `Cache` that is written regularly does not grow
-  without bound. A `Cache` that nothing writes any more keeps its expired entries,
-  and they are still loaded on every call, until a handler that uses it commits, and
-  a large backlog drains 64 at a time. Keep a `Cache`'s key space bounded, or
+  uses a `Cache` deletes up to 64 expired entries in all (the limit is shared by
+  every `Cache` the agent declares; oldest first, judged by the clock the handler
+  read), so a `Cache` that is written regularly does not grow without bound. A
+  `Cache` that nothing uses any more keeps its expired entries until a handler that
+  uses it commits, and a large backlog drains 64 at a time. Keep a `Cache`'s key space bounded, or
   `remove` keys you are finished with.
 - **Use D1 for a large or unbounded table.** A `Map` is the right home for a
   small, bounded collection owned by one agent; a table of every order, event or
