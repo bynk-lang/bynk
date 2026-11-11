@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: `bynk.cloudflare.StoredSecret` (experimental) reads one Secrets Store secret through a named instance; `bynk deploy` links the store and the secret and never creates them
----
+# 0802 — Account-level resources are linked by the deploy and never created, starting with Secrets Store secrets
 
-## ADR: linked-account-resources-and-stored-secret
-title: Account-level resources are linked by the deploy and never created, starting with Secrets Store secrets
-summary: A `linked` flag on instantiable registry kinds, and `StoredSecret` over the Secrets Store binding
+- **Status:** Accepted (v0.548)
 
 **Context.** Cloudflare's Secrets Store binding was the one secret surface
 Bynk did not reach. `bynk.Secrets.get(name)` is portable and reads per-Worker
