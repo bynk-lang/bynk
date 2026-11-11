@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "an expired token is refused" {
+    let r <- api.GET("/health") by Expired
+    expect r is Rejected(Unauthorized)
+  }
+}

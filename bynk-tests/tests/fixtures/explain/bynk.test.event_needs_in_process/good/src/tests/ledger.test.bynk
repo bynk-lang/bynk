@@ -1,0 +1,5 @@
+suite shop.ledger {
+  case "a placed order is booked" {
+    let _ <- OnPlaced.event(Placed { id: "o1" })
+  }
+}

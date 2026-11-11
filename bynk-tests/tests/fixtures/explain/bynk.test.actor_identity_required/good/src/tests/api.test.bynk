@@ -1,0 +1,6 @@
+suite demo.api {
+  case "a signed-in read" {
+    let r <- api.GET("/a") by User("bob")
+    expect r is Ok(_)
+  }
+}

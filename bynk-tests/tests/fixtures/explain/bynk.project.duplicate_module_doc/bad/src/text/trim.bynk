@@ -1,0 +1,6 @@
+---
+Trimming.
+---
+commons text
+
+fn tidy(s: String) -> String { s }

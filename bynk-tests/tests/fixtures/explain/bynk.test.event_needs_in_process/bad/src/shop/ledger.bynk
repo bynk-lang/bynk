@@ -1,0 +1,15 @@
+context shop.ledger
+
+consumes shop.order
+
+service OnPlaced from Events(Placed) {
+  on event(e: Placed) -> Effect[()] {
+    ()
+  }
+}
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("pong")
+  }
+}

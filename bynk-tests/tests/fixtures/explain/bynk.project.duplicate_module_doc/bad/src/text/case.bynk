@@ -1,0 +1,6 @@
+---
+Text helpers.
+---
+commons text
+
+fn shout(s: String) -> String { s }

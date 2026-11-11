@@ -2920,6 +2920,59 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sum-types",
     },
     Explain {
+        code: "bynk.project.duplicate_module_doc",
+        blurb: "A unit's module doc is one piece of prose. When a unit is split \
+                across files, at most one of them may open with it: with two, the \
+                tools would have to join them in some file order and the result \
+                would read oddly. The error names every file that carries one. \
+                Keep the doc in the file that best introduces the unit, and remove \
+                the others.",
+        example: "// text/case.bynk\n\
+                  ---\n\
+                  Text helpers.\n\
+                  ---\n\
+                  commons text\n\n\
+                  // text/trim.bynk\n\
+                  ---\n\
+                  Trimming.\n\
+                  ---\n\
+                  commons text       // ✗ a second module doc\n\n\
+                  commons text       // ✓ the doc stays in case.bynk",
+        page: "/book/guides/program-structure/document-your-code",
+        anchor: "one-module-doc-per-unit",
+    },
+    Explain {
+        code: "bynk.project.inconsistent_commons_name",
+        blurb: "A source file's path is its unit's identity: `context \
+                commerce.orders` lives at `commerce/orders.bynk`, or in a file \
+                under `commerce/orders/`, relative to an include root. A reader \
+                can then find a unit from its name alone. Rename the file or \
+                directory to match the declared name, or change the name. Test \
+                suites are exempt.",
+        example: "// pricing.bynk\n\
+                  commons tax     // ✗ the path says `pricing`\n\n\
+                  // tax.bynk\n\
+                  commons tax     // ✓",
+        page: "/book/guides/projects-build-and-deployment/layout",
+        anchor: "path-identity",
+    },
+    Explain {
+        code: "bynk.project.kind_conflict",
+        blurb: "A name belongs to one unit, so every file declaring it must agree \
+                on its kind. One file saying `commons shop` and another `context \
+                shop` would make the name both a library and a deployable unit. \
+                Give the files different names, or make them the same kind. A \
+                context is the deployable unit, and a commons is the shared code \
+                it uses.",
+        example: "// shop/types.bynk\n\
+                  commons shop        // ✗ the name is also a context\n\
+                  commons shop.types  // ✓\n\n\
+                  // shop/api.bynk\n\
+                  context shop",
+        page: "/book/spec/compilation-model",
+        anchor: "83-source-layout-and-test-ness",
+    },
+    Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
         blurb: "A provider calls an agent handler, and the handler needs a capability \
                 the provider's `given` does not list. A handler's `given` is \
@@ -3573,6 +3626,39 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-blocks",
     },
     Explain {
+        code: "bynk.test.actor_identity_required",
+        blurb: "An actor that declares an `identity` stands for one particular \
+                caller, and the handler reads that identity. A case that acts as \
+                the actor must therefore say which caller, as in `by \
+                User(\"bob\")`; a bare `by User` leaves the handler nothing to \
+                read. A handler that binds its caller (`by c: Caller`) wants the \
+                calling context's name the same way. Add the identity. The reverse \
+                mistake is `bynk.test.actor_no_identity`.",
+        example: "// demo/api.bynk\n\
+                  type UserId = String where NonEmpty\n\
+                  actor User { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/a\") by User          // ✗ which user?\n\
+                  let r <- api.GET(\"/a\") by User(\"bob\")   // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
+    },
+    Explain {
+        code: "bynk.test.actor_no_identity",
+        blurb: "A case supplies an identity only when the actor has one to give. \
+                An actor that declares no `identity`, and the failure principals \
+                `Nobody`, `Forged`, `Stale` and `Expired`, which present a missing \
+                or bad credential and so no verified caller, take no argument. \
+                Write `by Nobody`, not `by Nobody(\"bob\")`. For an actor that \
+                does declare an identity and is given none, see \
+                `bynk.test.actor_identity_required`.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/a\") by Nobody(\"bob\")   // ✗ no credential, so no identity\n\
+                  let r <- api.GET(\"/a\") by Nobody          // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
         code: "bynk.test.advance_not_clock",
         blurb: "`advance` moves the harness clock, the single time source a test \
                 owns, so it names `Clock` and nothing else. No other capability \
@@ -3602,6 +3688,169 @@ pub const EXPLANATIONS: &[Explain] = &[
                   advance Clock by 5.minutes   // ✓",
         page: "/book/reference/testing",
         anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.call_needs_in_process",
+        blurb: "A service with an `on call` handler is internal to a deployment: \
+                it has no public route, and a `system` case can only send requests \
+                through the Worker's front door. So `svc.call(…)` is refused in \
+                one. Call it at `unit` or `integration`, or drive an http route \
+                that reaches it. For the event equivalent, see \
+                `bynk.test.event_needs_in_process`.",
+        example: "// demo/api.bynk\n\
+                  service save { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  case \"a key is measured\" as system {   // ✗ `save` has no public route\n\
+                  case \"a key is measured\" {             // ✓\n\
+                  \x20\x20\x20\x20let n <- save.call(\"abc\")\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.event_needs_in_process",
+        blurb: "`svc.event(e)` hands an event straight to a subscriber. At \
+                `system`, an event reaches a subscriber only through its \
+                publisher's fan-out across the deployed Workers, so there is no \
+                direct delivery to make. Drive the handler that publishes the \
+                event, or deliver the event at `unit` or `integration`. For the \
+                `on call` equivalent, see `bynk.test.call_needs_in_process`.",
+        example: "// shop/ledger.bynk\n\
+                  service OnPlaced from Events(Placed) { … }\n\n\
+                  // tests/ledger.test.bynk\n\
+                  case \"a placed order is booked\" as system {   // ✗ no direct delivery at `system`\n\
+                  case \"a placed order is booked\" {             // ✓\n\
+                  \x20\x20\x20\x20let _ <- OnPlaced.event(Placed { id: \"o1\" })\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "event-address",
+    },
+    Explain {
+        code: "bynk.test.expired_needs_bearer_route",
+        blurb: "`by Expired` sends an expired token, so it needs a route whose \
+                seam checks one: a `Bearer` or `Oidc` actor. A public route, or \
+                one guarded by a `Signature` actor, has no token to expire; for a \
+                `Signature` route `by Stale` sends a stale signature. Drive a \
+                route guarded by a `Bearer` or `Oidc` actor. See \
+                `bynk.test.nobody_needs_secured_route` for the same limit on \
+                `Nobody`.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/a\") () -> Effect[HttpResult[Int]] by u: User { … }\n\
+                  on GET(\"/health\") () -> Effect[HttpResult[Int]] by v: Visitor { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/health\") by Expired   // ✗ a public route has no token\n\
+                  let r <- api.GET(\"/a\") by Expired        // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.extra_headers_authorization",
+        blurb: "A case sends a credential only through its `by` clause: the driver \
+                builds the `Authorization` header (or the signature headers) from \
+                the actor it acts as. Putting an `Authorization` header in \
+                `RequestHeaders.of` as well would give the request two competing \
+                credentials, so it is refused. Choose the actor with `by`, and \
+                keep `RequestHeaders` for other headers.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/health\", RequestHeaders.of([\"Authorization: Bearer x\"])) by Visitor   // ✗\n\
+                  let r <- api.GET(\"/health\", RequestHeaders.of([\"X-Trace: 1\"])) by Visitor                // ✓",
+        page: "/book/reference/testing",
+        anchor: "request-headers",
+    },
+    Explain {
+        code: "bynk.test.faults_needs_in_process",
+        blurb: "`expect <call> faults` claims that the handler throws. A request \
+                sent `by Nobody`, `Forged` or `Stale` is turned away by the auth \
+                seam, which exists only in a `system` case, and there a fault is \
+                never a throw but an error response. So the claim cannot hold. \
+                Assert the rejection in a `system` case instead, with `expect r is \
+                Rejected(Unauthorized)`.",
+        example: "// tests/api.test.bynk\n\
+                  expect api.GET(\"/a\") by Nobody faults     // ✗ a seam rejects, nothing throws\n\n\
+                  case \"no token is refused\" as system {    // ✓\n\
+                  \x20\x20\x20\x20let r <- api.GET(\"/a\") by Nobody\n\
+                  \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "faults",
+    },
+    Explain {
+        code: "bynk.test.forged_needs_system",
+        blurb: "`by Forged`, `by Stale` and the other bad-credential principals \
+                send a forged or out-of-date credential to the real auth seam, \
+                which only a `system` case reaches. In process the seam is skipped \
+                and the identity is simply given, so there is nothing to refuse. \
+                Move the case to `system` with `as system`. For `Nobody`, see \
+                `bynk.test.credential_needs_system`.",
+        example: "// tests/api.test.bynk\n\
+                  case \"a forged token is refused\" {            // ✗ not a system case\n\
+                  case \"a forged token is refused\" as system {  // ✓\n\
+                  \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
+                  \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.nobody_needs_secured_route",
+        blurb: "`by Nobody` sends no credential so that a route's auth seam \
+                answers `401`. A public route, guarded by `Visitor`, has no seam \
+                that refuses anyone, so the case would test nothing and is \
+                refused. Use `by Nobody` on a route guarded by a `Bearer`, `Oidc` \
+                or `Signature` actor, and act as `Visitor` on a public one. For \
+                the other failure principals, see \
+                `bynk.test.expired_needs_bearer_route`.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/health\") () -> Effect[HttpResult[Int]] by v: Visitor { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/health\") by Nobody     // ✗ a public route has no seam\n\
+                  let r <- api.GET(\"/health\") by Visitor    // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.principal_claims_not_oidc",
+        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
+                carries, which the handler reads and the actor's rules check. A \
+                `Bearer` actor's token holds an identity and nothing else, so \
+                there is no claim set to fill, and the argument is refused. Drop \
+                the claims, or test a route guarded by an `Oidc` actor. See \
+                `bynk.test.actor_no_identity` for the other extra argument.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a Bearer actor\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\")                                               // ✓",
+        page: "/book/reference/testing",
+        anchor: "token-claims",
+    },
+    Explain {
+        code: "bynk.test.principal_identity_mismatch",
+        blurb: "A handler guarded by an actor runs as that actor, so a case must \
+                act as it, with the identity type it declares. `by Visitor` \
+                carries no identity, so it cannot stand in for `User`, and an \
+                actor outside the handler's `by` sum is no member of it. Act as \
+                the actor the handler names. To exercise an unauthenticated \
+                request instead, use `by Nobody` in a `system` case.",
+        example: "// demo/api.bynk\n\
+                  actor User { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/a\") by Visitor        // ✗ the handler is `by u: User`\n\
+                  let r <- api.GET(\"/a\") by User(\"bob\")    // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
+    },
+    Explain {
+        code: "bynk.test.principal_on_wrong_method",
+        blurb: "A wrong-method test, such as `DELETE` on a path declared only for \
+                `GET`, expects the `405` the router returns before any handler is \
+                chosen. No handler runs, so there is no actor to act as, and a \
+                `by` clause would suggest otherwise. Drop the `by` clause. To test \
+                who may call a route, address a method it does declare.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.DELETE(\"/a\") by User(\"bob\")   // ✗ no handler runs\n\
+                  let r <- api.DELETE(\"/a\")                  // ✓\n\
+                  expect r is Rejected(MethodNotAllowed)",
+        page: "/book/reference/testing",
+        anchor: "testing-the-wrong-method-the-405-fall-through",
     },
     Explain {
         code: "bynk.test.service_bad_address",
@@ -3667,6 +3916,80 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
         page: "/book/reference/testing",
         anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.snapshot_in_property",
+        blurb: "A snapshot is keyed by its case and name, so it holds one value. A \
+                `property` runs its body once for each generated input, so there \
+                is no single value to store. Snapshot a fixed value in a `case`, \
+                and let the property assert what holds for every input.",
+        example: "// tests/api.test.bynk\n\
+                  property \"every n\" {\n\
+                  \x20\x20\x20\x20for all n: Int {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20expect run(n) matches snapshot \"n\"   // ✗ many inputs, one snapshot\n\
+                  \x20\x20\x20\x20}\n\
+                  }\n\n\
+                  case \"one n\" {\n\
+                  \x20\x20\x20\x20expect run(3) matches snapshot \"n\"       // ✓\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.snapshot_needs_unit_suite",
+        blurb: "A snapshot is stored in a file beside its unit suite and compared \
+                by the unit harness, so `matches snapshot` works only in a \
+                unit-tier `case` of a suite that tests a unit. A `system` case, or \
+                an integration or system suite, has no store to compare against. \
+                Take the snapshot in a unit case. See \
+                `bynk.test.snapshot_in_property` for the other place it is \
+                refused.",
+        example: "// tests/api.test.bynk\n\
+                  suite demo.api as system {\n\
+                  \x20\x20\x20\x20case \"one n\" {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20expect 3 matches snapshot \"n\"   // ✗ no snapshot store at `system`\n\
+                  \x20\x20\x20\x20}\n\
+                  }\n\n\
+                  suite demo.api {                             // ✓ a unit suite\n\
+                  \x20\x20\x20\x20case \"one n\" {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20expect 3 matches snapshot \"n\"\n\
+                  \x20\x20\x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.wire_http_only",
+        blurb: "`Wire(…)` delivers raw text to an http body or path segment. A \
+                queue message, a cron tick, an `on call` or an event has no raw \
+                text form: it is a typed value, and `Wire` would hand it to a \
+                typed decoder as a string and fail confusingly at run time. Pass \
+                the typed value. To drive an http route with raw text, see \
+                `bynk.test.wire_needs_system`.",
+        example: "// demo/api.bynk\n\
+                  service packer from queue(\"packing\") { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- packer.message(Wire(\"{}\"))   // ✗ a queue takes a typed message\n\
+                  let r <- packer.message(\"{}\")         // ✓",
+        page: "/book/reference/testing",
+        anchor: "driving-a-rejection-with-wire",
+    },
+    Explain {
+        code: "bynk.test.wire_needs_system",
+        blurb: "`Wire(…)` hands raw text to the real boundary, before any \
+                decoding, so that a case can check what the boundary refuses. Only \
+                a `system` case has a real boundary: below it the handler is \
+                called directly, and the text would go in unchecked. Promote the \
+                case with `as system`, or pass a typed value instead. For other \
+                addresses, see `bynk.test.wire_http_only`.",
+        example: "// tests/api.test.bynk\n\
+                  case \"raw text is refused\" {            // ✗ not a system case\n\
+                  case \"raw text is refused\" as system {  // ✓\n\
+                  \x20\x20\x20\x20let r <- api.POST(\"/n\", Wire(\"0\")) by Visitor\n\
+                  \x20\x20\x20\x20expect r is Rejected(RefinementViolation(_))\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "driving-a-rejection-with-wire",
     },
     Explain {
         code: "bynk.types.argument_mismatch",

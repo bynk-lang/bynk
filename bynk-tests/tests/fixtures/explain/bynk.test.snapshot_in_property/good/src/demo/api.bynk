@@ -1,0 +1,5 @@
+context demo.api
+
+fn run(n: Int) -> Int {
+  n
+}
