@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: An experimental `Postgres` instance kind in `bynk.cloudflare` reaches an existing Postgres database through Hyperdrive over postgres.js, with `all`, `first` and `run`, typed `PgValue` parameters and `PgError` outcomes
----
+# 0811 — Hyperdrive H1: a `Postgres` instance kind over postgres.js
 
-## ADR: hyperdrive-h1-postgres-instance-kind
-title: Hyperdrive H1: a `Postgres` instance kind over postgres.js
-summary: Variant names, how the driver reaches the binding, one connection per statement, and the SQLSTATE mapping
+- **Status:** Accepted (v0.556)
 
 **Context.** ADR 0799 settled the driver (postgres.js, pinned exactly), the value
 and error types and the row rules, and ADR 0808 built the first-party npm
