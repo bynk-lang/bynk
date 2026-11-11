@@ -2577,13 +2577,17 @@ imposed; entries keep the order they were retired in.
 
   **Observable changes the track accepted.** A stored value that no longer decodes faults when a
   handler first touches it, not on every call; a refined textual key faults when a scan reaches it,
-  not at load. Two `par`/`parTraverse` branches doing `get` then `put` on one key in separate
-  statements can lose an update, as on the single record before the track; single-call operations are
-  atomic per key.
+  not at load. Single-call operations on a key are atomic per key; two concurrent branches doing `get` then
+  `put` on one key in separate statements could lose an update, as on the single record before the
+  track, so the checker now refuses a store write inside a `par` block or a `parTraverse`-family
+  closure.
 
-  **Named follow-ons.** The checker rule refusing store writes in `parTraverse`-family closures
-  ([#3297](https://github.com/bynk-lang/bynk/issues/3297), [#3298](https://github.com/bynk-lang/bynk/issues/3298),
-  [ADR 0797](../decisions/0797-par-closure-store-write.md)). A plain `bynk deploy` preflight for a
+  **Also shipped alongside:** the checker rule refusing store writes inside `parTraverse`-family
+  closures ([#3297](https://github.com/bynk-lang/bynk/issues/3297),
+  [#3298](https://github.com/bynk-lang/bynk/issues/3298),
+  [ADR 0797](../decisions/0797-par-closure-store-write.md)).
+
+  **Named follow-ons.** A plain `bynk deploy` preflight for a
   layout rollback (the revert preflight covers `bynk deploy revert`). Streaming terminals over a scan, which
   still reads a collection in pages. Upkeep of the writer's vocabulary list when a collection kind is
   added.

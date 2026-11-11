@@ -184,10 +184,11 @@ group-by or an aggregate. Those read every entry in pages, so their cost still
 grows with the size of the collection. Each single operation on one key
 (`update`, `upsert`, `put`, `remove`) is atomic and runs one after another per key, so
 two concurrent branches' `update` or `upsert` calls on the same key both apply. A `get`
-followed by a separate `put` is two operations, and concurrent branches doing that on one
-key can still lose an update: use `update` or `upsert` for a read-modify-write
-([#3297](https://github.com/bynk-lang/bynk/issues/3297) tracks refusing the unsafe shape
-in a `parTraverse` closure).
+followed by a separate `put` is two operations, so the checker refuses a store write
+written inside a `par` block or a `parTraverse`-family closure
+([ADR 0797](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0797-par-closure-store-write.md)):
+use `update` or `upsert` for a read-modify-write, or move the write out of the
+concurrent form.
 
 A value stored the earlier way (the whole collection in one record), or a record a
 `migrate from` step still covers, is read whole and split into entries by its next
