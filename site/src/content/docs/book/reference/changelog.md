@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.549.4** | Every emitted Worker now targets compatibility date `2026-08-04`, with Node.js compatibility on by default, and the minimum `wrangler` is 4.120.1 (#3317) |
 | **v0.549.3** | `bynk explain` covers twelve more codes (`agents`, `effect`, `given`, `par`, `resolve`, `send` and `store` prefixes) |
 | **v0.549.2** | `bynk explain` explains eleven more codes that cross a unit boundary (boundary, capability options, consumes, context, exports, val, visibility) (Refs #3163) |
 | **v0.549.1** | `bynk explain` covers fifteen more `bynk.types.*` codes (patterns, lambdas, regexes, refinements, ordering and boundary types) |
