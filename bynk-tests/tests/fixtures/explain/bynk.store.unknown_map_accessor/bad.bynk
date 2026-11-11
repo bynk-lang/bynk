@@ -1,0 +1,13 @@
+context s
+
+type Item = { qty: Int }
+
+agent Shop {
+  key id: String
+
+  store items: Map[String, Item]
+
+  on call names() -> Effect[List[String]] {
+    items.names.collect()
+  }
+}

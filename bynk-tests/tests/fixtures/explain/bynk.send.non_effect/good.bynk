@@ -1,0 +1,8 @@
+commons demo
+
+fn total() -> Effect[()] { Effect.pure(()) }
+
+fn run() -> Effect[()] {
+  ~> total()
+  Effect.pure(())
+}
