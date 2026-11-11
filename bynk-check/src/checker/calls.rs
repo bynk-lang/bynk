@@ -2966,6 +2966,46 @@ fn record_kernel(
     result
 }
 
+/// #3277: type a method call on a handler's raw `cookies` (`RequestCookies`) and
+/// record its kernel op.
+fn check_request_cookies_call(
+    method: &Ident,
+    recv_ty: TyId,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let kop = RequestCookiesOp::from_name(&method.name);
+    let r = check_request_cookies_method(method, kop, args, span, ctx);
+    record_kernel(
+        ctx,
+        expr_id,
+        recv_ty,
+        kop.map(KernelOp::RequestCookies),
+        method,
+        r,
+    )
+}
+
+/// #3277: record and type `RequestCookies.of(…)` / `RequestCookies.empty()`.
+fn check_request_cookies_static_call(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    ctx.callees.insert(
+        expr_id,
+        Callee::Intrinsic {
+            ns: REQUEST_COOKIES,
+            op: method.name.clone(),
+        },
+    );
+    check_request_cookies_static(method, args, span, ctx)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
     receiver: &Expr,
@@ -3274,6 +3314,15 @@ pub(crate) fn check_method_call(
         );
         return check_request_query_static(method, args, span, ctx);
     }
+    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()`, the test-side
+    // way to build the raw cookies view a handler reads.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == REQUEST_COOKIES
+        && ctx.lookup(REQUEST_COOKIES).is_none()
+        && !ctx.input.types.contains_key(REQUEST_COOKIES)
+    {
+        return check_request_cookies_static_call(method, args, span, expr_id, ctx);
+    }
     // v0.22b: the typed JSON codec statics (ADR 0045).
     if let ExprKind::Ident(id) = &receiver.kind
         && id.name == JSON
@@ -3474,6 +3523,10 @@ pub(crate) fn check_method_call(
                 method,
                 r,
             );
+        }
+        // #3277: an HTTP handler's raw `cookies` — `get`, `all`, `names`.
+        Ty::RequestCookies => {
+            return check_request_cookies_call(method, recv_ty, args, span, expr_id, ctx);
         }
         // #2380 (L5): an `Oidc` binder's claims — `get`, `has`.
         Ty::TokenClaims => {

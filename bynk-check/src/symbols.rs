@@ -2510,6 +2510,7 @@ pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)

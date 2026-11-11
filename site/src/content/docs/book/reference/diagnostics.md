@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **813** codes in total.
+There are **815** codes in total.
 
 ## Agents
 
@@ -209,6 +209,7 @@ There are **813** codes in total.
 | `bynk.http.cookie_script_readable` | A cookie literal sets `httpOnly: false`, so page scripts can read it (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | [`bynk.http.cookie_secure_prefix`](/book/reference/http/#setting-cookies) | A `__Secure-` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookies_field_not_stringy`](/book/reference/http/#cookies) | A field of an HTTP handler's `cookies` record has a type a cookie cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.cookies_not_http` | A `RequestCookies` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookies_wrong_type`](/book/reference/http/#cookies) | An HTTP handler's `cookies` parameter is not a record type. |  | — |
 | `bynk.http.cors_invalid_field` | A `cors` policy field (`headers`/`credentials`/`maxAge`) has the wrong value shape. |  | — |
 | [`bynk.http.cors_invalid_origins`](/book/reference/http/#cors) | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
@@ -950,6 +951,7 @@ There are **813** codes in total.
 | [`bynk.types.record_pattern_on_non_record`](/book/reference/types/#record-patterns) | A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in). | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.types.regex_not_literal`](/book/reference/types/#regular-expressions) | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
+| `bynk.types.request_cookies_at_boundary` | `RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.request_query_at_boundary` | `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | [`bynk.types.return_mismatch`](/book/reference/types/) | A returned value does not match the declared return type. |  | — |
 | `bynk.types.rounding_mode_position` | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |

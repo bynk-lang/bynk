@@ -877,6 +877,12 @@ pub fn emit_worker_compose(
             crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.request_cookies() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::REQUEST_COOKIES_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.request_query() {
         append_missing_bindings(
             &mut runtime_imports,
@@ -2764,6 +2770,7 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
         TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_) => {}
         TypeRef::DecodeError(_) => {

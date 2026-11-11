@@ -51,11 +51,22 @@ agent Sessions {
 	}
 }
 
+// The session token the request's `__Host-sid` cookie carries, if it is one.
+fn session(cookies: RequestCookies) -> Option[Token] {
+	match cookies.get("__Host-sid") {
+		None => None,
+		Some(raw) => match Token.of(raw) {
+			Ok(token) => Some(token),
+			Err(_) => None,
+		},
+	}
+}
+
 service api from http {
 	// Log in: mint an unguessable token, store the session under it, and hand it
-	// to the browser in a cookie (`Secure`, `HttpOnly` and `SameSite=Lax` by
-	// default). A `__Host-` prefix would bind it to this origin, but a hyphenated
-	// name cannot be a record field yet, so the typed reader cannot name it.
+	// to the browser in a `__Host-` cookie (`Secure`, `HttpOnly` and `SameSite=Lax`
+	// by default, bound to this origin by the prefix: the compiler checks `secure`,
+	// `path: "/"` and no `domain`).
 	on POST("/sessions") (
 		body: LoginRequest
 	) -> Effect[HttpResult[String]] by Visitor given Random {
@@ -65,7 +76,7 @@ service api from http {
 			Ok(token) => {
 				do Sessions("default").login(token, body.user)
 				Created("ok").withCookie(Cookie {
-					name: "sid",
+					name: "__Host-sid",
 					value: text,
 					maxAge: Some(30.minutes),
 				})
@@ -74,9 +85,12 @@ service api from http {
 		}
 	}
 
-	// Who am I? The session cookie is read as a typed `cookies` record.
-	on GET("/me") (cookies: SessionCookies) -> Effect[HttpResult[UserId]] by Visitor {
-		match cookies.sid {
+	// A `__Host-` name cannot be a record field, so these handlers read the raw
+	// `RequestCookies` view and build their own `Token`, which checks the cookie
+	// against the same refinement the typed boundary would.
+	// Who am I? The session cookie names the live session.
+	on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[UserId]] by Visitor {
+		match session(cookies) {
 			None => Unauthorized,
 			Some(token) => {
 				let who <- Sessions("default").whoami(token)
@@ -89,12 +103,12 @@ service api from http {
 	}
 
 	// Log out: end the session and clear the cookie.
-	on POST("/logout") (cookies: SessionCookies) -> Effect[HttpResult[String]] by Visitor {
-		match cookies.sid {
+	on POST("/logout") (cookies: RequestCookies) -> Effect[HttpResult[String]] by Visitor {
+		match session(cookies) {
 			None => NoContent,
 			Some(token) => {
 				do Sessions("default").logout(token)
-				NoContent.clearCookie(Cookie { name: "sid", value: "" })
+				NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" })
 			},
 		}
 	}

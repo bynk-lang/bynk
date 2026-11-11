@@ -4,18 +4,18 @@
 # below 300 (or gone) must be removed. Prefer splitting a function to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
-bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1297
+bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1312
 bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1150
-bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1001
+bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1000
 bynk-driver/src/project.rs::run_checks = 955
-bynk-check/src/checker/calls.rs::check_method_call = 851
-bynk-emit/src/emitter/workers.rs::emit_worker_compose = 839
-bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 833
+bynk-check/src/checker/calls.rs::check_method_call = 864
+bynk-emit/src/emitter/workers.rs::emit_worker_compose = 845
+bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 836
 bynk-driver/src/test_runner.rs::run_test = 816
-bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 802
+bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 812
 bynk/src/deploy/plan.rs::run = 794
 bynk-driver/src/project.rs::build_output = 775
-bynk-check/src/resolver.rs::check_expr_references = 703
+bynk-check/src/resolver.rs::check_expr_references = 705
 bynk-emit/src/emitter/serialisation.rs::emit_generic_helpers_qualified = 687
 bynk-check/src/analysis.rs::analyse_project_inner = 666
 bynk-check/src/checker.rs::type_of = 659
@@ -36,7 +36,7 @@ bynk-check/src/context_checks.rs::check_agent_decls = 470
 bynk-syntax/src/parser/declarations.rs::parse_context_body = 468
 bynk-emit/src/emitter/lower.rs::lower_list_kernel = 458
 bynk-check/src/test_suites.rs::phase_integration_bodies = 455
-bynk-emit/src/emitter.rs::write_header = 439
+bynk-emit/src/emitter.rs::write_header = 446
 bynk-syntax/src/parser/expressions.rs::parse_primary = 438
 bynk-check/src/checker/calls.rs::check_test_service_address = 435
 bynk-check/src/checker/expressions.rs::check_match = 429
@@ -53,8 +53,8 @@ bynk/src/registry/conformance.rs::publishing = 375
 bynk/src/deploy/provisioning.rs::deploy_one = 371
 bynk-check/src/checker.rs::type_of_block = 370
 bynk-check/src/checker/expressions.rs::check_field_access = 363
+bynk-syntax/src/parser/types.rs::parse_type_atom = 362
 bynk-driver/src/project/tests_emit/test_deps.rs::emit_test_deps = 360
-bynk-syntax/src/parser/types.rs::parse_type_atom = 358
 bynk-emit/src/emitter/client.rs::emit_client = 351
 bynk-emit/src/emitter.rs::emit_boundary_helpers = 344
 bynk-syntax/src/parser/declarations.rs::parse_commons_body = 342

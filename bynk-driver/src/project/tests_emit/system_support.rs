@@ -1772,6 +1772,15 @@ fn cookie_header_texts(
         return (String::new(), String::new());
     };
     let var = bynk_emit::emitter::ts_ident(&p.name.name);
+    // #3277: the raw view sends the header text it was built from (a `Wire`
+    // string is the header text itself).
+    if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestCookies(_)) {
+        runtime_use.note_request_cookies();
+        let text = format!(
+            "\"cookie\": (typeof {var} === \"string\" ? {var} : __requestCookiesHeader({var})), "
+        );
+        return (text.clone(), text);
+    }
     runtime_use.note_cookie_string();
     let ser = bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
         &p.type_ref,

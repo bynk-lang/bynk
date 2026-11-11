@@ -2828,7 +2828,7 @@ fn lower_system_http_call(
                 // unconverted.
                 if matches!(
                     cx.commons().expr_ty(a.id).as_deref(),
-                    Some(Ty::RequestHeaders | Ty::RequestQuery)
+                    Some(Ty::RequestHeaders | Ty::RequestQuery | Ty::RequestCookies)
                 ) {
                     return lowered;
                 }
@@ -3675,6 +3675,24 @@ fn lower_runtime_value_static_call(
             _ => {}
         }
     }
+    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
+    // runtime's cookies view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_COOKIES)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_cookies();
+                return Some(format!("__requestCookies({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_cookies();
+                return Some("__requestCookies([])".to_string());
+            }
+            _ => {}
+        }
+    }
     // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
     // lowers to a host async iterable; `of` wraps a list as an async generator.
     // Emitted inline (no runtime import), like the collection kernels.
@@ -4377,7 +4395,10 @@ fn lower_kernel_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {
+            KernelOp::RequestHeaders(_)
+            | KernelOp::RequestQuery(_)
+            | KernelOp::RequestCookies(_)
+            | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
@@ -8158,6 +8179,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
