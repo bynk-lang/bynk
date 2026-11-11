@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret } from "../src/storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -263,4 +263,14 @@ test("InMemoryStorage: it counts operations so a test can assert I/O does not gr
     { reads: s.stats.reads, writes: s.stats.writes, lists: s.stats.lists, keysRead: s.stats.keysRead, keysWritten: s.stats.keysWritten },
     { reads: 1, writes: 1, lists: 1, keysRead: 1 + 11, keysWritten: 1 },
   );
+});
+
+// #3302: the integration tier's outbox keeps every builder and answers a
+// deterministic id; nothing leaves the process.
+test("makeIntegrationEmail keeps every builder in order and numbers its ids", async () => {
+  const mail = makeIntegrationEmail();
+  const first = await mail.send({ from: "a@x.example", to: ["b@y.example"], subject: "one" });
+  const second = await mail.send({ from: "a@x.example", to: ["c@y.example"], subject: "two" });
+  assert.deepEqual([first.messageId, second.messageId], ["test-message-1", "test-message-2"]);
+  assert.deepEqual(mail.sent.map((b) => b.subject), ["one", "two"]);
 });

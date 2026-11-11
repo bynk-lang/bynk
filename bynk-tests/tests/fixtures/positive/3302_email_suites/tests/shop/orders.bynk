@@ -1,0 +1,47 @@
+suite shop.orders
+
+case "a send needs no stub, is recorded and answers a deterministic id" {
+	let r <- receipts.call("buyer@example.com")
+	expect r == Ok("test-message-1")
+	expect Mail.send called once
+	expect Mail.send called with message.subject == "Receipt"
+}
+
+case "a stub forces an error" {
+	stub Mail.send(_) returns Err(SenderNotVerified)
+	let a <- receipts.call("buyer@example.com")
+	expect a is Err(SenderNotVerified)
+}
+
+case "a stub forces a platform refusal with a message" {
+	stub Mail.send(_) returns Err(SendFailed("down"))
+	let c <- receipts.call("buyer@example.com")
+	expect c is Err(SendFailed("down"))
+}
+
+case "fifty recipients pass and fifty-one fault" {
+	let ok <- fanout.call(false)
+	expect ok is Ok(_)
+	expect fanout.call(true) faults
+}
+
+case "a message with neither text nor html faults" {
+	expect empty.call() faults
+}
+
+case "a reserved header faults, whatever its case" {
+	expect tagged.call("Bcc", "evil@example.com") faults
+	expect tagged.call("reply-to", "evil@example.com") faults
+}
+
+case "a line break in a header name or value faults" {
+	expect tagged.call("X-Note", "a\r\nBcc: evil@example.com") faults
+	expect tagged.call("X-Note\nBcc: evil@example.com", "a") faults
+}
+
+case "a harmless header and an attachment pass" {
+	let a <- tagged.call("X-Order", "42")
+	expect a is Ok(_)
+	let b <- attaching.call()
+	expect b is Ok(_)
+}

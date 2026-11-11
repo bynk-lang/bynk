@@ -1,0 +1,11 @@
+context pay
+
+exports opaque { Status }
+
+type Status = | Paid | Declined
+
+service charge {
+  on call(amount: Int) -> Effect[Status] {
+    Effect.pure(Paid)
+  }
+}

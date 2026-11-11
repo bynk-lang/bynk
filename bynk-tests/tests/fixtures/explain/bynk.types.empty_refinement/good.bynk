@@ -1,0 +1,3 @@
+commons demo
+
+type Debt = Int where Positive && InRange(1, 10)

@@ -1,0 +1,6 @@
+commons demo
+
+fn next(n: Int) -> Int {
+  let x <- Effect.pure(n)
+  x
+}

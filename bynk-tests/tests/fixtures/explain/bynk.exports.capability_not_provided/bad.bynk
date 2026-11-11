@@ -1,0 +1,7 @@
+context clocks
+
+exports capability { Clock }
+
+capability Clock {
+	fn now() -> Effect[Int]
+}

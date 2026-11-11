@@ -451,6 +451,9 @@ pub enum OptionKind {
     PositiveInt,
     /// A `Duration` literal: `@period(60.seconds)`.
     Duration,
+    /// A list literal of string literals: `@allowedSenders(["a@b.example"])`
+    /// (#3302).
+    StrList,
 }
 
 /// The Worker binding prefix of a `Service` instance (interop I5, #1972):
@@ -523,6 +526,24 @@ pub const STORED_SECRET_STORE_OPTION: &str = "store";
 
 /// The option of a `StoredSecret` instance that names the secret in its store.
 pub const STORED_SECRET_SECRET_OPTION: &str = "secret";
+
+/// The Worker binding prefix of an `Email` instance (#3302):
+/// `capability Mail = Email @allowedSenders(["orders@shop.example"])` binds as
+/// `EMAIL_MAIL`, a `[[send_email]]` entry (keyed by `name`).
+pub const EMAIL_BINDING_PREFIX: &str = "EMAIL";
+
+/// The option of an `Email` instance that pins every message to one recipient
+/// (`destination_address`).
+pub const EMAIL_TO_OPTION: &str = "to";
+
+/// The option of an `Email` instance that lists the recipients it may send to
+/// (`allowed_destination_addresses`).
+pub const EMAIL_ALLOWED_RECIPIENTS_OPTION: &str = "allowedRecipients";
+
+/// The option of an `Email` instance that lists the senders it may send as
+/// (`allowed_sender_addresses`); `bynk deploy` checks each address's domain is
+/// verified for sending on the account (#3302 Decision D).
+pub const EMAIL_ALLOWED_SENDERS_OPTION: &str = "allowedSenders";
 
 /// The Worker binding of the `Version` capability (#3300): Cloudflare's
 /// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
@@ -620,6 +641,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersD1",
             "WorkersVersion",
             "WorkersStoredSecret",
+            "WorkersEmail",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -632,6 +654,7 @@ pub const UNITS: &[Unit] = &[
         // P3b (#2582): Analytics too, until a first-party service writes to it.
         // Version metadata (#3300) too, until a first-party service reports it.
         // Secrets Store (#3301) too, until a first-party service reads one.
+        // Outbound email (#3302) too: Email Service carries no GA label.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
         // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
@@ -646,13 +669,14 @@ pub const UNITS: &[Unit] = &[
             "Analytics",
             "Version",
             "StoredSecret",
+            "Email",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
             "Kv.putBytes",
             "Kv.listPage",
         ],
-        extensible: &["R2Condition", "KvExpiration", "SqlError"],
+        extensible: &["R2Condition", "KvExpiration", "SqlError", "EmailError"],
         instantiable: &[
             Instantiable {
                 capability: "Kv",
@@ -731,6 +755,23 @@ pub const UNITS: &[Unit] = &[
                 required: &[STORED_SECRET_STORE_OPTION, STORED_SECRET_SECRET_OPTION],
                 bare: false,
                 linked: true,
+            },
+            // #3302: every option is optional, but each use is a named
+            // instance (a bare `given Email` is refused, as for `Queue`), so a
+            // Worker's mail binding is always one the source names. Nothing is
+            // linked: the binding names no resource, and the deploy only
+            // *checks* each allowed sender's domain.
+            Instantiable {
+                capability: "Email",
+                binding_prefix: EMAIL_BINDING_PREFIX,
+                options: &[
+                    (EMAIL_TO_OPTION, OptionKind::Str),
+                    (EMAIL_ALLOWED_RECIPIENTS_OPTION, OptionKind::StrList),
+                    (EMAIL_ALLOWED_SENDERS_OPTION, OptionKind::StrList),
+                ],
+                required: &[],
+                bare: false,
+                linked: false,
             },
         ],
         // Version metadata (#3300): the running Worker version's id, tag and
@@ -1337,7 +1378,8 @@ mod tests {
                 ("bynk.cloudflare", "Analytics", "ANALYTICS"),
                 ("bynk.cloudflare", "D1", "D1"),
                 ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE"),
-                ("bynk.cloudflare", "StoredSecret", "SECRET")
+                ("bynk.cloudflare", "StoredSecret", "SECRET"),
+                ("bynk.cloudflare", "Email", "EMAIL")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1379,6 +1421,18 @@ mod tests {
             .map(|i| i.capability)
             .collect();
         assert_eq!(linked, ["StoredSecret"]);
+        // #3302: an email instance takes three optional options and is not
+        // linked.
+        let email = instantiable("bynk.cloudflare", "Email").expect("Email is instantiable");
+        assert_eq!(
+            email.option_names().collect::<Vec<_>>(),
+            ["to", "allowedRecipients", "allowedSenders"]
+        );
+        assert_eq!(
+            email.option_kind("allowedSenders"),
+            Some(OptionKind::StrList)
+        );
+        assert!(email.required.is_empty() && !email.bare && !email.linked);
         for u in UNITS {
             for i in u.instantiable {
                 assert!(
@@ -1429,6 +1483,7 @@ mod tests {
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
                 "bynk.cloudflare.StoredSecret",
+                "bynk.cloudflare.Email",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -1450,6 +1505,7 @@ mod tests {
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.cloudflare", "SqlError"),
+                ("bynk.cloudflare", "EmailError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

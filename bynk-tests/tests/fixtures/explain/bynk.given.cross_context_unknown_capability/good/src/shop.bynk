@@ -1,0 +1,9 @@
+context shop
+
+consumes clock { Clock }
+
+service tick {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

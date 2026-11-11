@@ -1,0 +1,6 @@
+commons demo
+
+fn count() -> Int {
+    let xs = []
+    xs.length()
+}

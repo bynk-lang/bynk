@@ -1521,6 +1521,8 @@ fn option_sample(option: &str) -> &'static str {
         "name" => "\"order-events\"",
         "store" => "\"payments\"",
         "secret" => "\"stripe-live\"",
+        "to" => "\"ops@shop.example\"",
+        "allowedRecipients" | "allowedSenders" => "[\"orders@shop.example\"]",
         _ => "\"legacy-billing\"",
     }
 }
@@ -4816,7 +4818,8 @@ fn Box.size(self) -> Int { 1 }
                 "Analytics",
                 "D1",
                 "EdgeCache",
-                "StoredSecret"
+                "StoredSecret",
+                "Email"
             ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
@@ -4843,6 +4846,8 @@ fn Box.size(self) -> Int { 1 }
         // A kind with no required option, or a line already carrying them,
         // gets nothing; nor does any other line.
         assert!(instance_declaration_completions("capability A = R2 ").is_empty());
+        // #3302: an `Email` has no required option, so offers none.
+        assert!(instance_declaration_completions("capability Mail = Email ").is_empty());
         assert!(instance_declaration_completions("capability Edge = EdgeCache ").is_empty());
         assert!(instance_declaration_completions("capability L = RateLimit @limit(1) ").is_empty());
         assert!(instance_declaration_completions("let x = R").is_empty());

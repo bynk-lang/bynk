@@ -1,0 +1,15 @@
+context a
+
+consumes b
+
+service base {
+	on call() -> Effect[Int] {
+		Effect.pure(2)
+	}
+}
+
+service total {
+	on call() -> Effect[Int] {
+		b.quote(2)
+	}
+}

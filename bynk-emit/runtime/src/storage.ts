@@ -975,3 +975,30 @@ export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStore
     },
   };
 }
+
+/**
+ * Cloudflare's `send_email` binding (#3302), which `WorkersEmail` calls with a
+ * message builder. It resolves to the platform's message id, or rejects with an
+ * `Error` carrying a `code` (`E_SENDER_NOT_VERIFIED`, …). A builder holds
+ * message bodies and attachment content, so nothing that holds one may log it.
+ */
+export interface SendEmail {
+  send(builder: Record<string, unknown>): Promise<{ messageId: string }>;
+}
+
+/**
+ * The `send_email` binding of a multi-Worker integration test participant,
+ * bound as its `env.<binding>`: an in-memory outbox. Every builder is kept (in
+ * `sent`, in order) and answered with a deterministic id, so a test reads what
+ * was sent and no mail leaves the process.
+ */
+export function makeIntegrationEmail(): SendEmail & { sent: Record<string, unknown>[] } {
+  const sent: Record<string, unknown>[] = [];
+  return {
+    sent,
+    async send(builder: Record<string, unknown>): Promise<{ messageId: string }> {
+      sent.push(builder);
+      return { messageId: `test-message-${sent.length}` };
+    },
+  };
+}

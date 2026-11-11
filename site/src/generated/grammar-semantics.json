@@ -185,7 +185,7 @@
     },
     {
       "code": "bynk.capability.invalid_option",
-      "summary": "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`)."
+      "summary": "A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`)."
     },
     {
       "code": "bynk.capability.missing_option",
@@ -513,7 +513,7 @@
     },
     {
       "code": "bynk.resolve.unconsumed_context",
-      "summary": "A context's service was called without a `consumes` declaration."
+      "summary": "A context's service was called, or its capability named in `given`, without a `consumes` declaration."
     },
     {
       "code": "bynk.target.vendor_conflict",
@@ -871,7 +871,7 @@
     },
     {
       "code": "bynk.given.cross_context_unknown_capability",
-      "summary": "`given B.Cap` names a capability the consumed context does not export."
+      "summary": "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export."
     },
     {
       "code": "bynk.given.fn_outside_context",
@@ -1765,7 +1765,7 @@
     },
     {
       "code": "bynk.uses.name_conflict",
-      "summary": "A `uses` name collides with another name, a value crosses between a unit's code and an imported declaration's position whose type the unit shadows, or a reference names an import the unit's own declaration shadows."
+      "summary": "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
     },
     {
       "code": "bynk.uses.self_reference",

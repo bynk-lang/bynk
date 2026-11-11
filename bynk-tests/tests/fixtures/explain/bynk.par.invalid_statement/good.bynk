@@ -1,0 +1,16 @@
+context demo
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+service dash {
+  on call(id: Int) -> Effect[Int] given Users {
+    let b = 1
+    par {
+      let a <- Users.get(id)
+      let c <- Users.get(b)
+    }
+    Effect.pure(0)
+  }
+}

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.548**.
+written against **v0.549**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,13 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.549.3** | `bynk explain` covers twelve more codes (`agents`, `effect`, `given`, `par`, `resolve`, `send` and `store` prefixes) |
+| **v0.549.2** | `bynk explain` explains eleven more codes that cross a unit boundary (boundary, capability options, consumes, context, exports, val, visibility) (Refs #3163) |
+| **v0.549.1** | `bynk explain` covers fifteen more `bynk.types.*` codes (patterns, lambdas, regexes, refinements, ordering and boundary types) |
+| **v0.549.0** | `bynk.cloudflare.Email` (experimental) sends mail through Email Service from a named instance, with typed send errors; `bynk deploy` checks each `@allowedSenders` domain and never configures one |
+| **v0.548.5** | `bynk explain` examples may span several files, and four more codes are explained with them (`uses.name_conflict`, `visibility.private_item`, `opaque_inspection`, `capability.invalid_option`) |
+| **v0.548.4** | The language server's per-file reuse digest hashes each shared declaration once per analysis round instead of once per file, trimming a warm editor round by about 9% on a 200-context project |
+| **v0.548.3** | `bynk explain` gains compiled explanations for the held-value leak and use-after-consume, `par` statement, constant initialiser and cycle, reserved built-in type name, store operation and plain-JSON nested `Option` errors |
 | **v0.548.2** | `bynk explain` covers twelve more `bynk.types.*` codes, among them comparison and ordering, arity, patterns, field defaults and regexes |
 | **v0.548.1** | `bynk explain` now explains seven more codes (the effect, generics and given rules), each with a compiled bad/good example, and the `unknown_constraint` summary lists all four constraints (#3163) |
 | **v0.548.0** | `bynk.cloudflare.StoredSecret` (experimental) reads one Secrets Store secret through a named instance; `bynk deploy` links the store and the secret and never creates them |

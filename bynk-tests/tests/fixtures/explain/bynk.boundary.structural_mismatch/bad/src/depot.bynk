@@ -1,0 +1,11 @@
+context depot
+
+consumes shop
+
+type Box = { label: String }
+
+service pack {
+	on call() -> Effect[Int] {
+		shop.weigh(Box { label: "a" })
+	}
+}

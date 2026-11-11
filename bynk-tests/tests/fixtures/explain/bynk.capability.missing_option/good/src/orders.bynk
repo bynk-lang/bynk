@@ -1,0 +1,11 @@
+context orders
+
+consumes bynk.cloudflare { Queue }
+
+capability OrderEvents = Queue @name("order-events")
+
+service probe {
+	on call() -> Effect[Int] {
+		Effect.pure(0)
+	}
+}

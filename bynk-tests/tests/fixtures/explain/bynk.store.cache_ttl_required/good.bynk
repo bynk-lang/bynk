@@ -1,0 +1,11 @@
+context demo
+
+agent Sessions {
+  key id: String
+
+  store live: Cache[String, Int] @ttl(5.minutes)
+
+  on call size() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}

@@ -71,6 +71,14 @@ pub struct Explain {
     /// marked `✗` and the corrected one `✓` in a trailing comment. Written to be
     /// read, so it may elide with `…`; `bynk-tests`' `explain_examples.rs` holds
     /// every line of it to a compiled pair of whole programs (#3163).
+    ///
+    /// An example that spans files says which one each snippet is in with a
+    /// comment-only line holding just a path: `// shop.bynk`, the file's path
+    /// under the project's `src/` (`// shop/till.bynk` if nested), or
+    /// `// bynk.toml`. The label applies until the next, and the gate holds each
+    /// line under it to that file (the bad project's if marked `✗`, the good
+    /// project's if `✓`, either's if unmarked). A label must name a file of the
+    /// fixture, and only a directory-form fixture may use one.
     pub example: &'static str,
     /// The target Book page as a site-root-relative path, no extension and no
     /// trailing slash, e.g. `/book/reference/types`. Used verbatim as an
@@ -112,8 +120,17 @@ impl Explain {
 /// newcomer-facing codes first). Kept sorted by code; every `code` must be a
 /// real [`REGISTRY`] entry and every `page` an existing Book page — both
 /// enforced by `tests/diagnostics_registry.rs`. Every `example` needs its
-/// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`.
+/// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`: `bad.bynk`
+/// and `good.bynk`, or, for a rule that needs a second unit or a `bynk.toml`,
+/// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
+    Explain {
+        code: "bynk.agents.bad_state_initialiser",
+        blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
+        example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
+        page: "/book/reference/agents",
+        anchor: "state-initialisation",
+    },
     Explain {
         code: "bynk.agents.non_zeroable_state_field",
         blurb: "A key that has never been used is initialised automatically the first time it is \
@@ -132,6 +149,36 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "state-initialisation",
     },
     Explain {
+        code: "bynk.boundary.structural_mismatch",
+        blurb: "A value that crosses a context boundary, as an argument to a consumed context's \
+                service or as its result, is matched by shape, not by name. So where both \
+                contexts declare a `Box`, the two must have the same shape, or the value is not \
+                a `Box` on the other side. Give them the same fields, or rename one so the names \
+                stop meeting. A type both sides need can live in a `commons` that each `uses`.",
+        example: "// shop.bynk\n\
+                  context shop\n\
+                  \n\
+                  type Box = { weight: Int }\n\
+                  \n\
+                  service weigh {\n    on call(b: Box) -> Effect[Int] { … }\n\
+                  }\n\
+                  \n\
+                  // depot.bynk\n\
+                  context depot\n\
+                  \n\
+                  consumes shop\n\
+                  \n\
+                  type Box = { label: String }\n\
+                  \n\
+                  shop.weigh(Box { label: \"a\" })        // ✗ a `depot` `Box` is not shaped like `shop`'s\n\
+                  \n\
+                  type Box = { weight: Int }\n\
+                  \n\
+                  shop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
+        page: "/book/reference/refined-types",
+        anchor: "across-a-context-boundary",
+    },
+    Explain {
         code: "bynk.capability.instance_only",
         blurb: "A few platform capabilities (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, \
                 `D1` and `EdgeCache`) are never used as the bare kind. Each stands for a \
@@ -148,6 +195,69 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.capability.invalid_option",
+        blurb: "A derived capability, `capability Name = Kind`, can take options after the kind, each \
+                one positional literal that the compiler reads while it checks the program: \
+                `Service` takes `@worker(\"name\")`, `R2` an optional `@jurisdiction(\"eu\")`, \
+                `RateLimit` a `@limit(n)` and a `@period(d)`, and `Queue` a `@name(\"queue\")`. \
+                The value must be a literal of the option's kind, and one the platform accepts: \
+                `@limit` a positive `Int`, `@period` `10.seconds` or `60.seconds`, \
+                `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@worker` a Worker name and `@name` a \
+                queue name, each of 1 to 63 lowercase letters, digits and `-` (a Worker name \
+                may also hold `_`). Each option is given once, and an `@worker` must name a Worker \
+                outside the project, since a context of your own is reached with `consumes`. A bad \
+                value would otherwise surface only when the platform refuses the deployment, so \
+                it is refused here. Use one of the values the note lists. `RateLimit` is \
+                experimental, so the project opts in under `[unstable]` in `bynk.toml`.",
+        example: "// bynk.toml\n\
+                  [unstable]\n\
+                  allow = [\"bynk.cloudflare.RateLimit\"]\n\n\
+                  // login.bynk\n\
+                  context login\n\n\
+                  consumes bynk.cloudflare { RateLimit }\n\n\
+                  capability LoginLimit = RateLimit @limit(20) @period(30.seconds)    // ✗ a window is 10 or 60 seconds\n\
+                  capability LoginLimit = RateLimit @limit(20) @period(60.seconds)    // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.capability.missing_option",
+        blurb: "A derived capability, `capability Name = Kind`, takes its configuration from \
+                options after the kind, and some kinds cannot work without them: a `Service` \
+                needs the Worker it reaches, `@worker(…)`, a `Queue` its `@name(…)`, a \
+                `RateLimit` its `@limit(…)` and `@period(…)`, and a `StoredSecret` its \
+                `@store(…)` and `@secret(…)`. There is no default. Write the options the note \
+                shows. A value the platform would refuse is `bynk.capability.invalid_option`; an \
+                option the kind does not take is `bynk.capability.unknown_option`.",
+        example: "// bynk.toml\n\
+                  [unstable]\n\
+                  allow = [\"bynk.cloudflare.Queue\"]\n\
+                  \n\
+                  // orders.bynk\n\
+                  context orders\n\
+                  \n\
+                  consumes bynk.cloudflare { Queue }\n\
+                  \n\
+                  capability OrderEvents = Queue                        // ✗ a queue must be named\n\
+                  capability OrderEvents = Queue @name(\"order-events\")  // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.capability.unknown_option",
+        blurb: "An option after the kind in `capability Name = Kind @option(…)` must be one that \
+                kind takes: `Service` takes `@worker`, `R2` `@jurisdiction`, `RateLimit` \
+                `@limit` and `@period`, `Queue` `@name`, and `StoredSecret` `@store` and \
+                `@secret`, while `Kv`, `Analytics`, `D1` and `EdgeCache` take none. One the kind \
+                does not take is refused rather than ignored, since it is probably a misspelling \
+                or the wrong kind. Drop it, or use one of the options the note lists. An option \
+                that is known but has a bad value is `bynk.capability.invalid_option`.",
+        example: "capability Sessions = Kv @ttl          // ✗ `Kv` instances take no options\n\
+                  capability Sessions = Kv               // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -159,6 +269,144 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
+    },
+    Explain {
+        code: "bynk.consumes.name_conflict",
+        blurb: "`consumes payment` brings every type that `payment` exports into scope under its \
+                own name, because the services' signatures use them. If this context already has \
+                something of that name, a type declared here or reached through `uses`, or a \
+                function, asset, service, agent or provider, a mention would mean two things, so \
+                the compiler refuses the clause. Rename the imported type with `as`: it is then \
+                in scope only under the alias, and is still the same type. \
+                `bynk.consumes.type_alias_conflict` is the same clash with an alias.",
+        example: "// payment.bynk\n\
+                  context payment\n\
+                  \n\
+                  exports transparent { Amount }\n\
+                  \n\
+                  // money.bynk\n\
+                  commons money\n\
+                  \n\
+                  type Amount = Int where NonNegative\n\
+                  \n\
+                  // orders.bynk\n\
+                  context orders\n\
+                  \n\
+                  uses money\n\
+                  consumes payment                           // ✗ `Amount` is also in scope from `money`\n\
+                  consumes payment { Amount as PayAmount }   // ✓ `PayAmount` is `payment`'s",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.context.consumes_cycle",
+        blurb: "Contexts may not form a circle of `consumes` clauses, whether directly or \
+                through others. `bynk deploy` takes the order in which to upload the Workers \
+                from the `consumes` clauses, because Cloudflare resolves a Service Binding when \
+                a Worker is uploaded and so the callee must already exist; a cycle has no such \
+                order. The error names the cycle and sits on one of its clauses. Remove one \
+                clause: usually the callee takes what it needs as an argument instead of calling \
+                back. Logic both contexts need can move into a `commons` that each `uses`.",
+        example: "// a.bynk\n\
+                  context a\n\
+                  \n\
+                  consumes b                       // ✗ `a` and `b` consume each other (reported on one clause)\n\
+                  \n\
+                  // b.bynk\n\
+                  context b\n\
+                  \n\
+                  consumes a                       // ✗\n\
+                  \n\
+                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)\n    }\n\
+                  }",
+        page: "/book/guides/projects-build-and-deployment/deploy-to-cloudflare",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.context.external_construction",
+        blurb: "A context that `consumes` another may hold and pass on the other's types, but \
+                may not build one. A refined or opaque type can promise an invariant, a \
+                `Matches` pattern or a smart constructor, and that holds only if every value is \
+                made by the owner; `.of`, `.unsafe` and a variant constructor are refused from \
+                outside, as is the record syntax of an opaque type. Ask the owner for the value \
+                instead: a service that returns it, or takes the plain input and does the check. \
+                `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+        example: "// payment.bynk\n\
+                  context payment\n\
+                  \n\
+                  exports transparent { AuthId }\n\
+                  \n\
+                  type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
+                  \n\
+                  service issue {\n    on call() -> Effect[AuthId] { … }\n\
+                  }\n\
+                  \n\
+                  // orders.bynk\n\
+                  context orders\n\
+                  \n\
+                  consumes payment\n\
+                  \n\
+                  AuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\
+                  \n\
+                  payment.issue()          // ✓ ask `payment` for one",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.context.external_decode",
+        blurb: "Decoding creates a value, and a context may not create one of a type another \
+                context owns and exports opaque. A decoder would check no more than the base \
+                type, because the owner's predicate is the owner's secret. So a handler that \
+                takes such a type as its input (an HTTP, queue, event or WebSocket handler \
+                decodes it from bytes), and a `Json.decode`, `Json.decodeSql` or `Codable` \
+                witness of it, are refused. Take the plain form of the input and let the owner's \
+                service make the value. A reply from the owner's own service is fine: its decode \
+                is generated.",
+        example: "// pay.bynk\n\
+                  context pay\n\
+                  \n\
+                  exports opaque { Token }\n\
+                  \n\
+                  type Token = opaque String where Matches(\"T-[0-9]+\")\n\
+                  \n\
+                  // shop.bynk\n\
+                  context shop\n\
+                  \n\
+                  consumes pay\n\
+                  \n\
+                  service api from http {\n    on POST(\"/t\") (body: Token) -> Effect[HttpResult[String]] by v: Visitor {     // ✗ `Token` cannot be decoded here\n    on POST(\"/t\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {    // ✓ take the plain input",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.context.opaque_inspection",
+        blurb: "A context that writes `exports opaque { T }` lets other contexts hold a `T`, pass it on and \
+                call its methods, but not look inside it: they cannot `match` on it, read a field, \
+                match a record pattern against it, or name one of its variants. Only the owning \
+                context sees the shape, so it can change the representation, or keep an invariant \
+                the type's constructors enforce, without breaking a consumer. Ask the owner for \
+                what you need instead: a service that returns the answer as a plain value, such as \
+                a `Bool`. If the shape is meant to be public, the owner exports it with \
+                `exports transparent { T }`.",
+        example: "// pay.bynk\n\
+                  context pay\n\n\
+                  exports opaque { Status }        // the owner hides the shape\n\n\
+                  type Status = | Paid | Declined\n\n\
+                  // shop.bynk\n\
+                  context shop\n\n\
+                  consumes pay\n\n\
+                  service checkout {\n    on call() -> Effect[Bool] {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n\
+                  // pay.bynk\n\
+                  exports transparent { Status }   // ✓ the owner shares the shape",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.effect.bind_in_pure_context",
+        blurb: "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
+        example: "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "",
     },
     Explain {
         code: "bynk.effect.fn_value_in_pure_context",
@@ -200,6 +448,24 @@ pub const EXPLANATIONS: &[Explain] = &[
                     Effect.pure(())\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.exports.capability_not_provided",
+        blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
+                built for them, so the exporting context must also say how: a `provides Clock = \
+                … { … }` declaration. Without one, a consumer would hold a capability that \
+                nothing in the project can instantiate. Add the provider. (A derived capability, \
+                `capability Name = Kind`, cannot be exported at all; that is \
+                `bynk.exports.derived_capability`.)",
+        example: "exports capability { Clock }       // ✗ nothing provides `Clock`\n\
+                  \n\
+                  capability Clock {\n    fn now() -> Effect[Int]\n\
+                  }\n\
+                  \n\
+                  provides Clock = Fixed {           // ✓\n    fn now() -> Effect[Int] { … }\n\
+                  }",
+        page: "/book/guides/effects-and-capabilities/share-across-contexts",
+        anchor: "export-the-capability-from-the-providing-context",
     },
     Explain {
         code: "bynk.generics.method_on_generic_type",
@@ -364,6 +630,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "bounds",
     },
     Explain {
+        code: "bynk.given.cross_context_unknown_capability",
+        blurb: "A context may only depend on a capability that the context providing it exports. `exports capability { … }` is the provider's decision about what it offers other contexts, and a capability it leaves out stays its own. So `consumes clock { Clock }`, or a qualified `given clock.Clock`, is refused when `clock` does not list `Clock`. Add the name to the provider's `exports capability` clause (it must declare and provide the capability), or correct the spelling here. A context that is not consumed at all is `bynk.resolve.unconsumed_context`.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes clock { Clock }   // ✗ `clock` exports no `Clock`\n\n\
+                  // clock.bynk\ncontext clock\n\nexports capability { Clock }   // ✓ the provider offers it",
+        page: "/book/reference/capabilities",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.given.fn_unsupported",
+        blurb: "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
+        example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "capabilities-in-functions",
+    },
+    Explain {
         code: "bynk.given.missing_for_call",
         blurb: "A free function in a context may declare `given`, and then uses those capabilities as a handler \
                 does. Because a `given` clause is the honest statement of everything a body can reach, a \
@@ -427,6 +708,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sending-and-broadcasting",
     },
     Explain {
+        code: "bynk.held.leak",
+        blurb: "A held value such as a `Connection[F]` has one owner, who must dispose of it before its scope ends: close it, store it (in a `Map[K, Connection[F]]` or a `Cell[Option[Connection[F]]]`), or pass it to a function or agent call that takes it. A dropped connection would stay open with nothing able to close it. The error is reported at the binding: a handler or function parameter, or a `let`. The connection `on open` receives is owned; the one `on message` and `on close` receive is only lent, so it carries no such duty. See `bynk.held.use_after_consume` (used after disposal) and `bynk.held.consume_on_borrow` (disposed of while borrowed).",
+        example: "fn ignore(c: Connection[ServerFrame]) -> Effect[()] {   // ✗ `c` is never closed, stored or passed on\n  Effect.pure(())\n}\n\nfn finish(c: Connection[ServerFrame]) -> Effect[()] {   // ✓\n  c.close()\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.held.use_after_consume",
+        blurb: "Closing, storing or passing on a held value such as a `Connection[F]` hands its single ownership away, and after that the name no longer refers to anything you may use. A later `send`, a second `close`, or any other mention of the binding is an error, reported on that later use, because the connection may already be closed or owned by someone else. Only `send` leaves a connection owned, so do every `send` first and dispose of the connection last. `bynk.held.leak` is the other end of the same rule (never disposed), and `bynk.held.consume_on_borrow` is the case where the code never owned the connection to begin with.",
+        example: "let _ <- c.close()\nlet _ <- c.send(ServerFrame { text: \"bye\" })   // ✗ `c` was closed on the line above\n\nlet _ <- c.send(ServerFrame { text: \"bye\" })   // ✓ send first\nlet _ <- c.close()",
+        page: "/book/reference/websocket",
+        anchor: "sending-and-broadcasting",
+    },
+    Explain {
         code: "bynk.http.error_status_position",
         blurb: "An `ErrorStatus` name such as `Forbidden` stands for a status only as \
                 `RawError`'s first argument, where the compiler turns it into the \
@@ -453,6 +748,27 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.json.nested_option_plain",
+        blurb: "Plain JSON writes `Some(v)` as `v` and `None` as `null`, so it can only be read back if `v` is never itself `null`. In an `Option[Option[T]]` or an `Option[()]`, `Some(None)` and `None` (or `Some(())` and `None`) would both be written `null`, and the decoder could not tell them apart. The compiler refuses the type wherever plain encoding is asked for: in the response type of a route whose `json { options: plain }` or `@json(options: plain)` applies, or in the argument of `Json.encodePlain`, through records, sums, containers and generic arguments alike. The tagged form, which `Json.encode` and a route's default use, writes `Option` as `{\"kind\":\"Some\",\"value\":…}` and has no such ambiguity. Either flatten the type, model the distinction as a sum type, or keep that route tagged.",
+        example: "type Row = { id: String, note: Option[Option[String]] }\n\non GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ `Some(None)` and `None` both write `null`\n\ntype Row = { id: String, note: Option[String] }   // ✓",
+        page: "/book/reference/types",
+        anchor: "plain-json",
+    },
+    Explain {
+        code: "bynk.par.invalid_statement",
+        blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
+        example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "par",
+    },
+    Explain {
+        code: "bynk.par.sibling_name",
+        blurb: "The bindings in a `par { … }` block run together, so none can read the result of another: there is no order in which one could be given the other's value. A binding that mentions a name a sibling binds is refused, even where an outer binding of that name exists, so a stale value is never picked up silently. Binding one name twice in a block is refused as well, since later code could not tell which result is meant. Move the dependent binding after the block, where every name is in scope, or rename.",
+        example: "par {\n    let a <- Effect.pure(1)\n    let b <- Effect.pure(a + 1)   // ✗ `a` is bound by a sibling\n}\n\npar {\n    let a <- Effect.pure(1)\n    let c <- Effect.pure(2)\n}\nlet b <- Effect.pure(a + 1)   // ✓ after the block, `a` is in scope",
+        page: "/book/reference/capabilities",
+        anchor: "par",
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
@@ -579,6 +895,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.arity_mismatch",
+        blurb: "A call to a declared `fn` must pass exactly as many arguments as it has parameters. Bynk has no optional or variadic parameters and fills nothing in, so a missing or extra argument is always a mistake, and the compiler cannot tell which one was meant. Add or remove the argument, or change the declaration. The error points at the call and labels the declaration. A call through a function value or a built-in operation is `bynk.types.call_arity`, and a method is `bynk.types.method_arity`.",
+        example: "fn double(x: Int) -> Int {\n    x * 2\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a, b)             // ✗ `double` takes one argument\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a) + double(b)    // ✓ one argument each call\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.bad_const_initialiser",
+        blurb: "A constant's value is fixed when its module loads, so its initialiser must be static: a literal, a `Duration` literal, a record, list or variant built from static values, `Some`/`None`/`Ok`/`Err`, `T.unsafe(lit)`, an empty `List`/`Map`/`Set`, or another constant. A function call (even a pure one), an operator, an interpolated string, a field access, a lambda, `if` and `match` are not. The code is also reported when a static value is not of the declared type. Write the value out, or make it a `fn` and call it where it is used.",
+        example: "fn base() -> Int {\n  10\n}\n\nconst Limit: Int = base()   // ✗ a call is not a static value\n\nconst Limit: Int = 10   // ✓",
+        page: "/book/reference/constants",
+        anchor: "what-an-initialiser-may-be",
+    },
+    Explain {
+        code: "bynk.resolve.const_cycle",
+        blurb: "Constants may refer to each other in any order, across files and through `uses`, but a value cannot depend on itself: in a cycle no member has anything to start from. The error lists the cycle (`First` → `Second` → `First`) and is reported once, at the member declared first. Break the cycle by giving one member a literal or other static value. A reference such as `Second` is itself a static initialiser, so this is the only rule that limits constants naming each other; `bynk.resolve.bad_const_initialiser` covers initialisers that are not static at all.",
+        example: "const First: Int = Second   // ✗ `First` → `Second` → `First`\nconst Second: Int = First\n\nconst Second: Int = 10   // ✓ end the chain at a literal",
+        page: "/book/reference/constants",
+        anchor: "what-an-initialiser-may-be",
+    },
+    Explain {
+        code: "bynk.resolve.const_name_case",
+        blurb: "A constant is named in upper-camel case, a capital letter and then letters, digits or `_`, like a variant, so that a constant reads differently from a binding wherever it is used. The grammar accepts any identifier here and leaves the case to the checker, so a lower-case name is reported with a suggested spelling instead of failing to parse. Rename it, and every use of it: `MaxRetries`, not `maxRetries`.",
+        example: "const maxRetries: Int = 3   // ✗ a constant's name starts with a capital\n\nconst MaxRetries: Int = 3   // ✓",
+        page: "/book/reference/constants",
+        anchor: "declaring-a-constant",
+    },
+    Explain {
         code: "bynk.resolve.duplicate_type",
         blurb: "A unit declares two types, or a type and an event, with the same name. A unit's top-level \
                 declarations share one scope in the emitted module, so a name can mean only one thing, \
@@ -617,6 +961,28 @@ pub const EXPLANATIONS: &[Explain] = &[
                   const Limit: Int = 3         // ✓ once the function is renamed `limit`",
         page: "/book/spec/static-semantics",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.recursive_record_field",
+        blurb: "A record cannot contain itself through record fields alone, whether directly (`next: Node` in `Node`) or round a cycle (`A` has a `B`, which has an `A`). A value of such a type could never be built, since making one needs one already, and the compiler could not synthesise the default value it needs for one. A cycle through an `Option`, `List`, `Map` or a sum type is fine, because that position can hold a value that ends the chain. Wrap one field in the cycle in `Option[…]`.",
+        example: "type Node = { value: Int, next: Node }   // ✗ a `Node` would need a `Node`\n\ntype Node = { value: Int, next: Option[Node] }   // ✓ `None` ends the chain",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.reserved_builtin_type",
+        blurb: "The compiler knows a few type names itself, and the type parser reads each one as the built-in wherever it appears in a type. A `type` declaration that reused one would be shadowed at every use, or fail confusingly there, so the declaration is refused. The names are `Asset`, `BoundaryRejection`, `Connection`, `History`, `HttpResult`, `List`, `Map`, `Query`, `QueueResult`, `RequestHeaders`, `RequestQuery`, `Set`, `Stream` and `TokenClaims`. Rename the type. They are reserved in type position only, so a value may still use the word. A constant with such a name is `bynk.resolve.name_conflict` instead, and the base types and words such as `Result` are keywords that the parser refuses earlier.",
+        example: "type Set = { items: List[Int] }   // ✗ `Set` is the built-in set type\n\ntype IntSet = { items: List[Int] }   // ✓",
+        page: "/book/reference/keywords",
+        anchor: "built-in-type-names",
+    },
+    Explain {
+        code: "bynk.resolve.unconsumed_context",
+        blurb: "A call such as `platform.pay.charge(1)` reaches into another context, and a context may only do that to one it has declared with `consumes`. The declaration is what makes a dependency between contexts visible and checked, instead of a name that happens to resolve. The same code is reported for a `given platform.pay.Cap` whose context is not consumed. Add `consumes platform.pay` (with an alias, if you want to call it by another name) at the top of the calling context. A consumed context that does not export a capability is `bynk.given.cross_context_unknown_capability`.",
+        example: "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\n\
+                  context app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
     },
     Explain {
         code: "bynk.resolve.unknown_field",
@@ -682,6 +1048,35 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn greet(u: User) -> String { … }  // ✓ the declared type",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.send.in_agent_handler",
+        blurb: "`~>` starts an effect and lets the handler carry on, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So the send is refused, and so is one inside a closure there. Await it instead, with `do` for an `Effect[()]` or `let _ <-`, or move the send to the service handler that calls the agent. A `~>` of a store operation is `bynk.send.store_op`.",
+        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")      // ✗ an agent handler cannot send\n    do count.update((n) => n + 1)\n}\n\n\
+                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\")      // ✓ awaited, so it finishes with the handler\n    do count.update((n) => n + 1)\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.store.cache_ttl_required",
+        blurb: "A `Cache` is a keyed store whose entries expire, so it needs `@ttl(<duration>)`, how long an entry lives. Without an expiry it would only be a `Map`. The argument must be a `Duration` literal such as `5.minutes`; a bare number (`@ttl(5)`) or a computed value is refused too, because the lifetime has to be known when the program compiles. Add the annotation, or declare a `Map` if entries should be kept until removed.",
+        example: "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓",
+        page: "/book/reference/agents",
+        anchor: "storage-annotations",
+    },
+    Explain {
+        code: "bynk.store.unkeyable_key",
+        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
+        example: "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
+    },
+    Explain {
+        code: "bynk.store.unknown_op",
+        blurb: "A `store` field's methods are its storage operations, which are effectful (await with `<-`), and each kind has a fixed set. `Map` and `Cache` take `put`, `get`, `update`, `upsert`, `remove`, `contains` and `size` (a `Map` also takes query operations); `Set` takes `add`, `remove`, `contains` and `size`; a `Cell` takes only `update`, being read by name and written with `:=`; a `Log` takes `append` and lazy query reads. Any other name is refused, even one the same type has as a plain value. For a read-modify-write use `update`, or `upsert` when the key may be absent. A wrong key query (`.entries`, `.keys`, `.values`) is `bynk.store.unknown_map_accessor`.",
+        example: "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
     },
     Explain {
         code: "bynk.types.argument_mismatch",
@@ -779,6 +1174,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "built-in-generic-types",
     },
     Explain {
+        code: "bynk.types.empty_range_pattern",
+        blurb: "A range pattern `lo..hi` matches every `Int` from `lo` to `hi`, both \
+                inclusive, so the low bound comes first. With `lo > hi` no value can match, \
+                so the arm is dead and almost certainly a typo, and the same goes for a range \
+                in a `via schema(...)` clause. Swap the bounds. A refinement \
+                written `InRange(150, 0)` is the separate `bynk.types.inverted_range`.",
+        example: "fn band(n: Int) -> String {\n    match n {\n        9..3 => \"mid\"    // ✗ the low bound is above the high bound\n        _ => \"other\"\n    }\n}\n\n\
+                  fn band(n: Int) -> String {\n    match n {\n        3..9 => \"mid\"    // ✓\n        _ => \"other\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "range-patterns",
+    },
+    Explain {
+        code: "bynk.types.empty_refinement",
+        blurb: "A refinement is a base type plus predicates, and a value must satisfy all of \
+                them. When the predicates contradict each other, nothing can satisfy them: \
+                the type has no values, and every `.of` and every boundary check would fail. \
+                The compiler works out the combined range of `Positive`, `NonNegative` and \
+                `InRange`, and the combined length of the length predicates, and refuses one \
+                that is empty. Drop or correct the predicate that conflicts, and read the \
+                note, which gives the empty range it found.",
+        example: "type Debt = Int where Positive && InRange(-10, -1)    // ✗ positive, yet at most -1\n\n\
+                  type Debt = Int where Positive && InRange(1, 10)      // ✓",
+        page: "/book/reference/refined-types",
+        anchor: "predicates",
+    },
+    Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
                 extensible: a minor release may add a variant. A `match` that names every \
@@ -827,6 +1248,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "rule-string_interpolation",
     },
     Explain {
+        code: "bynk.types.invalid_regex",
+        blurb: "A `Matches` pattern, and the pattern of a regex method such as `containsRegex`, \
+                must be a valid regular expression. The emitted check runs it under \
+                JavaScript's `RegExp`, so the compiler validates it with those rules: a \
+                pattern the Rust `regex` crate accepts, such as `(?P<name>…)`, may be refused \
+                here, and the compiler would otherwise ship a check that throws at run time. \
+                A regex method's pattern may open with one inline-flag group of `i`, `m` \
+                and `s`, each at most once. Fix the syntax; the note carries the parser's \
+                message. A valid but dangerous pattern is `bynk.types.catastrophic_regex`.",
+        example: "type Code = String where Matches(\"[A-Z\")     // ✗ the class is never closed\n\n\
+                  type Code = String where Matches(\"[A-Z]+\")   // ✓",
+        page: "/book/reference/types",
+        anchor: "regular-expressions",
+    },
+    Explain {
+        code: "bynk.types.inverted_range",
+        blurb: "`InRange(lo, hi)` is inclusive at both ends, so it needs `lo <= hi`. With the \
+                bounds the wrong way round the refinement admits no value, which is almost \
+                certainly a slip, so the compiler refuses it. Swap them; the diagnostic \
+                offers that fix. On an `Int` or `Float` the empty range is also reported as \
+                `bynk.types.empty_refinement`, which is what contradictory predicates give \
+                too. An inverted range in a `match` arm is `bynk.types.empty_range_pattern`.",
+        example: "type Price = Decimal where InRange(100.00d, 0.00d)    // ✗ the minimum is above the maximum\n\n\
+                  type Price = Decimal where InRange(0.00d, 100.00d)    // ✓",
+        page: "/book/reference/refined-types",
+        anchor: "predicates",
+    },
+    Explain {
         code: "bynk.types.json_uncodable",
         blurb: "`Json.encode` and `Json.decode` work on values that have a wire form, and a \
                 function does not: a value that can run has no JSON text to stand for it. \
@@ -838,6 +1287,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
         page: "/book/reference/types",
         anchor: "the-json-codec",
+    },
+    Explain {
+        code: "bynk.types.key_at_boundary",
+        blurb: "A `bynk.crypto` `SigningKey` or `VerifyKey` is a handle to a key the platform \
+                holds non-extractable, and it lives only for the call that imported it. \
+                Storing, serialising, logging or sending it would either leak the secret or \
+                mean nothing on the other side, so one cannot be a `store` field, a record or \
+                event field, or a handler parameter or result. Keep the key's bytes, such as \
+                the PKCS#8 `Bytes`, in `Secrets` or a field, and import the key again with \
+                `Crypto.importSigningKey` where you sign. A capability operation may take one.",
+        example: "type Credentials = {\n    owner: String,\n    key: SigningKey,    // ✗ a key cannot be held in a type\n}\n\n\
+                  type Credentials = {\n    owner: String,\n    pkcs8: Bytes,       // ✓ keep the bytes, import the key where it signs\n}",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.key_not_orderable",
+        blurb: "`sortBy`, `sortByDescending`, `min` and `max` order a list, or a storage \
+                `Query`, by the value the key function returns, so that value needs a \
+                total order. A record or sum is not ordered by accident, because opting in \
+                makes field and variant order significant. Return a field that is already \
+                orderable, or add `derives Ord` to the type. The operators `<` and `>` on an \
+                unordered type are `bynk.types.not_orderable`.",
+        example: "type Item = { id: Int }\n\n\
+                  fn byId(items: List[Item]) -> List[Item] {\n    items.sortBy((i) => i)       // ✗ `Item` has no order\n}\n\n\
+                  fn byId(items: List[Item]) -> List[Item] {\n    items.sortBy((i) => i.id)    // ✓ `Int` does\n}",
+        page: "/book/reference/types",
+        anchor: "ordering-your-own-types",
+    },
+    Explain {
+        code: "bynk.types.lambda_mismatch",
+        blurb: "A lambda is checked against the function type expected where it is written, \
+                such as the parameter it is passed for. It must take the same number of \
+                parameters, any annotation on a parameter must match that parameter's type, \
+                and its body must produce the result type, because the function it is passed \
+                to calls it with that shape and uses what comes back. Change the lambda to \
+                fit, or change the function type if that is what is wrong.",
+        example: "fn apply(f: Int -> Int, x: Int) -> Int {\n    f(x)\n}\n\n\
+                  fn total() -> Int {\n    apply((a, b) => a + b, 5)    // ✗ `f` takes one argument\n}\n\n\
+                  fn total() -> Int {\n    apply((a) => a + 1, 5)       // ✓\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-lambda_expr",
     },
     Explain {
         code: "bynk.types.let_annotation_mismatch",
@@ -852,6 +1343,32 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn run() -> Int {\n    let n: Int = 3          // ✓\n    n\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.list_pattern_on_non_list",
+        blurb: "A list pattern such as `[x, ..]` matches a value by its length and its elements, \
+                so the value must be a `List[T]`. A `Set`, a `Map`, an `Int` or a record has no \
+                such shape, and a record or sum is matched by its own pattern. Convert the \
+                value first, as `s.toList()` does for a `Set`, or match on what the value \
+                actually is. The same rule applies to a list pattern after `is` and in \
+                `let … else`.",
+        example: "fn first(s: Set[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✗ a `Set` is not a `List`\n        _ => 0\n    }\n}\n\n\
+                  fn first(s: List[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✓\n        _ => 0\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "list-patterns",
+    },
+    Explain {
+        code: "bynk.types.match_arm_mismatch",
+        blurb: "A `match` is an expression, so its arms must produce one type: the least upper \
+                bound of their types, where a refined type and its base agree at the base. If \
+                one arm gives a `String` and another an `Int`, there is no single type for the \
+                caller to rely on. Make the arms agree, converting where needed. The rule also \
+                holds for `let … else`, whose `else` must produce the type of the rest of its \
+                block.",
+        example: "type Status = enum { Pending, Active, Done }\n\nfn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => 1           // ✗ an `Int`, where the others are `String`\n        Done => \"finished\"\n    }\n}\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => \"running\"   // ✓\n        Done => \"finished\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
     },
     Explain {
         code: "bynk.types.method_arity",
@@ -883,6 +1400,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.never_inferred",
+        blurb: "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the \
+                bottom type `never returns`, which stands in for any type. If an unannotated \
+                `let` or `<-` binding took it, every later use would type-check whatever it \
+                was used as, and the type cannot be written in source to say otherwise. Annotate \
+                the binding with the type it is meant to have. A lambda that only faults is \
+                annotated with a function type.",
+        example: "fn later() -> Int {\n    let x = unreachable(\"never\")    // ✗ `x` would have no usable type\n    x\n}\n\n\
+                  fn later() -> Int {\n    let x: Int = unreachable(\"never\")    // ✓\n    x\n}",
+        page: "/book/reference/types",
+        anchor: "faults",
+    },
+    Explain {
         code: "bynk.types.no_numeric_coercion",
         blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
                 a comparison or an `InRange` bound. Each conversion can lose or invent \
@@ -909,6 +1439,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                   match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.not_codable",
+        blurb: "A type parameter declared `T: Codable`, on a generic `fn` or a capability \
+                operation, accepts only the types `Json.decode` can read. A call that makes `T` \
+                a function, an `Effect`, a `Stream` or a type carrying one, a `bynk.crypto` \
+                key or `()` is refused, because such a value has no wire form. Pass a plain \
+                value, or use a function whose parameter is not `Codable`. Calling \
+                `Json.encode` or `Json.decode` on such a type directly is \
+                `bynk.types.json_uncodable`.",
+        example: "fn keep[T: Codable](x: T) -> T { x }\n\n\
+                  fn run(f: Int -> Int) -> Int {\n    let _ = keep(f)    // ✗ a function has no wire form\n    1\n}\n\n\
+                  fn run(n: Int) -> Int {\n    keep(n)    // ✓ an `Int` does\n}",
+        page: "/book/reference/generics",
+        anchor: "bounds",
     },
     Explain {
         code: "bynk.types.not_comparable",
@@ -956,6 +1501,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "ordering-your-own-types",
     },
     Explain {
+        code: "bynk.types.pattern_arity",
+        blurb: "A variant pattern takes one binding for each payload field the variant \
+                declares, in order, or none to ignore the payload. A different count, or any \
+                binding on a variant with no payload, is refused: an extra name has nothing to \
+                hold, and a missing one would silently drop a field. Use `_` for a field you \
+                do not need, or name the fields you want (`radius: r`). Building a variant \
+                with the wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\n\
+                  fn size(s: Shape) -> Int {\n    match s {\n        Circle(r, extra) => r    // ✗ `Circle` has one field\n        Dot => 0\n    }\n}\n\n\
+                  fn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r           // ✓\n        Dot => 0\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
         code: "bynk.types.pattern_type_mismatch",
         blurb: "A pattern can only match values of the type it describes, so a pattern of \
                 another kind than the value being matched can never succeed and is refused. \
@@ -969,6 +1528,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn word(n: Int) -> String {\n    match n {\n        1 => \"uno\"        // ✓\n        _ => \"other\"\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.polynomial_regex",
+        blurb: "A `Matches` pattern runs under a backtracking `RegExp` on untrusted input. Two \
+                repetitions in sequence that can match the same characters, as in `\\d*\\d*`, \
+                let the engine split a run between them many ways, so the time grows as a \
+                power of the input's length. That is slower to hurt than \
+                `bynk.types.catastrophic_regex` but can still stall a handler. A `MaxLength`, \
+                `Length` or `IsoDate` predicate that keeps the input short enough makes it \
+                the warning `bynk.types.polynomial_regex_capped`; a regex method has no such \
+                bound. Rewrite it so the repetitions cannot overlap.",
+        example: "type Digits = String where Matches(\"\\\\d*\\\\d*\")    // ✗ two loops over the same digits\n\n\
+                  type Digits = String where Matches(\"\\\\d*\")         // ✓ one way to match",
+        page: "/book/reference/types",
+        anchor: "regular-expressions",
     },
     Explain {
         code: "bynk.types.return_mismatch",
@@ -989,6 +1563,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.stream_at_boundary",
+        blurb: "A `Stream[T]` is a live, lazily read source, built and consumed where it is \
+                made. It cannot be persisted or serialised, so it cannot be a service or agent \
+                handler parameter or result, a store field or an event field, nor can a record \
+                or sum that carries one in a field, at any depth. Drain it with `collect()` \
+                and send or keep the resulting `List`. A capability operation may take or \
+                return a stream, since its provider runs in the caller's own isolate.",
+        example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
+                  service s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "stream",
+    },
+    Explain {
         code: "bynk.types.type_mismatch",
         blurb: "An operator or a built-in method was given an operand of a type it does not \
                 accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on \
@@ -1001,6 +1588,18 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn isAdult(age: Int) -> Bool {\n    age == 18      // ✓ both `Int`\n}",
         page: "/book/reference/operators",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.uninferable_element_type",
+        blurb: "An empty `[]`, `List.empty()`, `Set.empty()` or `Map.empty()` has no elements to \
+                take a type from, and the compiler will not guess, because the element type \
+                becomes part of the type of everything the collection touches. Give it one: \
+                annotate the binding, as `let xs: List[Int] = []`, or use the empty value \
+                where a type is expected, such as an argument or a return value.",
+        example: "fn count() -> Int {\n    let xs = []                  // ✗ a list of what?\n    xs.length()\n}\n\n\
+                  fn count() -> Int {\n    let xs: List[Int] = []       // ✓\n    xs.length()\n}",
+        page: "/book/reference/types",
+        anchor: "built-in-generic-types",
     },
     Explain {
         code: "bynk.types.unknown_field",
@@ -1043,6 +1642,97 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn make() -> Shape {\n    Circle(1)       // ✓\n}",
         page: "/book/reference/types",
         anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.uses.name_conflict",
+        blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
+                and embeds) in scope under their own names, with no prefix. If two commons it uses \
+                both declare the same name, a mention of it could mean either, so the compiler \
+                refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the \
+                declarations, drop one of the `uses`, or mark the declaration `private` if only \
+                its own commons needs it, since a `private` declaration is never imported and so \
+                never conflicts.",
+        example: "// billing.bynk\n\
+                  commons billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // shipping.bynk\n\
+                  commons shipping\n\n\
+                  type Amount = Int where NonNegative    // both declare `Amount`\n\
+                  type Postage = Int where NonNegative   // ✓ renamed\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses billing\n\
+                  uses shipping                          // ✗ `Amount` is also declared by `billing`",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.val.needs_pin",
+        blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
+                most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
+                but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; \
+                the same goes for a record or sum that reaches one. A `for all` over such a type \
+                is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
+                refinement, or give the type an `@example` and use bare `Val`. See the \
+                `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
+        example: "// demo/codes.bynk\n\
+                  type Code = String where Matches(\"[a-z]+\")\n\
+                  \n\
+                  // tests/codes.test.bynk\n\
+                  let c = Val[Code]              // ✗ no value can be made from a pattern\n\
+                  let c = Val[Code](\"abc\")      // ✓ pin one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.visibility.private_in_public",
+        blurb: "A public declaration may not mention a `private` type of its own unit in its \
+                signature: a public function's parameters and return, a public type's fields and \
+                variant payloads, a public constant's type, or a context's `exports` list. A \
+                unit that `uses` the commons could neither name that type nor build a value of \
+                it, so the function would be half-usable. Make the type public, or make the \
+                declaration `private` too. Services, agents and capabilities are not checked \
+                here; a context's `exports` governs them.",
+        example: "private type Tally = { lines: Int, sum: Int }\n\
+                  \n\
+                  fn tally(n: Int) -> Tally { … }            // ✗ public, but returns a private type\n\
+                  private fn tally(n: Int) -> Tally { … }    // ✓ private too",
+        page: "/book/guides/program-structure/design-a-public-surface",
+        anchor: "keep-private-types-out-of-public-signatures",
+    },
+    Explain {
+        code: "bynk.visibility.private_item",
+        blurb: "A `private` function, type, constant, asset or embed (or a `private` method) is visible only \
+                within its own unit, across all of that unit's files, and to the unit's suites. It is \
+                never visible through `uses`, so a unit that uses the commons cannot name it. The \
+                compiler reports that the name is private, not that it is unknown, so you know it \
+                exists. `private` keeps a helper out of the public surface, so it can change \
+                without breaking anyone. Call the commons' public function that does the job, or, \
+                if the item really belongs to the public surface, remove `private` where it is \
+                declared.",
+        example: "// pricing.bynk\n\
+                  commons pricing\n\n\
+                  fn total(items: List[Item]) -> Int { … }\n\
+                  private fn lineTotal(i: Item) -> Int { … }\n\n\
+                  // shop.bynk\n\
+                  commons shop\n\n\
+                  uses pricing\n\n\
+                  fn cost(i: Item) -> Int {\n    lineTotal(i)      // ✗ `lineTotal` is a private function of `pricing`\n    total([i])        // ✓ the public function does the same job\n}",
+        page: "/book/guides/program-structure/design-a-public-surface",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.visibility.private_not_allowed",
+        blurb: "`private` hides a `fn`, `type`, `messages`, `asset`, `embed` or `const` from the \
+                units that import its commons or context. It does not apply to a service, agent, \
+                capability, provider, actor or event, or to anything in an adapter: how far \
+                those reach is decided by a context's `exports` and `consumes`, and an adapter's \
+                `exports`. Remove `private`. See `bynk.visibility.private_item` for using \
+                something that is private.",
+        example: "private service total { … }        // ✗ `private` does not apply to a service\n\
+                  service total { … }                // ✓ reach is governed by `exports`",
+        page: "/book/guides/program-structure/design-a-public-surface",
+        anchor: "",
     },
 ];
 
@@ -1463,7 +2153,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.invalid_option",
-        "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`).",
+        "A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`).",
         &["capability_decl"],
     ),
     dg(
@@ -1621,7 +2311,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.context.external_decode",
-        "A context decoded a type another context owns and exports opaque, through `Json.decode`, `Json.decodeSql` or a `Codable` witness. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type.",
+        "A context decoded a type another context owns and exports opaque: through `Json.decode`, `Json.decodeSql` or a `Codable` witness, or as the input of an HTTP, queue, event or WebSocket handler. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type.",
     ),
     dg(
         "bynk.context.external_provider",
@@ -2099,7 +2789,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.given.cross_context_unknown_capability",
-        "`given B.Cap` names a capability the consumed context does not export.",
+        "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export.",
         &["given_clause"],
     ),
     dg(
@@ -3461,7 +4151,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.resolve.unconsumed_context",
-        "A context's service was called without a `consumes` declaration.",
+        "A context's service was called, or its capability named in `given`, without a `consumes` declaration.",
         &["consumes_decl"],
     ),
     dg(
@@ -3611,7 +4301,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.store.unknown_op",
-        "A storage-`Map`/`Set` operation is not a recognised entry/membership method.",
+        "A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations.",
     ),
     d(
         "bynk.stub.after_type",
@@ -4563,7 +5253,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.uses.name_conflict",
-        "A `uses` name collides with another name, a value crosses between a unit's code and an imported declaration's position whose type the unit shadows, or a reference names an import the unit's own declaration shadows.",
+        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
         &["uses_decl"],
     ),
     dg(

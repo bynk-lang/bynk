@@ -1,0 +1,9 @@
+commons demo
+
+fn double(x: Int) -> Int {
+  x * 2
+}
+
+fn run(a: Int, b: Int) -> Int {
+  double(a, b)
+}

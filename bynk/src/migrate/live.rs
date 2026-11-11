@@ -95,9 +95,19 @@ pub(crate) struct Rest {
 impl Rest {
     pub(crate) fn get(&self, path: &str) -> Result<serde_json::Value, String> {
         let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
+        self.fetch(&url, path)
+    }
+
+    /// A `GET` of a path that is not under the account (`/zones/…`), answered
+    /// as [`Rest::get`] is (#3302: a zone's Email Sending subdomains).
+    pub(crate) fn get_global(&self, path: &str) -> Result<serde_json::Value, String> {
+        self.fetch(&format!("{}{path}", self.base), path)
+    }
+
+    fn fetch(&self, url: &str, path: &str) -> Result<serde_json::Value, String> {
         let mut response = self
             .agent
-            .get(&url)
+            .get(url)
             .header(
                 "Authorization",
                 &format!("Bearer {}", self.credentials.token),

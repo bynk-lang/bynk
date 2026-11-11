@@ -1,0 +1,7 @@
+context api
+
+private service total {
+	on call(n: Int) -> Effect[Int] {
+		Effect.pure(n)
+	}
+}

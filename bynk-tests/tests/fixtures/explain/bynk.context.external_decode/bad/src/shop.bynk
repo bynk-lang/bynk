@@ -1,0 +1,9 @@
+context shop
+
+consumes pay
+
+service api from http {
+	on POST("/t") (body: Token) -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok")
+	}
+}
