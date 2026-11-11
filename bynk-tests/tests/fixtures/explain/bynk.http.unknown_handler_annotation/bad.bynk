@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+    @cached(maxAge: 5.minutes)
+    on GET("/links") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

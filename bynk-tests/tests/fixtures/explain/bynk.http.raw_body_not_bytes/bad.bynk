@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+    @raw(contentType: "image/png")
+    @limit(maxBody: 1_000_000)
+    on POST("/avatars") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}
