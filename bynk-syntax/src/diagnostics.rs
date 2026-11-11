@@ -128,6 +128,35 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "reading-and-writing-state",
     },
     Explain {
+        code: "bynk.generics.missing_eq_bound",
+        blurb: "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. \
+                A type parameter stands for any type, and some types cannot be compared: a function, an \
+                `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement \
+                in the signature, where a caller, hover and signature help can see it, instead of leaving \
+                it to fail inside the body. The same rule applies when a generic passes its own parameter \
+                to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a \
+                chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The \
+                diagnostic's fix adds the bound.",
+        example: "fn same[T](a: T, b: T) -> Bool {\n    a == b                  // ✗ `T` could be a function\n}\n\n\
+                  fn same[T: Eq](a: T, b: T) -> Bool {\n    a == b                  // ✓ the bound is in the signature\n}",
+        page: "/book/reference/generics",
+        anchor: "bounds",
+    },
+    Explain {
+        code: "bynk.generics.missing_key_bound",
+        blurb: "A `Map` key or a `Set` element must be a type that can be held under a canonical encoding, and \
+                a type parameter might be a function or another type that cannot. So a type parameter \
+                that reaches a `Map` key or a `Set` element, in a signature, a generic type's field, or \
+                a `distinct`, `groupBy` or join key, must be declared `K: Key`, and a call must \
+                instantiate it with a key type. `Key` implies `Eq`, so an existing `Eq` bound is \
+                replaced rather than joined (`K: Eq + Key` is a warning). The diagnostic's fix declares \
+                the bound, and `bynk check --fix` applies it across a project.",
+        example: "fn single[K](k: K) -> Map[K, Int] {                 // ✗ `K` has no `Key` bound\n    Map.empty().insert(k, 1)\n}\n\n\
+                  fn single[K: Key](k: K) -> Map[K, Int] {            // ✓ declared\n    Map.empty().insert(k, 1)\n}",
+        page: "/book/reference/generics",
+        anchor: "key",
+    },
+    Explain {
         code: "bynk.generics.polymorphic_recursion",
         blurb: "A generic type may refer to itself only uniformly: the self-reference must pass \
                 the declaration's own type parameters through unchanged and in order, as \
@@ -157,6 +186,36 @@ pub const EXPLANATIONS: &[Explain] = &[
                   service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
         page: "/book/guides/type-system/recursive-generic-types",
         anchor: "where-it-cannot-go-yet",
+    },
+    Explain {
+        code: "bynk.generics.type_arg_mismatch",
+        blurb: "The type arguments of a generic call do not fit. The checker infers each type parameter from \
+                the arguments, and an argument that contradicts what an earlier one \
+                settled is refused: `pick(1, \"one\")` cannot make `T` both `Int` and `String`. The same \
+                code covers explicit type arguments of the wrong number (`pick[Int, Int](…)`), type \
+                arguments given to a function that is not generic, and a type parameter named like a \
+                declared type. Make the arguments agree, give the type argument explicitly where the \
+                inference is not what you meant, or rename the parameter.",
+        example: "fn pick[T](a: T, b: T) -> T {\n    a\n}\n\n\
+                  let x = pick(1, \"one\")          // ✗ `T` is `Int` from the first argument\n\n\
+                  pick(1, 2)                      // ✓ both arguments are `Int`",
+        page: "/book/reference/generics",
+        anchor: "type-parameters",
+    },
+    Explain {
+        code: "bynk.generics.uninferable_type_arg",
+        blurb: "A call to a generic function leaves a type parameter undetermined. Bynk fixes a type parameter \
+                from the arguments and, failing that, from the type the call is expected to have; it \
+                never guesses. `none()` has no argument that mentions `T`, and `let x = none()` gives it \
+                no expected type, so there is nothing to choose `T` from. The error also fires when a \
+                lambda's parameter types depend on a parameter that the other arguments leave open. Give \
+                the type argument explicitly with `none[Int]()`, or annotate the binding so the expected \
+                type supplies it: `let x: Option[Int] = none()`.",
+        example: "fn none[T]() -> Option[T] {\n    None\n}\n\n\
+                  let x = none()                    // ✗ nothing says what `T` is\n\n\
+                  let x = none[Int]()               // ✓ given explicitly",
+        page: "/book/reference/generics",
+        anchor: "the-expected-type-for-every-generic-call",
     },
     Explain {
         code: "bynk.given.undeclared_capability",
@@ -339,6 +398,18 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.duplicate_type",
+        blurb: "A unit declares two types, or a type and an event, with the same name. A unit's top-level \
+                declarations share one scope in the emitted module, so a name can mean only one thing, \
+                and a type name appears in signatures and constructors with no way to say which \
+                declaration is meant. Rename one of them, or remove the repeated declaration. The check \
+                spans all of the unit's files, so the second declaration can be in a different file.",
+        example: "type Money = Int\ntype Money = String          // ✗ `Money` is already declared\n\n\
+                  type Money = Int\ntype Label = String          // ✓ distinct names",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.missing_field",
         blurb: "A record must be constructed with every field that has no default. \
                 There is no partial construction: a value of a record type is only \
@@ -351,6 +422,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   User { name: \"Ada\", age: 36 }   // ✓ every field present",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.name_conflict",
+        blurb: "Two declarations of different kinds share a name. A unit's functions, assets, embeds, \
+                constants, types and events, services, agents and providers with a body (by their \
+                implementation name) all live in one namespace, across all of the unit's files, because \
+                they are one scope in the emitted module. Capabilities and actors each keep their own. \
+                Two types, or a type and an event, are `bynk.resolve.duplicate_type`, and two constants \
+                `bynk.resolve.duplicate_const`. Rename one of the two.",
+        example: "fn Limit() -> Int {\n    3\n}\n\n\
+                  const Limit: Int = 3         // ✗ a function already has this name\n\n\
+                  const Limit: Int = 3         // ✓ once the function is renamed `limit`",
+        page: "/book/spec/static-semantics",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.unknown_field",
@@ -366,6 +451,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.resolve.unknown_function",
+        blurb: "A call names a function that is not in scope. Only functions declared in the same unit, or \
+                brought in through `uses`, can be called; a capitalised name, which would construct an \
+                agent, needs an agent of that name in scope. This is most often a typo or a missing \
+                `uses`. A lambda cannot call itself through its own `let` name either, because the name \
+                is not bound until the lambda is built. A type used as a function, as in `Money(5)`, is \
+                the separate `bynk.resolve.type_as_function`.",
+        example: "fn double(x: Int) -> Int {\n    x * 2\n}\n\n\
+                  dubble(4)          // ✗ no function `dubble`\n\n\
+                  double(4)          // ✓ the declared name",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.unknown_name",
         blurb: "A name was referenced that is not in scope. Every name in Bynk \
                 must be introduced before use — as a `let` binding, a parameter, \
@@ -378,6 +477,19 @@ pub const EXPLANATIONS: &[Explain] = &[
                   greeting         // ✓ the bound name",
         page: "/book/guides/program-structure/how-a-program-is-shaped",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.unknown_static_member",
+        blurb: "A type was named with a `.` and a member it does not have. `T.name` refers to a variant of the \
+                sum type `T` or to a static method declared on it, and a misspelt variant has no such member. Some built-in types \
+                have a closed set: `HttpResult`, `ErrorStatus` and `RoundingMode` only their variants, \
+                `Float` only `parse`, `pi` and `e`, and `Decimal` only `parse` and `fromInt`. Check the spelling against the declaration, or declare the missing \
+                static method.",
+        example: "type Colour =\n    | Red\n    | Green\n\n\
+                  Colour.Gren          // ✗ `Colour` has no variant `Gren`\n\n\
+                  Colour.Green         // ✓ the declared variant",
+        page: "/book/reference/types",
+        anchor: "sum-types",
     },
     Explain {
         code: "bynk.resolve.unknown_type",

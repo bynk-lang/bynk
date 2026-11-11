@@ -1,0 +1,9 @@
+commons demo
+
+type Colour =
+    | Red
+    | Green
+
+fn pick() -> Colour {
+    Colour.Gren
+}
