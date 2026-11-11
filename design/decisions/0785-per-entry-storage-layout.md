@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (v0.535)
 
-**Context.** An agent's whole state was one value under the key `state`, so a handler that touched one entry of a large `Map` read and wrote all of it, and the value hit the platform's 8 MB limit. The per-entry storage track (`design/tracks/per-entry-storage.md`, #3195, proposal #3189) moves each collection entry to its own key. The slices before this one added the forward-compatibility guard (a build faults on a layout it does not know), the handler serialisation that makes a load-modify-commit cycle safe, the runtime primitives, and the sweep and revert reporting. This slice writes the layout. It has to land before the stored-state freeze at 1.0 (ADR 0538), so the stored bytes it settles are the ones every later build keeps reading.
+**Context.** An agent's whole state was one value under the key `state`, so a handler that touched one entry of a large `Map` read and wrote all of it, and the value hit the platform's 8 MB limit. The per-entry storage track (retired; see [`design/archive/retired-tracks.md`](../archive/retired-tracks.md), #3195, proposal #3189) moves each collection entry to its own key. The slices before this one added the forward-compatibility guard (a build faults on a layout it does not know), the handler serialisation that makes a load-modify-commit cycle safe, the runtime primitives, and the sweep and revert reporting. This slice writes the layout. It has to land before the stored-state freeze at 1.0 (ADR 0538), so the stored bytes it settles are the ones every later build keeps reading.
 
 **Decision.** From this build an agent's stored state is:
 

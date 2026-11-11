@@ -213,8 +213,8 @@ pub const TYPESCRIPT_MAJOR_TESTED: u32 = 7;
 /// written into a generated `wrangler.toml`.
 pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 
-/// The storage layout this emitter writes an agent's state in (#3189, track
-/// `design/tracks/per-entry-storage.md`): 1 is the wholesale layout, with every
+/// The storage layout this emitter writes an agent's state in (#3189, the
+/// retired per-entry-storage track in `design/archive/retired-tracks.md`): 1 is the wholesale layout, with every
 /// collection inline in the one `"state"` record, and 2 is the per-entry layout,
 /// with each `Map`/`Set`/`Cache`/`Log` entry and index posting under its own key. `bynk deploy` records it in each
 /// version's facts so that `bynk deploy revert` can refuse a rollback to a build
