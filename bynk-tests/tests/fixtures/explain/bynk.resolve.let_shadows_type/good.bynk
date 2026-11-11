@@ -1,0 +1,8 @@
+commons shop
+
+type Reps = Int where InRange(1, 100)
+
+fn run(n: Int) -> Int {
+  let reps = n
+  reps
+}

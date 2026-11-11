@@ -1,6 +1,5 @@
 ---
 level: minor
-probes: explained_codes
 changelog: A bare variant name that two sums in scope declare (two enums a consumed unit exports, say) builds the sum the expected type names, from an annotated `let`, a parameter, a return type or a `stub`'s operation, and is `bynk.resolve.ambiguous_variant` only when nothing picks one; the message names each qualified form, and a `stub` value no longer reports it as `bynk.stub.rhs_type` (#3344)
 ---
 

@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.550.5** | `bynk explain` explains 27 more codes across effect, provider, consumes, exports, resolve and generics (Refs #3163) |
+| **v0.550.4** | `bynk explain` explains twenty-four more `types` codes (`if`, `?`, constructors, patterns, opaque types, inference) (Refs #3163) |
+| **v0.550.3** | `bynk explain` covers fifteen more codes, in the `service`, `event` and `ws` families |
 | **v0.550.2** | `bynk explain` explains sixteen more codes under `actor` and `agent` (Refs #3163) |
 | **v0.550.1** | `bynk explain` explains eighteen more `http` codes (routes, path and query parameters, request bodies, `@cache`, `@limit`, `cors`, `on rejected`) (Refs #3163) |
 | **v0.550.0** | A service can receive email, `service support from email("support@shop.example")`, with an `on message(mail: InboundEmail) -> Effect[EmailVerdict]` handler tested in a suite; the Workers mapping follows (#3328 slice 1) |
