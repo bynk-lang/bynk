@@ -25,6 +25,7 @@ consumes bynk
 consumes bynk.cloudflare { Email, EmailError, EmailMessage, RateLimit }
 
 capability Mail = Email @allowedSenders(["orders@shop.example"])
+
 capability ReceiptLimit = RateLimit @limit(5) @period(60.seconds)
 ```
 
