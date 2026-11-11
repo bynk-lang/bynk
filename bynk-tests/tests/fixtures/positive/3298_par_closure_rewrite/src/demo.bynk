@@ -1,0 +1,53 @@
+context demo
+
+// #3298: what a `parTraverse` closure may do next to a store. It may read one,
+// iterate one as the receiver, and call another agent; it may not write one. The
+// writes run in a sequential `forEach`, where a single-call `update` is atomic.
+
+agent Hits {
+  key id: String
+  store n: Cell[Int] = 0
+
+  on call bump(amount: Int) -> Effect[()] {
+    do n.update((c) => c + amount)
+  }
+
+  on call total() -> Effect[Int] {
+    Effect.pure(n)
+  }
+}
+
+agent Tally {
+  key id: String
+  store counts: Map[String, Int]
+
+  // sequential, so `update` is atomic per key: 3, not 1
+  on call incrementSequentially(x: Int) -> Effect[()] {
+    let _ <- counts.put("k", 0)
+    let _ <- [1, 2, 3].forEach((i: Int) => counts.update("k", (v) => v + 1))
+    Effect.pure(())
+  }
+
+  // a read in a parallel closure, and a store as the receiver
+  on call readConcurrently(x: Int) -> Effect[List[Int]] {
+    let _ <- counts.put("k", 7)
+    let seen <- [1, 2].parTraverseAll((i: Int) => {
+      let o <- counts.get("k")
+      let r: Result[Int, String] = Ok(o.getOrElse(0))
+      Effect.pure(r)
+    })
+    let _ <- counts.values.parTraverse((v: Int) => Hits("h").bump(v))
+    Effect.pure([])
+  }
+
+  // the concurrent part stays in the closure: another agent's handler is atomic
+  on call viaAgent(x: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parTraverse((i: Int) => Hits("k\(i)").bump(i))
+    Effect.pure(())
+  }
+
+  on call read(x: Int) -> Effect[Int] {
+    let o <- counts.get("k")
+    Effect.pure(o.getOrElse(-1))
+  }
+}

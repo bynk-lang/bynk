@@ -1,0 +1,19 @@
+suite demo
+
+case "a sequential update loop counts every element" as integration {
+  let _ <- Tally("a").incrementSequentially(0)
+  let v <- Tally("a").read(0)
+  expect v == 3
+}
+
+case "a parallel closure that calls another agent is allowed" as integration {
+  let _ <- Tally("b").viaAgent(0)
+  let t <- Hits("k3").total()
+  expect t == 3
+}
+
+case "a parallel closure may read a store and iterate one" as integration {
+  let _ <- Tally("c").readConcurrently(0)
+  let t <- Hits("h").total()
+  expect t == 7
+}
