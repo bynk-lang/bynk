@@ -161,9 +161,9 @@ There are **806** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.expect.faults_not_effect` | A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`. | [`faults_expr`](/book/reference/grammar/#rule-faults_expr) | — |
-| `bynk.expect.not_bool` | `expect` was given a non-`Bool` predicate. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
-| `bynk.expect.outside_case` | `expect` was used outside a `case` body. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
+| [`bynk.expect.faults_not_effect`](/book/reference/testing/#faults) | A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`. | [`faults_expr`](/book/reference/grammar/#rule-faults_expr) | — |
+| [`bynk.expect.not_bool`](/book/reference/testing/#expect) | `expect` was given a non-`Bool` predicate. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
+| [`bynk.expect.outside_case`](/book/reference/testing/#expect) | `expect` was used outside a `case` body. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
 
 ## Exports
 
@@ -511,18 +511,18 @@ There are **806** codes in total.
 | [`bynk.store.unknown_op`](/book/reference/agents/#storage-kinds-and-their-operations) | A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations. |  | — |
 | `bynk.stub.after_type` | A test `stub … returns <value> after <d>` latency is not a `Duration`. |  | — |
 | `bynk.stub.at_system` | A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override. | [`stub_clause`](/book/reference/grammar/#rule-stub_clause) | — |
-| `bynk.stub.bad_sequence` | A `stub … returns each […]` sequence is malformed (e.g. empty). |  | — |
+| [`bynk.stub.bad_sequence`](/book/reference/testing/#stub) | A `stub … returns each […]` sequence is malformed (e.g. empty). |  | — |
 | `bynk.stub.generic_op` | A test `stub` targets a capability operation that declares its own type parameter — not supported at v1. |  | — |
-| `bynk.stub.not_a_seam` | A test `stub` overrides a capability the unit under test does not consume. |  | — |
-| `bynk.stub.rhs_type` | A test `stub … returns <value>` right-hand side does not match the operation's return type. |  | — |
-| `bynk.stub.unknown_op` | A test `stub` names an operation the capability does not declare. |  | — |
+| [`bynk.stub.not_a_seam`](/book/reference/testing/#stub) | A test `stub` overrides a capability the unit under test does not consume. |  | — |
+| [`bynk.stub.rhs_type`](/book/reference/testing/#stub) | A test `stub … returns <value>` right-hand side does not match the operation's return type. |  | — |
+| [`bynk.stub.unknown_op`](/book/reference/testing/#stub) | A test `stub` names an operation the capability does not declare. |  | — |
 | `bynk.target.browser_bundle_only` | The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build. |  | — |
 | `bynk.target.vendor_conflict` | One deployment unit's in-process closure uses platform-native capabilities from two mutually-exclusive platforms. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.target.vendor_required` | A deployment unit uses a platform-native capability but the build selects another `--platform`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.test.actor_identity_required` | A test omits the identity an identity-carrying actor requires: a bare call-site `by <Actor>`, or no `by` at all on a handler that binds its `Caller`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.actor_no_identity` | A call-site `by <Actor>(x)` supplies an identity to an actor that takes none — a unit-identity actor (e.g. `Visitor`) or `Nobody`. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.advance_not_clock` | An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
-| `bynk.test.advance_not_duration` | An `advance Clock by` statement's amount is not a `Duration`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| [`bynk.test.advance_not_clock`](/book/reference/testing/#time-in-tests) | An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| [`bynk.test.advance_not_duration`](/book/reference/testing/#time-in-tests) | An `advance Clock by` statement's amount is not a `Duration`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | `bynk.test.advance_outside_case` | An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | `bynk.test.asset_address_method` | A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.call_needs_in_process` | A `system`-tier case calls an `on call` service with `svc.call(…)`; an `on call` service is internal to a deployment and has no public route for a `system` case to drive, so the case drives an `http` route that reaches it, or calls it at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -549,10 +549,10 @@ There are **806** codes in total.
 | `bynk.test.remote_unsupported_env` | A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_queue` | A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_schedule` | A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_bad_address` | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_call_arity` | A test body's `svc.call(...)` passes the wrong number of arguments for the service's `on call` handler. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_no_call_handler` | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_unknown_route` | A test body addresses an http route / cron schedule / queue message the service does not declare. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_bad_address`](/book/reference/testing/#suite-blocks) | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_call_arity`](/book/reference/testing/#suite-blocks) | A test body's `svc.call(...)` passes the wrong number of arguments for the service's `on call` handler. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_no_call_handler`](/book/reference/testing/#suite-blocks) | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_unknown_route`](/book/reference/testing/#suite-blocks) | A test body addresses an http route / cron schedule / queue message the service does not declare. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.smoke_undeclared_status` | A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning). | [`case`](/book/reference/grammar/#rule-case) | Warning |
 | `bynk.test.snapshot_duplicate_name` | A case takes two snapshots (`expect v matches snapshot "name"`) under one name; a snapshot is keyed by its case and name. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
 | `bynk.test.snapshot_in_property` | A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
@@ -821,7 +821,7 @@ There are **806** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | `bynk.suite.const_name_clash` | A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.suite.duplicate_case_name` | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.suite.duplicate_case_name`](/book/reference/testing/#suite-blocks) | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.duplicate_fn` | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
@@ -833,7 +833,7 @@ There are **806** codes in total.
 | `bynk.suite.fn_name_clash` | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.type_generic` | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.type_name_clash` | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.suite.unknown_target` | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
+| [`bynk.suite.unknown_target`](/book/reference/testing/#suite-blocks) | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 
 ## Transitions (step invariants)
 
@@ -981,11 +981,11 @@ There are **806** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | `bynk.val.agent_not_generable` | A `for all`/`Val` cannot generate an agent — fabricated agent states need not be reachable. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
-| `bynk.val.arity` | `Val[T]` was given the wrong number of pin arguments. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.literal_violates` | A pinned `Val[T]` value violates the type's refinement. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.arity`](/book/reference/testing/#val) | `Val[T]` was given the wrong number of pin arguments. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.literal_violates`](/book/reference/testing/#val) | A pinned `Val[T]` value violates the type's refinement. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.needs_pin`](/book/reference/testing/#val) | A bare `Val[T]` cannot generate a value (e.g. a `Matches` string); pin one. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.outside_test` | `Val[T]` was used outside a test case body. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.pin_not_literal` | A `Val[T]` pin argument is not a compile-time literal. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.outside_test`](/book/reference/testing/#val) | `Val[T]` was used outside a test case body. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.pin_not_literal`](/book/reference/testing/#val) | A `Val[T]` pin argument is not a compile-time literal. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | `bynk.val.pin_unsupported` | A pin was given for a type kind that does not support pinning. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.unknown_type` | `Val[T]` names a type that does not resolve. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.unknown_type`](/book/reference/testing/#val) | `Val[T]` names a type that does not resolve. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | `bynk.val.unsupported_kind` | `Val[T]` cannot fabricate a value for this kind of type. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |

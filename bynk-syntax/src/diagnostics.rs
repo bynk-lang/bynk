@@ -910,6 +910,56 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-three-pieces",
     },
     Explain {
+        code: "bynk.expect.faults_not_effect",
+        blurb: "`expect <call> faults` claims that an effectful call throws, for \
+                instance because a `stub … fails`. Only a call can fault, so the \
+                subject must be the call itself, with type `Effect[_]`. A value \
+                already bound, or a pure method on one, has nothing left to throw. \
+                Write the call inside the claim, not a name bound from it. A fault \
+                that is not claimed fails the case.",
+        example: "// tests/vault.test.bynk\n\
+                  let label = \"sealed\"\n\
+                  expect label.length() faults   // ✗ a pure method, not an effectful call\n\
+                  expect box.call() faults       // ✓ the call that faults",
+        page: "/book/reference/testing",
+        anchor: "faults",
+    },
+    Explain {
+        code: "bynk.expect.not_bool",
+        blurb: "`expect` states a claim that is checked when the case runs, so its \
+                predicate must be a `Bool`: true, or the case fails. A count or a \
+                record is not a claim. Compare the value with what you expect \
+                (`==`, `<`, `is`), or use a method that returns `Bool`. It is the \
+                same predicate surface that `invariant` and `ensures` use.",
+        example: "// demo/count.bynk\n\
+                  fn bump(n: Int) -> Int { n + 1 }\n\
+                  \n\
+                  // tests/count.test.bynk\n\
+                  expect bump(1)         // ✗ an Int is not a claim\n\
+                  expect bump(1) == 2    // ✓ compare it",
+        page: "/book/reference/testing",
+        anchor: "expect",
+    },
+    Explain {
+        code: "bynk.expect.outside_case",
+        blurb: "`expect` is a test claim, checked when a `case` runs. Production \
+                code has no test runner to report a failure to, so an `expect` in \
+                a function, a handler or anywhere else outside a `case` body is \
+                refused. To check a condition in running code, return a `Bool` or \
+                a `Result`; to check it in a test, move the `expect` into a case. \
+                A `requires` or `ensures` contract is the always-on form.",
+        example: "// demo/rules.bynk\n\
+                  fn positive(n: Int) -> Bool {\n\
+                  \x20   expect n > 0           // ✗ not in a case\n\
+                  \x20   n > 0\n\
+                  }\n\
+                  \n\
+                  // tests/rules.test.bynk\n\
+                  expect positive(1)       // ✓ in a case",
+        page: "/book/reference/testing",
+        anchor: "expect",
+    },
+    Explain {
         code: "bynk.exports.capability_not_provided",
         blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
                 built for them, so the exporting context must also say how: a `provides Clock = \
@@ -2238,6 +2288,199 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "storage-kinds-and-their-operations",
     },
     Explain {
+        code: "bynk.stub.bad_sequence",
+        blurb: "`returns each […]` gives one outcome per call, in order, and the \
+                last outcome repeats once the list runs out. An empty list has no \
+                outcome to repeat, so the first call would have nothing to return. \
+                List at least one. To return an empty list as a single value, \
+                write `returns []`, without `each`.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.read() returns each []    // ✗ no outcomes\n\
+                  stub Meter.read() returns each [7]   // ✓ at least one",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.stub.not_a_seam",
+        blurb: "A `stub` substitutes one of the capabilities the unit under test \
+                depends on: one the context declares, or reaches through a \
+                `consumes`. Any other name, including a misspelt one, leaves \
+                nothing to substitute. A commons has no capabilities, so it cannot \
+                be stubbed at all. Name a capability of the target, or add the \
+                `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
+                operation.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Gauge.read() returns 7   // ✗ the context has no `Gauge`\n\
+                  stub Meter.read() returns 7   // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.stub.rhs_type",
+        blurb: "A `stub … returns <value>` stands in for a real provider, so the \
+                value must have the type the operation declares, as the real \
+                result would. `Meter.read` yields an `Int`, so it returns `7`, not \
+                a string; the `Effect` is supplied for you. Change the value, or \
+                stub the operation you meant. To inject a failure, write `fails` \
+                instead of a value.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.read() returns \"seven\"   // ✗ a String, not an Int\n\
+                  stub Meter.read() returns 7         // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.stub.unknown_op",
+        blurb: "`stub Cap.op(…)` overrides one operation of a capability, so `op` \
+                must be declared by that capability. A misspelt or renamed \
+                operation matches nothing, so the stub is refused instead of \
+                leaving the default provider in place unannounced. Use the \
+                operation name the capability declares. See `bynk.stub.not_a_seam` \
+                when the capability itself is the wrong one.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.reed() returns 7   // ✗ Meter has no `reed`\n\
+                  stub Meter.read() returns 7   // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.suite.duplicate_case_name",
+        blurb: "A case is identified by its description in the runner's output and \
+                in failure reports, so each description must be unique across the \
+                suites that test one unit. Two cases with the same description \
+                cannot be told apart. Rename one; the error is on the repeat, with a label at the first.",
+        example: "// tests/ledger.test.bynk\n\
+                  case \"an entry\" { … }\n\
+                  case \"an entry\" { … }          // ✗ same description\n\
+                  case \"another entry\" { … }     // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.suite.unknown_target",
+        blurb: "A `suite` names the commons or context it tests, by its full \
+                dotted name, and that unit must be declared in the project. A name \
+                that matches none, usually a typo or a unit not written yet, would \
+                leave the suite testing nothing. Correct the name, or declare the \
+                unit.",
+        example: "// demo/ledger.bynk\n\
+                  commons demo.ledger\n\
+                  \n\
+                  // tests/ledger.test.bynk\n\
+                  suite demo.ledgre { … }    // ✗ no such unit\n\
+                  suite demo.ledger { … }    // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.advance_not_clock",
+        blurb: "`advance` moves the harness clock, the single time source a test \
+                owns, so it names `Clock` and nothing else. No other capability \
+                has virtual time to move. To shape what another capability \
+                returns, use a `stub`. The clock only moves forward.",
+        example: "// demo/clock.bynk\n\
+                  consumes bynk { Clock }\n\
+                  \n\
+                  // tests/clock.test.bynk\n\
+                  advance Random by 5.minutes   // ✗ only the Clock moves\n\
+                  advance Clock by 5.minutes    // ✓",
+        page: "/book/reference/testing",
+        anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.advance_not_duration",
+        blurb: "`advance Clock by <amount>` moves the harness clock forward by a \
+                `Duration`. A bare number does not say what unit it counts, so it \
+                is refused. Write a duration literal such as `5.minutes`. See \
+                `bynk.test.advance_not_clock` for naming a capability other than \
+                `Clock`.",
+        example: "// demo/clock.bynk\n\
+                  consumes bynk { Clock }\n\
+                  \n\
+                  // tests/clock.test.bynk\n\
+                  advance Clock by 5           // ✗ a number, not a Duration\n\
+                  advance Clock by 5.minutes   // ✓",
+        page: "/book/reference/testing",
+        anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.service_bad_address",
+        blurb: "A test addresses an http route by method and route pattern, as in \
+                `api.POST(\"/items\", body)`. The first argument must be that \
+                pattern as a string literal, so a number or a variable is refused. \
+                The same code covers other addresses used the wrong way, such as \
+                fetching an asset through a service that is not `from http`.",
+        example: "// demo/api.bynk\n\
+                  service api from http { … }\n\
+                  \n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.POST(1, \"x\") by Visitor          // ✗ not a pattern\n\
+                  let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.service_call_arity",
+        blurb: "`svc.call(…)` in a test runs the service's `on call` handler, so \
+                it takes that handler's parameters, and the number of arguments is \
+                checked as for any call. Add or remove arguments to match the \
+                handler. The asset address, `svc.GET(asset)`, takes the asset \
+                alone, and this code covers extra arguments there too.",
+        example: "// demo/svc.bynk\n\
+                  service echo { … }\n\
+                  \n\
+                  // tests/svc.test.bynk\n\
+                  let r <- echo.call(1, 2)   // ✗ the handler takes one\n\
+                  let r <- echo.call(1)      // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.service_no_call_handler",
+        blurb: "A case reaches a service through the address its protocol has. \
+                `svc.call(…)` runs an `on call` handler, so it needs one; a `from \
+                http` service is driven by route (`api.POST(\"/items\", body)`), a \
+                `from cron` service by its schedule, a `from queue` service by \
+                message. Use the address the service has. The Book's table of \
+                addresses lists each.",
+        example: "// demo/api.bynk\n\
+                  service api from http { … }\n\
+                  \n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.call(\"x\")                      // ✗ no `on call` handler\n\
+                  let r <- api.POST(\"/items\", \"x\") by Visitor // ✓ its route",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.service_unknown_route",
+        blurb: "A case addresses an http route by the pattern its handler \
+                declares, `\"/items\"`, not a concrete URL, and a cron or queue \
+                service by its own address. A path that no route in the service \
+                declares, for any method, is refused. To test the `405` for a \
+                wrong method, use a declared path with a method it lacks.",
+        example: "// demo/api.bynk\n\
+                  service api from http { … }\n\
+                  \n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.POST(\"/item\", \"x\") by Visitor    // ✗ no route \"/item\"\n\
+                  let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -2994,6 +3237,38 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.val.arity",
+        blurb: "`Val[T]` takes at most one argument, the pin: `Val[Age]` lets the \
+                compiler choose a value, `Val[Age](20)` fixes it. `Val` makes one \
+                value of one type, so a second argument has no meaning. Pass one \
+                pin or none.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Age](20, 30)   // ✗ two pins\n\
+                  let a = Val[Age](20)       // ✓ one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.literal_violates",
+        blurb: "A pinned `Val[T](…)` is checked against the refinement of `T` at \
+                compile time, and this literal breaks it, so the test would build \
+                a value the type does not allow. Pin a value that satisfies the \
+                refinement, or drop the pin and let `Val[T]` choose one. To test \
+                that an invalid value is refused, call `T.of(…)` and expect an \
+                `Err`.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Age](200)  // ✗ 200 is outside InRange(0, 150)\n\
+                  let a = Val[Age](20)   // ✓ inside it",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
         code: "bynk.val.needs_pin",
         blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
                 most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
@@ -3008,6 +3283,57 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // tests/codes.test.bynk\n\
                   let c = Val[Code]              // ✗ no value can be made from a pattern\n\
                   let c = Val[Code](\"abc\")      // ✓ pin one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.outside_test",
+        blurb: "`Val[T]` fabricates a value that merely satisfies `T`. That is \
+                what a test wants and what running code must not do, so `Val` is \
+                allowed only in test code. In a function or handler, take the \
+                value as a parameter or build it properly, for instance with \
+                `Age.of(20)`. See `bynk.val.needs_pin` for a bare `Val` that a \
+                test cannot generate.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  fn sample() -> Age { Val[Age] }   // ✗ not test code\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Age]                  // ✓ in a case",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.pin_not_literal",
+        blurb: "A pin on `Val[T]` is checked against the refinement of `T` when \
+                the program compiles, so it must be a literal of `T`'s base type. \
+                A name or a call has no value at that point. Write the literal in \
+                place. For a computed value, build it with `Age.of(…)` and `?`, \
+                which fails the case if the value is not valid.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let n = 20\n\
+                  let a = Val[Age](n)    // ✗ a name, not a literal\n\
+                  let a = Val[Age](20)   // ✓ a literal",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.unknown_type",
+        blurb: "`Val[T]` fabricates a value of the type it names, so the name must \
+                resolve to a type the suite can see. A misspelt name stops here, \
+                before anything else about the value can be checked. Fix the \
+                spelling, or declare the type in the target unit or the suite. The \
+                same code covers a `for all` binder whose type does not resolve.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Agee]      // ✗ no such type\n\
+                  let a = Val[Age]       // ✓ the declared type",
         page: "/book/reference/testing",
         anchor: "val",
     },

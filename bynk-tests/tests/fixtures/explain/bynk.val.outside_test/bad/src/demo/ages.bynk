@@ -1,0 +1,5 @@
+commons demo.ages
+
+type Age = Int where InRange(0, 150)
+
+fn sample() -> Age { Val[Age] }
