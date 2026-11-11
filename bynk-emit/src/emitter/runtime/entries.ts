@@ -82,6 +82,13 @@ export function logRange(field: string, from: number | undefined, to: number | u
   };
 }
 
+/** The key time and counter of a `Log` entry's storage key (`l/<field>/<t>-<seq>`). */
+export function parseLogKey(key: string): { t: number; seq: number } {
+  const tail = key.slice(key.lastIndexOf("/") + 1);
+  const dash = tail.indexOf("-");
+  return { t: Number(tail.slice(0, dash)), seq: Number(tail.slice(dash + 1)) };
+}
+
 /** One posting of a secondary index: `by` is the indexed value, `pk` the primary key. */
 export const postingKey = (field: string, index: string, by: string, pk: string): string =>
   `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
@@ -543,7 +550,7 @@ function planEntries(
       delete record[ix.recordField];
       return { ix, postings };
     });
-    const meta = base.get(metaKey(f.name)) as { size?: number; seq?: number } | undefined;
+    const meta = base.get(metaKey(f.name)) as { size?: number; seq?: number; skew?: number } | undefined;
     let seq = meta?.seq ?? 0;
     if (inline === undefined || inline === null) {
       continue;
@@ -571,12 +578,15 @@ function planEntries(
       // keys sort in append order. The entry keeps its own `t`.
       const last = own.length > 0 ? own[own.length - 1]![0] : undefined;
       let keyTime = last === undefined ? 0 : Number(last.slice(logPrefix(f.name).length, logPrefix(f.name).length + TIME_WIDTH));
+      // The most a key's time is above its entry's `t`: a window read widens by it (`skew`).
+      let skew = meta?.skew ?? 0;
       log.slice(kept).forEach((e) => {
         keyTime = Math.max(keyTime, e.t);
+        skew = Math.max(skew, keyTime - e.t);
         entries[logKey(f.name, keyTime, seq)] = e;
         seq += 1;
       });
-      if (log.length > 0 || meta !== undefined) entries[metaKey(f.name)] = { size: log.length, seq };
+      if (log.length > 0 || meta !== undefined) entries[metaKey(f.name)] = { size: log.length, seq, ...(skew > 0 ? { skew } : {}) };
       continue;
     }
     const keyOf = f.kind === "set" ? setKey : mapKey;
