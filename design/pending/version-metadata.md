@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, emit_abi_shapes, ts_writes
 changelog: `bynk.cloudflare.Version` (experimental) reports the running Worker version, the first one-per-Worker platform capability, bound as `[version_metadata]` only when reached
 ---
 

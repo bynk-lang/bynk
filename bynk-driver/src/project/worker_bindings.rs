@@ -83,6 +83,44 @@ pub(super) fn contexts_singletons(
         .collect()
 }
 
+/// Each context's platform-native units, by platform ([`contexts_native`]).
+pub(super) type ContextsNative = HashMap<String, BTreeMap<Platform, String>>;
+
+/// Each context's one-per-Worker capabilities ([`contexts_singletons`]).
+pub(super) type ContextsSingletons = HashMap<String, Vec<String>>;
+
+/// The bare-resources view of every context: [`contexts_native`] counting
+/// only bare resources (S4a, #1966), and [`contexts_singletons`] (#3300).
+pub(super) fn bare_resources(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+) -> (ContextsNative, ContextsSingletons) {
+    let native = contexts_native(
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        false,
+    );
+    let singletons = contexts_singletons(
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+    );
+    (native, singletons)
+}
+
+/// Context `ctx`'s entry in [`contexts_singletons`]' map: none when absent.
+pub(super) fn singletons_of<'a>(map: &'a HashMap<String, Vec<String>>, ctx: &str) -> &'a [String] {
+    map.get(ctx).map(Vec::as_slice).unwrap_or_default()
+}
+
 /// v0.19 (C1): a Worker needs the KV namespace binding when its in-process
 /// closure reaches the cloudflare adapter.
 pub(super) fn needs_kv(
@@ -269,10 +307,7 @@ pub(super) fn all_context_bindings(
                 ),
                 &own_event_routes(ctx, event_subscribers),
                 needs_kv(&context_native, ctx),
-                context_singletons
-                    .get(ctx)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default(),
+                singletons_of(&context_singletons, ctx),
                 unit_table_uses_emit(table, unit_callees.get(ctx)),
             ),
         );

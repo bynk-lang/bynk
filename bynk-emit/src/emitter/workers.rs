@@ -455,27 +455,7 @@ pub fn emit_worker_compose(
     // binding list the members come from, so a binding can never be typed
     // by a name this file does not import or define.
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    if binds(|s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. })) {
-        runtime_imports.push("type __KVNamespace".to_string());
-    }
-    if binds(|s| matches!(s, BindingSource::R2Instance { .. })) {
-        runtime_imports.push("type __R2Bucket".to_string());
-    }
-    if binds(|s| matches!(s, BindingSource::RateLimitInstance { .. })) {
-        runtime_imports.push("type __RateLimiter".to_string());
-    }
-    if binds(|s| matches!(s, BindingSource::QueueProducer { .. })) {
-        runtime_imports.push("type __QueueProducer".to_string());
-    }
-    if binds(|s| matches!(s, BindingSource::AnalyticsDataset { .. })) {
-        runtime_imports.push("type __AnalyticsDataset".to_string());
-    }
-    if binds(|s| matches!(s, BindingSource::D1Database { .. })) {
-        runtime_imports.push("type __D1Database".to_string());
-    }
-    if binds(|s| matches!(s, BindingSource::Singleton { .. })) {
-        runtime_imports.push("type __WorkerVersionMetadata".to_string());
-    }
+    runtime_imports.extend(platform_binding_type_imports(bindings));
     runtime_imports.push("type __ServiceBinding".to_string());
     if has_bearer || has_sum || has_oidc {
         runtime_imports.push("HttpResult".to_string());
@@ -2768,6 +2748,49 @@ fn collect_runtime_type_names(r: &TypeRef, out: &mut std::collections::BTreeSet<
 fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
     let scope: HashSet<String> = named_types_in(r).into_iter().collect();
     crate::emitter::ts_type_ref_qualified_ts_type(r, &scope, "handlers")
+}
+
+/// #1944: the runtime types the `Env` members of `bindings` name for the
+/// platform resources (KV, R2, rate limiters, queue producers, Analytics
+/// datasets, D1, Version metadata), each once, in a fixed order, as
+/// `type __X` import entries.
+fn platform_binding_type_imports(bindings: &[WorkerBinding]) -> Vec<String> {
+    let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 7] = [
+        (
+            |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
+            "__KVNamespace",
+        ),
+        (
+            |s| matches!(s, BindingSource::R2Instance { .. }),
+            "__R2Bucket",
+        ),
+        (
+            |s| matches!(s, BindingSource::RateLimitInstance { .. }),
+            "__RateLimiter",
+        ),
+        (
+            |s| matches!(s, BindingSource::QueueProducer { .. }),
+            "__QueueProducer",
+        ),
+        (
+            |s| matches!(s, BindingSource::AnalyticsDataset { .. }),
+            "__AnalyticsDataset",
+        ),
+        (
+            |s| matches!(s, BindingSource::D1Database { .. }),
+            "__D1Database",
+        ),
+        (
+            |s| matches!(s, BindingSource::Singleton { .. }),
+            "__WorkerVersionMetadata",
+        ),
+    ];
+    kinds
+        .into_iter()
+        .filter(|(kind, _)| binds(*kind))
+        .map(|(_, ty)| format!("type {ty}"))
+        .collect()
 }
 
 #[cfg(test)]

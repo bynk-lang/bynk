@@ -3345,18 +3345,9 @@ fn build_output(
         &unit_flattened,
         true,
     );
-    // S4a (#1966): the same, counting only the bare resources, so a named
-    // instance never brings in an unreachable bare `KV` namespace.
-    let context_bare_native = worker_bindings::contexts_native(
-        &kinds,
-        &unit_tables,
-        &unit_consumes,
-        &unit_consumes_aliases,
-        &unit_flattened,
-        false,
-    );
-    // #3300: the one-per-Worker capabilities each context reaches bare.
-    let context_singletons = worker_bindings::contexts_singletons(
+    // S4a (#1966): the bare resources only, so a named instance never brings
+    // in an unreachable bare `KV`; #3300: and the singletons reached bare.
+    let (context_bare_native, context_singletons) = worker_bindings::bare_resources(
         &kinds,
         &unit_tables,
         &unit_consumes,
@@ -3518,10 +3509,7 @@ fn build_output(
                     &called_contexts,
                     &own_event_routes,
                     needs_kv,
-                    context_singletons
-                        .get(ctx_name)
-                        .map(Vec::as_slice)
-                        .unwrap_or_default(),
+                    worker_bindings::singletons_of(&context_singletons, ctx_name),
                     ctx_uses_emit,
                 );
                 // #2719: the context's handlers that hand work to the execution

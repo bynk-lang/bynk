@@ -115,13 +115,6 @@ pub(super) fn emit_integration_module(
             BindingSource::Agent { .. } | BindingSource::EventsFanout { .. }
         )
     });
-    let has_kv = binds(|s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }));
-    let has_r2 = binds(|s| matches!(s, BindingSource::R2Instance { .. }));
-    let has_ratelimit = binds(|s| matches!(s, BindingSource::RateLimitInstance { .. }));
-    let has_queue = binds(|s| matches!(s, BindingSource::QueueProducer { .. }));
-    let has_analytics = binds(|s| matches!(s, BindingSource::AnalyticsDataset { .. }));
-    let has_d1 = binds(|s| matches!(s, BindingSource::D1Database { .. }));
-    let has_version = binds(|s| matches!(s, BindingSource::Singleton { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -147,27 +140,7 @@ pub(super) fn emit_integration_module(
     if asset_harness.is_some() {
         runtime_names.push("HttpResult".to_string());
     }
-    if has_kv {
-        runtime_names.push("__makeIntegrationKv".to_string());
-    }
-    if has_r2 {
-        runtime_names.push("__makeIntegrationR2".to_string());
-    }
-    if has_ratelimit {
-        runtime_names.push("__makeIntegrationRateLimit".to_string());
-    }
-    if has_queue {
-        runtime_names.push("__makeIntegrationQueue".to_string());
-    }
-    if has_analytics {
-        runtime_names.push("__makeIntegrationAnalytics".to_string());
-    }
-    if has_d1 {
-        runtime_names.push("__makeIntegrationD1".to_string());
-    }
-    if has_version {
-        runtime_names.push("__makeIntegrationVersionMetadata".to_string());
-    }
+    runtime_names.extend(platform_binding_factories(&binds));
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());
         runtime_names.push("type __DurableObjectState".to_string());
@@ -864,4 +837,46 @@ pub(super) fn emit_integration_module(
             generative: false,
         },
     ))
+}
+
+/// The runtime factories the harness binds the participants' platform
+/// resources with (KV, R2, rate limiters, queue producers, Analytics datasets,
+/// D1, Version metadata), each once, in a fixed order. `binds` answers whether
+/// any participant has a binding of a kind.
+fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool) -> Vec<String> {
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 7] = [
+        (
+            |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
+            "__makeIntegrationKv",
+        ),
+        (
+            |s| matches!(s, BindingSource::R2Instance { .. }),
+            "__makeIntegrationR2",
+        ),
+        (
+            |s| matches!(s, BindingSource::RateLimitInstance { .. }),
+            "__makeIntegrationRateLimit",
+        ),
+        (
+            |s| matches!(s, BindingSource::QueueProducer { .. }),
+            "__makeIntegrationQueue",
+        ),
+        (
+            |s| matches!(s, BindingSource::AnalyticsDataset { .. }),
+            "__makeIntegrationAnalytics",
+        ),
+        (
+            |s| matches!(s, BindingSource::D1Database { .. }),
+            "__makeIntegrationD1",
+        ),
+        (
+            |s| matches!(s, BindingSource::Singleton { .. }),
+            "__makeIntegrationVersionMetadata",
+        ),
+    ];
+    kinds
+        .into_iter()
+        .filter(|(kind, _)| binds(*kind))
+        .map(|(_, name)| name.to_string())
+        .collect()
 }

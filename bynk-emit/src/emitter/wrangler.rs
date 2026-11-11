@@ -627,6 +627,10 @@ pub(crate) fn handler_bindings(consumed: &[String], agents: &[String]) -> Vec<Wo
         .collect()
 }
 
+/// A test of a binding's kind (`|s| matches!(s, BindingSource::Kv)`), as
+/// the tables pairing each platform-resource kind with what it needs use.
+pub type BindingKind = fn(&BindingSource) -> bool;
+
 /// The TypeScript type a binding has on the Worker's `env`, for both its
 /// `Env` interface and a handler's `deps.env`.
 pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
