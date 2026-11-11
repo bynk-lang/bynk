@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ast_importers, ts_writes, ts_any, diagnostic_coverage, explained_codes
-changelog: Inbound email on Workers (`from email`, #3328 slice 2): the `email()` export parses the message with `postal-mime`, dispatches by envelope recipient, mints the `Sender` identity from Cloudflare's DMARC verdict, applies the verdict, and routes via wrangler `addresses`; the first-party npm dependency mechanism of ADR 0799 C lands
----
+# 0808 — Inbound email on Workers, and the first-party npm dependency mechanism
 
-## ADR: inbound-email-workers-and-first-party-npm
-title: Inbound email on Workers, and the first-party npm dependency mechanism
-summary: The Worker's email() export, MIME parsing under limits, DMARC verdict selection, fault behaviour, routing, and how a built-in binding brings an exactly-pinned npm package
+- **Status:** Accepted (v0.553)
 
 **Context.** Slice 1 of #3328 (ADR 0805) shipped the surface, the checker and a
 runnable suite vertical, and refused a deployable Workers build of a `from email`
