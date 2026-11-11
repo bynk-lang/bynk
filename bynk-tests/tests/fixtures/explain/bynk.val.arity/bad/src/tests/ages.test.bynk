@@ -1,0 +1,6 @@
+suite demo.ages {
+	case "an age" {
+		let a = Val[Age](20, 30)
+		expect true
+	}
+}

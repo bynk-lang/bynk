@@ -1,0 +1,6 @@
+commons demo.rules
+
+fn positive(n: Int) -> Bool {
+	expect n > 0
+	n > 0
+}
