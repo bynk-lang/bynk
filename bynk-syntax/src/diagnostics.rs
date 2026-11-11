@@ -1610,7 +1610,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.given.fn_outside_context",
         blurb: "`given` lets a function use capabilities, and only a context declares which capabilities it consumes. A commons is shared by every context that uses it, and those may consume different capabilities, so a function in a commons or a suite cannot declare `given`. Take the operation as a parameter instead, and pass `(m) => Logger.error(m)` from the handler, or move the function into the context that consumes the capability. A method cannot declare `given` anywhere: that is `bynk.given.fn_unsupported`.",
-        example: "fn warn(what: String) -> Effect[()] given Logger {   // ✗ a commons function has no `given`\n\nfn warn(log: (String) -> Effect[()], what: String) -> Effect[()] {   // ✓ the caller passes the operation in",
+        example: "fn warn(what: String) -> Effect[()] given Logger { … }   // ✗ a commons function has no `given`\n\nfn warn(log: (String) -> Effect[()], what: String) -> Effect[()] { … }   // ✓ the caller passes the operation in",
         page: "/book/reference/capabilities",
         anchor: "capabilities-in-functions",
     },
