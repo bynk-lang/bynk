@@ -1450,7 +1450,7 @@ because a property over one value would run the same case every time; use
 `Val`. `bynk test --smoke` uses examples, so a route with a patterned path
 parameter or body field has its *answers* case run.
 
-## `property` / `for all` — generative tests
+## `property` / `for all` — generative tests {#properties}
 
 A `property` is the generative sibling of `case`, legal in the same `suite`. Where
 a `case` supplies its subjects, a `property` **generates** them and checks that a

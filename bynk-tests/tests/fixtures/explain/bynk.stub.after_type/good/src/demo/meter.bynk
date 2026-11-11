@@ -1,0 +1,17 @@
+context demo.meter
+
+capability Meter {
+  fn read() -> Effect[Int]
+}
+
+provides Meter = ZeroMeter {
+  fn read() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] given Meter {
+    Meter.read()
+  }
+}

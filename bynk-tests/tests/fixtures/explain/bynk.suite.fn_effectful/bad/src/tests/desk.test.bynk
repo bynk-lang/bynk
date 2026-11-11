@@ -1,0 +1,8 @@
+suite demo.desk {
+  fn bump(n: Int) -> Effect[Int] { local.call(n) }
+
+  case "an effectful helper" {
+    let n <- bump(1)
+    expect n == 2
+  }
+}

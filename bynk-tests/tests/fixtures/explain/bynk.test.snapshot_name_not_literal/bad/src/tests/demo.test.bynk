@@ -1,0 +1,5 @@
+suite demo {
+  case "reads" {
+    expect read("a") matches snapshot name
+  }
+}
