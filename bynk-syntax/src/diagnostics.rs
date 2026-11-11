@@ -3588,7 +3588,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.types.unknown_annotation",
-        blurb: "After a refinement, the only annotation Bynk knows is `@example(\"…\")`, a sample value that the compiler checks against the refinement. Any other name is refused rather than ignored, so a misspelling cannot pass as a comment. Use `@example`, or delete the annotation. It is accepted only on `Matches` and `IsoDate`.",
+        blurb: "After a refinement, the only annotation Bynk knows is `@example(\"…\")`, a sample value that the compiler checks against the refinement. Any other name is refused rather than ignored, so a misspelling cannot pass as a comment. Use `@example`, or delete the annotation. `@example` is accepted only on `Matches` and `IsoDate`.",
         example: "type Code = String where Matches(\"[A-Z]{3}\") @sample(\"ABC\")     // ✗ no annotation `@sample`\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")    // ✓",
         page: "/book/reference/refined-types",
         anchor: "predicates",
