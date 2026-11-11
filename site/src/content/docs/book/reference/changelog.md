@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.546.2** | Closes a gap where rebinding a writing lambda's name in an inner block let a store write through a `parTraverse` closure |
 | **v0.546.1** | Each `bynk explain` example is backed by a compiled before-and-after pair, and the examples that had drifted from the language are corrected |
 | **v0.546.0** | `bynk.cloudflare.Version` (experimental) reports the running Worker version, the first one-per-Worker platform capability, bound as `[version_metadata]` only when reached |
 | **v0.545.0** | A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` may not write a `store` (`bynk.par.store_write_in_closure`), extending the `par` block's rule that store writes stay sequential |
