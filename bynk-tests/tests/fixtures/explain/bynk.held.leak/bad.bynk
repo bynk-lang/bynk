@@ -1,0 +1,7 @@
+commons room {
+  type ServerFrame = { text: String }
+
+  fn ignore(c: Connection[ServerFrame]) -> Effect[()] {
+    Effect.pure(())
+  }
+}
