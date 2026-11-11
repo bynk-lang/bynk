@@ -100,6 +100,11 @@ export const postingPrefix = (field: string, index: string, by?: string): string
 export const expiryKey = (field: string, exp: number, k: string): string =>
   `x/${encodeKeyPart(field)}/${padNumber(exp, TIME_WIDTH)}/${encodeKeyPart(k)}`;
 export const expiryPrefix = (field: string): string => `x/${encodeKeyPart(field)}/`;
+/** The expiry time and entry key an expiry key (`x/<field>/<exp>/<key>`) carries. */
+export function parseExpiryKey(field: string, storageKey: string): { exp: number; key: string } {
+  const rest = storageKey.slice(expiryPrefix(field).length);
+  return { exp: Number(rest.slice(0, TIME_WIDTH)), key: decodeKeyPart(rest.slice(TIME_WIDTH + 1)) };
+}
 /** The expiry entries with `exp <= now`, as `list` options. */
 export function expiredRange(field: string, now: number): DurableObjectListOptions {
   const prefix = expiryPrefix(field);

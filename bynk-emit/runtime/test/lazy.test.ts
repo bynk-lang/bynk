@@ -332,3 +332,17 @@ test("a collection with no metadata at all is empty, and its skew is known to be
   await flushLazy(l);
   assert.equal(((await s.get("c/audit")) as { skew?: number }).skew, 0);
 });
+
+test("reaping drops an expiry key whose entry is gone, instead of re-reading it every time", async () => {
+  const s = new InMemoryStorage();
+  await s.put("state", { __layout: 2 });
+  await s.put("c/hits", { size: 1, seq: 2 });
+  await s.put("m/hits/live", { v: 1, exp: 50, i: 1 });
+  await s.put("x/hits/0000000000000050/live", 1);
+  await s.put("x/hits/0000000000000010/ghost", 1); // no entry behind it
+  const l = loadLazy(s);
+  assert.equal(await l.hits.reap(60, 5), 1, "only the live-but-expired entry counts");
+  await flushLazy(l);
+  assert.deepEqual([...(await s.list({ prefix: "x/hits/" })).keys()], [], "both expiry keys are gone");
+  assert.equal(((await s.get("c/hits")) as { size: number }).size, 0);
+});

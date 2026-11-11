@@ -12,7 +12,7 @@
 // in batches, and a `Log` window is a key range. A scan (`keys`, `values`, `entries`) lists the
 // collection in pages. Order is the entry's insertion sequence `i`, as `entries.ts` writes it.
 
-import { EntryOverlay, decodeKeyPart, expiredRange, expiryKey, expiryPrefix, logKey, logPrefix, logRange, mapKey, mapPrefix, metaKey, parseLogKey, postingKey, postingPrefix, sameStored, setKey, setPrefix } from "./entries.ts";
+import { EntryOverlay, decodeKeyPart, expiredRange, expiryKey, logKey, logPrefix, logRange, mapKey, mapPrefix, metaKey, parseExpiryKey, parseLogKey, postingKey, postingPrefix, sameStored, setKey, setPrefix } from "./entries.ts";
 import type { DurableObjectListOptions } from "./storage.ts";
 import type { CacheEntry, Indexer, LogEntry, StoreCacheHandle, StoreLogHandle, StoreMapHandle, StoreSetHandle } from "./store.ts";
 
@@ -240,12 +240,14 @@ export class LazyStoreCache<V> extends LazyStoreMap<CacheEntry<V>> implements St
    */
   async reap(now: number, limit: number): Promise<number> {
     if (limit <= 0) return 0;
-    const prefix = expiryPrefix(this.field);
     const expired = await this.overlay.list<unknown>({ ...expiredRange(this.field, now), limit });
     let reaped = 0;
     for (const xk of expired.keys()) {
-      const key = decodeKeyPart(xk.slice(prefix.length).slice("0000000000000000/".length));
+      const { key } = parseExpiryKey(this.field, xk);
       if (await this.remove(key)) reaped += 1;
+      // An expiry key whose entry is gone (or was rewritten under another expiry) is an orphan:
+      // drop it, or every reap would spend its limit on it again.
+      this.overlay.delete(xk);
     }
     return reaped;
   }

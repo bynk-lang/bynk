@@ -421,6 +421,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("oidcTrust", "auth"),
     ("orderedRecord", "store"),
     ("padNumber", "entries"),
+    ("parseExpiryKey", "entries"),
     ("parseLogKey", "entries"),
     ("postingKey", "entries"),
     ("postingPrefix", "entries"),
