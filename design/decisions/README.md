@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0805](0805-inbound-email-protocol.md) | **Inbound email joins the closed protocol set as `from email(…)`, with a typed verdict** (v0.550) — The seventh protocol, its verdict and actor, and the decisions slice 2 follows | Accepted (v0.550) |
 | [0804](0804-outbound-email-instance-kind.md) | **Outbound email is an `Email` instance kind over `send_email`, with typed send errors** (v0.549) — A list-valued instance option, a binding that checks limits before the call, and a deploy-side sender-domain check | Accepted (v0.549) |
 | [0803](0803-file-check-digest-reach.md) | **What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive** (v0.548.4) — What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive | Accepted (v0.548.4) |
 | [0802](0802-linked-account-resources-and-stored-secret.md) | **Account-level resources are linked by the deploy and never created, starting with Secrets Store secrets** (v0.548) — A `linked` flag on instantiable registry kinds, and `StoredSecret` over the Secrets Store binding | Accepted (v0.548) |

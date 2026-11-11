@@ -1,12 +1,6 @@
----
-level: minor
-probes: explained_codes, emit_diagnostics, diagnostic_coverage
-changelog: A service can receive email, `service support from email("support@shop.example")`, with an `on message(mail: InboundEmail) -> Effect[EmailVerdict]` handler tested in a suite; the Workers mapping follows (#3328 slice 1)
----
+# 0805 — Inbound email joins the closed protocol set as `from email(…)`, with a typed verdict
 
-## ADR: inbound-email-protocol
-title: Inbound email joins the closed protocol set as `from email(…)`, with a typed verdict
-summary: The seventh protocol, its verdict and actor, and the decisions slice 2 follows
+- **Status:** Accepted (v0.550)
 
 **Context.** A Bynk service could not receive mail. Cloudflare delivers inbound
 mail to a Worker's `email(message, env, ctx)` export. The protocol set is
