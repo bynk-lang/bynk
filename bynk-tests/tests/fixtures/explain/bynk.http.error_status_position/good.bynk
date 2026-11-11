@@ -1,0 +1,9 @@
+context api
+
+fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }
+
+service api from http {
+    on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+        RawError(Forbidden, problem("no access"), "text/plain")
+    }
+}

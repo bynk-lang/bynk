@@ -1,0 +1,17 @@
+context api
+
+type WorkloadId = String where NonEmpty
+
+actor Workload {
+    auth = Oidc(issuer = "https://issuer.example.com", audience = "api", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+    identity = WorkloadId
+}
+
+type Seen = { claims: TokenClaims }
+
+service api from http {
+    on GET("/who") () -> Effect[HttpResult[String]] by w: Workload {
+        let repo = w.claims.get("repository")
+        Ok(repo.getOrElse("-"))
+    }
+}
