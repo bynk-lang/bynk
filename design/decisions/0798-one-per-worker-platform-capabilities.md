@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes
-changelog: `bynk.cloudflare.Version` (experimental) reports the running Worker version, the first one-per-Worker platform capability, bound as `[version_metadata]` only when reached
----
+# 0798 — One-per-Worker platform capabilities are used bare and bound only when reached
 
-## ADR: one-per-worker-platform-capabilities
-title: One-per-Worker platform capabilities are used bare and bound only when reached
-summary: A registry kind for bindings a Worker has once, starting with `Version` over Version metadata
+- **Status:** Accepted (v0.546)
 
 **Context.** Every `bynk.cloudflare` capability had either named instances
 (`capability Orders = D1`) or, for bare `Kv`, a default instance beside them.
