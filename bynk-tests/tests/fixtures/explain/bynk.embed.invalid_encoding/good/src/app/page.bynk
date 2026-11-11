@@ -1,0 +1,7 @@
+commons app.page
+
+embed shell = "embeds/page.html"
+
+fn page(title: String) -> String {
+  shell.replace("{{title}}", title)
+}

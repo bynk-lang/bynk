@@ -676,6 +676,49 @@ records have propagated, so a domain still propagating can pass the check and be
 refused at run time as `SenderNotVerified`, which a handler can answer. An
 instance without `@allowedSenders` asks nothing.
 
+### Receiving mail: Email Routing
+
+A context with a [`from email`](/book/guides/entry-points/receive-email/) service
+gets its addresses in the Worker's `wrangler.toml`, as wrangler's top-level
+`addresses`, lower-cased and sorted:
+
+```toml
+addresses = ["*@shop.example", "support@shop.example"]
+```
+
+`wrangler deploy` (4.113.0 or later; Bynk requires 4.120.1) reconciles the
+account's Email Routing rules to that list, so an address a service claims has a
+rule that delivers to the Worker, and one that is no longer listed loses its rule.
+The list applies to every environment, so it is top-level and never copied into
+an `[env.*]` table. A Worker with no email service has no `addresses` key, and
+wrangler manages no routing rule for it. Two services in the project claiming one
+address, even in different contexts, is a compile error
+(`bynk.email.duplicate_address`), because Email Routing keeps one rule per address.
+
+The plan lists each address as an advisory line (`email address
+support@shop.example (Email Routing rule; advisory — wrangler reconciles it)`),
+and `--format json` carries them as the context's `email_addresses`: wrangler,
+not Bynk, owns the rules.
+
+Wrangler deletes the rule of an address a Worker no longer lists, and mail to it
+then bounces, so a removal is gated. Each push records the addresses it carried
+in `bynk.deploy.lock`; the next plan shows an address that has gone as
+`email address help@shop.example removed (…; needs --prune)` (and as
+`removed_email_addresses` in JSON), and the deploy is **refused before anything is
+pushed** unless `--prune` is given, with its usual confirmation (`--yes` answers
+it; `--yes` alone does not). A first deploy has nothing recorded and asks
+nothing, and neither does an added address. Dropping every `from email` service
+removes every recorded address the same way.
+
+Email Routing must be turned on for the domain, and a `Forward(to)` destination
+must be a verified destination address in the account; deploy does not check
+either. A forward the platform refuses is rejected `forward refused` and logged.
+The Worker needs `postal-mime` installed beside it: the build's `package.json`
+lists it, exactly pinned, so run `npm install` in `.bynk/deploy` before
+deploying. `bynk deploy` (and `bynk dev`) stop before wrangler and name any
+listed package that is not installed; `--dry-run` only warns, since it installs and
+pushes nothing.
+
 ### Workers outside the project
 
 A [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/)

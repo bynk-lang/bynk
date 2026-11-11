@@ -927,15 +927,16 @@ pub(crate) fn check_call(
         .values()
         .filter(|t| matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name.name)))
         .collect();
-    if owners.len() == 1 {
+    // #3344: several sums in scope share the name; the expected type picks one.
+    if let Some(sum) = variant_owner(&owners, expected, tys) {
         ctx.callees.insert(
             expr_id,
             Callee::Ctor {
-                sum: Arc::clone(owners[0]),
+                sum: Arc::clone(sum),
                 tag: name.name.clone(),
             },
         );
-        return check_variant_construction(owners[0], &name.name, args, span, expected, ctx);
+        return check_variant_construction(sum, &name.name, args, span, expected, ctx);
     }
     // Agent instantiation: `AgentName(key)` constructs an instance keyed by
     // `key`. The result type carries the agent's name so subsequent
@@ -1039,13 +1040,8 @@ pub(crate) fn check_call(
         let _ = type_of(a, None, ctx);
     }
     if owners.len() > 1 {
-        ctx.errors.push(CompileError::new(
-            "bynk.resolve.ambiguous_variant",
-            name.span,
-            format!(
-                "the variant name `{}` is declared on multiple sum types — qualify it as `TypeName.{}(...)`",
-                name.name, name.name
-            ),
+        ctx.errors.push(ambiguous_variant_error(
+            &name.name, name.span, &owners, true,
         ));
         return None;
     }

@@ -2513,25 +2513,8 @@ fn run_checks(
         &unit_flattened,
         &mut errors,
     );
-    // #1822: on Workers, a required local capability needs a provider.
-    project_model::phase_workers_unprovided_capabilities(
-        target,
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        &mut errors,
-    );
-    // #2306: on Workers, a WebSocket `on open` and the agent it transfers to
-    // must share a file.
-    project_model::phase_workers_ws_open_split(
-        target,
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        &mut errors,
-    );
+    // #1822, #3328, #2306: the project-wide topology checks.
+    project_model::phase_topology(target, &parsed, &groups, &kinds, &unit_tables, &mut errors);
     // #2959: on Workers, the `on open` transfer key must be one the edge can
     // evaluate before the body runs.
     project_model::phase_workers_ws_open_key(
@@ -3222,6 +3205,38 @@ fn run_checks(
     }
 }
 
+/// `package.json`: always `"type": "module"` (#2148), so the emitted tsconfig's
+/// `module: NodeNext` checks and builds the output as the ES modules it is, under
+/// Node's ESM rules; plus the adapter-declared (v0.17) and first-party (ADR 0799
+/// C) npm dependencies when there are any.
+fn package_json_file(npm_deps: &std::collections::BTreeMap<String, String>) -> StagedFile {
+    StagedFile {
+        output_path: PathBuf::from("package.json"),
+        document: Document::Json(render_package_json(npm_deps)),
+        source_map: None,
+        debug_metadata: None,
+    }
+}
+
+/// ADR 0799 C: a runtime module that imports a first-party npm package brings it,
+/// at its exact pin, into `package.json`.
+fn runtime_with_npm(
+    reached: &BTreeSet<(String, String)>,
+    mut npm_deps: std::collections::BTreeMap<String, String>,
+) -> (
+    Vec<(PathBuf, String)>,
+    std::collections::BTreeMap<String, String>,
+) {
+    let runtime_files = emitter::runtime_files::closure_files(reached);
+    let modules = runtime_files
+        .iter()
+        .filter_map(|(path, _)| path.file_stem().and_then(|m| m.to_str()));
+    for dep in firstparty::first_party_npm_for(modules) {
+        npm_deps.insert(dep.package.to_string(), dep.version.to_string());
+    }
+    (runtime_files, npm_deps)
+}
+
 /// Build-success tail (region 3): emit the composition/worker/runtime files
 /// and assemble the final `ProjectOutput`. Reached only on build mode with a
 /// clean error sink. Moved verbatim from the old pipeline; only the locals it
@@ -3606,6 +3621,7 @@ fn build_output(
                     &bindings,
                     &crons,
                     &queues,
+                    &bynk_check::email::routed_addresses(table),
                     compatibility_flags,
                     workers_dev,
                     &emitter::ClassTombstones::of(table),
@@ -3904,17 +3920,6 @@ fn build_output(
         });
     }
 
-    // `package.json`: always `"type": "module"` (#2148), so the emitted
-    // tsconfig's `module: NodeNext` checks and builds the output as the ES
-    // modules it is, under Node's ESM rules; plus the adapter-declared npm
-    // dependencies when there are any (v0.17).
-    compiled.push(StagedFile {
-        output_path: PathBuf::from("package.json"),
-        document: Document::Json(render_package_json(&npm_deps)),
-        source_map: None,
-        debug_metadata: None,
-    });
-
     // Runtime (ADR 0615): exactly the modules the emitted files import, closed
     // over the modules' own imports, under `__bynk_runtime/` at the root of
     // `out/` so every file's relative specifier resolves to it.
@@ -3926,7 +3931,8 @@ fn build_output(
             emitter::runtime_files::reached_in(program, &mut reached);
         }
     }
-    for (path, source) in emitter::runtime_files::closure_files(&reached) {
+    let (runtime_files, npm_deps) = runtime_with_npm(&reached, npm_deps);
+    for (path, source) in runtime_files {
         compiled.push(StagedFile {
             output_path: path,
             document: Document::Ts(bynk_ts::TsProgram {
@@ -3940,6 +3946,7 @@ fn build_output(
             debug_metadata: None,
         });
     }
+    compiled.push(package_json_file(&npm_deps));
     compiled.push(StagedFile {
         output_path: PathBuf::from("tsconfig.json"),
         document: Document::Json(emitter::emit_tsconfig()),

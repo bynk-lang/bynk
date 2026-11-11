@@ -367,6 +367,27 @@ pub fn caller_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     is_caller.then(|| binder.name.clone())
 }
 
+/// #3328: the binder of a `from email` handler that captures the minted
+/// `SenderIdentity` — `by s: Sender`, or `None` for a binder-less handler or a
+/// handler that inherits the default (which captures nothing). `Sender` is a
+/// prelude actor (a local actor of the same name is its own), and is admissible
+/// only on `from email`, so the handler kind decides.
+pub fn sender_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Option<String> {
+    if !matches!(handler.kind, HandlerKind::Message) {
+        return None;
+    }
+    let by = handler.by_clause.as_ref()?;
+    if by.is_sum() {
+        return None;
+    }
+    let binder = by.binder.as_ref()?;
+    let name = &by.primary().name;
+    (name == "Sender"
+        && !actors.contains_key(name)
+        && !handler.params.iter().any(|p| p.name.name == binder.name))
+    .then(|| binder.name.clone())
+}
+
 /// I3 (#1971): a declared foreign caller, as a `call` handler admits it: the
 /// actor's name, which the caller sends as `X-Bynk-Caller`, and the secret
 /// the callee verifies its signature under.

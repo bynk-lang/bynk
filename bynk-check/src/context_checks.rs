@@ -3238,8 +3238,19 @@ fn actor_identity_ty_guarded<'a>(
             tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String))
         }
         // #3328: `Sender`'s `SenderIdentity` is minted by the Workers `email()`
-        // entry (slice 2); until then it reads as the unit value, like the
-        // other platform-tag actors.
+        // entry. It is the first-party record from `bynk.cloudflare`, so it types
+        // as that record when the context imports it (`consumes bynk.cloudflare
+        // { SenderIdentity, … }`) and as the unit value when it does not, as the
+        // other platform-tag actors read.
+        Some(Identity::Declared(name)) => checker::resolve_type_ref(
+            &bynk_syntax::ast::TypeRef::Named(bynk_syntax::ast::Ident {
+                name,
+                span: bynk_syntax::span::Span::default(),
+            }),
+            &resolved.types,
+            tys,
+        )
+        .unwrap_or_else(|| tys.intern(checker::Ty::Unit)),
         _ => tys.intern(checker::Ty::Unit),
     }
 }

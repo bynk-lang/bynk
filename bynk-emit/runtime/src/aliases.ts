@@ -8,6 +8,7 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
+import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
@@ -35,6 +36,7 @@ export {
   wirePostings as __wirePostings,
   wireSet as __wireSet,
   WorkersConnection as __WorkersConnection,
+  handleEmail as __handleEmail,
   acceptHibernatableConnection as __acceptHibernatableConnection,
   applyCache as __applyCache,
   applyCors as __applyCors,
@@ -124,6 +126,8 @@ export {
   webSocketUpgradeResponse as __webSocketUpgradeResponse,
 };
 export type {
+  InboundMessage as __InboundMessage,
+  SenderIdentity as __SenderIdentity,
   AgentWire as __AgentWire,
   BoundaryError as __BoundaryError,
   CorsPolicy as __CorsPolicy,

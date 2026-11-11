@@ -194,7 +194,7 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
         })
         .collect();
     let npm = approvals(
-        npm_requirements(&walk.dirs),
+        npm_requirements(&walk.dirs, &members),
         &walk.resolved,
         &walk.existing,
         &mut walk.prepared,
@@ -673,7 +673,7 @@ impl Walk<'_> {
 /// the lock's `[[npm]]` rows: one row per `(package, range)`, its
 /// `required-by` the `org/package:adapter`s naming it. Every adapter counts,
 /// reached or not — the lock records what *could* enter a build.
-fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
+fn npm_requirements(dirs: &BTreeMap<String, PathBuf>, members: &[PathBuf]) -> Vec<LockedNpm> {
     let mut rows: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
     for (name, dir) in dirs {
         let Some(doc) = read_manifest(dir) else {
@@ -699,12 +699,56 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
             }
         }
     }
-    rows.into_iter()
+    let mut out: Vec<LockedNpm> = rows
+        .into_iter()
         .map(|((package, range), by)| LockedNpm {
             package,
             range,
             required_by: by.into_iter().collect(),
             approved: false,
+            first_party: false,
+        })
+        .collect();
+    out.extend(first_party_rows(members));
+    out
+}
+
+/// ADR 0799 C: the toolchain's own npm dependencies a project uses, one
+/// `first-party` row each, required by `bynk-std`: those whose binding the
+/// project's own contexts reach ([`bynk_check::firstparty::FirstPartyNpm::reached_by`]).
+/// They never need approval. Like an adapter's, a row records what *could* enter
+/// a build.
+fn first_party_rows(members: &[PathBuf]) -> Vec<LockedNpm> {
+    let mut units = Vec::new();
+    for member in members {
+        let Some(doc) = read_manifest(member) else {
+            continue;
+        };
+        for root in bynk_project::packages::package_source_roots(member, &doc) {
+            for file in bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default() {
+                let text = std::fs::read_to_string(file).unwrap_or_default();
+                // A file that does not parse reaches nothing; the build reports it.
+                if let Ok(tokens) = bynk_syntax::lexer::tokenize(&text)
+                    && let Ok(unit) = bynk_syntax::parser::parse_unit(&tokens, &text)
+                {
+                    units.push(unit);
+                }
+            }
+        }
+    }
+    bynk_check::firstparty::FIRST_PARTY_NPM
+        .iter()
+        .filter(|d| {
+            units
+                .iter()
+                .any(|u| bynk_check::firstparty::unit_reaches(u, &d.reached_by))
+        })
+        .map(|d| LockedNpm {
+            package: d.package.to_string(),
+            range: d.version.to_string(),
+            required_by: vec!["bynk-std".to_string()],
+            approved: false,
+            first_party: true,
         })
         .collect()
 }
@@ -728,6 +772,10 @@ fn approvals(
             .is_some_and(|p| p.source.starts_with("path+"))
     };
     for row in &mut rows {
+        if row.first_party {
+            // The toolchain's own: visible in the lock, never gated.
+            continue;
+        }
         let before = existing
             .npm
             .iter()

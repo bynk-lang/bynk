@@ -3192,6 +3192,18 @@ fn lower_test_service_call(
                 // `on message` handler, so the position index is 0.
                 let key = crate::emitter::queue_handler_method_name(&id.name, 0);
                 let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                // #3328: a case has no Email Routing to mint the `Sender` identity,
+                // so a handler that binds it reads the envelope sender with no
+                // DMARC verdict (`DmarcNone`) unless the case names a principal.
+                if deps_expr == "deps"
+                    && args.first().is_some_and(|a| is_inbound_email(a, cx))
+                    && let Some(mail) = args_lowered.first()
+                {
+                    return Some(settle(format!(
+                        "((__m: any) => {}.{}(__m, {{ ...deps, identity: {{ address: __m.from, dmarc: {{ tag: \"DmarcNone\" }} }} }}))({mail})",
+                        id.name, key
+                    )));
+                }
                 let mut all = args_lowered;
                 all.push(deps_expr);
                 return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
@@ -3234,6 +3246,14 @@ fn lower_test_service_call(
         )));
     }
     None
+}
+
+/// #3328: whether `e` is a first-party `InboundEmail`, the message an email
+/// service's `on message` takes (a queue's message is the user's own type).
+fn is_inbound_email(e: &Expr, cx: &LowerCtx) -> bool {
+    cx.commons().expr_types.get(&e.id).is_some_and(|te| {
+        matches!(&*cx.commons().tys().get(te.ty), bynk_check::checker::Ty::Named { name, .. } if name == "InboundEmail")
+    })
 }
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of

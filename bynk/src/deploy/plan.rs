@@ -150,6 +150,16 @@ struct ContextPlan<'a> {
     /// Interop I5 (#1972): its Service Bindings to Workers outside the
     /// project, in binding order. Bound, never provisioned.
     foreign_services: Vec<PlanForeignService<'a>>,
+    /// #3328: the addresses the Worker's `from email` services claim, in address
+    /// order. Advisory: wrangler reconciles the Email Routing rules to this list
+    /// on the push, so one no longer listed loses its rule.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    email_addresses: Vec<&'a str>,
+    /// #3328: addresses the last push carried that this one no longer lists.
+    /// Wrangler deletes their rules, so mail to them would bounce: the run is
+    /// refused unless `--prune` confirms it ([`confirm_address_removals`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    removed_email_addresses: Vec<String>,
 }
 
 /// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
@@ -336,6 +346,55 @@ fn record_pushed_tombstones(
         worker,
         pushed.renamed_durable_objects.iter().cloned().collect(),
     );
+    // #3328: and the Email Routing addresses it carried.
+    lock.record_email_addresses(
+        environment,
+        worker,
+        pushed.email_addresses.iter().cloned().collect(),
+    );
+}
+
+/// What the plan would destroy must be confirmed before anything is pushed: a
+/// Durable Object class by name (`--confirm-delete`), and an Email Routing rule
+/// by `--prune`.
+fn confirm_destructive(plan: &Plan<'_>, opts: &DeployOptions, lock: &DeployLock) -> bool {
+    confirm_deletions(plan, &opts.confirm_delete, lock)
+        && confirm_address_removals(plan, opts.prune, opts.yes)
+}
+
+/// #3328 (ADR 0805 F): wrangler deletes the Email Routing rule of an address a
+/// Worker no longer lists, and mail to it then bounces. So a removal is
+/// refused, before anything is pushed, unless `--prune` confirms it through the
+/// ordinary prune prompt (`--yes` answers it). A first deploy has no record, so
+/// removes nothing; an added address asks nothing.
+fn confirm_address_removals(plan: &Plan<'_>, prune: bool, yes: bool) -> bool {
+    let removed: Vec<(&str, &str)> = plan
+        .contexts
+        .iter()
+        .flat_map(|c| {
+            c.removed_email_addresses
+                .iter()
+                .map(move |a| (c.worker.as_str(), a.as_str()))
+        })
+        .collect();
+    if removed.is_empty() {
+        return true;
+    }
+    if !prune {
+        let list = removed
+            .iter()
+            .map(|(worker, address)| format!("`{address}` (`{worker}`)"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprintln!(
+            "bynk: this deploy would remove the Email Routing rule for {list}, and mail to it would bounce; nothing was pushed. Pass --prune to confirm the removal, or put the address back"
+        );
+        return false;
+    }
+    for (worker, address) in &removed {
+        eprintln!("bynk: will remove the Email Routing rule for `{address}` (`{worker}`)");
+    }
+    confirm_deletion_prompt(yes, removed.len())
 }
 
 /// State-migrations S3 (#2248, Decision E): every class this plan deletes must
@@ -510,7 +569,7 @@ pub fn run(
     if !workers::compile_once_reporting(
         project_root,
         &build_dir,
-        true,
+        workers::Build::new(true, opts.dry_run),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;
@@ -940,7 +999,7 @@ pub fn run(
     };
     // State-migrations S3 (#2248): a deletion is confirmed by name, apart
     // from — and before — the ordinary confirmation.
-    if !confirm_deletions(&plan, &opts.confirm_delete, &lock) {
+    if !confirm_destructive(&plan, opts, &lock) {
         return ExitCode::FAILURE;
     }
     if !confirm(opts.yes) {
@@ -1994,6 +2053,17 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         service.binding, service.worker
                     ));
                 }
+                // #3328: Email Routing rules, reconciled by the push.
+                for address in &context.email_addresses {
+                    out.push_str(&format!(
+                        "email address {address} (Email Routing rule; advisory — wrangler reconciles it)\n"
+                    ));
+                }
+                for address in &context.removed_email_addresses {
+                    out.push_str(&format!(
+                        "email address {address} removed (its Email Routing rule is deleted by the push; needs --prune)\n"
+                    ));
+                }
                 // Between the provisioning lines and the push, because that is
                 // where it happens: the `exports` declaration rides the config
                 // `wrangler deploy` reads rather than being a step of its own.
@@ -2285,6 +2355,16 @@ pub(crate) fn derive_plan<'a>(
                             worker: &f.worker,
                         })
                         .collect(),
+                    email_addresses: declared
+                        .email_addresses
+                        .iter()
+                        .map(String::as_str)
+                        .collect(),
+                    removed_email_addresses: lock.removed_email_addresses(
+                        environment,
+                        worker,
+                        &declared.email_addresses,
+                    ),
                 }
             })
             .collect(),
@@ -3126,6 +3206,112 @@ pub(crate) mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
         assert!(json["contexts"][0].get("stored_secrets").is_none());
+    }
+
+    // ---- #3328: Email Routing rules, reconciled by wrangler ----
+
+    #[test]
+    fn an_email_address_is_an_advisory_plan_line() {
+        let resources = project(vec![(
+            "shop-support",
+            Resources::default().email_addresses(&["*@shop.example", "support@shop.example"]),
+        )]);
+        let order = names(&["shop-support"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "email address *@shop.example (Email Routing rule; advisory — wrangler reconciles it)\nemail address support@shop.example (Email Routing rule; advisory — wrangler reconciles it)\ndeploy shop-support\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["email_addresses"],
+            serde_json::json!(["*@shop.example", "support@shop.example"])
+        );
+        // A project with no email service has no such key.
+        let plain = project(vec![("shop-support", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("email_addresses").is_none());
+    }
+
+    /// #3328 (ADR 0805 F): the Email Routing gate. The first deploy records
+    /// without asking; an added address asks nothing; a removed one is refused
+    /// before anything is pushed unless `--prune` confirms it, and a push records
+    /// what it carried.
+    #[test]
+    fn removing_an_email_address_is_refused_unless_pruned() {
+        let order = names(&["shop-support"]);
+        let both = project(vec![(
+            "shop-support",
+            Resources::default().email_addresses(&["help@shop.example", "support@shop.example"]),
+        )]);
+        let one = project(vec![(
+            "shop-support",
+            Resources::default().email_addresses(&["support@shop.example"]),
+        )]);
+        let mut lock = DeployLock::default();
+
+        // The first deploy: nothing recorded, so nothing is removed.
+        let plan = plan_of(&order, &both, &lock);
+        assert!(confirm_address_removals(&plan, false, false));
+        record_pushed_tombstones(&mut lock, "default", "shop-support", &both["shop-support"]);
+
+        // The same list again, and an added address, ask nothing.
+        assert!(confirm_address_removals(
+            &plan_of(&order, &both, &lock),
+            false,
+            false
+        ));
+        let added = project(vec![(
+            "shop-support",
+            Resources::default().email_addresses(&[
+                "help@shop.example",
+                "sales@shop.example",
+                "support@shop.example",
+            ]),
+        )]);
+        assert!(confirm_address_removals(
+            &plan_of(&order, &added, &lock),
+            false,
+            false
+        ));
+
+        // A removal, unconfirmed: refused, and the plan names it.
+        let removal = plan_of(&order, &one, &lock);
+        assert!(!confirm_address_removals(&removal, false, false));
+        assert!(
+            !confirm_address_removals(&removal, false, true),
+            "--yes alone is not --prune"
+        );
+        assert_eq!(
+            plan_report(&removal, DeployFormat::Short),
+            "email address support@shop.example (Email Routing rule; advisory — wrangler reconciles it)\nemail address help@shop.example removed (its Email Routing rule is deleted by the push; needs --prune)\ndeploy shop-support\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&removal, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["removed_email_addresses"],
+            serde_json::json!(["help@shop.example"])
+        );
+
+        // A removal, confirmed: allowed, and the push records the new list.
+        assert!(confirm_address_removals(&removal, true, true));
+        record_pushed_tombstones(&mut lock, "default", "shop-support", &one["shop-support"]);
+        assert!(confirm_address_removals(
+            &plan_of(&order, &one, &lock),
+            false,
+            false
+        ));
+
+        // Dropping every `from email` service removes the rest.
+        let none = project(vec![("shop-support", Resources::default())]);
+        assert!(!confirm_address_removals(
+            &plan_of(&order, &none, &lock),
+            false,
+            false
+        ));
     }
 
     // ---- interop I5 (#1972): Service Bindings to foreign Workers ----

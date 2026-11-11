@@ -10,6 +10,7 @@
     "strict": true,
     "noImplicitAny": true,
     "types": ["node"],
+    "paths": { "postal-mime": ["./node_modules/postal-mime"] },
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },

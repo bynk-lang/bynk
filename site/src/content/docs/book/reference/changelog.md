@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.550**.
+written against **v0.553**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,10 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.553.0** | Inbound email on Workers (`from email`, #3328 slice 2): the `email()` export parses the message with `postal-mime`, dispatches by envelope recipient, mints the `Sender` identity from Cloudflare's DMARC verdict, applies the verdict, and routes via wrangler `addresses`; the first-party npm dependency mechanism of ADR 0799 C lands |
+| **v0.552.0** | A bare variant name that two sums in scope declare (two enums a consumed unit exports, say) builds the sum the expected type names, from an annotated `let`, a parameter, a return type or a `stub`'s operation, and is `bynk.resolve.ambiguous_variant` only when nothing picks one; the message names each qualified form, and a `stub` value no longer reports it as `bynk.stub.rhs_type` (#3344) |
+| **v0.551.1** | `bynk explain` covers eighteen more codes under the adapter, asset, capability, embed and messages prefixes |
+| **v0.551.0** | A handler reads cookies through a typed `cookies: T` parameter and sets them with `Cookie`, `SameSite`, `withCookie`, `clearCookie` and `cookies()` on an `HttpResult` (#3277, slices 1 and 2; #3181 stays open for signing and the actor scheme) |
 | **v0.550.8** | `bynk explain` explains twenty more codes for writing tests, under `expect`, `stub`, `suite`, `test` and `val` (Refs #3163) |
 | **v0.550.7** | `bynk explain` explains eighteen more codes under `cron`, `held`, `queue`, `record_spread`, `send` and `store` (Refs #3163) |
 | **v0.550.6** | `bynk explain` covers twenty more codes (`lex` and `parse` prefixes) |

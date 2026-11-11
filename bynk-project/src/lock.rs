@@ -62,6 +62,11 @@ pub struct LockedNpm {
     /// its build. Required for a fetched (git or registry) package's adapter
     /// to reach `out/package.json`; absent reads as `false`.
     pub approved: bool,
+    /// ADR 0799 C, #3328: the toolchain itself emits this package for a
+    /// built-in binding (`bynk-std`'s first-party table), pinned to an exact
+    /// version. It is recorded so a lock check still sees it, but needs no
+    /// approval and is never `approved`.
+    pub first_party: bool,
 }
 
 /// #2274: a registry a build used, and the key first trusted for it — what
@@ -135,6 +140,9 @@ impl Lock {
             out.push_str(&format!("range = {}\n", toml_string(&n.range)));
             let by: Vec<String> = n.required_by.iter().map(|d| toml_string(d)).collect();
             out.push_str(&format!("required-by = [{}]\n", by.join(", ")));
+            if n.first_party {
+                out.push_str("first-party = true\n");
+            }
             if n.approved {
                 out.push_str("approved = true\n");
             }
@@ -259,11 +267,21 @@ pub fn parse_lock(text: &str) -> Result<Lock, LockError> {
                 ));
             }
         };
+        let first_party = match t.get("first-party") {
+            None => false,
+            Some(toml::Value::Boolean(b)) => *b,
+            Some(_) => {
+                return Err(LockError(
+                    "an `[[npm]]`'s `first-party` in `bynk.lock` must be `true` or `false`".into(),
+                ));
+            }
+        };
         npm.push(LockedNpm {
             package,
             range,
             required_by,
             approved,
+            first_party,
         });
     }
     let mut registries = Vec::new();
@@ -509,12 +527,21 @@ mod tests {
                     range: "^5.2.0".into(),
                     required_by: vec!["acme/ledger:auth".into()],
                     approved: true,
+                    first_party: false,
+                },
+                LockedNpm {
+                    package: "postal-mime".into(),
+                    range: "4.1.4".into(),
+                    required_by: vec!["bynk-std".into()],
+                    approved: false,
+                    first_party: true,
                 },
                 LockedNpm {
                     package: "stripe".into(),
                     range: "^14.2.0".into(),
                     required_by: vec!["acme/ledger:pay".into()],
                     approved: false,
+                    first_party: false,
                 },
             ],
             packages: vec![
@@ -544,6 +571,13 @@ mod tests {
                 || text.ends_with("required-by = [\"acme/ledger:pay\"]\n")
         );
         assert_eq!(back.npm, lock.npm, "approval survives the round trip");
+        assert!(
+            text.contains("range = \"4.1.4\"\nrequired-by = [\"bynk-std\"]\nfirst-party = true\n")
+        );
+        assert!(
+            !text.contains("first-party = true\napproved"),
+            "a first-party row is never approved"
+        );
         assert!(text.find("[[npm]]").unwrap() > text.find("[[package]]").unwrap());
         assert!(text.contains(
             "[[registry]]\nname = \"acme-internal\"\nid = \"acme\"\nkey = \"ed25519-fp:abc\"\n"
