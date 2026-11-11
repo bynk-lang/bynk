@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { D1 }
+
+service probe {
+    on call() -> Effect[()] given D1 {
+        let _ <- D1.run("DELETE FROM orders", [])
+        ()
+    }
+}

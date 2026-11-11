@@ -79,5 +79,5 @@ instance to its recorded namespace. Renaming an instance creates a new namespace
 and reports the old one as an orphan: see
 [Several KV namespaces](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#several-kv-namespaces).
 
-**See also:** [Derived capabilities](/book/reference/capabilities/#derived-capabilities-capability-x--k),
+**See also:** [Derived capabilities](/book/reference/capabilities/#derived-capabilities),
 [The Cloudflare surface](/book/reference/bynk-capabilities/#the-cloudflare-surface--bynkcloudflare).
