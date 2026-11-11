@@ -391,6 +391,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.argument_mismatch",
+        blurb: "An argument has a different type from the parameter it is passed to. Bynk \
+                compares types exactly and converts nothing implicitly, so a `String` is \
+                never read as an `Int`, and a call that passes the wrong type is refused \
+                at the call, not left to fail later. The same code covers the arguments of \
+                methods, capability operations and constructors. Pass a value of the \
+                parameter's type, or convert it first with an explicit conversion such as \
+                `Int.parse` (which returns an `Option`, because the text may not be a number).",
+        example: "fn double(n: Int) -> Int {\n    n * 2\n}\n\n\
+                  fn run() -> Int {\n    double(\"21\")    // ✗ a `String`, where `Int` is expected\n}\n\n\
+                  fn run() -> Int {\n    double(21)      // ✓ an `Int`\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.types.claims_at_boundary",
         blurb: "An `Oidc` actor's binder carries the verified token's claims (`who.claims`) for the \
                 handler that received the token. They are read there and never kept: a \
@@ -400,6 +415,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let repo = w.claims.get(\"repository\")            // ✓ keep the String",
         page: "/book/reference/actors",
         anchor: "reading-claims",
+    },
+    Explain {
+        code: "bynk.types.json_uncodable",
+        blurb: "`Json.encode` and `Json.decode` work on values that have a wire form, and a \
+                function does not: a value that can run has no JSON text to stand for it. \
+                The codec covers the base types, named types and the built-in containers \
+                over them. It does not cover functions, effects, streams or a type that \
+                carries one, `bynk.crypto` keys or the error builtins. Encode the data the \
+                function produces, or the record that describes it, not the function itself.",
+        example: "fn dump(f: Int -> Int) -> String {\n    Json.encode(f)       // ✗ a function has no JSON form\n}\n\n\
+                  fn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
+        page: "/book/reference/types",
+        anchor: "the-json-codec",
+    },
+    Explain {
+        code: "bynk.types.method_arity",
+        blurb: "A method was called with a different number of arguments from the number it \
+                declares. The count excludes `self`, which the receiver supplies, so \
+                `fn Box.adjust(self, delta: Int)` takes one argument. Pass exactly that \
+                many. The same code covers the built-in methods of `String`, `List`, `Map` and the other \
+                kernel types.",
+        example: "type Box = { value: Int }\n\n\
+                  fn Box.adjust(self, delta: Int) -> Box {\n    Box { value: self.value + delta }\n}\n\n\
+                  fn bump(b: Box) -> Box {\n    b.adjust()     // ✗ expects 1 argument\n}\n\n\
+                  fn bump(b: Box) -> Box {\n    b.adjust(1)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.method_not_found",
+        blurb: "A method call names an instance method that the receiver's type does not \
+                have. An instance method is a function declared with `self` as its first \
+                parameter. A function declared on a type without `self` is static, and is \
+                called on the type, as `Counter.zero()`, never on a value. This also fires on \
+                a typo, and on a built-in type that has methods but not this one, since only the \
+                methods the type documents exist.",
+        example: "type Counter = { count: Int }\n\n\
+                  fn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\n\
+                  fn reset(c: Counter) -> Counter {\n    c.zero()          // ✗ `zero` has no `self`: not an instance method\n}\n\n\
+                  fn reset(c: Counter) -> Counter {\n    Counter.zero()    // ✓ a static function is called on the type\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
     Explain {
         code: "bynk.types.no_numeric_coercion",
@@ -430,6 +487,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "exhaustiveness-and-reachability",
     },
     Explain {
+        code: "bynk.types.not_keyable",
+        blurb: "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` \
+                or join, must be a `Key` type, one whose equal values can always be found \
+                again. `String`, `Int`, `Bool`, `Instant`, `Duration` and `Bytes` are, as are \
+                `Option` and `List` of a key and records, sums and enums made only of keys. \
+                A `Float` never is, at any depth, because `NaN` is not equal to itself, so a \
+                key holding one could never be looked up. Key on a type that is: an `Int` \
+                count of cents, say, or a `String`.",
+        example: "fn distinctPrices(xs: List[Float]) -> Int {\n    let seen: Set[Float] = Set.of(xs)    // ✗ `Float` is not a `Key`\n    seen.length()\n}\n\n\
+                  fn distinctPrices(xs: List[Int]) -> Int {\n    let seen: Set[Int] = Set.of(xs)      // ✓ `Int` is\n    seen.length()\n}",
+        page: "/book/reference/types",
+        anchor: "keys",
+    },
+    Explain {
         code: "bynk.types.return_mismatch",
         blurb: "The value a function or handler body ends with does not have the declared \
                 return type, and the compiler compares the two exactly. Either change the \
@@ -446,6 +517,47 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.type_mismatch",
+        blurb: "An operator or a built-in method was given an operand of a type it does not \
+                accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on \
+                something that is not a `Bool`. Types are compared exactly, with no implicit \
+                conversion, so values of different types are never equal and never silently \
+                coerced. Make the operands the same type, or convert one explicitly. A `Float` \
+                and an `Int` mixed in arithmetic is the separate code \
+                `bynk.types.no_numeric_coercion`.",
+        example: "fn isAdult(age: Int) -> Bool {\n    age == \"18\"    // ✗ `Int` compared with `String`\n}\n\n\
+                  fn isAdult(age: Int) -> Bool {\n    age == 18      // ✓ both `Int`\n}",
+        page: "/book/reference/operators",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.unknown_field",
+        blurb: "A field access names a field the value's type does not declare. A record's \
+                fields are fixed by its type declaration, so `p.z` on a `Point` of `x` and `y` \
+                is refused. This is usually a typo, or a value of a different type from the \
+                one intended. Building a record with a field it lacks is the sibling code \
+                `bynk.resolve.unknown_field`.",
+        example: "type Point = { x: Int, y: Int }\n\n\
+                  fn height(p: Point) -> Int {\n    p.z    // ✗ `Point` has no field `z`\n}\n\n\
+                  fn height(p: Point) -> Int {\n    p.y    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.unreachable_arm",
+        blurb: "A `match` arm can never run, because the arms before it already match every \
+                value it would match. The usual cause is a wildcard `_` placed before more \
+                specific arms: arms are tried in order, so the wildcard takes everything and \
+                the rest are dead code, which Bynk refuses rather than let hide a mistake. \
+                Put the specific arms first and the wildcard last, or delete the arm. A \
+                guarded arm covers nothing, since its guard may fail.",
+        example: "type Status = enum { Pending, Active, Done }\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        _ => \"other\"\n        Pending => \"waiting\"    // ✗ the `_` above already matches it\n    }\n}\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        _ => \"other\"            // ✓ the catch-all last\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
     },
 ];
 
@@ -3907,7 +4019,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.type_mismatch",
-        "Two types that were required to match did not.",
+        "An operator or built-in method got an operand of a type it does not accept, or two operands that had to match did not.",
     ),
     dg(
         "bynk.types.uninferable_element_type",

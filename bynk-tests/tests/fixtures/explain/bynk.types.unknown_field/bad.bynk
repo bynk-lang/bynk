@@ -1,0 +1,7 @@
+commons demo
+
+type Point = { x: Int, y: Int }
+
+fn height(p: Point) -> Int {
+    p.z
+}

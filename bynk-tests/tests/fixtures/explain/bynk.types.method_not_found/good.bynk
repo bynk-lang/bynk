@@ -1,0 +1,11 @@
+commons demo
+
+type Counter = { count: Int }
+
+fn Counter.zero() -> Counter {
+    Counter { count: 0 }
+}
+
+fn reset(c: Counter) -> Counter {
+    Counter.zero()
+}
