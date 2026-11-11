@@ -4049,8 +4049,6 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             parts.push("__commitStored");
             // Cache reaping (#3189): a `Cache` op notes the clock it read.
             parts.push("__noteClock");
-            // Store queries chain through it (#3189).
-            parts.push("__bynkThen");
         }
         // Ordered store collections (#3254): the handle classes an agent's state is made
         // of, and the helpers that put them in wire form and fill them back.
