@@ -2513,26 +2513,8 @@ fn run_checks(
         &unit_flattened,
         &mut errors,
     );
-    // #1822: on Workers, a required local capability needs a provider.
-    project_model::phase_workers_unprovided_capabilities(
-        target,
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        &mut errors,
-    );
-    bynk_check::email::phase_duplicate_addresses(&parsed, &groups, &kinds, &mut errors);
-    // #2306: on Workers, a WebSocket `on open` and the agent it transfers to
-    // must share a file.
-    project_model::phase_workers_ws_open_split(
-        target,
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        &mut errors,
-    );
+    // #1822, #3328, #2306: the project-wide topology checks.
+    project_model::phase_topology(target, &parsed, &groups, &kinds, &unit_tables, &mut errors);
     // #2959: on Workers, the `on open` transfer key must be one the edge can
     // evaluate before the body runs.
     project_model::phase_workers_ws_open_key(
@@ -3220,6 +3202,19 @@ fn run_checks(
         asset_bytes,
         agent_versions: schema_effective_versions.agents,
         d1_migrations,
+    }
+}
+
+/// `package.json`: always `"type": "module"` (#2148), so the emitted tsconfig's
+/// `module: NodeNext` checks and builds the output as the ES modules it is, under
+/// Node's ESM rules; plus the adapter-declared (v0.17) and first-party (ADR 0799
+/// C) npm dependencies when there are any.
+fn package_json_file(npm_deps: &std::collections::BTreeMap<String, String>) -> StagedFile {
+    StagedFile {
+        output_path: PathBuf::from("package.json"),
+        document: Document::Json(render_package_json(npm_deps)),
+        source_map: None,
+        debug_metadata: None,
     }
 }
 
@@ -3951,16 +3946,7 @@ fn build_output(
             debug_metadata: None,
         });
     }
-    // `package.json`: always `"type": "module"` (#2148), so the emitted
-    // tsconfig's `module: NodeNext` checks and builds the output as the ES
-    // modules it is, under Node's ESM rules; plus the adapter-declared npm
-    // dependencies when there are any (v0.17).
-    compiled.push(StagedFile {
-        output_path: PathBuf::from("package.json"),
-        document: Document::Json(render_package_json(&npm_deps)),
-        source_map: None,
-        debug_metadata: None,
-    });
+    compiled.push(package_json_file(&npm_deps));
     compiled.push(StagedFile {
         output_path: PathBuf::from("tsconfig.json"),
         document: Document::Json(emitter::emit_tsconfig()),

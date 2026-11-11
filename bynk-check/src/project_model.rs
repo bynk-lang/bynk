@@ -4768,6 +4768,24 @@ pub fn phase_secrets_computed_name(
     }
 }
 
+/// The project-wide topology checks, in the order their diagnostics appear:
+/// #1822 (on Workers, a required local capability needs a provider), #3328 (one
+/// service per email address across the whole project, on every target) and
+/// #2306 (on Workers, a WebSocket `on open` and the agent it transfers to share a
+/// file). One call for the build and the editor path, which both run them.
+pub fn phase_topology(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    phase_workers_unprovided_capabilities(target, parsed, groups, kinds, unit_tables, errors);
+    crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
+    phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
+}
+
 /// #1822: on the Workers target, a capability a context declares and requires
 /// (`given`, on a service or agent handler or a provider) needs a provider in
 /// that context. A Worker's composition root builds every capability its

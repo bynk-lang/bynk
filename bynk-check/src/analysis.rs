@@ -637,19 +637,8 @@ fn analyse_project_inner(
         &unit_flattened,
         &mut errors,
     );
-    // #1822: Workers-only, so a no-op on this Bundle path, called for the
-    // same structural reason as the phase above.
-    project_model::phase_workers_unprovided_capabilities(
-        project_model::BuildTarget::Bundle,
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        &mut errors,
-    );
-    crate::email::phase_duplicate_addresses(&parsed, &groups, &kinds, &mut errors);
-    // #2306: Workers-only as well.
-    project_model::phase_workers_ws_open_split(
+    // #1822, #3328, #2306: the project-wide topology checks.
+    project_model::phase_topology(
         project_model::BuildTarget::Bundle,
         &parsed,
         &groups,

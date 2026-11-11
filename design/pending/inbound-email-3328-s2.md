@@ -140,20 +140,27 @@ header the sender chose; no log line carries the message. The DMARC rule trusts 
 header, by position and authserv-id. The remaining trust is Cloudflare's: that Email
 Routing prepends its `Authentication-Results`.
 
-**Deferred from this slice.** `bynk deploy`'s plan lists each Worker's managed
-addresses (an advisory line, and `email_addresses` in the JSON plan; wrangler owns the
-rules). Not built: putting a *removal* behind `--prune`'s confirmation (wrangler deletes
-a rule for an address no longer listed on the push, so gating it means keeping the
-address in the pushed config until confirmed, against a ledger record of what was last
-pushed), and the `Forward` destination check. The Email Routing destination-addresses
-API could not be confirmed from this session (no usable Cloudflare credential), so the
-check is left out as the brief says; a `Forward` to an unverified address is refused by
-the platform at run time and falls back to `Reject("forward refused")` (E). The platform
-behaviour on a *throw* was observed under `wrangler dev` rather than asserted: an error
-thrown out of `email()` comes back as a `500` whose body is the error's message and
-stack, and is logged as `Uncaught Error: <message>`, which is why a handler fault is
-caught and answered with a fixed reason instead (E). Production behaviour on a throw
-remains undocumented.
+**Routing removals are gated (ADR 0805 F).** Wrangler deletes the rule of an
+address a Worker no longer lists, so mail to it bounces. Each Worker's pushed
+`addresses` are recorded in the deploy ledger (by environment and Worker,
+`email_addresses`, replaced on every push, additive). The next plan computes the
+addresses that went; if any did, `bynk deploy` refuses before pushing, naming the
+addresses and `--prune`, unless `--prune` is given and confirmed through the
+ordinary prune prompt (`--yes` answers it, and `--yes` alone does not). A first
+deploy has no record and asks nothing; an added address asks nothing. It does not try
+to keep the old address in the pushed config: refusing is enough. The plan lists the
+managed addresses (an advisory line, `email_addresses` in JSON) and the removed ones
+(`removed_email_addresses`).
+
+**Deferred from this slice.** The `Forward` destination check. The Email Routing
+destination-addresses API could not be confirmed from this session (no usable
+Cloudflare credential), so the check is left out as the brief says; a `Forward` to an
+unverified address is refused by the platform at run time and falls back to
+`Reject("forward refused")` (E). The platform behaviour on a *throw* was observed under
+`wrangler dev` rather than asserted: an error thrown out of `email()` comes back as a
+`500` whose body is the error's message and stack, and is logged as `Uncaught Error:
+<message>`, which is why a handler fault is caught and answered with a fixed reason
+instead (E). Production behaviour on a throw remains undocumented.
 
 **Consequences.** A `from email` service builds for `--target workers`. A Worker with
 one imports `cloudflare:email`, gets `postal-mime` in `out/package.json`, and a

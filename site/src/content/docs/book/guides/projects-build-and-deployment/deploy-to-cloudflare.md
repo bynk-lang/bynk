@@ -698,9 +698,17 @@ address, even in different contexts, is a compile error
 The plan lists each address as an advisory line (`email address
 support@shop.example (Email Routing rule; advisory — wrangler reconciles it)`),
 and `--format json` carries them as the context's `email_addresses`: wrangler,
-not Bynk, owns the rules. Removing an address from the source, or every
-`from email` service, removes its rule on the next push; that removal is not yet
-behind `--prune`'s confirmation.
+not Bynk, owns the rules.
+
+Wrangler deletes the rule of an address a Worker no longer lists, and mail to it
+then bounces, so a removal is gated. Each push records the addresses it carried
+in `bynk.deploy.lock`; the next plan shows an address that has gone as
+`email address help@shop.example removed (…; needs --prune)` (and as
+`removed_email_addresses` in JSON), and the deploy is **refused before anything is
+pushed** unless `--prune` is given, with its usual confirmation (`--yes` answers
+it; `--yes` alone does not). A first deploy has nothing recorded and asks
+nothing, and neither does an added address. Dropping every `from email` service
+removes every recorded address the same way.
 
 Email Routing must be turned on for the domain, and a `Forward(to)` destination
 must be a verified destination address in the account; deploy does not check
