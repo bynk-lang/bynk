@@ -1,0 +1,7 @@
+commons demo
+
+type Point = { x: Int, y: Int }
+
+type Size = { x: Int, y: Int }
+
+fn widen(s: Size) -> Size { Size { ...s, x: 1 } }
