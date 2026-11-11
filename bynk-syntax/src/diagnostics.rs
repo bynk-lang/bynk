@@ -225,7 +225,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
                   xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
         page: "/book/reference/capabilities",
-        anchor: "par",
+        anchor: "joining-independent-effects-par-par",
     },
     Explain {
         code: "bynk.parse.bare_expression_statement",
@@ -2130,14 +2130,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning).",
         &["par_stmt"],
     )),
+    d(
+        "bynk.par.store_write_in_closure",
+        "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
+    ),
     dg(
         "bynk.parse.bare_expression_statement",
         "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`.",
         &["block"],
-    ),
-    d(
-        "bynk.par.store_write_in_closure",
-        "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
     ),
     d(
         "bynk.parse.clause_after_statement",
