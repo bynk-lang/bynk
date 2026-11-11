@@ -118,6 +118,10 @@ pub enum Identity {
 /// The built-in sealed identity type for the cross-context calling principal.
 pub const CALLER_ID: &str = "CallerId";
 
+/// The first-party record `Sender` yields (#3328): `{ address: String, dmarc:
+/// DmarcVerdict }`, exported by `bynk.cloudflare`.
+pub const SENDER_IDENTITY: &str = "SenderIdentity";
+
 /// A resolved actor contract: its scheme and the identity it yields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Contract {
@@ -141,6 +145,14 @@ pub fn prelude_actor(name: &str) -> Option<Contract> {
             scheme: Scheme::Internal,
             identity: Identity::Unit,
         },
+        // #3328 (DECISION E): the inbound-mail sender — Internal (the platform
+        // delivers and authenticates the mail before the handler runs),
+        // yielding the first-party `SenderIdentity` (envelope address plus the
+        // DMARC verdict) when a handler binds it with `by s: Sender`.
+        "Sender" => Contract {
+            scheme: Scheme::Internal,
+            identity: Identity::Declared(SENDER_IDENTITY.to_string()),
+        },
         // The cross-context calling principal — Internal, yielding the sealed
         // `CallerId` (Q7).
         "Caller" => Contract {
@@ -158,6 +170,9 @@ pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
         ServiceProtocol::Call => Some("Caller"),
         ServiceProtocol::Cron => Some("Scheduler"),
         ServiceProtocol::Queue { .. } => Some("Producer"),
+        // #3328 (DECISION E): inbound mail's default actor is the envelope
+        // sender, carrying its address and the platform's DMARC verdict.
+        ServiceProtocol::Email { .. } => Some("Sender"),
         // Events track, slice 0 (spine #936): delivery is runtime-triggered,
         // not an external caller — like `Queue`'s "Producer", the default
         // actor names the event's originating publisher.
@@ -711,6 +726,10 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         ServiceProtocol::Cron | ServiceProtocol::Queue { .. } | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)
         }
+        // #3328: the platform delivers inbound mail, so the only admitted
+        // scheme is the platform's own (`Internal`), as `Sender` is. A
+        // DMARC-refusing scheme could follow (DECISION E).
+        ServiceProtocol::Email { .. } => matches!(scheme, Scheme::Internal),
     }
 }
 

@@ -1,0 +1,2 @@
+bynk.email.bad_params
+bynk.email.return_not_email_verdict

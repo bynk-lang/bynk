@@ -3542,6 +3542,7 @@ fn target_test_services(
                 ServiceProtocol::Queue { .. } => Some("queue".to_string()),
                 ServiceProtocol::WebSocket { .. } => Some("websocket".to_string()),
                 ServiceProtocol::Events { .. } => Some("events".to_string()),
+                ServiceProtocol::Email { .. } => Some("email".to_string()),
             };
             let handlers = decl
                 .handlers

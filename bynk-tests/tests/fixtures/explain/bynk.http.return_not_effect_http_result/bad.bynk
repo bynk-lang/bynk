@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on GET("/items") () -> Effect[String] by v: Visitor {
+        Effect.pure("x")
+    }
+}

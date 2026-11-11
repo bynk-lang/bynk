@@ -967,7 +967,7 @@
     },
     {
       "code": "bynk.http.reserved_prefix",
-      "summary": "A route uses the reserved `/_bynk/` prefix."
+      "summary": "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets)."
     },
     {
       "code": "bynk.http.return_not_effect_http_result",

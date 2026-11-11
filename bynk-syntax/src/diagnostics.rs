@@ -125,6 +125,284 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.bearer_identity_not_string_constructible",
+        blurb: "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a \
+                string, so the identity type must be one a string can become: a refined or \
+                opaque `String`. Any other type has no way to be built from the claim, and an \
+                actor with no `identity` at all is refused for the same reason. Declare a type \
+                over `String`, such as `type UserId = String where NonEmpty`, and name it as the \
+                `identity`. An `Oidc` actor has the same rule under \
+                `bynk.actor.oidc_identity_not_string_constructible`.",
+        example: "type Age = Int where NonNegative\n\
+                  actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = Age }      // ✗ a token's `sub` is a string, not an `Int`\n\
+                  \n\
+                  type UserId = String where NonEmpty\n\
+                  actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }   // ✓ minted from `sub`",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.bearer_missing_secret",
+        blurb: "A `Bearer` actor checks a JWT signed with a shared key, so the compiler needs to \
+                know which key. Name the environment variable that holds it: \
+                `Bearer(secret = \"JWT_KEY\")`. The string is the variable's name, never the key \
+                itself, so no secret is written in the source; the `Secrets` capability reads the \
+                value at run time. An `Oidc` actor needs no secret, because it checks the \
+                provider's public keys, and a `Signature` actor has its own \
+                `bynk.actor.signature_missing_secret`.",
+        example: "type UserId = String where NonEmpty\n\n\
+                  actor User { auth = Bearer, identity = UserId }                         // ✗ no signing secret named\n\n\
+                  actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }     // ✓ the env var that holds the key",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.binder_shadows_param",
+        blurb: "A `by` clause with a binder, `by who: Visitor`, adds a name to the handler body \
+                beside its parameters. If the binder is spelt like a parameter it would hide it, \
+                so a body that read `body` would silently get the actor instead of the request \
+                body. The compiler refuses the clash rather than choose one. Rename the binder \
+                or the parameter. A `by` with no binder, `by Visitor`, adds no name and cannot \
+                clash.",
+        example: "on POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by body: Visitor {   // ✗ `body` is already a parameter\n\n\
+                  on POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by who: Visitor {   // ✓ a name of its own",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.by_on_agent",
+        blurb: "`by` names who is calling and has the compiler verify it at the edge of the \
+                program: an HTTP request, a queue message, a cron tick. An agent handler is not \
+                an edge. It is reached only from a service or another agent, which has already \
+                been through its own check, so there is no caller left to verify and the clause \
+                would be silently ignored. The compiler refuses it instead of letting it look \
+                like protection. Remove the clause, and put the `by` on the service handler that \
+                calls the agent, passing on whatever the agent needs as an argument.",
+        example: "on call bump() -> Effect[Int] by v: Visitor {   // ✗ an agent handler has no actor\n\n\
+                  on call bump() -> Effect[Int] {                // ✓ the service in front of it holds the `by`",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.missing_by_on_http",
+        blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
+                is calling, so each one must say, with a `by` clause, which actor it expects. \
+                The compiler then emits the verification before the body runs. A public route \
+                writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set \
+                it once on the header, `service api from http by Visitor`, and every handler \
+                without its own `by` inherits it. A WebSocket `on open` handler needs one too. \
+                The internal protocols (`call`, cron, queue) have a default.",
+        example: "service api from http {\n\
+                  \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n\
+                  \x20   Ok(\"up\")\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  service api from http {\n\
+                  \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ anyone, said outright\n\
+                  \x20   Ok(\"up\")\n\
+                  \x20 }\n\
+                  }",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.scheme_not_admissible",
+        blurb: "Each protocol admits only the schemes that can be verified on it. HTTP takes \
+                `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` \
+                and `Bearer`; `call` takes `Internal` and `Foreign`; cron and queue take \
+                `Internal`. A `Visitor` on cron is wrong because nothing public calls a cron \
+                handler: the platform does. Use the actor made for the protocol: `Scheduler` for \
+                cron, `Producer` for queue, `Caller` for `on call`. `Caller` is admitted on \
+                `on call` only.",
+        example: "service jobs from cron {\n\
+                  \x20 on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by v: Visitor {   // ✗ cron takes an `Internal` actor\n\
+                  \x20   Ok(())\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  service jobs from cron {\n\
+                  \x20 on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by s: Scheduler {   // ✓ the cron actor\n\
+                  \x20   Ok(())\n\
+                  \x20 }\n\
+                  }",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.sum_requires_binder",
+        blurb: "`by A | B` tries the actors in order and the first that verifies the caller wins. \
+                Which one that was is only known when a request arrives, so the handler learns it \
+                through the binder and `match`es on it. With no binder the answer would be \
+                thrown away and the sum would do nothing a single actor does not. Add one, \
+                `by who: A | B`, and match `who` in the body. A single actor needs no binder.",
+        example: "on GET(\"/x\") () -> Effect[HttpResult[String]] by User | Visitor {       // ✗ which one was it?\n\n\
+                  on GET(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ `who` is the resolved actor",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.unknown_actor",
+        blurb: "A `by` clause must name an actor the compiler can find: one declared with \
+                `actor` in this context, or a prelude actor (`Visitor`, `Caller`, `Scheduler` or \
+                `Producer`). Anything else is a misspelling or a missing declaration. The \
+                compiler will not guess, because the actor decides how callers are verified. \
+                Fix the spelling, or declare the actor first with `actor Name { auth = … }`.",
+        example: "on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitr {     // ✗ no actor of that name\n\n\
+                  on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ the prelude actor",
+        page: "/book/reference/actors",
+        anchor: "prelude-actors",
+    },
+    Explain {
+        code: "bynk.actor.unknown_scheme",
+        blurb: "An actor's `auth` names how its callers are verified, and the compiler writes \
+                that check itself, so the scheme must be one it knows: `None`, `Internal`, \
+                `Bearer`, `Signature`, `Oidc` or `Foreign`. There are no user-defined schemes, \
+                and a name outside the set is usually a typo or a scheme borrowed from another \
+                framework. Choose the one that matches how callers prove who they are, such as \
+                `Bearer` for a JWT signed with a shared key; the actors page lists what each \
+                one needs.",
+        example: "actor Robot { auth = Bogus }   // ✗ not a scheme the compiler knows\n\n\
+                  actor Robot { auth = None }    // ✓ one of the six",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.agent.construction_arity",
+        blurb: "An agent is addressed by its key, so constructing one takes exactly one \
+                argument: the value of its single `key` field. `Counter(\"a\")` names the \
+                instance with key `\"a\"`. Two arguments or none do not say which instance is \
+                meant. Pass the one key. A key of the wrong type is `bynk.agent.key_mismatch`.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(\"a\", \"b\").get()   // ✗ one key, two arguments\n\
+                  let v <- Counter(\"a\").get()         // ✓ one key",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.handler_arity",
+        blurb: "A handler call is checked against the handler's declaration, as a function \
+                call is: it must pass one argument for each parameter, no more and no fewer. \
+                The agent's key is not one of them, since it was given when the agent was \
+                constructed. Match the call to the parameter list. If the handler is missing a \
+                parameter it needs, add it to the declaration and update every caller.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(\"a\").get(1)   // ✗ `get` takes no arguments\n\
+                  let v <- Counter(\"a\").get()    // ✓",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.handler_not_found",
+        blurb: "An agent is used through the handlers it declares with `on call`, so a method \
+                name it does not declare is a mistake: usually a misspelling, or a handler that \
+                was never written. Check the name against the agent's declaration, or add the \
+                handler. To read a `store` field from a caller, add a handler that returns it.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(\"a\").nope()   // ✗ `Counter` declares no `nope`\n\
+                  let v <- Counter(\"a\").get()    // ✓ a declared handler",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.key_mismatch",
+        blurb: "The key is what picks an instance, so its type is fixed by the agent: the type \
+                of its `key` field. An agent keyed by `String` cannot be addressed by an `Int`, \
+                because `1` and `\"1\"` would otherwise be easy to confuse and could name \
+                different instances. Pass a value of the key's type. The number of key \
+                arguments is `bynk.agent.construction_arity`.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(1).get()     // ✗ the key is a `String`\n\
+                  let v <- Counter(\"a\").get()   // ✓",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.outside_context",
+        blurb: "An agent holds state, and a context is the unit that owns it. A `commons` is \
+                code shared between contexts, which each `uses` it, so it is not given an agent, \
+                a service, an actor or a capability: those are only allowed in a `context`. \
+                Declare the agent in a context. A type the agent and other contexts both need \
+                can stay in the commons.",
+        example: "commons shop\n\
+                  \n\
+                  agent Counter { … }   // ✗ a commons has no state\n\
+                  \n\
+                  context shop\n\
+                  \n\
+                  agent Counter { … }   // ✓ a context owns it",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.agent.return_not_effect",
+        blurb: "An agent handler reads and writes the agent's stored state, and may call other \
+                agents and capabilities, so it does work in the world, not just compute a \
+                value. Bynk marks that in the type: a handler must return `Effect[T]`, and its \
+                caller takes the result with `<-`. A bare `Int` would claim the handler is pure. \
+                Wrap the return type in `Effect`. A plain `fn`, which really is pure, returns an \
+                ordinary value.",
+        example: "on call get() -> Int {           // ✗ a handler that reads state is an effect\n\
+                  \x20 n\n\
+                  }\n\
+                  \n\
+                  on call get() -> Effect[Int] {   // ✓\n\
+                  \x20 n\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.agent.state_name_conflict",
+        blurb: "Inside an agent's handlers and invariants, `<Agent>State` names the record of the \
+                agent's `Cell` fields: for agent `Counter`, `CounterState`. A type you declare \
+                with that name would be silently replaced there, so the compiler refuses it \
+                instead of renaming anything: unlike the names it derives elsewhere, this one \
+                can be written in a program. Rename your type.",
+        example: "type CounterState = { label: String }   // ✗ the name of `Counter`'s state record\n\n\
+                  type CounterLabel = { label: String }   // ✓ any other name\n\n\
+                  agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call add(k: Int) -> Effect[Int] { k }\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "reading-and-writing-state",
+    },
+    Explain {
         code: "bynk.agents.bad_state_initialiser",
         blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
         example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
@@ -527,6 +805,48 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.email.bad_params",
+        blurb: "An email `on message` handler takes the message as one `InboundEmail` parameter: inbound email delivers one message per call, so the handler is `on message(mail: InboundEmail) -> Effect[EmailVerdict]`. A parameter of another type, or none, or more than one, is refused. Import `InboundEmail` and `EmailVerdict` from `bynk.cloudflare`.",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n        Accept\n    }\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.email.duplicate_address",
+        blurb: "Inbound mail is dispatched to a service by its envelope recipient, so each address belongs to one service. Addresses compare without regard to case. A literal address and the catch-all `*@domain` for the same domain may both be claimed: the literal address wins, and the catch-all takes everything else. Merge the two handlers, or claim different addresses.",
+        example: "service support from email(\"support@shop.example\") { … }\nservice helpdesk from email(\"Support@shop.example\") { … }   // ✗ the same address\n\nservice helpdesk from email(\"help@shop.example\") { … }   // ✓ its own address",
+        page: "/book/reference/inbound-email",
+        anchor: "addresses",
+    },
+    Explain {
+        code: "bynk.email.duplicate_handler",
+        blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.email.invalid_address",
+        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+        example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
+        page: "/book/reference/inbound-email",
+        anchor: "addresses",
+    },
+    Explain {
+        code: "bynk.email.return_not_email_verdict",
+        blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
+        example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "the-verdict",
+    },
+    Explain {
+        code: "bynk.email.workers_unsupported",
+        blurb: "Inbound email runs in a suite today, driven as `support.message(…)`, and builds for the bundle target. The Workers `email()` export, recipient dispatch and routing arrive in a later slice of #3328, so a deployable Workers build of a `from email` service is refused rather than emitted half-working.",
+        example: "bynk build --target workers   # ✗ inbound email is not yet emitted for Workers\n\nbynk build --target bundle    # ✓ builds, and `bynk test` runs the suites",
+        page: "/book/reference/inbound-email",
+        anchor: "status",
+    },
+    Explain {
         code: "bynk.exports.capability_not_provided",
         blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
                 built for them, so the exporting context must also say how: a `provides Clock = \
@@ -834,6 +1154,41 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sending-and-broadcasting",
     },
     Explain {
+        code: "bynk.http.body_kind_conflict",
+        blurb: "`@raw`, `@form` and `@multipart` each say how a route's one `body` is read off the wire: untouched octets, a urlencoded form or a multipart upload. A body has one wire format, so a handler carries at most one of them, and the second one written is reported. Keep the annotation that matches what the client sends; a JSON body needs none of them.",
+        example: "@form\n@raw(contentType: \"image/png\")   // ✗ the body is already a form\n@limit(maxBody: 1_000_000)\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form                           // ✓ one wire format\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.cache_bad_max_age",
+        blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number, a string or a singular unit such as `1.hour` is refused; the units are plural: `30.seconds`, `5.minutes`, `1.hours`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
+        example: "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cache_on_non_get",
+        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all.",
+        example: "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cors_wildcard_credentials",
+        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
+        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+        page: "/book/reference/http",
+        anchor: "cors",
+    },
+    Explain {
+        code: "bynk.http.duplicate_route",
+        blurb: "A route is a method and a path, and the router needs exactly one handler to answer it. Two handlers that declare the same pair, in one service or in two services of a context, leave it nothing to choose between, so the later one is refused. Merge them, or give one a different path or method.",
+        example: "on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }        // ✗ already declared above\n\non GET(\"/items/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a different path",
+        page: "/book/reference/http",
+        anchor: "handler-form",
+    },
+    Explain {
         code: "bynk.http.error_status_position",
         blurb: "An `ErrorStatus` name such as `Forbidden` stands for a status only as \
                 `RawError`'s first argument, where the compiler turns it into the \
@@ -845,6 +1200,62 @@ pub const EXPLANATIONS: &[Explain] = &[
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
         page: "/book/reference/http",
         anchor: "error-bodies",
+    },
+    Explain {
+        code: "bynk.http.extra_param",
+        blurb: "A handler's parameters are not free-form. Each is a path parameter, matching a `:name` in the route, or one of the three the router fills itself: `body`, `headers` and `query`. Any other name has nowhere to come from. Read a value from the query string with `query: RequestQuery` or a record, move it into the path, or drop it. A `:name` with no parameter is `bynk.http.unbound_path_param`.",
+        example: "on GET(\"/items\") (page: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ not in the path, and not `body`, `headers` or `query`\n\non GET(\"/items\") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.http.form_field_not_stringy",
+        blurb: "A form body is a flat set of keys with text values, so each field of a `@form` or `@multipart` body record must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key). A multipart body may also have `File` fields. A nested record, or any other type, is refused; flatten it. A `query` record follows the same rule: `bynk.http.query_field_not_stringy`.",
+        example: "type Address = { city: String }\ntype SignupForm = { email: String, address: Address }   // ✗ a form has no nesting\n\ntype SignupForm = { email: String, city: String }       // ✓ flat keys",
+        page: "/book/reference/http",
+        anchor: "form-bodies",
+    },
+    Explain {
+        code: "bynk.http.limit_bad_max_body",
+        blurb: "`@limit` sets the byte ceiling above which the router answers `413`, so it must give a `maxBody`, and only the author can know the right one: it is a positive `Int` literal counting bytes. There is no size literal yet, so `\"1MB\"` or `1.mb` is refused; write the count, `1_048_576` for 1 MiB. The service-wide default is `limits { maxBody: … }`.",
+        example: "@limit(maxBody: \"1MB\")    // ✗ a byte count, not a string\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_048_576)   // ✓ 1 MiB\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.http.limit_on_bodyless",
+        blurb: "`@limit` caps the size of a request body, so it means something only on a route that reads one: `POST`, `PUT` or `PATCH`. A `GET` or `DELETE` takes no body in Bynk, so there is nothing to cap. Move the annotation to the body-taking route, or remove it. A default for every body-taking route in a service goes in `limits { maxBody: … }`.",
+        example: "@limit(maxBody: 1_000_000)   // ✗ a `GET` has no body\non GET(\"/notes\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\ntype Note = { text: String }\n\n@limit(maxBody: 1_000_000)   // ✓ a route that reads a body\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.http.multipart_body_unbounded",
+        blurb: "A `@multipart` body is buffered whole, with its parsed parts held beside it, so an upload with no ceiling lets one client use up the Worker's memory. A `@multipart` route therefore needs a cap, as a `@raw` one does (`bynk.http.raw_body_unbounded`): `@limit(maxBody: …)` on the handler, or `limits { maxBody: … }` on the service. Choose the largest upload you mean to accept.",
+        example: "type Upload = { title: String }\n\n@multipart   // ✗ no cap on the handler or the service\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 1_000_000)   // ✓ capped\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "multipart-bodies",
+    },
+    Explain {
+        code: "bynk.http.path_param_not_stringy",
+        blurb: "A path parameter is read from a segment of the URL, which is text, so its type must be one the router can build from a string: `String`, a refined `String`, or an opaque type over `String`. An `Int`, an enum or a record is refused here, though a `query` field may be one. Take the segment as a refined `String` that states its shape.",
+        example: "on GET(\"/items/:id\") (id: Int) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a path segment is a string\n\ntype ItemId = String where Matches(\"^[0-9]+$\")\non GET(\"/items/:id\") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.http.query_field_not_stringy",
+        blurb: "A typed `query` record is filled from a query string, a set of keys with text values, so each field must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key). A nested record or any other type is refused. Flatten the record, or take `query: RequestQuery` and read the keys yourself. A `@form` body has the same rule: `bynk.http.form_field_not_stringy`.",
+        example: "type Range = { from: Int, to: Int }\ntype Filter = { range: Range }   // ✗ a query string has no nesting\n\ntype Filter = { from: Int, to: Int }   // ✓ flat keys",
+        page: "/book/reference/http",
+        anchor: "typed-query",
+    },
+    Explain {
+        code: "bynk.http.query_wrong_type",
+        blurb: "A handler's `query` parameter is the request's query string, and the router offers two ways to take it: a record type, which it decodes and validates, answering `400` when the string does not fit, or `RequestQuery`, the raw view. Any other type is refused. Declare the keys you expect as a record, or take `RequestQuery`. The record's fields are held to `bynk.http.query_field_not_stringy`.",
+        example: "on GET(\"/items\") (query: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `query` is a record or `RequestQuery`\n\ntype Filter = { tag: Option[String] }\non GET(\"/items\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "typed-query",
     },
     Explain {
         code: "bynk.http.raw_body_unbounded",
@@ -860,6 +1271,41 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.raw_on_bodyless",
+        blurb: "`@raw` marks a request body as untouched octets, so it belongs on a `POST`, `PUT` or `PATCH` route with a `body: Bytes` parameter. On a `GET`, a `DELETE` or a route with no `body` there is nothing for it to mark. It is about the request, not the response: to answer with bytes, return `Raw(body, contentType)`. `@form` on such a route is `bynk.http.form_on_bodyless`.",
+        example: "@raw(contentType: \"image/png\")   // ✗ a `GET` has no body\non GET(\"/avatars/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓ an upload route\n@limit(maxBody: 5_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.rejected_signature",
+        blurb: "`on rejected` renders the router's own refusals, such as a `413` or a `405`, before any handler or actor exists, so it has a fixed shape: one parameter typed `BoundaryRejection`, returning `HttpResult[()]` or `Effect[HttpResult[()]]`, with no `by`, since no actor is known yet, and no `given`, since it only renders a body. Each departure is reported with the form to write. A second `on rejected` is `bynk.http.duplicate_rejected`.",
+        example: "on rejected(why: String) -> Effect[HttpResult[()]] { … }             // ✗ the parameter is a `BoundaryRejection`\n\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "rendering-rejections",
+    },
+    Explain {
+        code: "bynk.http.reserved_prefix",
+        blurb: "Two path prefixes belong to the platform. `/_bynk/` is reserved for Bynk's own dispatch, and `/_assets/` is where content-hashed static assets are served before the Worker runs, so a handler there could be shadowed by any asset. A route at either, or at the bare `/_bynk` or `/_assets`, is refused. Choose another path.",
+        example: "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.http.return_not_effect_http_result",
+        blurb: "An `on http` handler returns `Effect[HttpResult[T]]`: `Effect` because it may use capabilities, and `HttpResult[T]` because the status is part of the answer (`Ok`, `Created`, `NotFound`, and so on). An `Effect[T]` with no status is refused. Wrap the type, and return one of the `HttpResult` variants.",
+        example: "on GET(\"/items\") () -> Effect[String] by v: Visitor { … }   // ✗ no `HttpResult`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.http.unbound_path_param",
+        blurb: "A `:name` segment in a route promises a value the handler can use, and the value reaches it only through a parameter of the same name. A segment with no such parameter would be matched and then thrown away, which is nearly always a slip, so the route is refused. Add the parameter, typed `String` or a refined `String`, or drop the segment from the path. The reverse, a parameter with no segment, is `bynk.http.extra_param`.",
+        example: "on GET(\"/items/:id\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `:id` has no parameter\n\non GET(\"/items/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "handler-form",
     },
     Explain {
         code: "bynk.json.nested_option_plain",
@@ -2648,6 +3094,30 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658).",
     ),
     d(
+        "bynk.email.bad_params",
+        "An email `on message` handler does not take exactly one `InboundEmail` parameter.",
+    ),
+    d(
+        "bynk.email.duplicate_address",
+        "Two `from email` services claim the same recipient address.",
+    ),
+    d(
+        "bynk.email.duplicate_handler",
+        "A `from email` service declares more than one `on message` handler; it has exactly one.",
+    ),
+    d(
+        "bynk.email.invalid_address",
+        "A `from email(\"…\")` binding is not a recipient address a service can claim.",
+    ),
+    d(
+        "bynk.email.return_not_email_verdict",
+        "An email `on message` handler does not return `Effect[EmailVerdict]`.",
+    ),
+    d(
+        "bynk.email.workers_unsupported",
+        "A `from email` service is built for the Workers target, whose `email()` entry is not emitted yet.",
+    ),
+    d(
         "bynk.embed.binary_content",
         "An `embed` names a file with a NUL byte, so it is binary, not text.",
     ),
@@ -3303,7 +3773,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.http.reserved_prefix",
-        "A route uses the reserved `/_bynk/` prefix.",
+        "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
         &["http_handler"],
     ),
     dg(

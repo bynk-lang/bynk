@@ -316,6 +316,10 @@
             "link": "/book/guides/entry-points/websocket/"
           },
           {
+            "label": "Receive email",
+            "link": "/book/guides/entry-points/receive-email/"
+          },
+          {
             "label": "Serve a page from an HTML file",
             "link": "/book/guides/entry-points/serve-a-page/"
           }
@@ -547,6 +551,10 @@
       {
         "label": "WebSocket",
         "link": "/book/reference/websocket/"
+      },
+      {
+        "label": "Inbound email",
+        "link": "/book/reference/inbound-email/"
       },
       {
         "label": "Static assets",

@@ -1,0 +1,12 @@
+suite shop.support {
+  case "an oversized message is rejected with its reason" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", size: 5000 })
+    expect r is Reject("too large")
+    expect r == Reject("too large")
+  }
+
+  case "a small message gets through" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", size: 10 })
+    expect r is Accept
+  }
+}

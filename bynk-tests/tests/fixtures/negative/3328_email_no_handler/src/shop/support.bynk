@@ -1,0 +1,4 @@
+context shop.support
+
+service support from email("support@shop.example") {
+}
