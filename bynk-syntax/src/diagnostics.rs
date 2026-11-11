@@ -1835,7 +1835,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.ws.open_transfer_shape",
         blurb: "A WebSocket `on open` must hand its `connection` to exactly one agent, unconditionally, as `Room(room).join(user.identity, connection)`. On Workers the upgrade is routed to that agent's Durable Object, which holds the connection, so it needs a single target the compiler can find. Neither none nor several will do, and a transfer inside an `if` or a `match` is not found. A connection left undisposed is `bynk.held.leak`; a transfer whose key the edge cannot compute is `bynk.ws.open_transfer_key`.",
-        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {   // ✗ `connection` is never transferred\n        let _ <- connection.close()\n        let _ <- Room(room).join(user.identity, connection)   // ✓\n        ()\n    }\n}",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {   // ✗ `connection` is never transferred\n        let _ <- connection.close()\n        ()\n    }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {\n        let _ <- Room(room).join(user.identity, connection)   // ✓ handed to one agent\n        ()\n    }\n}",
         page: "/book/reference/websocket",
         anchor: "service-form",
     },
