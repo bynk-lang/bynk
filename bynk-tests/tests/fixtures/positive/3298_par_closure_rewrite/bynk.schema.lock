@@ -1,0 +1,43 @@
+version = 2
+
+[events]
+
+[agents."demo.Hits"]
+version = 1
+floor = 1
+
+[[agents."demo.Hits".shapes]]
+version = 1
+additive = false
+
+[[agents."demo.Hits".shapes.fields]]
+name = "n"
+kind = "Cell"
+type = "Int"
+refinement = "Int"
+
+[[agents."demo.Hits".shapes.fields.paths]]
+path = "n"
+type = "Int"
+
+[agents."demo.Tally"]
+version = 1
+floor = 1
+
+[[agents."demo.Tally".shapes]]
+version = 1
+additive = false
+
+[[agents."demo.Tally".shapes.fields]]
+name = "counts"
+kind = "Map"
+type = "String, Int"
+refinement = "String, Int"
+
+[[agents."demo.Tally".shapes.fields.paths]]
+path = "counts#0"
+type = "String"
+
+[[agents."demo.Tally".shapes.fields.paths]]
+path = "counts#1"
+type = "Int"

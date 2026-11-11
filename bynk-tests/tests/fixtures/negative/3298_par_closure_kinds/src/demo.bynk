@@ -1,0 +1,48 @@
+context demo
+
+// #3298: each write form, in each of the three operations: `Set.add` in
+// `parTraverseAll`, `Log.append` in `parTraverseTry`, a `Cell` `:=` and
+// `Map.remove` in `parTraverse`.
+
+capability Clock {
+  fn now() -> Effect[Instant]
+}
+
+agent Tally {
+  key id: String
+  store seen: Set[Int]
+  store trail: Log[Int]
+  store total: Cell[Int] = 0
+  store counts: Map[String, Int]
+
+  on call viaSet(n: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parTraverseAll((x: Int) => {
+      do seen.add(x)
+      let r: Result[Int, String] = Ok(x)
+      Effect.pure(r)
+    })
+    Effect.pure(())
+  }
+
+  on call viaLog(n: Int) -> Effect[()] given Clock {
+    let _ <- [1, 2, 3].parTraverseTry((x: Int) => {
+      do trail.append(x)
+      let r: Result[Int, String] = Ok(x)
+      Effect.pure(r)
+    })
+    Effect.pure(())
+  }
+
+  on call viaCell(n: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parTraverse((x: Int) => {
+      total := x
+      Effect.pure(())
+    })
+    Effect.pure(())
+  }
+
+  on call viaRemove(n: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parTraverse((x: Int) => counts.remove("k"))
+    Effect.pure(())
+  }
+}

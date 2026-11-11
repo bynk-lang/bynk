@@ -1284,6 +1284,15 @@ scope after the closing brace, and re-binding an earlier name follows §5.1. A b
 with one binding is `bynk.par.single_binding`, a non-failing warning (ADR 0117). The
 block has no value; it is a statement.
 
+The same rule covers the closure passed to `parTraverse`, `parTraverseAll` or
+`parTraverseTry` (on a `List` or a `Query`; #3298): the closure runs once per element,
+concurrently, so it MUST NOT write a `store` field (`bynk.par.store_write_in_closure`).
+A write is a mutating `store` operation (`put`, `remove`, `update`, `upsert`, `add`,
+`append`) or a `:=`, found anywhere in the written lambda, a lambda nested in it
+included, or in a lambda bound by `let` to a name that is passed as the closure.
+Reads, a `store` as the combinator's receiver, and calls to other agents are not
+writes. The sequential `forEach`, `traverseAll` and `traverseTry` are not restricted.
+
 *Faults.* If any effect of the block faults, the block still waits for every other
 to settle, then raises the **first fault in source order**, whichever faulted first
 in time; later faults are attached to it for the log and cannot be caught
@@ -2856,7 +2865,8 @@ program sees does not depend on timing. Later faults ride on the raised one as
 slow sibling. A synchronous throw from `f` is a fault of that element only: the
 elements before and after it are still issued and awaited. The same holds for
 `parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
-([#2662](https://github.com/bynk-lang/bynk/issues/2662)).
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)). The closure of all three
+MUST NOT write a `store` (see the `par` block above).
 
 The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,
 [ADR 0172](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0172-list-collect-all-iterators.md))
