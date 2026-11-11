@@ -5116,7 +5116,7 @@ pub(crate) fn agent_state_runtime_names(
             "Map" => {
                 names.push("__StoreMap");
                 if is_held(f) {
-                    names.extend(["__wireHeld", "__fillHeld"]);
+                    names.extend(["__wireHeld", "__wireHeldOrder", "__fillHeld"]);
                 } else {
                     names.extend(["__wireMap", "__fillMap"]);
                 }
@@ -6633,6 +6633,7 @@ fn emit_agent_state_persistence(
         }
         if held {
             encode_entries.push(format!("{n}: __wireHeld(s.{n})"));
+            encode_entries.push(format!("{n}__order: __wireHeldOrder(s.{n})"));
         } else if is_codecable(v) {
             encode_entries.push(format!(
                 "{n}: __wireMap(s.{n}, (__v) => {e})",
@@ -6666,6 +6667,7 @@ fn emit_agent_state_persistence(
             ));
         }
         encode_entries.push(format!("{n}: __wireHeld(s.{n})"));
+        encode_entries.push(format!("{n}__order: __wireHeldOrder(s.{n})"));
     }
     // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
     // is textual, else defer (structural string key).
@@ -6774,8 +6776,14 @@ fn emit_agent_state_persistence(
     if has_collections {
         let mut fills = String::new();
         let mut fill = |name: &str, with: &str| {
+            // A held map's insertion order is stored beside its record, as `<field>__order`.
+            let order = if with == "__fillHeld" {
+                format!(", __r[\"{name}__order\"] as never")
+            } else {
+                String::new()
+            };
             fills.push_str(&format!(
-                "  if (globalThis.Object.hasOwn(__r, \"{name}\")) {{ {with}(__z.{name}, __r[\"{name}\"] as never); __w.{name} = __z.{name}; }}\n"
+                "  if (globalThis.Object.hasOwn(__r, \"{name}\")) {{ {with}(__z.{name}, __r[\"{name}\"] as never{order}); __w.{name} = __z.{name}; }}\n"
             ));
         };
         for (name, _) in store_map_fields {

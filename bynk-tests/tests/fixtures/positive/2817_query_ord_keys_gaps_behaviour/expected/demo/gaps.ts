@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpOption } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __StoreMap, __fillHeld, __fillMap, __wireEntries, __wireHeld, __wireMap } from "../__bynk_runtime/store.js";
+import { __StoreMap, __fillHeld, __fillMap, __wireEntries, __wireHeld, __wireHeldOrder, __wireMap } from "../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
@@ -74,11 +74,11 @@ function __hydrateShelfState(s: ShelfState, stored: ShelfState): void {
   const __w = s as { -readonly [K in keyof ShelfState]: ShelfState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
   if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
-  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns__order"] as never); __w.conns = __z.conns; }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {
-  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)), conns: __wireHeld(s.conns) };
+  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)), conns: __wireHeld(s.conns), conns__order: __wireHeldOrder(s.conns) };
 }
 
 export class Shelf {

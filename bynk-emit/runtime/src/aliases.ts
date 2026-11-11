@@ -12,7 +12,7 @@ import { commitStored, noteClock, readStored } from "./entries.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
-import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
+import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
 import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter } from "./storage.ts";
 
 export {
@@ -28,6 +28,7 @@ export {
   fillSet as __fillSet,
   wireEntries as __wireEntries,
   wireHeld as __wireHeld,
+  wireHeldOrder as __wireHeldOrder,
   wireLog as __wireLog,
   wireMap as __wireMap,
   wirePostings as __wirePostings,

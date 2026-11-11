@@ -1148,8 +1148,11 @@ the entries it changed. A load checks `__layout` on the raw stored record first,
 or not the project has the lock, and a marker this build does not know faults,
 `RehydrationViolation` with detail `NewerLayout` (a later build wrote the record). The
 faulting record is never decoded, merged or written back. A held `Map[K, Connection]`
-stays in the `"state"` record, as an array of `[key, connection id]` pairs in insertion order
-(a record written by an earlier build holds an object, which is read as it is).
+stays in the `"state"` record, as the object it has always been (key to connection id), with
+its insertion order beside it, in a `<field>__order` array of keys (an object cannot carry the
+order of its integer-like keys). A record with no order beside it, as an earlier build wrote
+it, is read in the order an object enumerates, and a build that predates the order reads the
+object and ignores the array.
 
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.

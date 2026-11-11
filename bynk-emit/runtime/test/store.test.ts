@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { StoreCache, StoreLog, StoreMap, StoreSet, type Indexer } from "../src/store.ts";
+import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, wireHeld, wireHeldOrder, type Indexer } from "../src/store.ts";
 
 // The in-memory store collection handles (#3254): insertion order for every key,
 // including the integer-like ones a plain object enumerates by value.
@@ -250,4 +250,33 @@ test("index: removing a key whose indexed value changed drops its current postin
   m.remove("l1");
   assert.equal(m.postingsOf("order").size, 0);
   assert.deepEqual(m.byIndex("order", "o2"), []);
+});
+
+test("held map: the wire record keeps its old shape, with the order beside it", () => {
+  const h = new StoreMap<string>();
+  for (const [k, v] of [["10", "c1"], ["2", "c2"], ["a", "c3"], ["5", "c4"]] as const) h.put(k, v);
+  // The record a build that predates the ordered handles wrote and reads.
+  assert.deepEqual(wireHeld(h), { "10": "c1", "2": "c2", a: "c3", "5": "c4" });
+  assert.deepEqual(wireHeldOrder(h), ["10", "2", "a", "5"]);
+});
+
+test("held map: a stored record fills in its stored order", () => {
+  const wire = JSON.parse(JSON.stringify({ "10": "c1", "2": "c2", a: "c3", "5": "c4" }));
+  const h = new StoreMap<string>();
+  fillHeld(h, wire, ["10", "2", "a", "5"]);
+  assert.deepEqual(h.keys(), ["10", "2", "a", "5"]);
+});
+
+test("held map: an older record, with no order beside it, is read as an object enumerates it", () => {
+  const h = new StoreMap<string>();
+  fillHeld(h, { "10": "c1", "2": "c2", a: "c3" });
+  assert.deepEqual(h.keys(), ["2", "10", "a"]);
+  assert.equal(h.get("10"), "c1");
+});
+
+test("held map: a stale order is tolerated, a key it lacks follows and a removed one is skipped", () => {
+  // A rollback wrote the record without maintaining the order: "b" is gone, "z" is new.
+  const h = new StoreMap<string>();
+  fillHeld(h, { a: "1", z: "2", c: "3" }, ["a", "b", "c"]);
+  assert.deepEqual(h.keys(), ["a", "c", "z"]);
 });

@@ -203,6 +203,8 @@ export function reportUnknownStoredKeys(agent: string, stored: object, zero: obj
     // An `@indexed` posting record of a legacy wholesale state: the map's handle rebuilds its postings.
     const idx = key.indexOf("__idx_");
     if (idx > 0 && globalThis.Object.hasOwn(zero, key.slice(0, idx))) continue;
+    // A held `Map`'s insertion order, stored beside its record.
+    if (key.endsWith("__order") && globalThis.Object.hasOwn(zero, key.slice(0, -"__order".length))) continue;
     const id = `${agent}\u0000${key}`;
     if (reportedUnknownStoredKeys.has(id)) continue;
     reportedUnknownStoredKeys.add(id);

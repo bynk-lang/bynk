@@ -330,7 +330,9 @@ plain object: a JS object enumerates integer-like keys (`"2"`, `"10"`) ahead of 
 key, by value, so it cannot keep the insertion order that [§6.2.3](/book/spec/static-semantics/)
 makes normative. A `Map` handle also holds the posting lists of its `@indexed` fields. The
 stored record is unchanged in form: each collection is written, and read back, in insertion
-order, on `bundle` and on `workers` alike.
+order, on `bundle` and on `workers` alike. State written in the per-entry layout carries
+each entry's insertion order; a record still in the earlier wholesale layout has none, so its
+integer-like keys are read in numeric order once, and the next commit stores that order.
 
 On `bundle` an agent is constructed against a per-agent `StateRegistry` (a
 serialised-key-to-state map, reset between tests); on `workers` it is a Durable
