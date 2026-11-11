@@ -1,0 +1,10 @@
+context api
+
+service api from http {
+    on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+        match why {
+            MethodNotAllowed => RawError(MethodNotAllowed, Bytes.empty(), "text/plain")
+            _ => RawError(BadRequest, Bytes.empty(), "text/plain")
+        }
+    }
+}

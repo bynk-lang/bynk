@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+        RawError(NotFound, Bytes.empty(), "text/plain")
+    }
+}

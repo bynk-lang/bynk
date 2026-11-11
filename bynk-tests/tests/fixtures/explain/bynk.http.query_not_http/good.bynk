@@ -1,0 +1,7 @@
+context api
+
+service ticker from http {
+    on GET("/ticks") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

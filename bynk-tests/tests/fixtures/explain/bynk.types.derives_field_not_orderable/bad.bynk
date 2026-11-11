@@ -1,0 +1,3 @@
+commons demo
+
+type Task = { title: String, done: Bool } derives Ord
