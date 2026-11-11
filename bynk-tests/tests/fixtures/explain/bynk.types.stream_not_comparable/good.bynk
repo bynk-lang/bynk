@@ -1,0 +1,7 @@
+commons demo
+
+fn same(a: Stream[Int], b: Stream[Int]) -> Effect[Bool] {
+    let xs <- a.collect()
+    let ys <- b.collect()
+    Effect.pure(xs == ys)
+}

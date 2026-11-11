@@ -1,0 +1,9 @@
+commons demo
+
+type Point = { x: Int, y: Int }
+
+fn first(p: Point) -> Int {
+    match p {
+        _ => 1
+    }
+}
