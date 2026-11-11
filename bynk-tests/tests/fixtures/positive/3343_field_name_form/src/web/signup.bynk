@@ -1,0 +1,17 @@
+context web.signup
+
+// #3343: `@name("…")` on a `@form` body record. A form key is case-sensitive, so
+// `Email` and `email` are two names here (unlike a cookie or a query name).
+
+type Signup = {
+	@name("Email") upperEmail: Option[String],
+	@name("email") lowerEmail: Option[String],
+	@name("remember-me") remember: Bool = false,
+}
+
+service api from http {
+	@form
+	on POST("/signup") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("ok")
+	}
+}

@@ -87,6 +87,9 @@ pub enum Reach {
     /// A context declares a service whose protocol is this one (`from email(…)`
     /// is `"email"`).
     ServiceProtocol(&'static str),
+    /// A context declares an instance of this `bynk.cloudflare` capability
+    /// (`capability Main = Postgres`, #3318), named by its base capability.
+    CapabilityInstance(&'static str),
 }
 
 /// A first-party npm dependency (ADR 0799 C, #3328): an npm package the
@@ -130,6 +133,16 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
         version: "4.1.4",
         runtime_module: "email",
         reached_by: Reach::ServiceProtocol("email"),
+    },
+    // Hyperdrive H1 (#3318): `postgres.ts` is the driver seam of `Postgres`,
+    // handed to the binding by a Worker's compose, so only a Worker with a
+    // `Postgres` instance carries the package. Pinned at the version ADR 0799 A
+    // measured.
+    FirstPartyNpm {
+        package: "postgres",
+        version: "3.4.5",
+        runtime_module: "postgres",
+        reached_by: Reach::CapabilityInstance("Postgres"),
     },
 ];
 
@@ -607,6 +620,11 @@ pub const STORED_SECRET_SECRET_OPTION: &str = "secret";
 /// `EMAIL_MAIL`, a `[[send_email]]` entry (keyed by `name`).
 pub const EMAIL_BINDING_PREFIX: &str = "EMAIL";
 
+/// The Worker binding prefix of a `Postgres` instance (Hyperdrive H1, #3318,
+/// ADR 0799 D): `capability Main = Postgres` binds as `HYPERDRIVE_MAIN`, a
+/// `[[hyperdrive]]` entry whose `id` `bynk deploy` will mint once H2 lands.
+pub const POSTGRES_BINDING_PREFIX: &str = "HYPERDRIVE";
+
 /// The option of an `Email` instance that pins every message to one recipient
 /// (`destination_address`).
 pub const EMAIL_TO_OPTION: &str = "to";
@@ -717,6 +735,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersVersion",
             "WorkersStoredSecret",
             "WorkersEmail",
+            "WorkersPostgres",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -730,6 +749,8 @@ pub const UNITS: &[Unit] = &[
         // Version metadata (#3300) too, until a first-party service reports it.
         // Secrets Store (#3301) too, until a first-party service reads one.
         // Outbound email (#3302) too: Email Service carries no GA label.
+        // Hyperdrive H1 (#3318): `Postgres` too, until a first-party service
+        // has run on it; its records are stable and `PgError` is extensible.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
         // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
@@ -745,13 +766,20 @@ pub const UNITS: &[Unit] = &[
             "Version",
             "StoredSecret",
             "Email",
+            "Postgres",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
             "Kv.putBytes",
             "Kv.listPage",
         ],
-        extensible: &["R2Condition", "KvExpiration", "SqlError", "EmailError"],
+        extensible: &[
+            "R2Condition",
+            "KvExpiration",
+            "SqlError",
+            "EmailError",
+            "PgError",
+        ],
         instantiable: &[
             Instantiable {
                 capability: "Kv",
@@ -844,6 +872,16 @@ pub const UNITS: &[Unit] = &[
                     (EMAIL_ALLOWED_RECIPIENTS_OPTION, OptionKind::StrList),
                     (EMAIL_ALLOWED_SENDERS_OPTION, OptionKind::StrList),
                 ],
+                required: &[],
+                bare: false,
+                linked: false,
+            },
+            // Hyperdrive H1 (#3318): no options (the connection string is
+            // H2's `[deploy.hyperdrive.<Cap>]`), every use a named instance.
+            Instantiable {
+                capability: "Postgres",
+                binding_prefix: POSTGRES_BINDING_PREFIX,
+                options: &[],
                 required: &[],
                 bare: false,
                 linked: false,
@@ -1472,7 +1510,8 @@ mod tests {
                 ("bynk.cloudflare", "D1", "D1"),
                 ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE"),
                 ("bynk.cloudflare", "StoredSecret", "SECRET"),
-                ("bynk.cloudflare", "Email", "EMAIL")
+                ("bynk.cloudflare", "Email", "EMAIL"),
+                ("bynk.cloudflare", "Postgres", "HYPERDRIVE")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1526,6 +1565,10 @@ mod tests {
             Some(OptionKind::StrList)
         );
         assert!(email.required.is_empty() && !email.bare && !email.linked);
+        // Hyperdrive H1 (#3318): a Postgres instance takes no option, is
+        // never bare, and is not linked.
+        let pg = instantiable("bynk.cloudflare", "Postgres").expect("Postgres is instantiable");
+        assert!(pg.options.is_empty() && pg.required.is_empty() && !pg.bare && !pg.linked);
         for u in UNITS {
             for i in u.instantiable {
                 assert!(
@@ -1577,6 +1620,7 @@ mod tests {
                 "bynk.cloudflare.Version",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
+                "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -1599,6 +1643,7 @@ mod tests {
                 ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
+                ("bynk.cloudflare", "PgError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

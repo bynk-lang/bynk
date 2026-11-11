@@ -1,0 +1,13 @@
+// At `integration` each participant's Hyperdrive binding faults, naming itself,
+// until a case stubs the instance: a test never reaches Postgres.
+suite shop.orders as integration {
+	case "a stub answers" {
+		stub Main.run(_, _) returns Err(PgConstraint("23505", "dup"))
+		let r <- api.POST("/orders") by Visitor
+		expect r is Ok("duplicate")
+	}
+
+	case "an unstubbed operation faults" {
+		expect api.POST("/orders") by Visitor faults
+	}
+}

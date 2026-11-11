@@ -1,0 +1,44 @@
+suite shop.orders
+
+case "every operation faults until it is stubbed" {
+	expect add.call("a") faults
+	expect list.call() faults
+	expect find.call(1) faults
+}
+
+case "a stub answers run, all and first" {
+	stub Main.run(_, _) returns Ok(PgRun { rowCount: 1 })
+	stub Main.all(_, _) returns Ok("[{\"id\":\"9007199254740993\"}]")
+	stub Main.first(_, _) returns Ok(None)
+	let a <- add.call("a")
+	expect a == Ok(PgRun { rowCount: 1 })
+	let l <- list.call()
+	expect l == Ok("[{\"id\":\"9007199254740993\"}]")
+	let f <- find.call(1)
+	expect f == Ok(None)
+	expect Main.run called once
+}
+
+case "a stub forces a constraint violation" {
+	stub Main.run(_, _) returns Err(PgConstraint("23505", "duplicate key value"))
+	let a <- add.call("a")
+	expect a is Err(PgConstraint("23505", _))
+}
+
+case "a stub forces a serialization failure" {
+	stub Main.all(_, _) returns Err(PgSerialization("could not serialize access"))
+	let a <- list.call()
+	expect a is Err(PgSerialization(_))
+}
+
+case "a stub forces a connection failure" {
+	stub Main.first(_, _) returns Err(PgConnection("could not reach the database (CONNECTION_CLOSED)"))
+	let b <- find.call(2)
+	expect b is Err(PgConnection(_))
+}
+
+case "a stub forces any other failure" {
+	stub Main.run(_, _) returns Err(PgFailed("42P01", "relation does not exist"))
+	let c <- add.call("a")
+	expect c is Err(PgFailed("42P01", _))
+}

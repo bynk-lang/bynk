@@ -586,6 +586,21 @@ pub fn instantiate_provider_ts_expr(
             }
             return expr;
         }
+        // Hyperdrive H1 (#3318): a Workers build hands a `Postgres` instance
+        // the runtime's driver as a third argument (the compose imports it).
+        // The binding never imports the package, so a project that does not
+        // declare an instance does not carry it. Anywhere else (the bundle)
+        // there is no driver, and the binding faults on use.
+        if inst.is_postgres()
+            && let (ProviderNamespaces::Workers { .. }, bynk_ts::TsExpr::New { args, .. }) =
+                (namespaces, &mut expr)
+        {
+            args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                inst.binding.clone(),
+            )));
+            args.push(bynk_ts::TsExpr::Ident("__pgExecute".to_string()));
+            return expr;
+        }
         // Review of #1968: anything but a construction to append the binding
         // to would quietly read the default `KV`, so two instances would share
         // a namespace. The one other shape is a test module's placeholder for

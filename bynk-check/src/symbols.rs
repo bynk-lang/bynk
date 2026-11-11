@@ -822,6 +822,11 @@ impl DerivedInstance {
         self.list(crate::firstparty::EMAIL_ALLOWED_SENDERS_OPTION)
     }
 
+    /// Whether this is a `Postgres` instance (Hyperdrive H1, #3318).
+    pub fn is_postgres(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Postgres"
+    }
+
     /// Whether this is an `Email` instance (#3302).
     pub fn is_email(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"

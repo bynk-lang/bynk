@@ -1,0 +1,18 @@
+---
+level: minor
+changelog: A record field may carry `@name("…")` before it, naming the key the field has on a request where that is not an identifier; this slice adds the syntax and its checks, and the request readers follow (#3343, slice 1)
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
+---
+
+## ADR: field-name-annotation
+title: `@name("…")` field annotation for external names that are not identifiers
+summary: The first field annotation in the language, how it is parsed and where it is legal
+
+**Context.** A typed request record names its inputs by field name, and a field name is an identifier. Real wire names are often not: a `__Host-sid` cookie, a `filter[status]` or `page-size` query key, a `g-recaptcha-response` form field. Today the only way to read one is the raw view (`RequestQuery`, `RequestCookies`), which gives up the boundary's typing and validation. Proposed and accepted as #3343 (general annotation: yes; refuse it on a record also used as a JSON body or store type; refuse case-only duplicate names for cookies and query).
+
+**Decision.**
+- **A: a `@name("…")` annotation before a record field.** `field = annotation* name ":" type …`. The field is `sid` everywhere in Bynk; `@name` changes only the key a request reader looks for. This slice adds the parse (`bynk-syntax` and the `tree-sitter-bynk` grammar, where a record field already took annotations after its refinement, as `@example`), the formatter, and the checks; the readers, the system-tier drivers, `Form.decode`/`Form.encode` and OpenAPI follow in later slices of #3343, so until the last of them lands a `@name` is checked but not yet applied.
+- **B: where it is legal.** Only on a field of a record used as the `cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler (`bynk.types.field_name_not_request_record` otherwise). Such a record may be used nowhere else a JSON form matters: not as another body, a result, a store field, an event, a call argument or a field of another record (`bynk.types.field_name_record_not_boundary`), because its JSON key is the field name and a rename would split the two.
+- **C: the argument and the name.** Exactly one string literal (`bynk.types.field_name_bad_arg`); at most one `@name` per field and no two fields reading the same wire name (`bynk.types.field_name_duplicate`); a cookie name must be an RFC 9110 token and no name is empty (`bynk.types.field_name_invalid`); for cookies and query, names that differ only in case are refused (`bynk.types.field_name_case_conflict`). Any other annotation on a field is `bynk.types.field_annotation_unknown`.
+
+**Consequences.** The language has its first prefix field annotation. A record with `@name` fields is a request-only shape; a service that wants the same data as JSON declares a second record. Rejected in the proposal, and not built: a naming convention (underscore matches hyphen), backtick-quoted field names, and a cookies-only rename block.
