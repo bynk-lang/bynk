@@ -8292,6 +8292,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.file_at_boundary",
         "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
     ),
+    d(
+        "bynk.types.form_uncodable",
+        "`Form.decode` or `Form.encode` names a type that is not a record of form fields (a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`).",
+    ),
     dg(
         "bynk.types.function_at_boundary",
         "A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary.",
