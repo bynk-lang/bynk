@@ -1,0 +1,6 @@
+commons demo
+
+fn distinctPrices(xs: List[Float]) -> Int {
+    let seen: Set[Float] = Set.of(xs)
+    seen.length()
+}

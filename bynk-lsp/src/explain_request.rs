@@ -154,8 +154,8 @@ mod tests {
 
     #[test]
     fn an_uncurated_or_unknown_code_is_none() {
-        assert!(diagnostics::lookup("bynk.resolve.duplicate_type").is_some());
-        assert!(explanation_for("bynk.resolve.duplicate_type").is_none());
+        assert!(diagnostics::lookup("bynk.resolve.duplicate_fn").is_some());
+        assert!(explanation_for("bynk.resolve.duplicate_fn").is_none());
         assert!(explanation_for("bynk.not.a_real_code").is_none());
         assert!(explanation_for("").is_none());
     }

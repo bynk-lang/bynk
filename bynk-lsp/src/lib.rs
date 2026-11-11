@@ -6129,7 +6129,7 @@ mod code_description_tests {
     fn uncurated_code_gets_no_link() {
         // A real code with no curated explanation, and a nonsense code, both
         // fall back to no link (graceful — not an error).
-        assert!(code_description("bynk.resolve.duplicate_type").is_none());
+        assert!(code_description("bynk.resolve.duplicate_fn").is_none());
         assert!(code_description("bynk.not.a_real_code").is_none());
     }
 
@@ -9597,7 +9597,7 @@ mod tests {
         assert_eq!(curated.title, "bynk.resolve.unknown_type");
         assert!(
             backend
-                .explain(ask("bynk.resolve.duplicate_type"))
+                .explain(ask("bynk.resolve.duplicate_fn"))
                 .await
                 .unwrap()
                 .is_none()

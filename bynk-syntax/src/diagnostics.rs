@@ -115,6 +115,39 @@ impl Explain {
 /// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.agents.non_zeroable_state_field",
+        blurb: "A key that has never been used is initialised automatically the first time it is \
+                touched, so every `store Cell[T]` field needs a starting value. With no \
+                initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a \
+                record of zeroed fields), but only where that zero is a valid value of the type. \
+                An opaque type, a sum other than `Option`, and a refined type that rules its zero \
+                out have none, and the compiler will not invent a value that the type's own \
+                constructors might refuse. Say what \"not set yet\" means: wrap the type in \
+                `Option`, where `None` is the zero, or give the field an initialiser, \
+                `store name: Cell[T] = value`.",
+        example: "type Secret = opaque String\n\n\
+                  store secret: Cell[Secret]                // ✗ no zero value for an opaque type\n\n\
+                  store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
+        page: "/book/reference/agents",
+        anchor: "state-initialisation",
+    },
+    Explain {
+        code: "bynk.capability.instance_only",
+        blurb: "A few platform capabilities (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, \
+                `D1` and `EdgeCache`) are never used as the bare kind. Each stands for a \
+                particular resource of its own: a database, a bucket, a limiter with a limit \
+                and a window, a Worker. So you declare a named instance, \
+                `capability Orders = D1`, which gets a binding and a double of its own, and a \
+                handler asks for that instance in `given` instead of the kind. Two instances of \
+                one kind never share data. Some kinds need options on the instance, such as \
+                `RateLimit @limit(20) @period(60.seconds)`.",
+        example: "on call() -> Effect[()] given D1 {            // ✗ the bare kind names no database\n\n\
+                  capability Orders = D1\n\
+                  on call() -> Effect[()] given Orders {        // ✓ a named instance",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -126,6 +159,35 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
+    },
+    Explain {
+        code: "bynk.generics.missing_eq_bound",
+        blurb: "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. \
+                A type parameter stands for any type, and some types cannot be compared: a function, an \
+                `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement \
+                in the signature, where a caller, hover and signature help can see it, instead of leaving \
+                it to fail inside the body. The same rule applies when a generic passes its own parameter \
+                to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a \
+                chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The \
+                diagnostic's fix adds the bound.",
+        example: "fn same[T](a: T, b: T) -> Bool {\n    a == b                  // ✗ `T` could be a function\n}\n\n\
+                  fn same[T: Eq](a: T, b: T) -> Bool {\n    a == b                  // ✓ the bound is in the signature\n}",
+        page: "/book/reference/generics",
+        anchor: "bounds",
+    },
+    Explain {
+        code: "bynk.generics.missing_key_bound",
+        blurb: "A `Map` key or a `Set` element must be a type that can be held under a canonical encoding, and \
+                a type parameter might be a function or another type that cannot. So a type parameter \
+                that reaches a `Map` key or a `Set` element, in a signature, a generic type's field, or \
+                a `distinct`, `groupBy` or join key, must be declared `K: Key`, and a call must \
+                instantiate it with a key type. `Key` implies `Eq`, so an existing `Eq` bound is \
+                replaced rather than joined (`K: Eq + Key` is a warning). The diagnostic's fix declares \
+                the bound, and `bynk check --fix` applies it across a project.",
+        example: "fn single[K](k: K) -> Map[K, Int] {                 // ✗ `K` has no `Key` bound\n    Map.empty().insert(k, 1)\n}\n\n\
+                  fn single[K: Key](k: K) -> Map[K, Int] {            // ✓ declared\n    Map.empty().insert(k, 1)\n}",
+        page: "/book/reference/generics",
+        anchor: "key",
     },
     Explain {
         code: "bynk.generics.polymorphic_recursion",
@@ -159,6 +221,36 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "where-it-cannot-go-yet",
     },
     Explain {
+        code: "bynk.generics.type_arg_mismatch",
+        blurb: "The type arguments of a generic call do not fit. The checker infers each type parameter from \
+                the arguments, and an argument that contradicts what an earlier one \
+                settled is refused: `pick(1, \"one\")` cannot make `T` both `Int` and `String`. The same \
+                code covers explicit type arguments of the wrong number (`pick[Int, Int](…)`), type \
+                arguments given to a function that is not generic, and a type parameter named like a \
+                declared type. Make the arguments agree, give the type argument explicitly where the \
+                inference is not what you meant, or rename the parameter.",
+        example: "fn pick[T](a: T, b: T) -> T {\n    a\n}\n\n\
+                  let x = pick(1, \"one\")          // ✗ `T` is `Int` from the first argument\n\n\
+                  pick(1, 2)                      // ✓ both arguments are `Int`",
+        page: "/book/reference/generics",
+        anchor: "type-parameters",
+    },
+    Explain {
+        code: "bynk.generics.uninferable_type_arg",
+        blurb: "A call to a generic function leaves a type parameter undetermined. Bynk fixes a type parameter \
+                from the arguments and, failing that, from the type the call is expected to have; it \
+                never guesses. `none()` has no argument that mentions `T`, and `let x = none()` gives it \
+                no expected type, so there is nothing to choose `T` from. The error also fires when a \
+                lambda's parameter types depend on a parameter that the other arguments leave open. Give \
+                the type argument explicitly with `none[Int]()`, or annotate the binding so the expected \
+                type supplies it: `let x: Option[Int] = none()`.",
+        example: "fn none[T]() -> Option[T] {\n    None\n}\n\n\
+                  let x = none()                    // ✗ nothing says what `T` is\n\n\
+                  let x = none[Int]()               // ✓ given explicitly",
+        page: "/book/reference/generics",
+        anchor: "the-expected-type-for-every-generic-call",
+    },
+    Explain {
         code: "bynk.given.undeclared_capability",
         blurb: "A handler may only use a capability it has itself declared with \
                 `given`. Effects in Bynk are explicit: the `given` clause is the \
@@ -185,6 +277,22 @@ pub const EXPLANATIONS: &[Explain] = &[
                   provides Greeter = Polite given Logger { … }   // ✓ matches the declared capability",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.held.consume_on_borrow",
+        blurb: "A held value such as a `Connection[F]` has exactly one owner, and the owner must \
+                dispose of it by storing, closing or handing it on. A closure that visits each \
+                stored connection (`forEach`, `parTraverse` and their variants) is only lent \
+                each one: it may `send`, which leaves the connection owned, but `close` or any \
+                transfer would be an owner's act performed on a value the closure does not own. A \
+                match guard borrows in the same \
+                way, because it runs before its arm is chosen. To close connections, remove \
+                them from the store, which closes them, in the owner's code and not in the \
+                closure.",
+        example: "conns.forEach((c: Connection[ServerFrame]) => c.close())                          // ✗ `c` is borrowed\n\n\
+                  conns.forEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: \"closing\" }))   // ✓ `send` does not consume",
+        page: "/book/reference/websocket",
+        anchor: "sending-and-broadcasting",
     },
     Explain {
         code: "bynk.http.error_status_position",
@@ -339,6 +447,18 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.duplicate_type",
+        blurb: "A unit declares two types, or a type and an event, with the same name. A unit's top-level \
+                declarations share one scope in the emitted module, so a name can mean only one thing, \
+                and a type name appears in signatures and constructors with no way to say which \
+                declaration is meant. Rename one of them, or remove the repeated declaration. The check \
+                spans all of the unit's files, so the second declaration can be in a different file.",
+        example: "type Money = Int\ntype Money = String          // ✗ `Money` is already declared\n\n\
+                  type Money = Int\ntype Label = String          // ✓ distinct names",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.missing_field",
         blurb: "A record must be constructed with every field that has no default. \
                 There is no partial construction: a value of a record type is only \
@@ -353,6 +473,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.resolve.name_conflict",
+        blurb: "Two declarations of different kinds share a name. A unit's functions, assets, embeds, \
+                constants, types and events, services, agents and providers with a body (by their \
+                implementation name) all live in one namespace, across all of the unit's files, because \
+                they are one scope in the emitted module. Capabilities and actors each keep their own. \
+                Two types, or a type and an event, are `bynk.resolve.duplicate_type`, and two constants \
+                `bynk.resolve.duplicate_const`. Rename one of the two.",
+        example: "fn Limit() -> Int {\n    3\n}\n\n\
+                  const Limit: Int = 3         // ✗ a function already has this name\n\n\
+                  const Limit: Int = 3         // ✓ once the function is renamed `limit`",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.unknown_field",
         blurb: "A record construction names a field the record type does not declare. \
                 A record's fields are fixed by its type declaration, and a literal may \
@@ -364,6 +498,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   User { name: \"Ada\", age: 36 }                // ✓ only the declared fields",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.unknown_function",
+        blurb: "A call names a function that is not in scope. Only functions declared in the same unit, or \
+                brought in through `uses`, can be called; a capitalised name, which would construct an \
+                agent, needs an agent of that name in scope. This is most often a typo or a missing \
+                `uses`. A lambda cannot call itself through its own `let` name either, because the name \
+                is not bound until the lambda is built. A type used as a function, as in `Money(5)`, is \
+                the separate `bynk.resolve.type_as_function`.",
+        example: "fn double(x: Int) -> Int {\n    x * 2\n}\n\n\
+                  dubble(4)          // ✗ no function `dubble`\n\n\
+                  double(4)          // ✓ the declared name",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.unknown_name",
@@ -380,6 +528,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.resolve.unknown_static_member",
+        blurb: "A type was named with a `.` and a member it does not have. `T.name` refers to a variant of the \
+                sum type `T` or to a static method declared on it, and a misspelt variant has no such member. Some built-in types \
+                have a closed set: `HttpResult`, `ErrorStatus` and `RoundingMode` only their variants, \
+                `Float` only `parse`, `pi` and `e`, and `Decimal` only `parse` and `fromInt`. Check the spelling against the declaration, or declare the missing \
+                static method.",
+        example: "type Colour =\n    | Red\n    | Green\n\n\
+                  Colour.Gren          // ✗ `Colour` has no variant `Gren`\n\n\
+                  Colour.Green         // ✓ the declared variant",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
         code: "bynk.resolve.unknown_type",
         blurb: "A type name was referenced that does not exist. Types must be \
                 declared (with `type`), be one of Bynk's built-in types, or be \
@@ -387,6 +548,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                 An unknown type is usually a typo or a missing declaration/import.",
         example: "fn greet(u: Usr) -> String { … }   // ✗ no type `Usr`\n\
                   fn greet(u: User) -> String { … }  // ✓ the declared type",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.argument_mismatch",
+        blurb: "An argument has a different type from the parameter it is passed to. Bynk \
+                compares types exactly and converts nothing implicitly, so a `String` is \
+                never read as an `Int`, and a call that passes the wrong type is refused \
+                at the call, not left to fail later. The same code covers the arguments of \
+                methods, capability operations and constructors. Pass a value of the \
+                parameter's type, or convert it first with an explicit conversion such as \
+                `Int.parse` (which returns an `Option`, because the text may not be a number).",
+        example: "fn double(n: Int) -> Int {\n    n * 2\n}\n\n\
+                  fn run() -> Int {\n    double(\"21\")    // ✗ a `String`, where `Int` is expected\n}\n\n\
+                  fn run() -> Int {\n    double(21)      // ✓ an `Int`\n}",
         page: "/book/reference/types",
         anchor: "",
     },
@@ -400,6 +576,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let repo = w.claims.get(\"repository\")            // ✓ keep the String",
         page: "/book/reference/actors",
         anchor: "reading-claims",
+    },
+    Explain {
+        code: "bynk.types.json_uncodable",
+        blurb: "`Json.encode` and `Json.decode` work on values that have a wire form, and a \
+                function does not: a value that can run has no JSON text to stand for it. \
+                The codec covers the base types, named types and the built-in containers \
+                over them. It does not cover functions, effects, streams or a type that \
+                carries one, `bynk.crypto` keys or the error builtins. Encode the data the \
+                function produces, or the record that describes it, not the function itself.",
+        example: "fn dump(f: Int -> Int) -> String {\n    Json.encode(f)       // ✗ a function has no JSON form\n}\n\n\
+                  fn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
+        page: "/book/reference/types",
+        anchor: "the-json-codec",
+    },
+    Explain {
+        code: "bynk.types.method_arity",
+        blurb: "A method was called with a different number of arguments from the number it \
+                declares. The count excludes `self`, which the receiver supplies, so \
+                `fn Box.adjust(self, delta: Int)` takes one argument. Pass exactly that \
+                many. The same code covers the built-in methods of `String`, `List`, `Map` and the other \
+                kernel types.",
+        example: "type Box = { value: Int }\n\n\
+                  fn Box.adjust(self, delta: Int) -> Box {\n    Box { value: self.value + delta }\n}\n\n\
+                  fn bump(b: Box) -> Box {\n    b.adjust()     // ✗ expects 1 argument\n}\n\n\
+                  fn bump(b: Box) -> Box {\n    b.adjust(1)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.method_not_found",
+        blurb: "A method call names an instance method that the receiver's type does not \
+                have. An instance method is a function declared with `self` as its first \
+                parameter. A function declared on a type without `self` is static, and is \
+                called on the type, as `Counter.zero()`, never on a value. This also fires on \
+                a typo, and on a built-in type that has methods but not this one, since only the \
+                methods the type documents exist.",
+        example: "type Counter = { count: Int }\n\n\
+                  fn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\n\
+                  fn reset(c: Counter) -> Counter {\n    c.zero()          // ✗ `zero` has no `self`: not an instance method\n}\n\n\
+                  fn reset(c: Counter) -> Counter {\n    Counter.zero()    // ✓ a static function is called on the type\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
     Explain {
         code: "bynk.types.no_numeric_coercion",
@@ -430,6 +648,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "exhaustiveness-and-reachability",
     },
     Explain {
+        code: "bynk.types.not_keyable",
+        blurb: "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` \
+                or join, must be a `Key` type, one whose equal values can always be found \
+                again. `String`, `Int`, `Bool`, `Instant`, `Duration` and `Bytes` are, as are \
+                `Option` and `List` of a key and records, sums and enums made only of keys. \
+                A `Float` never is, at any depth, because `NaN` is not equal to itself, so a \
+                key holding one could never be looked up. Key on a type that is: an `Int` \
+                count of cents, say, or a `String`.",
+        example: "fn distinctPrices(xs: List[Float]) -> Int {\n    let seen: Set[Float] = Set.of(xs)    // ✗ `Float` is not a `Key`\n    seen.length()\n}\n\n\
+                  fn distinctPrices(xs: List[Int]) -> Int {\n    let seen: Set[Int] = Set.of(xs)      // ✓ `Int` is\n    seen.length()\n}",
+        page: "/book/reference/types",
+        anchor: "keys",
+    },
+    Explain {
         code: "bynk.types.return_mismatch",
         blurb: "The value a function or handler body ends with does not have the declared \
                 return type, and the compiler compares the two exactly. Either change the \
@@ -446,6 +678,47 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.type_mismatch",
+        blurb: "An operator or a built-in method was given an operand of a type it does not \
+                accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on \
+                something that is not a `Bool`. Types are compared exactly, with no implicit \
+                conversion, so values of different types are never equal and never silently \
+                coerced. Make the operands the same type, or convert one explicitly. A `Float` \
+                and an `Int` mixed in arithmetic is the separate code \
+                `bynk.types.no_numeric_coercion`.",
+        example: "fn isAdult(age: Int) -> Bool {\n    age == \"18\"    // ✗ `Int` compared with `String`\n}\n\n\
+                  fn isAdult(age: Int) -> Bool {\n    age == 18      // ✓ both `Int`\n}",
+        page: "/book/reference/operators",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.unknown_field",
+        blurb: "A field access names a field the value's type does not declare. A record's \
+                fields are fixed by its type declaration, so `p.z` on a `Point` of `x` and `y` \
+                is refused. This is usually a typo, or a value of a different type from the \
+                one intended. Building a record with a field it lacks is the sibling code \
+                `bynk.resolve.unknown_field`.",
+        example: "type Point = { x: Int, y: Int }\n\n\
+                  fn height(p: Point) -> Int {\n    p.z    // ✗ `Point` has no field `z`\n}\n\n\
+                  fn height(p: Point) -> Int {\n    p.y    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.unreachable_arm",
+        blurb: "A `match` arm can never run, because the arms before it already match every \
+                value it would match. The usual cause is a wildcard `_` placed before more \
+                specific arms: arms are tried in order, so the wildcard takes everything and \
+                the rest are dead code, which Bynk refuses rather than let hide a mistake. \
+                Put the specific arms first and the wildcard last, or delete the arm. A \
+                guarded arm covers nothing, since its guard may fail.",
+        example: "type Status = enum { Pending, Active, Done }\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        _ => \"other\"\n        Pending => \"waiting\"    // ✗ the `_` above already matches it\n    }\n}\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        _ => \"other\"            // ✓ the catch-all last\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
     },
 ];
 
@@ -861,12 +1134,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.instance_only",
-        "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `EdgeCache`) was used bare, in a `given` clause.",
+        "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1`, `EdgeCache`) was used bare, in a `given` clause.",
         &["given_clause"],
     ),
     dg(
         "bynk.capability.invalid_option",
-        "A derived capability's option is not one string literal, is given twice, or (`@worker`) is not a Worker name outside the project.",
+        "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`).",
         &["capability_decl"],
     ),
     dg(
@@ -3907,7 +4180,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.type_mismatch",
-        "Two types that were required to match did not.",
+        "An operator or built-in method got an operand of a type it does not accept, or two operands that had to match did not.",
     ),
     dg(
         "bynk.types.uninferable_element_type",

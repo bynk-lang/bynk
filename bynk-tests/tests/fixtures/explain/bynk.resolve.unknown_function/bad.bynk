@@ -1,0 +1,9 @@
+commons demo
+
+fn double(x: Int) -> Int {
+    x * 2
+}
+
+fn use() -> Int {
+    dubble(4)
+}

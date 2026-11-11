@@ -1,0 +1,11 @@
+context vault
+
+type Secret = opaque String
+
+agent Vault {
+    key id: String
+
+    store secret: Cell[Option[Secret]]
+
+    on call touch() -> Effect[()] { () }
+}

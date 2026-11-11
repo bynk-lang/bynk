@@ -1,0 +1,9 @@
+commons demo
+
+fn double(n: Int) -> Int {
+    n * 2
+}
+
+fn run() -> Int {
+    double(21)
+}

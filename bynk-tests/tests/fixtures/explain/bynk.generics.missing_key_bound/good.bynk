@@ -1,0 +1,5 @@
+commons demo
+
+fn single[K: Key](k: K) -> Map[K, Int] {
+    Map.empty().insert(k, 1)
+}
