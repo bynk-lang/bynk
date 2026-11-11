@@ -5723,6 +5723,7 @@ fn classify_agent_store<'a>(
             )
         })
         .map(|f| RecordField {
+            annotations: Vec::new(),
             documentation: None,
             trivia: Default::default(),
             name: f.name.clone(),

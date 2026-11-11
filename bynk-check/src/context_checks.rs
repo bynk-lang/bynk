@@ -2821,6 +2821,9 @@ fn check_service_decls(
     // #2341 (decision C): the shape of each service's `on rejected`.
     check_rejected_handlers(table, errors);
 
+    // #3343: `@name("…")` on the fields of a request record.
+    validate_field_names(table, &typed.types, errors);
+
     // v0.9: validate HTTP handler shape and check for duplicate routes
     // across all services in this context.
     let mut route_first_span: HashMap<(HttpMethod, String), Span> = HashMap::new();
@@ -3938,6 +3941,7 @@ fn check_agent_decls(
             .iter()
             .filter(|f| f.kind.head.name == "Cell" && f.kind.args.len() == 1)
             .map(|f| RecordField {
+                annotations: Vec::new(),
                 documentation: None,
                 trivia: Default::default(),
                 name: f.name.clone(),
@@ -4059,6 +4063,7 @@ fn check_agent_decls(
             body: TypeBody::Record(RecordBody {
                 trailing_comments: Default::default(),
                 fields: vec![RecordField {
+                    annotations: Vec::new(),
                     documentation: None,
                     trivia: Default::default(),
                     name: Ident {
@@ -5018,6 +5023,173 @@ fn is_query_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> b
     match r {
         TypeRef::Option(inner, _) | TypeRef::List(inner, _) => is_query_leaf(inner, types),
         other => is_query_leaf(other, types),
+    }
+}
+
+/// Where a record is read off an HTTP request: the surface decides what a wire
+/// name must look like and whether two names that differ only in case clash.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RequestSurface {
+    Cookies,
+    Query,
+    Form,
+}
+
+/// RFC 9110 `token`: a cookie name is one.
+fn is_http_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_graphic() && !"()<>@,;:\\\"/[]?={}".contains(c))
+}
+
+/// #3343: `@name("…")` before a record field names the key it has on the wire,
+/// where that is not an identifier (`__Host-sid`). It is legal only on a record
+/// used as the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an
+/// `on http` handler (the readers that take names off a request); it takes one
+/// string literal; and two fields may not share a wire name (nor, for cookies and
+/// query, differ only in case).
+pub(crate) fn validate_field_names(
+    table: &UnitTable,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    let mut uses: HashMap<String, Vec<RequestSurface>> = HashMap::new();
+    for service in table.services.values() {
+        for h in &service.handlers {
+            if !matches!(h.kind, HandlerKind::Http { .. }) {
+                continue;
+            }
+            for p in &h.params {
+                let surface = match p.name.name.as_str() {
+                    "cookies" => Some(RequestSurface::Cookies),
+                    "query" => Some(RequestSurface::Query),
+                    "body"
+                        if h.annotations
+                            .iter()
+                            .any(|a| matches!(a.name.name.as_str(), "form" | "multipart")) =>
+                    {
+                        Some(RequestSurface::Form)
+                    }
+                    _ => None,
+                };
+                if let (Some(s), TypeRef::Named(id)) = (surface, &p.type_ref) {
+                    uses.entry(id.name.clone()).or_default().push(s);
+                }
+            }
+        }
+    }
+    let mut names: Vec<&String> = types.keys().collect();
+    names.sort();
+    for name in names {
+        let TypeBody::Record(rec) = &types[name].body else {
+            continue;
+        };
+        if rec.fields.iter().all(|f| f.annotations.is_empty()) {
+            continue;
+        }
+        let surfaces = uses.get(name).cloned().unwrap_or_default();
+        let mut wire: Vec<(String, Span)> = Vec::new();
+        for f in &rec.fields {
+            let mut external: Option<(String, Span)> = None;
+            for ann in &f.annotations {
+                if ann.name.name != "name" {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.field_annotation_unknown",
+                            ann.span,
+                            format!("unknown field annotation `@{}`", ann.name.name),
+                        )
+                        .with_note("the only field annotation is `@name(\"…\")`"),
+                    );
+                    continue;
+                }
+                let literal = match ann.args.as_slice() {
+                    [a] if a.label.is_none() => match &a.value.kind {
+                        ExprKind::StrLit(s) => Some(s.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let Some(literal) = literal else {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.field_name_bad_arg",
+                            ann.span,
+                            "`@name` takes exactly one string literal",
+                        )
+                        .with_note("write `@name(\"__Host-sid\")`"),
+                    );
+                    continue;
+                };
+                if external.is_some() {
+                    errors.push(CompileError::new(
+                        "bynk.types.field_name_duplicate",
+                        ann.span,
+                        format!("field `{}` has more than one `@name`", f.name.name),
+                    ));
+                    continue;
+                }
+                if surfaces.is_empty() {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.field_name_not_request_record",
+                            ann.span,
+                            format!(
+                                "`@name` is on a field of `{name}`, which is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler"
+                            ),
+                        )
+                        .with_note(
+                            "`@name` renames the key a request reader looks for; on any other record it would do nothing",
+                        ),
+                    );
+                } else {
+                    let bad = if surfaces.contains(&RequestSurface::Cookies)
+                        && !is_http_token(&literal)
+                    {
+                        Some(
+                            "a cookie name must be an RFC 9110 token (no spaces, quotes or separators)",
+                        )
+                    } else if literal.is_empty() {
+                        Some("a wire name must not be empty")
+                    } else {
+                        None
+                    };
+                    if let Some(why) = bad {
+                        errors.push(CompileError::new(
+                            "bynk.types.field_name_invalid",
+                            ann.span,
+                            format!("`@name(\"{literal}\")` is not a valid name here: {why}"),
+                        ));
+                    }
+                }
+                external = Some((literal, ann.span));
+            }
+            let (key, span) = external.unwrap_or_else(|| (f.name.name.clone(), f.name.span));
+            wire.push((key, span));
+        }
+        let case_matters = surfaces
+            .iter()
+            .any(|s| matches!(s, RequestSurface::Cookies | RequestSurface::Query));
+        for (i, (a, span)) in wire.iter().enumerate() {
+            for (b, _) in &wire[..i] {
+                if a == b {
+                    errors.push(CompileError::new(
+                        "bynk.types.field_name_duplicate",
+                        *span,
+                        format!("two fields of `{name}` read the same wire name `{a}`"),
+                    ));
+                } else if case_matters && a.eq_ignore_ascii_case(b) {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.field_name_case_conflict",
+                            *span,
+                            format!("wire names `{a}` and `{b}` of `{name}` differ only in case"),
+                        )
+                        .with_note("cookie and query names are case-sensitive but easily confused; rename one"),
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -6219,6 +6391,24 @@ pub fn reject_fn_types(
                 ),
             );
         }
+        // #3343: a record with `@name` fields is read off an HTTP request by name,
+        // so its JSON form is not its wire form: it may not be a body, a result,
+        // a store field, an event or a call argument.
+        TypeRef::Named(id) if record_has_field_names(&id.name, types) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.field_name_record_not_boundary",
+                    id.span,
+                    format!(
+                        "`{}` has `@name` fields, so it can only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter, not {what}",
+                        id.name
+                    ),
+                )
+                .with_note(
+                    "a record's JSON form uses its field names, so a `@name` rename would split the two; use a separate record for this position",
+                ),
+            );
+        }
         // #3276: a `File` is a file part of a `@multipart` request, held in
         // memory for the handler that receives it. A record field or sum payload
         // may carry one (that is how a `@multipart` body names its parts), but it
@@ -6247,6 +6437,14 @@ pub fn reject_fn_types(
         | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
+}
+
+/// #3343: whether `name` is a record with a `@name`-annotated field.
+fn record_has_field_names(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    matches!(
+        types.get(name).map(|t| &t.body),
+        Some(TypeBody::Record(r)) if r.fields.iter().any(|f| !f.annotations.is_empty())
+    )
 }
 
 /// #3276: `bynk.types.file_at_boundary` for a `File`, or a type that carries one,

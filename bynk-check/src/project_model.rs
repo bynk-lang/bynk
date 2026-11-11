@@ -2028,7 +2028,17 @@ pub fn check_function_type_boundary_items(
                         // parts are received.
                         let multipart_body = p.name.name == "body"
                             && h.annotations.iter().any(|a| a.name.name == "multipart");
-                        if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
+                        // #3343: and the record a request reader fills (`cookies`, `query`,
+                        // a `@form` body) is where `@name` fields are allowed.
+                        let request_record = matches!(h.kind, HandlerKind::Http { .. })
+                            && (matches!(p.name.name.as_str(), "cookies" | "query")
+                                || (p.name.name == "body"
+                                    && h.annotations.iter().any(|a| a.name.name == "form")));
+                        if !type_ref_is_held(&p.type_ref)
+                            && !http_headers
+                            && !multipart_body
+                            && !request_record
+                        {
                             reject_fn_types(
                                 &p.type_ref,
                                 "a service handler signature",
