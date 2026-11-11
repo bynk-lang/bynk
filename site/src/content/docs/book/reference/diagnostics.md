@@ -812,7 +812,7 @@ There are **815** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.asset.duplicate`](/book/reference/assets/#declaring-an-asset) | An `asset` name is declared more than once in the same unit. |  | — |
-| [`bynk.asset.invalid_at_path`](/book/reference/assets/#fixed-paths) | An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`. |  | — |
+| [`bynk.asset.invalid_at_path`](/book/reference/assets/#fixed-paths) | An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`, or is a file the platform reads as configuration. |  | — |
 | `bynk.asset.may_shadow_route` | A parameterised HTTP route matches a fixed asset path, so it never sees requests for that path (a warning). |  | Warning |
 | [`bynk.asset.missing_file`](/book/reference/assets/#declaring-an-asset) | An `asset` names a file that is not in the project's `assets/` folder. |  | — |
 | `bynk.asset.needs_project` | A single-file build met an `asset` declaration; assets need a project build. |  | — |

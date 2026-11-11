@@ -5355,7 +5355,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.asset.invalid_at_path",
-        "An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`.",
+        "An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`, or is a file the platform reads as configuration.",
     ),
     warn(d(
         "bynk.asset.may_shadow_route",
