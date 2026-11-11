@@ -1988,7 +1988,8 @@ fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<
     let link = out_js_root.join("node_modules");
     // A link left by an earlier run may dangle (`exists` follows it), so replace it.
     if link.symlink_metadata().is_ok() {
-        let _ = std::fs::remove_file(&link);
+        // A symlink goes with `remove_file`, a Windows junction with `remove_dir`.
+        let _ = std::fs::remove_file(&link).or_else(|_| std::fs::remove_dir(&link));
     }
     // Absolute, so a relative `--output` does not leave the link pointing
     // beside itself.
@@ -1997,6 +1998,30 @@ fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<
     #[cfg(unix)]
     std::os::unix::fs::symlink(&target, &link)
         .map_err(|e| format!("could not link {}: {e}", link.display()))?;
+    // A directory junction, which needs no privilege (a symlink does on Windows).
+    #[cfg(windows)]
+    {
+        // `canonicalize` gives a `\\?\` path, which `mklink` does not take.
+        let plain = target
+            .to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .to_string();
+        let made = ProcCommand::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&link)
+            .arg(&plain)
+            .output()
+            .map_err(|e| format!("could not link {}: {e}", link.display()))?;
+        if !made.status.success() {
+            return Err(format!(
+                "could not link {}: {}",
+                link.display(),
+                String::from_utf8_lossy(&made.stdout)
+            ));
+        }
+    }
     Ok(())
 }
 

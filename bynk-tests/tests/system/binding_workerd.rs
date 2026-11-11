@@ -1056,7 +1056,7 @@ fn post_email(port: u16, from: &str, to: &str, raw: &str) -> Result<(u16, String
 /// Worker, as a project does before `wrangler dev`.
 fn install_npm_dependencies(dir: &Path) -> Option<String> {
     let out = dir.parent()?.parent()?;
-    let npm = Command::new("npm")
+    let npm = tools::base_command("npm")
         .args([
             "install",
             "--ignore-scripts",
