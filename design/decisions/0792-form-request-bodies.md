@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `@form` decodes an `application/x-www-form-urlencoded` request body into a typed record at the boundary, with the refinements, defaults and `Option`s of a JSON body (#3276, slice 1; #3180 stays open for streaming)
-probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage, explained_codes
----
+# 0792 — A `@form` handler annotation decodes a urlencoded form body into a record
 
-## ADR: form-request-bodies
-title: A `@form` handler annotation decodes a urlencoded form body into a record
-summary: How a route declares a form body, how keys map to record fields, the form-specific leaf rules, and the 415 and 400 answers
+- **Status:** Accepted (v0.541)
 
 **Context.** A handler's `body` was JSON, or with `@raw` the untouched octets; an HTML form post had to be hand-parsed from `Bytes`, losing the boundary's refinements, defaults and path-naming errors. A typed `query` (#2854) already reads a flat key/value string into a record through the record's own codec. Proposed in #3276 (slice 1 of #3180; slice 2, multipart, follows).
 

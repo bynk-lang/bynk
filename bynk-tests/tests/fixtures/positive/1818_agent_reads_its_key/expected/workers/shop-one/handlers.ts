@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
 
@@ -64,7 +64,7 @@ export class Order {
   }
 
   private async commitState(s: OrderState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeOrderState(s), __entryFieldsOfOrder);
+    await __commitStored(this, this.state.storage, __encodeOrderState(s), __entryFieldsOfOrder, s);
   }
 
   async name(deps: {}): globalThis.Promise<OrderId> {
@@ -133,7 +133,7 @@ export class Label {
   }
 
   private async commitState(s: LabelState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLabelState(s), __entryFieldsOfLabel);
+    await __commitStored(this, this.state.storage, __encodeLabelState(s), __entryFieldsOfLabel, s);
   }
 
   async text(deps: {}): globalThis.Promise<string> {
@@ -202,7 +202,7 @@ export class Tally {
   }
 
   private async commitState(s: TallyState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeTallyState(s), __entryFieldsOfTally);
+    await __commitStored(this, this.state.storage, __encodeTallyState(s), __entryFieldsOfTally, s);
   }
 
   async doubled(deps: {}): globalThis.Promise<number> {
@@ -271,7 +271,7 @@ export class Grid {
   }
 
   private async commitState(s: GridState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeGridState(s), __entryFieldsOfGrid);
+    await __commitStored(this, this.state.storage, __encodeGridState(s), __entryFieldsOfGrid, s);
   }
 
   async sum(deps: {}): globalThis.Promise<number> {
