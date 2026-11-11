@@ -1,0 +1,11 @@
+commons demo
+
+// #3344: the expected type picks `MailError` from the two sums declaring
+// `Failed`, so the missing payload is reported against it, not as ambiguous.
+type DbError = | Constraint(message: String) | Failed(message: String)
+
+type MailError = | RateLimited | Failed(message: String)
+
+fn m() -> MailError {
+  Failed
+}

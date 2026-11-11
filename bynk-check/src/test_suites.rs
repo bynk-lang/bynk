@@ -1735,17 +1735,7 @@ fn check_test_bodies(
                     if errs.is_empty() {
                         return;
                     }
-                    // #2907: a name the value cannot resolve is that, not a
-                    // mismatch with the operation's return type.
-                    let unresolved: Vec<CompileError> = errs
-                        .into_iter()
-                        .filter(|e| {
-                            matches!(
-                                e.category,
-                                "bynk.resolve.unknown_name" | "bynk.resolve.unknown_function"
-                            )
-                        })
-                        .collect();
+                    let unresolved = stub_name_errors(errs);
                     if !unresolved.is_empty() {
                         errors.extend(unresolved);
                     } else {
@@ -2154,6 +2144,22 @@ pub fn value_block(e: &Expr) -> Block {
         tail_leading_comments: Vec::new(),
         implicit_tail: false,
     }
+}
+
+/// #2907: a name a `stub` value cannot resolve is that, not a mismatch with
+/// the operation's return type. #3344: nor is a variant name several sums
+/// declare that the operation's type does not settle.
+fn stub_name_errors(errs: Vec<CompileError>) -> Vec<CompileError> {
+    errs.into_iter()
+        .filter(|e| {
+            matches!(
+                e.category,
+                "bynk.resolve.unknown_name"
+                    | "bynk.resolve.unknown_function"
+                    | "bynk.resolve.ambiguous_variant"
+            )
+        })
+        .collect()
 }
 
 /// v0.118: whether a `stub` value expression type-checks against the

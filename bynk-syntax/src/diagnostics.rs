@@ -2262,10 +2262,16 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.resolve.ambiguous_variant",
-        blurb: "Two sum types in scope declare a variant with the same name, and a bare use of it, as a value or a call, could mean either. Bynk does not guess from context, so it asks for the type: write `Light.Red`. Declaring the same variant name in two types is allowed. Only the unqualified use is refused.",
-        example: "type Light = | Red | Green\n\ntype Flag = | Red | Blue\n\nfn run() -> Int {\n    let x = Red                  // ✗ `Red` is a variant of both `Light` and `Flag`\n    1\n}\n\nfn run() -> Int {\n    let x = Light.Red            // ✓ qualified with its type\n    1\n}",
+        blurb: "A bare variant name such as `Failed(\"down\")` builds a value of the sum that declares it. When two sums in scope declare the name (two of your own, or two that a consumed unit exports, like an adapter's error enums), the compiler reads the expected type: an annotated `let`, a parameter, a return type, or a `stub`'s operation. It builds the sum that type names. With nothing expecting either sum it cannot know which you meant, and it never picks one, so the name is refused. Qualify it as `TypeName.Variant`, or give the value a type. A `match` arm needs neither, because it reads its scrutinee's sum.",
+        example: "type DbError = | Constraint(message: String) | Failed(message: String)\n\
+                  type MailError = | RateLimited | Failed(message: String)\n\n\
+                  let e = Failed(\"down\")       // ✗ `DbError` or `MailError`?\n\n\
+                  fn mail() -> Result[Int, MailError] {\n\
+                  \x20   Err(Failed(\"down\"))          // ✓ the return type picks `MailError`\n\
+                  }\n\n\
+                  DbError.Failed(\"down\")       // ✓ qualified",
         page: "/book/reference/types",
-        anchor: "sum-types",
+        anchor: "shared-variant-names",
     },
     Explain {
         code: "bynk.resolve.arity_mismatch",
@@ -6000,7 +6006,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.resolve.ambiguous_variant",
-        "A variant name is ambiguous across several sum types.",
+        "A bare variant name is declared by several sum types in scope, and no expected type picks one.",
     ),
     dg(
         "bynk.resolve.arity_mismatch",
