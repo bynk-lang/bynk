@@ -633,30 +633,17 @@ pub fn phase_integration_bodies(
         // context that exposes an `http` service has a real edge (the public
         // boundary: deserialise → handler → serialise), so it qualifies.
         //
-        // `http` and `queue` are admitted, because the system driver wires both:
-        // `emit_system_http_support` drives `worker.fetch`, and
-        // `emit_system_job_support` (#2136) drives `worker.queue` with a batch
-        // whose message body has been through the platform's JSON
-        // serialisation. `cron` never qualifies on its own — a scheduled event
-        // carries only a cron string and a time, so there is nothing to
-        // serialise — but a cron address is legal in a suite that already
-        // qualifies, and is driven through `worker.scheduled` there.
-        let has_serialisation_edge = unit_tables.get(&suite_target).is_some_and(|t| {
-            t.services.values().any(|s| {
-                matches!(
-                    s.protocol,
-                    bynk_syntax::ast::ServiceProtocol::Http
-                        | bynk_syntax::ast::ServiceProtocol::Queue { .. }
-                )
-            })
-        });
+        // `http`, `queue` and `email` qualify; see [`has_serialisation_edge`].
+        let has_serialisation_edge = unit_tables
+            .get(&suite_target)
+            .is_some_and(has_serialisation_edge);
         if participants.len() < 2 && !has_serialisation_edge {
             errors.push(
                 CompileError::new(
                     "bynk.tier.system_needs_wire",
                     decl.target.span,
                     format!(
-                        "`system`-tier suite for `{suite_target}` has no serialisation edge — the target consumes no other context and exposes no `http` or `queue` service",
+                        "`system`-tier suite for `{suite_target}` has no serialisation edge — the target consumes no other context and exposes no `http`, `queue` or `email` service",
                     ),
                 )
                 .with_note(
@@ -1081,6 +1068,26 @@ fn visible_broken_names(
         .flatten()
         .cloned()
         .collect()
+}
+
+/// Whether `target` exposes a service a `system` case drives over a real wire:
+/// `http` (`emit_system_http_support` drives `worker.fetch`), `queue`
+/// (`emit_system_job_support`, #2136, drives `worker.queue` with a batch whose
+/// message body has been through the platform's JSON serialisation) or `email`
+/// (#3328: raw MIME through the Worker's `email()` entry, which parses it).
+/// `cron` never qualifies on its own: a scheduled event carries only a cron
+/// string and a time, so there is nothing to serialise, but a cron address is
+/// legal in a suite that already qualifies, and is driven through
+/// `worker.scheduled` there.
+fn has_serialisation_edge(target: &UnitTable) -> bool {
+    target.services.values().any(|s| {
+        matches!(
+            s.protocol,
+            bynk_syntax::ast::ServiceProtocol::Http
+                | bynk_syntax::ast::ServiceProtocol::Queue { .. }
+                | bynk_syntax::ast::ServiceProtocol::Email { .. }
+        )
+    })
 }
 
 /// Type-check one integration test case body. The body lives in a synthetic
@@ -5229,6 +5236,34 @@ pub fn integration_view(
             view.assets.retain(|n, _| {
                 local.assets.contains_key(n) || crate::symbols::local_value_kind(local, n).is_none()
             });
+        }
+    }
+    // #3328: a `system` case drives an email service through the Worker's
+    // `email()` entry and reads back the `EmailVerdict` it applied, so the
+    // first-party email types a participant's handler names are in scope, or the
+    // result would read as an untyped value and `expect r is Forward(…)` could not
+    // find the variant's fields.
+    let has_email = participants.iter().any(|p| {
+        unit_tables.get(p).is_some_and(|t| {
+            t.services
+                .values()
+                .any(|s| matches!(s.protocol, bynk_syntax::ast::ServiceProtocol::Email { .. }))
+        })
+    });
+    if has_email && let Some(cloudflare) = unit_tables.get(crate::firstparty::CLOUDFLARE_UNIT) {
+        for name in [
+            "InboundEmail",
+            "InboundAttachment",
+            "EmailVerdict",
+            "EmailReply",
+            "DmarcVerdict",
+            "SenderIdentity",
+        ] {
+            if let Some(decl) = cloudflare.types.get(name) {
+                view.types
+                    .entry(name.to_string())
+                    .or_insert_with(|| decl.clone());
+            }
         }
     }
     // #3064: a participant's actors' identity types are reached too.

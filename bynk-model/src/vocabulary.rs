@@ -433,6 +433,10 @@ pub enum ActorSeamIr {
     /// `caller_binder_for`'s return type is already the bare `Option<String>`
     /// the other four resolvers reduce a whole struct down to one field for.
     Caller(String),
+    /// #3328: a `from email` handler's `by s: Sender` binder. The Worker's
+    /// `email()` entry mints the `SenderIdentity` and threads it through
+    /// `deps.identity`, as `Caller` threads the calling context's name.
+    Sender(String),
 }
 
 /// P6.24a: an IR-native mirror of [`bynk_syntax::ast::HandlerKind`] — a

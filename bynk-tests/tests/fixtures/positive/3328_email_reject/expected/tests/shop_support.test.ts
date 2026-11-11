@@ -76,7 +76,7 @@ async function test_an_oversized_message_is_rejected_with_its_reason() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await support.queue_support_0({ from: "a@b.example", to: "support@shop.example", size: 5000, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [] }, deps);
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", size: 5000, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [] });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "too large"))) { throw __bynkExpectFailure("tests/support.bynk:4:12", 199, 223, "expect r is Reject(\"too large\")"); }
     if (!(__bynkEq(r, EmailVerdict.Reject("too large")))) { throw __bynkExpectFailure("tests/support.bynk:5:12", 235, 259, "expect r == Reject(\"too large\")\n  expected: r == Reject(\"too large\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((EmailVerdict.Reject("too large")))); }
     return { pass: true };
@@ -126,7 +126,7 @@ async function test_a_small_message_gets_through() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await support.queue_support_0({ from: "a@b.example", to: "support@shop.example", size: 10, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [] }, deps);
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", size: 10, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [] });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("tests/support.bynk:10:12", 421, 432, "expect r is Accept"); }
     return { pass: true };
   } catch (e) {

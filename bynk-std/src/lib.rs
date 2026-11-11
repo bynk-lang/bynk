@@ -80,6 +80,81 @@ pub const BYNK_SURFACE_CAPABILITIES: &[&str] = &[
     "Events",
 ];
 
+/// What reaches a first-party npm dependency (see [`FirstPartyNpm::reached_by`]),
+/// by the construct that needs it, never by text in a source file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reach {
+    /// A context declares a service whose protocol is this one (`from email(…)`
+    /// is `"email"`).
+    ServiceProtocol(&'static str),
+}
+
+/// A first-party npm dependency (ADR 0799 C, #3328): an npm package the
+/// toolchain itself emits into `out/package.json` for a built-in binding.
+///
+/// It is **pinned to an exact version** (no range), so a toolchain release, not
+/// an `npm install`, changes what runs. It needs no approval (ADR 0575
+/// approves fetched code; this ships inside the toolchain the user already
+/// trusts) and is never `approved` in `bynk.lock`, but it still appears in
+/// `out/package.json` and as a `first-party` `[[npm]]` row, so it is visible.
+/// An adapter in any other package that requires the same package stays under
+/// ADR 0575 and must agree on the version (`bynk.requires.conflicting_range`).
+///
+/// A package enters a build when a runtime module that imports it is emitted
+/// (`runtime_module`), not when a unit is consumed: an unrelated project never
+/// carries it. Each binding added here is held to R-12 (`tsc --strict` over the
+/// binding on its own) and R-16 (a security review) from the retired
+/// standard-library track.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FirstPartyNpm {
+    pub package: &'static str,
+    /// An exact version: `MAJOR.MINOR.PATCH`, no range operator.
+    pub version: &'static str,
+    /// The `@bynk/runtime` module (`__bynk_runtime/<name>.ts`) importing it.
+    pub runtime_module: &'static str,
+    /// What, in a project's own checked model, brings the package into a build.
+    /// `bynk.lock`'s first-party row is written only for a project that reaches
+    /// it, so a lock records what the project *could* bring into its build and not
+    /// every pin the toolchain has. Data, so Hyperdrive H1 adds `postgres` with the
+    /// variant for the capability that needs it.
+    pub reached_by: Reach,
+}
+
+/// Every first-party npm dependency. Hyperdrive H1 (#3318) adds `postgres`
+/// here. `bynk-emit`'s `first_party_pins_match_the_runtime` test holds each
+/// pin to the version `@bynk/runtime`'s own `package.json` tests against.
+pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
+    // Inbound email (#3328): `email.ts` parses the raw message with it.
+    FirstPartyNpm {
+        package: "postal-mime",
+        version: "4.1.4",
+        runtime_module: "email",
+        reached_by: Reach::ServiceProtocol("email"),
+    },
+];
+
+/// The first-party npm dependencies a set of emitted runtime modules brings.
+pub fn first_party_npm_for<'a>(
+    modules: impl IntoIterator<Item = &'a str>,
+) -> Vec<&'static FirstPartyNpm> {
+    let modules: Vec<&str> = modules.into_iter().collect();
+    FIRST_PARTY_NPM
+        .iter()
+        .filter(|d| modules.contains(&d.runtime_module))
+        .collect()
+}
+
+/// Whether `version` is an exact `MAJOR.MINOR.PATCH` (with an optional
+/// pre-release or build suffix), which is all a first-party pin may be.
+pub fn is_exact_version(version: &str) -> bool {
+    let core = version.split(['-', '+']).next().unwrap_or_default();
+    let parts: Vec<&str> = core.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// The unit name of the first-party Cloudflare platform adapter (v0.19,
 /// decision 0026): inside the reserved `bynk.*` prefix, so no separate
 /// reservation rule is needed. The surface unit `bynk` stays the portability
@@ -1104,6 +1179,24 @@ pub fn names_first_party_item_in(units: &[Unit], path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn first_party_pins_are_exact() {
+        for d in super::FIRST_PARTY_NPM {
+            assert!(
+                super::is_exact_version(d.version),
+                "{} must be pinned exactly, not `{}`",
+                d.package,
+                d.version
+            );
+        }
+        for range in [
+            "^4.1.4", "~4.1.4", "4", "4.1", "*", "latest", ">=4.1.4", "4.x",
+        ] {
+            assert!(!super::is_exact_version(range), "{range}");
+        }
+        assert!(super::is_exact_version("4.1.4"));
+    }
+
     use super::*;
 
     /// A synthetic registry with an experimental unit, an experimental item

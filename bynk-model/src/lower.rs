@@ -1060,6 +1060,9 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
     if let Some(binder) = bynk_check::actors::caller_binder_for(handler, actors) {
         return ActorSeamIr::Caller(binder);
     }
+    if let Some(binder) = bynk_check::actors::sender_binder_for(handler, actors) {
+        return ActorSeamIr::Sender(binder);
+    }
     ActorSeamIr::None
 }
 

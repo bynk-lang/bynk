@@ -75,7 +75,7 @@ async function test_the_named_service_is_the_default_Sender_s() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await support.queue_support_0({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 }, deps);
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "team@shop.example"))) { throw __bynkExpectFailure("tests/support.bynk:4:12", 180, 213, "expect r is Forward(\"team@shop.example\")"); }
     return { pass: true };
   } catch (e) {
@@ -124,9 +124,9 @@ async function test_the_catch_all_handles_the_rest() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const a = await everything.queue_everything_0({ from: "a@b.example", to: "sales@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 }, deps);
+    const a = await ((__m: any) => everything.queue_everything_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "sales@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(a.tag === "Accept"))) { throw __bynkExpectFailure("tests/support.bynk:9:12", 368, 379, "expect a is Accept"); }
-    const b = await everything.queue_everything_0({ from: "a@b.example", to: "nobody@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 }, deps);
+    const b = await ((__m: any) => everything.queue_everything_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "nobody@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(b.tag === "Reject" && b.reason === "no such mailbox"))) { throw __bynkExpectFailure("tests/support.bynk:11:12", 488, 518, "expect b is Reject(\"no such mailbox\")"); }
     return { pass: true };
   } catch (e) {

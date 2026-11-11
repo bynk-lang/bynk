@@ -467,8 +467,8 @@ export const EmailVerdict = {
 /**
  * Whether the platform authenticated the sender's domain with DMARC, read from
  * the `Authentication-Results` header Cloudflare Email Routing prepends: only
- * the first, from `mx.cloudflare.net`, is trusted. `DmarcNone` is no verdict
- * (the header is absent or reports none). The variants carry the `Dmarc`
+ * the topmost, and only if it is from `mx.cloudflare.net`, is trusted. `DmarcNone`
+ * is no verdict (the header is absent, is another server's, or reports none). The variants carry the `Dmarc`
  * prefix because a bare `None` would resolve to `Option`'s.
  */
 export type DmarcVerdict =

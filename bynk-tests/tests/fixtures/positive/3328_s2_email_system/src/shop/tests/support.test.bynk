@@ -1,0 +1,28 @@
+// #3328 slice 2: a `system` case posts the message as raw MIME to the Worker's
+// real `email()` entry, which parses it, mints the sender identity from the
+// Authentication-Results header, runs the handler and applies the verdict.
+suite shop.support as system {
+  case "a refund is forwarded" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "refund" })
+    expect r is Forward("billing@shop.example")
+  }
+
+  case "a rejected message carries the handler's reason" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "spam" })
+    expect r is Reject("not wanted")
+  }
+
+  case "a message with no DMARC verdict is accepted without a reply" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello" })
+    expect r is Accept
+  }
+
+  case "a message Cloudflare authenticated is answered" {
+    let signed: Map[String, String] = Map.empty().insert("authentication-results", "mx.cloudflare.net; dmarc=pass header.from=b.example")
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed })
+    match r {
+      Reply(m) => expect m.text == Some("Thanks, we have your message.")
+      _ => expect false
+    }
+  }
+}
