@@ -188,10 +188,10 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
                 The compiler then emits the verification before the body runs. A public route \
-                that anyone may call writes `by v: Visitor`; an authenticated one names an \
-                `actor` it declares. A WebSocket `on open` handler needs the same, since the \
-                upgrade is authenticated before it is accepted. The internal protocols (`call`, \
-                cron, queue) have a default and are not affected.",
+                writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set \
+                it once on the header, `service api from http by Visitor`, and every handler \
+                without its own `by` inherits it. A WebSocket `on open` handler needs one too. \
+                The internal protocols (`call`, cron, queue) have a default.",
         example: "service api from http {\n\
                   \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n\
                   \x20   Ok(\"up\")\n\
