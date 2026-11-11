@@ -388,6 +388,116 @@ export const EmailError = {
 };
 
 /**
+ * One file attached to an inbound `InboundEmail`: its `filename`, MIME
+ * `contentType` and `content` bytes. `inline` is true for a part the HTML body
+ * refers to by content id (an embedded image) rather than a download.
+ */
+export interface InboundAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: globalThis.Uint8Array;
+  readonly inline: boolean;
+}
+
+export const InboundAttachment = {
+};
+
+/**
+ * One email delivered to a `from email(...)` service's `on message` handler.
+ * `from` is the **envelope** sender, a claim: anyone can write any address, so
+ * trust it only when the `Sender` actor's `dmarc` is `DmarcPass`. `to` is the
+ * envelope recipient the service was routed by. `headers` holds the message's
+ * headers by lower-case name. `text`, `html` and `attachments` come from the
+ * parsed MIME body (`None` or empty when the message has no such part); a test
+ * builds them directly. `size` is the raw message in bytes. Every field after
+ * `to` has a default, so a test writes only what it cares about.
+ */
+export interface InboundEmail {
+  readonly from: string;
+  readonly to: string;
+  readonly subject: string;
+  readonly messageId: string;
+  readonly headers: ReadonlyMap<string, string>;
+  readonly text: Option<string>;
+  readonly html: Option<string>;
+  readonly attachments: readonly InboundAttachment[];
+  readonly size: number;
+}
+
+export const InboundEmail = {
+};
+
+/**
+ * The content of a `Reply` verdict. Only the content is the handler's: the
+ * runtime fills in `From` (the receiving address), `To` (the sender),
+ * `In-Reply-To` and `References`, so a reply can only go to the sender, from
+ * the address that received the mail, as the platform requires. `subject`
+ * defaults to the incoming subject prefixed `Re: `.
+ */
+export interface EmailReply {
+  readonly subject: Option<string>;
+  readonly text: Option<string>;
+  readonly html: Option<string>;
+}
+
+export const EmailReply = {
+};
+
+/**
+ * What a `from email` handler decides about a message, returned as
+ * `Effect[EmailVerdict]` (the agency rule of ADR 0078, as `QueueResult` is).
+ * `Accept` handles it and nothing else happens; `Reject(reason)` refuses it
+ * permanently with an SMTP rejection carrying `reason`; `Forward(to)` passes it
+ * to one destination, which must be a verified destination address in the
+ * account; `Reply(message)` answers the sender. One decision per message.
+ */
+export type EmailVerdict =
+    { readonly tag: "Accept" }
+  | { readonly tag: "Reject"; readonly reason: string }
+  | { readonly tag: "Forward"; readonly to: string }
+  | { readonly tag: "Reply"; readonly message: EmailReply };
+
+export const EmailVerdict = {
+  Accept: { tag: "Accept" } as EmailVerdict,
+  Reject: (reason: string): EmailVerdict => ({ tag: "Reject", reason }),
+  Forward: (to: string): EmailVerdict => ({ tag: "Forward", to }),
+  Reply: (message: EmailReply): EmailVerdict => ({ tag: "Reply", message }),
+};
+
+/**
+ * Whether the platform authenticated the sender's domain with DMARC, read from
+ * the `Authentication-Results` header Cloudflare Email Routing prepends: only
+ * the first, from `mx.cloudflare.net`, is trusted. `DmarcNone` is no verdict
+ * (the header is absent or reports none). The variants carry the `Dmarc`
+ * prefix because a bare `None` would resolve to `Option`'s.
+ */
+export type DmarcVerdict =
+    { readonly tag: "DmarcPass" }
+  | { readonly tag: "DmarcFail" }
+  | { readonly tag: "DmarcNone" };
+
+export const DmarcVerdict = {
+  DmarcPass: { tag: "DmarcPass" } as DmarcVerdict,
+  DmarcFail: { tag: "DmarcFail" } as DmarcVerdict,
+  DmarcNone: { tag: "DmarcNone" } as DmarcVerdict,
+};
+
+/**
+ * The identity of the `Sender` actor, the default actor of a `from email`
+ * handler: the envelope `address` and the platform's `dmarc` verdict on it.
+ * The Worker's `email()` entry mints it from the envelope and Email Routing's
+ * `Authentication-Results` header; a handler runs in a suite without a
+ * minted identity today, so `s.identity` reads as `()` until that lands.
+ */
+export interface SenderIdentity {
+  readonly address: string;
+  readonly dmarc: DmarcVerdict;
+}
+
+export const SenderIdentity = {
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was

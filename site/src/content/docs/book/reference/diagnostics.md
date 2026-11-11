@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **800** codes in total.
+There are **806** codes in total.
 
 ## Agents
 
@@ -15,10 +15,10 @@ There are **800** codes in total.
 |---|---|---|---|
 | `bynk.agent.class_conflict` | An agent class has more than one fate: it is renamed twice, both renamed and removed, or renamed onto a class that already has its own recorded history in `bynk.schema.lock`. |  | — |
 | `bynk.agent.class_removed` | An agent class recorded in `bynk.schema.lock` is no longer declared, so a deployment's stored instances of it would be orphaned. If the class was never deployed, delete its `[agents]` entry from the lock; renaming or removing a deployed class gets its own declaration in a later state-migrations slice. |  | — |
-| `bynk.agent.construction_arity` | An agent was constructed with the wrong number of key arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.handler_arity` | An agent handler was called with the wrong number of arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.handler_not_found` | Called a handler the agent does not declare. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.key_mismatch` | An agent key argument has the wrong type. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.construction_arity`](/book/reference/agents/#addressing-and-calling) | An agent was constructed with the wrong number of key arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.handler_arity`](/book/reference/agents/#addressing-and-calling) | An agent handler was called with the wrong number of arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.handler_not_found`](/book/reference/agents/#addressing-and-calling) | Called a handler the agent does not declare. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.key_mismatch`](/book/reference/agents/#addressing-and-calling) | An agent key argument has the wrong type. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.migrate_below_floor` | A `migrate` step reads a schema version below the agent's floor. A complete `bynk migrate sweep` raised the floor past it, so no stored instance can hold that version: the step emits nothing and can be deleted (warning). |  | Warning |
 | `bynk.agent.migrate_duplicate` | Two `migrate` steps in one agent read the same schema version. |  | — |
 | `bynk.agent.migrate_duplicate_assignment` | A `migrate` step assigns the same `store` field more than once; each field takes at most one value per step (record-literal semantics). |  | — |
@@ -27,13 +27,13 @@ There are **800** codes in total.
 | `bynk.agent.migrate_shape_mismatch` | A `migrate` step's declared old shape (or a `drop`) names a field the lock does not record at that version, or records with a different structure. |  | — |
 | `bynk.agent.migrate_unknown_version` | A `migrate` step reads a schema version the lock does not record below the agent's current version. |  | — |
 | `bynk.agent.non_additive_state_change` | An agent's stored state changed in a way deployed data cannot be read through — a `store` field was removed, retyped (including inside a stored record or sum), or changed storage kind. A renamed field is a removed field plus an added one. If the class was never deployed, delete its `[agents]` entry from `bynk.schema.lock`; otherwise widen rather than narrow, or stage the change through a new field. |  | — |
-| `bynk.agent.outside_context` | An `agent` was declared outside a context. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.outside_context`](/book/reference/agents/#declaration) | An `agent` was declared outside a context. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.refinement_changed` | A stored `store` field's refinement changed while its structure did not. A widening is safe; a narrowing faults on load for any stored value that no longer satisfies it (`RehydrationViolation`), so migrate the data first (warning). |  | Warning |
 | `bynk.agent.removed_live` | A `removed agent` declaration names a class that is still declared; removing a class deletes its stored data. |  | — |
 | `bynk.agent.replaces_live` | `agent New replaces Old` names an `Old` that is still declared; a rename moves the old class's data to the new one. |  | — |
 | `bynk.agent.replaces_unknown` | `agent New replaces Old` names an `Old` that `bynk.schema.lock` does not record for this context, so there is no recorded class to rename. |  | — |
-| `bynk.agent.return_not_effect` | An agent handler's return type is not an `Effect`. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.state_name_conflict` | A type is named `<Agent>State` beside agent `<Agent>`; that name is the agent's state record (its `Cell` fields), which its handlers and invariants see in place of the type. |  | — |
+| [`bynk.agent.return_not_effect`](/book/reference/agents/#declaration) | An agent handler's return type is not an `Effect`. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.state_name_conflict`](/book/reference/agents/#reading-and-writing-state) | A type is named `<Agent>State` beside agent `<Agent>`; that name is the agent's state record (its `Cell` fields), which its handlers and invariants see in place of the type. |  | — |
 | `bynk.agent.version_without_path` | A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning). |  | Warning |
 | [`bynk.agents.bad_state_initialiser`](/book/reference/agents/#state-initialisation) | An agent `store` field initialiser is not a static value of the field's type. | [`store_field`](/book/reference/grammar/#rule-store_field) | — |
 | [`bynk.agents.non_zeroable_state_field`](/book/reference/agents/#state-initialisation) | An agent `store` field has no initialiser and no implicit zero value. | [`store_field`](/book/reference/grammar/#rule-store_field) | — |
@@ -193,28 +193,28 @@ There are **800** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.http.body_kind_conflict` | A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`. |  | — |
+| [`bynk.http.body_kind_conflict`](/book/reference/http/#raw-request-bodies) | A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`. |  | — |
 | `bynk.http.body_on_get_or_delete` | A GET or DELETE handler declares a `body` parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cache_bad_immutable` | A `@cache` annotation's `immutable` is not a `Bool` literal. |  | — |
-| `bynk.http.cache_bad_max_age` | A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal. |  | — |
+| [`bynk.http.cache_bad_max_age`](/book/reference/http/#caching) | A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal. |  | — |
 | `bynk.http.cache_bad_scope` | A `@cache` annotation's `scope` is not `public` or `private`. |  | — |
 | `bynk.http.cache_duplicate` | A handler carries more than one `@cache` annotation. |  | — |
 | `bynk.http.cache_max_age_fractional_seconds` | A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds. |  | — |
-| `bynk.http.cache_on_non_get` | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
+| [`bynk.http.cache_on_non_get`](/book/reference/http/#caching) | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
 | `bynk.http.cache_unknown_arg` | A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`). |  | — |
 | `bynk.http.cors_invalid_field` | A `cors` policy field (`headers`/`credentials`/`maxAge`) has the wrong value shape. |  | — |
 | `bynk.http.cors_invalid_origins` | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
 | `bynk.http.cors_not_http` | A `cors { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.cors_unknown_field` | A `cors { }` policy declares a field outside the closed set. |  | — |
-| `bynk.http.cors_wildcard_credentials` | A `cors` policy combines `credentials: true` with the wildcard origin `["*"]`. |  | — |
+| [`bynk.http.cors_wildcard_credentials`](/book/reference/http/#cors) | A `cors` policy combines `credentials: true` with the wildcard origin `["*"]`. |  | — |
 | `bynk.http.duplicate_rejected` | A `from http` service declares `on rejected` more than once. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
-| `bynk.http.duplicate_route` | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.duplicate_route`](/book/reference/http/#handler-form) | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
-| `bynk.http.extra_param` | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.extra_param`](/book/reference/http/#handler-form) | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.form_body_not_record` | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.form_bool_without_default` | A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | `bynk.http.form_duplicate` | A handler carries more than one `@form` annotation. |  | — |
-| `bynk.http.form_field_not_stringy` | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.form_field_not_stringy`](/book/reference/http/#form-bodies) | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.form_on_bodyless` | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.form_on_sum_route` | A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself. |  | — |
 | `bynk.http.form_unknown_arg` | A `@form` annotation is given an argument; it takes none. |  | — |
@@ -228,35 +228,35 @@ There are **800** codes in total.
 | `bynk.http.json_on_non_http` | A `@json` annotation is placed on a handler that is not `on http`. |  | — |
 | `bynk.http.json_unknown_arg` | A `@json` annotation has an argument outside the closed set (`options`). |  | — |
 | `bynk.http.json_unknown_field` | A `json { }` policy declares a field outside the closed set (`options`). |  | — |
-| `bynk.http.limit_bad_max_body` | A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal. |  | — |
+| [`bynk.http.limit_bad_max_body`](/book/reference/http/#request-body-limits) | A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal. |  | — |
 | `bynk.http.limit_bad_max_file` | A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal. |  | — |
 | `bynk.http.limit_duplicate` | A handler carries more than one `@limit` annotation. |  | — |
-| `bynk.http.limit_on_bodyless` | A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE). |  | — |
+| [`bynk.http.limit_on_bodyless`](/book/reference/http/#request-body-limits) | A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE). |  | — |
 | `bynk.http.limit_on_non_multipart` | A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`. |  | — |
 | `bynk.http.limit_unknown_arg` | A `@limit` annotation has an argument outside the closed set (`maxBody`). |  | — |
 | `bynk.http.limits_invalid_field` | A `limits` policy field (`maxBody`) has the wrong value shape. |  | — |
 | `bynk.http.limits_not_http` | A `limits { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.limits_unknown_field` | A `limits { }` policy declares a field outside the closed set. |  | — |
-| `bynk.http.multipart_body_unbounded` | A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`). |  | — |
+| [`bynk.http.multipart_body_unbounded`](/book/reference/http/#multipart-bodies) | A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`). |  | — |
 | `bynk.http.multipart_large_cap` | A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning). |  | Warning |
-| `bynk.http.path_param_not_stringy` | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.query_field_not_stringy` | A field of an HTTP handler's `query` record has a type a query string cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.path_param_not_stringy`](/book/reference/http/#handler-form) | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.query_field_not_stringy`](/book/reference/http/#typed-query) | A field of an HTTP handler's `query` record has a type a query string cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.query_not_http` | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.query_wrong_type` | An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.query_wrong_type`](/book/reference/http/#typed-query) | An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.raw_bad_content_type` | A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal. |  | — |
 | `bynk.http.raw_body_not_bytes` | The `body` of a `@raw` handler is not typed `Bytes`. |  | — |
 | [`bynk.http.raw_body_unbounded`](/book/reference/http/#raw-request-bodies) | A `@raw` route has no request-body cap (no `@limit` and no service `limits`). |  | — |
 | `bynk.http.raw_duplicate` | A handler carries more than one `@raw` annotation. |  | — |
 | `bynk.http.raw_error_status` | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
-| `bynk.http.raw_on_bodyless` | A `@raw` annotation is placed on a handler that takes no body. |  | — |
+| [`bynk.http.raw_on_bodyless`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.raw_unknown_arg` | A `@raw` annotation has an argument outside the closed set (`contentType`). |  | — |
-| `bynk.http.rejected_signature` | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
-| `bynk.http.reserved_prefix` | A route uses the reserved `/_bynk/` prefix. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.return_not_effect_http_result` | An HTTP handler does not return `Effect[HttpResult[T]]`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.rejected_signature`](/book/reference/http/#rendering-rejections) | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
+| [`bynk.http.reserved_prefix`](/book/reference/http/#handler-form) | A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.return_not_effect_http_result`](/book/reference/http/#handler-form) | An HTTP handler does not return `Effect[HttpResult[T]]`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.security_invalid_field` | A `security` policy field (`hsts`/`nosniff`) has the wrong value shape. |  | — |
 | `bynk.http.security_not_http` | A `security { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.security_unknown_field` | A `security { }` policy declares a field outside the closed set. |  | — |
-| `bynk.http.unbound_path_param` | A `:name` route segment has no matching handler parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.unbound_path_param`](/book/reference/http/#handler-form) | A `:name` route segment has no matching handler parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.unknown_handler_annotation` | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
 
 ## Lexer
@@ -309,10 +309,10 @@ There are **800** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.actor.bearer_identity_not_string_constructible` | A `Bearer` actor's identity is not a string-constructible type. |  | — |
-| `bynk.actor.bearer_missing_secret` | A `Bearer` actor does not name its signing secret. |  | — |
-| `bynk.actor.binder_shadows_param` | A `by` actor binder collides with a handler parameter of the same name. |  | — |
-| `bynk.actor.by_on_agent` | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
+| [`bynk.actor.bearer_identity_not_string_constructible`](/book/reference/actors/#schemes) | A `Bearer` actor's identity is not a string-constructible type. |  | — |
+| [`bynk.actor.bearer_missing_secret`](/book/reference/actors/#schemes) | A `Bearer` actor does not name its signing secret. |  | — |
+| [`bynk.actor.binder_shadows_param`](/book/reference/actors/#the-by-clause) | A `by` actor binder collides with a handler parameter of the same name. |  | — |
+| [`bynk.actor.by_on_agent`](/book/reference/actors/#the-by-clause) | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
 | `bynk.actor.duplicate_sum_scheme` | Two peers in a multi-actor sum share an authentication scheme. |  | — |
 | `bynk.actor.foreign_context_name_unkeyable` | A context declaring a `Foreign` actor has a name no call key can be named from. |  | — |
 | `bynk.actor.foreign_duplicate_secret` | A `Foreign` actor's secret is also another actor's secret in the same context. |  | — |
@@ -322,7 +322,7 @@ There are **800** codes in total.
 | `bynk.actor.foreign_reserved_secret` | A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name. |  | — |
 | `bynk.actor.foreign_secret_not_string` | A `Foreign` actor's secret is not a string. |  | — |
 | `bynk.actor.identity_not_sealed` | An actor identity type is not a context-ownable (sealed) value type. |  | — |
-| `bynk.actor.missing_by_on_http` | An HTTP handler lacks the required `by` actor clause. |  | — |
+| [`bynk.actor.missing_by_on_http`](/book/reference/actors/#the-by-clause) | An HTTP handler lacks the required `by` actor clause. |  | — |
 | `bynk.actor.oidc_identity_not_string_constructible` | An `Oidc` actor's identity is not a string-constructible type. |  | — |
 | `bynk.actor.oidc_missing_audience` | An `Oidc` actor does not name its `audience`. |  | — |
 | `bynk.actor.oidc_missing_issuer` | An `Oidc` actor does not name its `issuer`. |  | — |
@@ -334,15 +334,15 @@ There are **800** codes in total.
 | `bynk.actor.refinement_base_unsupported` | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
 | `bynk.actor.refinement_in_sum` | A refinement actor appears as a member of a multi-actor sum. |  | — |
 | `bynk.actor.refinement_predicate_unsupported` | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
-| `bynk.actor.scheme_not_admissible` | An actor's scheme is not admissible on this handler's protocol. |  | — |
+| [`bynk.actor.scheme_not_admissible`](/book/reference/actors/#schemes) | An actor's scheme is not admissible on this handler's protocol. |  | — |
 | `bynk.actor.signature_identity_unsupported` | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
 | `bynk.actor.signature_missing_header` | A `Signature` actor does not name its signature header. |  | — |
 | `bynk.actor.signature_missing_secret` | A `Signature` actor does not name its signing secret. |  | — |
 | `bynk.actor.signature_requires_body` | A `Signature` handler does not take a `body` parameter. |  | — |
 | `bynk.actor.signature_tolerance_without_timestamp` | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
-| `bynk.actor.sum_requires_binder` | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
-| `bynk.actor.unknown_actor` | A handler's `by` clause names an actor that is not declared. |  | — |
-| `bynk.actor.unknown_scheme` | An actor declares an authentication scheme that is not compiler-known. |  | — |
+| [`bynk.actor.sum_requires_binder`](/book/reference/actors/#the-by-clause) | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
+| [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
+| [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |
 | `bynk.actor.unreachable_sum_arm` | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
 | `bynk.adapter.consumes_context` | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.adapter.consumes_requires_selection` | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
@@ -368,6 +368,12 @@ There are **800** codes in total.
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
 | `bynk.duration.literal_overflow` | A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range. |  | — |
+| [`bynk.email.bad_params`](/book/reference/inbound-email/#handler-form) | An email `on message` handler does not take exactly one `InboundEmail` parameter. |  | — |
+| [`bynk.email.duplicate_address`](/book/reference/inbound-email/#addresses) | Two `from email` services claim the same recipient address. |  | — |
+| [`bynk.email.duplicate_handler`](/book/reference/inbound-email/#handler-form) | A `from email` service declares more than one `on message` handler; it has exactly one. |  | — |
+| [`bynk.email.invalid_address`](/book/reference/inbound-email/#addresses) | A `from email("…")` binding is not a recipient address a service can claim. |  | — |
+| [`bynk.email.return_not_email_verdict`](/book/reference/inbound-email/#the-verdict) | An email `on message` handler does not return `Effect[EmailVerdict]`. |  | — |
+| [`bynk.email.workers_unsupported`](/book/reference/inbound-email/#status) | A `from email` service is built for the Workers target, whose `email()` entry is not emitted yet. |  | — |
 | `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
 | `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |

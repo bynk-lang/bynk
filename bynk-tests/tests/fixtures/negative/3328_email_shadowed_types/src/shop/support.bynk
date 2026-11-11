@@ -1,0 +1,12 @@
+context shop.support
+
+type InboundEmail = { body: String }
+
+type EmailVerdict =
+  | Done
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    Done
+  }
+}

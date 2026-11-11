@@ -1,0 +1,29 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailReply,
+  EmailError,
+  SqlError,
+  KvExpiration,
+  DmarcVerdict,
+}
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    // Each bare variant below belongs to exactly one type in scope: the
+    // verdict's own four, beside SqlError's `Failed`, EmailError's
+    // `SendFailed`, KvExpiration's `Never` and DmarcVerdict's `DmarcNone`.
+    let _ = Failed("x")
+    let _ = SendFailed("y")
+    let _ = Never
+    let _ = DmarcNone
+    match mail.subject {
+      "a" => Accept
+      "r" => Reject("no")
+      "f" => Forward("team@shop.example")
+      _ => Reply(EmailReply {})
+    }
+  }
+}

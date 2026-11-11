@@ -1,0 +1,7 @@
+context shop
+
+service jobs from cron {
+  on schedule("* * * * *") () -> Effect[Result[(), String]] by s: Scheduler {
+    Ok(())
+  }
+}

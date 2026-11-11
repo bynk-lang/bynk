@@ -1,0 +1,17 @@
+context shop
+
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call get() -> Effect[Int] {
+    n
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] {
+    let v <- Counter("a").nope()
+    v
+  }
+}

@@ -967,6 +967,9 @@ module.exports = grammar({
           "http",
           "cron",
           seq("queue", "(", field("name", $.string_literal), ")"),
+          // #3328: `from email("support@shop.example")` — inbound email.
+          // `email` is contextual, like `websocket`.
+          seq("email", "(", field("address", $.string_literal), ")"),
           seq(
             "websocket",
             "(",

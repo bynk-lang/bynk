@@ -1,0 +1,14 @@
+suite shop.support {
+  case "a refund goes to billing" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "refund" })
+    expect r is Forward("billing@shop.example")
+  }
+
+  case "anything else goes to the team" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello" })
+    match r {
+      Forward(dest) => expect dest == "team@shop.example"
+      _ => expect false
+    }
+  }
+}

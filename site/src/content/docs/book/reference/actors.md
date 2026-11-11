@@ -113,7 +113,7 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
 
 - **HTTP requires a `by` clause** (`bynk.actor.missing_by_on_http`); a public
   route writes `by v: Visitor`. The internal protocols default: `call` →
-  `Caller`, cron → `Scheduler`, queue → `Producer`.
+  `Caller`, cron → `Scheduler`, queue → `Producer`, email → `Sender`.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.
   Peers are distinguished by scheme (no duplicates), a `None` catch-all is last,
   refinements are not members, and total failure is `401`. On `call`, a sum
@@ -136,6 +136,7 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
 | `Caller` | `Internal` | `CallerId` | the calling context (`on call`) |
 | `Scheduler` | `Internal` | `()` | cron |
 | `Producer` | `Internal` | `()` | queue |
+| `Sender` | `Internal` | `SenderIdentity` (minted by the Worker; `()` in a suite today) | [inbound email](/book/reference/inbound-email/#the-sender) |
 
 ## Diagnostics
 

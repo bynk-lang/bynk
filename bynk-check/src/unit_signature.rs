@@ -312,6 +312,10 @@ pub enum ProtocolSignature {
     Queue {
         name: String,
     },
+    /// `from email("addr")` (#3328): the claimed recipient address.
+    Email {
+        address: String,
+    },
     WebSocket {
         in_type: TypeRef,
         out_type: TypeRef,
@@ -329,6 +333,9 @@ fn protocol_signature(p: &ServiceProtocol) -> ProtocolSignature {
         ServiceProtocol::Http => ProtocolSignature::Http,
         ServiceProtocol::Cron => ProtocolSignature::Cron,
         ServiceProtocol::Queue { name } => ProtocolSignature::Queue { name: name.clone() },
+        ServiceProtocol::Email { address } => ProtocolSignature::Email {
+            address: address.clone(),
+        },
         ServiceProtocol::WebSocket { in_type, out_type } => ProtocolSignature::WebSocket {
             in_type: in_type.clone(),
             out_type: out_type.clone(),
