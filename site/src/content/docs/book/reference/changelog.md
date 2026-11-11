@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.554.1** | `bynk explain` covers 26 more `parse` and `lex` diagnostics, each with a compiled bad and good example |
 | **v0.554.0** | A handler reads a `__Host-`/`__Secure-` cookie through a raw `cookies: RequestCookies` view, and `examples/sessions` sets and reads `__Host-sid` (#3277, closing slice) |
 | **v0.553.4** | The `bynk explain` example gate checks each example's layout as printed, so a block body printed flush left fails it |
 | **v0.553.3** | `bynk explain` covers twenty-two more codes under the actor and event prefixes |
