@@ -280,7 +280,7 @@ impl DebugHasher {
 /// The unit's own table is not rendered: `phase_symbol_tables` builds it from
 /// the unit's own files, whose text is hashed (`unit_files_digest`), so only the
 /// parts filled in from other units are taken
-/// ([`UnitTable::cross_unit_facts`]).
+/// (`UnitTable::cross_unit_facts`).
 ///
 /// **Adding an input to `check_file_core` or to [`UnitCheckCtx`] means adding it
 /// here.** [`UnitCheckCtx`] and [`UnitTable`] are destructured exhaustively, so a

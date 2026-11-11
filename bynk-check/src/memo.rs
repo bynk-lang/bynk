@@ -2,14 +2,14 @@
 //!
 //! [`analyse_project_memoised`] is the entry point the language server calls
 //! once per round, passing the same [`AnalysisMemo`] each time. The memo keeps
-//! each file's checked output ([`FileRecord`]) keyed by a digest of everything
+//! each file's checked output (a `FileRecord`) keyed by a digest of everything
 //! the check read ([`crate::check_pipeline::file_check_digest`]); a file whose
 //! digest is unchanged is replayed instead of re-checked. The answer must be
-//! exactly [`analyse_project`]'s; the differential oracle
+//! exactly `analyse_project`'s; the differential oracle
 //! (`xtask/tests/analysis_oracle.rs`) holds it to that.
 //!
 //! `bynk check` and `bynk build` never call this: they stay on the plain,
-//! table-free path ([`analyse_project`] / the driver's own checks), which is the
+//! table-free path (`analyse_project` / the driver's own checks), which is the
 //! cold-compile cost R3.15 asks us not to raise. A test pins it.
 //!
 //! # The type table's growth policy
@@ -18,7 +18,7 @@
 //! append-only [`Types`] table (a `TyId` stays valid as long as its table does).
 //! Interning deduplicates, so an unchanged project adds nothing; but an edit
 //! that mints new types leaves the old ones behind. The policy
-//! ([`AnalysisMemo::begin_round`]): after a round the table's size is the
+//! (`AnalysisMemo::begin_round`): after a round the table's size is the
 //! baseline; once it has grown past [`GROWTH_FACTOR`] times that baseline (and
 //! past [`MIN_RESET_LEN`], so a tiny project never churns), the memo is dropped
 //! and the next round starts cold with a fresh table. That bounds the table to a
@@ -193,7 +193,7 @@ impl AnalysisMemo {
 }
 
 /// One analysis round over `roots`, free to reuse what `memo` learned from the
-/// previous round. Must answer exactly what [`analyse_project`] answers; the
+/// previous round. Must answer exactly what `analyse_project` answers; the
 /// oracle holds it to that.
 pub fn analyse_project_memoised(
     roots: &Roots,
