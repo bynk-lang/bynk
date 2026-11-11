@@ -1715,7 +1715,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.store.unknown_kind",
-        blurb: "The type of a `store` field names a storage kind, which says how the state is persisted and which operations it has; it is not an ordinary type. The kinds are `Cell`, `Map`, `Set`, `Log`, `Queue` and `Cache`. A `List` or a record is not one, because nothing would say how to read or update it atomically. Pick the kind that matches how you use the data: `Set` for membership, `Map` for lookup by key, `Log` to append, `Cell` for one value.",
+        blurb: "The type of a `store` field names a storage kind, which says how the state is persisted and which operations it has; it is not an ordinary type. The kinds are `Cell`, `Map`, `Set`, `Log` and `Cache`; `Queue` is reserved but not yet supported (`bynk.store.kind_unsupported`). A `List` or a record is not one, because nothing would say how to read or update it atomically. Pick the kind that matches how you use the data: `Set` for membership, `Map` for lookup by key, `Log` to append, `Cell` for one value.",
         example: "store tags: List[String]   // ✗ `List` is not a storage kind\n\nstore tags: Set[String]   // ✓ a storage kind",
         page: "/book/reference/agents",
         anchor: "storage-kinds-and-their-operations",
