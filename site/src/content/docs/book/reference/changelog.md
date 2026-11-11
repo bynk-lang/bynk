@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.546.6** | `bynk explain` gains compiled-example explanations for the generics bound, inference and mismatch codes and the name-resolution codes (unknown function, static member, name conflict, duplicate type) |
+| **v0.546.5** | `bynk explain` gains compiled explanations for the agent state-zero, derived-capability instance and held-borrow errors |
 | **v0.546.4** | `bynk explain` covers eight everyday type errors, among them `bynk.types.type_mismatch`, `bynk.types.method_not_found` and `bynk.types.unreachable_arm` |
 | **v0.546.3** | Design record for Hyperdrive (H0), covering the Postgres driver, the compatibility date and the surface; no surface ships yet |
 | **v0.546.2** | Closes a gap where rebinding a writing lambda's name in an inner block let a store write through a `parTraverse` closure |
