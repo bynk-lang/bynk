@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Design record for Hyperdrive (H0), covering the Postgres driver, the compatibility date and the surface; no surface ships yet
----
+# 0799 — Hyperdrive H0 settles the Postgres driver, the compatibility date and the surface before H1 builds it
 
-## ADR: hyperdrive-h0-driver-date-surface
-title: Hyperdrive H0 settles the Postgres driver, the compatibility date and the surface before H1 builds it
-summary: postgres.js pinned exactly; first-party npm dependencies need no approval row; the compatibility date moves past 2026-08-04 in a follow-up PR (H0b); `Postgres` and `MySql` kinds with their own value types; deploy reads the connection string from an environment variable
+- **Status:** Accepted (v0.546.3)
 
 **Context.** Hyperdrive, the route to an existing Postgres or MySQL database, is
 absent ([#3184](https://github.com/bynk-lang/bynk/issues/3184)). Two questions
