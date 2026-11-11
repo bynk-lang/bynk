@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, emit_abi_shapes, ts_writes
 changelog: `bynk.cloudflare.StoredSecret` (experimental) reads one Secrets Store secret through a named instance; `bynk deploy` links the store and the secret and never creates them
 ---
 
