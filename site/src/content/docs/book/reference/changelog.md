@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.557.2** | `bynk explain` covers twenty-four more codes under `invariant`, `transition`, `within`, `race`, `send`, `par`, `index`, `store`, `query`, `cron` and `queue` (#3163) |
 | **v0.557.1** | `bynk explain` covers twenty-two more codes under the http and cloudflare prefixes |
 | **v0.557.0** | A record field may carry `@name("…")` before it, naming the key the field has on a request where that is not an identifier; this slice adds the syntax and its checks, and the request readers follow (#3343, slice 1) |
 | **v0.556.0** | An experimental `Postgres` instance kind in `bynk.cloudflare` reaches an existing Postgres database through Hyperdrive over postgres.js, with `all`, `first` and `run`, typed `PgValue` parameters and `PgError` outcomes |
