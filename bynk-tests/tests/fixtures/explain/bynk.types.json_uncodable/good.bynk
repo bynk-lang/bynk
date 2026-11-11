@@ -1,0 +1,5 @@
+commons demo
+
+fn dump(f: Int -> Int) -> String {
+    Json.encode(f(1))
+}
