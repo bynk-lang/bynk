@@ -634,7 +634,8 @@ One `name: value` field of a `json` policy.
 {{#grammar service_protocol}}
 
 The `from <protocol>` clause: `from http`, `from cron`, `from queue("name")`
-(v0.44), `from websocket(in: I, out: O)` (v0.103), or `from Events(E)` (v0.238),
+(v0.44), `from websocket(in: I, out: O)` (v0.103), `from email("address")` (#3328;
+`email` is a contextual word, not a reserved one), or `from Events(E)` (v0.238),
 whose event may carry a delivery pattern and a `via schema(N)` clause
 ([§4.4.7b](#447b-events-subscriptions-v0238)). Absent ⇒ the contract-mediated
 default, which admits only `on call`. Well-formedness: §5.
@@ -643,7 +644,7 @@ default, which admits only `on call`. Well-formedness: §5.
 
 {{#grammar handler}}
 
-A handler: a call, HTTP, cron, queue, WebSocket, or event entry point, matching
+A handler: a call, HTTP, cron, queue, email, WebSocket, or event entry point, matching
 the service's protocol. Well-formedness: §5.
 
 ### §4.4.3 call_handler

@@ -1,0 +1,9 @@
+context api
+
+type ItemId = String where Matches("^[0-9]+$")
+
+service api from http {
+    on GET("/items/:id") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

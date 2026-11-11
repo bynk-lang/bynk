@@ -1,0 +1,6 @@
+[project]
+name = "3328-email-wrong-return"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

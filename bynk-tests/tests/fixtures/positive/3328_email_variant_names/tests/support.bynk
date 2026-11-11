@@ -1,0 +1,12 @@
+suite shop.support {
+  case "every verdict name resolves to EmailVerdict" {
+    let a <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "a" })
+    expect a is Accept
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "r" })
+    expect r is Reject("no")
+    let f <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "f" })
+    expect f is Forward("team@shop.example")
+    let p <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "p" })
+    expect p is Reply(_)
+  }
+}

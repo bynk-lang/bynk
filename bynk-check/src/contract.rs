@@ -866,6 +866,7 @@ fn canon_protocol_signature(
         ProtocolSignature::Http => "http".to_string(),
         ProtocolSignature::Cron => "cron".to_string(),
         ProtocolSignature::Queue { name } => format!("queue {name:?}"),
+        ProtocolSignature::Email { address } => format!("email {address:?}"),
         ProtocolSignature::WebSocket { in_type, out_type } => format!(
             "websocket in={} out={}",
             canon_type(in_type, types, &mut Vec::new()),

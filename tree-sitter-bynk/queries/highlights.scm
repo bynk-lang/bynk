@@ -21,6 +21,7 @@
   "cron"
   "queue"
   "websocket"
+  "email"
   "schedule"
   "message"
   "Events"
