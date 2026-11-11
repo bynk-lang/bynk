@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0795](0795-lazy-storage-handles.md) | **Storage-backed collection handles read per entry and stage their writes** (v0.543) — LazyStoreMap, LazyStoreCache, LazyStoreSet and LazyStoreLog implement the in-memory handle interfaces over the layout-2 keys, with insertion-order, indexed and key-range reads, and a Log skew field so windows stay correct | Accepted (v0.543) |
 | [0794](0794-ordered-store-collection-handles.md) | **An agent's store collections are insertion-ordered handles** (v0.542.2) — A store collection is held as a handle backed by a JS `Map`, not a plain object, behind an interface every method of which may be asynchronous | Accepted (v0.542.2) |
 | [0793](0793-multipart-request-bodies.md) | **A `@multipart` handler annotation decodes a multipart body into a record with `File` parts** (v0.542) — The file part type, the caps and buffering, the parser, and the MalformedForm rejection that breaks exhaustive matches | Accepted (v0.542) |
 | [0792](0792-form-request-bodies.md) | **A `@form` handler annotation decodes a urlencoded form body into a record** (v0.541) — How a route declares a form body, how keys map to record fields, the form-specific leaf rules, and the 415 and 400 answers | Accepted (v0.541) |
