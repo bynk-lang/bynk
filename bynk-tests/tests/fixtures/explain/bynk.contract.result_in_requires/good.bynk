@@ -1,0 +1,7 @@
+commons demo.c
+
+fn inc(x: Int) -> Int
+  ensures small: result < 100
+{
+  x + 1
+}

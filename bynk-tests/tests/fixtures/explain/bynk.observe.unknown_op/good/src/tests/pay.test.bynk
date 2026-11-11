@@ -1,0 +1,6 @@
+suite demo.pay {
+  case "logs" {
+    let _ <- authorise.call(1)
+    expect Logger.log called
+  }
+}

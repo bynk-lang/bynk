@@ -1,0 +1,6 @@
+suite demo.api {
+  case "a call" {
+    let r <- api.GET("/items") by User("x")
+    expect r is Ok(_)
+  }
+}

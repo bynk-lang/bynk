@@ -844,6 +844,66 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "opaque-types",
     },
     Explain {
+        code: "bynk.contract.duplicate_name",
+        blurb: "Every `requires` and `ensures` clause has a name, and a \
+                failure report points at a clause by that name, so each name \
+                must be unique within one function, across both kinds. Rename \
+                the repeat; the error is on its name.",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20requires bigger: x > 0\n\
+                  \x20\x20ensures bigger: result > x      // ✗ `bigger` is already taken\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20requires positive: x > 0\n\
+                  \x20\x20ensures bigger: result > x      // ✓",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
+        code: "bynk.contract.impure_predicate",
+        blurb: "A contract clause is checked on every call in the dev and test \
+                build, and by the runner on generated inputs, so its predicate \
+                must be a pure `Bool` over the parameters and `result`. \
+                Effects (`Effect.pure`, `?`) and test-only constructs \
+                (`expect`, `val`, observations, `faults`, `trace`) cannot \
+                appear in it. State the claim as a plain comparison, and keep \
+                assertions and effects in a `case`.",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: expect result > x   // ✗ `expect` is a test statement\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: result > x          // ✓ a pure `Bool`",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
+        code: "bynk.contract.not_bool",
+        blurb: "A `requires` or `ensures` clause is a claim the function can \
+                meet or break, so its predicate must be a `Bool`. A value of \
+                another type, such as an `Int`, claims nothing that could \
+                fail. Write a comparison or another `Bool` expression over the \
+                parameters (and `result`, in an `ensures`).",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: result + 1      // ✗ an `Int`, not a `Bool`\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: result > x      // ✓",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
+        code: "bynk.contract.result_in_requires",
+        blurb: "A `requires` clause is checked on entry, before the function \
+                has returned anything, so `result` is not bound there. Only an \
+                `ensures` can read it. Either state the condition over the \
+                parameters, or, if it is a claim about the return value, make \
+                it an `ensures`. A parameter that is itself named `result` is \
+                read as that parameter.",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20requires small: result < 100    // ✗ nothing has been returned yet\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures small: result < 100     // ✓ checked on exit",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
         code: "bynk.cron.invalid_schedule",
         blurb: "A cron schedule is a standard five-field expression: minute, hour, day of month, month, day of week, separated by whitespace. Bynk checks the field count at compile time so a schedule the platform's cron trigger would reject is caught before deploy, not when it silently never runs. Only the count is checked at compile time. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
         example: "on schedule(\"every day\") () -> Effect[Result[(), String]] { … }   // ✗ words, not five fields\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 every day",
@@ -1143,6 +1203,22 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "exports opaque { Ordr }          // ✗ no type `Ordr` in this context\n\ntype Order = { total: Int }\n\nexports opaque { Order }         // ✓ the declared name",
         page: "/book/reference/types",
         anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.fixture.missing_file",
+        blurb: "A `fixture` reads a file into a `String` for the suite's \
+                cases, so the file must exist as a regular file in the \
+                project's `fixtures/` folder. A misspelt name, a file not yet \
+                added, or a symbolic link (which is not followed) leaves the \
+                suite without its input. Add the file or correct the path. A \
+                path outside that folder is \
+                `bynk.fixture.outside_fixtures_dir`; an empty, absolute or \
+                `..` path is `bynk.fixture.unsafe_path`.",
+        example: "// tests/desk.test.bynk\n\
+                  fixture note = \"fixtures/absent.txt\"    // ✗ no such file in `fixtures/`\n\
+                  fixture note = \"fixtures/note.txt\"      // ✓",
+        page: "/book/reference/fixtures",
+        anchor: "declaring-a-fixture",
     },
     Explain {
         code: "bynk.generics.duplicate_type_param",
@@ -1802,6 +1878,22 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "adding-a-locale",
     },
     Explain {
+        code: "bynk.observe.unknown_op",
+        blurb: "`expect Cap.op called` checks the calls recorded for one \
+                operation of a capability, so `op` must be declared by that \
+                capability. A misspelt or renamed operation would match no \
+                call, so it is refused instead of leaving the check vacuous. \
+                Use the name the capability declares. A capability the unit \
+                does not consume is `bynk.observe.not_a_seam`.",
+        example: "// demo/pay.bynk\n\
+                  capability Logger { … }\n\n\
+                  // tests/pay.test.bynk\n\
+                  expect Logger.nope called    // ✗ Logger has no `nope`\n\
+                  expect Logger.log called     // ✓",
+        page: "/book/reference/testing",
+        anchor: "observation",
+    },
+    Explain {
         code: "bynk.par.invalid_statement",
         blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
         example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
@@ -2117,6 +2209,17 @@ pub const EXPLANATIONS: &[Explain] = &[
                   | Suspended   // ✓",
         page: "/book/reference/types",
         anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.property.where_not_bool",
+        blurb: "A `where` clause on `for all` discards each generated input \
+                that fails it, so it must be a `Bool`. A filter of another \
+                type, such as an `Int`, cannot say whether to keep an input. \
+                Write a comparison over the bound variables.",
+        example: "for all n: Int where n + 1 {   // ✗ an `Int`, not a `Bool`\n\n\
+                  for all n: Int where n > 0 {   // ✓",
+        page: "/book/reference/testing",
+        anchor: "property--for-all--generative-tests",
     },
     Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
@@ -2584,6 +2687,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "storage-kinds-and-their-operations",
     },
     Explain {
+        code: "bynk.stub.after_type",
+        blurb: "`stub … returns <value> after <delay>` makes the stubbed call \
+                complete only once the harness clock has advanced by that \
+                delay, so the delay must be a `Duration`, such as `3.seconds`. \
+                A bare number has no unit, so it is refused rather than \
+                guessed at as milliseconds or seconds.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.read() returns 7 after 3           // ✗ no unit\n\
+                  stub Meter.read() returns 7 after 3.seconds   // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub-latency",
+    },
+    Explain {
         code: "bynk.stub.bad_sequence",
         blurb: "`returns each […]` gives one outcome per call, in order, and the \
                 last outcome repeats once the list runs out. An empty list has no \
@@ -2665,6 +2783,78 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-blocks",
     },
     Explain {
+        code: "bynk.suite.duplicate_fn",
+        blurb: "A case calls a suite helper by its bare name, so two helpers \
+                of one suite with one name would leave the call ambiguous. \
+                Give each a distinct name; the error is on the repeat. The \
+                same holds for a suite's types and constants: see \
+                `bynk.suite.duplicate_type` and `bynk.suite.duplicate_const`.",
+        example: "// tests/desk.test.bynk\n\
+                  fn twice(n: Int) -> Int { n * 2 }\n\
+                  fn twice(n: Int) -> Int { n + n }     // ✗ `twice` again\n\
+                  fn thrice(n: Int) -> Int { n * 3 }    // ✓",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.fn_effectful",
+        blurb: "A suite helper is a pure function that builds a value for a \
+                case: a request, a fixture, an expected result. Returning an \
+                `Effect` would hide a step of the test inside a helper. Build \
+                the value in the helper and run the effect in the `case`, \
+                where each step is visible with `<-`.",
+        example: "// tests/desk.test.bynk\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn start() -> Int { 1 }                            // ✓ build the value\n\
+                  let n <- local.call(start())                       // ✓ run it in the case",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.fn_method",
+        blurb: "A suite helper is a plain function its cases call by name, so \
+                it is a free `fn`, not a method (`fn Type.name`). A method \
+                belongs to its type: declare it in the target or in a commons. \
+                In a suite, take the value as an ordinary parameter.",
+        example: "// demo/desk.bynk\n\
+                  type Count = Int where NonNegative\n\n\
+                  // tests/desk.test.bynk\n\
+                  fn Count.bump(self) -> Int { 1 }       // ✗ a method\n\
+                  fn bump(count: Count) -> Int { 1 }     // ✓ a free function",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.fn_name_clash",
+        blurb: "A suite helper is called by bare name from the suite's cases, \
+                which also see the target's declarations and those of the \
+                commons it `uses`. A helper with one of those names would \
+                silently change which function a call reaches, so it is \
+                refused instead of shadowing. Rename the helper. A type or \
+                constant clashing is `bynk.suite.type_name_clash` or \
+                `bynk.suite.const_name_clash`.",
+        example: "// demo/desk.bynk\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\n\
+                  // tests/desk.test.bynk\n\
+                  fn double(n: Int) -> Int { n * 3 }    // ✗ the target has a `double`\n\
+                  fn triple(n: Int) -> Int { n * 3 }    // ✓",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.type_generic",
+        blurb: "A suite's `type` is a plain shape that only its tests care \
+                about, such as a row to read back with `select[T]`, so it \
+                takes no type parameters. If you need a generic type, declare \
+                it in the target or in a commons, where the suite can use it. \
+                Otherwise write the concrete type.",
+        example: "// tests/desk.test.bynk\n\
+                  type Box[T] = { v: T }       // ✗ a suite type is not generic\n\
+                  type IntBox = { v: Int }     // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-types-consts",
+    },
+    Explain {
         code: "bynk.suite.unknown_target",
         blurb: "A `suite` names the commons or context it tests, by its full \
                 dotted name, and that unit must be declared in the project. A name \
@@ -2710,6 +2900,55 @@ pub const EXPLANATIONS: &[Explain] = &[
                   advance Clock by 5.minutes   // ✓",
         page: "/book/reference/testing",
         anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.advance_outside_case",
+        blurb: "`advance Clock by …` moves the harness clock, which only a \
+                `case` owns. A `property` runs its body once per generated \
+                input and has no clock of its own, and non-test code reads \
+                real time. Put the time-dependent step in a `case`. \
+                `bynk.test.advance_not_clock` and \
+                `bynk.test.advance_not_duration` cover the other ways to get \
+                `advance` wrong.",
+        example: "property \"time moves on\" {\n\
+                  \x20\x20for all n: Int {\n\
+                  \x20\x20\x20\x20advance Clock by 5.minutes    // ✗ a property has no clock\n\
+                  \x20\x20}\n\
+                  }\n\n\
+                  case \"time moves on\" {\n\
+                  \x20\x20advance Clock by 5.minutes      // ✓\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.event_not_subscribed",
+        blurb: "`svc.event(e)` delivers an event through the handler the \
+                service subscribes with, so it takes the one event named in \
+                the service's `from Events(E)` header. Delivering a different \
+                event would test a path the service does not have. Pass the \
+                subscribed event, or test the service that does subscribe to \
+                the one you meant.",
+        example: "// shop/ledger.bynk\n\
+                  service OnPlaced from Events(Placed) { … }\n\n\
+                  // tests/ledger.test.bynk\n\
+                  let _ <- OnPlaced.event(Cancelled { id: \"o1\" })   // ✗ it subscribes to `Placed`\n\
+                  let _ <- OnPlaced.event(Placed { id: \"o1\" })      // ✓",
+        page: "/book/reference/testing",
+        anchor: "event-address",
+    },
+    Explain {
+        code: "bynk.test.principal_required",
+        blurb: "A handler declared `by u: User` runs as a verified actor, and \
+                a `case` has no real caller, so it must say who is calling \
+                with a call-site `by`. The same applies to a handler guarded \
+                by an actor sum: name one of its members. Append `by \
+                <Actor>(<identity>)` to the call.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/items\")                  // ✗ who is calling?\n\
+                  let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
     },
     Explain {
         code: "bynk.test.service_bad_address",
@@ -2775,6 +3014,56 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
         page: "/book/reference/testing",
         anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.snapshot_duplicate_name",
+        blurb: "A snapshot is stored under its case and its name, so each \
+                `matches snapshot` in one case needs a name of its own. Two \
+                with the same name would compare against, and update, the same \
+                stored value. Give the repeat a distinct name.",
+        example: "expect read(\"a\") matches snapshot \"delivery\"\n\
+                  expect read(\"b\") matches snapshot \"delivery\"   // ✗ name already taken\n\
+                  expect read(\"b\") matches snapshot \"second\"     // ✓",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.snapshot_name_not_literal",
+        blurb: "A snapshot is stored under its name, so the name must be a \
+                string literal: the compiler then knows every snapshot a suite \
+                takes. A variable or other expression is refused. Write the \
+                name as a literal.",
+        example: "expect read(\"a\") matches snapshot name        // ✗ not a string literal\n\
+                  expect read(\"a\") matches snapshot \"first\"     // ✓",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.snapshot_not_codable",
+        blurb: "A snapshot stores the value as the JSON text `Json.encode` \
+                produces, so the value must be `Codable`: base types, named \
+                types and the built-in containers over them. A `Stream`, a \
+                function, an `Effect` or `()` has no such text. Snapshot a \
+                `Codable` value instead, such as a list.",
+        example: "expect Stream.of([1, 2]) matches snapshot \"items\"   // ✗ a `Stream`\n\
+                  expect [1, 2] matches snapshot \"items\"              // ✓ a `List[Int]`",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.unknown_actor",
+        blurb: "A call-site `by <Actor>` makes the case act as that actor, so \
+                it must name an `actor` the target context declares, or one of \
+                the prelude actors such as `Visitor` and `Caller`. Any other \
+                name, often a misspelling, has no identity to supply. Correct \
+                the name or declare the actor.",
+        example: "// demo/api.bynk\n\
+                  actor User { auth = Bearer(secret = \"S\"), identity = UserId }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/items\") by Ghost(\"x\")   // ✗ no actor `Ghost`\n\
+                  let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
     },
     Explain {
         code: "bynk.types.argument_mismatch",

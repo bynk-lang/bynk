@@ -1,0 +1,7 @@
+suite demo.desk {
+  fn bump(count: Count) -> Int { 1 }
+
+  case "a free function" {
+    expect 1 == 1
+  }
+}

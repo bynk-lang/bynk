@@ -1,0 +1,8 @@
+suite demo.clock {
+  property "time moves on" {
+    for all n: Int {
+      advance Clock by 5.minutes
+      expect n == n
+    }
+  }
+}

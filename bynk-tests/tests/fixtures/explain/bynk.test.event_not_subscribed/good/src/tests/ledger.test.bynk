@@ -1,0 +1,5 @@
+suite shop.ledger {
+  case "a placement" {
+    let _ <- OnPlaced.event(Placed { id: "o1" })
+  }
+}
