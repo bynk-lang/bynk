@@ -633,7 +633,12 @@ pub fn phase_integration_bodies(
         // context that exposes an `http` service has a real edge (the public
         // boundary: deserialise → handler → serialise), so it qualifies.
         //
-        // `http` and `queue` are admitted, because the system driver wires both:
+        // `http`, `queue` and (#3328) `email` are admitted, because the system
+        // driver wires each: an email service is driven as raw MIME posted to the
+        // Worker's `email()` entry, which parses it, so the message crosses a real
+        // serialisation edge.
+        //
+        // The original reading: `http` and `queue` are admitted, because the system driver wires both:
         // `emit_system_http_support` drives `worker.fetch`, and
         // `emit_system_job_support` (#2136) drives `worker.queue` with a batch
         // whose message body has been through the platform's JSON
@@ -647,6 +652,7 @@ pub fn phase_integration_bodies(
                     s.protocol,
                     bynk_syntax::ast::ServiceProtocol::Http
                         | bynk_syntax::ast::ServiceProtocol::Queue { .. }
+                        | bynk_syntax::ast::ServiceProtocol::Email { .. }
                 )
             })
         });
@@ -656,7 +662,7 @@ pub fn phase_integration_bodies(
                     "bynk.tier.system_needs_wire",
                     decl.target.span,
                     format!(
-                        "`system`-tier suite for `{suite_target}` has no serialisation edge — the target consumes no other context and exposes no `http` or `queue` service",
+                        "`system`-tier suite for `{suite_target}` has no serialisation edge — the target consumes no other context and exposes no `http`, `queue` or `email` service",
                     ),
                 )
                 .with_note(
@@ -5223,6 +5229,34 @@ pub fn integration_view(
             view.assets.retain(|n, _| {
                 local.assets.contains_key(n) || crate::symbols::local_value_kind(local, n).is_none()
             });
+        }
+    }
+    // #3328: a `system` case drives an email service through the Worker's
+    // `email()` entry and reads back the `EmailVerdict` it applied, so the
+    // first-party email types a participant's handler names are in scope, or the
+    // result would read as an untyped value and `expect r is Forward(…)` could not
+    // find the variant's fields.
+    let has_email = participants.iter().any(|p| {
+        unit_tables.get(p).is_some_and(|t| {
+            t.services
+                .values()
+                .any(|s| matches!(s.protocol, bynk_syntax::ast::ServiceProtocol::Email { .. }))
+        })
+    });
+    if has_email && let Some(cloudflare) = unit_tables.get(crate::firstparty::CLOUDFLARE_UNIT) {
+        for name in [
+            "InboundEmail",
+            "InboundAttachment",
+            "EmailVerdict",
+            "EmailReply",
+            "DmarcVerdict",
+            "SenderIdentity",
+        ] {
+            if let Some(decl) = cloudflare.types.get(name) {
+                view.types
+                    .entry(name.to_string())
+                    .or_insert_with(|| decl.clone());
+            }
         }
     }
     // #3064: a participant's actors' identity types are reached too.

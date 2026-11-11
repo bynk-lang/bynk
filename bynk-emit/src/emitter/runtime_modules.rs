@@ -479,6 +479,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("parseInbound", "email"),
     ("parseLogKey", "entries"),
     ("pickRoute", "email"),
+    ("platformReply", "email"),
     ("postingKey", "entries"),
     ("postingPrefix", "entries"),
     ("queryObject", "http"),

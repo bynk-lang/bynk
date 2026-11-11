@@ -3039,16 +3039,6 @@ fn append_deps_field(
     deps_members.push(bynk_ts::TsTypeMember::prop(name, ty));
 }
 
-/// #3328: the first line of a `Sender`-binding handler's body. The Worker's
-/// `email()` entry always supplies `deps.identity`; a suite does not, and gets
-/// the envelope sender with no DMARC verdict (`DmarcNone`).
-fn sender_identity_prologue(mail: &str) -> String {
-    format!(
-        "{}deps = {{ ...deps, identity: deps.identity ?? {{ address: {mail}.from, dmarc: {{ tag: \"DmarcNone\" }} }} }};\n",
-        " ".repeat(INDENT_STEP * 2)
-    )
-}
-
 /// #3328: the structural type of the minted `SenderIdentity` in a handler's
 /// `deps`. Structural, so the handler module needs no import of the
 /// `bynk.cloudflare` declaration the checker typed `s.identity` by, and the
@@ -3330,16 +3320,6 @@ pub(crate) fn emit_service(
             // the post-insert `body_out` handed to it below) still resolves
             // each statement to its own real line rather than one line too
             // early.
-            body_smb.borrow_mut().shift_checkpoints(prologue.len());
-        }
-        // #3328: a `by s: Sender` handler run without the Worker's `email()`
-        // entry (a suite, a direct call) has no minted identity, so it reads the
-        // sender as the message's own envelope with no DMARC verdict.
-        if let ActorSeamIr::Sender(_) = &seam
-            && let Some((param_name, _)) = ir_params.first()
-        {
-            let prologue = sender_identity_prologue(&ts_ident(param_name));
-            body_out.insert_str(0, &prologue);
             body_smb.borrow_mut().shift_checkpoints(prologue.len());
         }
         // Events track, slice 4 (spine #936): a `via schema(N)` guard,

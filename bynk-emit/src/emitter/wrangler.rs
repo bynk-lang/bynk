@@ -226,6 +226,12 @@ pub fn emit_wrangler_toml(
     // v0.10b/v0.44: every `from queue("name")` service's bound queue name,
     // sorted+deduped (same reproducibility requirement as `crons`).
     queues: &[String],
+    // #3328: every `from email` service's address, lower-cased, sorted and
+    // deduped. Emitted as wrangler's **top-level** `addresses` (it applies to
+    // every environment, so it is never copied into an `[env.*]` table); a
+    // Worker with no email service has none, and wrangler then manages no
+    // routing rule for it.
+    addresses: &[String],
     // #1890: the merged flag list, [`compatibility_flags`]' first result.
     // The same for every Worker in the project, so the caller merges (and
     // warns about duplicates) once, not per Worker.
@@ -249,6 +255,12 @@ pub fn emit_wrangler_toml(
             TomlValue::Array(flags.iter().map(TomlValue::str).collect()),
         ),
     ];
+    if !addresses.is_empty() {
+        root.push(TomlEntry::kv(
+            "addresses",
+            TomlValue::Array(addresses.iter().map(TomlValue::str).collect()),
+        ));
+    }
     if let Some(workers_dev) = workers_dev {
         root.push(TomlEntry::kv("workers_dev", TomlValue::Bool(workers_dev)));
     }

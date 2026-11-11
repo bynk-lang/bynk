@@ -83,7 +83,7 @@ pub use bynk_emit::emit_model::{
     TestLocation, WORKER_ASSETS_DIR, is_worker_asset_path, is_worker_migration_path,
     node_wasm_shim, sibling_path, wasm_shim_path, worker_assets_dir,
 };
-use bynk_emit::emit_model::{CLOUDFLARE_EMAIL_DTS, WASM_MODULES_DTS, worker_reaches_wasm_module, workers_wasm_shim};
+use bynk_emit::emit_model::{WASM_MODULES_DTS, worker_reaches_wasm_module, workers_wasm_shim};
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use diagnostics::*;
@@ -2524,6 +2524,8 @@ fn run_checks(
     );
     // #2306: on Workers, a WebSocket `on open` and the agent it transfers to
     // must share a file.
+    // #3328: one service per address across the whole project.
+    bynk_check::email::phase_duplicate_addresses(&parsed, &groups, &kinds, &mut errors);
     project_model::phase_workers_ws_open_split(
         target,
         &parsed,
@@ -3606,6 +3608,7 @@ fn build_output(
                     &bindings,
                     &crons,
                     &queues,
+                    &bynk_check::email::routed_addresses(table),
                     compatibility_flags,
                     workers_dev,
                     &emitter::ClassTombstones::of(table),
@@ -3904,25 +3907,6 @@ fn build_output(
         });
     }
 
-    // #3328: a Worker whose `email()` entry imports `cloudflare:email` ships the
-    // declaration that lets `tsc` resolve it.
-    if compiled.iter().any(|f| {
-        matches!(&f.document, Document::Ts(p) if p.import_specifiers().contains(&"cloudflare:email"))
-    }) {
-        compiled.push(StagedFile {
-            output_path: PathBuf::from("cloudflare-email.d.ts"),
-            document: Document::Ts(bynk_ts::TsProgram {
-                stmts: vec![bynk_ts::TsStmt::verbatim(
-                    bynk_ts::VerbatimOrigin::NotYetConverted,
-                    CLOUDFLARE_EMAIL_DTS.to_string(),
-                    None,
-                )],
-            }),
-            source_map: None,
-            debug_metadata: None,
-        });
-    }
-
     // Runtime (ADR 0615): exactly the modules the emitted files import, closed
     // over the modules' own imports, under `__bynk_runtime/` at the root of
     // `out/` so every file's relative specifier resolves to it.
@@ -3935,7 +3919,8 @@ fn build_output(
         }
     }
     let mut npm_deps = npm_deps;
-    for (path, source) in emitter::runtime_files::closure_files(&reached) {
+    let runtime_files = emitter::runtime_files::closure_files(&reached);
+    for (path, source) in runtime_files {
         // ADR 0799 C: a runtime module that imports a first-party npm package
         // brings it, at its exact pin, into `package.json`.
         if let Some(module) = path.file_stem().and_then(|m| m.to_str()) {

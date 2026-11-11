@@ -1,11 +1,11 @@
-context shop.support
+context shop.sales
 
 consumes bynk.cloudflare {
   InboundEmail,
   EmailVerdict,
 }
 
-service support from email("support@shop.example") {
+service sales from email("HELP@shop.example") {
   on message(mail: InboundEmail) -> Effect[EmailVerdict] {
     Accept
   }

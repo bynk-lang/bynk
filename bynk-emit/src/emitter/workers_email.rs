@@ -4,13 +4,15 @@
 //! a short call into the runtime's `handleEmail` (`runtime/src/email.ts`), which
 //! does the security-bearing work (dispatch by envelope recipient, parsing, the
 //! DMARC verdict, applying the handler's verdict); this module only lists the
-//! routes: each `from email("…")` service's address and its compose wrapper.
+//! routes: each `from email("…")` service's address and its compose wrapper. A
+//! reply's `EmailMessage` (`cloudflare:email`) is loaded by the runtime when one
+//! is built.
 //!
 //! Kept out of `workers_entry.rs`, whose entry builder is near its length
 //! ceiling.
 
 use bynk_syntax::ast::ServiceProtocol;
-use bynk_ts::{TsDecl, TsExpr, TsParam, TsStmt, TsType};
+use bynk_ts::{TsExpr, TsParam, TsStmt, TsType};
 
 use super::workers_entry::{call, const_, ident};
 use bynk_check::symbols::UnitTable;
@@ -47,19 +49,6 @@ pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
     routes
 }
 
-/// `import { EmailMessage } from "cloudflare:email";` — Workers-only, so the
-/// runtime module is handed a factory rather than importing it.
-pub(super) fn platform_import() -> TsStmt {
-    TsStmt::decl(
-        TsDecl::Import {
-            type_only: false,
-            names: vec!["EmailMessage".to_string()],
-            from: "cloudflare:email".to_string(),
-        },
-        None,
-    )
-}
-
 /// The runtime names the entry imports.
 pub(super) const RUNTIME_IMPORTS: [&str; 2] = ["__handleEmail", "type __InboundMessage"];
 
@@ -91,7 +80,7 @@ pub(super) fn emit_email_handler(
             r.address
         ));
     }
-    text.push_str("    ], (from, to, raw) => new EmailMessage(from, to, raw));\n");
+    text.push_str("    ]);\n");
     TsObjectEntry::Method {
         name: "email".to_string(),
         is_async: true,

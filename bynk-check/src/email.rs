@@ -9,13 +9,17 @@
 //! by `bynk.cloudflare`, so the handler-shape checks compare type *names*; the
 //! body is then type-checked against the real declarations like any other.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use bynk_syntax::ast::{Handler, HandlerKind, ServiceDecl, ServiceProtocol, TypeRef};
+use bynk_syntax::ast::{
+    CommonsItem, Handler, HandlerKind, ServiceDecl, ServiceProtocol, SourceUnit, TypeRef,
+};
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
 use crate::context_checks::ts_type_ref_display;
+use crate::project_model::ErrorSink;
+use bynk_project::{ParsedFile, UnitKind};
 
 /// The first-party type a `from email` handler receives.
 pub const INBOUND_EMAIL: &str = "InboundEmail";
@@ -238,6 +242,80 @@ fn named(t: &TypeRef) -> Option<&str> {
         TypeRef::Named(id) => Some(id.name.as_str()),
         _ => None,
     }
+}
+
+/// #3328 slice 2: two *contexts* claiming one address is an error too. Slice 1
+/// checks each context on its own ([`check_email_services`]); routing is
+/// project-wide (one rule per address, on the account), so this sees every
+/// context. A claim inside one context is that check's, so only a claim by a
+/// different context is reported here, on the later one (contexts in name
+/// order, so the report does not depend on discovery order).
+pub fn phase_duplicate_addresses(
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    errors: &mut ErrorSink,
+) {
+    // routing key -> the first context to claim it.
+    let mut first: HashMap<String, &str> = HashMap::new();
+    for (name, indices) in groups {
+        if kinds.get(name) != Some(&UnitKind::Context) {
+            continue;
+        }
+        let mut here: Vec<(Span, &String, usize)> = Vec::new();
+        for &i in indices {
+            let SourceUnit::Context(ctx) = &parsed[i].unit() else {
+                continue;
+            };
+            for item in &ctx.items {
+                let CommonsItem::Service(s) = item else {
+                    continue;
+                };
+                if let ServiceProtocol::Email { address } = &s.protocol
+                    && address_problem(address).is_none()
+                {
+                    here.push((s.name.span, address, i));
+                }
+            }
+        }
+        here.sort_by_key(|(span, _, _)| *span);
+        for (span, address, i) in here {
+            match first.get(&claim_key(address)) {
+                Some(other) if *other != name.as_str() => errors.push_for(
+                    Some(&parsed[i].identity_path()),
+                    CompileError::new(
+                        "bynk.email.duplicate_address",
+                        span,
+                        format!("context `{other}` already claims `{address}`"),
+                    )
+                    .with_note(
+                        "mail is routed project-wide by its envelope recipient, so each address has one service in the whole project; a literal address and `*@domain` may coexist, and the literal wins",
+                    ),
+                ),
+                Some(_) => {}
+                None => {
+                    first.insert(claim_key(address), name.as_str());
+                }
+            }
+        }
+    }
+}
+
+/// The addresses a context's `from email` services claim, lower-cased (Email
+/// Routing matches without regard to case, ADR 0805 A), sorted and de-duplicated:
+/// what the Worker's `wrangler.toml` lists as its top-level `addresses`.
+pub fn routed_addresses(table: &crate::symbols::UnitTable) -> Vec<String> {
+    let mut addresses: Vec<String> = table
+        .services
+        .values()
+        .filter_map(|s| match &s.protocol {
+            ServiceProtocol::Email { address } => Some(address.to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    addresses.sort();
+    addresses.dedup();
+    addresses
 }
 
 #[cfg(test)]

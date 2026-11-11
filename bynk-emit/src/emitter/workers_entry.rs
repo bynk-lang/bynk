@@ -1863,7 +1863,6 @@ pub fn emit_worker_entry(
     let email_routes = super::workers_email::collect_routes(table);
     if !email_routes.is_empty() {
         imports.extend(super::workers_email::RUNTIME_IMPORTS.map(String::from));
-        header_decls.push(super::workers_email::platform_import());
         default_entries.push(super::workers_email::emit_email_handler(
             &email_routes,
             &fault_exec_params,

@@ -5,12 +5,8 @@ title: Receive email
 accept it, reject it, forward it to a person, or reply.
 
 :::note
-Receiving email is **experimental**. Today you write the service and test it in
-a suite; the deployed Worker path, which parses real messages and routes
-mail from Cloudflare, is the next slice of
-[#3328](https://github.com/bynk-lang/bynk/issues/3328). Until then a
-`from email` service builds for the bundle target, and `--target workers`
-refuses it (`bynk.email.workers_unsupported`).
+Receiving email is **experimental**
+([#3328](https://github.com/bynk-lang/bynk/issues/3328)).
 :::
 
 An email service goes in a `service` inside a `context`. The address is bound
@@ -56,6 +52,33 @@ handler's default actor is `Sender`, which carries the address and whether
 Cloudflare found the sender's domain authenticated with DMARC
 (`DmarcPass`, `DmarcFail` or `DmarcNone`). Forward or reply on a claim; act
 on the evidence.
+
+## Deploy it
+
+`bynk build --target workers` gives the Worker an `email()` export and lists the
+addresses in its `wrangler.toml`; `bynk deploy` pushes it, and Cloudflare Email
+Routing delivers mail for those addresses to it. Turn Email Routing on for the
+domain first, and verify any address you `Forward` to: a forward to an address
+the account has not verified is refused (and falls back to
+`Reject("forward refused")`).
+
+`out/package.json` lists `postal-mime`, which the Worker parses messages with, at
+an exact version; run `npm install` in the build directory before `wrangler dev`
+or a deploy.
+
+A reply goes out only for a sender whose mail passed DMARC, and only once per
+message. The runtime does the sending, so the handler stays a pure decision.
+
+## Try it locally
+
+`bynk dev` runs the Worker under `wrangler dev`, which takes a raw message:
+
+```sh
+curl -X POST 'http://localhost:8787/cdn-cgi/local/email?from=a@example.org&to=support@shop.example' \
+  --data-binary @message.eml
+```
+
+Write a small RFC 5322 file for `message.eml`. It must have a `Message-ID` header.
 
 ## Test it
 

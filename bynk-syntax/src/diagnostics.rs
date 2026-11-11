@@ -763,13 +763,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-verdict",
     },
     Explain {
-        code: "bynk.email.workers_unsupported",
-        blurb: "Inbound email runs in a suite today, driven as `support.message(…)`, and builds for the bundle target. The Workers `email()` export, recipient dispatch and routing arrive in a later slice of #3328, so a deployable Workers build of a `from email` service is refused rather than emitted half-working.",
-        example: "bynk build --target workers   # ✗ inbound email is not yet emitted for Workers\n\nbynk build --target bundle    # ✓ builds, and `bynk test` runs the suites",
-        page: "/book/reference/inbound-email",
-        anchor: "status",
-    },
-    Explain {
         code: "bynk.exports.capability_not_provided",
         blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
                 built for them, so the exporting context must also say how: a `provides Clock = \
@@ -2923,10 +2916,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.email.return_not_email_verdict",
         "An email `on message` handler does not return `Effect[EmailVerdict]`.",
-    ),
-    d(
-        "bynk.email.workers_unsupported",
-        "A `from email` service is built for the Workers target, whose `email()` entry is not emitted yet.",
     ),
     d(
         "bynk.embed.binary_content",

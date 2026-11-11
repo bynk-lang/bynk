@@ -4969,6 +4969,9 @@ pub struct SystemJobServices {
     pub cron: HashMap<String, Vec<String>>,
     /// The queue services.
     pub queue: HashSet<String>,
+    /// #3328: the email services, driven as raw MIME through the Worker's
+    /// `email()` entry (`__sysdrive_message_<svc>(mail)`).
+    pub email: HashSet<String>,
 }
 
 /// #2019: what a `system`-tier call needs to sign the claims a refinement
@@ -5792,7 +5795,8 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn system_message_driver(&self, service: &str) -> Option<String> {
         match &self.mode {
             BodyMode::IntegrationCase { system_jobs, .. }
-                if system_jobs.queue.contains(service) =>
+                if system_jobs.queue.contains(service)
+                    || system_jobs.email.contains(service) =>
             {
                 Some(format!("__sysdrive_message_{service}"))
             }
@@ -7577,12 +7581,49 @@ mod runtime_tests {
                 (l.starts_with("import ") || l.starts_with("} from ")) && l.contains('"')
             }) {
                 let from = line.rsplit('"').nth(1).expect("import specifier");
+                // ADR 0799 C: a module may import the first-party npm package
+                // `bynk-std` declares for it, and nothing else outside the table.
+                if bynk_check::firstparty::FIRST_PARTY_NPM
+                    .iter()
+                    .any(|d| d.runtime_module == *name && d.package == from)
+                {
+                    continue;
+                }
                 let target = from.strip_prefix("./").and_then(|f| f.strip_suffix(".ts"));
                 assert!(
                     target.is_some_and(|t| names.contains(&t) && t != *name),
                     "{name}: import {from:?} does not name another runtime module"
                 );
             }
+        }
+    }
+
+    /// ADR 0799 C: each first-party npm pin is exact and is the version the
+    /// runtime's own tests and type-check run against (`runtime/package.json`),
+    /// so what a project installs is what was tested, and the module it names
+    /// really imports the package.
+    #[test]
+    fn first_party_pins_match_the_runtime() {
+        let manifest =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/runtime/package.json"))
+                .expect("runtime/package.json");
+        for d in bynk_check::firstparty::FIRST_PARTY_NPM {
+            assert!(
+                manifest.contains(&format!("\"{}\": \"{}\"", d.package, d.version)),
+                "`{}` is pinned at {} in bynk-std but not in runtime/package.json",
+                d.package,
+                d.version
+            );
+            let (_, src) = runtime_modules::RUNTIME_MODULES
+                .iter()
+                .find(|(n, _)| *n == d.runtime_module)
+                .expect("the runtime module exists");
+            assert!(
+                src.contains(&format!("from \"{}\"", d.package)),
+                "runtime module `{}` does not import `{}`",
+                d.runtime_module,
+                d.package
+            );
         }
     }
 

@@ -1567,6 +1567,30 @@ pub(super) fn emit_system_job_support(
                 ));
                 services.queue.insert(sname.clone());
             }
+            // #3328: an email service is driven as raw MIME through the Worker's
+            // real `email()` entry, which parses it; the case reads back the
+            // verdict the entry applied (`__bynkDeliverEmail`).
+            ServiceProtocol::Email { .. } => {
+                let Some(h) = decl
+                    .handlers
+                    .iter()
+                    .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Message))
+                else {
+                    continue;
+                };
+                let key = bynk_emit::emitter::queue_handler_method_name(sname, 0);
+                let param = h
+                    .params
+                    .first()
+                    .map_or("mail".to_string(), |p| bynk_emit::emitter::ts_ident(&p.name.name));
+                drivers.push(TsStmt::raw(
+                    format!(
+                        "async function __sysdrive_message_{sname}({param}: any) {{\n  const __h = __makeHarness();\n  return __bynkDeliverEmail<Awaited<ReturnType<typeof {ns}.{sname}.{key}>>>({param}, (message, exec) => {worker}.email(message, {env}, exec));\n}}\n"
+                    ),
+                    None,
+                ));
+                services.email.insert(sname.clone());
+            }
             _ => {}
         }
     }
@@ -1576,6 +1600,13 @@ pub(super) fn emit_system_job_support(
             include_str!("../test_runtime/jobs.ts").to_string(),
             None,
         ));
+        // #3328: only a target with an email service carries the email driver.
+        if !services.email.is_empty() {
+            code.push(TsStmt::raw(
+                include_str!("../test_runtime/jobs_email.ts").to_string(),
+                None,
+            ));
+        }
         code.extend(drivers);
     }
     SystemJobSupport { code, services }

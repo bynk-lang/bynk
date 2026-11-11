@@ -956,6 +956,18 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    // #3328: a Worker built for a `system` case may import a first-party npm
+    // package (`postal-mime`, for inbound email); `tsc` and Node resolve it from
+    // `out/node_modules`.
+    if let Err(msg) = provision_npm_dependencies(&output_root, &out_js_root) {
+        if json {
+            crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
+        } else {
+            eprintln!("{program} test: {msg}");
+        }
+        return ExitCode::FAILURE;
+    }
+
     // Try a sequence of (program, prefix args) tsc invocations. In JSON mode the
     // tsc step is captured so its output never reaches stdout (the document is
     // the only thing on stdout); a tsc failure on the emitted TS is a
@@ -1947,4 +1959,48 @@ mod output_within_tests {
             Err(e) => eprintln!("could not check for survivors ({e}); relying on the timing"),
         }
     }
+}
+
+/// #3328: install the npm packages the emitted `package.json` lists (the
+/// toolchain's own first-party ones, ADR 0799 C, and an adapter's), into
+/// `out/node_modules`, and make them resolvable from the compiled `out-js`.
+/// A tree that lists none needs nothing; one whose `node_modules` exists is left
+/// alone (the install is offline-safe on a re-run).
+fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<(), String> {
+    let manifest = std::fs::read_to_string(output_root.join("package.json")).unwrap_or_default();
+    if !manifest.contains("\"dependencies\"") {
+        return Ok(());
+    }
+    let modules = output_root.join("node_modules");
+    if !modules.exists() {
+        let npm = resolve_tool("npm").ok_or_else(|| {
+            "the generated project depends on npm packages, and `npm` is not on PATH to install them"
+                .to_string()
+        })?;
+        let out = ProcCommand::new(npm)
+            .args(["install", "--no-audit", "--no-fund", "--ignore-scripts", "--silent"])
+            .current_dir(output_root)
+            .output()
+            .map_err(|e| format!("could not run `npm install`: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "`npm install` failed in {}:\n{}",
+                output_root.display(),
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+    }
+    let link = out_js_root.join("node_modules");
+    // A link left by an earlier run may dangle (`exists` follows it), so replace it.
+    if link.symlink_metadata().is_ok() {
+        let _ = std::fs::remove_file(&link);
+    }
+    // Absolute, so a relative `--output` does not leave the link pointing
+    // beside itself.
+    let target = std::fs::canonicalize(&modules)
+        .map_err(|e| format!("could not resolve {}: {e}", modules.display()))?;
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link)
+        .map_err(|e| format!("could not link {}: {e}", link.display()))?;
+    Ok(())
 }

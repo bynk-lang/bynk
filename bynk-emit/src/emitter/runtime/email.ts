@@ -19,11 +19,15 @@
 // fault and a refused reply each reject the message with a fixed reason that
 // reveals nothing (ADR 0805, DECISION G).
 //
-// `cloudflare:email`'s `EmailMessage` is Workers-only, so the entry passes a
-// factory in; nothing here imports a platform module, and the whole module runs
-// under node.
+// `cloudflare:email`'s `EmailMessage` is Workers-only, so it is loaded lazily,
+// only when a reply is built, and tests pass a factory in; the module imports no
+// platform module statically and runs under node.
+// The runtime is also copied into trees that never install the package (a bundle
+// that emits every module), so the import's resolution is not type-checked: the
+// parsed shape is declared below, and a project that emits this module has
+// `postal-mime` in its `package.json` (ADR 0799 C).
+// @ts-ignore TS2307 when the package is not installed
 import PostalMime from "postal-mime";
-import type { Email as ParsedEmail, Header as ParsedHeader } from "postal-mime";
 import { Some, None } from "./result.ts";
 import type { Option } from "./result.ts";
 
@@ -91,6 +95,31 @@ export type EmailVerdict =
   | { readonly tag: "Forward"; readonly to: string }
   | { readonly tag: "Reply"; readonly message: EmailReply };
 
+/** The part of `postal-mime`'s `Header` this module reads. */
+interface ParsedHeader {
+  readonly key: string;
+  readonly value: string;
+}
+
+/** The part of `postal-mime`'s `Attachment` this module reads. */
+interface ParsedAttachment {
+  readonly filename: string | null;
+  readonly mimeType: string;
+  readonly disposition: string | null;
+  readonly related?: boolean;
+  readonly content: unknown;
+}
+
+/** The part of `postal-mime`'s `Email` this module reads. */
+interface ParsedEmail {
+  readonly subject?: string;
+  readonly messageId?: string;
+  readonly text?: string;
+  readonly html?: string;
+  readonly headers: readonly ParsedHeader[];
+  readonly attachments: readonly ParsedAttachment[];
+}
+
 /** The part of Workers' `ForwardableEmailMessage` this module uses. */
 export interface InboundMessage {
   readonly from: string;
@@ -110,6 +139,21 @@ export interface EmailRoute {
 
 /** Builds the platform's `EmailMessage` (`cloudflare:email`) for a reply. */
 export type ReplyFactory = (from: string, to: string, raw: string) => unknown;
+
+/**
+ * The factory on a Worker: `EmailMessage` from `cloudflare:email`, loaded when a
+ * reply is first built, so a Worker that never replies never loads it. Node has no
+ * such module, so a test double on `globalThis.__bynkEmailMessage` stands in for
+ * it there (the system-tier harness installs one).
+ */
+export const platformReply: ReplyFactory = async (from, to, raw) => {
+  const double = (globalThis as { __bynkEmailMessage?: ReplyFactory }).__bynkEmailMessage;
+  if (double !== undefined) return double(from, to, raw);
+  // `cloudflare:email` exists only on Workers, so its resolution is not type-checked.
+  // @ts-ignore TS2307
+  const { EmailMessage } = await import("cloudflare:email");
+  return new EmailMessage(from, to, raw);
+};
 
 /** The log sink. Only ever handed fixed strings, codes and class names. */
 export type EmailLog = (line: string) => void;
@@ -266,20 +310,20 @@ export async function parseInbound(
 ): Promise<ParseSuccess | ParseFailure> {
   let parsed: ParsedEmail;
   try {
-    parsed = await PostalMime.parse(raw, {
+    parsed = (await PostalMime.parse(raw, {
       maxNestingDepth: EMAIL_MAX_NESTING,
       maxHeadersSize: EMAIL_MAX_HEADER_BYTES,
       maxPartCount: EMAIL_MAX_PARTS,
       maxRfc822NestingDepth: EMAIL_MAX_RFC822_NESTING,
       maxForwardedAddresses: EMAIL_MAX_FORWARDED_ADDRESSES,
-    });
+    })) as unknown as ParsedEmail;
   } catch (e) {
     return { ok: false, reason: EMAIL_REJECT_UNPARSEABLE, code: errorCode(e) };
   }
   if (parsed.attachments.length > EMAIL_MAX_ATTACHMENTS) {
     return { ok: false, reason: EMAIL_REJECT_UNPARSEABLE, code: "EEMAILLIMIT" };
   }
-  const attachments: InboundAttachment[] = parsed.attachments.map((a) => ({
+  const attachments: InboundAttachment[] = parsed.attachments.map((a: ParsedAttachment) => ({
     filename: a.filename ?? "",
     contentType: a.mimeType,
     content: attachmentBytes(a.content),
@@ -492,7 +536,7 @@ const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply"]);
 export async function handleEmail(
   message: InboundMessage,
   routes: readonly EmailRoute[],
-  makeReply: ReplyFactory,
+  makeReply: ReplyFactory = platformReply,
   log: EmailLog = defaultLog,
 ): Promise<void> {
   const route = pickRoute(routes, message.to);
@@ -553,7 +597,7 @@ export async function handleEmail(
     case "Reply":
       try {
         const rawReply = replyMime(parsed.mail, verdict.message, message.to);
-        await message.reply(makeReply(message.to, message.from, rawReply));
+        await message.reply(await makeReply(message.to, message.from, rawReply));
       } catch (e) {
         log(`${where}: reply refused (${errorName(e)})`);
         message.setReject(EMAIL_REJECT_REPLY);

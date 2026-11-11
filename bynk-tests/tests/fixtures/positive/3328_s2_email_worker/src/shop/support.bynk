@@ -1,0 +1,31 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailReply,
+  DmarcVerdict,
+  SenderIdentity,
+}
+
+service support from email("Support@Shop.Example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+    if s.identity.dmarc == DmarcPass {
+      Reply(EmailReply { text: Some("Thanks, we have your message.") })
+    } else {
+      Reject("sender not verified")
+    }
+  }
+}
+
+service billing from email("billing@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    Forward("finance@shop.example")
+  }
+}
+
+service everything from email("*@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    Reject("no such mailbox")
+  }
+}
