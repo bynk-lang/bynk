@@ -11,6 +11,8 @@ schedules, queue messages, WebSocket connections, and inbound email.
 - [Handle a WebSocket connection](/book/guides/entry-points/websocket/)
 - [Receive email](/book/guides/entry-points/receive-email/)
 - [Serve a page from an HTML file](/book/guides/entry-points/serve-a-page/)
+- [Accept an HTML form](/book/guides/entry-points/accept-a-form/)
+- [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
 
 **See also:** [Reference — HTTP](/book/reference/http/),
 [Cron](/book/reference/cron/), [Queue](/book/reference/queue/),

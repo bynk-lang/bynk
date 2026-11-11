@@ -1,0 +1,9 @@
+context shop.ledger
+
+consumes shop.order
+
+service OnPlaced from Events(Placed) {
+  on event(e: Placed) -> Effect[()] {
+    ()
+  }
+}

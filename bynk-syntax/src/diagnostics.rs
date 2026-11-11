@@ -842,6 +842,48 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "reading-and-writing-state",
     },
     Explain {
+        code: "bynk.cloudflare.edge_cache_duplicate",
+        blurb: "Workers Cache is one setting for the whole Worker, and a context has one Worker, so a context declares at most one `EdgeCache` instance, which both turns the cache on and purges it. A second would be another handle on the same cache, so it is refused. Delete it and use the first instance wherever you need it, with `given`.",
+        example: "capability Edge = EdgeCache\ncapability Cdn = EdgeCache    // ✗ one `EdgeCache` per context\n\ncapability Edge = EdgeCache   // ✓ use `Edge` everywhere",
+        page: "/book/guides/effects-and-capabilities/cache-at-the-edge",
+        anchor: "turn-the-cache-on",
+    },
+    Explain {
+        code: "bynk.cloudflare.edge_cache_exported",
+        blurb: "A capability you `export` is built by each context that consumes it, in that context's own Worker. A provider that reaches `EdgeCache` would purge from there, and a purge reaches only the cache of the Worker it runs in, so this context's cache would keep the stale response. Keep the capability inside the context and have a service route do the purge, which another context can reach by calling that service.",
+        example: "exports capability { Takedown }\n\ncapability Edge = EdgeCache\n\ncapability Takedown {   // ✗ exported, but its provider purges through `Edge`\n    fn take(path: String) -> Effect[Bool]\n}\n\nprovides Takedown = Purging given Edge {\n    fn take(path: String) -> Effect[Bool] {\n        Edge.purge([path])\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+        page: "/book/guides/effects-and-capabilities/cache-at-the-edge",
+        anchor: "purge-after-a-change",
+    },
+    Explain {
+        code: "bynk.cloudflare.edge_cache_in_agent",
+        blurb: "A purge reaches the edge cache only when it runs in the Worker's own `fetch`. An agent runs in a Durable Object, so an agent handler that reaches `EdgeCache`, with `given Edge` or through a provider that does, would not reach this Worker's cache. Purge from the service handler that calls the agent. A queue consumer and an `on schedule` handler have the same rule: `bynk.cloudflare.edge_cache_in_queue`, `bynk.cloudflare.edge_cache_in_schedule`.",
+        example: "capability Edge = EdgeCache\n\nagent Index {\n    key name: String\n\n    store hits: Cell[Int]\n\n    on call withdraw(path: String) -> Effect[Bool] given Edge {   // ✗ an agent's purge misses the Worker's cache\n        Edge.purge([path])\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+        page: "/book/guides/effects-and-capabilities/cache-at-the-edge",
+        anchor: "purge-after-a-change",
+    },
+    Explain {
+        code: "bynk.cloudflare.edge_cache_in_queue",
+        blurb: "A purge reaches the edge cache only from the Worker's own `fetch`, the entrypoint that serves cached responses. A queue consumer is not that entrypoint, and its purge is not known to reach the cache, so a consumer that reaches `EdgeCache`, with `given Edge` or through a provider that does, is refused. Purge from a service handler instead. An agent and an `on schedule` handler have the same rule: `bynk.cloudflare.edge_cache_in_agent`, `bynk.cloudflare.edge_cache_in_schedule`.",
+        example: "capability Edge = EdgeCache\n\nservice purges from queue(\"purges\") {\n    on message(path: String) -> Effect[QueueResult] given Edge {   // ✗ not the entrypoint the cache serves\n        let purged <- Edge.purge([path])\n        if purged { Ack } else { Retry(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+        page: "/book/guides/effects-and-capabilities/cache-at-the-edge",
+        anchor: "purge-after-a-change",
+    },
+    Explain {
+        code: "bynk.cloudflare.edge_cache_in_schedule",
+        blurb: "A purge reaches the edge cache only from the Worker's own `fetch`. Cloudflare accepts a purge from a cron run, but it clears nothing from the cache that `fetch` serves, so the stale responses would stay. An `on schedule` handler that reaches `EdgeCache`, with `given Edge` or through a provider that does, is refused. Purge from a service handler instead. An agent and a queue consumer have the same rule: `bynk.cloudflare.edge_cache_in_agent`, `bynk.cloudflare.edge_cache_in_queue`.",
+        example: "capability Edge = EdgeCache\n\nservice sweep from cron {\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] given Edge {   // ✗ a cron purge clears nothing\n        let purged <- Edge.purge([\"/dl/\"])\n        if purged { Ok(()) } else { Err(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+        page: "/book/guides/effects-and-capabilities/cache-at-the-edge",
+        anchor: "purge-after-a-change",
+    },
+    Explain {
+        code: "bynk.cloudflare.edge_cache_public_authenticated",
+        blurb: "In a context with `EdgeCache`, the edge keys a response by its URL alone, and `scope: public` lets it share one response with every later caller. On a route whose actor authenticates, such as a `Bearer` one, that response belongs to one caller, so it would be served to the rest. Use `scope: private`, which is never shared at the edge, or serve the route `by Visitor`. See also `bynk.http.cache_public_reads_cookies`.",
+        example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
+        page: "/book/guides/effects-and-capabilities/cache-at-the-edge",
+        anchor: "mark-what-may-be-cached",
+    },
+    Explain {
         code: "bynk.consumes.name_conflict",
         blurb: "`consumes payment` brings every type that `payment` exports into scope under its \
                 own name, because the services' signatures use them. If this context already has \
@@ -1006,6 +1048,66 @@ pub const EXPLANATIONS: &[Explain] = &[
                   exports transparent { Status }   // ✓ the owner shares the shape",
         page: "/book/reference/types",
         anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.contract.duplicate_name",
+        blurb: "Every `requires` and `ensures` clause has a name, and a \
+                failure report points at a clause by that name, so each name \
+                must be unique within one function, across both kinds. Rename \
+                the repeat; the error is on its name.",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20requires bigger: x > 0\n\
+                  \x20\x20ensures bigger: result > x      // ✗ `bigger` is already taken\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20requires positive: x > 0\n\
+                  \x20\x20ensures bigger: result > x      // ✓",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
+        code: "bynk.contract.impure_predicate",
+        blurb: "A contract clause is checked on every call in the dev and test \
+                build, and by the runner on generated inputs, so its predicate \
+                must be a pure `Bool` over the parameters and `result`. \
+                Effects (`Effect.pure`, `?`) and test-only constructs \
+                (`expect`, `val`, observations, `faults`, `trace`) cannot \
+                appear in it. State the claim as a plain comparison, and keep \
+                assertions and effects in a `case`.",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: expect result > x   // ✗ `expect` is a test statement\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: result > x          // ✓ a pure `Bool`",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
+        code: "bynk.contract.not_bool",
+        blurb: "A `requires` or `ensures` clause is a claim the function can \
+                meet or break, so its predicate must be a `Bool`. A value of \
+                another type, such as an `Int`, claims nothing that could \
+                fail. Write a comparison or another `Bool` expression over the \
+                parameters (and `result`, in an `ensures`).",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: result + 1      // ✗ an `Int`, not a `Bool`\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures bigger: result > x      // ✓",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
+        code: "bynk.contract.result_in_requires",
+        blurb: "A `requires` clause is checked on entry, before the function \
+                has returned anything, so `result` is not bound there. Only an \
+                `ensures` can read it. Either state the condition over the \
+                parameters, or, if it is a claim about the return value, make \
+                it an `ensures`. A parameter that is itself named `result` is \
+                read as that parameter.",
+        example: "fn inc(x: Int) -> Int\n\
+                  \x20\x20requires small: result < 100    // ✗ nothing has been returned yet\n\n\
+                  fn inc(x: Int) -> Int\n\
+                  \x20\x20ensures small: result < 100     // ✓ checked on exit",
+        page: "/book/reference/testing",
+        anchor: "contracts",
     },
     Explain {
         code: "bynk.cron.invalid_schedule",
@@ -1439,6 +1541,22 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "opaque-types",
     },
     Explain {
+        code: "bynk.fixture.missing_file",
+        blurb: "A `fixture` reads a file into a `String` for the suite's \
+                cases, so the file must exist as a regular file in the \
+                project's `fixtures/` folder. A misspelt name, a file not yet \
+                added, or a symbolic link (which is not followed) leaves the \
+                suite without its input. Add the file or correct the path. A \
+                path outside that folder is \
+                `bynk.fixture.outside_fixtures_dir`; an empty, absolute or \
+                `..` path is `bynk.fixture.unsafe_path`.",
+        example: "// tests/desk.test.bynk\n\
+                  fixture note = \"fixtures/absent.txt\"    // ✗ no such file in `fixtures/`\n\
+                  fixture note = \"fixtures/note.txt\"      // ✓",
+        page: "/book/reference/fixtures",
+        anchor: "declaring-a-fixture",
+    },
+    Explain {
         code: "bynk.generics.duplicate_type_param",
         blurb: "The type parameters of one declaration are told apart by name, and a repeat would collapse into a single parameter, so `Pair[T, T]` would force both fields to the same type with no sign of it. Give each parameter its own name. A method's own type parameter may not reuse a name from its receiver type either, as that would make the two ambiguous.",
         example: "type Pair[T, T] = { a: T, b: T }    // ✗ `T` declared twice\n\ntype Pair[A, B] = { a: A, b: B }    // ✓ one name for each",
@@ -1756,6 +1874,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "handler-form",
     },
     Explain {
+        code: "bynk.http.cache_bad_immutable",
+        blurb: "`immutable` on `@cache` promises that the response at this URL never changes, so a cache may reuse it for the whole `maxAge` without asking again. A promise is either made or not, so the value must be the literal `true` or `false`; a bare word, a string or an expression is refused. Write `immutable: true` for a content-addressed path, or leave the argument out. The other arguments are `bynk.http.cache_bad_max_age` and `bynk.http.cache_bad_scope`.",
+        example: "@cache(maxAge: 365.days, immutable: yes)    // ✗ `true` or `false`\non GET(\"/dl/:hex\") (hex: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 365.days, immutable: true)   // ✓\non GET(\"/dl/:hex\") (hex: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "caching",
+    },
+    Explain {
         code: "bynk.http.cache_bad_max_age",
         blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number, a string or a singular unit such as `1.hour` is refused; the units are plural: `30.seconds`, `5.minutes`, `1.hours`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
         example: "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -1766,6 +1891,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.http.cache_bad_scope",
         blurb: "`scope` says who may store a cached response: `private` means the user's own browser only, and `public` also lets a shared cache, such as a CDN, keep it. Those are the only two values, written bare rather than as strings, so `shared` or `\"public\"` is refused. Choose one, or omit `scope` for `private`. Use `public` only for a response that is the same for everyone: `bynk.http.cache_public_reads_cookies`.",
         example: "@cache(maxAge: 5.minutes, scope: shared)   // ✗ `public` or `private`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes, scope: public)   // ✓",
+        page: "/book/reference/http",
+        anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cache_duplicate",
+        blurb: "A handler has one `@cache`, which says how long the response to that route may be reused. Two would give it two freshness windows, and neither could be said to win, so the second is refused. Delete the one you do not want. A handler may likewise carry only one `@limit` (`bynk.http.limit_duplicate`), `@raw` or `@json`.",
+        example: "@cache(maxAge: 1.minutes)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "caching",
     },
@@ -1787,6 +1919,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.http.cache_public_reads_cookies",
         blurb: "`scope: public` lets a shared cache, such as a CDN, store the response and serve it to anyone who asks for the URL. A handler that reads `cookies` answers for whoever is asking, so a shared cache could replay one user's response to another. Use `scope: private`, the default, which only the user's own browser may keep, or drop the `cookies` parameter. A response that sets a cookie is always sent as private.",
         example: "type Session = { sid: Option[String] }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ the answer depends on who asks\non GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
+        page: "/book/reference/http",
+        anchor: "caching",
+    },
+    Explain {
+        code: "bynk.http.cache_unknown_arg",
+        blurb: "`@cache` takes three named arguments: `maxAge`, `scope` and `immutable`. The set is closed, so a misspelt or invented option is refused rather than ignored, which would leave the route with caching you did not ask for. A positional argument is refused too. Rename the argument or remove it. The values are checked by `bynk.http.cache_bad_max_age`, `bynk.http.cache_bad_scope` and `bynk.http.cache_bad_immutable`.",
+        example: "@cache(maxAge: 5.minutes, stale: true)   // ✗ not an argument of `@cache`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)                // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "caching",
     },
@@ -1826,11 +1965,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "cookies",
     },
     Explain {
+        code: "bynk.http.cookies_not_http",
+        blurb: "`RequestCookies` is the cookies of an HTTP request, read from its `Cookie` header. A `cron` or other handler that is not an `on http` route answers no request, so there are no cookies for it to take, and the parameter is refused. Remove it, or move the work into an HTTP handler. On an HTTP route, `cookies` is a record or `RequestCookies` and nothing else: `bynk.http.cookies_wrong_type`. `RequestQuery` has the same rule: `bynk.http.query_not_http`.",
+        example: "service ticker from cron {\n    on schedule(\"*/5 * * * *\") (cookies: RequestCookies) -> Effect[Result[(), String]] { … }   // ✗ no request\n}\n\ntype Session = { sid: Option[String] }\n\nservice ticker from http {\n    on GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓\n}",
+        page: "/book/reference/http",
+        anchor: "request-cookies",
+    },
+    Explain {
         code: "bynk.http.cookies_wrong_type",
         blurb: "`cookies` is the name the router reserves for the request's cookies. It decodes the `Cookie` header into the record you name, one field per cookie, and answers `400` when they do not fit, so the parameter must be a record type. Declare the cookies you read as a record, with an `Option` for each that may be absent. A field a cookie cannot carry is `bynk.http.cookies_field_not_stringy`.",
         example: "type Session = { sid: Option[String] }\n\non GET(\"/me\") (cookies: String) -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ not a record\n\non GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
         page: "/book/reference/http",
         anchor: "cookies",
+    },
+    Explain {
+        code: "bynk.http.cors_invalid_field",
+        blurb: "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hours`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+        example: "cors { origins: [\"https://app.example.com\"], credentials: \"yes\" }   // ✗ `true` or `false`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }    // ✓",
+        page: "/book/reference/http",
+        anchor: "cors",
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
@@ -1843,6 +1996,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.http.cors_not_http",
         blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP surface has cross-origin browser callers, so it is valid only on a `from http` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
         example: "service jobs from cron {\n    cors { origins: [\"https://app.example.com\"] }   // ✗ a schedule has no browser callers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "cors",
+    },
+    Explain {
+        code: "bynk.http.cors_unknown_field",
+        blurb: "A `cors { }` policy has four fields: `origins`, `headers`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
+        example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hours }    // ✓",
         page: "/book/reference/http",
         anchor: "cors",
     },
@@ -1909,6 +2069,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "form-bodies",
     },
     Explain {
+        code: "bynk.http.form_on_sum_route",
+        blurb: "A route `by` a sum of actors, such as `User | Visitor`, reads and verifies the request body as JSON itself. `@form` and `@multipart` have the router decode the body in another format, so the two cannot both own it and the pair is refused. Name one actor on the route, or split it into one route per actor. A route with `@form` and a second wire format is `bynk.http.body_kind_conflict`.",
+        example: "type UserId = opaque String\ntype Search = { q: String }\n\nactor User { auth = Bearer(secret = \"AUTH_JWT_SECRET\"), identity = UserId }\n\n@form\non POST(\"/search\") (body: Search) -> Effect[HttpResult[String]] by who: User | Visitor { … }   // ✗ a sum of actors\n\n@form\non POST(\"/search\") (body: Search) -> Effect[HttpResult[String]] by who: User { … }             // ✓ one actor",
+        page: "/book/reference/http",
+        anchor: "form-bodies",
+    },
+    Explain {
         code: "bynk.http.headers_wrong_type",
         blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` must be typed `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -1923,6 +2090,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "handler-form",
     },
     Explain {
+        code: "bynk.http.json_invalid_arg",
+        blurb: "`@json` has one argument, `options:`, whose value is the bare word `tagged` or `plain`: tagged writes `Option` as `{\"kind\": \"Some\", …}` (the default), and plain writes `Some(v)` as `v` and `None` as `null`. The annotation is refused with no `options`, or with any other value. Write `@json(options: plain)` or `@json(options: tagged)`. Another argument name is `bynk.http.json_unknown_arg`.",
+        example: "@json(options: compact)   // ✗ `tagged` or `plain`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)     // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "json-for-non-bynk-clients",
+    },
+    Explain {
+        code: "bynk.http.json_not_http",
+        blurb: "A `json { }` section chooses how a service's HTTP response bodies write `Option`, tagged or plain. Only a `from http` service has response bodies, so on a `cron` or other service the section is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `limits` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.limits_not_http`. For the per-route form, see `bynk.http.json_on_non_http`.",
+        example: "service jobs from cron {\n    json { options: plain }   // ✗ a schedule has no response body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    json { options: plain }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "json-for-non-bynk-clients",
+    },
+    Explain {
+        code: "bynk.http.json_on_non_http",
+        blurb: "`@json(options: …)` picks how one HTTP response body writes `Option`, tagged or plain. Only an `on http` handler answers with a response body, so the annotation is refused on a `schedule`, queue or other handler. Move it to an HTTP route, or remove it. The service-wide section, `json { }`, is limited to `from http` services too: `bynk.http.json_not_http`.",
+        example: "service jobs from cron {\n    @json(options: plain)   // ✗ a schedule has no response body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    @json(options: plain)   // ✓\n    on GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "json-for-non-bynk-clients",
+    },
+    Explain {
         code: "bynk.http.limit_bad_max_body",
         blurb: "`@limit` sets the byte ceiling above which the router answers `413`, so it must give a `maxBody`, and only the author can know the right one: it is a positive `Int` literal counting bytes. There is no size literal yet, so `\"1MB\"` or `1.mb` is refused; write the count, `1_048_576` for 1 MiB. The service-wide default is `limits { maxBody: … }`.",
         example: "@limit(maxBody: \"1MB\")    // ✗ a byte count, not a string\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_048_576)   // ✓ 1 MiB\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -1930,9 +2118,44 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "request-body-limits",
     },
     Explain {
+        code: "bynk.http.limit_bad_max_file",
+        blurb: "On a `@multipart` route, `@limit`'s `maxFile` caps the bytes of one file part and `maxParts` the number of parts. Each must be a positive `Int` literal: zero or a negative number would refuse every upload, and there is no size literal, so `\"5MB\"` is refused too. Write the count, as `5_000_000`. `limits { }` has the same rule (`bynk.http.limits_invalid_field`), and so does `maxBody` (`bynk.http.limit_bad_max_body`).",
+        example: "consumes bynk { File }\n\ntype Upload = { photo: File }\n\n@multipart\n@limit(maxBody: 5_000_000, maxFile: 0)           // ✗ a positive byte count\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 5_000_000, maxFile: 1_000_000)   // ✓\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
         code: "bynk.http.limit_on_bodyless",
         blurb: "`@limit` caps the size of a request body, so it means something only on a route that reads one: `POST`, `PUT` or `PATCH`. A `GET` or `DELETE` takes no body in Bynk, so there is nothing to cap. Move the annotation to the body-taking route, or remove it. A default for every body-taking route in a service goes in `limits { maxBody: … }`.",
         example: "@limit(maxBody: 1_000_000)   // ✗ a `GET` has no body\non GET(\"/notes\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\ntype Note = { text: String }\n\n@limit(maxBody: 1_000_000)   // ✓ a route that reads a body\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.http.limit_on_non_multipart",
+        blurb: "`maxFile` and `maxParts` cap the parts of a multipart body: the size of one file and the number of parts. A route that is not `@multipart` has no parts, so naming either in `@limit` is refused. Remove the argument and keep `maxBody`, which caps any body, or mark the route `@multipart` if it takes an upload. A `@limit` on a route with no body at all is `bynk.http.limit_on_bodyless`.",
+        example: "type Signup = { email: String }\n\n@form\n@limit(maxBody: 100_000, maxFile: 10_000)   // ✗ a form has no file parts\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form\n@limit(maxBody: 100_000)                    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.http.limit_unknown_arg",
+        blurb: "`@limit` accepts `maxBody` and, on a `@multipart` route, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented cap is refused rather than ignored, which would leave the route with a ceiling you did not set. Rename the argument or remove it. The ceilings are checked by `bynk.http.limit_bad_max_body` and `bynk.http.limit_bad_max_file`.",
+        example: "type Note = { text: String }\n\n@limit(maxBody: 1_000_000, maxSize: 10)   // ✗ not an argument of `@limit`\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_000_000)                // ✓\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.http.limits_invalid_field",
+        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody` and `maxFile` are byte counts, and `maxParts` counts parts. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the three is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
+        example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: \"1MB\" }       // ✗ a byte count, not a string\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_048_576 }   // ✓ 1 MiB\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.http.limits_not_http",
+        blurb: "A `limits { }` section sets the request-body ceilings of a service's routes, and only a `from http` service has routes that take requests, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
+        example: "type Note = { text: String }\n\nservice jobs from cron {\n    limits { maxBody: 1_000_000 }   // ✗ a schedule takes no request body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }   // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
         page: "/book/reference/http",
         anchor: "request-body-limits",
     },
@@ -2034,6 +2257,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on GET(\"/items\") () -> Effect[String] by v: Visitor { … }   // ✗ no `HttpResult`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
         page: "/book/reference/http",
         anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.http.security_not_http",
+        blurb: "A `security { }` section sets the security headers, `Strict-Transport-Security` and `X-Content-Type-Options`, stamped on a service's HTTP responses. Only a `from http` service sends them, so on a `cron` or other service the section is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `limits` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
+        example: "service jobs from cron {\n    security { hsts: 180.days }   // ✗ a schedule sends no response headers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "security-headers",
     },
     Explain {
         code: "bynk.http.unbound_path_param",
@@ -2337,6 +2567,22 @@ pub const EXPLANATIONS: &[Explain] = &[
                 }",
         page: "/book/guides/localisation/declare-a-message-bundle",
         anchor: "adding-a-locale",
+    },
+    Explain {
+        code: "bynk.observe.unknown_op",
+        blurb: "`expect Cap.op called` checks the calls recorded for one \
+                operation of a capability, so `op` must be declared by that \
+                capability. A misspelt or renamed operation would match no \
+                call, so it is refused instead of leaving the check vacuous. \
+                Use the name the capability declares. A capability the unit \
+                does not consume is `bynk.observe.not_a_seam`.",
+        example: "// demo/pay.bynk\n\
+                  capability Logger { … }\n\n\
+                  // tests/pay.test.bynk\n\
+                  expect Logger.nope called    // ✗ Logger has no `nope`\n\
+                  expect Logger.log called     // ✓",
+        page: "/book/reference/testing",
+        anchor: "observation",
     },
     Explain {
         code: "bynk.par.invalid_statement",
@@ -3039,6 +3285,17 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sum-types",
     },
     Explain {
+        code: "bynk.property.where_not_bool",
+        blurb: "A `where` clause on `for all` discards each generated input \
+                that fails it, so it must be a `Bool`. A filter of another \
+                type, such as an `Int`, cannot say whether to keep an input. \
+                Write a comparison over the bound variables.",
+        example: "for all n: Int where n + 1 {   // ✗ an `Int`, not a `Bool`\n\n\
+                  for all n: Int where n > 0 {   // ✓",
+        page: "/book/reference/testing",
+        anchor: "properties",
+    },
+    Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
         blurb: "A provider calls an agent handler, and the handler needs a capability \
                 the provider's `given` does not list. A handler's `given` is \
@@ -3595,6 +3852,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "storage-kinds-and-their-operations",
     },
     Explain {
+        code: "bynk.stub.after_type",
+        blurb: "`stub … returns <value> after <delay>` makes the stubbed call \
+                complete only once the harness clock has advanced by that \
+                delay, so the delay must be a `Duration`, such as `3.seconds`. \
+                A bare number has no unit, so it is refused rather than \
+                guessed at as milliseconds or seconds.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.read() returns 7 after 3           // ✗ no unit\n\
+                  stub Meter.read() returns 7 after 3.seconds   // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub-latency",
+    },
+    Explain {
         code: "bynk.stub.bad_sequence",
         blurb: "`returns each […]` gives one outcome per call, in order, and the \
                 last outcome repeats once the list runs out. An empty list has no \
@@ -3676,6 +3948,79 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-blocks",
     },
     Explain {
+        code: "bynk.suite.duplicate_fn",
+        blurb: "A case calls a suite helper by its bare name, so two helpers \
+                of one suite with one name would leave the call ambiguous. \
+                Give each a distinct name; the error is on the repeat. The \
+                same holds for a suite's types and constants: see \
+                `bynk.suite.duplicate_type` and `bynk.suite.duplicate_const`.",
+        example: "// tests/desk.test.bynk\n\
+                  fn twice(n: Int) -> Int { n * 2 }\n\
+                  fn twice(n: Int) -> Int { n + n }     // ✗ `twice` again\n\
+                  fn thrice(n: Int) -> Int { n * 3 }    // ✓",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.fn_effectful",
+        blurb: "A suite helper is a pure function that builds a value for a \
+                case: a request, a fixture, an expected result. Returning an \
+                `Effect` would hide a step of the test inside a helper. Build \
+                the value in the helper and run the effect in the `case`, \
+                where each step is visible with `<-`.",
+        example: "// tests/desk.test.bynk\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn start() -> Int { 1 }                            // ✓ build the value\n\
+                  let n <- local.call(start())                       // ✓ run it in the case",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.fn_method",
+        blurb: "A suite helper is a plain function its cases call by name, so \
+                it is a free `fn`, not a method (`fn Type.name`). A method \
+                belongs to its type: declare it in the target or in a commons. \
+                In a suite, take the value as an ordinary parameter.",
+        example: "// demo/desk.bynk\n\
+                  type Count = Int where NonNegative\n\n\
+                  // tests/desk.test.bynk\n\
+                  fn Count.bump(self) -> Int { 1 }       // ✗ a method\n\
+                  fn bump(count: Count) -> Int { 1 }     // ✓ a free function",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.fn_name_clash",
+        blurb: "A suite helper is called by bare name from the suite's cases, \
+                which also see the target's declarations (services and agents \
+                included) and those of the commons it `uses`. A helper with \
+                one of those names would silently change which function a \
+                call reaches, so it is refused instead of shadowing. A \
+                fixture of the suite counts too, and `deps` and names \
+                beginning `__` are reserved for the runner. Rename the helper. A type or constant clashing is \
+                `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`.",
+        example: "// demo/desk.bynk\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\n\
+                  // tests/desk.test.bynk\n\
+                  fn double(n: Int) -> Int { n * 3 }    // ✗ the target has a `double`\n\
+                  fn triple(n: Int) -> Int { n * 3 }    // ✓",
+        page: "/book/reference/testing",
+        anchor: "helpers",
+    },
+    Explain {
+        code: "bynk.suite.type_generic",
+        blurb: "A suite's `type` is a plain shape that only its tests care \
+                about, such as a row to read back with `select[T]`, so it \
+                takes no type parameters. If you need a generic type, declare \
+                it in the target or in a commons, where the suite can use it. \
+                Otherwise write the concrete type.",
+        example: "// tests/desk.test.bynk\n\
+                  type Box[T] = { v: T }       // ✗ a suite type is not generic\n\
+                  type IntBox = { v: Int }     // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-types-consts",
+    },
+    Explain {
         code: "bynk.suite.unknown_target",
         blurb: "A `suite` names the commons or context it tests, by its full \
                 dotted name, and that unit must be declared in the project. A name \
@@ -3721,6 +4066,55 @@ pub const EXPLANATIONS: &[Explain] = &[
                   advance Clock by 5.minutes   // ✓",
         page: "/book/reference/testing",
         anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.advance_outside_case",
+        blurb: "`advance Clock by …` moves the harness clock, which only a \
+                `case` owns. A `property` runs its body once per generated \
+                input and has no clock of its own, and non-test code reads \
+                real time. Put the time-dependent step in a `case`. \
+                `bynk.test.advance_not_clock` and \
+                `bynk.test.advance_not_duration` cover the other ways to get \
+                `advance` wrong.",
+        example: "property \"time moves on\" {\n\
+                  \x20\x20for all n: Int {\n\
+                  \x20\x20\x20\x20advance Clock by 5.minutes    // ✗ a property has no clock\n\
+                  \x20\x20}\n\
+                  }\n\n\
+                  case \"time moves on\" {\n\
+                  \x20\x20advance Clock by 5.minutes      // ✓\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.event_not_subscribed",
+        blurb: "`svc.event(e)` delivers an event through the handler the \
+                service subscribes with, so it takes the one event named in \
+                the service's `from Events(E)` header. Delivering a different \
+                event would test a path the service does not have. Pass the \
+                subscribed event, or test the service that does subscribe to \
+                the one you meant.",
+        example: "// shop/ledger.bynk\n\
+                  service OnPlaced from Events(Placed) { … }\n\n\
+                  // tests/ledger.test.bynk\n\
+                  let _ <- OnPlaced.event(Cancelled { id: \"o1\" })   // ✗ it subscribes to `Placed`\n\
+                  let _ <- OnPlaced.event(Placed { id: \"o1\" })      // ✓",
+        page: "/book/reference/testing",
+        anchor: "event-address",
+    },
+    Explain {
+        code: "bynk.test.principal_required",
+        blurb: "A handler declared `by u: User` runs as a verified actor, and \
+                a `case` has no real caller, so it must say who is calling \
+                with a call-site `by`. The same applies to a handler guarded \
+                by an actor sum: name one of its members. Append `by \
+                <Actor>(<identity>)` to the call.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/items\")                  // ✗ who is calling?\n\
+                  let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
     },
     Explain {
         code: "bynk.test.service_bad_address",
@@ -3786,6 +4180,56 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
         page: "/book/reference/testing",
         anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.snapshot_duplicate_name",
+        blurb: "A snapshot is stored under its case and its name, so each \
+                `matches snapshot` in one case needs a name of its own. Two \
+                with the same name would compare against, and update, the same \
+                stored value. Give the repeat a distinct name.",
+        example: "expect read(\"a\") matches snapshot \"delivery\"\n\
+                  expect read(\"b\") matches snapshot \"delivery\"   // ✗ name already taken\n\
+                  expect read(\"b\") matches snapshot \"second\"     // ✓",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.snapshot_name_not_literal",
+        blurb: "A snapshot is stored under its name, so the name must be a \
+                string literal: the compiler then knows every snapshot a suite \
+                takes. A variable or other expression is refused. Write the \
+                name as a literal.",
+        example: "expect read(\"a\") matches snapshot name        // ✗ not a string literal\n\
+                  expect read(\"a\") matches snapshot \"first\"     // ✓",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.snapshot_not_codable",
+        blurb: "A snapshot stores the value as the JSON text `Json.encode` \
+                produces, so the value must be `Codable`: base types, named \
+                types and the built-in containers over them. A `Stream`, a \
+                function, an `Effect` or `()` has no such text. Snapshot a \
+                `Codable` value instead, such as a list.",
+        example: "expect Stream.of([1, 2]) matches snapshot \"items\"   // ✗ a `Stream`\n\
+                  expect [1, 2] matches snapshot \"items\"              // ✓ a `List[Int]`",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.unknown_actor",
+        blurb: "A call-site `by <Actor>` makes the case act as that actor, so \
+                it must name an `actor` the target context declares, or one of \
+                the prelude actors such as `Visitor` and `Caller`. Any other \
+                name, often a misspelling, has no identity to supply. Correct \
+                the name or declare the actor.",
+        example: "// demo/api.bynk\n\
+                  actor User { auth = Bearer(secret = \"S\"), identity = UserId }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/items\") by Ghost(\"x\")   // ✗ no actor `Ghost`\n\
+                  let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
     },
     Explain {
         code: "bynk.types.argument_mismatch",
@@ -8183,9 +8627,44 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "Field access on a value that is not a record.",
         &["field_access"],
     ),
+    dg(
+        "bynk.types.field_annotation_unknown",
+        "A record field carries an annotation other than `@name(\"…\")`.",
+        &["record_field"],
+    ),
     d(
         "bynk.types.field_default_on_variant",
         "A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given.",
+    ),
+    dg(
+        "bynk.types.field_name_bad_arg",
+        "A field's `@name` does not take exactly one string literal.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_case_conflict",
+        "Two fields of a `cookies` or `query` record have wire names that differ only in case.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_duplicate",
+        "A field has more than one `@name`, or two fields of a request record read the same wire name.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_invalid",
+        "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name).",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_not_request_record",
+        "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_record_not_boundary",
+        "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument.",
+        &["record_field"],
     ),
     dg(
         "bynk.types.field_refinement_not_base",
@@ -8200,6 +8679,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.file_at_boundary",
         "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
+    ),
+    d(
+        "bynk.types.form_uncodable",
+        "`Form.decode` or `Form.encode` names a type that is not a record of form fields (a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`).",
     ),
     dg(
         "bynk.types.function_at_boundary",

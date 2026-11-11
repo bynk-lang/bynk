@@ -415,6 +415,7 @@ mod tests {
                 "bynk.cloudflare.Version",
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
+                "bynk.cloudflare.Postgres",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -432,6 +433,10 @@ mod tests {
         // #3302: the capability and its operation; its records are stable.
         assert!(p.blocks("bynk.cloudflare.Email.send"));
         assert!(!p.blocks("bynk.cloudflare.Message"));
+        // Hyperdrive H1 (#3318): the capability and its operations; its records
+        // are stable.
+        assert!(p.blocks("bynk.cloudflare.Postgres.all"));
+        assert!(!p.blocks("bynk.cloudflare.PgValue"));
         // K5a (#2586): new operations of stable capabilities, alone.
         assert!(p.blocks("bynk.Fetch.sendWith"));
         assert!(!p.blocks("bynk.Fetch.send"));

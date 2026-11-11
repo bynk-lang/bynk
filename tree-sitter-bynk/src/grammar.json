@@ -1535,6 +1535,17 @@
       "type": "SEQ",
       "members": [
         {
+          "type": "REPEAT",
+          "content": {
+            "type": "FIELD",
+            "name": "annotation",
+            "content": {
+              "type": "SYMBOL",
+              "name": "store_annotation"
+            }
+          }
+        },
+        {
           "type": "FIELD",
           "name": "name",
           "content": {

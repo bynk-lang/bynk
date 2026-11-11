@@ -8,14 +8,15 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
+import { pgExecute, type PgExecute, type PgOutcome, type PgParam } from "./postgres.ts";
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, corsPreflightResponse, edgeCacheGuard, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, corsPreflightResponse, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerVersionMetadata } from "./storage.ts";
 
 export {
   AGENT_WIRE_PASS as __AGENT_WIRE_PASS,
@@ -37,6 +38,7 @@ export {
   wireSet as __wireSet,
   WorkersConnection as __WorkersConnection,
   handleEmail as __handleEmail,
+  pgExecute as __pgExecute,
   acceptHibernatableConnection as __acceptHibernatableConnection,
   applyCache as __applyCache,
   applyCors as __applyCors,
@@ -70,6 +72,7 @@ export {
   makeIntegrationAnalytics as __makeIntegrationAnalytics,
   makeIntegrationD1 as __makeIntegrationD1,
   makeIntegrationEmail as __makeIntegrationEmail,
+  makeIntegrationHyperdrive as __makeIntegrationHyperdrive,
   makeIntegrationKv as __makeIntegrationKv,
   makeIntegrationQueue as __makeIntegrationQueue,
   makeIntegrationR2 as __makeIntegrationR2,
@@ -88,6 +91,7 @@ export {
   then as __bynkThen,
   requestHeaders as __requestHeaders,
   formMediaTypeMatches as __formMediaTypeMatches,
+  formDecode as __formDecode,
   formObject as __formObject,
   formString as __formString,
   cookieObject as __cookieObject,
@@ -127,6 +131,9 @@ export {
 };
 export type {
   InboundMessage as __InboundMessage,
+  PgExecute as __PgExecute,
+  PgOutcome as __PgOutcome,
+  PgParam as __PgParam,
   SenderIdentity as __SenderIdentity,
   AgentWire as __AgentWire,
   BoundaryError as __BoundaryError,
@@ -136,6 +143,7 @@ export type {
   D1Database as __D1Database,
   DurableObjectState as __DurableObjectState,
   JsonValue as __JsonValue,
+  Hyperdrive as __Hyperdrive,
   KVNamespace as __KVNamespace,
   QueueProducer as __QueueProducer,
   R2Bucket as __R2Bucket,

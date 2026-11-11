@@ -981,6 +981,9 @@ pub(super) fn emit_test_module(
     if runtime_use.query_string() {
         append_missing_bindings(&mut runtime_names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
     }
+    if runtime_use.form_codec() {
+        append_missing_bindings(&mut runtime_names, emitter::FORM_CODEC_RUNTIME_IMPORTS);
+    }
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut runtime_names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }

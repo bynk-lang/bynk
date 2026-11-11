@@ -780,6 +780,9 @@ pub(super) fn emit_integration_module(
     if runtime_use.query_string() {
         append_missing_bindings(&mut runtime_names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
     }
+    if runtime_use.form_codec() {
+        append_missing_bindings(&mut runtime_names, emitter::FORM_CODEC_RUNTIME_IMPORTS);
+    }
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut runtime_names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
@@ -860,7 +863,7 @@ pub(super) fn emit_integration_module(
 /// D1, Version metadata), each once, in a fixed order. `binds` answers whether
 /// any participant has a binding of a kind.
 fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 9] = [
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 10] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",
@@ -892,6 +895,10 @@ fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool
         (
             |s| matches!(s, BindingSource::Email { .. }),
             "__makeIntegrationEmail",
+        ),
+        (
+            |s| matches!(s, BindingSource::Postgres { .. }),
+            "__makeIntegrationHyperdrive",
         ),
         (
             |s| matches!(s, BindingSource::Singleton { .. }),

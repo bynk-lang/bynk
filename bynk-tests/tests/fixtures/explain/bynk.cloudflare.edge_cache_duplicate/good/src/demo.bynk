@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+service probe {
+    on call() -> Effect[Bool] given Edge {
+        Edge.purge(["/a"])
+    }
+}

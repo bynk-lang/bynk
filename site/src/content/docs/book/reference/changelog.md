@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.554**.
+written against **v0.557**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,10 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.557.0** | A record field may carry `@name("…")` before it, naming the key the field has on a request where that is not an identifier; this slice adds the syntax and its checks, and the request readers follow (#3343, slice 1) |
+| **v0.556.0** | An experimental `Postgres` instance kind in `bynk.cloudflare` reaches an existing Postgres database through Hyperdrive over postgres.js, with `all`, `first` and `run`, typed `PgValue` parameters and `PgError` outcomes |
+| **v0.555.1** | `bynk explain` explains twenty more codes under `contract`, `fixture`, `observe`, `property`, `stub`, `suite` and `test` (Refs #3163) |
+| **v0.555.0** | `Form.decode[T](s)` and `Form.encode(v)` expose the `@form` mapping as a codec, so a `@raw` handler, a webhook or a test reads and writes form text with `DecodeError`s rooted at `$` (#3276, slice 3; closes #3276) |
 | **v0.554.2** | `bynk explain` covers twenty more codes under the resolve, uses, exports and generics prefixes |
 | **v0.554.1** | `bynk explain` covers 26 more `parse` and `lex` diagnostics, each with a compiled bad and good example |
 | **v0.554.0** | A handler reads a `__Host-`/`__Secure-` cookie through a raw `cookies: RequestCookies` view, and `examples/sessions` sets and reads `__Host-sid` (#3277, closing slice) |

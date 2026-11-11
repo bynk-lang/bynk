@@ -64,6 +64,7 @@
     - [Call a Worker outside the project](guides/effects-and-capabilities/call-a-foreign-worker.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
     - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
+    - [Connect an existing Postgres database](guides/effects-and-capabilities/connect-an-existing-postgres-database.md)
     - [Apply webhook events that arrive late, twice or out of order](guides/effects-and-capabilities/apply-webhook-events-out-of-order.md)
     - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
     - [Send transactional email](guides/effects-and-capabilities/send-transactional-email.md)

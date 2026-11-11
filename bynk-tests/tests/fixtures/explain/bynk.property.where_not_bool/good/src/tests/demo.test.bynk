@@ -1,0 +1,7 @@
+suite demo {
+  property "doubling" {
+    for all n: Int where n > 0 {
+      expect double(n) == n + n
+    }
+  }
+}

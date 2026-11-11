@@ -381,6 +381,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
+| **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -880,6 +881,110 @@ answers a deterministic id (`"test-message-1"`, then `-2`), and faults on the sa
 limits and headers. `stub Mail.send(_) returns Err(SenderNotVerified)` forces an
 error. At `integration` and `system` each Worker binds its own outbox. `Email` is
 experimental: list `"bynk.cloudflare.Email"` under `[unstable] allow`.
+
+### Postgres databases: `Postgres`
+
+`Postgres` queries an existing Postgres database through
+[Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/), over
+[postgres.js](https://github.com/porsager/postgres). Each database is a named
+instance that takes no options, and a bare `given Postgres` is refused
+(`bynk.capability.instance_only`). It is **experimental**: list
+`"bynk.cloudflare.Postgres"` under `[unstable] allow`. The step-by-step version
+is [Connect an existing Postgres database](/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/).
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgValue }
+
+capability Main = Postgres
+
+service orders from http {
+	on GET("/orders/:id") (id: Int) -> Effect[HttpResult[String]] by Visitor given Main {
+		let row <- Main.first("select id, name from orders where id = $1", [PgInteger(id)])
+		match row {
+			Ok(Some(json)) => Ok(json)
+			Ok(None) => Ok("not found")
+			Err(PgConstraint(_, _)) => Ok("conflict")
+			Err(_) => Ok("failed")
+		}
+	}
+}
+```
+
+`Main` binds as `env.HYPERDRIVE_MAIN`, a `[[hyperdrive]]` entry whose `id` is a
+placeholder. **`bynk deploy` does not create the Hyperdrive configuration yet**:
+make one with `wrangler hyperdrive create` and write its id into the generated
+`wrangler.toml`, and for `bynk dev` give it a `localConnectionString` (or set
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_MAIN`). Provisioning and
+`bynk dev` wiring are the next slice.
+
+**The statement.** The SQL is a string literal (or a `String` constant bound to
+one), as for [`D1`](#sql-databases-d1), so data reaches a statement only as a
+parameter: placeholders are `$1`, `$2`, …, and `params` binds them in order.
+Bynk does not check the statement or the parameter count: Postgres does, and
+answers a `PgError`.
+
+| `PgValue` | Binds |
+|---|---|
+| `PgNull` | `NULL` |
+| `PgInteger(Int)` · `PgReal(Float)` | a number |
+| `PgText(String)` | text |
+| `PgBytea(Bytes)` | `bytea` |
+| `PgBoolean(Bool)` | `boolean` |
+| `PgTimestamp(Instant)` | a `timestamptz` |
+| `PgJson(String)` · `PgNumeric(String)` | JSON text and a decimal as text, which the server types from the column or a cast (`$1::jsonb`, `$2::numeric`) |
+
+The variants carry the `Pg` prefix because a bare `Null`, `Integer`, `Real`,
+`Text` or `Boolean` would resolve to `SqlValue`'s. `PgError` is likewise
+`PgConstraint`, `PgSerialization`, `PgConnection` and `PgFailed`, since
+`Constraint` and `Failed` are `SqlError`'s.
+
+**The rows.** `all` gives every row as a JSON array of objects keyed by column
+name, `first` the first row as one object or `None`, for `Json.decode`. The rules
+are fixed: `int8` and `numeric` arrive as **strings** (so nothing past 2^53 is
+lost), `timestamptz` as ISO-8601 text, `bytea` as base64 (a `Bytes` field decodes
+it), `json` and `jsonb` nested as JSON, and a `boolean` as `true` or `false`
+(`D1`'s `0` and `1` do not apply). `first` takes the first row of the statement
+as written; add `limit 1` when you want the database to stop early. `run` reports
+`PgRun { rowCount }`: the rows the statement inserted, updated or deleted, or a
+`SELECT` returned.
+
+**The errors.** Every operation answers a `PgError` rather than faulting:
+
+| Variant | When |
+|---|---|
+| `PgConstraint(sqlstate, message)` | an integrity-constraint violation, SQLSTATE class `23`: unique, not-null, check, foreign key |
+| `PgSerialization(message)` | a serialization failure, `40001`, which a retry may clear |
+| `PgConnection(message)` | the connection could not be made or was lost; the message is the driver's code, never the host |
+| `PgFailed(sqlstate, message)` | anything else, with its SQLSTATE (empty when the driver gave none) |
+
+Postgres has further failure kinds, so `PgError` is extensible and a `match`
+over it needs a wildcard. A missing binding is a deployment mistake and faults.
+
+**Connections.** Each statement opens its own connection from
+`env.HYPERDRIVE_MAIN.connectionString`, runs with `{ prepare: true }` (so
+Hyperdrive can cache it), and closes it before it answers; a Worker may not carry
+a socket between requests, and Hyperdrive pools the connections to your database.
+Cloudflare allows **six simultaneous connections per Worker invocation**, so a
+[`par`](/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/)
+over more than six statements waits for its turn. The connection string is a
+secret: it is never logged and never appears in an error.
+
+**A Worker with a `Postgres` instance** gets `postgres` (pinned to an exact
+version) in `out/package.json`, and a `first-party` `[[npm]]` row in `bynk.lock`
+that needs no approval. It needs `nodejs_compat`, which the compatibility date
+the toolchain emits already provides. `bynk dev` and `bynk deploy` stop and name
+the package when it is not installed in the build directory.
+
+**Tests.** There is no in-memory Postgres: a test never reaches a database, so
+every operation of an instance **faults until the case stubs it**, as a
+`Service` does: `stub Main.run(_, _) returns Ok(PgRun { rowCount: 1 })`, or
+`returns Err(PgConstraint("23505", "duplicate key"))` to force an error. At
+`integration`, each Worker's `env.HYPERDRIVE_MAIN` faults on its connection
+string until the case stubs the instance. `Postgres` has no `system`-tier
+behaviour, where a stub has no effect.
+
+`transaction` and the typed `select`/`firstAs` are not part of this surface yet.
 
 ### SQL databases: `D1`
 

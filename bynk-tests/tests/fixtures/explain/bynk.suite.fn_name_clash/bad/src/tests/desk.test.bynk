@@ -1,0 +1,7 @@
+suite demo.desk {
+  fn double(n: Int) -> Int { n * 3 }
+
+  case "a clash" {
+    expect double(2) == 6
+  }
+}

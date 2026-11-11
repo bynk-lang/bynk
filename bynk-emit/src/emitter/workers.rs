@@ -455,7 +455,7 @@ pub fn emit_worker_compose(
     // binding list the members come from, so a binding can never be typed
     // by a name this file does not import or define.
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    runtime_imports.extend(platform_binding_type_imports(bindings));
+    runtime_imports.extend(platform_binding_imports(bindings));
     runtime_imports.push("type __ServiceBinding".to_string());
     runtime_imports.extend(email_identity_import(table));
     if has_bearer || has_sum || has_oidc {
@@ -893,6 +893,12 @@ pub fn emit_worker_compose(
         append_missing_bindings(
             &mut runtime_imports,
             crate::emitter::QUERY_STRING_RUNTIME_IMPORTS,
+        );
+    }
+    if runtime_use.form_codec() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::FORM_CODEC_RUNTIME_IMPORTS,
         );
     }
     if runtime_use.multipart_form() {
@@ -2827,10 +2833,10 @@ fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
 /// #1944: the runtime types the `Env` members of `bindings` name for the
 /// platform resources (KV, R2, rate limiters, queue producers, Analytics
 /// datasets, D1, Version metadata), each once, in a fixed order, as
-/// `type __X` import entries.
-fn platform_binding_type_imports(bindings: &[WorkerBinding]) -> Vec<String> {
+/// `type __X` import entries, then the driver a `Postgres` instance is given.
+fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 9] = [
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 10] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__KVNamespace",
@@ -2861,15 +2867,26 @@ fn platform_binding_type_imports(bindings: &[WorkerBinding]) -> Vec<String> {
         ),
         (|s| matches!(s, BindingSource::Email { .. }), "__SendEmail"),
         (
+            |s| matches!(s, BindingSource::Postgres { .. }),
+            "__Hyperdrive",
+        ),
+        (
             |s| matches!(s, BindingSource::Singleton { .. }),
             "__WorkerVersionMetadata",
         ),
     ];
-    kinds
+    let mut imports: Vec<String> = kinds
         .into_iter()
         .filter(|(kind, _)| binds(*kind))
         .map(|(_, ty)| format!("type {ty}"))
-        .collect()
+        .collect();
+    // Hyperdrive H1 (#3318): a Worker with a `Postgres` instance hands the
+    // runtime's driver to the binding, so `postgres` is in the build of exactly
+    // the Workers that have one.
+    if binds(|s| matches!(s, BindingSource::Postgres { .. })) {
+        imports.push("__pgExecute".to_string());
+    }
+    imports
 }
 
 #[cfg(test)]

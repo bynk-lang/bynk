@@ -1,4 +1,5 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
+import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
 import type { HttpResult } from "./httpresult.ts";
 
@@ -1063,6 +1064,27 @@ export function formObject(
   fields: readonly QueryField[],
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   return fieldsObject(new URLSearchParams(text), fields, "body", true);
+}
+
+/** #3276 (decision G): `Form.decode[T]` — the text of a form body read into the
+ *  JSON object `T`'s codec decodes, by exactly the rules the router applies to a
+ *  `@form` body. A failure is a `DecodeError` whose `path` is rooted at `$` (as
+ *  `Json.decode`'s is), where the router's would be rooted at `body`. */
+export function formDecode(
+  text: string,
+  fields: readonly QueryField[],
+): Result<JsonValue, DecodeError> {
+  const r = formObject(text, fields);
+  if (r.ok) return { tag: "Ok", value: r.value } as Result<JsonValue, DecodeError>;
+  const e = r.error;
+  const path = e.kind === "StructuralMismatch" ? "$" + e.path.slice("body".length) : "$";
+  const message =
+    e.kind === "StructuralMismatch"
+      ? "expected " + e.expected + ", got " + String(e.actual)
+      : e.kind === "RefinementViolation"
+        ? e.violation.message
+        : e.details;
+  return { tag: "Err", error: { kind: e.kind, path, message } } as Result<JsonValue, DecodeError>;
 }
 
 function fieldsObject(

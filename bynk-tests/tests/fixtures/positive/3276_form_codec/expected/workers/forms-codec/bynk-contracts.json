@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "readForm": "ac1390cb94edf4a0",
+    "roundTrip": "d0ef05f913ce88e2",
+    "writeForm": "47e4ee79c4ad4e47"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "readForm": "Svc(\"readForm\",P(\"text\",B(\"String\")),Ret(B(\"String\")))",
+    "roundTrip": "Svc(\"roundTrip\",P(\"text\",B(\"String\")),Ret(B(\"Bool\")))",
+    "writeForm": "Svc(\"writeForm\",P(\"email\",Rf(\"Email\",\"String\",\"Matches(\\\"^[^@]+@[^@]+$\\\")\")),P(\"tags\",L(B(\"String\"))),Ret(B(\"String\")))"
+  }
+}

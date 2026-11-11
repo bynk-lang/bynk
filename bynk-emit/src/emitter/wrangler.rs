@@ -397,12 +397,8 @@ pub fn emit_wrangler_toml(
             BindingSource::StoredSecret { store, secret, .. } => {
                 stored_secret_block(name, store, secret)
             }
-            BindingSource::Email {
-                to,
-                allowed_recipients,
-                allowed_senders,
-                ..
-            } => email_block(name, to.as_deref(), allowed_recipients, allowed_senders),
+            BindingSource::Postgres { .. } => hyperdrive_block(name, &binding.name),
+            BindingSource::Email { .. } => email_block(name, &binding.source),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -612,6 +608,14 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::StoredSecret { .. }))
             .cloned(),
     );
+    // Hyperdrive H1 (#3318): the Postgres bindings, after the Secrets Store
+    // secrets.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::Postgres { .. }))
+            .cloned(),
+    );
     // #3302: the outbound email bindings, after the Secrets Store secrets.
     bindings.extend(
         instances
@@ -683,16 +687,40 @@ fn stored_secret_block(binding: TomlValue, store: &str, secret: &str) -> TomlBlo
     )
 }
 
+/// Hyperdrive H1 (#3318): the `[[hyperdrive]]` entry of a `Postgres` instance.
+/// The configuration is made outside the build until H2
+/// (`wrangler hyperdrive create`), so its `id` is a placeholder to replace, as
+/// D1's is until a deploy fills it. `bynk dev` needs `localConnectionString` or
+/// `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>`.
+fn hyperdrive_block(name: TomlValue, binding: &str) -> TomlBlock {
+    TomlBlock::array_table(
+        "hyperdrive",
+        vec![
+            TomlEntry::kv("binding", name),
+            TomlEntry::with_comment(
+                "id",
+                TomlValue::str(hyperdrive_id_placeholder(binding)),
+                "replace with the id from `wrangler hyperdrive create`",
+            ),
+        ],
+    )
+}
+
 /// #3302: the `[[send_email]]` entry of an `Email` instance. Its key is `name`,
 /// not `binding` (as `[[ratelimits]]`'s is), and each restriction is written
 /// only when the declaration carries it: `destination_address` pins every
 /// message to one recipient, and the two lists limit recipients and senders.
-fn email_block(
-    name: TomlValue,
-    to: Option<&str>,
-    allowed_recipients: &[String],
-    allowed_senders: &[String],
-) -> TomlBlock {
+fn email_block(name: TomlValue, source: &BindingSource) -> TomlBlock {
+    let BindingSource::Email {
+        to,
+        allowed_recipients,
+        allowed_senders,
+        ..
+    } = source
+    else {
+        unreachable!("`email_block` takes an `Email` binding")
+    };
+    let to = to.as_deref();
     let list = |items: &[String]| TomlValue::Array(items.iter().map(TomlValue::str).collect());
     let mut entries = vec![TomlEntry::kv("name", name)];
     if let Some(to) = to {
@@ -730,6 +758,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Email { .. } => "__SendEmail",
+        BindingSource::Postgres { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             other => unreachable!("singleton `{other}` has no `env` type"),
@@ -940,6 +969,12 @@ pub use bynk_check::d1_migrations::d1_database_name;
 /// P4a (#2602): the placeholder `database_id` of D1 binding `binding`, which
 /// `bynk deploy` replaces with the id it records in the ledger.
 pub fn d1_database_id_placeholder(binding: &str) -> String {
+    format!("<{binding}_ID>")
+}
+
+/// Hyperdrive H1 (#3318): the placeholder `id` of Hyperdrive binding `binding`,
+/// which the author replaces with a configuration id until H2 provisions one.
+pub fn hyperdrive_id_placeholder(binding: &str) -> String {
     format!("<{binding}_ID>")
 }
 

@@ -1,0 +1,33 @@
+context shop.orders
+
+// Hyperdrive H1 (#3318): a `Postgres` instance is one `[[hyperdrive]]` binding,
+// bound as `HYPERDRIVE_<NAME>`, whose `id` is a placeholder until the
+// configuration exists. A Worker with one imports the runtime's driver and hands
+// it to the binding, so `postgres` is in its build. The SQL is a literal, its
+// values are `$n` parameters, and every operation answers a `PgError`.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgValue, PgRun }
+
+capability Main = Postgres
+capability Reports = Postgres
+
+service api from http {
+	on POST("/orders/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("insert into orders (name, qty) values ($1, $2)", [PgText(name), PgInteger(1)])
+		match ran {
+			Ok(r) => Ok("inserted")
+			Err(PgConstraint(_, _)) => Ok("duplicate")
+			Err(_) => Ok("failed")
+		}
+	}
+
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor given Main, Reports {
+		let rows <- Main.all("select id, name from orders where qty > $1", [PgInteger(0)])
+		let one <- Reports.first("select count(*)::text as n from orders", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(_) => Ok("failed")
+		}
+	}
+}

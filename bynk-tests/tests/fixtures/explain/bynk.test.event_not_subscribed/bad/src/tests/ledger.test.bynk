@@ -1,0 +1,5 @@
+suite shop.ledger {
+  case "a cancellation" {
+    let _ <- OnPlaced.event(Cancelled { id: "o1" })
+  }
+}

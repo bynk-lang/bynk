@@ -1,0 +1,8 @@
+context jobs
+
+service jobs from cron {
+    @json(options: plain)
+    on schedule("0 0 * * *") () -> Effect[Result[(), String]] {
+        Effect.pure(Ok(()))
+    }
+}

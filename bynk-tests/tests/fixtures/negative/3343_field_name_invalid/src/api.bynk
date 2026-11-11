@@ -1,0 +1,11 @@
+context api
+
+type Session = {
+  @name("") sid: Option[String],
+}
+
+service api from http {
+  on GET("/me") (query: Session) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

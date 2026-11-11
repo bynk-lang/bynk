@@ -1206,7 +1206,7 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 return;
             };
             // #3214: `Yaml.decode[T]` decodes through the same codec helpers.
-            if *ns != JSON && *ns != YAML {
+            if *ns != JSON && *ns != YAML && *ns != FORM {
                 return;
             }
             match op.as_str() {
@@ -4250,6 +4250,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.form_codec() {
+            parts.extend(
+                FORM_CODEC_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.cookie_string() {
             parts.extend(
                 COOKIE_STRING_RUNTIME_IMPORTS
@@ -4417,6 +4424,11 @@ fn write_header_single(
         } else {
             ""
         };
+        let form_codec_imports = if runtime_use.form_codec() {
+            FORM_CODEC_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         let cookie_string_imports = if runtime_use.cookie_string() {
             COOKIE_STRING_RUNTIME_IMPORTS
         } else {
@@ -4457,7 +4469,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{form_codec_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4486,6 +4498,9 @@ pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
 
 /// #3276: the `FormData` a system driver sends a typed `@multipart` body as.
 pub const MULTIPART_FORM_RUNTIME_IMPORTS: &str = ", __multipartForm";
+
+/// #3276: the form codec behind `Form.decode[T]` / `Form.encode(v)`.
+pub const FORM_CODEC_RUNTIME_IMPORTS: &str = ", __formDecode, __formString";
 
 /// #3277: the `Cookie` header a system driver sends a typed `cookies` record as.
 pub const COOKIE_STRING_RUNTIME_IMPORTS: &str = ", __cookieString";
