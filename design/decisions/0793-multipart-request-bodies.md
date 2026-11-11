@@ -1,13 +1,6 @@
----
-level: minor
-changelog: `@multipart` decodes a `multipart/form-data` request body into a typed record with `File` parts, under `maxBody`, `maxFile` and `maxParts` caps; `BoundaryRejection` gains `MalformedForm` (#3276, slice 2)
-breaking: `BoundaryRejection` gains `MalformedForm(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `MalformedForm(_)`, or a `_` arm.
-probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage, explained_codes
----
+# 0793 — A `@multipart` handler annotation decodes a multipart body into a record with `File` parts
 
-## ADR: multipart-request-bodies
-title: A `@multipart` handler annotation decodes a multipart body into a record with `File` parts
-summary: The file part type, the caps and buffering, the parser, and the MalformedForm rejection that breaks exhaustive matches
+- **Status:** Accepted (v0.542)
 
 **Context.** `@form` (ADR form-request-bodies) decodes a urlencoded form; a browser file upload still had to be hand-parsed from `Bytes`. This is slice 2 of #3276 (#3180 stays open for streaming a request body).
 
