@@ -3,7 +3,7 @@ context demo
 consumes bynk { Clock }
 
 service probe {
-  on call() -> Effect[Instant] given Clock {
-    Clock.now()
-  }
+    on call() -> Effect[Instant] given Clock {
+        Clock.now()
+    }
 }

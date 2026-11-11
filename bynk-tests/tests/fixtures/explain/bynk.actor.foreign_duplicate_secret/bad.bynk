@@ -4,7 +4,7 @@ actor Legacy { auth = Foreign(secret = "SHARED_KEY") }
 actor Ledger { auth = Foreign(secret = "SHARED_KEY") }
 
 service ping {
-  on call(n: Int) -> Effect[Int] by who: Legacy | Ledger {
-    n
-  }
+    on call(n: Int) -> Effect[Int] by who: Legacy | Ledger {
+        n
+    }
 }

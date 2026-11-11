@@ -1,11 +1,11 @@
 context demo
 
 capability Store {
-  fn load(id: String) -> Effect[Option[String]]
+    fn load(id: String) -> Effect[Option[String]]
 }
 
 service probe {
-  on call() -> Effect[Int] {
-    Effect.pure(1)
-  }
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
 }

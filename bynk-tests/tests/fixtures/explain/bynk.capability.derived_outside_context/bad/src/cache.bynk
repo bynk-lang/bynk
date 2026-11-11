@@ -1,5 +1,5 @@
 adapter cache {
-  binding "./cache.binding.ts"
-  consumes bynk.cloudflare { Kv }
-  capability Sessions = Kv
+    binding "./cache.binding.ts"
+    consumes bynk.cloudflare { Kv }
+    capability Sessions = Kv
 }

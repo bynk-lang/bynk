@@ -1,9 +1,9 @@
 adapter tokens {
-  binding "./tokens.binding.ts"
+    binding "./tokens.binding.ts"
 
-  capability Jwt {
-    fn sign(secret: String) -> Effect[String]
-  }
+    capability Jwt {
+        fn sign(secret: String) -> Effect[String]
+    }
 
-  provides Jwt = JoseJwt
+    provides Jwt = JoseJwt
 }

@@ -9,7 +9,7 @@ actor User { auth = Bearer(secret = "JWT_KEY"), identity = UserId }
 actor Workload { auth = Oidc(issuer = "https://i.test", audience = "a", jwks = "https://i.test/jwks", trustFrom = "OIDC_TRUST"), identity = WorkloadId }
 
 service api from http {
-  on GET("/x") () -> Effect[HttpResult[()]] by w: Workload {
-    NoContent
-  }
+    on GET("/x") () -> Effect[HttpResult[()]] by w: Workload {
+        NoContent
+    }
 }

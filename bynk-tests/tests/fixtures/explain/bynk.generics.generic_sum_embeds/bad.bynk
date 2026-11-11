@@ -1,7 +1,8 @@
 commons demo
 
-type Inner = | A | B
+type PayError = enum { Declined }
 
-type Wrap[T] =
-  | Held(value: T)
-  embeds Inner as Inner
+type Failure[T] =
+    | Payment(reason: PayError)
+    | Other(value: T)
+    embeds PayError as Payment

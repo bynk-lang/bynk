@@ -3,11 +3,11 @@ context payment
 exports capability { Gateway }
 
 capability Gateway {
-  fn ping() -> Effect[()]
+    fn ping() -> Effect[()]
 }
 
 provides Gateway = LocalGateway {
-  fn ping() -> Effect[()] {
-    ()
-  }
+    fn ping() -> Effect[()] {
+        ()
+    }
 }

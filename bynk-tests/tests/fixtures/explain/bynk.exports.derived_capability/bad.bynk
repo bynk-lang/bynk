@@ -7,7 +7,7 @@ exports capability { Sessions }
 capability Sessions = Kv
 
 service probe {
-  on call() -> Effect[Int] {
-    Effect.pure(1)
-  }
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
 }

@@ -1,6 +1,6 @@
 suite demo {
-  case "a box" {
-    let b = Box { v: 1 }
-    expect b.v == 1
-  }
+    case "a box" {
+        let b = Box { v: 1 }
+        expect b.v == 1
+    }
 }

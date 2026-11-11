@@ -1,11 +1,11 @@
 context demo
 
 capability Registry {
-  fn lookup[K: Key + Ord](key: K) -> Effect[Option[String]]
+    fn lookup[K: Key + Ord](key: K) -> Effect[Option[String]]
 }
 
 service probe {
-  on call() -> Effect[Int] {
-    Effect.pure(1)
-  }
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
 }

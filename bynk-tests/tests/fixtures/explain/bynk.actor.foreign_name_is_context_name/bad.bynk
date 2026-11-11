@@ -3,7 +3,7 @@ context demo
 actor legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
 
 service ping {
-  on call(n: Int) -> Effect[Int] by legacy {
-    n
-  }
+    on call(n: Int) -> Effect[Int] by legacy {
+        n
+    }
 }
