@@ -1,0 +1,11 @@
+context demo
+
+agent Signal {
+  key id: String
+
+  store label: Cell[String] = self.id
+
+  on call peek() -> Effect[String] {
+    Effect.pure(label)
+  }
+}

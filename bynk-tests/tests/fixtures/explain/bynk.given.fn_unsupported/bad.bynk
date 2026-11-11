@@ -1,0 +1,7 @@
+context demo
+
+consumes bynk { Logger }
+
+fn size(sku: String) -> Int given Logger {
+  3
+}
