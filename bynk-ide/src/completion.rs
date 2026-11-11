@@ -2100,6 +2100,13 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         "Yaml",
         &[("decode", "decode[T](s: String) -> Result[T, DecodeError]")],
     ),
+    (
+        "Form",
+        &[
+            ("decode", "decode[T](s: String) -> Result[T, DecodeError]"),
+            ("encode", "encode(v: T) -> String"),
+        ],
+    ),
     ("List", &[("empty", "empty() -> List[T]")]),
     ("Map", &[("empty", "empty() -> Map[K, V]")]),
     (

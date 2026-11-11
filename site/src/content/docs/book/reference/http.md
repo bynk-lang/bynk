@@ -923,6 +923,8 @@ body a bad JSON `body` gets, its `path` naming the field (`body.email`).
 - **Charset and decoding.** The body is decoded as UTF-8, as the URL standard does:
   `+` is a space, and a percent-sequence that is not valid UTF-8 reads as U+FFFD
   rather than failing.
+- **As a codec.** [`Form.decode[T](s)` and `Form.encode(v)`](/book/reference/types/#form-codec)
+  expose this mapping to a `@raw` handler or a test, with `DecodeError`s rooted at `$`.
 - **Caps.** The body is buffered like a JSON one. A `@limit` or `limits { maxBody }`
   applies, with the same `413`; unlike a [`@raw`](#raw-request-bodies) route, a
   `@form` route needs no cap, but a public form should have one.

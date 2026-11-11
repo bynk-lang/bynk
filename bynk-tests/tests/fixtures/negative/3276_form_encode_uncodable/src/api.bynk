@@ -1,0 +1,16 @@
+context api
+
+type Inner = { a: String }
+
+type Nested = {
+  name: String,
+  inner: Inner,
+}
+
+fn write(v: Nested) -> String {
+  Form.encode(v)
+}
+
+fn writeNumber() -> String {
+  Form.encode(5)
+}

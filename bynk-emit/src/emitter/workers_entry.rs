@@ -1929,6 +1929,9 @@ pub fn emit_worker_entry(
     if runtime_use.query_string() {
         append_missing_bindings(&mut imports, crate::emitter::QUERY_STRING_RUNTIME_IMPORTS);
     }
+    if runtime_use.form_codec() {
+        append_missing_bindings(&mut imports, crate::emitter::FORM_CODEC_RUNTIME_IMPORTS);
+    }
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut imports, crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
@@ -2805,7 +2808,7 @@ fn multipart_spec(
 
 /// The wire shape of each field of a record read off a query string or a form:
 /// `(name, leaf kind, list, option)`.
-fn record_field_specs(
+pub(crate) fn record_field_specs(
     rec: &bynk_syntax::ast::RecordBody,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     allow_file: bool,
