@@ -1,0 +1,5 @@
+commons money
+
+uses money
+
+type Amount = Int where NonNegative

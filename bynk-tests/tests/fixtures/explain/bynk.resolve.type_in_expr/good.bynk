@@ -1,0 +1,5 @@
+commons demo
+
+type Metres = Int where NonNegative
+
+fn grow(x: Int) -> Result[Metres, ValidationError] { Metres.of(x + 1) }

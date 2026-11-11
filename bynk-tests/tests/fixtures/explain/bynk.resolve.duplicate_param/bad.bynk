@@ -1,0 +1,3 @@
+commons demo
+
+fn area(w: Int, w: Int) -> Int { w * w }

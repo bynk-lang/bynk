@@ -1,0 +1,3 @@
+commons demo
+
+fn Order.total(self) -> Int { 1 }

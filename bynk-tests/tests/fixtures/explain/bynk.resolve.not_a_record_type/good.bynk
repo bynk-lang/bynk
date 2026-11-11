@@ -1,0 +1,5 @@
+commons demo
+
+type Shape = | Circle | Square
+
+fn make() -> Shape { Circle }

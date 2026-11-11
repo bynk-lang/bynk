@@ -1285,9 +1285,23 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "export-the-capability-from-the-providing-context",
     },
     Explain {
+        code: "bynk.exports.conflicting_visibility",
+        blurb: "A type is exported `opaque`, so consuming contexts can pass it around but not look inside it, or `transparent`, so they can. It cannot be both, and the compiler will not pick for you. Keep the clause you mean and delete the other. The same visibility twice is `bynk.exports.duplicate_export`.",
+        example: "exports opaque { OrderId }\nexports transparent { OrderId }    // ✗ already exported `opaque`\n\ntype OrderId = String where Matches(\"ORD-[0-9]+\")\n\nexports opaque { OrderId }         // ✓ one visibility",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
         code: "bynk.exports.duplicate_export",
         blurb: "A type or capability is exported once. Naming it again in a second `exports` clause with the same visibility adds nothing, and usually means a clause was pasted twice, or a name was meant for another one. Delete the repeat. Within a single clause the repeat is `bynk.exports.duplicate_in_clause`, and the same type under both `opaque` and `transparent` is `bynk.exports.conflicting_visibility`.",
         example: "exports transparent { Order }\nexports transparent { Order }    // ✗ already exported above\n\ntype Order = { total: Int }\n\nexports transparent { Order }    // ✓ exported once",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.exports.duplicate_in_clause",
+        blurb: "An `exports` clause lists each type once. Naming one twice is a typo or a pasted name, and the second may have been meant for another type. Delete the repeat, or correct the name. The same type in two separate clauses is `bynk.exports.duplicate_export`.",
+        example: "exports transparent { Order, Order }    // ✗ `Order` listed twice\n\ntype Order = { total: Int }\n\nexports transparent { Order }           // ✓ listed once",
         page: "/book/reference/types",
         anchor: "opaque-types",
     },
@@ -1311,6 +1325,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Pair[T, T] = { a: T, b: T }    // ✗ `T` declared twice\n\ntype Pair[A, B] = { a: A, b: B }    // ✓ one name for each",
         page: "/book/reference/generics",
         anchor: "type-parameters",
+    },
+    Explain {
+        code: "bynk.generics.generic_non_record",
+        blurb: "Type parameters are for a type whose shape can mention them: a record, `{ value: T }`, or a sum whose variants carry payloads. A refined, opaque or alias type has a fixed base, so a parameter would have nowhere to go. Give the type a record or sum body that uses its parameters, or drop the parameters.",
+        example: "type Wrapped[T] = Int            // ✗ `T` has nowhere to be used\n\ntype Wrapped[T] = { value: T }   // ✓ a record may be generic",
+        page: "/book/reference/types",
+        anchor: "generic-record-types",
     },
     Explain {
         code: "bynk.generics.method_on_generic_type",
@@ -1478,6 +1499,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                     x\n}\n\n\
                   fn first[A: Key](x: A) -> A {            // ✓ one of `Eq`, `Ord`, `Key`, `Codable`\n    \
                     x\n}",
+        page: "/book/reference/generics",
+        anchor: "bounds",
+    },
+    Explain {
+        code: "bynk.generics.unknown_where_param",
+        blurb: "A `where` clause bounds a type parameter, so it must name one: the function's own, or, for a method, its receiver type's. A name that is neither is usually a misspelling. Correct it, or declare the parameter in the brackets after the function's name. A bound that does not exist is `bynk.generics.unknown_constraint`.",
+        example: "fn same[T](a: T) -> T where U: Eq { a }   // ✗ `U` is not a parameter here\n\nfn same[T](a: T) -> T where T: Eq { a }   // ✓ bound a parameter that is declared",
         page: "/book/reference/generics",
         anchor: "bounds",
     },
@@ -3075,11 +3103,39 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-constant",
     },
     Explain {
+        code: "bynk.resolve.duplicate_const",
+        blurb: "A constant is a value that every use of its name reads, so a name is declared once in a unit. With two `Limit`s, a use would have two values to read. Rename one, or delete the repeat. A constant whose name is a function's, a type's or another declaration's in the unit is `bynk.resolve.name_conflict`.",
+        example: "const Limit: Int = 1\nconst Limit: Int = 2   // ✗ `Limit` is already declared\n\nconst Cap: Int = 2     // ✓ a different name",
+        page: "/book/reference/constants",
+        anchor: "declaring-a-constant",
+    },
+    Explain {
         code: "bynk.resolve.duplicate_field",
         blurb: "A record is built and read by field name, so each name may appear once in its declaration, and the same holds for the payload fields of one sum variant. A repeat usually means two different fields were intended: rename one, or remove it. A field set twice in a literal is `bynk.resolve.duplicate_field_init`.",
         example: "type Order = { id: Int, id: String }      // ✗ `id` declared twice\n\ntype Order = { id: Int, label: String }  // ✓ distinct names",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_field_init",
+        blurb: "A record literal gives each field one value. A field set twice leaves it unclear which value is meant, and is nearly always a pasted line or a misspelt name for the field that was meant. Remove the repeat, or correct the name. A field declared twice in the type is `bynk.resolve.duplicate_field`; a field left out of the literal is `bynk.resolve.missing_field`.",
+        example: "type Point = { x: Int, y: Int }\n\nfn origin() -> Point { Point { x: 0, y: 0, y: 1 } }   // ✗ `y` set twice\n\nfn origin() -> Point { Point { x: 0, y: 0 } }         // ✓ each field once",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_method",
+        blurb: "A method is looked up by its type and name, so `p.norm()` has to mean one body. A second `fn Point.norm` would leave the call with nothing to choose between. Delete the repeat, or give it a different name if it does something else.",
+        example: "type Point = { x: Int }\n\nfn Point.norm(self) -> Int { self.x }\n\nfn Point.norm(self) -> Int { 0 }                  // ✗ `Point.norm` is already declared\n\nfn Point.isOrigin(self) -> Bool { self.x == 0 }   // ✓ a different name",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_param",
+        blurb: "A function's parameters are read by name in its body, and a call passes them in order, so each name may appear once in the list. A repeat is usually two different parameters meant, and the body could see only one of them. Rename one of the two, or remove it.",
+        example: "fn area(w: Int, w: Int) -> Int { w * w }   // ✗ `w` declared twice\n\nfn area(w: Int, h: Int) -> Int { w * h }   // ✓ distinct names",
+        page: "/book/spec/static-semantics",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.duplicate_type",
@@ -3090,6 +3146,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                 spans all of the unit's files, so the second declaration can be in a different file.",
         example: "type Money = Int\ntype Money = String          // ✗ `Money` is already declared\n\n\
                   type Money = Int\ntype Label = String          // ✓ distinct names",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_variant",
+        blurb: "A sum value is identified by its variant name: in a `match` pattern, in a constructor, and as the `kind` of its JSON form. So each variant appears once in a type. A repeat is usually two different variants meant, or a line pasted twice. Rename one of them, or delete the repeat. A payload field repeated within one variant is `bynk.resolve.duplicate_field`.",
+        example: "type Colour = | Red | Red     // ✗ `Red` declared twice\n\ntype Colour = | Red | Green   // ✓ distinct variants",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.resolve.fn_without_call",
+        blurb: "A function's name on its own is the function, not its result. It is a value only where a function type is expected, such as an argument to `map`; anywhere else it is nearly always a forgotten call. Call it with its arguments, or pass it where a function is wanted.",
+        example: "fn double(x: Int) -> Int { x * 2 }\n\nfn run() -> Int {\n    let d = double      // ✗ the function itself, not a call\n    5\n}\n\nfn run() -> Int {\n    let d = double(5)   // ✓ the result of calling it\n    d\n}",
         page: "/book/spec/static-semantics",
         anchor: "",
     },
@@ -3105,6 +3175,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "A `let` may not take the name of a declared type. The same name would then mean a type in one position and a value in another within one body, which is hard to read and easy to get wrong. Choose a different name for the binding, conventionally in lower case. Reusing a function's name is `bynk.resolve.let_shadows_fn`.",
         example: "type Reps = Int where InRange(1, 100)\n\nfn run(n: Int) -> Int {\n    let Reps = n                 // ✗ shadows the type `Reps`\n    n\n}\n\nfn run(n: Int) -> Int {\n    let reps = n                 // ✓ a new name\n    reps\n}",
         page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.method_unknown_type",
+        blurb: "A method is declared on a type, as in `fn Order.total(self)`, and the type has to be declared in the same unit, so that every value of it can reach the method. A misspelt or missing type is the usual cause. Correct the name, or declare the type next to the method.",
+        example: "fn Order.total(self) -> Int { 1 }         // ✗ there is no type `Order` here\n\ntype Order = { id: Int }\n\nfn Order.total(self) -> Int { self.id }   // ✓ `Order` is declared in this unit",
+        page: "/book/spec/static-semantics",
         anchor: "",
     },
     Explain {
@@ -3136,6 +3213,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.resolve.not_a_record_type",
+        blurb: "`Name { field: value }` builds a record, so `Name` has to be a record type. A sum is built by naming one of its variants, and a refined type with `Name.of(value)`, which checks the value. A type that is opaque is its own error, `bynk.resolve.opaque_record_construction`.",
+        example: "type Shape = | Circle | Square\n\nfn make() -> Shape { Shape { side: 1 } }   // ✗ `Shape` is a sum, not a record\n\nfn make() -> Shape { Circle }              // ✓ name a variant",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.resolve.opaque_record_construction",
+        blurb: "An opaque type hides its representation so that nothing outside its own checks can produce a value of it, and a record literal `T { value: … }` would go round them. Build one with `T.of(value)`, which validates and returns a `Result`, or, inside the commons that defines the type, with `T.unsafe(value)`.",
+        example: "type Timestamp = opaque Int\n\nfn Timestamp.fromMillis(n: Int) -> Timestamp {\n    Timestamp { value: n }       // ✗ record syntax on an opaque type\n}\n\nfn Timestamp.fromMillis(n: Int) -> Timestamp {\n    Timestamp.unsafe(n)          // ✓ inside the defining commons\n}",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
         code: "bynk.resolve.param_as_function",
         blurb: "Only a value of function type can be called. `n(5)` applies `n`, but `n` is an `Int`, so there is nothing to run. It is usually a missing operator or a parameter that was meant to be a function. Give the parameter a function type, such as `f: Int -> Int`, or drop the call. The check covers any local value, not only parameters.",
         example: "fn apply(n: Int) -> Int {\n    n(5)                         // ✗ `n` is an `Int`, not a function\n}\n\nfn apply(f: Int -> Int) -> Int {\n    f(5)                         // ✓ a function-typed parameter\n}",
@@ -3157,11 +3248,39 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "built-in-type-names",
     },
     Explain {
+        code: "bynk.resolve.reserved_host_name",
+        blurb: "The generated TypeScript reaches the host's built-in objects as `globalThis.<name>`, so a top-level declaration called `globalThis` (a type, function, agent, provider and so on) would hide all of them in its module. Rename the declaration. Parameters and local bindings may use the name: the compiler renames those itself.",
+        example: "type globalThis = { n: Int }   // ✗ the name is reserved\n\ntype Counter = { n: Int }      // ✓ any other name",
+        page: "/book/spec/emission",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.reserved_payload_field",
+        blurb: "A sum value is encoded as a flat JSON object whose `kind` field holds the variant's name, so a payload field called `kind` would collide with that tag. Rename the field, for instance to `category`.",
+        example: "type Shape = | Circle(kind: String, r: Int) | Square(side: Int)   // ✗ `kind` is the variant tag\n\ntype Shape = | Circle(category: String, r: Int) | Square(side: Int)   // ✓ any other name",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.resolve.self_outside_method",
+        blurb: "`self` is the value a method was called on, so it exists only in the body of a method, declared as `fn Type.name(self, …)`. A plain function has no receiver. Make the function a method of the type, or take the value as an ordinary parameter.",
+        example: "type Counter = { n: Int }\n\nfn read(c: Counter) -> Int {\n    self.n                         // ✗ a plain function has no `self`\n}\n\nfn Counter.read(self) -> Int {     // ✓ a method declares `self`\n    self.n\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.type_as_function",
         blurb: "A type's name is not a function. A refined type is built with `.of(value)`, which checks the value and returns a `Result`, and a record with a literal such as `Order { … }`, so `Amount(5)` has no meaning to fall back on. A sum variant with a payload is the one exception: `Placed(at, total)` constructs it. A name that is not a type at all is `bynk.resolve.unknown_function`.",
         example: "type Amount = Int where NonNegative\n\nfn price() -> Amount {\n    Amount(5)                    // ✗ a type is not a function\n}\n\nfn price() -> Result[Amount, ValidationError] {\n    Amount.of(5)                 // ✓ checked construction\n}",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.resolve.type_in_expr",
+        blurb: "A type's name stands for a set of values, not for one, so it cannot be used where a value is expected. This is usually a missing constructor. Build a value in the type's own way: `Type { … }` for a record, a variant name for a sum, `Type.of(value)` for a refined type. A type used as a call, `Type(…)`, is `bynk.resolve.type_as_function`.",
+        example: "type Metres = Int where NonNegative\n\nfn grow(x: Int) -> Int { x + Metres }   // ✗ `Metres` is a type, not a value\n\nfn grow(x: Int) -> Result[Metres, ValidationError] { Metres.of(x + 1) }   // ✓ build a `Metres`",
+        page: "/book/spec/static-semantics",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.unconsumed_context",
@@ -4460,6 +4579,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.uses.self_reference",
+        blurb: "`uses` brings another commons into scope. A commons' own declarations are already there, so using itself adds nothing, and a unit that depends on itself is a cycle of length one. Delete the clause, or, if you meant another commons, name it. The mirror of this for contexts is `bynk.consumes.self_reference`.",
+        example: "// tax.bynk\ncommons tax\n\nfn rate() -> Int { 20 }\n\n// money.bynk\ncommons money\n\nuses money                       // ✗ a commons cannot use itself\nuses tax                         // ✓ a different commons\n\ntype Amount = Int where NonNegative",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "the-two-kinds-of-module",
+    },
+    Explain {
+        code: "bynk.uses.target_is_context",
+        blurb: "`uses` is for shared types and functions, and those live in a commons. A context is something to depend on: it has services to call and capabilities to use, and that is `consumes`. Replace `uses` with `consumes`. The mirror of this is `bynk.consumes.target_is_commons`.",
+        example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nuses pay                         // ✗ `pay` is a context\nconsumes pay                     // ✓ depend on a context with `consumes`",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "the-two-kinds-of-module",
+    },
+    Explain {
+        code: "bynk.uses.unknown_commons",
+        blurb: "`uses` brings a commons' types, functions and constants into scope, so it must name a commons in the project, and no unit of that name exists. Check the spelling against the `commons` line of the unit you mean. If the unit is a context, `uses` is the wrong clause: that is `bynk.uses.target_is_context`.",
+        example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nuses mony                        // ✗ no commons `mony`\nuses money                       // ✓ the commons' declared name",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "the-two-kinds-of-module",
+    },
+    Explain {
         code: "bynk.val.arity",
         blurb: "`Val[T]` takes at most one argument, the pin: `Val[Age]` lets the \
                 compiler choose a value, `Val[Age](20)` fixes it. `Val` makes one \
@@ -5626,7 +5766,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.generic_non_record",
-        "A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197).",
+        "A `type` declaration carries type parameters on a refined, opaque or alias body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197).",
         &["type_decl"],
     ),
     dg(
