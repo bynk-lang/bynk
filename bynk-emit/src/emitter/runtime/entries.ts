@@ -578,15 +578,20 @@ function planEntries(
       // keys sort in append order. The entry keeps its own `t`.
       const last = own.length > 0 ? own[own.length - 1]![0] : undefined;
       let keyTime = last === undefined ? 0 : Number(last.slice(logPrefix(f.name).length, logPrefix(f.name).length + TIME_WIDTH));
-      // The most a key's time is above its entry's `t`: a window read widens by it (`skew`).
-      let skew = meta?.skew ?? 0;
+      // The most a key's time is above its entry's `t`: a window read widens by it (`skew`). It is
+      // exact over every entry the log now holds, so it is always recorded (a record without it
+      // means "unknown", never zero).
+      let skew = 0;
+      own.slice(pruned).forEach(([k, v]) => {
+        skew = Math.max(skew, Number(k.slice(logPrefix(f.name).length, logPrefix(f.name).length + TIME_WIDTH)) - (v as { t: number }).t);
+      });
       log.slice(kept).forEach((e) => {
         keyTime = Math.max(keyTime, e.t);
         skew = Math.max(skew, keyTime - e.t);
         entries[logKey(f.name, keyTime, seq)] = e;
         seq += 1;
       });
-      if (log.length > 0 || meta !== undefined) entries[metaKey(f.name)] = { size: log.length, seq, ...(skew > 0 ? { skew } : {}) };
+      if (log.length > 0 || meta !== undefined) entries[metaKey(f.name)] = { size: log.length, seq, skew };
       continue;
     }
     const keyOf = f.kind === "set" ? setKey : mapKey;

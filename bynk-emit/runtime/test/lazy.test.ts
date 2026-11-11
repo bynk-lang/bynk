@@ -284,3 +284,51 @@ test("cache reaping through the handle deletes what the commit-time reaper would
   assert.equal(await dump(sL), await dump(sE));
   assert.ok(expiredRange("hits", 60).prefix !== undefined);
 });
+
+// A `c/<field>` without `skew` means the skew is unknown, never zero: a build that predates the field
+// (or one that drops it when it commits) may have left clamped entries. Reads stay correct.
+test("a log whose record has no skew reads windows correctly, and a writer records the skew", async () => {
+  const s = new InMemoryStorage();
+  // Entry t=1000 was appended after t=1020 and keyed at 1020: its key is 20 above its time.
+  await s.put("state", { __layout: 2 });
+  await s.put("c/audit", { size: 3, seq: 3 }); // no skew, as an older build leaves it
+  await s.put("l/audit/0000000000001010-0000000000", { t: 1010, v: 10 });
+  await s.put("l/audit/0000000000001020-0000000001", { t: 1020, v: 20 });
+  await s.put("l/audit/0000000000001020-0000000002", { t: 1000, v: 1 });
+  const read = loadLazy(s).audit;
+  assert.deepEqual(await read.before(1005), [1], "the clamped entry is found below 1005, past its key");
+  assert.deepEqual(await read.between(990, 1005), [1]);
+  assert.deepEqual(await read.since(1015), [20]);
+  assert.deepEqual(await read.recent(2), [1, 20]);
+  const before = await dump(s);
+  const write = loadLazy(s);
+  await write.audit.append(30, 1030);
+  await flushLazy(write);
+  assert.notEqual(await dump(s), before);
+  assert.equal(((await s.get("c/audit")) as { skew?: number }).skew, 20, "the writer established the skew");
+  assert.deepEqual(await loadLazy(s).audit.before(1005), [1]);
+});
+
+test("a log that was never clamped records an explicit skew of 0, from either writer", async () => {
+  const lazy = new InMemoryStorage();
+  const l = loadLazy(lazy);
+  await l.audit.append(1, 100);
+  await l.audit.append(2, 200);
+  await flushLazy(l);
+  assert.equal(((await lazy.get("c/audit")) as { skew?: number }).skew, 0);
+  const eager = new InMemoryStorage();
+  const self = {};
+  const e = await loadEager(self, eager);
+  e.audit.append(1, 100);
+  e.audit.append(2, 200);
+  await commitEager(self, eager, e);
+  assert.equal(((await eager.get("c/audit")) as { skew?: number }).skew, 0);
+});
+
+test("a collection with no metadata at all is empty, and its skew is known to be 0", async () => {
+  const s = new InMemoryStorage();
+  const l = loadLazy(s);
+  await l.audit.append(1, 50);
+  await flushLazy(l);
+  assert.equal(((await s.get("c/audit")) as { skew?: number }).skew, 0);
+});

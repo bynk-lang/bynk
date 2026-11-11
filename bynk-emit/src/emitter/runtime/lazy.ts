@@ -27,8 +27,12 @@ interface Envelope {
 interface Meta {
   size: number;
   seq: number;
-  /** A `Log`'s largest key time beyond an entry's own `t` (its keys never go backwards). */
-  skew: number;
+  /**
+   * A `Log`'s largest key time beyond an entry's own `t` (its keys never go backwards). Absent
+   * means *unknown*, not zero: a record written before the field existed, or by a build that
+   * drops it, may hold clamped entries. An unknown skew is never trusted to bound a window.
+   */
+  skew: number | undefined;
 }
 
 // Every key of a range, in key order, in pages (a list returns everything it matches).
@@ -48,7 +52,7 @@ async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptio
 }
 
 class MetaCell {
-  private value: Meta = { size: 0, seq: 0, skew: 0 };
+  private value: Meta = { size: 0, seq: 0, skew: undefined };
   private loaded = false;
   private existed = false;
   private changed = false;
@@ -64,7 +68,8 @@ class MetaCell {
     if (!this.loaded) {
       const stored = await this.overlay.get<Partial<Meta>>(this.key);
       this.existed = stored !== undefined;
-      this.value = { size: stored?.size ?? 0, seq: stored?.seq ?? 0, skew: stored?.skew ?? 0 };
+      // A collection with no metadata at all is empty: it has nothing clamped, so its skew is known to be 0.
+      this.value = { size: stored?.size ?? 0, seq: stored?.seq ?? 0, skew: stored === undefined ? 0 : typeof stored.skew === "number" ? stored.skew : undefined };
       this.loaded = true;
     }
     return this.value;
@@ -79,7 +84,7 @@ class MetaCell {
     if (!this.changed) return;
     const m = this.value;
     if (m.size > 0 || this.existed) {
-      this.overlay.put(this.key, { size: m.size, seq: m.seq, ...(m.skew > 0 ? { skew: m.skew } : {}) });
+      this.overlay.put(this.key, { size: m.size, seq: m.seq, ...(m.skew !== undefined ? { skew: m.skew } : {}) });
     }
     this.changed = false;
   }
@@ -327,8 +332,23 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
     return { t: e.t, v: this.codec.decode(e.v as never) };
   }
 
-  async append(value: V, now: number): Promise<void> {
+  // The skew of a log whose record does not say: the largest key time above an entry's `t`, found by
+  // reading the log once. A writer establishes it (so it is recorded); a reader does not write, and
+  // widens its window without bound instead.
+  private async establishSkew(): Promise<Meta> {
     const meta = await this.meta.load();
+    if (meta.skew !== undefined) return meta;
+    let skew = 0;
+    for (const [k, e] of await listAll<StoredLogEntry>(this.overlay, { prefix: logPrefix(this.field) })) {
+      skew = Math.max(skew, parseLogKey(k).t - e.t);
+    }
+    meta.skew = skew;
+    this.meta.touch();
+    return meta;
+  }
+
+  async append(value: V, now: number): Promise<void> {
+    const meta = await this.establishSkew();
     if (this.lastKeyTime === undefined) {
       const last = await this.overlay.list<unknown>({ prefix: logPrefix(this.field), reverse: true, limit: 1 });
       const [lastKey] = [...last.keys()];
@@ -336,7 +356,7 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
     }
     // A key's time never goes backwards, so keys sort in append order; the entry keeps its own `t`.
     const keyTime = Math.max(this.lastKeyTime, now);
-    meta.skew = Math.max(meta.skew, keyTime - now);
+    meta.skew = Math.max(meta.skew as number, keyTime - now);
     this.overlay.put(logKey(this.field, keyTime, meta.seq), { t: now, v: this.codec.encode(value) });
     this.lastKeyTime = keyTime;
     meta.seq += 1;
@@ -345,9 +365,9 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
   }
 
   async prune(cutoff: number): Promise<void> {
-    const meta = await this.meta.load();
+    const meta = await this.establishSkew();
     // An entry with `t < cutoff` has a key time below `cutoff + skew`.
-    const stale = await listAll<StoredLogEntry>(this.overlay, { ...logRange(this.field, undefined, cutoff + meta.skew) });
+    const stale = await listAll<StoredLogEntry>(this.overlay, { ...logRange(this.field, undefined, cutoff + (meta.skew as number)) });
     let removed = 0;
     for (const [k, e] of stale) {
       if (e.t < cutoff) {
@@ -367,8 +387,10 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
 
   private async window(from: number | undefined, to: number | undefined, keep: (t: number) => boolean): Promise<LogEntry<V>[]> {
     const skew = (await this.meta.load()).skew;
-    // The key time is never below an entry's `t` and at most `skew` above it.
-    const all = await listAll<StoredLogEntry>(this.overlay, logRange(this.field, from, to === undefined ? undefined : to + skew));
+    // The key time is never below an entry's `t` and at most `skew` above it; with no known skew an
+    // upper bound cannot be trusted, so the window reads to the end of the log and filters.
+    const upper = to === undefined || skew === undefined ? undefined : to + skew;
+    const all = await listAll<StoredLogEntry>(this.overlay, logRange(this.field, from, upper));
     return all.filter(([, e]) => keep(e.t)).map(([, e]) => this.entry(e));
   }
 
