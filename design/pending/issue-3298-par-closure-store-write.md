@@ -1,0 +1,22 @@
+---
+level: minor
+changelog: A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` may not write a `store` (`bynk.par.store_write_in_closure`), extending the `par` block's rule that store writes stay sequential
+breaking: `parTraverse`, `parTraverseAll` and `parTraverseTry` closures that write an agent's `store` (`put`, `remove`, `update`, `upsert`, `add`, `append`, or `:=`) are now refused with `bynk.par.store_write_in_closure`: run the loop with `forEach` (or `traverseAll`/`traverseTry`), or do the writes after the parallel part.
+---
+
+## ADR: par-closure-store-write
+title: A `parTraverse`-family closure may not write a store
+summary: Track Q4's rule (store writes stay sequential) extends from `par { }` to the closures of `parTraverse`, `parTraverseAll` and `parTraverseTry`
+
+**Context.** A `par { }` block refuses a binding that is a store write (track Q4, `bynk.par.invalid_statement`), but the closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` was not checked. A closure that read a store field and then wrote it (`get` then `put`) lost updates across branches, because every `<-` is an await point and the branches interleave between the two calls: three branches incrementing one key left it at 1. A single-call `update` or `upsert` stayed atomic per key. Proposed in #3298, which refers to #3297. Related: ADR 0109 (the handler is the atomic unit; writes stage in memory), ADR 0171 and ADR 0679 (the `parTraverse` family and its settle-all semantics).
+
+**Decision.**
+
+- **A. The rule.** A store write in a closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry`, on a `List` or a `Query` receiver, is the error `bynk.par.store_write_in_closure`. The sequential `forEach`, `traverseAll` and `traverseTry` are unchanged, and so is `par { }`.
+- **B. What counts as a write.** The operations Q4 refuses: `put`, `remove`, `update`, `upsert`, `add`, `append`, and `:=`. `update` and `upsert` are included, so the closures and `par { }` stay equal. Allowing them later is a loosening, made for both together, and breaks nothing. Reads, a store as the combinator's receiver, and calls to other agents are allowed.
+- **C. Reach.** The whole lambda, nested lambdas included, plus a lambda bound by `let` to a name and passed by name. A store is reachable only from a handler body (a free `fn` cannot name one), so no inter-procedural analysis is needed.
+- **D. Combinators.** The three `parTraverse` operations only. No `parMap`, `parSequence` or `parZip` exists.
+- **E. Diagnostic.** A new error code with a `bynk explain` entry. Its notes point to `forEach` (where `update` and `upsert` stay atomic per key) and to collecting with `parTraverseAll` and writing afterwards.
+- **F. Alternatives rejected.** Refusing only a closure that reads and writes one field (inconsistent with Q4, and blind to a stale read taken outside the closure); a warning (the failure is silent data loss, and `par { }` already refuses); runtime serialisation (store operations are already atomic, and the lost update is the await between two of them).
+
+**Consequences.** A program that wrote a store inside such a closure stops compiling; no example, fixture, test or Book snippet in the repository did. The rewrite is `forEach`, which loses no concurrency, because a store write is staged in memory. This rests on the in-memory staging on main and should be re-checked once the per-entry storage lazy reads (#3296 and its follow-up) are on main.

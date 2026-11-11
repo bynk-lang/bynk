@@ -211,6 +211,23 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.par.store_write_in_closure",
+        blurb: "The closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+                once per element, all at once, so it may not write a `store` field, which is \
+                the rule a `par { … }` block already follows. Every `<-` is an await point, \
+                so a `get` then a `put` in the closure lets the other branches write in \
+                between, and their updates are lost. A single call such as `update` is atomic \
+                per key, but it is refused here too, so the two rules stay equal. Run the \
+                loop with `forEach` (or `traverseAll` / `traverseTry`), where each element \
+                finishes before the next starts; a store write is staged in memory, so no \
+                concurrency is lost. To keep the concurrent part, collect with \
+                `parTraverseAll` and write afterwards.",
+        example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
+                  xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
+        page: "/book/reference/capabilities",
+        anchor: "par",
+    },
+    Explain {
         code: "bynk.parse.bare_expression_statement",
         blurb: "A block has no expression statements: each statement is a `let`, `do`, \
                 `~>`, `expect`, `:=` and so on, and the last expression is the block's \
@@ -2117,6 +2134,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.parse.bare_expression_statement",
         "An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`.",
         &["block"],
+    ),
+    d(
+        "bynk.par.store_write_in_closure",
+        "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
     ),
     d(
         "bynk.parse.clause_after_statement",

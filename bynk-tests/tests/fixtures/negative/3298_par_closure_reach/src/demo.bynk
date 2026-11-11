@@ -1,0 +1,27 @@
+context demo
+
+// #3298: how far the check sees. A write in a closure over a store `Query`
+// receiver, in a lambda nested inside the closure, and in a lambda bound to a
+// name and passed by name are all refused.
+
+agent Tally {
+  key id: String
+  store items: Map[String, Int]
+  store counts: Map[String, Int]
+
+  on call overQuery(n: Int) -> Effect[()] {
+    let _ <- items.parTraverse((v: Int) => counts.put("k", v))
+    Effect.pure(())
+  }
+
+  on call nested(n: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parTraverse((x: Int) => [4, 5].forEach((y: Int) => counts.put("k", y)))
+    Effect.pure(())
+  }
+
+  on call named(n: Int) -> Effect[()] {
+    let f = (x: Int) => counts.put("k", x)
+    let _ <- [1, 2, 3].parTraverse(f)
+    Effect.pure(())
+  }
+}

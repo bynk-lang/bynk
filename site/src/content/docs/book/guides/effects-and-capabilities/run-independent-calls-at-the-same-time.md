@@ -75,6 +75,23 @@ sequential, so do them before or after the block, and a `?` is matched after the
 rather than inside it. The
 [reference](/book/reference/capabilities/#par) lists everything that is refused.
 
+The same holds for the closure you give to `parTraverse`, `parTraverseAll` or
+`parTraverseTry`: it runs for every element at once, so it may not write a `store`
+(`bynk.par.store_write_in_closure`). A `get` followed by a `put` in it would lose
+updates, because the branches interleave between the two calls. Run that loop with
+`forEach`, where each element finishes before the next starts and a single-call
+`update` stays atomic per key; no concurrency is lost, because a store write is staged
+in memory. To keep the concurrent part, collect with `parTraverseAll` and write
+afterwards:
+
+```bynk,fragment
+// refused: the closure writes `counts`
+let _ <- xs.parTraverse((x: Int) => counts.update("k", (v) => v + 1))
+
+// accepted: sequential, and `update` is atomic per key
+let _ <- xs.forEach((x: Int) => counts.update("k", (v) => v + 1))
+```
+
 ## Test it
 
 A `case` can check which names the block bound and the order its calls were issued in:

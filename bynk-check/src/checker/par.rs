@@ -307,3 +307,159 @@ fn reject_store_write(value: &Expr, ctx: &mut Ctx) {
         );
     }
 }
+
+/// One store access found in a closure: where, which field, which operation
+/// (`:=` for a `Cell` assignment), and whether it writes.
+struct StoreAccess {
+    span: Span,
+    field: String,
+    op: String,
+    writes: bool,
+}
+
+/// #3298: every store call and `:=` under `e`, lambdas, blocks, `match` arms
+/// and statements included. `expr_children` flattens statements to their
+/// expressions, which drops a `:=` itself, so blocks are walked here.
+fn scan_store_access(e: &Expr, ctx: &Ctx, out: &mut Vec<StoreAccess>) {
+    if let Some(Callee::Store { field, op }) = ctx.callees.get(&e.id) {
+        out.push(StoreAccess {
+            span: e.span,
+            field: field.clone(),
+            op: op.clone(),
+            writes: crate::store_ops::is_mutating_any(op),
+        });
+    }
+    match &e.kind {
+        ExprKind::Block(b) => scan_block_access(b, ctx, out),
+        ExprKind::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            scan_store_access(cond, ctx, out);
+            scan_block_access(then_block, ctx, out);
+            scan_block_access(else_block, ctx, out);
+        }
+        ExprKind::Match { discriminant, arms } => {
+            scan_store_access(discriminant, ctx, out);
+            for arm in arms {
+                if let Some(g) = &arm.guard {
+                    scan_store_access(g, ctx, out);
+                }
+                match &arm.body {
+                    MatchBody::Expr(x) => scan_store_access(x, ctx, out),
+                    MatchBody::Block(b) => scan_block_access(b, ctx, out),
+                }
+            }
+        }
+        _ => {
+            for child in expr_children(e) {
+                scan_store_access(child, ctx, out);
+            }
+        }
+    }
+}
+
+fn scan_block_access(b: &Block, ctx: &Ctx, out: &mut Vec<StoreAccess>) {
+    for st in &b.statements {
+        if let Statement::Assign(a) = st {
+            out.push(StoreAccess {
+                span: a.span,
+                field: a.target.name.clone(),
+                op: ":=".to_string(),
+                writes: true,
+            });
+        }
+        let mut exprs = Vec::new();
+        statement_exprs(st, &mut exprs);
+        for x in exprs {
+            scan_store_access(x, ctx, out);
+        }
+    }
+    scan_store_access(&b.tail, ctx, out);
+}
+
+/// The first store write in a lambda expression's body, as `(field, op)`.
+/// `None` for anything that is not a lambda, or whose body writes no store.
+pub(super) fn lambda_store_write(e: &Expr, ctx: &Ctx) -> Option<(String, String)> {
+    let mut e = e;
+    while let ExprKind::Paren(inner) = &e.kind {
+        e = inner;
+    }
+    if !matches!(e.kind, ExprKind::Lambda(_)) {
+        return None;
+    }
+    let mut found = Vec::new();
+    scan_store_access(e, ctx, &mut found);
+    found
+        .into_iter()
+        .find(|a| a.writes)
+        .map(|a| (a.field, a.op))
+}
+
+/// #3298 (extends track Q4 to the `parTraverse` family): the closure given to
+/// `parTraverse`, `parTraverseAll` or `parTraverseTry` runs once per element,
+/// concurrently, so it may not write a store: a `get` then a `put` in it loses
+/// updates, because each `<-` is an await point. A single call such as `update`
+/// is atomic, but it is refused too, exactly as `par { }` refuses it, so the
+/// two rules stay equal. Reads, and a store as the combinator's *receiver*, are
+/// untouched. The closure is the written lambda, or a name `let`-bound to one.
+pub(super) fn reject_store_write_in_closure(method: &Ident, arg: &Expr, ctx: &mut Ctx) {
+    use crate::builtin_names::methods::{PAR_TRAVERSE, PAR_TRAVERSE_ALL, PAR_TRAVERSE_TRY};
+    let name = method.name.as_str();
+    if name != PAR_TRAVERSE && name != PAR_TRAVERSE_ALL && name != PAR_TRAVERSE_TRY {
+        return;
+    }
+    let mut inner = arg;
+    while let ExprKind::Paren(i) = &inner.kind {
+        inner = i;
+    }
+    let mut accesses = Vec::new();
+    match &inner.kind {
+        ExprKind::Lambda(_) => scan_store_access(inner, ctx, &mut accesses),
+        ExprKind::Ident(id) => {
+            if let Some((field, op)) = ctx.store_writing_lambdas.get(&id.name) {
+                accesses.push(StoreAccess {
+                    span: inner.span,
+                    field: field.clone(),
+                    op: op.clone(),
+                    writes: true,
+                });
+            }
+        }
+        _ => {}
+    }
+    let reads: Vec<String> = accesses
+        .iter()
+        .filter(|a| !a.writes)
+        .map(|a| a.field.clone())
+        .collect();
+    for a in accesses.iter().filter(|a| a.writes) {
+        let what = if a.op == ":=" {
+            format!("`{} := …`", a.field)
+        } else {
+            format!("`{}.{}(…)`", a.field, a.op)
+        };
+        let mut err = CompileError::new(
+            "bynk.par.store_write_in_closure",
+            a.span,
+            format!(
+                "a closure passed to `{name}` cannot write the store field `{}` ({what}): its branches run concurrently, so store writes stay sequential",
+                a.field
+            ),
+        )
+        .with_label(method.span, format!("`{name}` runs the closure for every element at once"))
+        .with_note(
+            "run the loop with `forEach` instead (`traverseAll` or `traverseTry` for the collecting forms); a single-call `update` or `upsert` is atomic per key there, and no concurrency is lost, because a store write is staged in memory",
+        )
+        .with_note(
+            "or keep the concurrent part in the closure and do the writes after it: collect with `parTraverseAll`, then write in a `forEach`",
+        );
+        if reads.contains(&a.field) {
+            err = err.with_note(
+                "a `get` and a `put` are two awaited steps, so another branch can write between them and the update is lost; use `update` or `upsert` in a sequential loop",
+            );
+        }
+        ctx.errors.push(err);
+    }
+}
