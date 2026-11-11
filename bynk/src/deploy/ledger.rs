@@ -52,6 +52,16 @@ pub(crate) struct Environment {
     /// reads and a project without D1 writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) d1_instances: BTreeMap<String, BTreeMap<String, D1Record>>,
+    /// #3319: each Worker's `Postgres` instances (`capability Main =
+    /// Postgres`), keyed by the instance's binding (`HYPERDRIVE_MAIN`): the
+    /// Hyperdrive config the deploy created or adopted for it, and the id
+    /// the push binds. It holds an id and a name, and a one-way fingerprint
+    /// of the connection string so a change is seen; never the string.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without `Postgres` writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) hyperdrive_instances: BTreeMap<String, BTreeMap<String, HyperdriveRecord>>,
     /// #3301: each Worker's `StoredSecret` instances, keyed by the instance's
     /// binding (`SECRET_STRIPE_KEY`): the Secrets Store the deploy linked it
     /// to. Linked, never created, so there is nothing to orphan or prune; the
@@ -197,6 +207,41 @@ pub(crate) struct D1Record {
     /// orphans) until their entry is removed by hand, as R2's are.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) superseded: Vec<D1Past>,
+}
+
+/// #3319: the Hyperdrive config of one `Postgres` binding, as the account
+/// names it, with the id the push binds.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct HyperdriveRecord {
+    /// The config's account-facing name; for an adopted config, the name the
+    /// deploy found it under, or empty when it did not ask.
+    pub(crate) name: String,
+    /// Cloudflare's id for the config.
+    pub(crate) id: String,
+    /// `true` when the project named an existing config (`config_id`) rather
+    /// than having this deploy make one. An adopted config is not the
+    /// project's to change or delete: it is never updated and never pruned.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) adopted: bool,
+    /// A one-way fingerprint of the connection string the config was last
+    /// made or updated from, so the plan can tell the string changed. It is
+    /// a truncated SHA-256 over the string, the environment and the binding:
+    /// it identifies a change, and is not the string.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) fingerprint: Option<String>,
+    /// Configs this binding used to have, under another id. They stay recorded
+    /// (and are reported as orphans) until pruned or removed by hand.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) superseded: Vec<HyperdrivePast>,
+}
+
+/// A config a binding no longer uses (see [`HyperdriveRecord::superseded`]).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct HyperdrivePast {
+    pub(crate) name: String,
+    pub(crate) id: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) adopted: bool,
 }
 
 /// #3301: the Secrets Store secret a `StoredSecret` binding was linked to.
@@ -671,6 +716,65 @@ impl DeployLock {
         );
     }
 
+    /// #3319: record the Hyperdrive config made (or adopted) for `worker`'s
+    /// `Postgres` `binding`. A config this replaces is not forgotten: it
+    /// stays as a superseded one, reported as an orphan.
+    pub(crate) fn record_hyperdrive(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        record: HyperdriveRecord,
+    ) {
+        let instances = self
+            .environments
+            .entry(environment.to_string())
+            .or_default()
+            .hyperdrive_instances
+            .entry(worker.to_string())
+            .or_default();
+        let mut record = record;
+        if let Some(old) = instances.remove(binding) {
+            record.superseded = old.superseded;
+            if old.id != record.id {
+                record.superseded.push(HyperdrivePast {
+                    name: old.name,
+                    id: old.id,
+                    adopted: old.adopted,
+                });
+            }
+        }
+        instances.insert(binding.to_string(), record);
+    }
+
+    /// #3319: drop a config from the ledger once `--prune` deleted it, whether
+    /// it was the live one (its Worker or capability is gone) or a superseded
+    /// one.
+    pub(crate) fn forget_hyperdrive(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        id: &str,
+    ) {
+        let Some(instances) = self
+            .environments
+            .get_mut(environment)
+            .and_then(|env| env.hyperdrive_instances.get_mut(worker))
+        else {
+            return;
+        };
+        if instances.get(binding).is_some_and(|r| r.id == id) {
+            instances.remove(binding);
+        } else if let Some(record) = instances.get_mut(binding) {
+            record.superseded.retain(|past| past.id != id);
+        }
+        if instances.is_empty() {
+            let env = self.environments.get_mut(environment).expect("present");
+            env.hyperdrive_instances.remove(worker);
+        }
+    }
+
     /// #3301: record the store `worker`'s `StoredSecret` `binding` was linked
     /// to. `true` when that changed the ledger.
     pub(crate) fn record_stored_secret(
@@ -839,6 +943,11 @@ pub(crate) struct Orphans {
     /// Reported only, as buckets are: a database holds data.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) d1: Vec<OrphanD1>,
+    /// #3319: recorded Hyperdrive configs the build no longer declares. A
+    /// config holds no data, so `--prune` deletes one the deploy made; an
+    /// adopted one is only ever reported.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) hyperdrive: Vec<OrphanHyperdrive>,
     pub(crate) workers: Vec<String>,
     pub(crate) queues: Vec<String>,
 }
@@ -875,6 +984,22 @@ pub(crate) struct OrphanD1 {
     pub(crate) database: String,
 }
 
+/// One recorded Hyperdrive config the build no longer declares (#3319): a
+/// capability removed or renamed, a config replaced, or a whole Worker gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct OrphanHyperdrive {
+    pub(crate) worker: String,
+    pub(crate) binding: String,
+    /// The config's name on the account.
+    pub(crate) config: String,
+    /// Its id, which `--prune` deletes it by. Not serialised: the plan names
+    /// the config, and an id is not for the reader.
+    #[serde(skip)]
+    pub(crate) id: String,
+    /// An adopted config is reported and never deleted.
+    pub(crate) adopted: bool,
+}
+
 impl OrphanKv {
     /// The binding whose ledger entry this is: `KV` for the bare namespace.
     pub(crate) fn binding(&self) -> &str {
@@ -892,7 +1017,7 @@ impl Orphans {
     /// `confirm_prune`'s prompt at all — `Delete 0 resource(s)?` is a bug,
     /// not a valid state.
     pub(crate) fn has_prunable(&self) -> bool {
-        !self.kv.is_empty() || !self.queues.is_empty()
+        !self.kv.is_empty() || !self.queues.is_empty() || self.hyperdrive.iter().any(|h| !h.adopted)
     }
 
     /// These orphans as the account names them under `environment`, for the
@@ -922,6 +1047,7 @@ impl Orphans {
                 })
                 .collect(),
             d1: self.d1.clone(),
+            hyperdrive: self.hyperdrive.clone(),
             workers: self
                 .workers
                 .iter()
@@ -1044,9 +1170,39 @@ pub(crate) fn find_orphans(
             })
         }))
         .collect();
+    // #3319: a Hyperdrive config likewise, with its Worker or on its own.
+    let hyperdrive_orphans = env
+        .hyperdrive_instances
+        .iter()
+        .flat_map(|(worker, instances)| {
+            instances.iter().flat_map(move |(binding, record)| {
+                let live = resources
+                    .get(worker)
+                    .is_some_and(|r| r.hyperdrive.iter().any(|h| &h.binding == binding));
+                let own = (!live).then(|| OrphanHyperdrive {
+                    worker: worker.clone(),
+                    binding: binding.clone(),
+                    config: record.name.clone(),
+                    id: record.id.clone(),
+                    adopted: record.adopted,
+                });
+                // A config a replacement left behind is an orphan while its
+                // binding is live, too.
+                own.into_iter()
+                    .chain(record.superseded.iter().map(move |past| OrphanHyperdrive {
+                        worker: worker.clone(),
+                        binding: binding.clone(),
+                        config: past.name.clone(),
+                        id: past.id.clone(),
+                        adopted: past.adopted,
+                    }))
+            })
+        })
+        .collect();
     Orphans {
         r2: r2_orphans,
         d1: d1_orphans,
+        hyperdrive: hyperdrive_orphans,
         // The bare namespace likewise: with its Worker, or on its own once
         // the live Worker stops using the bare `Kv` (review of #1974).
         kv: env
@@ -1098,6 +1254,19 @@ pub(crate) fn recorded_d1<'a>(
     lock.environments
         .get(environment)
         .and_then(|env| env.d1_instances.get(worker))
+        .and_then(|instances| instances.get(binding))
+}
+
+/// The Hyperdrive config recorded for `worker`'s `Postgres` `binding` (#3319).
+pub(crate) fn recorded_hyperdrive<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a HyperdriveRecord> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.hyperdrive_instances.get(worker))
         .and_then(|instances| instances.get(binding))
 }
 
@@ -1329,11 +1498,15 @@ pub fn materialise_deploy_state(
     // #3301: each `StoredSecret` must have been linked by a deploy, and is
     // then bound by the store id that deploy recorded.
     let stored = bynk_emit::emitter::wrangler::stored_secret_entries(&text)?;
+    // #3319: each `Postgres` must have had its Hyperdrive config made or
+    // adopted by a deploy, and is then bound by the id that deploy recorded.
+    let hyperdrive = bynk_emit::emitter::wrangler::hyperdrive_entries(&text)?;
     if needed.is_empty()
         && buckets.is_empty()
         && limiters.is_empty()
         && databases.is_empty()
         && stored.is_empty()
+        && hyperdrive.is_empty()
     {
         return Ok(false);
     }
@@ -1382,7 +1555,22 @@ pub fn materialise_deploy_state(
         };
         store_ids.insert(binding.clone(), link.store_id.clone());
     }
+    let mut hyperdrive_ids = BTreeMap::new();
+    for (binding, _) in &hyperdrive {
+        let Some(recorded) = recorded_hyperdrive(&lock, worker, binding, environment) else {
+            return Err(format!(
+                "remote Hyperdrive config `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
+            ));
+        };
+        hyperdrive_ids.insert(binding.clone(), recorded.id.clone());
+    }
     let mut changed = false;
+    if !hyperdrive_ids.is_empty() {
+        if !materialise_hyperdrive_ids(config, &hyperdrive_ids) {
+            return Err("could not write generated configuration".into());
+        }
+        changed = true;
+    }
     if !store_ids.is_empty() {
         if !materialise_stored_secret_stores(config, &store_ids) {
             return Err("could not write generated configuration".into());
@@ -1462,7 +1650,19 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
             env_qualify(environment, queue)
         );
     }
-    confirm_deletion_prompt(yes, orphans.kv.len() + orphans.queues.len())
+    // #3319: a Hyperdrive config the deploy made, by the name it has on the
+    // account. An adopted one is not the project's to delete.
+    let hyperdrive: Vec<_> = orphans.hyperdrive.iter().filter(|h| !h.adopted).collect();
+    for h in &hyperdrive {
+        eprintln!(
+            "bynk: will delete Hyperdrive config `{}` of `{}`'s `{}`",
+            h.config, h.worker, h.binding
+        );
+    }
+    confirm_deletion_prompt(
+        yes,
+        orphans.kv.len() + orphans.queues.len() + hyperdrive.len(),
+    )
 }
 
 /// The `--yes`-or-ask tail of [`confirm_prune`], shared with the Email Routing
@@ -1752,6 +1952,7 @@ pub(crate) mod tests {
                             },
                         )]),
                     )]),
+                    hyperdrive_instances: BTreeMap::new(),
                     stored_secret_links: BTreeMap::from([(
                         "api".into(),
                         BTreeMap::from([(

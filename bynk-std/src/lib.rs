@@ -622,7 +622,7 @@ pub const EMAIL_BINDING_PREFIX: &str = "EMAIL";
 
 /// The Worker binding prefix of a `Postgres` instance (Hyperdrive H1, #3318,
 /// ADR 0799 D): `capability Main = Postgres` binds as `HYPERDRIVE_MAIN`, a
-/// `[[hyperdrive]]` entry whose `id` `bynk deploy` will mint once H2 lands.
+/// `[[hyperdrive]]` entry whose `id` `bynk deploy` makes or adopts (#3319).
 pub const POSTGRES_BINDING_PREFIX: &str = "HYPERDRIVE";
 
 /// The option of an `Email` instance that pins every message to one recipient

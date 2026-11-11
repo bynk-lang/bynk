@@ -108,6 +108,70 @@
         }
       }
     },
+    "deploy": {
+      "additionalProperties": false,
+      "description": "Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.\nNo table holds a connection string: it is a secret, and `bynk.toml` is\ncommitted.",
+      "properties": {
+        "hyperdrive": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `Postgres` capability's Hyperdrive config at deploy.",
+            "properties": {
+              "config_id": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Hyperdrive config ids that already exist, by deployment environment\n(`default`, or an `--env` name). An environment listed here is adopted\nas it is and needs no connection string.",
+                "type": "object"
+              },
+              "connection_env": {
+                "description": "The name of the environment variable `bynk deploy` reads the\nconnection string from (`postgres://user:password@host:5432/db`). The\ndeploy creates the Hyperdrive config from it, or updates the config\nwhen the string changes. The string is never written to the ledger,\nthe plan or a generated file. A missing variable fails the deploy.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "description": "Hyperdrive settings, keyed by the `Postgres` capability's name\n(`capability Main = Postgres` is `Main`).",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#deploy"
+        }
+      }
+    },
+    "dev": {
+      "additionalProperties": false,
+      "description": "Settings `bynk dev` reads.",
+      "properties": {
+        "hyperdrive": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `Postgres` capability's connection string under `bynk dev`.",
+            "properties": {
+              "connection_env": {
+                "description": "The name of the environment variable `bynk dev` reads the local\nconnection string from, and hands to `wrangler dev` as\n`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "connection_env"
+            ],
+            "type": "object"
+          },
+          "description": "Local Hyperdrive connection strings, keyed by the `Postgres`\ncapability's name.",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/docs/manifest/#dev"
+        }
+      }
+    },
     "dev-dependencies": {
       "additionalProperties": {
         "additionalProperties": false,

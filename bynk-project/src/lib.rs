@@ -26,6 +26,7 @@ pub mod consistency;
 pub mod contracts_lock;
 pub mod discovery;
 pub mod graph;
+pub mod hyperdrive;
 pub mod json;
 pub mod lock;
 pub mod manifest;

@@ -67,36 +67,38 @@ base64, and `json` and `jsonb` nested. The
 [reference](/book/reference/bynk-capabilities/#postgres-databases-postgres) has the
 full rules and the `PgError` variants.
 
-## Create the Hyperdrive configuration by hand
+## Give Bynk the connection string
 
-`bynk deploy` does **not** create the Hyperdrive configuration yet (that, and the
-`bynk dev` wiring, are the next slice). Until then:
+`bynk deploy` makes the Hyperdrive configuration, and `bynk dev` needs a local
+database. Both read the connection string from an **environment variable** that
+`bynk.toml` names, because the string is a secret and `bynk.toml` is committed:
 
-1. Create the configuration, once per database and environment, with the
-   connection string of your database:
+```toml
+[deploy.hyperdrive.Main]
+connection_env = "MAIN_DATABASE_URL"
 
-   ```sh
-   npx wrangler hyperdrive create shop-main --connection-string="postgres://user:password@db.example.com:5432/shop"
-   ```
+[dev.hyperdrive.Main]
+connection_env = "MAIN_LOCAL_DATABASE_URL"
+```
 
-   It prints the configuration's `id`.
-2. Replace the placeholder in the generated `wrangler.toml`:
+```sh
+export MAIN_LOCAL_DATABASE_URL="postgres://postgres:postgres@localhost:5432/shop"
+bynk dev
 
-   ```toml
-   [[hyperdrive]]
-   binding = "HYPERDRIVE_MAIN"
-   id = "<the id wrangler printed>"
-   ```
+export MAIN_DATABASE_URL="postgres://user:password@db.example.com:5432/shop"
+bynk deploy
+```
 
-   A rebuild writes the placeholder again, so keep the id where your deploy step
-   can substitute it.
-3. For `bynk dev`, point the binding at a local database. Either add
-   `localConnectionString` to the `[[hyperdrive]]` entry, or set the environment
-   variable for the binding:
-
-   ```sh
-   export CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_MAIN="postgres://user:password@localhost:5432/shop"
-   ```
+`bynk dev` hands the local string to that Worker's `wrangler dev` as
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_MAIN`, so the Worker
+reaches your own Postgres. Deploy makes the config from the other variable, updates
+it when the string changes, and records its id, so there is no
+`wrangler hyperdrive create` and no id to paste. A team whose config already exists
+names it with `config_id` instead and needs no string at deploy. The
+[deploy guide](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)
+has the details, and
+[running locally](/book/guides/projects-build-and-deployment/run-locally/#a-local-postgres-database)
+the dev side.
 
 The connection string is a secret. Bynk reads it from the binding and passes it to
 the driver; it is never logged and never appears in an error. Keep it out of source

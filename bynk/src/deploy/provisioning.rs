@@ -95,6 +95,7 @@ pub(crate) fn deploy_one(
     // #3301: the Secrets Store each `(worker, binding)` linked to, as its id,
     // found before anything was pushed ([`link_for_run`]).
     linked_stores: &BTreeMap<(String, String), String>,
+    hyperdrive: &hyperdrive::HyperdriveRun<'_>,
 ) -> Result<Pushed, DeployFailure> {
     let worker_dir = workers_dir.join(worker);
     let config = worker_dir.join("wrangler.toml");
@@ -140,43 +141,15 @@ pub(crate) fn deploy_one(
         };
         kv_ids.insert(binding.to_string(), id);
     }
-    // P5 (#2323): each `R2` bucket, made by name (the name is the identity, so
-    // an existing one is the same end state) and recorded before the push. A
-    // bucket the ledger already holds under the same jurisdiction is not asked
-    // of the account again. Buckets are named as `environment` names them in
-    // the config the push reads: the top level already carries the default
-    // environment's, and the synthesised `[env.<name>]` block the rest.
-    for bucket in &declared.r2_buckets {
-        if r2_action(lock, worker, bucket, environment) == "reuse" {
-            continue;
-        }
-        let physical = r2_bucket_name(environment, &bucket.name);
-        create_r2_bucket(
-            provenance,
-            &physical,
-            bucket.jurisdiction.as_deref(),
-            project_root,
-        )
-        .map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
-                bucket.binding
-            ))
-        })?;
-        lock.record_r2(
-            environment,
-            worker,
-            &bucket.binding,
-            &physical,
-            bucket.jurisdiction.as_deref(),
-        );
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "created the R2 bucket `{physical}` but could not record it in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
+    provision_r2_buckets(
+        provenance,
+        project_root,
+        worker,
+        declared,
+        lock,
+        lock_path,
+        environment,
+    )?;
     provision_d1_databases(
         provenance,
         project_root,
@@ -187,6 +160,8 @@ pub(crate) fn deploy_one(
         &config,
         environment,
     )?;
+    // #3319: each `Postgres` binding's Hyperdrive config, bound by its id.
+    hyperdrive.provision(worker, declared, lock, lock_path, &config, environment)?;
     // #3301: each stored secret's store, found before the run, recorded and
     // bound by its id. Nothing is created here: the account owns them.
     record_links(
@@ -906,6 +881,55 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
         return Ok(false);
     }
     Err(said)
+}
+
+/// P5 (#2323): each `R2` bucket, made by name (the name is the identity, so an
+/// existing one is the same end state) and recorded before the push. A bucket
+/// the ledger already holds under the same jurisdiction is not asked of the
+/// account again. Buckets are named as `environment` names them in the config
+/// the push reads: the top level already carries the default environment's, and
+/// the synthesised `[env.<name>]` block the rest.
+fn provision_r2_buckets(
+    provenance: &Provenance,
+    project_root: &Path,
+    worker: &str,
+    declared: &Resources,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    for bucket in &declared.r2_buckets {
+        if r2_action(lock, worker, bucket, environment) == "reuse" {
+            continue;
+        }
+        let physical = r2_bucket_name(environment, &bucket.name);
+        create_r2_bucket(
+            provenance,
+            &physical,
+            bucket.jurisdiction.as_deref(),
+            project_root,
+        )
+        .map_err(|e| {
+            DeployFailure::driver(format!(
+                "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
+                bucket.binding
+            ))
+        })?;
+        lock.record_r2(
+            environment,
+            worker,
+            &bucket.binding,
+            &physical,
+            bucket.jurisdiction.as_deref(),
+        );
+        write_lock(lock_path, lock).map_err(|e| {
+            DeployFailure::driver(format!(
+                "created the R2 bucket `{physical}` but could not record it in {}: {e}",
+                lock_path.display()
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 /// P4a (#2602): each `D1` database, created by name with the id Cloudflare
@@ -1922,6 +1946,7 @@ mod tests {
             environment,
             live_kv_ids.as_ref(),
             &BTreeMap::new(),
+            &hyperdrive::HyperdriveRun::none(),
         );
         let calls = std::fs::read_to_string(&log)
             .unwrap_or_default()
@@ -2633,6 +2658,7 @@ mod tests {
             environment,
             None,
             &BTreeMap::new(),
+            &hyperdrive::HyperdriveRun::none(),
         );
         let read = |path: &Path| -> Vec<String> {
             std::fs::read_to_string(path)

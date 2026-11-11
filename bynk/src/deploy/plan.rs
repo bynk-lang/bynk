@@ -94,6 +94,10 @@ struct ContextPlan<'a> {
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     d1: Vec<PlanD1<'a>>,
+    /// #3319: one line per Hyperdrive config the Worker binds (a `Postgres`
+    /// instance), in binding order. Never the connection string.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    hyperdrive: Vec<PlanHyperdrive<'a>>,
     /// P3 (#2342): one line per rate limiter the Worker binds, in binding
     /// order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -234,6 +238,24 @@ struct PlanD1<'a> {
     /// can't say which those are.
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     migrations: &'a [String],
+}
+
+/// #3319: one Hyperdrive config.
+#[derive(Debug, Serialize)]
+struct PlanHyperdrive<'a> {
+    /// `HYPERDRIVE_<SNAKE>`.
+    binding: &'a str,
+    /// `create` (a config made from the connection string), `update` (the
+    /// string changed since the ledger last saw it), `reuse` (the recorded
+    /// config, unchanged) or `adopt` (a config `bynk.toml` names by id).
+    action: &'static str,
+    /// The config's account-facing name, or for an adopted config its id.
+    /// Never the connection string, or any part of it.
+    config: String,
+    /// The environment variable the connection string is read from, named so
+    /// the plan says where a change would come from. A name, not a value.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection_env: Option<String>,
 }
 
 /// P3b (#2582): one Analytics Engine dataset.
@@ -879,29 +901,10 @@ pub fn run(
         eprint!("{}", unpinned_message(&unpinned));
     }
 
-    // Review of #1974: namespace titles are account-wide, and a derived
-    // instance's joins two names with the separator Worker names already use,
-    // so two can coincide. Refused before the plan, `--dry-run` included,
-    // rather than met as wrangler's own error partway through a deploy.
-    if let Some(message) = kv_title_collision(&resources, &lock, &opts.environment) {
-        eprintln!("bynk: {message}");
-        return ExitCode::FAILURE;
-    }
-    // P5 (#2323): likewise a bucket's derived name, which R2 scopes to the
-    // account and holds to its own character rules.
-    if let Some(message) = r2_bucket_problem(&resources, &lock, &opts.environment) {
-        eprintln!("bynk: {message}");
-        return ExitCode::FAILURE;
-    }
-    // P3b (#2582): two instances whose derived dataset names meet would write
-    // into one table, silently and for the dataset's whole retention.
-    // P4a (#2602): likewise a database's, which deploy would otherwise adopt
-    // and share.
-    if let Some(message) = d1_database_problem(&resources, &lock, &opts.environment) {
-        eprintln!("bynk: {message}");
-        return ExitCode::FAILURE;
-    }
-    if let Some(message) = analytics_dataset_problem(&resources, &lock, &opts.environment) {
+    // Review of #1974: names the account scopes (a namespace's title, a
+    // bucket's, a database's, a dataset's) can coincide, so they are refused
+    // before the plan, `--dry-run` included, not met as wrangler's own error.
+    if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
         eprintln!("bynk: {message}");
         return ExitCode::FAILURE;
     }
@@ -916,6 +919,16 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
+    // #3319: each `Postgres` binding's connection string is read now, from the
+    // environment variable `bynk.toml` names, so a missing variable fails the
+    // deploy before the plan (`--dry-run` included) and the plan can show a
+    // changed string as an update. The string itself goes no further than the
+    // `Wants` below.
+    let Some(hyperdrive_wants) =
+        hyperdrive::wants_for_run(project_root, &order, &resources, &opts.environment)
+    else {
+        return ExitCode::FAILURE;
+    };
     let plan = derive_plan(
         &order,
         &resources,
@@ -923,7 +936,8 @@ pub fn run(
         &secret_source,
         opts.force,
         &opts.environment,
-    );
+    )
+    .with_hyperdrive(&order, &resources, &lock, &hyperdrive_wants);
     print_plan(&plan, opts.format);
     if opts.dry_run {
         return ExitCode::SUCCESS;
@@ -935,32 +949,13 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    // The CI gate is KV's alone, deliberately. A namespace id is *minted* by
-    // Cloudflare, so a CI job that creates one and cannot commit the result
-    // leaves an orphan nobody can find again. A queue's name comes from the
-    // source, so CI creating one loses nothing: the next run derives the same
-    // name and finds the same queue (ADR 0194 D2).
-    // Per namespace (S4b, #1967): each derived instance's id is minted too.
-    if is_ci()
-        && let Some((worker, binding)) =
-            first_unrecorded_kv(&order, &resources, &lock, &opts.environment)
-    {
-        eprintln!(
-            "bynk: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
-            kv_namespace_noun(worker, binding)
-        );
-        return ExitCode::FAILURE;
-    }
-    // P3 (#2342): a rate limiter's id is allocated by the ledger, so one
-    // allocated in CI and never committed would be allocated again next run —
-    // possibly another number, resetting the limiter's counters.
-    if is_ci()
-        && let Some((worker, binding)) =
-            first_unrecorded_ratelimit(&order, &resources, &lock, &opts.environment)
-    {
-        eprintln!(
-            "bynk: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
-        );
+    if unrecordable_in_ci(
+        &order,
+        &resources,
+        &lock,
+        &opts.environment,
+        &hyperdrive_wants,
+    ) {
         return ExitCode::FAILURE;
     }
     let probe = probe::detect(
@@ -997,6 +992,20 @@ pub fn run(
     let Some(linked_stores) = link_for_run(&order, &resources) else {
         return ExitCode::FAILURE;
     };
+    // #3319: the Hyperdrive API client, checked here, before the confirmation,
+    // so a missing token costs nothing.
+    let Ok(hyperdrive_api) = hyperdrive::api_for_run(
+        &order,
+        &resources,
+        &lock,
+        &opts.environment,
+        &hyperdrive_wants,
+        &plan.orphans,
+        opts.prune,
+    ) else {
+        return ExitCode::FAILURE;
+    };
+    let hyperdrive_run = hyperdrive::HyperdriveRun::new(&hyperdrive_wants, hyperdrive_api.as_ref());
     // State-migrations S3 (#2248): a deletion is confirmed by name, apart
     // from — and before — the ordinary confirmation.
     if !confirm_destructive(&plan, opts, &lock) {
@@ -1168,6 +1177,7 @@ pub fn run(
             &opts.environment,
             live_kv_ids.as_ref(),
             &linked_stores,
+            &hyperdrive_run,
         ) {
             Ok(Pushed::Ok) => {
                 // v0.177 (#643): record what this Worker now *provides*, so a
@@ -1299,6 +1309,18 @@ pub fn run(
         if let Err(e) = prune_orphans(
             &probe.provenance,
             project_root,
+            &mut lock,
+            &lock_path,
+            &opts.environment,
+            &plan.orphans,
+        ) {
+            eprintln!("bynk: {}", e.message);
+            return ExitCode::from(e.code);
+        }
+        // #3319: a Hyperdrive config holds no data, so one the deploy made is
+        // deleted with the rest; an adopted one never is.
+        if let Err(e) = hyperdrive::prune_run(
+            &hyperdrive_run,
             &mut lock,
             &lock_path,
             &opts.environment,
@@ -1973,6 +1995,19 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                     d1.worker, d1.binding, d1.database
                 ));
             }
+            for h in &plan.shown_orphans.hyperdrive {
+                out.push_str(&format!(
+                    "orphan hyperdrive {} {} ({}{})\n",
+                    h.worker,
+                    h.binding,
+                    h.config,
+                    if h.adopted {
+                        "; adopted, never deleted"
+                    } else {
+                        "; deleted by --prune"
+                    }
+                ));
+            }
             for worker in &plan.shown_orphans.workers {
                 out.push_str(&format!("orphan worker {worker}\n"));
             }
@@ -2016,6 +2051,18 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                             if n == 1 { "" } else { "s" }
                         ));
                     }
+                }
+                for h in &context.hyperdrive {
+                    out.push_str(&format!(
+                        "hyperdrive {} {} ({}",
+                        h.action, h.config, h.binding
+                    ));
+                    if h.action == "update"
+                        && let Some(variable) = &h.connection_env
+                    {
+                        out.push_str(&format!("; `{variable}` changed"));
+                    }
+                    out.push_str(")\n");
                 }
                 for limiter in &context.ratelimits {
                     match &limiter.namespace_id {
@@ -2147,6 +2194,111 @@ fn print_plan(plan: &Plan<'_>, format: DeployFormat) {
     print!("{}", plan_report(plan, format));
 }
 
+/// What CI must not make: a resource whose id Cloudflare mints or the ledger
+/// allocates, which a CI job that cannot commit `bynk.deploy.lock` would lose,
+/// leaving an orphan nobody can find again. Printed, and `true` when there is
+/// one. A queue's name comes from the source, so CI creating one loses nothing
+/// (ADR 0194 D2), and a bucket's, database's or dataset's likewise.
+///
+/// - A KV namespace's id is minted (S4b, #1967: each derived instance's too).
+/// - A rate limiter's id is allocated by the ledger (P3, #2342): one allocated
+///   and never committed would be allocated again next run, possibly another
+///   number, resetting the limiter's counters.
+/// - A Hyperdrive config's id is minted (#3319); a team that deploys from CI
+///   adopts one (`config_id`) instead.
+fn unrecordable_in_ci(
+    order: &[String],
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+    hyperdrive: &hyperdrive::Wants,
+) -> bool {
+    if !is_ci() {
+        return false;
+    }
+    if let Some((worker, binding)) = first_unrecorded_kv(order, resources, lock, environment) {
+        eprintln!(
+            "bynk: {} is unrecorded; provision locally first and commit {LOCK_FILE}",
+            kv_namespace_noun(worker, binding)
+        );
+        return true;
+    }
+    if let Some((worker, binding)) = first_unrecorded_ratelimit(order, resources, lock, environment)
+    {
+        eprintln!(
+            "bynk: the rate limiter `{binding}` of `{worker}` is unrecorded; deploy locally first and commit {LOCK_FILE}"
+        );
+        return true;
+    }
+    hyperdrive::refused_in_ci(order, resources, lock, environment, hyperdrive)
+}
+
+/// The first collision among the names the account scopes: a KV namespace's
+/// title (a derived instance's joins two names with the separator Worker names
+/// already use), an R2 bucket's, a D1 database's and an Analytics dataset's.
+fn account_name_problem(
+    resources: &BTreeMap<String, Resources>,
+    lock: &DeployLock,
+    environment: &str,
+) -> Option<String> {
+    kv_title_collision(resources, lock, environment)
+        .or_else(|| r2_bucket_problem(resources, lock, environment))
+        .or_else(|| d1_database_problem(resources, lock, environment))
+        .or_else(|| analytics_dataset_problem(resources, lock, environment))
+}
+
+/// #3319: the plan lines of `worker`'s Hyperdrive configs. `wants` is empty
+/// when the deploy has not read `bynk.toml`'s settings (a bare [`derive_plan`]),
+/// and then a config is a `create` or a `reuse` by the ledger alone.
+fn hyperdrive_plan<'a>(
+    worker: &str,
+    declared: &'a Resources,
+    lock: &DeployLock,
+    environment: &str,
+    wants: &hyperdrive::Wants,
+) -> Vec<PlanHyperdrive<'a>> {
+    declared
+        .hyperdrive
+        .iter()
+        .map(|decl| {
+            let physical = hyperdrive::config_name(environment, worker, decl);
+            let recorded = recorded_hyperdrive(lock, worker, &decl.binding, environment);
+            let want = wants.get(&(worker.to_string(), decl.binding.clone()));
+            PlanHyperdrive {
+                binding: &decl.binding,
+                action: hyperdrive::action(recorded, &physical, want),
+                config: match want {
+                    Some(hyperdrive::Want::Adopt { id }) => id.clone(),
+                    _ => physical,
+                },
+                connection_env: match want {
+                    Some(hyperdrive::Want::Connection { variable, .. }) => Some(variable.clone()),
+                    _ => None,
+                },
+            }
+        })
+        .collect()
+}
+
+impl<'a> Plan<'a> {
+    /// #3319: show each Hyperdrive config as `bynk.toml` and the environment
+    /// say it will be handled (an `update` when the connection string
+    /// changed, an `adopt`), once the deploy has read them.
+    pub(crate) fn with_hyperdrive(
+        mut self,
+        order: &[String],
+        resources: &'a BTreeMap<String, Resources>,
+        lock: &DeployLock,
+        wants: &hyperdrive::Wants,
+    ) -> Self {
+        for (worker, context) in order.iter().zip(self.contexts.iter_mut()) {
+            context.hyperdrive =
+                hyperdrive_plan(worker, &resources[worker], lock, self.environment, wants);
+        }
+        self
+    }
+}
+
 /// Derive the plan over the resolved order. Pure, so the per-context breakdown
 /// and the ordering claim are unit-tested without a Cloudflare account.
 ///
@@ -2225,6 +2377,13 @@ pub(crate) fn derive_plan<'a>(
                             }
                         })
                         .collect(),
+                    hyperdrive: hyperdrive_plan(
+                        worker,
+                        declared,
+                        lock,
+                        environment,
+                        &hyperdrive::Wants::new(),
+                    ),
                     ratelimits: declared
                         .ratelimits
                         .iter()
@@ -2737,7 +2896,7 @@ pub(crate) fn requires_interactive_confirmation(yes: bool, stdin_is_terminal: bo
     !yes && stdin_is_terminal
 }
 
-fn is_ci() -> bool {
+pub(crate) fn is_ci() -> bool {
     std::env::var_os("CI").is_some_and(|value| value != "false")
 }
 

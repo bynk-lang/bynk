@@ -65,6 +65,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | `consumes bynk.cloudflare { Kv }` | Creates a KV namespace and records its id |
 | `capability Sessions = Kv` | Creates a KV namespace of its own for that instance, and records its id |
 | `capability Archives = R2` | Creates an R2 bucket of its own for that instance, by name, and records it |
+| `capability Main = Postgres` | Makes a Hyperdrive config from the connection string in the environment variable `[deploy.hyperdrive.Main]` names (or adopts a config you name by id), and records its id |
 | `capability PublishLimit = RateLimit …` | Allocates the limiter a `namespace_id` and records it; nothing is created on the account |
 | An `agent` | Nothing to create — the config declares its Durable Object class, and Cloudflare registers it |
 | `service … from queue("n")` | Creates the queue `n` before pushing |
@@ -618,6 +619,92 @@ applied, and deploy stops with wrangler's message before anything is pushed,
 so the previous code keeps serving. Deploy's own confirmation covers the
 apply, so wrangler doesn't ask again.
 
+### Postgres databases: Hyperdrive
+
+Each [`Postgres` instance](/book/reference/bynk-capabilities/#postgres-databases-postgres)
+(`capability Main = Postgres`) binds a Hyperdrive config, and `bynk deploy` makes
+it. Tell it where the database's connection string is, in `bynk.toml`, by the
+**name of an environment variable**:
+
+```toml
+[deploy.hyperdrive.Main]
+connection_env = "MAIN_DATABASE_URL"
+```
+
+```sh
+export MAIN_DATABASE_URL="postgres://user:password@db.example.com:5432/shop"
+export CLOUDFLARE_API_TOKEN=…   # needs "Hyperdrive: Edit", and CLOUDFLARE_ACCOUNT_ID
+bynk deploy
+```
+
+The key is the capability's name (`Main`). The string is a secret, so `bynk.toml`
+never holds it, and a connection string written there is refused. Deploy reads the
+variable, makes the config through Cloudflare's API (the account's
+`hyperdrive/configs`, which takes the string as its parts, so
+`postgres://user:password@host:port/database` must be a Postgres URL; a query
+string such as `?sslmode=require` is ignored), records its id in the ledger and
+writes the id into the generated `[[hyperdrive]]` entry, which a named environment
+(`--env staging`) copies. The config is named `<worker>-<capability>`, with the
+environment suffix under `--env` (`shop-orders-main-staging`), and each
+environment makes its own:
+
+```
+hyperdrive create shop-orders-main (HYPERDRIVE_MAIN)
+deploy shop-orders
+```
+
+**When the string changes.** The ledger keeps a one-way fingerprint of the string
+each config was made from (not the string), so rotating the password or moving the
+database shows in the plan as an update to the same config, which keeps its id, and
+the plan names the variable and never its value:
+
+```
+hyperdrive update shop-orders-main (HYPERDRIVE_MAIN; `MAIN_DATABASE_URL` changed)
+deploy shop-orders
+```
+
+**A missing variable fails the deploy**, `--dry-run` included, before the plan,
+naming both:
+
+```
+bynk: the environment variable `MAIN_DATABASE_URL` is not set, and the `Postgres` capability behind `HYPERDRIVE_MAIN` of `shop-orders` reads its connection string from it (set it, or give environment `default` a `config_id` in `[deploy.hyperdrive]` to adopt a config that exists)
+```
+
+**Adopting a config that exists.** A team whose Hyperdrive config already exists
+does not need its connection string at deploy. Name the config's id per environment
+and nothing else is read:
+
+```toml
+[deploy.hyperdrive.Main]
+connection_env = "MAIN_DATABASE_URL"          # used by environments with no config_id
+config_id = { production = "0123456789abcdef0123456789abcdef" }
+```
+
+```
+hyperdrive adopt 0123456789abcdef0123456789abcdef (HYPERDRIVE_MAIN)
+```
+
+Deploy checks the config is on the account, records it as adopted and binds it. It
+never updates or deletes an adopted config. Use this too when you deploy from CI:
+a config id minted in a CI run that cannot commit `bynk.deploy.lock` would be lost,
+so CI refuses to make one (it names the binding and the two ways out).
+
+Renaming the capability makes a new config and orphans the old one:
+
+```
+orphan hyperdrive shop-orders HYPERDRIVE_MAIN (shop-orders-main; deleted by --prune)
+hyperdrive create shop-orders-primary (HYPERDRIVE_PRIMARY)
+```
+
+A Hyperdrive config holds no data, so `--prune` deletes an orphan the deploy made
+(an adopted one is only ever listed). `bynk dev -- --remote` binds the recorded
+config and refuses one no deploy has made; plain `bynk dev` is
+[configured separately](/book/guides/projects-build-and-deployment/run-locally/#a-local-postgres-database).
+
+The connection string goes to Cloudflare over TLS and nowhere else. It is not in
+the ledger, the plan or its JSON, `wrangler.toml`, `out/`, a log or an error
+message: what Cloudflare answers is scrubbed of it before it is shown.
+
 ### Account secrets: Secrets Store
 
 A `StoredSecret` instance
@@ -972,8 +1059,8 @@ redeploy shop-cart
 The data is not moved. Copy it across before you prune the old namespace. This is a plain diff against your current source; it
 never calls Cloudflare, so it works under `--dry-run` too.
 
-Pass `--prune` to delete what's reported — KV namespaces and queues only,
-never a Worker. It does not touch Worker versions or static assets: Cloudflare
+Pass `--prune` to delete what's reported — KV namespaces, queues and the
+Hyperdrive configs a deploy made, never a Worker. It does not touch Worker versions or static assets: Cloudflare
 owns those, and an asset lives as long as a version that serves it. Anything that
 holds data (a D1 database, an R2 bucket) is only ever listed:
 

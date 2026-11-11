@@ -562,22 +562,12 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    // Remote dev reads the real Cloudflare KV id, unlike Miniflare's local
-    // mode. Resolve it from the deploy ledger immediately before Wrangler
-    // runs; a never-deployed project gets an actionable error instead of
-    // sending the generated placeholder to Cloudflare.
-    if opts.wrangler_args.iter().any(|arg| arg == "--remote") {
-        for s in &serving {
-            if let Err(e) = crate::deploy::materialise_deploy_state(
-                project_root,
-                &s.worker,
-                &workers_dir.join(&s.worker).join("wrangler.toml"),
-                &opts.environment,
-            ) {
-                eprintln!("bynk: {e}");
-                return ExitCode::FAILURE;
-            }
-        }
+    // Remote dev reads the real Cloudflare ids, unlike Miniflare's local mode,
+    // from the deploy ledger immediately before Wrangler runs.
+    if opts.wrangler_args.iter().any(|arg| arg == "--remote")
+        && !materialise_remote_state(project_root, &workers_dir, &serving, &opts.environment)
+    {
+        return ExitCode::FAILURE;
     }
 
     // Interop I5 (#1972, track §11 Q8): each context's Service Bindings to
@@ -695,6 +685,12 @@ pub fn run(
     // up and the driver still dies of the default action; the children
     // themselves get the default back at `exec`.
     crate::stop::install();
+    // #3319: each `Postgres` instance's local connection string, from the
+    // variable `[dev.hyperdrive]` names, into that Worker's environment only.
+    let Some(local_strings) = hyperdrive_local_env(project_root, &workers_dir, &serving, remote)
+    else {
+        return ExitCode::FAILURE;
+    };
     let rewriter = std::sync::Arc::new(crate::logs::Rewriter::new(&build_dir));
     let mut children: Vec<(String, Served)> = Vec::new();
     let mut pumps: Vec<std::thread::JoinHandle<()>> = Vec::new();
@@ -722,6 +718,9 @@ pub fn run(
         }
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
+        }
+        for local in local_strings.get(&s.worker).into_iter().flatten() {
+            cmd.env(&local.name, &local.value);
         }
         // #2474: off a terminal (the editor's task, CI) or on request,
         // wrangler's output passes through the driver, line by line, so a
@@ -848,6 +847,55 @@ pub fn run(
 /// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
 /// or when either of our streams is not a terminal, where wrangler has no
 /// colour or hotkeys to lose.
+/// Fill each served Worker's generated config from the deploy ledger, for
+/// `-- --remote`. A never-deployed project gets an actionable error instead of
+/// sending a generated placeholder to Cloudflare; `false` after printing it.
+fn materialise_remote_state(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    environment: &str,
+) -> bool {
+    for s in serving {
+        let config = workers_dir.join(&s.worker).join("wrangler.toml");
+        if let Err(e) =
+            crate::deploy::materialise_deploy_state(project_root, &s.worker, &config, environment)
+        {
+            eprintln!("bynk: {e}");
+            return false;
+        }
+    }
+    true
+}
+
+/// #3319: the local connection strings of the served Workers' `Postgres`
+/// instances, or `None` after printing why not. `--remote` runs against the
+/// account's Hyperdrive config, so no local string applies.
+fn hyperdrive_local_env(
+    project_root: &Path,
+    workers_dir: &Path,
+    serving: &[Serving],
+    remote: bool,
+) -> Option<crate::dev_hyperdrive::LocalConnections> {
+    if remote {
+        return Some(Default::default());
+    }
+    let workers: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
+    let lookup = |name: &str| std::env::var(name).ok();
+    match crate::dev_hyperdrive::local_connections(project_root, workers_dir, &workers, &lookup) {
+        Ok((strings, warnings)) => {
+            for warning in warnings {
+                eprintln!("bynk: {warning}");
+            }
+            Some(strings)
+        }
+        Err(e) => {
+            eprintln!("bynk: {e}");
+            None
+        }
+    }
+}
+
 fn pipes_output(opts: &DevOptions) -> bool {
     use std::io::IsTerminal;
     opts.rewrite_frames

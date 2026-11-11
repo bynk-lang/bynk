@@ -750,8 +750,8 @@ fn a_broken_manifest_is_reported_not_ignored() {
         // #1665: `fmt` refuses an unknown table too, after `[fmt]` reads.
         (
             "fmt-unknown-table",
-            "[deploy]\ngroups = []\n",
-            "not yet supported (#551)",
+            "[pahts]\ninclude = []\n",
+            "did you mean `[paths]`?",
         ),
     ] {
         let dir = scratch(name);

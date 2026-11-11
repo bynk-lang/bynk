@@ -129,6 +129,19 @@ service api from http {
 }
 ";
 
+/// A `band` that asks [`run_smoke_with`] for ports the operating system says
+/// are free, for a smoke that has no band of its own: every one below port
+/// 65_536 is taken (the last, 10, by the D1 migrations smoke, #2608).
+const FREE_PORTS: u16 = u16::MAX;
+
+/// A port nothing is listening on, as the operating system hands one out.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .expect("a free local port")
+}
+
 fn skip(reason: &str) -> bool {
     if require::is_required(REQUIRE_ENV) {
         panic!("{REQUIRE_ENV} is set but {reason}");
@@ -201,13 +214,16 @@ fn run_smoke(
     band: u16,
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
-    run_smoke_with(project, ctx, source, &[], &|_| None, boot, band, drive)
+    run_smoke_with(project, ctx, source, &[], &|_| None, boot, band, &[], drive)
 }
 
 /// [`run_smoke`] with `files` (project-relative path, content) written into
 /// the project beside the source, and `prepare` run on the compiled Worker's
 /// directory before `wrangler dev` starts; a `Some` from it is a failure that
-/// stops the smoke.
+/// stops the smoke. `env` is set on `wrangler dev`'s own environment (and
+/// nowhere else), as `bynk dev` sets a Hyperdrive binding's local connection
+/// string (#3319). A `band` of [`FREE_PORTS`] takes two ports the operating
+/// system says are free instead of a band of its own.
 #[allow(clippy::too_many_arguments)]
 fn run_smoke_with(
     project: &str,
@@ -217,6 +233,7 @@ fn run_smoke_with(
     prepare: &dyn Fn(&std::path::Path) -> Option<String>,
     boot: &str,
     band: u16,
+    env: &[(&str, &str)],
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
     if !tools::tool_exists("npx") && skip("`npx` is not on PATH") {
@@ -235,7 +252,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Postgres\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -272,8 +289,12 @@ fn run_smoke_with(
     // and 6 (40_000 to 48_000) share a port with the events smokes for half
     // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
     // migrations smoke 10, the last band below port 65_536 (#2608).
-    let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
-    let inspector_port = port + 1;
+    let (port, inspector_port) = if band == FREE_PORTS {
+        (free_port(), free_port())
+    } else {
+        let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
+        (port, port + 1)
+    };
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
@@ -288,6 +309,7 @@ fn run_smoke_with(
                 "--inspector-port",
                 &inspector_port.to_string(),
             ])
+            .envs(env.iter().copied())
             .current_dir(&dir)
             .stdout(Stdio::from(out_log))
             .stderr(Stdio::from(err_log)),
@@ -864,6 +886,7 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
         &install_npm_dependencies,
         "/seen/boot",
         3,
+        &[],
         &|port| {
             let mut failures = check_steps(
                 port,
@@ -1211,6 +1234,7 @@ fn workers_analytics_writes_on_workerd() {
         &seed_local_secret,
         "/bare",
         4,
+        &[],
         &|port| {
             check_steps(
                 port,
@@ -1440,6 +1464,7 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
         &apply,
         "/items",
         10,
+        &[],
         &|port| {
             check_steps(
                 port,
@@ -1876,4 +1901,394 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
         "Fetch.receiveBytes/sendBytes/receiveStream/sendStream on workerd disagree with the contract their fake models:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
+}
+
+// ---- Hyperdrive H2 (#3319): `Postgres` through `wrangler dev` ----
+
+/// A Postgres server of the smoke's own, in a scratch directory, on a free
+/// port. Absent when no server binaries are installed, and then the smoke
+/// skips (or fails under `BYNK_REQUIRE_POSTGRES`).
+struct LocalPostgres {
+    bin: std::path::PathBuf,
+    dir: std::path::PathBuf,
+    port: u16,
+    /// The operating-system user the server runs as: Postgres refuses to run
+    /// as root, so a root test run (a container) hands it to `postgres`.
+    user: Option<String>,
+}
+
+const REQUIRE_POSTGRES_ENV: &str = "BYNK_REQUIRE_POSTGRES";
+
+impl LocalPostgres {
+    /// The directory holding `initdb` and `pg_ctl`: on `PATH`, or where the
+    /// distribution packages put them (`/usr/lib/postgresql/<version>/bin`).
+    fn find_bin() -> Option<std::path::PathBuf> {
+        if let Some(path) = std::env::var_os("PATH") {
+            for dir in std::env::split_paths(&path) {
+                if dir.join("initdb").is_file() && dir.join("pg_ctl").is_file() {
+                    return Some(dir);
+                }
+            }
+        }
+        let mut versions: Vec<_> = fs::read_dir("/usr/lib/postgresql")
+            .ok()?
+            .flatten()
+            .map(|e| e.path().join("bin"))
+            .filter(|b| b.join("initdb").is_file() && b.join("pg_ctl").is_file())
+            .collect();
+        versions.sort();
+        versions.pop()
+    }
+
+    fn is_root() -> bool {
+        Command::new("id")
+            .arg("-u")
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+            .unwrap_or(false)
+    }
+
+    /// Run `program args` as the server's user.
+    fn run(&self, program: &Path, args: &[&str]) -> bool {
+        let mut command = match &self.user {
+            Some(user) => {
+                let mut c = Command::new("su");
+                let line = std::iter::once(program.display().to_string())
+                    .chain(args.iter().map(|a| format!("'{a}'")))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                c.args([user.as_str(), "-s", "/bin/sh", "-c", &line]);
+                c
+            }
+            None => {
+                let mut c = Command::new(program);
+                c.args(args);
+                c
+            }
+        };
+        command
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// A started server, or `None` when this machine cannot run one.
+    fn start() -> Option<Self> {
+        let bin = Self::find_bin()?;
+        let dir = std::env::temp_dir().join(format!("bynk-pg-smoke-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).ok()?;
+        let user = if Self::is_root() {
+            if !Command::new("id")
+                .arg("postgres")
+                .output()
+                .ok()?
+                .status
+                .success()
+            {
+                return None;
+            }
+            Command::new("chown")
+                .arg("postgres")
+                .arg(&dir)
+                .status()
+                .ok()?;
+            Some("postgres".to_string())
+        } else {
+            None
+        };
+        let server = Self {
+            bin,
+            port: free_port(),
+            dir,
+            user,
+        };
+        let data = server.dir.join("data");
+        let socket = server.dir.display().to_string();
+        let options = format!(
+            "-p {} -k {socket} -c listen_addresses=127.0.0.1 -c fsync=off",
+            server.port
+        );
+        let started = server.run(
+            &server.bin.join("initdb"),
+            &[
+                "-D",
+                &data.display().to_string(),
+                "-A",
+                "trust",
+                "-U",
+                "postgres",
+            ],
+        ) && server.run(
+            &server.bin.join("pg_ctl"),
+            &[
+                "-D",
+                &data.display().to_string(),
+                "-o",
+                &options,
+                "-l",
+                &server.dir.join("log").display().to_string(),
+                "-w",
+                "start",
+            ],
+        );
+        started.then_some(server)
+    }
+
+    /// A connection string for this server. `trust` authentication takes any
+    /// password, so the string still carries one, as a real one does.
+    fn url(&self) -> String {
+        format!(
+            "postgres://postgres:smoke-pw-4711@127.0.0.1:{}/postgres",
+            self.port
+        )
+    }
+}
+
+impl Drop for LocalPostgres {
+    fn drop(&mut self) {
+        let data = self.dir.join("data").display().to_string();
+        self.run(
+            &self.bin.join("pg_ctl"),
+            &["-D", &data, "-m", "immediate", "stop"],
+        );
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// The `Postgres` smoke's Worker: three instances, one per database the smoke
+/// reaches (a real one; a port nothing listens on; a host that does not
+/// resolve). The routes answer plain text so a step is one line.
+const POSTGRES_SOURCE: &str = r#"context pg.smoke
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgValue, PgRun }
+
+capability Main = Postgres
+capability Refused = Postgres
+capability Nowhere = Postgres
+
+fn why(e: PgError) -> String {
+	match e {
+		PgConstraint(state, _) => "constraint \(state)"
+		PgSerialization(_) => "serialization"
+		PgConnection(message) => "connection: \(message)"
+		PgFailed(state, message) => "failed [\(state)] \(message)"
+		_ => "other"
+	}
+}
+
+service api from http {
+	on GET("/ready") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ready")
+	}
+
+	on GET("/setup") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let dropped <- Main.run("drop table if exists items", [])
+		let made <- Main.run("create table items (name text primary key, qty bigint not null, meta jsonb, stamp timestamptz, raw bytea)", [])
+		match made {
+			Ok(_) => Ok("made")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/insert/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("insert into items (name, qty, meta, stamp, raw) values ($1, $2::bigint, '{\"k\":[1,2]}'::jsonb, $3, $4)", [PgText(name), PgNumeric("1152921504606846976"), PgTimestamp(Instant.fromIso("2026-01-02T03:04:05Z").getOrElse(Instant.fromEpochMillis(0))), PgBytea(Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))])
+		match ran {
+			Ok(r) => Ok("inserted \(r.rowCount)")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/all") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.all("select name, qty, meta, stamp, raw from items order by name", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/first/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let one <- Main.first("select name, qty from items where name = $1", [PgText(name)])
+		match one {
+			Ok(Some(json)) => Ok(json)
+			Ok(None) => NotFound
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/update/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("update items set qty = qty + 1 where name = $1", [PgText(name)])
+		match ran {
+			Ok(r) => Ok("updated \(r.rowCount)")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/bad") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.all("select * from no_such_table", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/refused") () -> Effect[HttpResult[String]] by Visitor given Refused {
+		let rows <- Refused.all("select 1", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/nowhere") () -> Effect[HttpResult[String]] by Visitor given Nowhere {
+		let rows <- Nowhere.all("select 1", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+}
+"#;
+
+/// A JSON string body's text; the body itself when it is not one.
+fn unquote(body: &str) -> String {
+    serde_json::from_str::<String>(body).unwrap_or_else(|_| body.to_string())
+}
+
+#[test]
+fn workers_postgres_runs_through_hyperdrive_on_workerd() {
+    let Some(postgres) = LocalPostgres::start() else {
+        if require::is_required(REQUIRE_POSTGRES_ENV) {
+            panic!("{REQUIRE_POSTGRES_ENV} is set but no Postgres server could be started");
+        }
+        eprintln!(
+            "\n!!! POSTGRES SMOKE SKIPPED !!!\nno Postgres server binaries (`initdb`, `pg_ctl`) were found, or one could not be started\n"
+        );
+        return;
+    };
+    // The local strings, set on `wrangler dev` alone, as `bynk dev` sets them
+    // from `[dev.hyperdrive]`. The dead ones are a port nothing listens on and
+    // a name that does not resolve, each with a password and user to look for
+    // in what comes back.
+    let main = postgres.url();
+    let refused = "postgres://deadly:refused-pw-9001@127.0.0.1:1/db".to_string();
+    let nowhere = "postgres://ghost:nowhere-pw-9002@no-such-host.invalid:5432/db".to_string();
+    let prefix = "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_";
+    let env = [
+        (format!("{prefix}HYPERDRIVE_MAIN"), main.clone()),
+        (format!("{prefix}HYPERDRIVE_REFUSED"), refused.clone()),
+        (format!("{prefix}HYPERDRIVE_NOWHERE"), nowhere.clone()),
+    ];
+    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let Some((failures, log)) = run_smoke_with(
+        "pg-smoke",
+        "pg",
+        POSTGRES_SOURCE,
+        &[],
+        // The first-party `postgres` package, from the emitted
+        // `package.json` (ADR 0808): the Worker imports it, so its `node:*`
+        // imports must resolve under the emitted compatibility date.
+        &install_npm_dependencies,
+        "/ready",
+        FREE_PORTS,
+        &env,
+        &|port| {
+            // A handler's `String` is a JSON string on the wire.
+            let q = |text: &str| serde_json::to_string(text).unwrap();
+            let all = q(
+                r#"[{"name":"a","qty":"1152921504606846976","meta":{"k":[1,2]},"stamp":"2026-01-02T03:04:05.000Z","raw":"AP8H"},{"name":"b","qty":"1152921504606846976","meta":{"k":[1,2]},"stamp":"2026-01-02T03:04:05.000Z","raw":"AP8H"}]"#,
+            );
+            let first = q(r#"{"name":"a","qty":"1152921504606846976"}"#);
+            let (made, inserted, updated, none, duplicate) = (
+                q("made"),
+                q("inserted 1"),
+                q("updated 1"),
+                q("updated 0"),
+                q("constraint 23505"),
+            );
+            let mut failures = check_steps(
+                port,
+                &[
+                    ("/setup", 200, &made),
+                    ("/insert/a", 200, &inserted),
+                    ("/insert/b", 200, &inserted),
+                    // `all` and `first`: the rules of ADR 0799 F. `int8` is a
+                    // string (nothing past 2^53 is lost), `timestamptz` is
+                    // ISO-8601, `bytea` is base64 and `jsonb` is nested.
+                    ("/all", 200, &all),
+                    ("/first/a", 200, &first),
+                    ("/first/zzz", 404, ""),
+                    ("/update/a", 200, &updated),
+                    ("/update/zzz", 200, &none),
+                    // A unique violation is `PgConstraint` with its SQLSTATE.
+                    ("/insert/a", 200, &duplicate),
+                ],
+            );
+            // An error in the statement itself is `PgFailed` with its
+            // SQLSTATE and the database's message.
+            match get(port, "/bad") {
+                Ok((200, body)) if unquote(&body).starts_with("failed [42P01]") => {}
+                other => failures.push(format!("/bad: expected `failed [42P01] …`, got {other:?}")),
+            }
+            // A database that cannot be reached is an answer, not a fault,
+            // and its message never carries the host, the user or the
+            // password of the connection string.
+            for (path, dead, secrets) in [
+                (
+                    "/refused",
+                    &refused,
+                    ["127.0.0.1:1", "deadly", "refused-pw-9001"],
+                ),
+                (
+                    "/nowhere",
+                    &nowhere,
+                    ["no-such-host", "ghost", "nowhere-pw-9002"],
+                ),
+            ] {
+                match get(port, path) {
+                    Ok((200, body)) => {
+                        let body = unquote(&body);
+                        // Under local Hyperdrive a socket error carries no
+                        // driver `code`, so it is `PgFailed` with an empty
+                        // SQLSTATE; a driver that gave one would be
+                        // `PgConnection`. Either is a `PgError` answer.
+                        if !(body.starts_with("connection:") || body.starts_with("failed [] ")) {
+                            failures.push(format!("{path}: not a `PgError`: {body}"));
+                        }
+                        for secret in secrets {
+                            if body.contains(secret) {
+                                failures.push(format!(
+                                    "{path}: the answer holds `{secret}` of the connection string: {body}"
+                                ));
+                            }
+                        }
+                        if body.contains(dead.as_str()) {
+                            failures.push(format!("{path}: the answer holds the whole string"));
+                        }
+                    }
+                    other => failures.push(format!("{path}: expected a 200 answer, got {other:?}")),
+                }
+            }
+            failures
+        },
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "`Postgres` on workerd disagrees with the contract:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+    // No password in what `wrangler dev` logged. (Its own diagnostics name a
+    // host it cannot reach, the local test string's, which is workerd's
+    // output and not Bynk's.)
+    for secret in ["smoke-pw-4711", "refused-pw-9001", "nowhere-pw-9002"] {
+        assert!(
+            !log.contains(secret),
+            "the wrangler log holds `{secret}`:\n{log}"
+        );
+    }
 }

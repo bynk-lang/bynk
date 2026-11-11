@@ -32,6 +32,7 @@ pub mod cli;
 pub mod compile;
 pub mod deploy;
 pub mod dev;
+mod dev_hyperdrive;
 pub mod diagnostics;
 pub mod doctor;
 pub mod explain;
