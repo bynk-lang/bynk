@@ -1,0 +1,8 @@
+commons demo
+
+fn values(xs: List[Option[Int]]) -> List[Int] {
+    xs.map((o) => match o {
+        Some(n) => n
+        None => 0
+    })
+}

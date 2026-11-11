@@ -272,19 +272,19 @@ There are **813** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.lex.bad_escape`](/book/spec/lexical-grammar/#32-literals) | An invalid escape sequence in a string literal. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.bad_unicode_escape` | A `\u{…}` escape names a surrogate or a value above U+10FFFF. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| [`bynk.lex.bad_unicode_escape`](/book/spec/lexical-grammar/#322-string-literal) | A `\u{…}` escape names a surrogate or a value above U+10FFFF. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.decimal_literal_too_large` | A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622). | [`decimal_literal`](/book/reference/grammar/#rule-decimal_literal) | — |
-| `bynk.lex.float_literal_overflow` | A float literal does not fit a finite 64-bit float. | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
+| [`bynk.lex.float_literal_overflow`](/book/spec/lexical-grammar/#321a-float-literal) | A float literal does not fit a finite 64-bit float. | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | [`bynk.lex.integer_overflow`](/book/spec/lexical-grammar/#32-literals) | An integer literal is outside the `Int` range, the JS safe integers ±(2^53 − 1). | [`number_literal`](/book/reference/grammar/#rule-number_literal) | — |
 | `bynk.lex.interpolation_too_deep` | A string interpolation `\(…)` nests deeper than the lexer's fixed limit. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | [`bynk.lex.legacy_comment`](/book/spec/lexical-grammar/#333-retired-spellings) | A `--` line comment, the spelling before #2203; a comment is `//` (auto-fixable; `bynk fmt` rewrites it). |  | — |
-| `bynk.lex.legacy_doc_line` | A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it). |  | — |
+| [`bynk.lex.legacy_doc_line`](/book/spec/lexical-grammar/#333-retired-spellings) | A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it). |  | — |
 | `bynk.lex.multiline_close_not_own_line` | A `"""` inside a multi-line string literal is not on a line of its own. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_in_hole` | A multi-line string literal appears inside an interpolation hole, which must close on its own line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_indent` | A line of a multi-line string literal is indented less than its closing `"""`. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_open` | The opening `"""` of a multi-line string literal is not followed by a newline, or by a language tag (`"""sql`) and a newline. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.slash_doc` | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
-| `bynk.lex.unclosed_doc_block` | A documentation block is not closed. |  | — |
+| [`bynk.lex.slash_doc`](/book/spec/lexical-grammar/#333-retired-spellings) | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
+| [`bynk.lex.unclosed_doc_block`](/book/spec/lexical-grammar/#332-doc-blocks) | A documentation block is not closed. |  | — |
 | [`bynk.lex.unexpected_character`](/book/spec/lexical-grammar/#35-lexical-errors) | An unexpected character in the source. |  | — |
 | `bynk.lex.unterminated_interpolation` | An interpolation hole `\(…)` is not closed on its line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | [`bynk.lex.unterminated_string`](/book/spec/lexical-grammar/#32-literals) | A string literal is not terminated. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
@@ -602,20 +602,20 @@ There are **813** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.parse.bare_expression_statement`](/book/spec/syntactic-grammar/) | An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`. | [`block`](/book/reference/grammar/#rule-block) | — |
-| `bynk.parse.clause_after_statement` | A `stub` or `env` clause came after a statement in a test case; they lead the case body. |  | — |
+| [`bynk.parse.clause_after_statement`](/book/reference/testing/) | A `stub` or `env` clause came after a statement in a test case; they lead the case body. |  | — |
 | [`bynk.parse.const_missing_type`](/book/reference/constants/#declaring-a-constant) | A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.parse.consumes_after_decls` | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.parse.dangling_handler_annotation` | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
+| [`bynk.parse.consumes_after_decls`](/book/spec/syntactic-grammar/) | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.parse.dangling_handler_annotation`](/book/spec/static-semantics/#cache) | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
 | [`bynk.parse.doc_block_contains_code`](/book/spec/lexical-grammar/#332-doc-blocks) | A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation. |  | — |
 | `bynk.parse.duplicate_cors` | A service declares more than one `cors { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_json` | A service declares more than one `json { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_limits` | A service declares more than one `limits { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_security` | A service declares more than one `security { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.empty_agent` | An `agent` body is empty. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.parse.empty_capability` | A `capability` body is empty. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.parse.empty_interpolation` | An interpolation hole `\(…)` contains no expression. |  | — |
+| [`bynk.parse.empty_agent`](/book/reference/agents/#declaration) | An `agent` body is empty. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.parse.empty_capability`](/book/reference/capabilities/#declaring-a-capability) | A `capability` body is empty. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.parse.empty_interpolation`](/book/spec/lexical-grammar/#322a-string-interpolation) | An interpolation hole `\(…)` contains no expression. |  | — |
 | [`bynk.parse.empty_match`](/book/reference/types/#matching) | A `match` has no arms. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
-| `bynk.parse.empty_service` | A `service` body is empty. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.parse.empty_service`](/book/spec/syntactic-grammar/#441-service-decl) | A `service` body is empty. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.event_pattern_empty` | A `from Events(E { ... })` subscription pattern listed no fields — use `from Events(E)` (no braces) for an unfiltered subscription. |  | — |
 | `bynk.parse.expected_agent_key` | Expected a `key` declaration in an agent. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.parse.expected_agent_storage` | An agent declares no storage — it has no `store` fields. |  | — |
@@ -630,33 +630,33 @@ There are **813** codes in total.
 | `bynk.parse.expected_type` | Expected a type. |  | — |
 | `bynk.parse.expected_unit_header` | Expected a `commons` or `context` header. |  | — |
 | `bynk.parse.expected_visibility` | Expected a visibility keyword. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.parse.exports_after_decls` | `exports` appears after other declarations. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.parse.exports_after_decls`](/book/spec/syntactic-grammar/) | `exports` appears after other declarations. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | `bynk.parse.extra_tokens` | Unexpected tokens after an otherwise complete construct. |  | — |
-| `bynk.parse.generic_arg_count` | Wrong number of generic type arguments. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
+| [`bynk.parse.generic_arg_count`](/book/reference/types/#built-in-generic-types) | Wrong number of generic type arguments. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
 | [`bynk.parse.handler_in_agent`](/book/reference/agents/#declaration) | A protocol handler (`on GET`/`schedule`/`message`) was declared in an agent. | [`handler`](/book/reference/grammar/#rule-handler) | — |
-| `bynk.parse.invariant_after_handler` | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
+| [`bynk.parse.invariant_after_handler`](/book/reference/agent-invariants/#declaration) | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
 | [`bynk.parse.keyword_field_shorthand`](/book/reference/types/#keyword-field-names) | A reserved keyword was used as a field shorthand, which would bind a variable of that name. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
-| `bynk.parse.lambda_pattern_annotation` | A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
-| `bynk.parse.lambda_pattern_not_record` | A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
-| `bynk.parse.lambda_pattern_refutable` | A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
-| `bynk.parse.let_else_on_binding` | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
+| [`bynk.parse.lambda_pattern_annotation`](/book/spec/syntactic-grammar/#469b-lambda-param) | A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| [`bynk.parse.lambda_pattern_not_record`](/book/spec/syntactic-grammar/#469b-lambda-param) | A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| [`bynk.parse.lambda_pattern_refutable`](/book/spec/syntactic-grammar/#469b-lambda-param) | A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| [`bynk.parse.let_else_on_binding`](/book/spec/syntactic-grammar/#484a-let-else-stmt-2010) | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
 | `bynk.parse.let_else_staircase` | Nested `match`es on `Option`/`Result` that each carry on in one arm and give up in the other, which `let … else` writes flat. A hint with a machine-applicable rewrite; never fails a build and is hidden from the terminal (hint). |  | Hint |
-| `bynk.parse.let_pattern_annotation` | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
+| [`bynk.parse.let_pattern_annotation`](/book/spec/syntactic-grammar/#484a-let-else-stmt-2010) | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | [`bynk.parse.let_pattern_without_else`](/book/guides/type-system/destructure-a-record-with-let/#when-a-field-must-match) | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
 | [`bynk.parse.list_rest_not_last`](/book/reference/types/#list-patterns) | A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
-| `bynk.parse.malformed_float_literal` | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
+| [`bynk.parse.malformed_float_literal`](/book/spec/lexical-grammar/#321a-float-literal) | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | [`bynk.parse.match_ends_block`](/book/guides/type-system/match/#flatten-a-staircase) | A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow. | [`block`](/book/reference/grammar/#rule-block) | — |
 | `bynk.parse.migrate_after_handler` | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
 | `bynk.parse.migrate_item` | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
-| `bynk.parse.multiple_docs` | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
+| [`bynk.parse.multiple_docs`](/book/spec/static-semantics/#one-doc-per-target) | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
 | `bynk.parse.nesting_too_deep` | An expression or type nests deeper than the parser's fixed limit. |  | — |
 | [`bynk.parse.no_remainder_operator`](/book/reference/operators/#remainder) | `%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's). |  | — |
 | [`bynk.parse.non_associative`](/book/reference/operators/#precedence) | A non-associative operator was chained (e.g. `a == b == c`). | [`binary_expr`](/book/reference/grammar/#rule-binary_expr) | — |
 | `bynk.parse.orphan_doc_block` | A documentation block is not attached to a declaration (warning). |  | Warning |
 | `bynk.parse.policy_order` | A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.record_pattern_in_is_unparenthesised` | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
+| [`bynk.parse.record_pattern_in_is_unparenthesised`](/book/spec/syntactic-grammar/#4711-record_pattern) | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.parse.record_pattern_without_rest`](/book/reference/types/#record-patterns) | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
-| `bynk.parse.refined_pattern_inner` | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
+| [`bynk.parse.refined_pattern_inner`](/book/spec/syntactic-grammar/#4710-refined-pattern) | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
 | [`bynk.parse.reserved_keyword`](/book/reference/keywords/#hard-keywords) | A reserved keyword was used as an identifier. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
 | [`bynk.parse.self_outside_method`](/book/spec/syntactic-grammar/) | `self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
 | `bynk.parse.storage_after_phase` | Agent storage (`state` / `store`) is declared after the invariants or handlers. |  | — |
@@ -665,8 +665,8 @@ There are **813** codes in total.
 | `bynk.parse.unexpected_context` | A `context` appeared where it is not allowed. | [`context_decl`](/book/reference/grammar/#rule-context_decl) | — |
 | `bynk.parse.unexpected_eof` | Unexpected end of input. |  | — |
 | `bynk.parse.unexpected_suite` | A `suite` appeared where it is not allowed. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
-| `bynk.parse.unknown_effect_method` | An unknown method on `Effect`. |  | — |
-| `bynk.parse.unknown_handler_kind` | An unknown handler form (expected `call`, an HTTP method, `schedule`, or `message`). | [`handler`](/book/reference/grammar/#rule-handler) | — |
+| [`bynk.parse.unknown_effect_method`](/book/spec/syntactic-grammar/#4619-effect-pure-expr) | An unknown method on `Effect`. |  | — |
+| [`bynk.parse.unknown_handler_kind`](/book/spec/syntactic-grammar/#442a-handler) | An unknown handler form (expected `call`, an HTTP method, `schedule`, or `message`). | [`handler`](/book/reference/grammar/#rule-handler) | — |
 | [`bynk.parse.unknown_predicate`](/book/spec/type-system/#63-refinement-predicates) | An unknown refinement predicate. | [`predicate_name`](/book/reference/grammar/#rule-predicate_name) | — |
 | `bynk.parse.unknown_tier` | A `case`/`suite` `as <tier>` clause names something other than `unit`, `integration`, or `system`. |  | — |
 | [`bynk.parse.uses_after_decls`](/book/spec/syntactic-grammar/) | `uses` appears after other declarations. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |

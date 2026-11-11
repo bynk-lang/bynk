@@ -1608,6 +1608,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "32-literals",
     },
     Explain {
+        code: "bynk.lex.bad_unicode_escape",
+        blurb: "A `\\u{…}` escape must name a Unicode scalar value, so a string \
+                is always valid text. A surrogate (`D800` to `DFFF`) is half of \
+                a UTF-16 pair and stands for no character on its own, and \
+                anything above `10FFFF` is outside Unicode. Write the code point \
+                of the character you mean, such as `\\u{E9}` for `é`. A `\\u` \
+                with no braces, no digits or more than six digits is \
+                `bynk.lex.bad_escape`.",
+        example: "const Mark: String = \"\\u{D800}\"    // ✗ a surrogate is not a character\n\
+                  const Mark: String = \"\\u{E9}\"      // ✓ `é`",
+        page: "/book/spec/lexical-grammar",
+        anchor: "322-string-literal",
+    },
+    Explain {
+        code: "bynk.lex.float_literal_overflow",
+        blurb: "A `Float` is a 64-bit IEEE 754 double, and a literal must be a \
+                finite one: the largest is about 1.8e308. A literal past that \
+                would round to infinity, which no `Float` literal can spell, so \
+                it is refused rather than changed silently. Write a value in \
+                range.",
+        example: "const Big: Float = 1e999    // ✗ past the largest double\n\
+                  const Big: Float = 1e308    // ✓",
+        page: "/book/spec/lexical-grammar",
+        anchor: "321a-float-literal",
+    },
+    Explain {
         code: "bynk.lex.integer_overflow",
         blurb: "An `Int` is a JavaScript safe integer, from -(2^53 - 1) to 2^53 - \
                 1 (±9007199254740991), the range the runtime holds exactly; a \
@@ -1632,6 +1658,55 @@ pub const EXPLANATIONS: &[Explain] = &[
                   const Limit: Int = 100        // ✓ a comment is `//`",
         page: "/book/spec/lexical-grammar",
         anchor: "333-retired-spellings",
+    },
+    Explain {
+        code: "bynk.lex.legacy_doc_line",
+        blurb: "A one-line doc is `--- text`. The older `--|` spelling is \
+                refused rather than reread, so no file written for it changes \
+                meaning unnoticed. The fix is machine-applicable: `bynk check \
+                --fix` applies it and `bynk fmt` rewrites a whole project. A \
+                `--|` with no text has no one-line form; write a doc block \
+                between two `---` lines.",
+        example: "--| Doubles a number.                  // ✗ the old spelling\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\
+                  \n\
+                  --- Doubles a number.                  // ✓\n\
+                  fn double(n: Int) -> Int { n * 2 }",
+        page: "/book/spec/lexical-grammar",
+        anchor: "333-retired-spellings",
+    },
+    Explain {
+        code: "bynk.lex.slash_doc",
+        blurb: "A `///` is not a doc comment in Bynk. A doc is written with \
+                dashes: `--- text` for one line, or a block between two `---` \
+                lines for more. A plain comment is `//`. The fix to `---` is \
+                machine-applicable: `bynk check --fix` applies it. A run of four \
+                or more slashes is an ordinary comment.",
+        example: "/// Doubles a number.                  // ✗ a comment, not a doc\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\
+                  \n\
+                  --- Doubles a number.                  // ✓\n\
+                  fn double(n: Int) -> Int { n * 2 }",
+        page: "/book/spec/lexical-grammar",
+        anchor: "333-retired-spellings",
+    },
+    Explain {
+        code: "bynk.lex.unclosed_doc_block",
+        blurb: "A line of three or more dashes opens a documentation block, and \
+                a line of exactly the same number of dashes closes it. Here no \
+                closing line follows, so the compiler cannot tell where the \
+                documentation ends. There is no standalone `---` divider; a \
+                divider is a comment, `// ---`. Add the closing line.",
+        example: "---                                // ✗ never closed\n\
+                  Doubles a number.\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\
+                  \n\
+                  ---\n\
+                  Doubles a number.\n\
+                  ---                                // ✓ closed with as many dashes\n\
+                  fn double(n: Int) -> Int { n * 2 }",
+        page: "/book/spec/lexical-grammar",
+        anchor: "332-doc-blocks",
     },
     Explain {
         code: "bynk.lex.unexpected_character",
@@ -1856,6 +1931,33 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.parse.clause_after_statement",
+        blurb: "A `stub` or `env` clause sets up the world a test case runs in, \
+                so it comes at the start of the case body, before any statement. \
+                One after a `let` or other statement is refused, so the setup \
+                reads in one place above the steps that depend on it. Move the \
+                clause above the first statement of the case.",
+        example: "suite demo {\n\
+                  \x20\x20case \"x\" {\n\
+                  \x20\x20\x20\x20let k = 1\n\
+                  \x20\x20\x20\x20stub Clock.now() returns 0       // ✗ after a statement\n\
+                  \x20\x20\x20\x20let t <- probe.call()\n\
+                  \x20\x20\x20\x20expect t == 0\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  suite demo {\n\
+                  \x20\x20case \"x\" {\n\
+                  \x20\x20\x20\x20stub Clock.now() returns 0       // ✓ before the statements\n\
+                  \x20\x20\x20\x20let k = 1\n\
+                  \x20\x20\x20\x20let t <- probe.call()\n\
+                  \x20\x20\x20\x20expect t == 0\n\
+                  \x20\x20}\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.parse.const_missing_type",
         blurb: "A `const` always states its type: `const Limit: Int = 100`. A \
                 constant is part of its unit's interface, so a reader, or a unit \
@@ -1865,6 +1967,42 @@ pub const EXPLANATIONS: &[Explain] = &[
                   const Limit: Int = 100     // ✓",
         page: "/book/reference/constants",
         anchor: "declaring-a-constant",
+    },
+    Explain {
+        code: "bynk.parse.consumes_after_decls",
+        blurb: "In the fragment form of a `context` (the header with no braces), \
+                the `consumes` clauses come straight after the `uses` lines, \
+                before any `type` or `fn`, so a unit's dependencies are all \
+                stated at the top. Move the `consumes` line up. `uses` and \
+                `exports` follow the same rule, as `bynk.parse.uses_after_decls` \
+                and `bynk.parse.exports_after_decls`.",
+        example: "context shop.orders\n\
+                  type Id = String\n\
+                  consumes shop.payment            // ✗ a declaration comes first\n\
+                  \n\
+                  context shop.orders\n\
+                  consumes shop.payment            // ✓ clauses straight after the header\n\
+                  type Id = String",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.dangling_handler_annotation",
+        blurb: "A handler annotation, such as `@cache(maxAge: 5.minutes)`, \
+                applies to the handler after it, so it must sit directly above \
+                an `on`. Here something else, or the end of the service, follows \
+                it. Move the annotation to just above its handler.",
+        example: "service api from http {\n\
+                  \x20\x20\x20\x20on GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }\n\
+                  \x20\x20\x20\x20@cache(maxAge: 5.minutes)\n\
+                  }                                  // ✗ the annotation has no handler to apply to\n\
+                  \n\
+                  service api from http {\n\
+                  \x20\x20\x20\x20@cache(maxAge: 5.minutes)      // ✓ directly above its handler\n\
+                  \x20\x20\x20\x20on GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }\n\
+                  }",
+        page: "/book/spec/static-semantics",
+        anchor: "cache",
     },
     Explain {
         code: "bynk.parse.doc_block_contains_code",
@@ -1885,6 +2023,59 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "332-doc-blocks",
     },
     Explain {
+        code: "bynk.parse.empty_agent",
+        blurb: "An agent is its storage and the `on call` handlers that read and \
+                change it. One with no handler can never be called, so it is \
+                refused, as is one with no `store` field \
+                (`bynk.parse.expected_agent_storage`). Add a handler.",
+        example: "agent Tally {                                              // ✗ no handler\n\
+                  \x20\x20\x20\x20key id: String\n\
+                  \x20\x20\x20\x20store count: Cell[Int]\n\
+                  }\n\
+                  \n\
+                  agent Tally {\n\
+                  \x20\x20\x20\x20key id: String\n\
+                  \x20\x20\x20\x20store count: Cell[Int]\n\
+                  \n\
+                  \x20\x20\x20\x20on call get() -> Effect[Result[Int, String]] {         // ✓\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20Ok(count)\n\
+                  \x20\x20\x20\x20}\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.parse.empty_capability",
+        blurb: "A capability is a set of operations that a unit asks for with \
+                `given` and that a provider supplies. With no operations there \
+                is nothing to call or to provide, so an empty one is refused. \
+                Declare at least one operation, or remove the capability.",
+        example: "capability Clock {                 // ✗ no operations\n\
+                  }\n\
+                  \n\
+                  capability Clock {\n\
+                  \x20\x20\x20\x20fn now() -> Effect[Int]        // ✓\n\
+                  }",
+        page: "/book/reference/capabilities",
+        anchor: "declaring-a-capability",
+    },
+    Explain {
+        code: "bynk.parse.empty_interpolation",
+        blurb: "An interpolation hole, `\\(…)`, holds one expression, whose \
+                value is written into the text. An empty `\\()` has nothing to \
+                write. Put an expression in the hole. To write the characters \
+                `\\(` themselves, escape the backslash: `\\\\(`.",
+        example: "fn label(n: Int) -> String {\n\
+                  \x20\x20\x20\x20\"total: \\()\"                   // ✗ nothing to interpolate\n\
+                  }\n\
+                  \n\
+                  fn label(n: Int) -> String {\n\
+                  \x20\x20\x20\x20\"total: \\(n)\"                  // ✓\n\
+                  }",
+        page: "/book/spec/lexical-grammar",
+        anchor: "322a-string-interpolation",
+    },
+    Explain {
         code: "bynk.parse.empty_match",
         blurb: "A `match`, or the `else match` of a `let … else`, must have at \
                 least one arm. Each arm gives the match a value, so one with no \
@@ -1898,6 +2089,58 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/reference/types",
         anchor: "matching",
+    },
+    Explain {
+        code: "bynk.parse.empty_service",
+        blurb: "A service is its handlers, so one with none can never be called \
+                or triggered, and is refused. (A service that subscribes to \
+                `Events` takes exactly one `on event`.) Add a handler, or remove \
+                the service.",
+        example: "service orders {                   // ✗ no handler\n\
+                  }\n\
+                  \n\
+                  service orders {\n\
+                  \x20\x20\x20\x20on call() -> Effect[Int] {     // ✓\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20Effect.pure(0)\n\
+                  \x20\x20\x20\x20}\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "441-service-decl",
+    },
+    Explain {
+        code: "bynk.parse.exports_after_decls",
+        blurb: "In the fragment form of a `context` (the header with no braces), \
+                the `exports` clauses come after the `uses` and `consumes` lines \
+                and before any `type` or `fn`, so what a unit offers is stated \
+                at the top. Move the `exports` line up. `uses` and `consumes` \
+                follow the same rule, as `bynk.parse.uses_after_decls` and \
+                `bynk.parse.consumes_after_decls`.",
+        example: "context shop.orders\n\
+                  type Id = String\n\
+                  exports transparent { Id }       // ✗ a declaration comes first\n\
+                  \n\
+                  context shop.orders\n\
+                  exports transparent { Id }       // ✓ clauses straight after the header\n\
+                  type Id = String",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.generic_arg_count",
+        blurb: "`Result` takes two type arguments, the success type and the \
+                error type: `Result[T, E]`. `Map` takes two as well, `Map[K, \
+                V]`, and a type applied to an empty `[]` needs at least one. A \
+                `Result[Int]` leaves out the error a caller has to handle, so it \
+                is refused rather than guessed. Give every argument.",
+        example: "fn parse(s: String) -> Result[Int] {            // ✗ the error type is missing\n\
+                  \x20\x20\x20\x20Ok(1)\n\
+                  }\n\
+                  \n\
+                  fn parse(s: String) -> Result[Int, String] {    // ✓\n\
+                  \x20\x20\x20\x20Ok(1)\n\
+                  }",
+        page: "/book/reference/types",
+        anchor: "built-in-generic-types",
     },
     Explain {
         code: "bynk.parse.handler_in_agent",
@@ -1924,6 +2167,37 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaration",
     },
     Explain {
+        code: "bynk.parse.invariant_after_handler",
+        blurb: "An agent's declarations come in phases: `store` fields, then \
+                `invariant`s, then `on` handlers. An invariant after a handler \
+                is refused, so that every property the handlers must preserve \
+                sits together above them. Move the invariant above the first \
+                handler.",
+        example: "agent Tally {\n\
+                  \x20\x20\x20\x20key id: String\n\
+                  \x20\x20\x20\x20store count: Cell[Int]\n\
+                  \n\
+                  \x20\x20\x20\x20on call get() -> Effect[Result[Int, String]] {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20Ok(count)\n\
+                  \x20\x20\x20\x20}\n\
+                  \n\
+                  \x20\x20\x20\x20invariant nonNegative: count >= 0                // ✗ after a handler\n\
+                  }\n\
+                  \n\
+                  agent Tally {\n\
+                  \x20\x20\x20\x20key id: String\n\
+                  \x20\x20\x20\x20store count: Cell[Int]\n\
+                  \n\
+                  \x20\x20\x20\x20invariant nonNegative: count >= 0                // ✓ before the handlers\n\
+                  \n\
+                  \x20\x20\x20\x20on call get() -> Effect[Result[Int, String]] {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20Ok(count)\n\
+                  \x20\x20\x20\x20}\n\
+                  }",
+        page: "/book/reference/agent-invariants",
+        anchor: "declaration",
+    },
+    Explain {
         code: "bynk.parse.keyword_field_shorthand",
         blurb: "A record pattern or construction may write a field by name alone \
                 (`{ total }`), which binds a variable of that name. A reserved \
@@ -1937,6 +2211,91 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/reference/types",
         anchor: "keyword-field-names",
+    },
+    Explain {
+        code: "bynk.parse.lambda_pattern_annotation",
+        blurb: "A lambda parameter written as a record pattern already names its \
+                type, in `Item { … }`, and its names take their types from that \
+                record, so a `: Type` after the pattern is refused. Remove the \
+                annotation; the fix is machine-applicable, so `bynk check --fix` \
+                applies it.",
+        example: "items.map((Item { qty, .. }: Item) => qty)    // ✗ the pattern names the type\n\
+                  items.map((Item { qty, .. }) => qty)          // ✓",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "469b-lambda-param",
+    },
+    Explain {
+        code: "bynk.parse.lambda_pattern_not_record",
+        blurb: "A lambda parameter may be a pattern only when it is a record \
+                pattern that cannot fail, as in `(Item { qty, .. }) => qty`. A \
+                lambda is given a value and has no `else`, so a pattern that can \
+                miss, such as `Some(n)`, a list, a literal or a range, has no \
+                way to say what happens then. Take a name and `match` on it in \
+                the body.",
+        example: "xs.map((Some(n)) => n)               // ✗ a lambda has no `else` for `None`\n\
+                  \n\
+                  xs.map((o) => match o {              // ✓ the `match` covers both\n\
+                  \x20\x20\x20\x20Some(n) => n\n\
+                  \x20\x20\x20\x20None => 0\n\
+                  })",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "469b-lambda-param",
+    },
+    Explain {
+        code: "bynk.parse.lambda_pattern_refutable",
+        blurb: "A lambda parameter pattern must match every value of its type, \
+                because a lambda has no `else` for the rest. `Item { status: \
+                Paid, qty, .. }` matches only some items. Use bare names, `f: \
+                name` or `f: _`; the note names the first field that can fail. \
+                To handle the other cases, take a name and `match` on it in the \
+                body.",
+        example: "items.map((Item { status: Paid, qty, .. }) => qty)   // ✗ not every item is `Paid`\n\
+                  \n\
+                  items.map((i) => match i.status {                    // ✓ every status is handled\n\
+                  \x20\x20\x20\x20Paid => i.qty\n\
+                  \x20\x20\x20\x20Pending => 0\n\
+                  })",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "469b-lambda-param",
+    },
+    Explain {
+        code: "bynk.parse.let_else_on_binding",
+        blurb: "`else` after a `let` says what the block does when the pattern \
+                does not match. A plain name matches every value, so this `else` \
+                could never run, and it is refused rather than ignored. To \
+                handle a failure, bind a pattern that can fail: `Ok(x)`, \
+                `Some(x)`, or a qualified variant such as `Status.Pending`. \
+                Otherwise drop the `else`.",
+        example: "fn count(r: Result[Int, String]) -> Int {\n\
+                  \x20\x20\x20\x20let n = r else { 0 }              // ✗ a name always matches\n\
+                  \x20\x20\x20\x20n\n\
+                  }\n\
+                  \n\
+                  fn count(r: Result[Int, String]) -> Int {\n\
+                  \x20\x20\x20\x20let Ok(n) = r else { 0 }          // ✓ an `Err` takes the `else`\n\
+                  \x20\x20\x20\x20n\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "484a-let-else-stmt-2010",
+    },
+    Explain {
+        code: "bynk.parse.let_pattern_annotation",
+        blurb: "A `let` that takes a value apart with a pattern gives its names \
+                the types they have in the value, so it has no place for an \
+                annotation after the pattern. Remove the `: Type`. To pin the \
+                type of the value itself, annotate an ordinary `let` first and \
+                match on that.",
+        example: "fn count(r: Result[Int, String]) -> Int {\n\
+                  \x20\x20\x20\x20let Ok(n): Int = r else { 0 }     // ✗ a pattern takes its types from the value\n\
+                  \x20\x20\x20\x20n\n\
+                  }\n\
+                  \n\
+                  fn count(r: Result[Int, String]) -> Int {\n\
+                  \x20\x20\x20\x20let Ok(n) = r else { 0 }          // ✓\n\
+                  \x20\x20\x20\x20n\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "484a-let-else-stmt-2010",
     },
     Explain {
         code: "bynk.parse.let_pattern_without_else",
@@ -1974,6 +2333,18 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "list-patterns",
     },
     Explain {
+        code: "bynk.parse.malformed_float_literal",
+        blurb: "A `Float` literal has a digit on each side of the point, as in \
+                `1.0` and `0.5`; `1.` and `.5` are refused. This keeps a method \
+                call on a number, such as `1.toFloat()` or `2.5.round()`, \
+                unambiguous. Write the missing digit; the note gives the \
+                corrected literal.",
+        example: "const Half: Float = .5     // ✗ no digit before the point\n\
+                  const Half: Float = 0.5    // ✓",
+        page: "/book/spec/lexical-grammar",
+        anchor: "321a-float-literal",
+    },
+    Explain {
         code: "bynk.parse.match_ends_block",
         blurb: "A block has no expression statements, so a `match` is its final \
                 value and nothing can follow it; a second `match` straight after \
@@ -1990,6 +2361,25 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/guides/type-system/match",
         anchor: "flatten-a-staircase",
+    },
+    Explain {
+        code: "bynk.parse.multiple_docs",
+        blurb: "A declaration or member has one doc. Two doc lines in a row are \
+                two docs, not one of two lines. For more than one line, write a \
+                doc block: a `---` line, the text, and another `---` line. When \
+                every doc is a one-line `--- text`, the fix that joins them into \
+                a block is machine-applicable, so `bynk check --fix` applies it.",
+        example: "--- Doubles a number.\n\
+                  --- Used by the pricing code.          // ✗ a second doc\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\
+                  \n\
+                  ---                                    // ✓ one doc block\n\
+                  Doubles a number.\n\
+                  Used by the pricing code.\n\
+                  ---\n\
+                  fn double(n: Int) -> Int { n * 2 }",
+        page: "/book/spec/static-semantics",
+        anchor: "one-doc-per-target",
     },
     Explain {
         code: "bynk.parse.no_remainder_operator",
@@ -2028,6 +2418,23 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "precedence",
     },
     Explain {
+        code: "bynk.parse.record_pattern_in_is_unparenthesised",
+        blurb: "After `is`, a record pattern is written in parentheses. Bare, \
+                the `{` that opens its fields could equally open the block of \
+                the `if`, and the reader could not tell which. Write `x is (Type \
+                { field, .. })`. The fix is machine-applicable, so `bynk check \
+                --fix` applies it. A `match` arm needs no parentheses.",
+        example: "fn isPaid(o: Order) -> Bool {\n\
+                  \x20\x20\x20\x20if o is Order { status: Paid, .. } { true } else { false }       // ✗ `{` is ambiguous\n\
+                  }\n\
+                  \n\
+                  fn isPaid(o: Order) -> Bool {\n\
+                  \x20\x20\x20\x20if o is (Order { status: Paid, .. }) { true } else { false }     // ✓\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "4711-record_pattern",
+    },
+    Explain {
         code: "bynk.parse.record_pattern_without_rest",
         blurb: "Every record pattern ends with `..`. Record patterns are always open: they \
                 name the fields they care about and ignore the rest, so adding a field \
@@ -2038,6 +2445,25 @@ pub const EXPLANATIONS: &[Explain] = &[
                   match o {\n    Order { total, .. } => total      // ✓ open: other fields ignored\n}",
         page: "/book/reference/types",
         anchor: "record-patterns",
+    },
+    Explain {
+        code: "bynk.parse.refined_pattern_inner",
+        blurb: "A `where` guard on a `match` arm is written on the wildcard, as \
+                `_ where InRange(0, 100)`. In this version no other pattern can \
+                carry one, a name included, so binding the matched value \
+                together with a guard is not yet supported. Write `_ where …`, \
+                and refer to the value by the name it already has.",
+        example: "match n {\n\
+                  \x20\x20\x20\x20n where InRange(0, 100) => 1      // ✗ only `_` can take a `where`\n\
+                  \x20\x20\x20\x20_ => 0\n\
+                  }\n\
+                  \n\
+                  match n {\n\
+                  \x20\x20\x20\x20_ where InRange(0, 100) => 1      // ✓\n\
+                  \x20\x20\x20\x20_ => 0\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "4710-refined-pattern",
     },
     Explain {
         code: "bynk.parse.reserved_keyword",
@@ -2071,6 +2497,38 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/spec/syntactic-grammar",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.unknown_effect_method",
+        blurb: "`Effect.pure(value)` is the only operation spelled on `Effect` \
+                itself in an expression: it lifts a plain value into \
+                `Effect[T]`. An effect otherwise comes from calling a handler or \
+                a capability's operation. Use `Effect.pure`.",
+        example: "fn lift(n: Int) -> Effect[Int] {\n\
+                  \x20\x20\x20\x20Effect.of(n)                     // ✗ the only operation is `pure`\n\
+                  }\n\
+                  \n\
+                  fn lift(n: Int) -> Effect[Int] {\n\
+                  \x20\x20\x20\x20Effect.pure(n)                   // ✓\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "4619-effect-pure-expr",
+    },
+    Explain {
+        code: "bynk.parse.unknown_handler_kind",
+        blurb: "A handler is `on` and a kind the compiler knows: `call`, an HTTP \
+                method, `schedule`, `message` and the like. An HTTP method is \
+                written in capitals, `GET`, `POST`, `PUT`, `PATCH` or `DELETE`, \
+                so `on get(…)` is not a handler. Spell the kind as one of these.",
+        example: "service api from http {\n\
+                  \x20\x20\x20\x20on get(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ methods are capitals\n\
+                  }\n\
+                  \n\
+                  service api from http {\n\
+                  \x20\x20\x20\x20on GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✓\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "442a-handler",
     },
     Explain {
         code: "bynk.parse.unknown_predicate",
