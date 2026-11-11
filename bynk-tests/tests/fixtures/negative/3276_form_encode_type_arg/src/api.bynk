@@ -1,0 +1,7 @@
+context api
+
+type Signup = { email: String }
+
+fn write(v: Signup) -> String {
+  Form.encode[Signup](v)
+}

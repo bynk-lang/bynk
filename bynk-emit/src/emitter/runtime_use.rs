@@ -281,7 +281,7 @@ impl RuntimeUse {
         self.request_query.get()
     }
 
-    /// Record that a typed query becomes a query string (#2854).
+    /// Record that `Form.decode`/`Form.encode` use the form codec (#3276).
     pub fn note_form_codec(&self) {
         self.form_codec.set(true);
     }

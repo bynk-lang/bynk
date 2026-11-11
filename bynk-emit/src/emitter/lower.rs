@@ -4588,19 +4588,13 @@ fn lower_json_codec_call(
             let arg = pre.lower(&args[0], cx);
             return Some(pre.finish(format!("({decoder})({arg})")));
         }
-        if method.name == "encode"
-            && let Some(text) = json_encode_text(&mut pre, &args[0], cx, false)
-        {
+        if method.name == "encode" {
             cx.runtime_use().note_form_codec();
-            // `json_encode_text` is `JSON.stringify(<wire value>)`: the form text is the
-            // same wire value, written flat.
-            let wire = text
-                .strip_prefix("globalThis.JSON.stringify(")
-                .and_then(|t| t.strip_suffix(')'))
-                .map(str::to_string);
-            if let Some(wire) = wire {
-                return Some(pre.finish(format!("__formString({wire})")));
-            }
+            // The checker admits only a concrete record of form fields, so the wire
+            // value is always available; a miss is a compiler fault, not a user error.
+            let wire = form_encode_wire(&mut pre, &args[0], cx)
+                .expect("`Form.encode` checked a concrete record of form fields");
+            return Some(pre.finish(format!("__formString({wire})")));
         }
     }
     if matches!(
@@ -4756,6 +4750,24 @@ fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<Str
         })
         .collect();
     Some(format!("[{}]", items.join(", ")))
+}
+
+/// #3276: the wire value `Form.encode(arg)` writes flat: `arg` serialised exactly as
+/// `Json.encode` serialises it, before the JSON text step. `None` only for a type
+/// the lowering cannot render, which the checker has already refused for `Form`.
+fn form_encode_wire(pre: &mut Pre, arg: &Expr, cx: &mut LowerCtx) -> Option<String> {
+    let tys = cx.commons().tys();
+    let arg_ty = cx.commons().expr_types.get(&arg.id).map(|te| te.ty)?;
+    let tref = ty_to_type_ref(arg_ty, tys)?;
+    if cx.records_codec_roots() {
+        cx.runtime_use().note_json_codec_root(arg_ty);
+    }
+    let v = pre.lower(arg, cx);
+    Some(bynk_ts::print_expr(&serialisation::serialise_expr(
+        &tref,
+        &v,
+        cx.runtime_use(),
+    )))
 }
 
 /// `Json.encode(arg)`'s text: `globalThis.JSON.stringify(<serialised arg>)`, with

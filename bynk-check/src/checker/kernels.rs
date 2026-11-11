@@ -2937,7 +2937,7 @@ fn form_codec_target(t: TyId, span: Span, verb: &str, ctx: &mut Ctx) -> bool {
                     format!("`Form` {verb} a record of form fields, but {why}"),
                 )
                 .with_note(
-                    "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`; form keys are flat, so a nested record is not allowed",
+                    "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`; form keys are flat, so a nested record is not allowed. The target is a record type named directly (an alias of a record is not accepted)",
                 ),
             );
             false
