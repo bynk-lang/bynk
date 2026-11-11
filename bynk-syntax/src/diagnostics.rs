@@ -481,8 +481,8 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.resolve.unknown_static_member",
         blurb: "A type was named with a `.` and a member it does not have. `T.name` refers to a variant of the \
                 sum type `T` or to a static method declared on it, and a misspelt variant has no such member. Some built-in types \
-                have a closed set: `HttpResult` and `ErrorStatus` only their variants, and the numeric \
-                types only `parse`. Check the spelling against the declaration, or declare the missing \
+                have a closed set: `HttpResult`, `ErrorStatus` and `RoundingMode` only their variants, \
+                `Float` only `parse`, `pi` and `e`, and `Decimal` only `parse` and `fromInt`. Check the spelling against the declaration, or declare the missing \
                 static method.",
         example: "type Colour =\n    | Red\n    | Green\n\n\
                   Colour.Gren          // ✗ `Colour` has no variant `Gren`\n\n\
