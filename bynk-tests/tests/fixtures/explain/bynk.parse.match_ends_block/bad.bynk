@@ -1,0 +1,12 @@
+commons demo
+
+fn grade(a: Int, b: Int) -> Int {
+    match a {
+        0 => 0
+        _ => 1
+    }
+    match b {
+        0 => 0
+        _ => 1
+    }
+}

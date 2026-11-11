@@ -1,0 +1,5 @@
+commons demo
+
+fn parity(n: Int) -> Int {
+    n % 2
+}

@@ -1545,7 +1545,7 @@
   "self_expr": [
     {
       "code": "bynk.parse.self_outside_method",
-      "summary": "`self` used outside a method or handler."
+      "summary": "`self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver."
     },
     {
       "code": "bynk.resolve.self_outside_method",
