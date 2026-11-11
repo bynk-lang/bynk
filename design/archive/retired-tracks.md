@@ -2583,7 +2583,7 @@ imposed; entries keep the order they were retired in.
   **Named follow-ons.** The checker rule refusing store writes in `parTraverse`-family closures
   ([#3297](https://github.com/bynk-lang/bynk/issues/3297), [#3298](https://github.com/bynk-lang/bynk/issues/3298),
   [ADR 0797](../decisions/0797-par-closure-store-write.md)). A plain `bynk deploy` preflight for a
-  layout rollback (the revert preflight covers `bynk revert`). Streaming terminals over a scan, which
+  layout rollback (the revert preflight covers `bynk deploy revert`). Streaming terminals over a scan, which
   still reads a collection in pages. Upkeep of the writer's vocabulary list when a collection kind is
   added.
 

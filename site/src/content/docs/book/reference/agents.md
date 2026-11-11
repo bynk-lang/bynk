@@ -181,9 +181,13 @@ returns and are committed with the `Cell` record in one transaction, so a handle
 that faults writes nothing. What still reads a whole collection is a scan: `keys`,
 `values` or `entries`, a filter that is not an `@indexed` equality, a join, a
 group-by or an aggregate. Those read every entry in pages, so their cost still
-grows with the size of the collection. Operations on one key (`update`, `upsert`,
-`put`, `remove`) run one after another per key, so concurrent branches of a handler
-cannot lose an update to each other's write of the same key.
+grows with the size of the collection. Each single operation on one key
+(`update`, `upsert`, `put`, `remove`) is atomic and runs one after another per key, so
+two concurrent branches' `update` or `upsert` calls on the same key both apply. A `get`
+followed by a separate `put` is two operations, and concurrent branches doing that on one
+key can still lose an update: use `update` or `upsert` for a read-modify-write
+([#3297](https://github.com/bynk-lang/bynk/issues/3297) tracks refusing the unsafe shape
+in a `parTraverse` closure).
 
 A value stored the earlier way (the whole collection in one record), or a record a
 `migrate from` step still covers, is read whole and split into entries by its next
