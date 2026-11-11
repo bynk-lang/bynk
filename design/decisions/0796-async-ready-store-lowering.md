@@ -1,12 +1,6 @@
----
-level: minor
-probes: ts_writes
-changelog: Store collection operations and store queries in emitted agents are written so a handle backed by storage can serve them, with no change to an agent's behaviour (per-entry storage, lazy-read slice, part 2a)
----
+# 0796 — Store collection calls are awaited, and store queries chain through __bynkThen
 
-## ADR: async-ready-store-lowering
-title: Store collection calls are awaited, and store queries chain through __bynkThen
-summary: Every call the emitted code makes on a store handle is awaited and every store query runs its stages through a helper that serves a value or a promise, so a storage-backed handle can replace the in-memory one without a second change to the lowering
+- **Status:** Accepted (v0.544)
 
 **Context.** The in-memory handles (#3254) return their values at once; the storage-backed ones (#3295) return promises. The lowering written for the first assumed the first: a keyed op called `has`/`get`/`put` and used the results synchronously, and a store `Query[T]` was a thunk producing an array that each builder and terminal indexed directly. Decision F of #3189 needs the second, and the `Awaitable` return types of the handle interface were designed for it. Doing this as its own increment keeps the lazy wiring (part 2b) small and lets this change be checked against the whole existing suite, since it must change no behaviour.
 

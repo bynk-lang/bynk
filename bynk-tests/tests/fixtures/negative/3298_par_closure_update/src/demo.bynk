@@ -1,0 +1,14 @@
+context demo
+
+// #3298: a single-call `update` is atomic per key, but a `par { }` block refuses
+// it (2640_par_store_write), so a `parTraverse` closure refuses it too.
+
+agent Tally {
+  key id: String
+  store counts: Map[String, Int]
+
+  on call bump(n: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parTraverse((x: Int) => counts.update("k", (v) => v + 1))
+    Effect.pure(())
+  }
+}

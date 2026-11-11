@@ -1361,26 +1361,20 @@ for (const k of ["__proto__", "constructor"]) assert(!texts(k).includes("hi"), `
 console.log("ALL OK");
 "#;
 
-// Branches of one `parTraverse` that touch the same key (#3189, #3296). A single-call
-// `update` is atomic per key; a get then put across statements is not, and the count
-// it leaves is not a guarantee (#3297).
+// The rewrite #3298 asks for (#3189, #3296, #3297). A `parTraverse` closure may not write a
+// store (`bynk.par.store_write_in_closure`), so the increments run in a sequential
+// `forEach`, where a single-call `update` is atomic per key and every one counts. The
+// parallel forms (`viaUpdate`, `viaGetPut`) are the negative fixture
+// `3298_par_closure_issue_example`.
 const PAR_SOURCE: &str = "context shop\n\
 \n\
 agent Tally {\n\
   key id: String\n\
   store counts: Map[String, Int]\n\
 \n\
-  on call viaUpdate(n: Int) -> Effect[()] {\n\
+  on call viaForEach(n: Int) -> Effect[()] {\n\
     let _ <- counts.put(\"k\", 0)\n\
-    let _ <- [1, 2, 3].parTraverse((x: Int) => counts.update(\"k\", (v) => v + 1))\n\
-    Effect.pure(())\n\
-  }\n\
-  on call viaGetPut(n: Int) -> Effect[()] {\n\
-    let _ <- counts.put(\"k\", 0)\n\
-    let _ <- [1, 2, 3].parTraverse((x: Int) => {\n\
-      let o <- counts.get(\"k\")\n\
-      counts.put(\"k\", o.getOrElse(0) + 1)\n\
-    })\n\
+    let _ <- [1, 2, 3].forEach((x: Int) => counts.update(\"k\", (v) => v + 1))\n\
     Effect.pure(())\n\
   }\n\
   on call read() -> Effect[Int] {\n\
@@ -1412,12 +1406,8 @@ function fakeState() {
 }
 
 const t = new Tally(fakeState() as never);
-await t.viaUpdate(0, {});
-assert((await t.read({})) === 3, "three parTraverse updates on one key all count");
-
-// `viaGetPut` loses updates today (a get then a put across statements); no count is
-// asserted, so nobody reads one as intended behaviour. See #3297.
-await t.viaGetPut(0, {});
+await t.viaForEach(0, {});
+assert((await t.read({})) === 3, "three sequential updates on one key all count");
 
 console.log("ALL OK");
 "#;
@@ -1505,7 +1495,7 @@ fn store_cell_update_runtime_semantics() {
 }
 
 #[test]
-fn par_traverse_on_one_key_runtime_semantics() {
+fn for_each_update_on_one_key_runtime_semantics() {
     verify("par_key", PAR_SOURCE, PAR_DRIVER_TS);
 }
 

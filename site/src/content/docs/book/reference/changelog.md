@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.543**.
+written against **v0.545**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.545.0** | A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` may not write a `store` (`bynk.par.store_write_in_closure`), extending the `par` block's rule that store writes stay sequential |
+| **v0.544.1** | The project analysis shares each context's agent declarations with the sequence and boundary info it retains instead of deep-copying them twice per context, which shaves editor edit latency on projects with many agents |
+| **v0.544.0** | Store collection operations and store queries in emitted agents are written so a handle backed by storage can serve them, with no change to an agent's behaviour (per-entry storage, lazy-read slice, part 2a) |
 | **v0.543.1** | A ratcheted maximum function length: `cargo xtask fn-lengths` lists the non-test functions over 300 lines, and a test fails when one grows past its committed ceiling or a new one crosses the threshold (#3167) |
 | **v0.543.0** | The runtime gains storage-backed handles for an agent's Map, Set, Cache and Log fields that read one entry, one posting list or one key range at a time, inert until wired in (per-entry storage, lazy-read slice, part 1) |
 | **v0.542.2** | A `store Map`, `Set`, `Cache` and `Log` field is held in an agent's state as an insertion-ordered handle, so a `Map`'s keys, values and entries enumerate in insertion order for integer-like keys too, on both targets, in a handler and, for state written in the per-entry layout, after a reload (#3254) |

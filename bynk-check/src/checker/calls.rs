@@ -294,6 +294,7 @@ pub(crate) fn check_fn_in(
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
         let_else_removals: HashMap::new(),
+        store_writing_lambdas: HashMap::new(),
         question_let_binders: HashMap::new(),
         return_ty,
         return_ty_span: f.return_type.span(),
@@ -495,6 +496,7 @@ fn type_static_initialiser(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            store_writing_lambdas: HashMap::new(),
             question_let_binders: HashMap::new(),
             return_ty: field_ty,
             return_ty_span: init.span,
@@ -2715,7 +2717,10 @@ pub(crate) fn check_store_log_op(
         }
         // The general query vocabulary over the entry values.
         name if is_query_op(name) => {
-            check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx)
+            let r =
+                check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx);
+            par::reject_store_write_in_closure(method, args, ctx);
+            r
         }
         other => {
             ctx.errors.push(
@@ -3345,12 +3350,14 @@ pub(crate) fn check_method_call(
         Ty::List(elem) => {
             let kop = ListOp::from_name(&method.name);
             let r = check_list_kernel_method(method, kop, args, *elem, span, ctx);
+            par::reject_store_write_in_closure(method, args, ctx);
             return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::List), method, r);
         }
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
             let kop = QueryOp::from_name(&method.name);
             let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            par::reject_store_write_in_closure(method, args, ctx);
             return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }
         // v0.100: a chained builder/terminal on a `Stream[T]`.
