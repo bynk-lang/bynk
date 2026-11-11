@@ -2292,253 +2292,21 @@ fn lower_method_call(
     if let Some(s) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(s);
     }
-    // #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
-    // a derived `D1`. The checker wrote the statement (`SELECT` + the column
-    // list from `T` + the literal tail); this runs it through `all`/`first`
-    // and decodes with the `decodeSql` codec, so no runtime op is involved.
-    // Keyed on the recorded callee, not the method name. #2957: the error
-    // tags are `as const` — `Err<E>` infers `E` from the literal, and a bare
-    // `"Sql"` widens to `string`, so a match on `Err(Sql(e))` would not narrow
-    // and `e` would reach tsc as `DecodeError | SqlError`.
-    if let Some(Callee::D1Select {
-        cap,
-        row,
-        sql,
-        first,
-    }) = cx.commons().callees.get(&e.id).cloned()
-        && let Some(params) = args.get(1)
-    {
-        let tys = cx.commons().tys();
-        let target = if first {
-            row
-        } else {
-            tys.intern(Ty::List(row))
-        };
-        let decoder = json_decoder_fn(target, DecodeSource::Sql, cx)
-            .expect("a checked D1 select row type has a JSON decoder");
-        {
-            let params = pre.lower(params, cx);
-            let deps = if cx.in_test_case() {
-                "deps".to_string()
-            } else {
-                cx.cap_deps_expr().to_string()
-            };
-            let sql = escape_ts_string(&sql);
-            let (op, decode) = if first {
-                (
-                    "first",
-                    "if (__r.value.tag === \"None\") return Ok(None); \
-                     const __d = __decode(__r.value.value); \
-                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({ tag: \"Decode\" as const, error: __d.error });",
-                )
-            } else {
-                (
-                    "all",
-                    "const __d = __decode(__r.value); \
-                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\" as const, error: __d.error });",
-                )
-            };
-            return pre.finish(format!(
-                "(async () => {{ const __decode = {decoder}; \
-                 const __r = await {deps}.{cap}.{op}(\"{sql}\", {params}); \
-                 if (__r.tag === \"Err\") return Err({{ tag: \"Sql\" as const, error: __r.error }}); \
-                 {decode} }})()"
-            ));
-        }
-    }
-    // v0.15 cross-context capability call: `B.Cap.op(args)` /
-    // `Alias.Cap.op(args)`. The provider is instantiated locally in
-    // the composition root, so this lowers to an in-process
-    // `<deps>.<Cap>.op(args)` exactly like a local capability call —
-    // the consumed-context prefix is resolved away.
-    if let Some(chain) = flatten_emit_ident_chain(receiver)
-        && let Some((consumed, cap)) = cx.cross_context().resolve_cross_capability(&chain)
-    {
-        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        scope_idempotency_key(
-            cap == "Idempotency" && consumed == "bynk",
-            &method.name,
-            &mut args_lowered,
-            cx,
-        );
-        let wire = capability_wire(e, cx);
-        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        return pre.finish(format!(
-            "{}.{}.{}{}({})",
-            cx.cap_deps_expr(),
-            cap,
-            method.name,
-            capability_call_type_args_ts(type_args, wire.as_deref()),
-            args_lowered.join(", ")
-        ));
-    }
-    // v0.6 cross-context service call: receiver is an alias or the
-    // dotted name of a consumed context. #1961: unless the checker resolved
-    // this call to something else — a local shadowing the alias
-    // (`1203_cross_context_call_shadowed_by_local`) is a UFCS call, and
-    // lowering it over the wire named a Service Binding the Worker, which
-    // binds only what it calls, does not declare.
-    if !matches!(cx.commons().callee(e.id), Some(c) if !matches!(c, Callee::Cross { .. }))
-        && let Some(s) =
-            pre.absorb_opt(lower_cross_context_service_call(receiver, method, args, cx))
-    {
+    // Capability, cross-context, events and static-type calls (#3167).
+    if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
         return pre.finish(s);
     }
-    // Events track, slice 0 (spine #936): `Events.emit[E](event)` never
-    // calls through a provider like an ordinary capability op — release-
-    // at-commit (the retired events track's §3.0, `design/archive/retired-tracks.md`) buffers it into the handler's own
-    // `__events` local instead, flushed only if the handler completes
-    // without throwing. The local is declared by the outer body wrapper
-    // whenever `block_uses_emit` is true (the same syntactic check this
-    // receiver/method match mirrors), so the two stay in lockstep by
-    // construction. The flush calls `deps.__eventsDispatch`, which the
-    // publishing context's own compose wires to the Cloudflare fan-out DO
-    // (Workers) or an in-process dispatch closure (Bundle) — see
-    // `emit_events_fanout_do`/`project.rs`'s `__eventsDispatch` construction.
-    // P6.21 (continued, review of #1254): reads `Callee::Capability` (P6.0)
-    // instead of `id.name == "Events" && method.name == "emit"` — a real
-    // instance of R6.5's name-matched-receiver defect class, the same one
-    // every other branch in this module already closed. `unit_table_uses_
-    // emit` (`project.rs`) already reads this exact `Callee` for the
-    // identical classification, project-wide. `cx.is_first_party_events()`
-    // stays: it answers a different question (is *this unit's* `Events`
-    // capability actually the first-party runtime implementation, not
-    // which provider/target the emitted TS should call at all) than the
-    // one `Callee` settles.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Capability { cap, op, .. }) if cap == "Events" && op == "emit"
-        )
-        && cx.is_first_party_events()
-    {
-        let event_name = type_args
-            .first()
-            .and_then(|t| match t {
-                TypeRef::Named(ident) => Some(ident.name.clone()),
-                _ => None,
-            })
-            .unwrap_or_else(|| "unknown".to_string());
-        let payload = pre.lower(&args[0], cx);
-        // Events track, slice 2 (spine #936): the envelope is minted here,
-        // once, before fan-out duplicates this single `__events` entry to
-        // every subscriber — so one emission always carries one `eventId`/
-        // `emittedAt` to all of them (the invariant the identical-eventId
-        // fixture proves). `publisherId` is the emitting *context's*
-        // qualified name, not the emitting agent's instance identity:
-        // `Events.emit` is also legal from a plain, keyless service handler
-        // with no agent to report (`negative/503_events_emit_outside_owner`),
-        // so a context-scoped identifier is the only one available
-        // uniformly at every legal emission site — an amendment to
-        // design/bynk-design-notes.md §7's "the publisher is the emitting
-        // agent" framing (events-envelope ADR). `emittedAt` uses bare
-        // `Date.now()`, not `given Clock`, matching the runtime's existing
-        // JWT exp/nbf precedent of bypassing the `Clock` capability for its
-        // own internal timestamps — requiring `Clock` alongside `Events`
-        // would be new ambient coupling and would break every existing
-        // fixture that emits with `given Events` alone. `schemaVersion` is
-        // the event's own declared `@schema(N)` (Events slice 3b, #978),
-        // or `1` if it declares none — a real, per-type computed value is
-        // still a future slice (3c, the cross-build schema registry).
-        let schema_version = cx.event_schema_version(&event_name);
-        let publisher_id = escape_ts_string(cx.owning_context().unwrap_or_default());
-        return pre.finish(format!(
-            "(async () => {{ __events.push({{ type: \"{event_name}\", payload: {payload}, envelope: {{ eventId: globalThis.crypto.randomUUID(), publisherId: \"{publisher_id}\", emittedAt: globalThis.Date.now(), schemaVersion: {schema_version} }} }}); }})()"
-        ));
+    if let Some(s) = lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #1975: a capability call in a test `case` body (`Greeter.hello("ann")`)
-    // reaches the case's own `deps`, built by `__makeTestDeps`: the checker
-    // puts the target's capabilities in scope there, so it records the call
-    // as a capability operation, but a case body is no handler and has no
-    // `given` set for the branch below to read.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx.in_test_case()
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Capability { cap, .. }) if *cap == id.name
-        )
-    {
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        return pre.finish(format!(
-            "deps.{}.{}({})",
-            id.name,
-            method.name,
-            args_lowered.join(", ")
-        ));
+    if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // Capability call: receiver is a bare ident naming a declared
-    // capability in `given`. Lower to `<deps>.Capability.op(args)`,
-    // where `<deps>` is `deps` in a handler body and `this.deps` in a
-    // provider body (v0.12 provider composition).
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx.has_capability(&id.name)
-    {
-        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        // #934: a flattened `consumes bynk { Idempotency }` local name is
-        // first-party only if it's actually `bynk`'s own capability — either
-        // declared right here (this unit *is* `bynk`) or flattened in from it
-        // (`flattened_caps`). A same-named capability from any other adapter
-        // or context (e.g. the #926/#931 generic-op test fixtures' own
-        // illustrative `capability Idempotency`) must not be scoped.
-        let is_first_party = id.name == "Idempotency"
-            && (cx.in_bynk_unit()
-                || cx
-                    .cross_context()
-                    .flattened_caps
-                    .get(&id.name)
-                    .map(String::as_str)
-                    == Some("bynk"));
-        scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
-        let wire = capability_wire(e, cx);
-        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        return pre.finish(format!(
-            "{}.{}.{}{}({})",
-            cx.cap_deps_expr(),
-            id.name,
-            method.name,
-            capability_call_type_args_ts(type_args, wire.as_deref()),
-            args_lowered.join(", ")
-        ));
+    if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // Static call: receiver is a bare ident naming a declared type — unless
-    // the checker resolved it as a test-service address, which a target's
-    // service named like a `uses`-imported type it hides is (#1927).
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx.commons().types.contains_key(&id.name)
-        && !matches!(
-            cx.commons().callees.get(&e.id),
-            Some(
-                bynk_check::checker::Callee::TestService { .. }
-                    | bynk_check::checker::Callee::TestAssetFetch { .. }
-            )
-        )
-    {
-        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        // #2719: a static method in the needs-context set takes the context last.
-        let mut needs_exec = false;
-        if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
-            // Constrained generics slice 4: the call's witnesses follow the
-            // ordinary arguments, as for an instance method.
-            args_lowered.extend(cx.witness_args(decl, witnesses));
-            if cx.commons().exec_plan.fn_needs(decl) {
-                args_lowered.push(cx.exec_expr());
-                needs_exec = true;
-            }
-        }
-        // Slice 4 (DECISION B): explicit type arguments (`Box.empty[Int]()`) are
-        // kept, so a call with no argument of type `T` still types as written.
-        let call = format!(
-            "{}.{}{}({})",
-            id.name,
-            method.name,
-            capability_call_type_args_ts(type_args, None),
-            args_lowered.join(", ")
-        );
-        return pre.finish(if needs_exec {
-            settle_exec_call(call, cx)
-        } else {
-            call
-        });
+    if let Some(s) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
     // v0.7 / v0.182: local service call inside a test case body. `svc.call(args)`
     // lowers to `svc.call(args, deps)`. An http address `svc.<VERB>("/path", …)`
@@ -3145,6 +2913,320 @@ fn lower_method_call(
     // Instance call: UFCS lowering with the receiver as first arg.
     let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
     pre.finish(call)
+}
+
+/// Lower a derived-`D1` `select`/`firstAs` call (#2865), or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_d1_select_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
+    // a derived `D1`. The checker wrote the statement (`SELECT` + the column
+    // list from `T` + the literal tail); this runs it through `all`/`first`
+    // and decodes with the `decodeSql` codec, so no runtime op is involved.
+    // Keyed on the recorded callee, not the method name. #2957: the error
+    // tags are `as const` — `Err<E>` infers `E` from the literal, and a bare
+    // `"Sql"` widens to `string`, so a match on `Err(Sql(e))` would not narrow
+    // and `e` would reach tsc as `DecodeError | SqlError`.
+    if let Some(Callee::D1Select {
+        cap,
+        row,
+        sql,
+        first,
+    }) = cx.commons().callees.get(&e.id).cloned()
+        && let Some(params) = args.get(1)
+    {
+        let tys = cx.commons().tys();
+        let target = if first {
+            row
+        } else {
+            tys.intern(Ty::List(row))
+        };
+        let decoder = json_decoder_fn(target, DecodeSource::Sql, cx)
+            .expect("a checked D1 select row type has a JSON decoder");
+        {
+            let params = pre.lower(params, cx);
+            let deps = if cx.in_test_case() {
+                "deps".to_string()
+            } else {
+                cx.cap_deps_expr().to_string()
+            };
+            let sql = escape_ts_string(&sql);
+            let (op, decode) = if first {
+                (
+                    "first",
+                    "if (__r.value.tag === \"None\") return Ok(None); \
+                     const __d = __decode(__r.value.value); \
+                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({ tag: \"Decode\" as const, error: __d.error });",
+                )
+            } else {
+                (
+                    "all",
+                    "const __d = __decode(__r.value); \
+                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\" as const, error: __d.error });",
+                )
+            };
+            return Some(format!(
+                "(async () => {{ const __decode = {decoder}; \
+                 const __r = await {deps}.{cap}.{op}(\"{sql}\", {params}); \
+                 if (__r.tag === \"Err\") return Err({{ tag: \"Sql\" as const, error: __r.error }}); \
+                 {decode} }})()"
+            ));
+        }
+    }
+    None
+}
+
+/// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_cross_context_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.15 cross-context capability call: `B.Cap.op(args)` /
+    // `Alias.Cap.op(args)`. The provider is instantiated locally in
+    // the composition root, so this lowers to an in-process
+    // `<deps>.<Cap>.op(args)` exactly like a local capability call —
+    // the consumed-context prefix is resolved away.
+    if let Some(chain) = flatten_emit_ident_chain(receiver)
+        && let Some((consumed, cap)) = cx.cross_context().resolve_cross_capability(&chain)
+    {
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        scope_idempotency_key(
+            cap == "Idempotency" && consumed == "bynk",
+            &method.name,
+            &mut args_lowered,
+            cx,
+        );
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        return Some(format!(
+            "{}.{}.{}{}({})",
+            cx.cap_deps_expr(),
+            cap,
+            method.name,
+            capability_call_type_args_ts(type_args, wire.as_deref()),
+            args_lowered.join(", ")
+        ));
+    }
+    // v0.6 cross-context service call: receiver is an alias or the
+    // dotted name of a consumed context. #1961: unless the checker resolved
+    // this call to something else — a local shadowing the alias
+    // (`1203_cross_context_call_shadowed_by_local`) is a UFCS call, and
+    // lowering it over the wire named a Service Binding the Worker, which
+    // binds only what it calls, does not declare.
+    if !matches!(cx.commons().callee(e.id), Some(c) if !matches!(c, Callee::Cross { .. }))
+        && let Some(s) =
+            pre.absorb_opt(lower_cross_context_service_call(receiver, method, args, cx))
+    {
+        return Some(s);
+    }
+    None
+}
+
+/// Lower `Events.emit[E](event)`, buffered into the handler's `__events` until commit, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_events_emit_call(
+    e: &Expr,
+    receiver: &Expr,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // Events track, slice 0 (spine #936): `Events.emit[E](event)` never
+    // calls through a provider like an ordinary capability op — release-
+    // at-commit (the retired events track's §3.0, `design/archive/retired-tracks.md`) buffers it into the handler's own
+    // `__events` local instead, flushed only if the handler completes
+    // without throwing. The local is declared by the outer body wrapper
+    // whenever `block_uses_emit` is true (the same syntactic check this
+    // receiver/method match mirrors), so the two stay in lockstep by
+    // construction. The flush calls `deps.__eventsDispatch`, which the
+    // publishing context's own compose wires to the Cloudflare fan-out DO
+    // (Workers) or an in-process dispatch closure (Bundle) — see
+    // `emit_events_fanout_do`/`project.rs`'s `__eventsDispatch` construction.
+    // P6.21 (continued, review of #1254): reads `Callee::Capability` (P6.0)
+    // instead of `id.name == "Events" && method.name == "emit"` — a real
+    // instance of R6.5's name-matched-receiver defect class, the same one
+    // every other branch in this module already closed. `unit_table_uses_
+    // emit` (`project.rs`) already reads this exact `Callee` for the
+    // identical classification, project-wide. `cx.is_first_party_events()`
+    // stays: it answers a different question (is *this unit's* `Events`
+    // capability actually the first-party runtime implementation, not
+    // which provider/target the emitted TS should call at all) than the
+    // one `Callee` settles.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Capability { cap, op, .. }) if cap == "Events" && op == "emit"
+        )
+        && cx.is_first_party_events()
+    {
+        let event_name = type_args
+            .first()
+            .and_then(|t| match t {
+                TypeRef::Named(ident) => Some(ident.name.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+        let payload = pre.lower(&args[0], cx);
+        // Events track, slice 2 (spine #936): the envelope is minted here,
+        // once, before fan-out duplicates this single `__events` entry to
+        // every subscriber — so one emission always carries one `eventId`/
+        // `emittedAt` to all of them (the invariant the identical-eventId
+        // fixture proves). `publisherId` is the emitting *context's*
+        // qualified name, not the emitting agent's instance identity:
+        // `Events.emit` is also legal from a plain, keyless service handler
+        // with no agent to report (`negative/503_events_emit_outside_owner`),
+        // so a context-scoped identifier is the only one available
+        // uniformly at every legal emission site — an amendment to
+        // design/bynk-design-notes.md §7's "the publisher is the emitting
+        // agent" framing (events-envelope ADR). `emittedAt` uses bare
+        // `Date.now()`, not `given Clock`, matching the runtime's existing
+        // JWT exp/nbf precedent of bypassing the `Clock` capability for its
+        // own internal timestamps — requiring `Clock` alongside `Events`
+        // would be new ambient coupling and would break every existing
+        // fixture that emits with `given Events` alone. `schemaVersion` is
+        // the event's own declared `@schema(N)` (Events slice 3b, #978),
+        // or `1` if it declares none — a real, per-type computed value is
+        // still a future slice (3c, the cross-build schema registry).
+        let schema_version = cx.event_schema_version(&event_name);
+        let publisher_id = escape_ts_string(cx.owning_context().unwrap_or_default());
+        return Some(format!(
+            "(async () => {{ __events.push({{ type: \"{event_name}\", payload: {payload}, envelope: {{ eventId: globalThis.crypto.randomUUID(), publisherId: \"{publisher_id}\", emittedAt: globalThis.Date.now(), schemaVersion: {schema_version} }} }}); }})()"
+        ));
+    }
+    None
+}
+
+/// Lower a capability call: in a test `case` body, or on a capability named in `given`, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_capability_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // #1975: a capability call in a test `case` body (`Greeter.hello("ann")`)
+    // reaches the case's own `deps`, built by `__makeTestDeps`: the checker
+    // puts the target's capabilities in scope there, so it records the call
+    // as a capability operation, but a case body is no handler and has no
+    // `given` set for the branch below to read.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && cx.in_test_case()
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Capability { cap, .. }) if *cap == id.name
+        )
+    {
+        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        return Some(format!(
+            "deps.{}.{}({})",
+            id.name,
+            method.name,
+            args_lowered.join(", ")
+        ));
+    }
+    // Capability call: receiver is a bare ident naming a declared
+    // capability in `given`. Lower to `<deps>.Capability.op(args)`,
+    // where `<deps>` is `deps` in a handler body and `this.deps` in a
+    // provider body (v0.12 provider composition).
+    if let ExprKind::Ident(id) = &receiver.kind
+        && cx.has_capability(&id.name)
+    {
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        // #934: a flattened `consumes bynk { Idempotency }` local name is
+        // first-party only if it's actually `bynk`'s own capability — either
+        // declared right here (this unit *is* `bynk`) or flattened in from it
+        // (`flattened_caps`). A same-named capability from any other adapter
+        // or context (e.g. the #926/#931 generic-op test fixtures' own
+        // illustrative `capability Idempotency`) must not be scoped.
+        let is_first_party = id.name == "Idempotency"
+            && (cx.in_bynk_unit()
+                || cx
+                    .cross_context()
+                    .flattened_caps
+                    .get(&id.name)
+                    .map(String::as_str)
+                    == Some("bynk"));
+        scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        let wire = capability_wire(e, cx);
+        encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
+        return Some(format!(
+            "{}.{}.{}{}({})",
+            cx.cap_deps_expr(),
+            id.name,
+            method.name,
+            capability_call_type_args_ts(type_args, wire.as_deref()),
+            args_lowered.join(", ")
+        ));
+    }
+    None
+}
+
+/// Lower a static call on a declared type (`Box.empty[Int]()`), or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_type_static_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // Static call: receiver is a bare ident naming a declared type — unless
+    // the checker resolved it as a test-service address, which a target's
+    // service named like a `uses`-imported type it hides is (#1927).
+    if let ExprKind::Ident(id) = &receiver.kind
+        && cx.commons().types.contains_key(&id.name)
+        && !matches!(
+            cx.commons().callees.get(&e.id),
+            Some(
+                bynk_check::checker::Callee::TestService { .. }
+                    | bynk_check::checker::Callee::TestAssetFetch { .. }
+            )
+        )
+    {
+        let mut args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        // #2719: a static method in the needs-context set takes the context last.
+        let mut needs_exec = false;
+        if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
+            // Constrained generics slice 4: the call's witnesses follow the
+            // ordinary arguments, as for an instance method.
+            args_lowered.extend(cx.witness_args(decl, witnesses));
+            if cx.commons().exec_plan.fn_needs(decl) {
+                args_lowered.push(cx.exec_expr());
+                needs_exec = true;
+            }
+        }
+        // Slice 4 (DECISION B): explicit type arguments (`Box.empty[Int]()`) are
+        // kept, so a call with no argument of type `T` still types as written.
+        let call = format!(
+            "{}.{}{}({})",
+            id.name,
+            method.name,
+            capability_call_type_args_ts(type_args, None),
+            args_lowered.join(", ")
+        );
+        return Some(if needs_exec {
+            settle_exec_call(call, cx)
+        } else {
+            call
+        });
+    }
+    None
 }
 
 /// Lower the built-in scalar and collection statics (`HttpResult.*`, `List.empty`, `Map.empty`, `Set.empty`/`of`, the JSON codec, `Float.pi`/`e`, the numeric parses, `Duration.millis`, `Instant.from*`), or `None` when the call is none of them. Moved out of
