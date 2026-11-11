@@ -26,9 +26,9 @@ covers what slice 2 decides beyond ADR 0805.
   never carries `postal-mime`. The driver writes the pin into `out/package.json`.
   Hyperdrive H1 (#3318) adds `postgres` as a row and a runtime module, and nothing
   else. `bynk.lock` records each row as an `[[npm]]` with `first-party = true`,
-  `required-by = ["bynk-std"]`, never `approved`; it is written for every lock the
-  toolchain writes, because the lock records what *could* enter a build, as an
-  adapter's rows do. It never reaches `bynk.requires.unapproved` (that check
+  `required-by = ["bynk-std"]`, never `approved`; it is written when the project's own sources use the
+  binding (a `source_marker` text, `from email` for `postal-mime`), so a lock records
+  what the project could bring into its build and not every pin the toolchain has. It never reaches `bynk.requires.unapproved` (that check
   covers fetched packages' adapters only) and never appears among `bynk approve`'s
   pending rows (the listing calls it `built-in`). An adapter, in any package, that
   requires the same package at a different version is
@@ -67,23 +67,27 @@ covers what slice 2 decides beyond ADR 0805.
   (0.7 MB unpacked, with its own dependencies) would add a dependency to review and
   pin for what a test can pin directly, and its header encoding is not ours to
   audit. The writer is exercised by round-tripping its output through `postal-mime`.
-- **D. DMARC and the `Sender` identity.** The verdict is read from the **first**
-  `Authentication-Results` header (in the parsed header order, duplicates kept)
-  whose authserv-id is `mx.cloudflare.net`: the id is the first token before the
-  first `;`, comments stripped, compared case-insensitively and exactly (so
-  `mx.cloudflare.net.evil.example` does not match). The verdict is the first
-  `dmarc=` result of that header: `pass` and `fail` are those, anything else is
-  `DmarcNone`. Email Routing prepends its header, so a copy the sender wrote sits
-  below it. The rule is the one ADR 0805 states and no more: if Cloudflare added
-  no header, a sender's own `mx.cloudflare.net` header would be read, which the
-  platform does not allow to happen. `SenderIdentity` is
+- **D. DMARC and the `Sender` identity.** *A refinement of ADR 0805 E:* the verdict
+  is read from the **topmost** `Authentication-Results` header only (parsed header
+  order, duplicates kept), and only if its authserv-id is `mx.cloudflare.net`. ADR 0805
+  said "the first header whose authserv-id is `mx.cloudflare.net`", which searches
+  downward; every header below the top can be written by the sender, so whenever
+  Cloudflare did not prepend its own, that rule could land on a spoofed one. Now a
+  topmost header from any other server, or none, is `DmarcNone`, and the search never
+  goes further down. The id is the first token before the first `;`, comments
+  stripped, compared case-insensitively and exactly (so
+  `mx.cloudflare.net.evil.example` does not match). The verdict is the first `dmarc=`
+  result of that header: `pass` and `fail` are those, anything else is `DmarcNone`.
+  Tests: a spoofed Cloudflare header below another server's gives `DmarcNone`, as
+  does any header below one from another server (property test). The remaining trust
+  is Cloudflare's: that Email Routing prepends its header. `SenderIdentity` is
   `{ address: envelope from, dmarc }`. The checker types `s.identity` as
   `SenderIdentity` when the context imports it (`consumes bynk.cloudflare {
   SenderIdentity, … }`), and as the unit value otherwise, as slice 1 did. The
   Worker passes it through the compose wrapper's `__sender` argument into
   `deps.identity`, as `Caller` threads the calling context. A suite has no Email
   Routing: a handler that binds `Sender` reads the envelope sender with `DmarcNone`
-  (a prologue defaults it), so `bynk test` of such a handler runs.
+  (the case lowering supplies it), so `bynk test` of such a handler runs.
 - **E. Faults (ADR 0805 G, now implemented).** Every outcome is settled by the
   runtime and nothing escapes as a throw: a handler fault, or a return that is not a
   verdict, is `setReject("message could not be processed")`; a parse failure is
@@ -139,6 +143,14 @@ reply is built only from the envelope and the incoming `Message-ID`, never from 
 header the sender chose; no log line carries the message. The DMARC rule trusts one
 header, by position and authserv-id. The remaining trust is Cloudflare's: that Email
 Routing prepends its `Authentication-Results`.
+
+**Missing npm packages fail clearly.** `bynk dev` and `bynk deploy` do not run
+`npm install` (that would change every project and is its own decision). Instead, after
+the build, they check that every package the emitted `package.json` lists is in
+`node_modules` beside it, and stop before wrangler otherwise, naming the packages and
+the `npm install` to run in the build directory (so a `from email` project fails with
+an instruction, not a bundling error). `--dry-run` is stopped too. Automatic install is
+left to a follow-up.
 
 **Routing removals are gated (ADR 0805 F).** Wrangler deletes the rule of an
 address a Worker no longer lists, so mail to it bounces. Each Worker's pushed

@@ -130,14 +130,15 @@ test("dmarcVerdict: a header from another server is never trusted", () => {
   assert.deepEqual(dmarcVerdict(h(["authentication-results", "evil.example; x=mx.cloudflare.net; dmarc=pass"])), { tag: "DmarcNone" });
 });
 
-test("dmarcVerdict: only the FIRST mx.cloudflare.net header counts; a sender's later copy is ignored", () => {
+test("dmarcVerdict: only the TOPMOST header is read; a sender's later copy is ignored", () => {
   const spoof = ["authentication-results", "mx.cloudflare.net; dmarc=pass"] as [string, string];
   assert.deepEqual(dmarcVerdict(h(["authentication-results", "mx.cloudflare.net; dmarc=fail"], spoof)), { tag: "DmarcFail" });
-  // a header from another server above Cloudflare's does not stand in for it
-  assert.deepEqual(
-    dmarcVerdict(h(["authentication-results", "evil.example; dmarc=pass"], ["authentication-results", "mx.cloudflare.net; dmarc=fail"])),
-    { tag: "DmarcFail" },
-  );
+});
+
+test("dmarcVerdict: a topmost header from another server is DmarcNone, however far down a Cloudflare-looking one sits", () => {
+  const spoof = ["authentication-results", "mx.cloudflare.net; dmarc=pass"] as [string, string];
+  assert.deepEqual(dmarcVerdict(h(["authentication-results", "evil.example; dmarc=pass"], spoof)), { tag: "DmarcNone" });
+  assert.deepEqual(dmarcVerdict(h(["received", "from x"], ["authentication-results", "other.example; dmarc=fail"], spoof)), { tag: "DmarcNone" });
 });
 
 test("dmarcVerdict: comments, case and a version number in the header are read", () => {
@@ -148,7 +149,15 @@ test("dmarcVerdict: comments, case and a version number in the header are read",
   assert.deepEqual(dmarcVerdict(h(["authentication-results", "mx.cloudflare.net; spf=fail reason=\"dmarc=pass\""])), { tag: "DmarcNone" });
 });
 
-test("handleEmail reads the verdict through the parser: Cloudflare's header first, a spoofed copy ignored", async () => {
+test("handleEmail: a spoofed Cloudflare header below another server's is DmarcNone", async () => {
+  const raw = "Authentication-Results: evil.example; dmarc=pass\r\nAuthentication-Results: mx.cloudflare.net; dmarc=pass\r\n";
+  const seen: { mail?: InboundEmail; sender?: unknown } = {};
+  const { message } = fake(mime({ headers: raw }));
+  await handleEmail(message, [route("support@shop.example", { tag: "Accept" }, seen)], factory, () => {});
+  assert.deepEqual((seen.sender as { dmarc: unknown }).dmarc, { tag: "DmarcNone" });
+});
+
+test("handleEmail reads the verdict through the parser: Cloudflare's header on top, a spoofed copy ignored", async () => {
   const spoofed = `${CF.replace("dmarc=pass", "dmarc=fail")}Authentication-Results: mx.cloudflare.net; dmarc=pass\r\n`;
   const seen: { mail?: InboundEmail; sender?: unknown } = {};
   const { message } = fake(mime({ headers: spoofed }));
@@ -160,10 +169,9 @@ test("handleEmail reads the verdict through the parser: Cloudflare's header firs
   assert.deepEqual((seen2.sender as { dmarc: unknown }).dmarc, { tag: "DmarcPass" });
 });
 
-test("a sender-supplied header with no Cloudflare header above it is the documented gap: read as written", async () => {
-  // Email Routing always prepends its header, so this is not reachable through
-  // the platform; the test records that the rule is "first mx.cloudflare.net",
-  // as ADR 0805 states, and nothing cleverer.
+test("a lone topmost mx.cloudflare.net header is read as written", async () => {
+  // Email Routing always prepends its header, so the topmost one is Cloudflare's;
+  // a message with no Cloudflare header cannot reach here with one on top.
   const seen: { mail?: InboundEmail; sender?: unknown } = {};
   const { message } = fake(mime({ headers: "Authentication-Results: mx.cloudflare.net; dmarc=pass\r\n" }));
   await handleEmail(message, [route("support@shop.example", { tag: "Accept" }, seen)], factory, () => {});
@@ -620,6 +628,16 @@ test("property: random bytes never throw out of the parser", async () => {
     } else {
       assert.match(r.code, /^E[A-Z0-9]+$/);
     }
+  }
+});
+
+test("property: a topmost header from another server is DmarcNone whatever sits below it", () => {
+  const rand = prng(11);
+  const below = ["mx.cloudflare.net; dmarc=pass", "mx.cloudflare.net; dmarc=fail", "evil.example; dmarc=pass"];
+  for (let i = 0; i < 200; i++) {
+    const rows: [string, string][] = [["authentication-results", "evil.example; dmarc=pass"]];
+    for (let j = 0; j < 1 + Math.floor(rand() * 3); j++) rows.push(["authentication-results", below[Math.floor(rand() * below.length)]!]);
+    assert.deepEqual(dmarcVerdict(h(...rows)), { tag: "DmarcNone" });
   }
 });
 

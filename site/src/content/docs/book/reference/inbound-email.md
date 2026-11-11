@@ -122,9 +122,11 @@ A handler runs as the **`Sender`** actor unless it names another with `by`. Its
 scheme is the platform's own (`Internal`): Email Routing delivers and
 authenticates the mail before the handler runs. Its identity is a
 `SenderIdentity`, the envelope `address` and a `DmarcVerdict`, read only from
-the first `Authentication-Results` header whose authserv-id is
+the **topmost** `Authentication-Results` header, and only if its authserv-id is
 `mx.cloudflare.net`: Email Routing prepends its own, so a copy the sender wrote
-sits below it and is never read, and a header from any other server is ignored.
+sits below it. If the topmost header is another server's, or there is none, the
+verdict is `DmarcNone`; the search never goes further down, because every lower
+header can be the sender's.
 Treat `InboundEmail.from` as a claim, and `dmarc` as the evidence.
 
 Bind it to read it, and import the types it names:

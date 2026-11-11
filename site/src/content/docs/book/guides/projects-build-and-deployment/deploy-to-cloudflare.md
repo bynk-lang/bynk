@@ -713,8 +713,10 @@ removes every recorded address the same way.
 Email Routing must be turned on for the domain, and a `Forward(to)` destination
 must be a verified destination address in the account; deploy does not check
 either. A forward the platform refuses is rejected `forward refused` and logged.
-The Worker needs `postal-mime` installed beside it: `out/package.json` lists it,
-exactly pinned, so run `npm install` in the build directory before deploying.
+The Worker needs `postal-mime` installed beside it: the build's `package.json`
+lists it, exactly pinned, so run `npm install` in `.bynk/deploy` before
+deploying. `bynk deploy` (and `bynk dev`) stop before wrangler and name any
+listed package that is not installed, `--dry-run` included.
 
 ### Workers outside the project
 

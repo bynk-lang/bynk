@@ -101,7 +101,45 @@ pub fn compile_once_reporting(
         &output.snapshots,
         &output.display_root,
     );
+    let missing = missing_npm_dependencies(build_dir);
+    if !missing.is_empty() {
+        eprintln!(
+            "bynk: the build needs npm packages that are not installed: {}. Run `npm install` in `{}`, then try again",
+            missing.join(", "),
+            build_dir.display()
+        );
+        return false;
+    }
     true
+}
+
+/// The npm packages the emitted `package.json` lists (an adapter's, and the
+/// toolchain's own, ADR 0799 C, such as `postal-mime` for inbound email) that
+/// `node_modules` beside it does not hold, sorted. Checked before wrangler runs,
+/// so a project that needs `npm install` fails with that instruction rather than
+/// a bundling error.
+pub fn missing_npm_dependencies(build_dir: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(build_dir.join("package.json")) else {
+        return Vec::new();
+    };
+    let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let mut missing: Vec<String> = manifest["dependencies"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(name, _)| name.clone())
+        .filter(|name| {
+            !build_dir
+                .join("node_modules")
+                .join(name)
+                .join("package.json")
+                .is_file()
+        })
+        .collect();
+    missing.sort();
+    missing
 }
 
 /// Ensure `.bynk/` is gitignored on first build (cargo's `target/.gitignore`
@@ -238,5 +276,44 @@ pub fn wrangler_command(provenance: &Provenance, subcommand: &str) -> Option<Com
             Some(cmd)
         }
         Provenance::Missing => None,
+    }
+}
+
+#[cfg(test)]
+mod npm_preflight_tests {
+    use super::missing_npm_dependencies;
+
+    fn dir(name: &str) -> std::path::PathBuf {
+        let d =
+            std::env::temp_dir().join(format!("bynk-npm-preflight-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_listed_package_that_is_not_installed_is_named() {
+        let d = dir("missing");
+        std::fs::write(
+            d.join("package.json"),
+            r#"{ "type": "module", "dependencies": { "postal-mime": "4.1.4", "jose": "^5" } }"#,
+        )
+        .unwrap();
+        assert_eq!(missing_npm_dependencies(&d), ["jose", "postal-mime"]);
+        // Installing one leaves the other named.
+        let installed = d.join("node_modules/postal-mime");
+        std::fs::create_dir_all(&installed).unwrap();
+        std::fs::write(installed.join("package.json"), "{}").unwrap();
+        assert_eq!(missing_npm_dependencies(&d), ["jose"]);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_build_that_lists_no_dependencies_needs_nothing() {
+        let d = dir("none");
+        std::fs::write(d.join("package.json"), r#"{ "type": "module" }"#).unwrap();
+        assert!(missing_npm_dependencies(&d).is_empty());
+        assert!(missing_npm_dependencies(&d.join("absent")).is_empty());
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

@@ -9,8 +9,8 @@
 //      catch-all, an unclaimed recipient rejected with a fixed reason;
 //   2. read the raw stream under a byte cap and parse it with `postal-mime`
 //      (pinned exactly, a first-party npm dependency, ADR 0799 C);
-//   3. read the DMARC verdict from the **first** `Authentication-Results` header
-//      whose authserv-id is `mx.cloudflare.net`, never a sender-supplied copy;
+//   3. read the DMARC verdict from the **topmost** `Authentication-Results` header,
+//      and only if its authserv-id is `mx.cloudflare.net`, never a sender's copy;
 //   4. run the handler, and apply its verdict.
 //
 // The message is untrusted input. Nothing in it (body, headers, attachments,
@@ -212,17 +212,21 @@ function authservId(value: string): string {
 }
 
 /**
- * The DMARC verdict, from the **first** `Authentication-Results` header whose
- * authserv-id is `mx.cloudflare.net` (ADR 0805 E). Email Routing prepends its
- * own header, so a copy the sender wrote sits below it and is never read. A
- * header from any other server, however it is worded, is not trusted. The
- * verdict is the first `dmarc=` result of that header: `pass` and `fail` are
- * those verdicts, anything else (`none`, `temperror`, `permerror`, a missing
- * method) is no verdict.
+ * The DMARC verdict, from the **topmost** `Authentication-Results` header, and
+ * only if its authserv-id is `mx.cloudflare.net` (ADR 0805 E, tightened in
+ * slice 2). Email Routing prepends its own header, so Cloudflare's is the first
+ * one. Every header below it can be written by the sender, so the search never
+ * goes further down: if the topmost header is from another server, or there is
+ * none, the verdict is `DmarcNone`, even when a lower header claims to be
+ * Cloudflare's. The verdict is the first `dmarc=` result of that header: `pass`
+ * and `fail` are those verdicts, anything else (`none`, `temperror`,
+ * `permerror`, a missing method) is no verdict. The authserv-id is the first
+ * token before the first `;`, comments stripped, compared case-insensitively
+ * and exactly.
  */
 export function dmarcVerdict(headers: readonly { readonly key: string; readonly value: string }[]): DmarcVerdict {
-  const header = headers.find((h) => h.key === "authentication-results" && authservId(h.value) === "mx.cloudflare.net");
-  if (header === undefined) return { tag: "DmarcNone" };
+  const header = headers.find((h) => h.key === "authentication-results");
+  if (header === undefined || authservId(header.value) !== "mx.cloudflare.net") return { tag: "DmarcNone" };
   // The first `;`-separated field is the authserv-id; the rest are results.
   const results = stripComments(header.value).split(";").slice(1);
   for (const result of results) {

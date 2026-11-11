@@ -1812,8 +1812,8 @@ is `bynk.target.vendor_required`. Two contexts claiming one address is also
 `bynk.email.duplicate_address`: the check is project-wide, because routing is.
 On `--target workers` the Worker exports `email(message, env, ctx)`, which
 dispatches on the envelope recipient, parses the raw message into `InboundEmail`
-under fixed limits, mints the `Sender` identity from the first
-`Authentication-Results` header whose authserv-id is `mx.cloudflare.net`, runs
+under fixed limits, mints the `Sender` identity from the
+topmost `Authentication-Results` header when its authserv-id is `mx.cloudflare.net`, runs
 the handler, and applies its verdict; a fault, a parse failure and a refused
 reply each reject the message with a fixed reason and log nothing of it.
 

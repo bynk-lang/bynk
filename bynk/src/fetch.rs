@@ -194,7 +194,7 @@ pub fn prepare(project_dir: &Path, opts: &FetchOptions) -> Result<Prepared, Fetc
         })
         .collect();
     let npm = approvals(
-        npm_requirements(&walk.dirs),
+        npm_requirements(&walk.dirs, &members),
         &walk.resolved,
         &walk.existing,
         &mut walk.prepared,
@@ -673,7 +673,7 @@ impl Walk<'_> {
 /// the lock's `[[npm]]` rows: one row per `(package, range)`, its
 /// `required-by` the `org/package:adapter`s naming it. Every adapter counts,
 /// reached or not — the lock records what *could* enter a build.
-fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
+fn npm_requirements(dirs: &BTreeMap<String, PathBuf>, members: &[PathBuf]) -> Vec<LockedNpm> {
     let mut rows: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
     for (name, dir) in dirs {
         let Some(doc) = read_manifest(dir) else {
@@ -709,17 +709,30 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>) -> Vec<LockedNpm> {
             first_party: false,
         })
         .collect();
-    out.extend(first_party_rows());
+    out.extend(first_party_rows(members));
     out
 }
 
-/// ADR 0799 C: the toolchain's own npm dependencies, one `first-party` row
-/// each, required by `bynk-std`. They never need approval (see
-/// [`bynk_check::firstparty::FirstPartyNpm`]). Like an adapter's, a row records
-/// what *could* enter a build.
-fn first_party_rows() -> impl Iterator<Item = LockedNpm> {
+/// ADR 0799 C: the toolchain's own npm dependencies a project uses, one
+/// `first-party` row each, required by `bynk-std`: those whose binding the
+/// project's own sources use ([`bynk_check::firstparty::FirstPartyNpm::source_marker`]).
+/// They never need approval. Like an adapter's, a row records what *could* enter
+/// a build.
+fn first_party_rows(members: &[PathBuf]) -> Vec<LockedNpm> {
+    let mut sources = String::new();
+    for member in members {
+        let Some(doc) = read_manifest(member) else {
+            continue;
+        };
+        for root in bynk_project::packages::package_source_roots(member, &doc) {
+            for file in bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default() {
+                sources.push_str(&std::fs::read_to_string(file).unwrap_or_default());
+            }
+        }
+    }
     bynk_check::firstparty::FIRST_PARTY_NPM
         .iter()
+        .filter(|d| sources.contains(d.source_marker))
         .map(|d| LockedNpm {
             package: d.package.to_string(),
             range: d.version.to_string(),
@@ -727,6 +740,7 @@ fn first_party_rows() -> impl Iterator<Item = LockedNpm> {
             approved: false,
             first_party: true,
         })
+        .collect()
 }
 
 /// #2296 (decisions A, C): settle each row's approval. A row the lock already

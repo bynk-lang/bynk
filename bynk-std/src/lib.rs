@@ -103,6 +103,11 @@ pub struct FirstPartyNpm {
     pub version: &'static str,
     /// The `@bynk/runtime` module (`__bynk_runtime/<name>.ts`) importing it.
     pub runtime_module: &'static str,
+    /// Text a project's `.bynk` source holds when it uses the binding that
+    /// needs the package. `bynk.lock`'s first-party row is written only for a
+    /// project that holds it, so a lock records what the project *could* bring
+    /// into its build and not every pin the toolchain has.
+    pub source_marker: &'static str,
 }
 
 /// Every first-party npm dependency. Hyperdrive H1 (#3318) adds `postgres`
@@ -114,6 +119,7 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
         package: "postal-mime",
         version: "4.1.4",
         runtime_module: "email",
+        source_marker: "from email",
     },
 ];
 

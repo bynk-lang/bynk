@@ -62,9 +62,11 @@ domain first, and verify any address you `Forward` to: a forward to an address
 the account has not verified is refused (and falls back to
 `Reject("forward refused")`).
 
-`out/package.json` lists `postal-mime`, which the Worker parses messages with, at
-an exact version; run `npm install` in the build directory before `wrangler dev`
-or a deploy.
+The build's `package.json` lists `postal-mime`, which the Worker parses messages
+with, at an exact version. Run `npm install` in the build directory (`.bynk/dev`
+for `bynk dev`, `.bynk/deploy` for `bynk deploy`, the output directory of a
+`bynk compile`) before running it: `bynk dev` and `bynk deploy` stop before
+wrangler, naming any package that is not installed.
 
 A reply goes out only for a sender whose mail passed DMARC, and only once per
 message. The runtime does the sending, so the handler stays a pure decision.

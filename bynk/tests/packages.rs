@@ -378,6 +378,38 @@ fn conflicting_and_unpinned_ranges_across_packages_are_refused() {
     );
 }
 
+/// ADR 0799 C: a project that uses a built-in binding backed by an npm package
+/// (here inbound email, `postal-mime`) gets that package in `bynk.lock` as a
+/// first-party row: pinned exactly, required by `bynk-std`, never approved and
+/// never awaiting approval. A project that does not, gets none.
+#[test]
+fn a_first_party_npm_package_is_a_lock_row_that_needs_no_approval() {
+    let root = scratch("npm-first-party");
+    let shop = money_workspace(&root, SHOP);
+    let (code, out) = short(&shop);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        !std::fs::read_to_string(root.join("bynk.lock"))
+            .unwrap()
+            .contains("[[npm]]")
+    );
+    write(
+        &shop.join("src/shop/mail.bynk"),
+        "context shop.mail\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"help@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    Accept\n  }\n}\n",
+    );
+    let (code, out) = short(&shop);
+    assert_eq!(code, 0, "{out}");
+    let lock = std::fs::read_to_string(root.join("bynk.lock")).unwrap();
+    assert!(
+        lock.contains("[[npm]]\npackage = \"postal-mime\"\nrange = \"4.1.4\"\nrequired-by = [\"bynk-std\"]\nfirst-party = true\n"),
+        "{lock}"
+    );
+    assert!(!lock.contains("approved"), "{lock}");
+    let (code, out, err) = bynk_in(&shop, &["approve", "--list"]);
+    assert_eq!(code, 0, "{out}{err}");
+    assert!(format!("{out}{err}").contains("built-in"), "{out}{err}");
+}
+
 #[test]
 fn a_dependency_adding_an_npm_requirement_changes_the_lock() {
     let root = scratch("npm-locked");
