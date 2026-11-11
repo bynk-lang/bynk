@@ -1,0 +1,7 @@
+commons demo.e
+
+type PayError = enum { Declined }
+type OrderError =
+    | Payment(reason: PayError)
+    | Refund(reason: PayError)
+    embeds PayError as Payment

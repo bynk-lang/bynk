@@ -587,6 +587,28 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "state-initialisation",
     },
     Explain {
+        code: "bynk.asset.duplicate",
+        blurb: "An asset is a name for a file, read as a value (`style.url`), so a unit declares each \
+                name once: a second `asset style` would leave `style` meaning two files. Give each \
+                asset its own name, or drop the repeat when it names the same file. An asset whose \
+                name is a function's or a type's is `bynk.resolve.name_conflict` instead.",
+        example: "asset style = \"assets/board.css\"\nasset style = \"assets/print.css\"    // ✗ `style` is already declared\n\nasset style = \"assets/board.css\"\nasset print = \"assets/print.css\"    // ✓ one name each",
+        page: "/book/reference/assets",
+        anchor: "declaring-an-asset",
+    },
+    Explain {
+        code: "bynk.asset.invalid_at_path",
+        blurb: "`at` serves an asset at a fixed URL, for clients that ask for a file by name, such as \
+                `/favicon.ico`, so the path must be the URL of one file: it starts with `/`, does not \
+                end in `/`, and uses only letters, digits and `._~-` between its slashes. It may \
+                not be under `/_assets/` or `/_bynk/`, which Bynk uses itself, nor be `/_headers`, \
+                `/_redirects` or `/.assetsignore`, which the platform reads as configuration. \
+                Write the path of a single file.",
+        example: "asset favicon = \"assets/favicon.ico\" at \"/icons/\"          // ✗ a folder, not a file\n\nasset favicon = \"assets/favicon.ico\" at \"/favicon.ico\"    // ✓",
+        page: "/book/reference/assets",
+        anchor: "fixed-paths",
+    },
+    Explain {
         code: "bynk.asset.missing_file",
         blurb: "An `asset` is a file the build ships, and the compiler reads it to hash its contents \
                 into the asset's URL, so the file must exist when the project is built. The path is \
@@ -609,6 +631,29 @@ pub const EXPLANATIONS: &[Explain] = &[
                 asset style = \"assets/board.css\"        // ✓",
         page: "/book/reference/assets",
         anchor: "declaring-an-asset",
+    },
+    Explain {
+        code: "bynk.asset.path_conflict",
+        blurb: "A fixed asset path names one file, and a Worker serves one file at it, so two assets \
+                cannot both claim `/legal.txt`. One path cannot be a folder of another either, as \
+                `/logo` and `/logo/icon.png` would be: a name cannot be both a file and a \
+                directory. Give each asset its own path. Two assets for the same file at the same \
+                path are no conflict. A route at an asset's path is `bynk.asset.shadows_route`.",
+        example: "asset terms = \"assets/a.txt\" at \"/legal.txt\"\nasset privacy = \"assets/b.txt\" at \"/legal.txt\"    // ✗ a second file at `/legal.txt`\n\nasset terms = \"assets/a.txt\" at \"/terms.txt\"\nasset privacy = \"assets/b.txt\" at \"/privacy.txt\"    // ✓",
+        page: "/book/reference/assets",
+        anchor: "fixed-paths",
+    },
+    Explain {
+        code: "bynk.asset.shadows_route",
+        blurb: "The platform answers a fixed asset's path before the Worker runs, and it does so for \
+                every method, so an HTTP handler at exactly that path can never be reached. The \
+                compiler refuses it rather than ship a route that never runs. Move the route, or \
+                give the asset another path. A route with a parameter that matches the asset's \
+                path, such as `/:page`, still serves every other path, and is only the warning \
+                `bynk.asset.may_shadow_route`.",
+        example: "asset favicon = \"assets/favicon.ico\" at \"/favicon.ico\"\n\nservice web from http {\n    on GET(\"/favicon.ico\") () -> Effect[HttpResult[String]] by Visitor {    // ✗ the asset answers first\n        Ok(\"never reached\")\n    }\n}\n\nservice web from http {\n    on GET(\"/health\") () -> Effect[HttpResult[String]] by Visitor {    // ✓\n        Ok(\"ok\")\n    }\n}",
+        page: "/book/reference/assets",
+        anchor: "fixed-paths",
     },
     Explain {
         code: "bynk.asset.unsafe_path",
@@ -1093,6 +1138,38 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "handler-form",
     },
     Explain {
+        code: "bynk.d1.select_field_missing",
+        blurb: "`select[T]` and `firstAs[T]` read each row into the record `T`, matching columns to \
+                fields by name, so every field needs a column of that name. `Json.decodeSql` reads \
+                a literal `all` or `first` the same way, for each required field. Rename the \
+                field, or alias the column in the SQL (`… AS price`) so the names agree.",
+        example: "type Order = { id: String, price: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `orders` has no column `price`\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "sql-checked-against-the-migrations",
+    },
+    Explain {
+        code: "bynk.d1.sql_invalid",
+        blurb: "Bynk prepares each literal SQL statement of a `D1` capability against the schema \
+                your migrations build, applied to an empty in-memory SQLite, so a syntax error or an \
+                unknown table or column is a compile error, not a failure on the first request. \
+                Nothing runs. Correct the statement, or add the migration that creates what it \
+                names. A project whose schema is made elsewhere can turn the check off with \
+                `[check] d1_sql = false`.",
+        example: "let _ <- Orders.all(\"SELECT id, totl FROM orders\", [])     // ✗ no such column: totl\n\nlet _ <- Orders.all(\"SELECT id, total FROM orders\", [])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "sql-checked-against-the-migrations",
+    },
+    Explain {
+        code: "bynk.d1.sql_param_count",
+        blurb: "D1 refuses a statement bound to a different number of values than it has \
+                parameters, so Bynk counts them at compile time by SQLite's rule: the highest `?N`, \
+                with a bare `?` taking the next number. It checks a list written out in place, or a \
+                name `let`-bound to one. Pass one `SqlValue` for each parameter, or change the SQL.",
+        example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id)])                 // ✗ two parameters, one value\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id), Integer(100)])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "sql-checked-against-the-migrations",
+    },
+    Explain {
         code: "bynk.effect.bind_in_pure_context",
         blurb: "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
         example: "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
@@ -1218,6 +1295,26 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-verdict",
     },
     Explain {
+        code: "bynk.embed.binary_content",
+        blurb: "An embed becomes a `String` in the compiled code, so its file must be text. A file \
+                holding a NUL byte is binary, and a `String` made from it would be meaningless. \
+                Binary data belongs in `assets/`, where the platform serves it as a file. Text \
+                that is not valid UTF-8 is `bynk.embed.invalid_encoding`.",
+        example: "embed logo = \"embeds/logo.png\"    // ✗ the file has a NUL byte\n\nasset logo = \"assets/logo.png\"    // ✓ a binary file is served, not read",
+        page: "/book/reference/embeds",
+        anchor: "what-the-text-is",
+    },
+    Explain {
+        code: "bynk.embed.duplicate",
+        blurb: "An embed is a `String` constant used by its name, so a unit declares each name once: \
+                a second `embed shell` would leave `shell` meaning two files. Give each embed its \
+                own name. An embed whose name is an asset's, a function's or a type's is \
+                `bynk.resolve.name_conflict` instead.",
+        example: "embed shell = \"embeds/page.html\"\nembed shell = \"embeds/other.html\"     // ✗ `shell` is already declared\n\nembed shell = \"embeds/page.html\"\nembed footer = \"embeds/other.html\"    // ✓ one name each",
+        page: "/book/reference/embeds",
+        anchor: "declaring-an-embed",
+    },
+    Explain {
         code: "bynk.embed.invalid_encoding",
         blurb: "An `embed` becomes a `String`, which is Unicode text, so the file must be valid \
                 UTF-8. A file saved in another encoding, such as Latin-1, holds bytes that are not \
@@ -1238,6 +1335,28 @@ pub const EXPLANATIONS: &[Explain] = &[
                 exists but cannot be read is `bynk.embed.unreadable_file`.",
         example: "embed shell = \"embeds/page.html\"        // ✗ no such file in the project\n\
                 embed shell = \"embeds/page.html\"        // ✓ once embeds/page.html exists",
+        page: "/book/reference/embeds",
+        anchor: "declaring-an-embed",
+    },
+    Explain {
+        code: "bynk.embed.outside_embeds_dir",
+        blurb: "An embed is compiled into the deployed code, so it may come only from the project's \
+                `embeds/` folder. If any path were allowed, a declaration could pull `.env` or a \
+                source file into the bundle just by naming it. Move the file into `embeds/` and \
+                name it there. A path that is empty, absolute or contains `..` is \
+                `bynk.embed.unsafe_path` instead.",
+        example: "embed shell = \"templates/page.html\"    // ✗ not in the embeds/ folder\n\nembed shell = \"embeds/page.html\"       // ✓",
+        page: "/book/reference/embeds",
+        anchor: "declaring-an-embed",
+    },
+    Explain {
+        code: "bynk.embed.unsafe_path",
+        blurb: "An embed's path is joined onto the project root to find the file, so it must stay \
+                inside the project: it may not be empty or absolute, and it may not contain a `..` \
+                segment, which could climb out of it. Write the path relative to the project root, \
+                inside `embeds/`. A relative path that is only outside `embeds/` is \
+                `bynk.embed.outside_embeds_dir`.",
+        example: "embed shell = \"embeds/../page.html\"    // ✗ a `..` segment\n\nembed shell = \"embeds/page.html\"       // ✓",
         page: "/book/reference/embeds",
         anchor: "declaring-an-embed",
     },
@@ -4275,6 +4394,17 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.asset_at_boundary",
+        blurb: "An `Asset` names a file the platform serves; it is not data to keep or send. So an \
+                `Asset` cannot be a record field, a sum payload, an event field, an agent key or \
+                store field, or part of a service or agent handler signature. What crosses is its \
+                `.url`, a `String`: hold that instead. Other types refused there include \
+                `bynk.types.function_at_boundary` and `bynk.types.held_at_boundary`.",
+        example: "type Page = {\n    title: String,\n    style: Asset,     // ✗ an asset is not a value to hold\n}\n\ntype Page = {\n    title: String,\n    style: String,    // ✓ keep its `.url`\n}",
+        page: "/book/reference/assets",
+        anchor: "the-url",
+    },
+    Explain {
         code: "bynk.types.bad_field_default",
         blurb: "A field default, `field: T = expr`, is filled in whenever a literal leaves the \
                 field out and whenever a decoded body omits its key, so it has to be a fixed \
@@ -4383,6 +4513,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "validate-with-of",
     },
     Explain {
+        code: "bynk.types.decimal_division_unscaled",
+        blurb: "`Decimal` is exact, and a quotient often has no exact decimal answer (one third), so \
+                `/` is not defined on it. `div` says what `/` leaves out: how many decimal places to \
+                keep and how to round. `+`, `-` and `*` stay exact. Write \
+                `a.div(b, 2, RoundingMode.HalfEven)`, with the scale and mode you need.",
+        example: "fn share(total: Decimal, ways: Decimal) -> Decimal {\n    total / ways    // ✗ no exact quotient\n}\n\nfn share(total: Decimal, ways: Decimal) -> Decimal {\n    total.div(ways, 2, RoundingMode.HalfEven)    // ✓ two places, rounded\n}",
+        page: "/book/reference/types",
+        anchor: "decimal",
+    },
+    Explain {
         code: "bynk.types.derives_field_not_orderable",
         blurb: "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
         example: "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
@@ -4409,6 +4549,35 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Light = | Red | Green\n\nfn go(l: Light) -> Int {\n    match l {\n        Red => 1\n        Red => 2      // ✗ `Red` is already matched above\n        Green => 3\n    }\n}\n\nfn go(l: Light) -> Int {\n    match l {\n        Red => 1\n        Green => 2    // ✓ each variant once\n    }\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.embeds_ambiguous",
+        blurb: "`embeds E as V` lets `?` wrap an `E` error in the variant `V`. It picks the variant by \
+                the error's type, so a type may be embedded once: with two variants wrapping \
+                `PayError`, `?` could not tell which one an error belongs to. Embed the type in one \
+                variant, and build the other by hand where you want it.",
+        example: "type OrderError =\n    | Payment(reason: PayError)\n    | Refund(reason: PayError)\n    embeds PayError as Payment, PayError as Refund    // ✗ `PayError` twice\n\ntype OrderError =\n    | Payment(reason: PayError)\n    | Refund(reason: PayError)\n    embeds PayError as Payment    // ✓ once",
+        page: "/book/reference/types",
+        anchor: "error-embeddings",
+    },
+    Explain {
+        code: "bynk.types.embeds_unknown_variant",
+        blurb: "`embeds E as V` lets `?` wrap an `E` error in the variant `V` of the same sum, so `V` \
+                must be one of that sum's variants. Here it names none, usually a misspelling. \
+                Correct the name, or add the variant it should wrap into.",
+        example: "type OrderError =\n    | Payment(reason: PayError)\n    embeds PayError as Pay        // ✗ no variant `Pay`\n\ntype OrderError =\n    | Payment(reason: PayError)\n    embeds PayError as Payment    // ✓",
+        page: "/book/reference/types",
+        anchor: "error-embeddings",
+    },
+    Explain {
+        code: "bynk.types.embeds_variant_shape",
+        blurb: "`embeds E as V` has `?` wrap an `E` error into `V`, so `V` must take exactly that: one \
+                payload field, of type `E`. A variant with a payload of another type, or with more \
+                or fewer fields, has nowhere to put the error. Give `V` a single field of type `E`, \
+                or embed a different variant.",
+        example: "type OrderError =\n    | Payment(reason: String)\n    embeds PayError as Payment    // ✗ the payload is a `String`\n\ntype OrderError =\n    | Payment(reason: PayError)\n    embeds PayError as Payment    // ✓",
+        page: "/book/reference/types",
+        anchor: "error-embeddings",
     },
     Explain {
         code: "bynk.types.empty_range_pattern",
@@ -4444,6 +4613,47 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "construct-values",
     },
     Explain {
+        code: "bynk.types.example_not_literal",
+        blurb: "`@example` takes exactly one literal of the refinement's base type. It is read where \
+                the type is declared, not evaluated, so a call such as `Code.of(\"ABC\")`, a name or \
+                a literal of another type is refused. Write the value itself, as a string for a \
+                `String` base.",
+        example: "type Code = String where Matches(\"[A-Z]{3}\") @example(Code.of(\"ABC\"))    // ✗ a call, not a literal\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")            // ✓",
+        page: "/book/reference/testing",
+        anchor: "val-example",
+    },
+    Explain {
+        code: "bynk.types.example_on_named_field",
+        blurb: "On a record field, `@example` pins the field's own value, which exists only where \
+                the field has a base type. A field of a named type takes its value from that type, \
+                so an example on the field would have no effect and is refused. Put the \
+                `@example` on the named type's declaration, where `Val` reads it.",
+        example: "type Code = String where Matches(\"[A-Z]{3}\")\ntype Ticket = { code: Code where Matches(\"[A-Z]+\") @example(\"ABC\") }    // ✗ `Code` is a named type\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")    // ✓ pin it on the type\ntype Ticket = { code: Code }",
+        page: "/book/reference/testing",
+        anchor: "val-example",
+    },
+    Explain {
+        code: "bynk.types.example_unneeded",
+        blurb: "`Val` cannot invent a string that matches a pattern, so a `Matches` or `IsoDate` \
+                refinement takes an `@example` for it to use. Every other refinement already has a \
+                value `Val` makes, so there is nothing for the example to do and it is refused. \
+                Remove the annotation.",
+        example: "type Sku = String where NonEmpty @example(\"a\")    // ✗ `Val` already makes one\n\ntype Sku = String where NonEmpty                  // ✓",
+        page: "/book/reference/testing",
+        anchor: "val-example",
+    },
+    Explain {
+        code: "bynk.types.example_violates",
+        blurb: "`@example` is the value `Val` uses for a type it cannot fabricate, so it must be a \
+                valid one. The compiler checks it where the type is declared, against every \
+                predicate of the refinement, whether or not a test uses it; an example that fails \
+                one would give tests a value the type refuses. Write an example that satisfies the \
+                whole refinement.",
+        example: "type Code = String where Matches(\"[A-Z]{3}\") @example(\"abc\")    // ✗ lower case\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")    // ✓",
+        page: "/book/reference/testing",
+        anchor: "val-example",
+    },
+    Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
                 extensible: a minor release may add a variant. A `match` that names every \
@@ -4465,6 +4675,17 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn size(name: String) -> Int {\n    name.length    // ✗ `String` is not a record; `length` is a method\n}\n\nfn size(name: String) -> Int {\n    name.length()    // ✓\n}",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.field_default_on_variant",
+        blurb: "Only a record's fields take defaults. A variant is built like a call, with every \
+                payload field given, so a default on a payload field would be an optional argument \
+                by another name. Remove it and give the field wherever the variant is built, or \
+                hold the optional values in a record, which can have defaults, and make that \
+                record the payload.",
+        example: "type Retry =\n    | Never\n    | Times(n: Int = 3)    // ✗ a variant's field has no default\n\ntype Backoff = { n: Int = 3 }\n\ntype Retry =\n    | Never\n    | Times(opts: Backoff)    // ✓ the record carries the default",
+        page: "/book/reference/types",
+        anchor: "field-defaults",
     },
     Explain {
         code: "bynk.types.field_refinement_not_base",
@@ -4502,6 +4723,17 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r => \"round\"    // ✗ `r` is an `Int`\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r > 10 => \"round\"    // ✓\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.held_at_boundary",
+        blurb: "A `Connection` is a held resource, built and disposed of in place, so it is never \
+                stored or sent: it cannot be a record, sum or event field, or part of a service or \
+                agent handler signature. An agent may keep one in its own state, as \
+                `Cell[Option[Connection[F]]]` or `Map[K, Connection[F]]`. Keep it there, and pass \
+                what you need from it, not the connection.",
+        example: "type Session = {\n    conn: Connection[Frame],    // ✗ a held resource is not a field\n}\n\nagent Room {\n    key id: String\n\n    store conns: Map[String, Connection[Frame]]    // ✓ held in agent state\n}",
+        page: "/book/reference/types",
+        anchor: "connection",
     },
     Explain {
         code: "bynk.types.held_not_comparable",
@@ -5735,7 +5967,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.asset.invalid_at_path",
-        "An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`.",
+        "An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`, or is a file the platform reads as configuration.",
     ),
     warn(d(
         "bynk.asset.may_shadow_route",
