@@ -2,12 +2,16 @@
 # Download one GitHub release asset through the authenticated REST API and
 # check it against the sha256 digest GitHub records for it.
 #
-#   gh-release-fetch.sh <owner/repo> <tag> <asset-name> <out-dir>
+#   gh-release-fetch.sh <owner/repo> <tag> <asset-name> <out-dir> [<sha256>]
 #   gh-release-fetch.sh --latest <owner/repo> <tag-prefix>
 #
 # The first form writes <out-dir>/<asset-name>. The second prints the newest
 # non-draft, non-prerelease tag that starts with <tag-prefix> (for a version
 # range like nextest's 0.9 line).
+#
+# <sha256> is a digest recorded by the caller. With it the download must match
+# that, and GitHub's own digest too when the release has one (assets uploaded
+# before GitHub began recording digests, such as binaryen 120's, have none).
 #
 # Why not the `github.com/<repo>/releases/download/...` URL: that is the
 # anonymous web route, and CI runners share their egress IPs, so it answers
@@ -87,15 +91,19 @@ repo="${1:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
 tag="${2:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
 asset="${3:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
 out="${4:?usage: gh-release-fetch.sh <owner/repo> <tag> <asset> <out-dir>}"
+pinned="${5:-}"
+[[ -z "$pinned" || "$pinned" =~ ^[0-9a-f]{64}$ ]] || die "<sha256> must be 64 lowercase hex digits, got $pinned"
 
 release=$(api -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$repo/releases/tags/$tag") ||
   die "could not look up $repo release $tag"
 read -r id digest < <(json asset "$asset" <<<"$release") || true
 [[ -n "${id:-}" ]] || die "$repo $tag has no asset named $asset"
-# GitHub records a sha256 digest for every release asset; without one there
-# is nothing to check the download against, so refuse rather than skip.
-[[ "${digest:-}" == sha256:* ]] || die "$repo $tag: $asset has no sha256 digest to verify against"
+# GitHub records a sha256 digest for release assets (those uploaded since it
+# began to); without one, or a digest pinned by the caller, there is nothing
+# to check the download against, so refuse rather than skip.
+[[ "${digest:-}" == sha256:* || -n "$pinned" ]] ||
+  die "$repo $tag: $asset has no sha256 digest to verify against"
 
 mkdir -p "$out"
 echo "downloading $repo $tag $asset (authenticated)"
@@ -112,6 +120,8 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   got=$(shasum -a 256 "$out/$asset" | cut -d' ' -f1)
 fi
-[[ "$got" == "${digest#sha256:}" ]] ||
+[[ -z "$pinned" || "$got" == "$pinned" ]] ||
+  die "$asset: sha256 $got does not match the pinned $pinned"
+[[ "${digest:-}" != sha256:* || "$got" == "${digest#sha256:}" ]] ||
   die "$asset: sha256 $got does not match the release's ${digest#sha256:}"
 echo "verified sha256 $got"
