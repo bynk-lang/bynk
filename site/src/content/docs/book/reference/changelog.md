@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.541**.
+written against **v0.542**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.542.0** | `@multipart` decodes a `multipart/form-data` request body into a typed record with `File` parts, under `maxBody`, `maxFile` and `maxParts` caps; `BoundaryRejection` gains `MalformedForm` (#3276, slice 2) |
+| **v0.541.4** | Internal refactor of the emitter, with no change to emitted TypeScript. The derived-D1 select, cross-context, `Events.emit`, capability and declared-type static calls of a method call now lower in five functions instead of inline in `lower_method_call` (#3167). |
+| **v0.541.3** | Internal refactor of the emitter, with no change to emitted TypeScript. The intrinsic static calls of a method call (`HttpResult`, `List`/`Map`/`Set` constructors, the numeric parses, `Bytes`, `Decimal`, `Stream` and the rest) now lower in two functions instead of inline in `lower_method_call` (#3167). |
 | **v0.541.2** | Internal refactor of the emitter, with no change to emitted TypeScript. The persisted-store receivers of a method call (held Map, Map, Set, Cache, Log, Cell) now lower in one function per kind instead of inline in `lower_method_call` (#3167). |
 | **v0.541.1** | The runtime gains insertion-ordered in-memory handles for an agent's store collections, `StoreMap`, `StoreSet`, `StoreCache` and `StoreLog`, the first step of keeping a `store Map`/`Set` in insertion order for integer-like keys too; nothing emits them yet (#3254) |
 | **v0.541.0** | `@form` decodes an `application/x-www-form-urlencoded` request body into a typed record at the boundary, with the refinements, defaults and `Option`s of a JSON body (#3276, slice 1; #3180 stays open for streaming) |
