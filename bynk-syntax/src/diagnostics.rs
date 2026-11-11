@@ -184,6 +184,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.actor.duplicate_sum_scheme",
+        blurb: "Peers in a `by who: A | B` clause are told apart by their authentication scheme, so two peers of the same scheme can't both be reached: the second would never be chosen. Keep one peer per scheme, or fold the two into a single actor. A catch-all peer placed too early is a different mistake, `bynk.actor.unreachable_sum_arm`.",
+        example: "type UserId = String where NonEmpty\nactor One { auth = Bearer(secret = \"KEY_A\"), identity = UserId }\nactor Two { auth = Bearer(secret = \"KEY_B\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Two {   // ✗ two `Bearer` peers\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Visitor {   // ✓ one peer per scheme",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.identity_not_sealed",
+        blurb: "An actor's identity is a value only its context can mint, from a verified token or caller, so its type has to be one that context owns. A built-in such as `Int`, or a type from another context, could be built by anyone, so the identity would prove nothing. Declare the identity as a type in this context, such as `type PrincipalId = Int where NonNegative`, and name that.",
+        example: "actor Principal { auth = Internal, identity = Int }   // ✗ `Int` is not owned by this context\n\ntype PrincipalId = Int where NonNegative\nactor Principal { auth = Internal, identity = PrincipalId }   // ✓ minted only here",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
         code: "bynk.actor.missing_by_on_http",
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
@@ -207,6 +221,69 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.actor.oidc_identity_not_string_constructible",
+        blurb: "An `Oidc` actor's identity is minted from the verified token's `sub` claim, which is a string, so the identity type must be a refined or opaque `String`. An actor with no `identity` is refused too. Declare a type over `String`, such as `type UserId = String where NonEmpty`, and name it. A `Bearer` actor has the same rule under `bynk.actor.bearer_identity_not_string_constructible`.",
+        example: "type Age = Int where NonNegative\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = Age }   // ✗ `sub` is a string, not an `Int`\n\ntype UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ minted from `sub`",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.oidc_missing_audience",
+        blurb: "A provider signs tokens for many services, and each token is issued for one. An `Oidc` actor therefore names its `audience`, the `aud` claim a token must carry, so a token issued for some other API is refused here even though its signature is valid. Add `audience = \"…\"` with the identifier your provider uses for this API. The issuer and key set have their own codes, `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_jwks`.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✗ no audience\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the `aud` this API accepts",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.oidc_missing_issuer",
+        blurb: "A valid signature shows that some key signed a token, not that your provider issued it. An `Oidc` actor therefore names its `issuer`, the `iss` claim a token must carry, and refuses any other. Add `issuer = \"…\"` with the provider's issuer URL. The other required settings have their own codes, `bynk.actor.oidc_missing_audience` and `bynk.actor.oidc_missing_jwks`.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✗ no issuer\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the `iss` a token must carry",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.oidc_missing_jwks",
+        blurb: "An `Oidc` actor holds no shared secret. It checks a token's signature against the provider's public keys, a JSON Web Key Set that the verifier fetches from a URL, so the actor must say where it is. Add `jwks = \"…\"`, for example the provider's `/.well-known/jwks.json`. The `issuer` and `audience` are required as well, under `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_audience`.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.oidc_not_in_sum",
+        blurb: "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
+        example: "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.outside_context",
+        blurb: "An `actor` says who may call a handler and what the compiler then knows about them. Only a context has handlers, and an actor's identity is sealed to the context that declares it, so only a context may declare one. A `commons` is shared code that other units `uses`. Move the `actor` into the context whose services take it.",
+        example: "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
+        page: "/book/reference/actors",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.actor.refinement_base_unsupported",
+        blurb: "`actor Admin = User where …` adds an authorisation check on a token's claims, and only a `Bearer` actor carries claims. So the base must be a declared `Bearer` actor: not `Visitor`, `Internal` or `Signature`, and not another refinement. Name a `Bearer` actor as the base, declaring it if need be.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = Visitor where hasClaim(\"admin\")   // ✗ `Visitor` carries no claims\n\nactor Admin = User where hasClaim(\"admin\")   // ✓ a `Bearer` actor",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.refinement_in_sum",
+        blurb: "A refinement actor has its base's scheme and only narrows it, and peers of a sum are told apart by scheme, so it can't stand beside its base as another choice. Name the base as the peer and test the extra condition in its arm, or give the refined route its own `by who: Admin`.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Admin = User where hasClaim(\"admin\")\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Admin {   // ✗ `Admin` refines `User`\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Admin {   // ✓ its own route",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.refinement_predicate_unsupported",
+        blurb: "A refinement actor's `where` is checked against a token's claims, which are untyped JSON, so the predicate is a closed vocabulary: `hasClaim(\"name\")` and `claimEquals(\"name\", \"value\")`, composed with `&&`, `||` and `!`. Express the condition with those. Anything else, such as a call to a function of your own, is refused.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = User where isAdmin(user)   // ✗ not a claim predicate\n\nactor Admin = User where hasClaim(\"admin\")   // ✓",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
         code: "bynk.actor.scheme_not_admissible",
         blurb: "Each protocol admits only the schemes that can be verified on it. HTTP takes \
                 `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` \
@@ -226,6 +303,34 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20   Ok(())\n\
                   \x20 }\n\
                   }",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.signature_missing_header",
+        blurb: "A `Signature` actor reads the sender's signature from a request header, and the header's name is the sender's choice, so the actor must say which one. Add `header = \"…\"` with the name of the header that carries the HMAC. Without it the compiler has no way to find the signature to check the body against.",
+        example: "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\") }   // ✗ which header holds the signature?\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.signature_missing_secret",
+        blurb: "A `Signature` actor checks an HMAC of the request body, so the compiler needs the key to check it against. Name the environment variable that holds it: `secret = \"WEBHOOK_KEY\"`. The string is the variable's name, never the key itself, so no secret is written in the source. A `Bearer` actor has its own `bynk.actor.bearer_missing_secret`.",
+        example: "actor Hook { auth = Signature(header = \"X-Sig\") }   // ✗ no signing secret named\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }   // ✓ the env var that holds the key",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.signature_requires_body",
+        blurb: "A `Signature` is an HMAC over the raw request body, so the handler must take that body: one with no `body` parameter would vouch for data it never reads. Add `(body: T)`, where `T` is the payload's type. A route that takes no payload has nothing for a signature to protect.",
+        example: "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by Hook {   // ✗ no `body` parameter\n  on POST(\"/x\") (body: String) -> Effect[HttpResult[String]] by Hook {   // ✓ the signed payload",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.signature_tolerance_without_timestamp",
+        blurb: "`tolerance` is how many seconds old a signed request may be before it is refused, which limits replay of a captured one. The age is read from a timestamp header, so `tolerance` needs `timestamp = \"…\"` naming it; alone it has nothing to compare against. Add the `timestamp`, or drop `tolerance` and accept that a captured request can be replayed.",
+        example: "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\", tolerance = 300) }   // ✗ age of what?\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\", timestamp = \"X-Time\", tolerance = 300) }   // ✓",
         page: "/book/reference/actors",
         anchor: "schemes",
     },
@@ -266,6 +371,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   actor Robot { auth = None }    // ✓ one of the six",
         page: "/book/reference/actors",
         anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.unreachable_sum_arm",
+        blurb: "In `by who: A | B` the peers are tried in order and the first to verify wins. `Visitor`, or any other `None` peer, accepts everyone, so a peer after it can never be reached and its check would never run. Put the catch-all last. A repeated scheme is a different mistake, `bynk.actor.duplicate_sum_scheme`.",
+        example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Visitor | User {   // ✗ `Visitor` accepts everyone first\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ the catch-all last",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
     },
     Explain {
         code: "bynk.adapter.disallowed_item",
@@ -1007,6 +1119,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-an-embed",
     },
     Explain {
+        code: "bynk.event.bad_params",
+        blurb: "An `on event` handler takes the event payload and, optionally, a second parameter of type `EventEnvelope`, which carries the emission's metadata: its event id, publisher, time and schema version. Any other count, or any other type in second place, has nothing to receive it. Remove the extra parameter or type it `EventEnvelope`. A wrong first parameter is `bynk.event.handler_param_type_mismatch`.",
+        example: "consumes bynk\n\nevent Paid = { id: String }\n\nservice onPaid from Events(Paid) {\n  on event(e: Paid, env: String) -> Effect[()] {   // ✗ the second parameter must be `EventEnvelope`\n  on event(e: Paid, env: EventEnvelope) -> Effect[()] {   // ✓",
+        page: "/book/guides/events/understand-events",
+        anchor: "the-envelope-and-idempotent-handling",
+    },
+    Explain {
         code: "bynk.event.duplicate_handler",
         blurb: "A `from Events(E)` service has exactly one `on event` handler. To react to an event in two ways, declare two services, each subscribing to it: every subscriber is delivered to independently. So the second handler is refused here, and the fix is to move it into a service of its own.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n    on event(e: Paid) -> Effect[()] { … }   // ✗ a service has one `on event` handler\n}\n\nservice onPaidAudit from Events(Paid) {     // ✓ a second subscriber, delivered to separately\n    on event(e: Paid) -> Effect[()] { … }\n}",
@@ -1042,11 +1161,46 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-three-pieces",
     },
     Explain {
+        code: "bynk.event.pattern_type_mismatch",
+        blurb: "A subscription pattern compares a field with a literal or a variant, so the value must be of the field's type: an `Int` literal for an `Int` field, a `String` for a `String`, a variant of the field's own sum type. A value of any other type could never match an emission. Write one of the field's type.",
+        example: "event Paid = { id: String, amount: Int }\n\nservice onPaid from Events(Paid { amount: \"10\", .. }) {   // ✗ `amount` is an `Int`\n\nservice onPaid from Events(Paid { amount: 10, .. }) {   // ✓",
+        page: "/book/guides/events/understand-events",
+        anchor: "filtering-delivery-with-a-pattern",
+    },
+    Explain {
+        code: "bynk.event.pattern_unknown_field",
+        blurb: "A subscription pattern filters on the event's own fields, so each name in it must be one the event declares. A name that matches none could never filter anything, and is usually a misspelling; the diagnostic lists the declared fields. Use one of them.",
+        example: "event Paid = { id: String, amount: Int }\n\nservice onPaid from Events(Paid { total: 10, .. }) {   // ✗ `Paid` has no field `total`\n\nservice onPaid from Events(Paid { amount: 10, .. }) {   // ✓",
+        page: "/book/guides/events/understand-events",
+        anchor: "filtering-delivery-with-a-pattern",
+    },
+    Explain {
+        code: "bynk.event.pattern_unknown_variant",
+        blurb: "A pattern that tests a sum-typed field names a variant of that type, and an emission can only carry the variants the type declares. A name it lacks, often a misspelling, could never match. Use a variant the type declares. A variant that carries a payload is refused too, as `bynk.event.pattern_variant_payload`.",
+        example: "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Nowhere, .. }) {   // ✗ `Region` has no `Nowhere`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓",
+        page: "/book/guides/events/understand-events",
+        anchor: "filtering-delivery-with-a-pattern",
+    },
+    Explain {
+        code: "bynk.event.pattern_variant_payload",
+        blurb: "A pattern can test only which variant a field holds, not what it carries. For a variant with a payload that would admit emissions the pattern looks as if it excludes, so only payload-free variants are allowed. Subscribe to a payload-free variant, or drop the pattern and read the field in the handler's body.",
+        example: "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
+        page: "/book/guides/events/understand-events",
+        anchor: "filtering-delivery-with-a-pattern",
+    },
+    Explain {
         code: "bynk.event.return_not_effect_unit",
         blurb: "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[Int] { … }   // ✗ the result has nowhere to go\n    on event(e: Paid) -> Effect[()] { … }    // ✓\n}",
         page: "/book/guides/events/understand-events",
         anchor: "emission-is-fire-and-forget-and-release-at-commit",
+    },
+    Explain {
+        code: "bynk.event.unknown_annotation",
+        blurb: "The only annotation an event accepts is `@schema(N)`, which asserts its schema version. Names like `@indexed` belong to agent state and mean nothing on an event, so a stray or misspelt one would be silently ignored if it were not refused. Remove the annotation, or use `@schema` with a positive integer.",
+        example: "event Paid @indexed = { id: String }   // ✗ not an event annotation\n\nevent Paid @schema(1) = { id: String }   // ✓",
+        page: "/book/guides/events/understand-events",
+        anchor: "asserting-a-schema-version-with-scheman",
     },
     Explain {
         code: "bynk.event.unknown_subscription",
