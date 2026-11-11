@@ -450,6 +450,48 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.email.bad_params",
+        blurb: "An email `on message` handler takes the message as one `InboundEmail` parameter: inbound email delivers one message per call, so the handler is `on message(mail: InboundEmail) -> Effect[EmailVerdict]`. A parameter of another type, or none, or more than one, is refused. Import `InboundEmail` and `EmailVerdict` from `bynk.cloudflare`.",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n        Accept\n    }\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.email.duplicate_address",
+        blurb: "Inbound mail is dispatched to a service by its envelope recipient, so each address belongs to one service. Addresses compare without regard to case. A literal address and the catch-all `*@domain` for the same domain may both be claimed: the literal address wins, and the catch-all takes everything else. Merge the two handlers, or claim different addresses.",
+        example: "service support from email(\"support@shop.example\") { … }\nservice helpdesk from email(\"Support@shop.example\") { … }   // ✗ the same address\n\nservice helpdesk from email(\"help@shop.example\") { … }   // ✓ its own address",
+        page: "/book/reference/inbound-email",
+        anchor: "addresses",
+    },
+    Explain {
+        code: "bynk.email.duplicate_handler",
+        blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.email.invalid_address",
+        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+        example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
+        page: "/book/reference/inbound-email",
+        anchor: "addresses",
+    },
+    Explain {
+        code: "bynk.email.return_not_email_verdict",
+        blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
+        example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+        page: "/book/reference/inbound-email",
+        anchor: "the-verdict",
+    },
+    Explain {
+        code: "bynk.email.workers_unsupported",
+        blurb: "Inbound email runs in a suite today, driven as `support.message(…)`, and builds for the bundle target. The Workers `email()` export, recipient dispatch and routing arrive in a later slice of #3328, so a deployable Workers build of a `from email` service is refused rather than emitted half-working.",
+        example: "bynk build --target workers   # ✗ inbound email is not yet emitted for Workers\n\nbynk build --target bundle    # ✓ builds, and `bynk test` runs the suites",
+        page: "/book/reference/inbound-email",
+        anchor: "status",
+    },
+    Explain {
         code: "bynk.exports.capability_not_provided",
         blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
                 built for them, so the exporting context must also say how: a `provides Clock = \
@@ -2457,6 +2499,30 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.effect.unbound_effect",
         "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658).",
+    ),
+    d(
+        "bynk.email.bad_params",
+        "An email `on message` handler does not take exactly one `InboundEmail` parameter.",
+    ),
+    d(
+        "bynk.email.duplicate_address",
+        "Two `from email` services claim the same recipient address.",
+    ),
+    d(
+        "bynk.email.duplicate_handler",
+        "A `from email` service declares more than one `on message` handler; it has exactly one.",
+    ),
+    d(
+        "bynk.email.invalid_address",
+        "A `from email(\"…\")` binding is not a recipient address a service can claim.",
+    ),
+    d(
+        "bynk.email.return_not_email_verdict",
+        "An email `on message` handler does not return `Effect[EmailVerdict]`.",
+    ),
+    d(
+        "bynk.email.workers_unsupported",
+        "A `from email` service is built for the Workers target, whose `email()` entry is not emitted yet.",
     ),
     d(
         "bynk.embed.binary_content",

@@ -592,6 +592,9 @@ pub fn lower_protocol_ir_from_commons(
         ServiceProtocol::Http => ProtocolIr::Http,
         ServiceProtocol::Cron => ProtocolIr::Cron,
         ServiceProtocol::Queue { name } => ProtocolIr::Queue { name: name.clone() },
+        ServiceProtocol::Email { address } => ProtocolIr::Email {
+            address: address.clone(),
+        },
         ServiceProtocol::WebSocket { in_type, out_type } => ProtocolIr::WebSocket {
             in_ty: cx.resolve_checked_type_ref(in_type, "WebSocket service protocol in-type"),
             out_ty: cx.resolve_checked_type_ref(out_type, "WebSocket service protocol out-type"),

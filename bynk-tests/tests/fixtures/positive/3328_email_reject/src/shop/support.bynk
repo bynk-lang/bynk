@@ -1,0 +1,16 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    if mail.size > 1000 {
+      Reject("too large")
+    } else {
+      Accept
+    }
+  }
+}

@@ -1,0 +1,33 @@
+================================================================================
+from email service protocol (#3328)
+================================================================================
+
+context shop.support
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    Accept
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol
+        (string_literal))
+      (handler
+        (queue_handler
+          (param
+            (identifier)
+            (identifier))
+          (generic_type_ref
+            (builtin_type)
+            (identifier))
+          (block
+            (identifier)))))))

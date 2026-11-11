@@ -1904,7 +1904,7 @@ fn variants_for_type_ref(
 
 /// The service protocols offerable after `from`.
 fn protocol_candidates() -> Vec<Completion> {
-    ["http", "cron", "queue", "websocket"]
+    ["http", "cron", "queue", "websocket", "email"]
         .into_iter()
         .map(|p| Completion::item(p, CompletionKind::Keyword, Some("service protocol".into())))
         .collect()
@@ -2131,6 +2131,28 @@ fn builtin_sum_variants(receiver: &str) -> Vec<(String, String)> {
             .iter()
             .map(|v| (v.name.to_string(), "variant of `QueueResult`".to_string()))
             .collect(),
+        // #3328: the first-party verdict of a `from email` handler. Declared in
+        // `bynk.cloudflare` rather than hard-wired like `QueueResult`, but
+        // offered the same way so the decision's four names are one keystroke
+        // away wherever the receiver is written out.
+        "EmailVerdict" => [
+            (
+                "Accept",
+                "variant of `EmailVerdict`: handled, nothing else happens",
+            ),
+            (
+                "Reject",
+                "variant of `EmailVerdict`: refuse with an SMTP rejection",
+            ),
+            (
+                "Forward",
+                "variant of `EmailVerdict`: pass to a verified destination",
+            ),
+            ("Reply", "variant of `EmailVerdict`: answer the sender"),
+        ]
+        .into_iter()
+        .map(|(n, d)| (n.to_string(), d.to_string()))
+        .collect(),
         _ => Vec::new(),
     }
 }
@@ -4490,6 +4512,21 @@ fn Box.size(self) -> Int { 1 }
         let got = labels("  service s from ", "context a.b\n");
         assert!(got.contains(&"http".to_string()), "{got:?}");
         assert!(got.contains(&"cron".to_string()) && got.contains(&"queue".to_string()));
+        // #3328: inbound email is the seventh protocol.
+        assert!(got.contains(&"email".to_string()), "{got:?}");
+    }
+
+    /// #3328: the verdict's four names complete on their type.
+    #[test]
+    fn email_verdict_variants_complete() {
+        let items = complete("  EmailVerdict.", "context a.b\n", None);
+        for name in ["Accept", "Reject", "Forward", "Reply"] {
+            assert!(
+                find(&items, name, CompletionKind::Variant).is_some(),
+                "{name} missing: {:?}",
+                items.iter().map(|c| &c.label).collect::<Vec<_>>()
+            );
+        }
     }
 
     #[test]

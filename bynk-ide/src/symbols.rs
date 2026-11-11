@@ -3106,6 +3106,7 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
         ServiceProtocol::Http => " from http".to_string(),
         ServiceProtocol::Cron => " from cron".to_string(),
         ServiceProtocol::Queue { name } => format!(" from queue(\"{name}\")"),
+        ServiceProtocol::Email { address } => format!(" from email(\"{address}\")"),
         ServiceProtocol::WebSocket { .. } => " from websocket".to_string(),
         // Events track slice 1 (spine #936): a subscription pattern is not
         // rendered in this short suffix, matching how WebSocket's in/out
@@ -3498,6 +3499,19 @@ mod tests {
     }
 
     use super::*;
+
+    /// #3328: a `from email` service's header reads back as the author wrote
+    /// it, whatever the address.
+    #[test]
+    fn email_service_header_renders_its_address() {
+        let p = ServiceProtocol::Email {
+            address: "*@shop.example".to_string(),
+        };
+        assert_eq!(
+            service_protocol_suffix(&p),
+            " from email(\"*@shop.example\")"
+        );
+    }
 
     /// #2136: the `system` cron/queue hover answers only when the receiver is
     /// a `cron` / `queue` service of the suite's target, not a record field

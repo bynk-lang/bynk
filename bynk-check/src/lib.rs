@@ -40,6 +40,7 @@ pub mod contract;
 pub mod contract_compat;
 pub mod d1_migrations;
 pub mod d1_sql;
+pub mod email;
 pub mod embeds;
 pub mod emitted_names;
 pub mod entailment;
