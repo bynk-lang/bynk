@@ -412,6 +412,34 @@ A cookie is not authentication: it reaches the router from the client, so treat 
 as input to check. A cookie-backed actor is separate. See
 [#3181](https://github.com/bynk-lang/bynk/issues/3181).
 
+### Reading a prefixed cookie: `RequestCookies` {#request-cookies}
+
+A cookie named `__Host-sid` or `__Secure-id` is not a legal record field, so a typed
+`cookies` record cannot read it. Declare the parameter as `cookies: RequestCookies` instead:
+the raw, read-only view of the request's cookies. It is not decoded or validated at the
+boundary, so the handler builds the values it needs.
+
+```bynk,fragment
+on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[String]] by v: Visitor {
+  match cookies.get("__Host-sid") {
+    Some(raw) => Ok(raw)
+    None => Unauthorized
+  }
+}
+```
+
+| Method | Type | Meaning |
+|---|---|---|
+| `get(name)` | `Option[String]` | the first cookie of that name |
+| `all(name)` | `List[String]` | every cookie of that name, in header order |
+| `names()` | `List[String]` | each name once, in order of first appearance |
+
+Parsing is the typed form's: RFC 6265 §5.4, no decoding. Pass the value through a refined
+type's `.of` (`Token.of(raw)`) to check it. A `RequestCookies` may only be a handler's
+`cookies` parameter (`bynk.http.cookies_not_http`; it cannot be stored or sent,
+`bynk.types.request_cookies_at_boundary`). Reading `__Host-` cookies this way is the
+defence against cookie tossing, since a sibling subdomain cannot set one.
+
 ### Setting cookies
 
 `bynk` exports a `Cookie` record and a `SameSite` enum (`Strict`, `Lax`, `Unrestricted`;

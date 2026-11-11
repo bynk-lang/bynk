@@ -2022,6 +2022,7 @@ impl Gate<'_> {
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
             | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
@@ -2741,6 +2742,7 @@ fn check_type_ref_resolves_in(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_) => {}
         TypeRef::List(t, _) => {
@@ -3805,6 +3807,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Decimal"
                         | "RequestHeaders"
                         | "RequestQuery"
+                        | "RequestCookies"
                         | "TokenClaims"
                 )
                 && !cx.types.contains_key(&id.name)
@@ -3838,6 +3841,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     // #2341 (L4): the test-side constructors.
                     "RequestHeaders" => &["of", "empty"],
                     "RequestQuery" => &["of", "empty"],
+                    "RequestCookies" => &["of", "empty"],
                     // #2380 (L5): the test-side constructor.
                     "TokenClaims" => &["of"],
                     // K6b (#2598): the two constants beside `parse`.

@@ -1,0 +1,35 @@
+suite auth.api {
+	case "a __Host- cookie is read through the raw view" {
+		let r <- api.GET("/me", RequestCookies.of(["__Host-sid=abc"]))
+		expect r is Ok("hello abc")
+	}
+
+	case "a missing cookie is None" {
+		let r <- api.GET("/me", RequestCookies.empty())
+		expect r is Unauthorized
+	}
+
+	case "names lists each name once, all lists every value" {
+		let a <- api.GET("/names", RequestCookies.of(["a=1", "b=2", "a=3"]))
+		expect a is Ok(2)
+		let b <- api.GET("/all", RequestCookies.of(["theme=dark", "theme=light", "x=1"]))
+		expect b is Ok(2)
+	}
+}
+
+suite auth.api as system {
+	case "the router builds the raw view from the Cookie header" {
+		let r <- api.GET("/me", RequestCookies.of(["__Host-sid=abc"]))
+		expect r is Ok("hello abc")
+	}
+
+	case "a Wire string is the header text itself" {
+		let r <- api.GET("/me", Wire("__Host-sid=abc"))
+		expect r is Handled(Ok(_))
+	}
+
+	case "a prefixed cookie the login sets is the one the view reads" {
+		let login <- api.POST("/login")
+		expect login.cookies().map((c) => c.name) == ["__Host-sid"]
+	}
+}

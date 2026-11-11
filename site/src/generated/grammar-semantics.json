@@ -950,6 +950,10 @@
       "summary": "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry."
     },
     {
+      "code": "bynk.http.cookies_not_http",
+      "summary": "A `RequestCookies` appears on a handler that is not an HTTP route."
+    },
+    {
       "code": "bynk.http.duplicate_route",
       "summary": "Two handlers share the same method and route."
     },

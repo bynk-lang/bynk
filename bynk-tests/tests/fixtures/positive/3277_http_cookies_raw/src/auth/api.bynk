@@ -1,0 +1,31 @@
+context auth.api
+
+consumes bynk { Cookie }
+
+type Token = String where NonEmpty && MaxLength(64)
+
+service api from http {
+	// The session cookie is a `__Host-` name, which a record field cannot spell,
+	// so the handler reads the raw view and builds its own `Token`.
+	on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[String]] by v: Visitor {
+		match cookies.get("__Host-sid") {
+			None => Unauthorized
+			Some(raw) => match Token.of(raw) {
+				Ok(t) => Ok("hello \(t)")
+				Err(_) => BadRequest("bad session cookie")
+			}
+		}
+	}
+
+	on GET("/names") (cookies: RequestCookies) -> Effect[HttpResult[Int]] by v: Visitor {
+		Ok(cookies.names().length())
+	}
+
+	on GET("/all") (cookies: RequestCookies) -> Effect[HttpResult[Int]] by v: Visitor {
+		Ok(cookies.all("theme").length())
+	}
+
+	on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
+		Created("ok").withCookie(Cookie { name: "__Host-sid", value: "abc" })
+	}
+}

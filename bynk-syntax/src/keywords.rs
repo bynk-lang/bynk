@@ -346,6 +346,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "The queue handler result type (non-generic).",
     ),
     k(
+        "RequestCookies",
+        "An HTTP handler's read-only view of the request's cookies (`cookies: RequestCookies`).",
+    ),
+    k(
         "RequestHeaders",
         "An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`).",
     ),

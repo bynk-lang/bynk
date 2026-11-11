@@ -269,6 +269,15 @@ Cookie = { name: String, value: String,
            sameSite: SameSite = Lax, partitioned: Bool = false }
 ```
 
+### RequestCookies {#request-cookies}
+
+`RequestCookies` is the raw, read-only view of an HTTP request's cookies, the type of a
+handler's `cookies` parameter when it needs a name a record field cannot spell. It has
+`get(name) -> Option[String]`, `all(name) -> List[String]` and `names() -> List[String]`,
+and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty()`. It is not
+a boundary type: it cannot be stored, sent or returned. See
+[Reading a prefixed cookie](/book/reference/http/#request-cookies).
+
 ## Built-in generic types
 
 | Type | Variants | Purpose |

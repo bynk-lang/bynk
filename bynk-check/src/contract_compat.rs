@@ -406,6 +406,7 @@ fn shape_of(
         TypeRef::Asset(_) => Shape::Named("Asset".into()),
         TypeRef::RequestHeaders(_) => Shape::Named("RequestHeaders".into()),
         TypeRef::RequestQuery(_) => Shape::Named("RequestQuery".into()),
+        TypeRef::RequestCookies(_) => Shape::Named("RequestCookies".into()),
         TypeRef::TokenClaims(_) => Shape::Named("TokenClaims".into()),
         TypeRef::BoundaryRejection(_) => Shape::Named("BoundaryRejection".into()),
         TypeRef::Fn(..)

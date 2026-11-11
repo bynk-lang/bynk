@@ -2101,6 +2101,66 @@ pub(crate) fn check_request_query_method(
     Some(ret)
 }
 
+/// #3277: type a method on an HTTP handler's raw `cookies` (`RequestCookies`).
+/// `get(name)` is the first cookie of that name, `all(name)` every one in header
+/// order, `names()` every distinct name.
+pub(crate) fn check_request_cookies_method(
+    method: &Ident,
+    op: Option<RequestCookiesOp>,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let strings = tys.intern(Ty::List(string));
+    let (params, ret): (Vec<TyId>, TyId) = match op {
+        Some(RequestCookiesOp::Get) => (vec![string], tys.intern(Ty::Option(string))),
+        Some(RequestCookiesOp::All) => (vec![string], strings),
+        Some(RequestCookiesOp::Names) => (vec![], strings),
+        None => {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_not_found",
+                method.span,
+                format!(
+                    "`RequestCookies` has no method `{}` — it has `get(name)`, `all(name)` and `names()`",
+                    method.name
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestCookies.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(&params) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestCookies.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(ret)
+}
+
 /// #2380 (L5): type a method on an `Oidc` binder's `claims` (`TokenClaims`).
 /// `get(name)` is the claim when it is a JSON string (`Option[String]`);
 /// `has(name)` is whether the claim is present, of any type.
@@ -3662,6 +3722,54 @@ pub(crate) fn check_request_query_static(
         );
     }
     Some(tys.intern(Ty::RequestQuery))
+}
+
+/// #3277: the `RequestCookies` static constructors, the test-side way to build
+/// the cookies a raw-view handler reads. `of(pairs)` takes `"name=value"` pairs
+/// as a browser sends them; `empty()` has none.
+pub(crate) fn check_request_cookies_static(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let params: Vec<TyId> = match method.name.as_str() {
+        "of" => vec![tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::String))))],
+        "empty" => vec![],
+        _ => {
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestCookies.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(params.iter()) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestCookies.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(tys.intern(Ty::RequestCookies))
 }
 
 /// #2380 (L5): `TokenClaims.of(lines)`, the test-side way to build the claims
