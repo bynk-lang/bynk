@@ -79,6 +79,13 @@ pub struct Explain {
     /// line under it to that file (the bad project's if marked `✗`, the good
     /// project's if `✓`, either's if unmarked). A label must name a file of the
     /// fixture, and only a directory-form fixture may use one.
+    ///
+    /// The gate also checks the layout of the string as it prints: a line
+    /// inside a `{ … }` block must be indented past the line that opens it, and
+    /// the closing `}` must sit at that line's indentation. A `\` line
+    /// continuation swallows the whitespace that follows it, newlines included,
+    /// so write a nested line's leading spaces as `\x20` (four spaces a level)
+    /// and a blank line as `\n\`, never as a line holding only `\`.
     pub example: &'static str,
     /// The target Book page as a site-root-relative path, no extension and no
     /// trailing slash, e.g. `/book/reference/types`. Used verbatim as an
