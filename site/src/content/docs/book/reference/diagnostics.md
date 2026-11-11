@@ -117,8 +117,8 @@ There are **823** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.cron.bad_params` | A cron handler declares more than one parameter, or a non-`Int` one. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
-| `bynk.cron.duplicate_schedule` | Two cron handlers declare the same schedule. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+| [`bynk.cron.bad_params`](/book/reference/cron/#handler-form) | A cron handler declares more than one parameter, or a non-`Int` one. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+| [`bynk.cron.duplicate_schedule`](/book/reference/cron/#handler-form) | Two cron handlers declare the same schedule. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 | [`bynk.cron.invalid_schedule`](/book/reference/cron/#handler-form) | A cron expression is not five whitespace-separated fields. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 | [`bynk.cron.return_not_effect_result`](/book/reference/cron/#handler-form) | A cron handler does not return `Effect[Result[(), E]]`. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 
@@ -445,15 +445,15 @@ There are **823** codes in total.
 | `bynk.history.not_generable` | A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155). |  | — |
 | `bynk.history.outside_property` | `History[Agent]` appears outside a `property`'s `for all` binding — it is a test-only generator, not a value type (testing track slice 7, ADR 0155). |  | — |
 | `bynk.history.restates_invariant` | A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155). |  | — |
-| `bynk.index.bad_argument` | An `@indexed` argument is not a `by: <field>` label. |  | — |
+| [`bynk.index.bad_argument`](/book/reference/agents/#storage-annotations) | An `@indexed` argument is not a `by: <field>` label. |  | — |
 | `bynk.index.missing` | A query filters a map by equality on a field that is not `@indexed` (a perf-hint warning). |  | Warning |
-| `bynk.index.unkeyable_key` | An `@indexed(by: k)` field is not value-keyable. |  | — |
+| [`bynk.index.unkeyable_key`](/book/reference/agents/#storage-annotations) | An `@indexed(by: k)` field is not value-keyable. |  | — |
 | `bynk.index.unknown_key` | An `@indexed(by: k)` field is not a field of the map's value type. |  | — |
 | `bynk.index.unused` | A declared `@indexed(by: k)` is never used by an equality filter (a hygiene warning). |  | Warning |
-| `bynk.invariant.cross_agent_reference` | An invariant predicate references another agent; invariants are per-agent. |  | — |
-| `bynk.invariant.duplicate_name` | An agent declares two invariants with the same name. |  | — |
-| `bynk.invariant.impure_predicate` | An invariant predicate uses an effectful or test-only construct. |  | — |
-| `bynk.invariant.not_bool` | An invariant predicate does not have type `Bool`. |  | — |
+| [`bynk.invariant.cross_agent_reference`](/book/reference/agent-invariants/#the-predicate-surface) | An invariant predicate references another agent; invariants are per-agent. |  | — |
+| [`bynk.invariant.duplicate_name`](/book/reference/agent-invariants/#the-predicate-surface) | An agent declares two invariants with the same name. |  | — |
+| [`bynk.invariant.impure_predicate`](/book/reference/agent-invariants/#the-predicate-surface) | An invariant predicate uses an effectful or test-only construct. |  | — |
+| [`bynk.invariant.not_bool`](/book/reference/agent-invariants/#the-predicate-surface) | An invariant predicate does not have type `Bool`. |  | — |
 | `bynk.json.encode_plain_generic` | `Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type. |  | — |
 | [`bynk.json.nested_option_plain`](/book/reference/types/#plain-json) | A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`. |  | — |
 | `bynk.lambda.unannotated_param` | A lambda parameter has no type annotation in a position where no function type is expected to infer it from. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
@@ -477,14 +477,14 @@ There are **823** codes in total.
 | `bynk.package.unsupported_in_dependency` | A dependency declares an `asset` or an `embed`, which would resolve against the consuming project's `assets/` or `embeds/`; a per-package namespace for either isn't designed yet. |  | — |
 | `bynk.package.version_conflict` | One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package. |  | — |
 | [`bynk.par.invalid_statement`](/book/reference/capabilities/#par) | A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `~>`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
-| `bynk.par.question_in_join` | A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
+| [`bynk.par.question_in_join`](/book/reference/capabilities/#par) | A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | [`bynk.par.sibling_name`](/book/reference/capabilities/#par) | A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | `bynk.par.single_binding` | A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning). | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | Warning |
 | [`bynk.par.store_write_in_closure`](/book/reference/capabilities/#par) | A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block. |  | — |
-| `bynk.query.join_key_mismatch` | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
+| [`bynk.query.join_key_mismatch`](/book/reference/types/#joins-and-grouping) | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
-| `bynk.race.in_agent_handler` | `a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.race.in_pure_context` | `a.race(b)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.race.in_agent_handler`](/book/reference/capabilities/#race) | `a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.race.in_pure_context`](/book/reference/capabilities/#race) | `a.race(b)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.race.outside_handler` | `a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.registry.account_refused` | `bynk login`, `bynk logout` or a `bynk org` command didn't go through: you aren't signed in or your session expired, the registry has no account API (or is read through a mirror), the sign-in was declined or its code expired, or the registry refused the request (a taken or reserved name, not the owner, an unknown member or token). |  | — |
 | `bynk.registry.bad_archive` | A registry archive is malformed or hostile: not a `bynk-tree-v1` stream, a path that is absolute or climbs out of the package, an out-of-order or repeated file, or past the size limits. |  | — |
@@ -501,11 +501,11 @@ There are **823** codes in total.
 | `bynk.requires.unpinned_dependency` | An adapter `binding … requires { … }` entry has an unpinned version range. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
 | [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.in_pure_context` | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.in_pure_context`](/book/reference/capabilities/#capabilities-in-functions) | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.non_effect`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.requires_unit`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.store_op`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#not-in-an-agent-handler) | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.store.annotation_kind_mismatch` | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |
+| [`bynk.store.annotation_kind_mismatch`](/book/reference/agents/#storage-annotations) | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |
 | `bynk.store.annotation_unsupported` | A known storage annotation (`@ttl`/`@retain`/`@indexed`/`@bounded`) is used before the slice that supports it. |  | — |
 | [`bynk.store.cache_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
 | [`bynk.store.cache_ttl_required`](/book/reference/agents/#storage-annotations) | A `Cache` field is missing its required `@ttl(<duration>)` annotation (a keyed store with no expiry is a `Map`). |  | — |
@@ -513,7 +513,7 @@ There are **823** codes in total.
 | `bynk.store.kind_unsupported` | A known storage kind (`Queue`) is used before the slice that supports it. |  | — |
 | [`bynk.store.log_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`. |  | — |
 | [`bynk.store.unkeyable_key`](/book/reference/agents/#storage-kinds-and-their-operations) | A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680). |  | — |
-| `bynk.store.unknown_annotation` | A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set. |  | — |
+| [`bynk.store.unknown_annotation`](/book/reference/agents/#storage-annotations) | A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set. |  | — |
 | [`bynk.store.unknown_kind`](/book/reference/agents/#storage-kinds-and-their-operations) | A `store` field's type is not a known storage kind. |  | — |
 | [`bynk.store.unknown_map_accessor`](/book/reference/types/#map-key-accessors) | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
 | [`bynk.store.unknown_op`](/book/reference/agents/#storage-kinds-and-their-operations) | A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations. |  | — |
@@ -586,10 +586,10 @@ There are **823** codes in total.
 | [`bynk.visibility.private_not_allowed`](/book/guides/program-structure/design-a-public-surface/) | `private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context. | [`visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier) | — |
 | `bynk.wasm.panic` | The in-browser compiler panicked internally (a compiler bug, reported as a diagnostic instead of crashing the page). |  | — |
 | `bynk.wasm.strip_failed` | The in-browser compiler could not strip the emitted TypeScript to JavaScript. |  | — |
-| `bynk.within.in_agent_handler` | `e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.within.in_pure_context` | `e.within(d)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.within.in_agent_handler`](/book/reference/capabilities/#within) | `e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.within.in_pure_context`](/book/reference/capabilities/#within) | `e.within(d)` was used in a pure (non-effectful) context. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.within.outside_handler` | `e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.within.timed_out_not_in_scope` | `e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.within.timed_out_not_in_scope`](/book/reference/capabilities/#within) | `e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.ws.lifecycle_by_mismatch`](/book/reference/websocket/#service-form) | A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ). |  | — |
 | [`bynk.ws.message_frame_param`](/book/reference/websocket/#service-form) | A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii). |  | — |
 | `bynk.ws.open_given_unsupported` | A WebSocket `on open` handler declares `given` capabilities — unsupported at v1, since on Workers the handler runs inside the connection-hosting Durable Object, which has no composition root to supply them (real-time track slice 3b). |  | — |
@@ -719,7 +719,7 @@ There are **823** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.queue.bad_params`](/book/reference/queue/#handler-form) | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
-| `bynk.queue.duplicate_consumer` | Two `on message` handlers consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
+| [`bynk.queue.duplicate_consumer`](/book/reference/queue/#handler-form) | Two `on message` handlers consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | `bynk.queue.invalid_name` | A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | [`bynk.queue.return_not_queue_result`](/book/reference/queue/#handler-form) | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 
@@ -847,12 +847,12 @@ There are **823** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.transition.cross_agent_reference` | A transition predicate references another agent; step invariants are per-agent. |  | — |
-| `bynk.transition.duplicate_name` | An agent declares two transitions with the same name. |  | — |
-| `bynk.transition.impure_predicate` | A transition predicate uses an effectful or test-only construct; a step invariant must be pure. |  | — |
+| [`bynk.transition.cross_agent_reference`](/book/reference/agent-invariants/#step-invariants) | A transition predicate references another agent; step invariants are per-agent. |  | — |
+| [`bynk.transition.duplicate_name`](/book/reference/agent-invariants/#step-invariants) | An agent declares two transitions with the same name. |  | — |
+| [`bynk.transition.impure_predicate`](/book/reference/agent-invariants/#step-invariants) | A transition predicate uses an effectful or test-only construct; a step invariant must be pure. |  | — |
 | `bynk.transition.may_violate` | A handler can make a move that an agent's `transition` refuses, from a state the agent can be in after a commit; at run time that call faults with `InvariantViolation` (warning). Resolve it in code: refuse the move first, with a `match` arm or an `is` test on the state field that the path can't get past. |  | Warning |
-| `bynk.transition.no_step_reference` | A transition references neither `old` nor `new`; it constrains one state, so it is an `invariant`, not a step. |  | — |
-| `bynk.transition.not_bool` | A transition predicate does not have type `Bool`. |  | — |
+| [`bynk.transition.no_step_reference`](/book/reference/agent-invariants/#step-invariants) | A transition references neither `old` nor `new`; it constrains one state, so it is an `invariant`, not a step. |  | — |
+| [`bynk.transition.not_bool`](/book/reference/agent-invariants/#step-invariants) | A transition predicate does not have type `Bool`. |  | — |
 
 ## Type checking
 
