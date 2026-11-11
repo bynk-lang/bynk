@@ -1,0 +1,14 @@
+context s
+
+consumes bynk { Clock }
+
+agent Audit {
+  key id: String
+
+  store trail: Log[String]
+
+  on call opened() -> Effect[()] given Clock {
+    let _ <- trail.append("opened")
+    Effect.pure(())
+  }
+}

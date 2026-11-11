@@ -119,8 +119,8 @@ There are **806** codes in total.
 |---|---|---|---|
 | `bynk.cron.bad_params` | A cron handler declares more than one parameter, or a non-`Int` one. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 | `bynk.cron.duplicate_schedule` | Two cron handlers declare the same schedule. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
-| `bynk.cron.invalid_schedule` | A cron expression is not five whitespace-separated fields. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
-| `bynk.cron.return_not_effect_result` | A cron handler does not return `Effect[Result[(), E]]`. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+| [`bynk.cron.invalid_schedule`](/book/reference/cron/#handler-form) | A cron expression is not five whitespace-separated fields. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+| [`bynk.cron.return_not_effect_result`](/book/reference/cron/#handler-form) | A cron handler does not return `Effect[Result[(), E]]`. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 
 ## Doc comments
 
@@ -429,9 +429,9 @@ There are **806** codes in total.
 | `bynk.held.branch_divergence` | Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2). |  | — |
 | [`bynk.held.consume_on_borrow`](/book/reference/websocket/#sending-and-broadcasting) | A consuming operation (`close`/`put`/`take`) is called on a *borrowed* held reference — borrows admit only non-consuming operations like `send` (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.held.leak`](/book/reference/websocket/#service-form) | A held value (`Connection[F]`) is still owned at scope exit — it must be disposed (stored, closed, or transferred) before the handler or function returns (§2.9.1, real-time track slice 2). |  | — |
-| `bynk.held.query_accessor_on_held_map` | A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query. |  | — |
-| `bynk.held.unsupported_map_op` | A held `Map[K, Connection]` is given an `update`/`upsert` — a held resource cannot be transformed by a `(Connection) -> Connection` function; use `put`/`get`/`remove` (real-time track slice 3b-ii). |  | — |
-| `bynk.held.unsupported_storage` | A held value (`Connection[F]`) is stored in a `Set`/`Log`/`Cache` — held values may only live in `Cell[Option[Connection]]` or `Map[K, Connection]` (§2.9.3, real-time track slice 2). |  | — |
+| [`bynk.held.query_accessor_on_held_map`](/book/reference/websocket/#sending-and-broadcasting) | A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query. |  | — |
+| [`bynk.held.unsupported_map_op`](/book/reference/websocket/#sending-and-broadcasting) | A held `Map[K, Connection]` is given an `update`/`upsert` — a held resource cannot be transformed by a `(Connection) -> Connection` function; use `put`/`get`/`remove` (real-time track slice 3b-ii). |  | — |
+| [`bynk.held.unsupported_storage`](/book/reference/types/#connection) | A held value (`Connection[F]`) is stored in a `Set`/`Log`/`Cache` — held values may only live in `Cell[Option[Connection]]` or `Map[K, Connection]` (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.held.use_after_consume`](/book/reference/websocket/#sending-and-broadcasting) | A held value (`Connection[F]`) is used after a consuming operation (`close`/`put`/`take`) ended its lifetime (§2.9.2, real-time track slice 2). |  | — |
 | `bynk.history.not_an_agent` | A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155). |  | — |
 | `bynk.history.not_generable` | A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155). |  | — |
@@ -494,20 +494,20 @@ There are **806** codes in total.
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
 | [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | `bynk.send.in_pure_context` | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.non_effect` | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.requires_unit` | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.store_op` | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.non_effect`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.requires_unit`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.store_op`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#not-in-an-agent-handler) | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | `bynk.store.annotation_kind_mismatch` | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |
 | `bynk.store.annotation_unsupported` | A known storage annotation (`@ttl`/`@retain`/`@indexed`/`@bounded`) is used before the slice that supports it. |  | — |
-| `bynk.store.cache_needs_clock` | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
+| [`bynk.store.cache_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
 | [`bynk.store.cache_ttl_required`](/book/reference/agents/#storage-annotations) | A `Cache` field is missing its required `@ttl(<duration>)` annotation (a keyed store with no expiry is a `Map`). |  | — |
-| `bynk.store.kind_arity` | A storage kind was applied to the wrong number of type arguments (e.g. `Cell[A, B]`). |  | — |
+| [`bynk.store.kind_arity`](/book/reference/agents/#storage-kinds-and-their-operations) | A storage kind was applied to the wrong number of type arguments (e.g. `Cell[A, B]`). |  | — |
 | `bynk.store.kind_unsupported` | A known storage kind (`Queue`) is used before the slice that supports it. |  | — |
-| `bynk.store.log_needs_clock` | A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`. |  | — |
+| [`bynk.store.log_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`. |  | — |
 | [`bynk.store.unkeyable_key`](/book/reference/agents/#storage-kinds-and-their-operations) | A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680). |  | — |
 | `bynk.store.unknown_annotation` | A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set. |  | — |
-| `bynk.store.unknown_kind` | A `store` field's type is not a known storage kind. |  | — |
-| `bynk.store.unknown_map_accessor` | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
+| [`bynk.store.unknown_kind`](/book/reference/agents/#storage-kinds-and-their-operations) | A `store` field's type is not a known storage kind. |  | — |
+| [`bynk.store.unknown_map_accessor`](/book/reference/types/#map-key-accessors) | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
 | [`bynk.store.unknown_op`](/book/reference/agents/#storage-kinds-and-their-operations) | A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations. |  | — |
 | `bynk.stub.after_type` | A test `stub … returns <value> after <d>` latency is not a `Duration`. |  | — |
 | `bynk.stub.at_system` | A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override. | [`stub_clause`](/book/reference/grammar/#rule-stub_clause) | — |
@@ -710,19 +710,19 @@ There are **806** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.queue.bad_params` | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
+| [`bynk.queue.bad_params`](/book/reference/queue/#handler-form) | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | `bynk.queue.duplicate_consumer` | Two `on message` handlers consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | `bynk.queue.invalid_name` | A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
-| `bynk.queue.return_not_queue_result` | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
+| [`bynk.queue.return_not_queue_result`](/book/reference/queue/#handler-form) | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 
 ## Record spread
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.record_spread.field_type_mismatch` | A record-spread override has the wrong type for the field. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
-| `bynk.record_spread.non_record_base` | The base of a record spread is not a record. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.field_type_mismatch`](/book/reference/types/#record-types) | A record-spread override has the wrong type for the field. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.non_record_base`](/book/reference/types/#record-types) | The base of a record spread is not a record. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | `bynk.record_spread.type_mismatch` | A record spread's base is a different record type. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
-| `bynk.record_spread.unknown_field` | A record spread overrides a field the record does not have. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.unknown_field`](/book/reference/types/#record-types) | A record spread overrides a field the record does not have. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 
 ## Refinement
 
