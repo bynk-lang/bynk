@@ -448,7 +448,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 have. An instance method is a function declared with `self` as its first \
                 parameter. A function declared on a type without `self` is static, and is \
                 called on the type, as `Counter.zero()`, never on a value. This also fires on \
-                a typo, and on a built-in type whose kernel lacks the method, since only the \
+                a typo, and on a built-in type that has methods but not this one, since only the \
                 methods the type documents exist.",
         example: "type Counter = { count: Int }\n\n\
                   fn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\n\

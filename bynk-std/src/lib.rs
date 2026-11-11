@@ -376,6 +376,25 @@ pub struct Unit {
     /// A capability not listed (Workers AI's single `[ai]` binding, say) has no
     /// instances.
     pub instantiable: &'static [Instantiable],
+    /// The capabilities bound once per Worker (#3300, track D3 rule 2): used
+    /// bare (`given Version`), never derived (`capability V = Version` is
+    /// `bynk.capability.base_not_instantiable`, as for any capability not in
+    /// [`Unit::instantiable`]), and bound only in a Worker whose closure
+    /// reaches one.
+    pub singletons: &'static [Singleton],
+}
+
+/// A platform capability with exactly one binding per Worker (#3300): Version
+/// metadata's `[version_metadata]`, and later Workers AI's `[ai]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Singleton {
+    /// The capability's name in its unit (`Version`).
+    pub capability: &'static str,
+    /// Its fixed Worker binding name, the one `env` field its provider reads.
+    pub binding: &'static str,
+    /// The `wrangler.toml` table that declares it (`version_metadata`), a
+    /// plain table holding only `binding`.
+    pub wrangler_table: &'static str,
 }
 
 /// A capability a context may declare instances of (S4a, #1966, track D3).
@@ -486,6 +505,11 @@ pub const ANALYTICS_BINDING_PREFIX: &str = "ANALYTICS";
 /// `[[d1_databases]]` entry whose `database_id` `bynk deploy` mints.
 pub const D1_BINDING_PREFIX: &str = "D1";
 
+/// The Worker binding of the `Version` capability (#3300): Cloudflare's
+/// Version metadata binding, `[version_metadata] binding = "CF_VERSION_METADATA"`,
+/// the name Cloudflare's own documentation uses.
+pub const VERSION_BINDING_NAME: &str = "CF_VERSION_METADATA";
+
 /// The prefix an `EdgeCache` instance's binding name would carry (first-party
 /// registry L7, #2414). Workers Cache is a Worker-wide `[cache]` setting with
 /// no `env` binding, so the name is never emitted: the instance is built from
@@ -554,6 +578,7 @@ pub const UNITS: &[Unit] = &[
         ],
         extensible: &["FetchError", "Method", "Redirect"],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: CLOUDFLARE_UNIT,
@@ -574,6 +599,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersQueue",
             "WorkersAnalytics",
             "WorkersD1",
+            "WorkersVersion",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -584,6 +610,7 @@ pub const UNITS: &[Unit] = &[
         // L7 (#2414): EdgeCache likewise.
         // P2 (#2578): Queue too, until a first-party service has sent on it.
         // P3b (#2582): Analytics too, until a first-party service writes to it.
+        // Version metadata (#3300) too, until a first-party service reports it.
         // P1 (#2590): the new operations of the stable `Kv`, until a service
         // has used them.
         // D1 shipped experimental (P4a, #2602) and graduated in P4d (#2652)
@@ -596,6 +623,7 @@ pub const UNITS: &[Unit] = &[
             "EdgeCache",
             "Queue",
             "Analytics",
+            "Version",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -664,6 +692,13 @@ pub const UNITS: &[Unit] = &[
                 bare: false,
             },
         ],
+        // Version metadata (#3300): the running Worker version's id, tag and
+        // creation time, one binding per Worker.
+        singletons: &[Singleton {
+            capability: "Version",
+            binding: VERSION_BINDING_NAME,
+            wrangler_table: "version_metadata",
+        }],
     },
     Unit {
         name: LIST_UNIT,
@@ -678,6 +713,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: MAP_UNIT,
@@ -692,6 +728,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: STRING_UNIT,
@@ -706,6 +743,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: LOCALE_UNIT,
@@ -720,6 +758,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: LOCALE_TYPES_UNIT,
@@ -734,6 +773,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: CRYPTO_UNIT,
@@ -757,6 +797,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &["Digest", "Signature", "CryptoError"],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: URL_UNIT,
@@ -771,6 +812,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
     Unit {
         name: SET_UNIT,
@@ -786,6 +828,7 @@ pub const UNITS: &[Unit] = &[
         experimental: &[],
         extensible: &[],
         instantiable: &[],
+        singletons: &[],
     },
 ];
 
@@ -894,6 +937,15 @@ pub fn instantiable(unit: &str, capability: &str) -> Option<&'static Instantiabl
         .find(|i| i.capability == capability)
 }
 
+/// The one-per-Worker capability `capability` of first-party unit `unit`
+/// (#3300), if it is one.
+pub fn singleton(unit: &str, capability: &str) -> Option<&'static Singleton> {
+    self::unit(unit)?
+        .singletons
+        .iter()
+        .find(|s| s.capability == capability)
+}
+
 /// Whether `name`, an enum exported by `unit`, is extensible.
 pub fn is_extensible(unit: &str, name: &str) -> bool {
     is_extensible_in(UNITS, unit, name)
@@ -988,6 +1040,7 @@ mod tests {
             experimental: &["Fetch.stream"],
             extensible: &["FetchError"],
             instantiable: &[],
+            singletons: &[],
         },
         Unit {
             name: "bynk.cloudflare",
@@ -1002,6 +1055,7 @@ mod tests {
             experimental: &["Ai"],
             extensible: &[],
             instantiable: &[],
+            singletons: &[],
         },
         Unit {
             name: "bynk.cloudflare.d1",
@@ -1016,6 +1070,7 @@ mod tests {
             experimental: &[],
             extensible: &[],
             instantiable: &[],
+            singletons: &[],
         },
         Unit {
             name: "bynk.text",
@@ -1030,6 +1085,7 @@ mod tests {
             experimental: &[],
             extensible: &[],
             instantiable: &[],
+            singletons: &[],
         },
     ];
 
@@ -1156,6 +1212,64 @@ mod tests {
         assert!(!is_extensible_in(SYNTH, "bynk", "Method"));
     }
 
+    /// #3300: the shipped one-per-Worker capabilities: `bynk.cloudflare`'s
+    /// `Version`, bound as `CF_VERSION_METADATA` under `[version_metadata]`.
+    /// Each is a capability its unit exports, is not also instantiable, has a
+    /// provider that takes `env`, and that provider's default binding in the
+    /// TypeScript is the registry's name, so a bare construction reads it.
+    #[test]
+    fn the_shipped_singletons_are_pinned() {
+        let shipped: Vec<(&str, &str, &str, &str)> = UNITS
+            .iter()
+            .flat_map(|u| {
+                u.singletons
+                    .iter()
+                    .map(move |s| (u.name, s.capability, s.binding, s.wrangler_table))
+            })
+            .collect();
+        assert_eq!(
+            shipped,
+            [(
+                "bynk.cloudflare",
+                "Version",
+                "CF_VERSION_METADATA",
+                "version_metadata"
+            )]
+        );
+        for u in UNITS {
+            for s in u.singletons {
+                assert!(
+                    instantiable(u.name, s.capability).is_none(),
+                    "{}",
+                    s.capability
+                );
+                assert!(
+                    u.source
+                        .contains(&format!("capability {} {{", s.capability)),
+                    "{} declares `{}`",
+                    u.name,
+                    s.capability
+                );
+                assert!(
+                    provider_takes_env(u.name, &format!("Workers{}", s.capability)),
+                    "`Workers{}` takes `env`",
+                    s.capability
+                );
+                let Binding::Fixed { source, .. } = u.binding else {
+                    panic!("{} has a fixed binding", u.name);
+                };
+                assert!(
+                    source.contains(&format!("binding: string = \"{}\"", s.binding)),
+                    "`Workers{}` defaults to `{}`",
+                    s.capability,
+                    s.binding
+                );
+            }
+        }
+        assert!(singleton("bynk.cloudflare", "Version").is_some());
+        assert!(singleton("bynk.cloudflare", "Kv").is_none());
+    }
+
     /// The shipped instantiable kinds: `bynk.cloudflare`'s `Kv` (S4a, #1966),
     /// binding as `KV_<NAME>` with no creation options, and its `Service`
     /// (interop I5, #1972), binding as `SERVICE_<NAME>` and naming its Worker
@@ -1255,6 +1369,7 @@ mod tests {
                 "bynk.cloudflare.EdgeCache",
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
+                "bynk.cloudflare.Version",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",

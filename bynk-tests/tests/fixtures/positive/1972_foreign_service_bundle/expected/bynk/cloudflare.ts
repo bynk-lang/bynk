@@ -321,6 +321,21 @@ export const SqlReadError = {
 };
 
 /**
+ * The version of this Worker that is running, as `Version.current()`
+ * reports it. `id` is the version's id, `tag` its tag (`None` when the
+ * version was uploaded without one), and `deployed` when the version was
+ * created.
+ */
+export interface WorkerVersion {
+  readonly id: string;
+  readonly tag: Option<string>;
+  readonly deployed: number;
+}
+
+export const WorkerVersion = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -580,3 +595,19 @@ export interface D1 {
 }
 
 export const __D1Token: symbol = globalThis.Symbol("D1");
+
+/**
+ * The running Worker's version, from Cloudflare's Version metadata binding.
+ * It is bound once per Worker, so it is used bare (`given Version`) and has
+ * no named instances. Only a Worker that uses it declares the binding.
+ * `current()` gives the same value for every call in a deployment: report it
+ * from a health route, or write it beside an `Analytics` point, to tell
+ * which version served a request. Under `bynk dev` the id is local; in a
+ * test the value is fixed (id `"test"`, no tag, `deployed` at the epoch) and
+ * `stub Version.current() returns …` replaces it.
+ */
+export interface Version {
+  current(): globalThis.Promise<WorkerVersion>;
+}
+
+export const __VersionToken: symbol = globalThis.Symbol("Version");

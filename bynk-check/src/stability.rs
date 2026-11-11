@@ -412,6 +412,7 @@ mod tests {
                 "bynk.cloudflare.EdgeCache",
                 "bynk.cloudflare.Queue",
                 "bynk.cloudflare.Analytics",
+                "bynk.cloudflare.Version",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -421,6 +422,9 @@ mod tests {
             ]
         );
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
+        // #3300: the capability and its operation; its record is stable.
+        assert!(p.blocks("bynk.cloudflare.Version.current"));
+        assert!(!p.blocks("bynk.cloudflare.WorkerVersion"));
         // K5a (#2586): new operations of stable capabilities, alone.
         assert!(p.blocks("bynk.Fetch.sendWith"));
         assert!(!p.blocks("bynk.Fetch.send"));
