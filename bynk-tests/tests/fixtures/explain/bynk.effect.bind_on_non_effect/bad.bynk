@@ -1,0 +1,6 @@
+commons demo
+
+fn run() -> Effect[Int] {
+  let x <- 42
+  Effect.pure(x)
+}

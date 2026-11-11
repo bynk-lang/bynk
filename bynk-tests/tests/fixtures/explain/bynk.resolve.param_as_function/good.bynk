@@ -1,0 +1,5 @@
+commons shop
+
+fn apply(f: Int -> Int) -> Int {
+  f(5)
+}

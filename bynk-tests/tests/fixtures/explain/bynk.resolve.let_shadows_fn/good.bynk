@@ -1,0 +1,8 @@
+commons shop
+
+fn total() -> Int { 1 }
+
+fn run() -> Int {
+  let sum = total() + 1
+  sum
+}

@@ -1,0 +1,5 @@
+context shop
+
+exports opaque { Order }
+
+type Order = { total: Int }
