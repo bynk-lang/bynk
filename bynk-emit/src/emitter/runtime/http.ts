@@ -881,7 +881,11 @@ export function serialiseCookie(c: CookieValue): string {
   if (c.sameSite.tag === "Unrestricted" && !c.secure) bad("SameSite=None needs Secure");
   if (c.partitioned && !c.secure) bad("a Partitioned cookie needs Secure");
   const parts = [`${c.name}=${c.value}`];
-  if (c.expires.tag === "Some") parts.push(`Expires=${new Date(c.expires.value).toUTCString()}`);
+  if (c.expires.tag === "Some") {
+    const when = new Date(c.expires.value);
+    if (Number.isNaN(when.getTime())) bad("Expires is outside the range of dates");
+    parts.push(`Expires=${when.toUTCString()}`);
+  }
   if (c.maxAge.tag === "Some") parts.push(`Max-Age=${Math.max(0, Math.trunc(c.maxAge.value / 1000))}`);
   if (domain !== undefined) parts.push(`Domain=${domain}`);
   parts.push(`Path=${c.path}`);
@@ -1454,7 +1458,10 @@ export function applyCache<R extends Response>(
   scope: "public" | "private",
   immutable?: boolean,
 ): R {
-  const directives = `${scope}, max-age=${maxAgeSecs}`;
+  // #3277: a response that sets a cookie is one user's, so a shared cache must
+  // never store it: `public` becomes `private` whenever a `Set-Cookie` is present.
+  const effective = response.headers.has("set-cookie") ? "private" : scope;
+  const directives = `${effective}, max-age=${maxAgeSecs}`;
   response.headers.set("cache-control", immutable ? `${directives}, immutable` : directives);
   return response;
 }
@@ -1534,6 +1541,9 @@ export function notModifiedIfMatch<R extends Response>(
   headers.set("etag", etag);
   const cacheControl = response.headers.get("cache-control");
   if (cacheControl !== null) headers.set("cache-control", cacheControl);
+  // #3277: a handler that rotates a cookie while answering the same body must
+  // not lose it to the conditional-`GET` short-circuit.
+  for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie);
   return new Response(null, { status: 304, headers });
 }
 

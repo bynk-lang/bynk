@@ -1336,3 +1336,29 @@ test("queryObject: an Option field wraps a present value, so `None` is not the e
   const r = queryObject(queryRequest("?kind=None"), [{ name: "kind", kind: "enum", list: false, option: true }]);
   assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: { kind: "None" } } } });
 });
+
+test("serialiseCookie: an Expires outside the Date range faults rather than emitting Invalid Date", () => {
+  assert.throws(
+    () => serialiseCookie({ ...baseCookie, expires: { tag: "Some", value: 9e15 } }),
+    /Expires/,
+  );
+});
+
+test("a conditional GET 304 keeps the Set-Cookie of the response it replaces", () => {
+  const withCookie = { ...HttpResult.Ok(1), cookies: [baseCookie] };
+  const res = httpResultToResponse(withCookie as never, id, { weakEtag: true });
+  const etag = res.headers.get("etag") as string;
+  const out = notModifiedIfMatch(res, new Request("http://x/", { headers: { "if-none-match": etag } }));
+  assert.equal(out.status, 304);
+  assert.deepEqual(out.headers.getSetCookie(), ["sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax"]);
+});
+
+test("applyCache: a response that sets a cookie is never marked public", () => {
+  const withCookie = { ...HttpResult.Ok(1), cookies: [baseCookie] };
+  const res = applyCache(httpResultToResponse(withCookie as never, id), 60, "public");
+  assert.equal(res.headers.get("cache-control"), "private, max-age=60");
+  assert.equal(
+    applyCache(httpResultToResponse(HttpResult.Ok(1), id), 60, "public").headers.get("cache-control"),
+    "public, max-age=60",
+  );
+});

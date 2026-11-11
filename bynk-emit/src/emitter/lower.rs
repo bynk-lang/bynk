@@ -4159,7 +4159,7 @@ fn lower_kernel_method_call(
                         format!("((({recv}) as any).cookies ?? [])")
                     }
                 };
-                return pre.finish(expr);
+                return Some(expr);
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
