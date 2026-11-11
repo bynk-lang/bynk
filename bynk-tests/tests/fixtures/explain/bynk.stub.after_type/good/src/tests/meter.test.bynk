@@ -1,0 +1,8 @@
+suite demo.meter {
+  stub Meter.read() returns 7 after 3.seconds
+
+  case "a probe" {
+    let n <- probe.call()
+    expect n == 7
+  }
+}

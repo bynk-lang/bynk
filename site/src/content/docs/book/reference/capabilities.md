@@ -328,7 +328,7 @@ on it unchanged.
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
   `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
-  `StoredSecret` and `Email`. `Version` is not: a Worker has one Version metadata binding, so it is used
+  `StoredSecret`, `Email` and `Postgres`. `Version` is not: a Worker has one Version metadata binding, so it is used
   bare, with `given Version`.
 - Options follow the base as `@annotations`, from the kind's own set
   (`bynk.capability.unknown_option`), each one literal of the option's kind,
@@ -351,10 +351,14 @@ on it unchanged.
   `@allowedSenders([…])`, each optional: deploy-time policy written into
   `[[send_email]]`, whose senders `bynk deploy` checks and never configures
   ([Outbound email](/book/reference/bynk-capabilities/#outbound-email-email)).
+  `Postgres` takes none: it binds as `HYPERDRIVE_<NAME>`, a `[[hyperdrive]]`
+  entry whose `id` is a placeholder until the Hyperdrive configuration exists,
+  and `bynk deploy` does not create it yet
+  ([Postgres databases](/book/reference/bynk-capabilities/#postgres-databases-postgres)).
   `EdgeCache` takes none, and a context declares at most one
   (`bynk.cloudflare.edge_cache_duplicate`): it turns on the Worker's edge cache
   and has no binding ([Edge caching](/book/reference/bynk-capabilities/#edge-caching-edgecache)).
-  `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1` and `EdgeCache` are used only through instances
+  `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1`, `Postgres` and `EdgeCache` are used only through instances
   (`bynk.capability.instance_only`).
 - Only a context declares one (`bynk.capability.derived_outside_context`), and
   it cannot be exported (`bynk.exports.derived_capability`). The data belongs to

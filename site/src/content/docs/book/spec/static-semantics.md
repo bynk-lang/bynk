@@ -1431,7 +1431,7 @@ and `expect` apply to it unchanged. The rules:
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
   `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
-  `StoredSecret` and `Email` have them
+  `StoredSecret`, `Email` and `Postgres` have them
   (`bynk.capability.base_not_instantiable`). `Version` is bound once per Worker
   and has none: it is used bare (#3300).
 - Each `@annotation` MUST be one of `K`'s instance options
@@ -1459,10 +1459,15 @@ and `expect` apply to it unchanged. The rules:
   string literals, every address being `local@domain` with no whitespace,
   control, angle-bracket, quote or comma character
   (`bynk.capability.invalid_option`) (#3302). A deploy checks each allowed
-  sender's domain and never configures it.
+  sender's domain and never configures it. `Postgres` takes none (Hyperdrive
+  H1, #3318): it binds as `HYPERDRIVE_<NAME>`, a `[[hyperdrive]]` entry whose
+  `id` is a placeholder until the Hyperdrive configuration exists. The SQL
+  argument of each of its operations MUST be a string literal, or a `String`
+  constant bound to one (`bynk.types.sql_not_literal`), with `$1`, `$2`, … as its
+  placeholders.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
-  `Queue`, `Analytics`, `EdgeCache` and `Email` are such kinds.
+  `Queue`, `Analytics`, `EdgeCache`, `Email` and `Postgres` are such kinds.
 - A context MUST declare at most one `EdgeCache` instance
   (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
   makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent

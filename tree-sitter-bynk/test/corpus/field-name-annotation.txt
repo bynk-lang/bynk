@@ -1,0 +1,30 @@
+==========================
+@name before a record field (#3343)
+==========================
+
+commons app.cookies
+
+type Session = { @name("__Host-sid") sid: Option[String], theme: String }
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (record_type
+        (record_field
+          annotation: (store_annotation
+            name: (identifier)
+            (annotation_arg
+              value: (string_literal)))
+          name: (identifier)
+          type: (generic_type_ref
+            name: (builtin_type)
+            arg: (base_type)))
+        (record_field
+          name: (identifier)
+          type: (base_type))))))

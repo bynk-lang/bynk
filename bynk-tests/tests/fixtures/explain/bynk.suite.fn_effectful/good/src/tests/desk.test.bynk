@@ -1,0 +1,8 @@
+suite demo.desk {
+  fn start() -> Int { 1 }
+
+  case "a pure helper" {
+    let n <- local.call(start())
+    expect n == 2
+  }
+}

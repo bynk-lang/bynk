@@ -1,0 +1,7 @@
+suite demo.desk {
+  fn Count.bump(self) -> Int { 1 }
+
+  case "a method" {
+    expect 1 == 1
+  }
+}

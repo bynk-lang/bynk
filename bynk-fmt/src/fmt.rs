@@ -1730,6 +1730,10 @@ impl<'a> Formatter<'a> {
     }
 
     fn format_record_field(&mut self, field: &RecordField) {
+        // #3343: annotations stay on the field's line, before its name.
+        for ann in &field.annotations {
+            self.push(&format!("{} ", annotation_to_string(ann)));
+        }
         self.push(&format!("{}: ", field.name.name));
         self.format_type_ref(&field.type_ref);
         if let Some(r) = &field.refinement {

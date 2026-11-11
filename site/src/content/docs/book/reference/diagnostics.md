@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **816** codes in total.
+There are **823** codes in total.
 
 ## Agents
 
@@ -107,11 +107,11 @@ There are **816** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.contract.duplicate_name` | A function declares two contract clauses (`requires`/`ensures`) with the same name. |  | — |
-| `bynk.contract.impure_predicate` | A contract predicate uses an effectful or test-only construct; a contract clause must be pure. |  | — |
-| `bynk.contract.not_bool` | A contract predicate does not have type `Bool`. |  | — |
+| [`bynk.contract.duplicate_name`](/book/reference/testing/#contracts) | A function declares two contract clauses (`requires`/`ensures`) with the same name. |  | — |
+| [`bynk.contract.impure_predicate`](/book/reference/testing/#contracts) | A contract predicate uses an effectful or test-only construct; a contract clause must be pure. |  | — |
+| [`bynk.contract.not_bool`](/book/reference/testing/#contracts) | A contract predicate does not have type `Bool`. |  | — |
 | `bynk.contract.restated_by_test` | A `case`/`property` merely restates a contract clause already declared at the function; the test is redundant. |  | — |
-| `bynk.contract.result_in_requires` | A precondition (`requires`) references `result`; the return value is only in scope inside an `ensures`. |  | — |
+| [`bynk.contract.result_in_requires`](/book/reference/testing/#contracts) | A precondition (`requires`) references `result`; the return value is only in scope inside an `ensures`. |  | — |
 
 ## Cron
 
@@ -311,7 +311,7 @@ There are **816** codes in total.
 | `bynk.observe.impure_with` | A `with` predicate uses an effectful or test-only construct; it must be pure. |  | — |
 | `bynk.observe.not_a_seam` | An observation targets a capability the unit under test does not consume. |  | — |
 | `bynk.observe.trace_outside_test` | `trace(Cap.op)` appears outside a `case` body. |  | — |
-| `bynk.observe.unknown_op` | An observation names an operation the capability does not declare. |  | — |
+| [`bynk.observe.unknown_op`](/book/reference/testing/#observation) | An observation names an operation the capability does not declare. |  | — |
 | `bynk.observe.with_not_bool` | A `with` predicate does not have type `Bool`. |  | — |
 
 ## Other
@@ -405,7 +405,7 @@ There are **816** codes in total.
 | `bynk.fixture.binary_content` | A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.duplicate` | A suite declares two `fixture`s of the same name. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.invalid_encoding` | A suite's `fixture` names a file that is not valid UTF-8. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
-| `bynk.fixture.missing_file` | A suite's `fixture` names a file that is not in the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
+| [`bynk.fixture.missing_file`](/book/reference/fixtures/#declaring-a-fixture) | A suite's `fixture` names a file that is not in the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.outside_fixtures_dir` | A suite's `fixture` names a file outside the project's `fixtures/` folder. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.too_large` | A suite's `fixture` names a file over the 4 MiB limit for one fixture file. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
 | `bynk.fixture.unreadable_file` | A suite's `fixture` names a listed file that could not be read. | [`fixture_decl`](/book/reference/grammar/#rule-fixture_decl) | — |
@@ -517,7 +517,7 @@ There are **816** codes in total.
 | [`bynk.store.unknown_kind`](/book/reference/agents/#storage-kinds-and-their-operations) | A `store` field's type is not a known storage kind. |  | — |
 | [`bynk.store.unknown_map_accessor`](/book/reference/types/#map-key-accessors) | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
 | [`bynk.store.unknown_op`](/book/reference/agents/#storage-kinds-and-their-operations) | A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations. |  | — |
-| `bynk.stub.after_type` | A test `stub … returns <value> after <d>` latency is not a `Duration`. |  | — |
+| [`bynk.stub.after_type`](/book/reference/testing/#stub-latency) | A test `stub … returns <value> after <d>` latency is not a `Duration`. |  | — |
 | `bynk.stub.at_system` | A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override. | [`stub_clause`](/book/reference/grammar/#rule-stub_clause) | — |
 | [`bynk.stub.bad_sequence`](/book/reference/testing/#stub) | A `stub … returns each […]` sequence is malformed (e.g. empty). |  | — |
 | `bynk.stub.generic_op` | A test `stub` targets a capability operation that declares its own type parameter — not supported at v1. |  | — |
@@ -531,12 +531,12 @@ There are **816** codes in total.
 | `bynk.test.actor_no_identity` | A call-site `by <Actor>(x)` supplies an identity to an actor that takes none — a unit-identity actor (e.g. `Visitor`) or `Nobody`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.advance_not_clock`](/book/reference/testing/#time-in-tests) | An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | [`bynk.test.advance_not_duration`](/book/reference/testing/#time-in-tests) | An `advance Clock by` statement's amount is not a `Duration`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
-| `bynk.test.advance_outside_case` | An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| [`bynk.test.advance_outside_case`](/book/reference/testing/#time-in-tests) | An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | `bynk.test.asset_address_method` | A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.call_needs_in_process` | A `system`-tier case calls an `on call` service with `svc.call(…)`; an `on call` service is internal to a deployment and has no public route for a `system` case to drive, so the case drives an `http` route that reaches it, or calls it at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.credential_needs_system` | A case drives `by Nobody` (the no-credential principal, which tests the auth seam's 401) outside a `system`-tier case, where there is no real seam to reject it. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.event_needs_in_process` | A `system`-tier case delivers an event with `svc.event(e)`; at `system` an event reaches a subscriber only through its publisher's fan-out, so the case drives the emitting handler instead, or delivers the event at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.event_not_subscribed` | A test body's `svc.event(e)` delivers an event the `from Events(E)` service does not subscribe to. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.event_not_subscribed`](/book/reference/testing/#event-address) | A test body's `svc.event(e)` delivers an event the `from Events(E)` service does not subscribe to. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.event_publisher_ambiguous` | A test body's `svc.event(e)` omits the envelope, but the event's publisher, which the default envelope names, is not one context the target declares or consumes. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.expired_needs_bearer_route` | A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.extra_headers_authorization` | A `system` case sends `Authorization` as an extra request header to a route that declares no `headers:` parameter; the case's `by <Actor>` owns the credential the driver sends. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -549,7 +549,7 @@ There are **816** codes in total.
 | `bynk.test.principal_identity_mismatch` | A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_on_asset` | A suite's asset fetch carries a `by` clause; an asset is public and served before the Worker runs. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.principal_on_wrong_method` | A wrong-method `405` test carries a `by <Actor>` clause; it reaches no handler, so a principal is meaningless. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.principal_required` | A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.principal_required`](/book/reference/testing/#call-site-by) | A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_clock_dependent` | Under `bynk test --against`, a `system` case's `expect` compares an `Instant` that isn't derived from the run (a constant such as `Instant.fromEpochMillis(0)`); in process the clock starts at the epoch, but a real runtime's Workers read wall-clock time. | [`case`](/book/reference/grammar/#rule-case) | Warning |
 | `bynk.test.remote_unsupported_advance` | A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_asset` | A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -562,14 +562,14 @@ There are **816** codes in total.
 | [`bynk.test.service_no_call_handler`](/book/reference/testing/#suite-blocks) | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |
 | [`bynk.test.service_unknown_route`](/book/reference/testing/#suite-blocks) | A test body addresses an http route / cron schedule / queue message the service does not declare. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.smoke_undeclared_status` | A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning). | [`case`](/book/reference/grammar/#rule-case) | Warning |
-| `bynk.test.snapshot_duplicate_name` | A case takes two snapshots (`expect v matches snapshot "name"`) under one name; a snapshot is keyed by its case and name. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| [`bynk.test.snapshot_duplicate_name`](/book/reference/testing/#snapshots) | A case takes two snapshots (`expect v matches snapshot "name"`) under one name; a snapshot is keyed by its case and name. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
 | `bynk.test.snapshot_in_property` | A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
-| `bynk.test.snapshot_name_not_literal` | `matches snapshot` is not followed by a string literal; a snapshot is named by a literal so the compiler knows every snapshot a suite takes. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| [`bynk.test.snapshot_name_not_literal`](/book/reference/testing/#snapshots) | `matches snapshot` is not followed by a string literal; a snapshot is named by a literal so the compiler knows every snapshot a suite takes. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
 | `bynk.test.snapshot_needs_unit_suite` | A snapshot is taken in a `system`-tier case or in an integration or system suite; snapshots are stored per unit suite file and compared in the unit harness. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
-| `bynk.test.snapshot_not_codable` | The value of an `expect … matches snapshot` is not `Codable`: a snapshot stores the value's `Json.encode` text, so it must be in the domain `Json.encode` accepts. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
+| [`bynk.test.snapshot_not_codable`](/book/reference/testing/#snapshots) | The value of an `expect … matches snapshot` is not `Codable`: a snapshot stores the value's `Json.encode` text, so it must be in the domain `Json.encode` accepts. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
 | `bynk.test.stale_needs_timestamp` | A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.system_claims_need_literal` | A `system`-tier case passes token claims to a call-site principal other than as a literal `TokenClaims.of([…])`; the driver mints the `Oidc` token's claims from those lines, which a `TokenClaims` value does not expose. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.unknown_actor` | A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.unknown_actor`](/book/reference/testing/#call-site-by) | A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.wire_http_only` | A `Wire(...)` raw argument is passed to a queue, cron, `on call` or event address; `Wire` drives an http body or path segment only, so a queue message, cron tick or event is passed as a typed value. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.wire_needs_system` | A `Wire(...)` raw argument is used outside a `system`-tier service address; `Wire` hands pre-validation input to the boundary and is meaningless at `unit` or in any other position. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.wrong_algorithm_needs_oidc_route` | A case drives `by WrongAlgorithm` at an address that is not an http route with an `Oidc` actor; it sends a token with `alg: none` and an `HS256` token keyed with the JWKS public key, so only an `Oidc` seam can refuse them. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -699,7 +699,7 @@ There are **816** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | `bynk.property.restates_refinement` | A `property` merely re-checks a refinement its type already guarantees. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
-| `bynk.property.where_not_bool` | A `for all ... where` filter does not type to `Bool`. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
+| [`bynk.property.where_not_bool`](/book/reference/testing/#properties) | A `for all ... where` filter does not type to `Bool`. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 
 ## Providers
 
@@ -832,14 +832,14 @@ There are **816** codes in total.
 | [`bynk.suite.duplicate_case_name`](/book/reference/testing/#suite-blocks) | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
-| `bynk.suite.duplicate_fn` | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.suite.duplicate_fn`](/book/reference/testing/#helpers) | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.duplicate_type` | A suite declares two `type`s of the same name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.env_binding_clash` | A `system`-tier suite's or case's `env` names a binding a participant's Worker already declares (a Service Binding, KV namespace, or Durable Object namespace), or a key the test harness sets on it (a call-edge key, a `Foreign` caller's secret), so the entry would clash with it on the Worker's `env`. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.env_not_literal` | An `env { … }` entry's value is neither a `String` literal nor a `fixture` the same suite declares; a Worker's variables and secrets are strings, given verbatim. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
-| `bynk.suite.fn_effectful` | A suite helper `fn` returns an `Effect`; suite helpers are pure. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.suite.fn_method` | A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.suite.fn_name_clash` | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.suite.type_generic` | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| [`bynk.suite.fn_effectful`](/book/reference/testing/#helpers) | A suite helper `fn` returns an `Effect`; suite helpers are pure. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.suite.fn_method`](/book/reference/testing/#helpers) | A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.suite.fn_name_clash`](/book/reference/testing/#helpers) | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.suite.type_generic`](/book/reference/testing/#suite-types-consts) | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.type_name_clash` | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.suite.unknown_target`](/book/reference/testing/#suite-blocks) | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 
@@ -890,7 +890,14 @@ There are **816** codes in total.
 | `bynk.types.example_violates` | An `@example` does not satisfy its refinement's predicates. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.extensible_match_needs_wildcard`](/book/reference/bynk-capabilities/#extensible-enums) | A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release. |  | — |
 | [`bynk.types.field_access_on_non_record`](/book/reference/types/#record-types) | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
+| `bynk.types.field_annotation_unknown` | A record field carries an annotation other than `@name("…")`. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | `bynk.types.field_default_on_variant` | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
+| `bynk.types.field_name_bad_arg` | A field's `@name` does not take exactly one string literal. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| `bynk.types.field_name_case_conflict` | Two fields of a `cookies` or `query` record have wire names that differ only in case. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| `bynk.types.field_name_duplicate` | A field has more than one `@name`, or two fields of a request record read the same wire name. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| `bynk.types.field_name_invalid` | A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name). | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| `bynk.types.field_name_not_request_record` | `@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| `bynk.types.field_name_record_not_boundary` | A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_refinement_not_base`](/book/reference/types/#record-types) | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_value_mismatch`](/book/reference/types/#record-types) | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.types.file_at_boundary` | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |

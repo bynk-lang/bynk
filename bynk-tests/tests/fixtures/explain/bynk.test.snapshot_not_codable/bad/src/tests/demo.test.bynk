@@ -1,0 +1,5 @@
+suite demo {
+  case "reads" {
+    expect Stream.of([1, 2]) matches snapshot "items"
+  }
+}

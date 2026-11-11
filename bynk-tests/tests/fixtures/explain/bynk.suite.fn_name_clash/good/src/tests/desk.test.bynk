@@ -1,0 +1,7 @@
+suite demo.desk {
+  fn triple(n: Int) -> Int { n * 3 }
+
+  case "no clash" {
+    expect triple(2) == 6
+  }
+}
