@@ -1,0 +1,11 @@
+context api
+
+type Signup = { email: String }
+
+service api from http {
+    @form
+    @limit(maxBody: 100_000, maxFile: 10_000)
+    on POST("/signup") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok(body.email)
+    }
+}

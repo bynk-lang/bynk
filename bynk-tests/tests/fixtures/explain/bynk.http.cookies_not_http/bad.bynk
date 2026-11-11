@@ -1,0 +1,9 @@
+context api
+
+type Session = { sid: Option[String] }
+
+service ticker from cron {
+    on schedule("*/5 * * * *") (cookies: RequestCookies) -> Effect[Result[(), String]] {
+        Ok(())
+    }
+}

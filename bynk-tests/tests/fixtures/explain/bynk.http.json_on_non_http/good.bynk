@@ -1,0 +1,8 @@
+context jobs
+
+service api from http {
+    @json(options: plain)
+    on GET("/activity") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}
