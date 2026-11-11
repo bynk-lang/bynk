@@ -125,6 +125,284 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.bearer_identity_not_string_constructible",
+        blurb: "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a \
+                string, so the identity type must be one a string can become: a refined or \
+                opaque `String`. Any other type has no way to be built from the claim, and an \
+                actor with no `identity` at all is refused for the same reason. Declare a type \
+                over `String`, such as `type UserId = String where NonEmpty`, and name it as the \
+                `identity`. An `Oidc` actor has the same rule under \
+                `bynk.actor.oidc_identity_not_string_constructible`.",
+        example: "type Age = Int where NonNegative\n\
+                  actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = Age }      // ✗ a token's `sub` is a string, not an `Int`\n\
+                  \n\
+                  type UserId = String where NonEmpty\n\
+                  actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }   // ✓ minted from `sub`",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.bearer_missing_secret",
+        blurb: "A `Bearer` actor checks a JWT signed with a shared key, so the compiler needs to \
+                know which key. Name the environment variable that holds it: \
+                `Bearer(secret = \"JWT_KEY\")`. The string is the variable's name, never the key \
+                itself, so no secret is written in the source; the `Secrets` capability reads the \
+                value at run time. An `Oidc` actor needs no secret, because it checks the \
+                provider's public keys, and a `Signature` actor has its own \
+                `bynk.actor.signature_missing_secret`.",
+        example: "type UserId = String where NonEmpty\n\n\
+                  actor User { auth = Bearer, identity = UserId }                         // ✗ no signing secret named\n\n\
+                  actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }     // ✓ the env var that holds the key",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.binder_shadows_param",
+        blurb: "A `by` clause with a binder, `by who: Visitor`, adds a name to the handler body \
+                beside its parameters. If the binder is spelt like a parameter it would hide it, \
+                so a body that read `body` would silently get the actor instead of the request \
+                body. The compiler refuses the clash rather than choose one. Rename the binder \
+                or the parameter. A `by` with no binder, `by Visitor`, adds no name and cannot \
+                clash.",
+        example: "on POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by body: Visitor {   // ✗ `body` is already a parameter\n\n\
+                  on POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by who: Visitor {   // ✓ a name of its own",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.by_on_agent",
+        blurb: "`by` names who is calling and has the compiler verify it at the edge of the \
+                program: an HTTP request, a queue message, a cron tick. An agent handler is not \
+                an edge. It is reached only from a service or another agent, which has already \
+                been through its own check, so there is no caller left to verify and the clause \
+                would be silently ignored. The compiler refuses it instead of letting it look \
+                like protection. Remove the clause, and put the `by` on the service handler that \
+                calls the agent, passing on whatever the agent needs as an argument.",
+        example: "on call bump() -> Effect[Int] by v: Visitor {   // ✗ an agent handler has no actor\n\n\
+                  on call bump() -> Effect[Int] {                // ✓ the service in front of it holds the `by`",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.missing_by_on_http",
+        blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
+                is calling, so each one must say, with a `by` clause, which actor it expects. \
+                The compiler then emits the verification before the body runs. A public route \
+                that anyone may call writes `by v: Visitor`; an authenticated one names an \
+                `actor` it declares. A WebSocket `on open` handler needs the same, since the \
+                upgrade is authenticated before it is accepted. The internal protocols (`call`, \
+                cron, queue) have a default and are not affected.",
+        example: "service api from http {\n\
+                  \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n\
+                  \x20   Ok(\"up\")\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  service api from http {\n\
+                  \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ anyone, said outright\n\
+                  \x20   Ok(\"up\")\n\
+                  \x20 }\n\
+                  }",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.scheme_not_admissible",
+        blurb: "Each protocol admits only the schemes that can be verified on it. HTTP takes \
+                `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` \
+                and `Bearer`; `call` takes `Internal` and `Foreign`; cron and queue take \
+                `Internal`. A `Visitor` on cron is wrong because nothing public calls a cron \
+                handler: the platform does. Use the actor made for the protocol: `Scheduler` for \
+                cron, `Producer` for queue, `Caller` for `on call`. `Caller` is admitted on \
+                `on call` only.",
+        example: "service jobs from cron {\n\
+                  \x20 on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by v: Visitor {   // ✗ cron takes an `Internal` actor\n\
+                  \x20   Ok(())\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  service jobs from cron {\n\
+                  \x20 on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by s: Scheduler {   // ✓ the cron actor\n\
+                  \x20   Ok(())\n\
+                  \x20 }\n\
+                  }",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.actor.sum_requires_binder",
+        blurb: "`by A | B` tries the actors in order and the first that verifies the caller wins. \
+                Which one that was is only known when a request arrives, so the handler learns it \
+                through the binder and `match`es on it. With no binder the answer would be \
+                thrown away and the sum would do nothing a single actor does not. Add one, \
+                `by who: A | B`, and match `who` in the body. A single actor needs no binder.",
+        example: "on GET(\"/x\") () -> Effect[HttpResult[String]] by User | Visitor {       // ✗ which one was it?\n\n\
+                  on GET(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ `who` is the resolved actor",
+        page: "/book/reference/actors",
+        anchor: "the-by-clause",
+    },
+    Explain {
+        code: "bynk.actor.unknown_actor",
+        blurb: "A `by` clause must name an actor the compiler can find: one declared with \
+                `actor` in this context, or a prelude actor (`Visitor`, `Caller`, `Scheduler` or \
+                `Producer`). Anything else is a misspelling or a missing declaration. The \
+                compiler will not guess, because the actor decides how callers are verified. \
+                Fix the spelling, or declare the actor first with `actor Name { auth = … }`.",
+        example: "on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitr {     // ✗ no actor of that name\n\n\
+                  on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ the prelude actor",
+        page: "/book/reference/actors",
+        anchor: "prelude-actors",
+    },
+    Explain {
+        code: "bynk.actor.unknown_scheme",
+        blurb: "An actor's `auth` names how its callers are verified, and the compiler writes \
+                that check itself, so the scheme must be one it knows: `None`, `Internal`, \
+                `Bearer`, `Signature`, `Oidc` or `Foreign`. There are no user-defined schemes, \
+                and a name outside the set is usually a typo or a scheme borrowed from another \
+                framework. Choose the one that matches how callers prove who they are, such as \
+                `Bearer` for a JWT signed with a shared key; the actors page lists what each \
+                one needs.",
+        example: "actor Robot { auth = Bogus }   // ✗ not a scheme the compiler knows\n\n\
+                  actor Robot { auth = None }    // ✓ one of the six",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
+        code: "bynk.agent.construction_arity",
+        blurb: "An agent is addressed by its key, so constructing one takes exactly one \
+                argument: the value of its single `key` field. `Counter(\"a\")` names the \
+                instance with key `\"a\"`. Two arguments or none do not say which instance is \
+                meant. Pass the one key. A key of the wrong type is `bynk.agent.key_mismatch`.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(\"a\", \"b\").get()   // ✗ one key, two arguments\n\
+                  let v <- Counter(\"a\").get()         // ✓ one key",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.handler_arity",
+        blurb: "A handler call is checked against the handler's declaration, as a function \
+                call is: it must pass one argument for each parameter, no more and no fewer. \
+                The agent's key is not one of them, since it was given when the agent was \
+                constructed. Match the call to the parameter list. If the handler is missing a \
+                parameter it needs, add it to the declaration and update every caller.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(\"a\").get(1)   // ✗ `get` takes no arguments\n\
+                  let v <- Counter(\"a\").get()    // ✓",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.handler_not_found",
+        blurb: "An agent is used through the handlers it declares with `on call`, so a method \
+                name it does not declare is a mistake: usually a misspelling, or a handler that \
+                was never written. Check the name against the agent's declaration, or add the \
+                handler. To read a `store` field from a caller, add a handler that returns it.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(\"a\").nope()   // ✗ `Counter` declares no `nope`\n\
+                  let v <- Counter(\"a\").get()    // ✓ a declared handler",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.key_mismatch",
+        blurb: "The key is what picks an instance, so its type is fixed by the agent: the type \
+                of its `key` field. An agent keyed by `String` cannot be addressed by an `Int`, \
+                because `1` and `\"1\"` would otherwise be easy to confuse and could name \
+                different instances. Pass a value of the key's type. The number of key \
+                arguments is `bynk.agent.construction_arity`.",
+        example: "agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call get() -> Effect[Int] {\n\
+                  \x20   n\n\
+                  \x20 }\n\
+                  }\n\
+                  \n\
+                  let v <- Counter(1).get()     // ✗ the key is a `String`\n\
+                  let v <- Counter(\"a\").get()   // ✓",
+        page: "/book/reference/agents",
+        anchor: "addressing-and-calling",
+    },
+    Explain {
+        code: "bynk.agent.outside_context",
+        blurb: "An agent holds state, and a context is the unit that owns it. A `commons` is \
+                code shared between contexts, which each `uses` it, so it is not given an agent, \
+                a service, an actor or a capability: those are only allowed in a `context`. \
+                Declare the agent in a context. A type the agent and other contexts both need \
+                can stay in the commons.",
+        example: "commons shop\n\
+                  \n\
+                  agent Counter { … }   // ✗ a commons has no state\n\
+                  \n\
+                  context shop\n\
+                  \n\
+                  agent Counter { … }   // ✓ a context owns it",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.agent.return_not_effect",
+        blurb: "An agent handler reads and writes the agent's stored state, and may call other \
+                agents and capabilities, so it does work in the world, not just compute a \
+                value. Bynk marks that in the type: a handler must return `Effect[T]`, and its \
+                caller takes the result with `<-`. A bare `Int` would claim the handler is pure. \
+                Wrap the return type in `Effect`. A plain `fn`, which really is pure, returns an \
+                ordinary value.",
+        example: "on call get() -> Int {           // ✗ a handler that reads state is an effect\n\
+                  \x20 n\n\
+                  }\n\
+                  \n\
+                  on call get() -> Effect[Int] {   // ✓\n\
+                  \x20 n\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.agent.state_name_conflict",
+        blurb: "Inside an agent's handlers and invariants, `<Agent>State` names the record of the \
+                agent's `Cell` fields: for agent `Counter`, `CounterState`. A type you declare \
+                with that name would be silently replaced there, so the compiler refuses it \
+                instead of renaming anything: unlike the names it derives elsewhere, this one \
+                can be written in a program. Rename your type.",
+        example: "type CounterState = { label: String }   // ✗ the name of `Counter`'s state record\n\n\
+                  type CounterLabel = { label: String }   // ✓ any other name\n\n\
+                  agent Counter {\n\
+                  \x20 key id: String\n\
+                  \x20 store n: Cell[Int]\n\
+                  \n\
+                  \x20 on call add(k: Int) -> Effect[Int] { k }\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "reading-and-writing-state",
+    },
+    Explain {
         code: "bynk.agents.bad_state_initialiser",
         blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
         example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
