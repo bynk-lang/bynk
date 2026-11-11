@@ -45,7 +45,9 @@ impl RestStores {
     pub(crate) fn from_env() -> Result<Self, String> {
         let credentials = Credentials::from_env_for(
             "link a Secrets Store secret",
-            &format!("an API token with \"{TOKEN_SCOPE}\""),
+            &format!(
+                "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+            ),
         )?;
         Ok(Self {
             rest: Rest {

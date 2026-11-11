@@ -2161,6 +2161,47 @@ pub(crate) mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// #3301: `bynk dev -- --remote` binds a stored secret by the store id the
+    /// last deploy recorded for the environment. An unlinked one is refused
+    /// naming it, and the store's *name* is never left in `store_id`, where
+    /// Cloudflare would take it as an id.
+    #[test]
+    fn materialise_deploy_state_binds_a_linked_stored_secret_by_its_recorded_id() {
+        let dir = scratch_lock_dir("materialise-stored-secret");
+        let config = dir.join("wrangler.toml");
+        let text = "[[secrets_store_secrets]]\nbinding = \"SECRET_STRIPE_KEY\"\nstore_id = \"payments\"\nsecret_name = \"stripe-live\"\n";
+        std::fs::write(&config, text).unwrap();
+        let mut lock = DeployLock {
+            version: 1,
+            ..Default::default()
+        };
+        let link = |store_id: &str| StoredSecretLink {
+            store: "payments".into(),
+            store_id: store_id.into(),
+            secret: "stripe-live".into(),
+        };
+        // Linked only under `staging`: the default environment is refused.
+        lock.record_stored_secret("staging", "shop-cart", "SECRET_STRIPE_KEY", link("store-s"));
+        std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
+        let err = materialise_deploy_state(&dir, "shop-cart", &config, "default")
+            .expect_err("an unlinked stored secret must not pass");
+        assert!(
+            err.contains("`SECRET_STRIPE_KEY`")
+                && err.contains("`shop-cart`")
+                && err.contains("bynk deploy --env default"),
+            "{err}"
+        );
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), text);
+
+        // Each environment binds its own recorded id.
+        assert!(materialise_deploy_state(&dir, "shop-cart", &config, "staging").unwrap());
+        let parsed: toml::Table = std::fs::read_to_string(&config).unwrap().parse().unwrap();
+        let entry = &parsed["secrets_store_secrets"][0];
+        assert_eq!(entry["store_id"].as_str(), Some("store-s"));
+        assert_eq!(entry["secret_name"].as_str(), Some("stripe-live"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// S4b (#1967): a project with only the bare `Kv` writes the ledger it
     /// wrote before instances existed, byte for byte: no `kv_instances` table.
     #[test]
