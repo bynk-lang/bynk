@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
-changelog: `Form.decode[T](s)` and `Form.encode(v)` expose the `@form` mapping as a codec, so a `@raw` handler, a webhook or a test reads and writes form text with `DecodeError`s rooted at `$` (#3276, slice 3; closes #3276)
----
+# 0810 — `Form.decode` and `Form.encode` expose the `@form` mapping as a codec
 
-## ADR: form-codec
-title: `Form.decode` and `Form.encode` expose the `@form` mapping as a codec
-summary: How form text is read into and written from a record, and where the codec sits beside `Json`
+- **Status:** Accepted (v0.555)
 
 **Context.** `@form` (#3276, slice 1) decodes a form body at the router, and the system-tier driver already writes one. A `@raw` handler, a signed webhook that must keep the octets it verified, and an outbound `Fetch.sendBytes` had no way to use that mapping. Decision G of the accepted proposal exposes it.
 
