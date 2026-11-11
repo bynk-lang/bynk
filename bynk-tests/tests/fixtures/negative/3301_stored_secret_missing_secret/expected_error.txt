@@ -1,0 +1,2 @@
+bynk.capability.missing_option
+a `StoredSecret` instance needs `@secret(…)`

@@ -618,6 +618,41 @@ applied, and deploy stops with wrangler's message before anything is pushed,
 so the previous code keeps serving. Deploy's own confirmation covers the
 apply, so wrangler doesn't ask again.
 
+### Account secrets: Secrets Store
+
+A `StoredSecret` instance
+(`capability StripeKey = StoredSecret @store("payments") @secret("stripe-live")`)
+reads a secret of a Cloudflare Secrets Store. The store and the secret belong
+to the account, so deploy **links** them and never creates either. Before
+anything is pushed, `bynk deploy` asks the account for the store named in
+`@store`, checks that the secret named in `@secret` is in it, and records the
+store's id in `bynk.deploy.lock`; a missing store or secret fails the deploy,
+naming both, with the command that creates the secret:
+
+```
+bynk: `StripeKey` of `shop-billing` reads secret `stripe-live` of Secrets Store `payments`, which does not exist: create it with `wrangler secrets-store secret create <store-id> --name stripe-live --scopes workers --remote`
+```
+
+The plan shows the binding as linked, with no action:
+
+```
+stored secret SECRET_STRIPE_KEY stripe-live in store payments (linked; not created)
+```
+
+`--dry-run` stays offline and does not ask. The lookup uses Cloudflare's API,
+so it needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
+the "Secrets Store: Read" permission; a refusal says so. The store's name is used
+as declared, without an environment suffix, and `--prune` never touches one.
+The secret's value never reaches `bynk`, the plan, the ledger or generated
+config: only its name and the store's id do.
+
+**Per-Worker secrets or stored secrets?** [`bynk.Secrets`](/book/reference/bynk-capabilities/#the-portable-surface--bynk)
+reads a secret set on one Worker, the portable kind that `bynk deploy` sets from
+your environment (see [Secrets](#secrets)). A stored secret is account-wide:
+shared across Workers, rotated once in the store, and Cloudflare-only. Use
+`bynk.Secrets` unless several Workers must share one value or you rotate it
+centrally.
+
 ### Workers outside the project
 
 A [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/)

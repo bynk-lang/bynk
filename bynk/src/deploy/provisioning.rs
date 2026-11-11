@@ -92,6 +92,9 @@ pub(crate) fn deploy_one(
     // recorded id is trusted unconditionally, as it always was pre-slice-5,
     // rather than blocking a deploy on a fetch that didn't happen.
     live_kv_ids: Option<&BTreeSet<String>>,
+    // #3301: the Secrets Store each `(worker, binding)` linked to, as its id,
+    // found before anything was pushed ([`link_for_run`]).
+    linked_stores: &BTreeMap<(String, String), String>,
 ) -> Result<Pushed, DeployFailure> {
     let worker_dir = workers_dir.join(worker);
     let config = worker_dir.join("wrangler.toml");
@@ -174,42 +177,27 @@ pub(crate) fn deploy_one(
             ))
         })?;
     }
-    // P4a (#2602): each `D1` database, created by name with the id Cloudflare
-    // mints recorded before the push (an interrupted run never makes a second
-    // one), then bound by that name and id. One of the same name already on
-    // the account is adopted, as a bucket is: the name is account-unique and
-    // derived from this project's, so it is this project's. A database the
-    // ledger already holds under this environment's name is not asked of
-    // the account again.
-    let mut d1_databases = BTreeMap::new();
-    for db in &declared.d1_databases {
-        let physical = d1_database_name(environment, &db.name);
-        let id = match recorded_d1(lock, worker, &db.binding, environment) {
-            Some(recorded) if recorded.name == physical => recorded.id.clone(),
-            _ => {
-                let id = create_d1(provenance, &physical, project_root).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
-                        db.binding
-                    ))
-                })?;
-                lock.record_d1(environment, worker, &db.binding, &physical, &id);
-                write_lock(lock_path, lock).map_err(|e| {
-                    DeployFailure::driver(format!(
-                        "created the D1 database `{physical}` but could not record it in {}: {e}",
-                        lock_path.display()
-                    ))
-                })?;
-                id
-            }
-        };
-        d1_databases.insert(db.binding.clone(), (physical, id));
-    }
-    if !d1_databases.is_empty() && !materialise_d1_databases(&config, &d1_databases) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the D1 database ids into `{worker}`'s generated configuration"
-        )));
-    }
+    provision_d1_databases(
+        provenance,
+        project_root,
+        worker,
+        declared,
+        lock,
+        lock_path,
+        &config,
+        environment,
+    )?;
+    // #3301: each stored secret's store, found before the run, recorded and
+    // bound by its id. Nothing is created here: the account owns them.
+    record_links(
+        worker,
+        declared,
+        linked_stores,
+        lock,
+        lock_path,
+        &config,
+        environment,
+    )?;
     // P3 (#2342): each rate limiter's `namespace_id`, allocated in the ledger
     // (no account call: the id is ours to choose) and recorded before the
     // push, so an interrupted run never allocates a second one and resets
@@ -918,6 +906,56 @@ fn create_queue(provenance: &Provenance, name: &str, project_root: &Path) -> Res
         return Ok(false);
     }
     Err(said)
+}
+
+/// P4a (#2602): each `D1` database, created by name with the id Cloudflare
+/// mints recorded before the push (an interrupted run never makes a second
+/// one), then bound by that name and id. One of the same name already on
+/// the account is adopted, as a bucket is: the name is account-unique and
+/// derived from this project's, so it is this project's. A database the
+/// ledger already holds under this environment's name is not asked of
+/// the account again.
+#[allow(clippy::too_many_arguments)]
+fn provision_d1_databases(
+    provenance: &Provenance,
+    project_root: &Path,
+    worker: &str,
+    declared: &Resources,
+    lock: &mut DeployLock,
+    lock_path: &Path,
+    config: &Path,
+    environment: &str,
+) -> Result<(), DeployFailure> {
+    let mut d1_databases = BTreeMap::new();
+    for db in &declared.d1_databases {
+        let physical = d1_database_name(environment, &db.name);
+        let id = match recorded_d1(lock, worker, &db.binding, environment) {
+            Some(recorded) if recorded.name == physical => recorded.id.clone(),
+            _ => {
+                let id = create_d1(provenance, &physical, project_root).map_err(|e| {
+                    DeployFailure::driver(format!(
+                        "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
+                        db.binding
+                    ))
+                })?;
+                lock.record_d1(environment, worker, &db.binding, &physical, &id);
+                write_lock(lock_path, lock).map_err(|e| {
+                    DeployFailure::driver(format!(
+                        "created the D1 database `{physical}` but could not record it in {}: {e}",
+                        lock_path.display()
+                    ))
+                })?;
+                id
+            }
+        };
+        d1_databases.insert(db.binding.clone(), (physical, id));
+    }
+    if !d1_databases.is_empty() && !materialise_d1_databases(config, &d1_databases) {
+        return Err(DeployFailure::driver(format!(
+            "could not materialise the D1 database ids into `{worker}`'s generated configuration"
+        )));
+    }
+    Ok(())
 }
 
 /// P4b (#2608): `wrangler d1 migrations apply <binding> --remote` from the
@@ -1883,6 +1921,7 @@ mod tests {
             &[],
             environment,
             live_kv_ids.as_ref(),
+            &BTreeMap::new(),
         );
         let calls = std::fs::read_to_string(&log)
             .unwrap_or_default()
@@ -2593,6 +2632,7 @@ mod tests {
             &[],
             environment,
             None,
+            &BTreeMap::new(),
         );
         let read = |path: &Path| -> Vec<String> {
             std::fs::read_to_string(path)

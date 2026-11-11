@@ -1355,6 +1355,10 @@ pub(super) fn platform_double(
         // epoch), so a case's result never depends on the deployment;
         // `stub Version.current() returns …` gives another.
         ("bynk.cloudflare", "Version") => "  return {\n    async current() {\n      return { id: \"test\", tag: None, deployed: 0 } as never;\n    },\n  };\n".to_string(),
+        // #3301: a test never reads the account's Secrets Store, so each
+        // instance faults until its `get` is stubbed. The message names the
+        // instance and never a value: there is none to name.
+        ("bynk.cloudflare", "StoredSecret") => format!("  return {{\n    async get() {{\n      throw new globalThis.Error(\"bynk: `{name}.get` is not stubbed, and a test never reads the Secrets Store — add `stub {name}.get() returns …`\");\n    }},\n  }};\n"),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

@@ -1096,6 +1096,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Queue" => "OrderEvents",
         "Analytics" => "Signups",
         "D1" => "Orders",
+        "StoredSecret" => "StripeKey",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1112,6 +1113,8 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::RATELIMIT_LIMIT_OPTION => "100",
         firstparty::RATELIMIT_PERIOD_OPTION => "60.seconds",
         firstparty::QUEUE_NAME_OPTION => "\"order-events\"",
+        firstparty::STORED_SECRET_STORE_OPTION => "\"payments\"",
+        firstparty::STORED_SECRET_SECRET_OPTION => "\"stripe-live\"",
         _ => "\"legacy-billing\"",
     }
 }
@@ -1244,6 +1247,30 @@ fn instance_option_value(
         );
         return None;
     }
+    if base == "StoredSecret"
+        && matches!(
+            option,
+            crate::firstparty::STORED_SECRET_STORE_OPTION
+                | crate::firstparty::STORED_SECRET_SECRET_OPTION
+        )
+        && !is_secrets_store_name(text)
+    {
+        let what = if option == crate::firstparty::STORED_SECRET_STORE_OPTION {
+            "store"
+        } else {
+            "secret"
+        };
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not a {what} name a `{base}` can read"),
+            )
+            .with_note("a Secrets Store name is 1 to 255 letters, digits, `-` or `_`"),
+        );
+        return None;
+    }
     if option == crate::firstparty::QUEUE_NAME_OPTION && base == "Queue" && !is_queue_name(text) {
         errors.push_for(
             Some(path),
@@ -1273,6 +1300,16 @@ pub(crate) fn is_queue_name(name: &str) -> bool {
         && name.bytes().all(|b| alnum(b) || b == b'-')
         && name.bytes().next().is_some_and(alnum)
         && name.bytes().last().is_some_and(alnum)
+}
+
+/// Whether `name` is a Secrets Store's or a secret's name as Cloudflare takes
+/// one ([`instance_option_value`], #3301): 1 to 255 letters, digits, `-` or
+/// `_`.
+pub(crate) fn is_secrets_store_name(name: &str) -> bool {
+    (1..=255).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Whether `name` is a Cloudflare Worker name ([`instance_option_value`]).

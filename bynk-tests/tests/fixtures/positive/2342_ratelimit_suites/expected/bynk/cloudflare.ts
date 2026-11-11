@@ -614,6 +614,34 @@ export interface Version {
 
 export const __VersionToken: symbol = globalThis.Symbol("Version");
 
+/**
+ * One secret of a Cloudflare Secrets Store, read as `StripeKey.get()`. A
+ * Secrets Store is account-scoped: its secrets are shared across Workers,
+ * rotated centrally and bound one per binding, which is what separates this
+ * from `bynk.Secrets`, whose per-Worker secrets are portable. Used only
+ * through a named instance that says which store and which secret,
+ * `capability StripeKey = StoredSecret @store("payments") @secret("stripe-live")`,
+ * which binds as `SECRET_STRIPE_KEY`; both annotations are required, and a
+ * bare `given StoredSecret` is refused.
+ *
+ * `bynk deploy` links the instance and never creates anything: it looks the
+ * store up by name, records its id in `bynk.deploy.lock`, and fails, naming
+ * the store and the secret, when either is missing (create the secret with
+ * `wrangler secrets-store secret create`). The deploy needs
+ * `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
+ * "Secrets Store: Read". `get` returns the value as a `String`, not an
+ * `Option`: the binding exists only if the deploy found the secret, so an
+ * absence at run time is a platform fault, not something a handler can act
+ * on. The value is not logged by Bynk; do not log it either. Under `bynk dev`
+ * the secret is read from the local store, and a test faults until
+ * `stub StripeKey.get() returns …` gives it a value.
+ */
+export interface StoredSecret {
+  get(): globalThis.Promise<string>;
+}
+
+export const __StoredSecretToken: symbol = globalThis.Symbol("StoredSecret");
+
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
     index: __serialise_Option_String(value.index),

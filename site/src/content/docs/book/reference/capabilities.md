@@ -327,8 +327,8 @@ on it unchanged.
 - The base must be a capability the context selects with `consumes U { K }`
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache`.
-  `Version` is not: a Worker has one Version metadata binding, so it is used
+  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache` and
+  `StoredSecret`. `Version` is not: a Worker has one Version metadata binding, so it is used
   bare, with `given Version`.
 - Options follow the base as `@annotations`, from the kind's own set
   (`bynk.capability.unknown_option`), each one literal of the option's kind,
@@ -344,6 +344,9 @@ on it unchanged.
   ([Writing events](/book/reference/bynk-capabilities/#writing-events-analytics)).
   `D1` takes none: `bynk deploy` names and creates its database
   ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)).
+  `StoredSecret` requires `@store("name")` and `@secret("name")`, the Secrets
+  Store and the secret in it, which `bynk deploy` links and never creates
+  ([Account secrets](/book/reference/bynk-capabilities/#account-secrets-storedsecret)).
   `EdgeCache` takes none, and a context declares at most one
   (`bynk.cloudflare.edge_cache_duplicate`): it turns on the Worker's edge cache
   and has no binding ([Edge caching](/book/reference/bynk-capabilities/#edge-caching-edgecache)).

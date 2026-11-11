@@ -52,6 +52,17 @@ pub(crate) struct Environment {
     /// reads and a project without D1 writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) d1_instances: BTreeMap<String, BTreeMap<String, D1Record>>,
+    /// #3301: each Worker's `StoredSecret` instances, keyed by the instance's
+    /// binding (`SECRET_STRIPE_KEY`): the Secrets Store the deploy linked it
+    /// to. Linked, never created, so there is nothing to orphan or prune; the
+    /// record is what `bynk dev -- --remote` binds by, and is refreshed by
+    /// every deploy. It holds a store's name and id and a secret's name, never
+    /// a value: the deploy never asks for one.
+    ///
+    /// Additive, `default`ed and omitted when empty, so an older ledger still
+    /// reads and a project without stored secrets writes the same file.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) stored_secret_links: BTreeMap<String, BTreeMap<String, StoredSecretLink>>,
     /// P3 (#2342): each Worker's `RateLimit` instances, keyed by binding
     /// (`RATELIMIT_LOGIN_LIMIT`), as `kv_instances` is. The `namespace_id` is
     /// minted here, not by Cloudflare: a positive integer unique across every
@@ -177,6 +188,17 @@ pub(crate) struct D1Record {
     /// orphans) until their entry is removed by hand, as R2's are.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) superseded: Vec<D1Past>,
+}
+
+/// #3301: the Secrets Store secret a `StoredSecret` binding was linked to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct StoredSecretLink {
+    /// The store's name, as `@store` wrote it.
+    pub(crate) store: String,
+    /// The store's id, which the push binds.
+    pub(crate) store_id: String,
+    /// The secret's name in the store, as `@secret` wrote it.
+    pub(crate) secret: String,
 }
 
 /// A database a binding no longer uses (see [`D1Record::superseded`]).
@@ -600,6 +622,29 @@ impl DeployLock {
         );
     }
 
+    /// #3301: record the store `worker`'s `StoredSecret` `binding` was linked
+    /// to. `true` when that changed the ledger.
+    pub(crate) fn record_stored_secret(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        binding: &str,
+        link: StoredSecretLink,
+    ) -> bool {
+        let links = self
+            .environments
+            .entry(environment.to_string())
+            .or_default()
+            .stored_secret_links
+            .entry(worker.to_string())
+            .or_default();
+        if links.get(binding) == Some(&link) {
+            return false;
+        }
+        links.insert(binding.to_string(), link);
+        true
+    }
+
     /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
     /// in `environment`: the recorded one, else a new one — the first id from
     /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
@@ -1007,6 +1052,19 @@ pub(crate) fn recorded_d1<'a>(
         .and_then(|instances| instances.get(binding))
 }
 
+/// The store recorded for `worker`'s `StoredSecret` `binding` (#3301).
+pub(crate) fn recorded_stored_secret<'a>(
+    lock: &'a DeployLock,
+    worker: &str,
+    binding: &str,
+    environment: &str,
+) -> Option<&'a StoredSecretLink> {
+    lock.environments
+        .get(environment)
+        .and_then(|env| env.stored_secret_links.get(worker))
+        .and_then(|links| links.get(binding))
+}
+
 /// The `namespace_id` recorded for `worker`'s rate limiter `binding` (P3,
 /// #2342).
 pub(crate) fn recorded_ratelimit<'a>(
@@ -1219,7 +1277,15 @@ pub fn materialise_deploy_state(
     // P4a (#2602): each `D1` database must have been created by a deploy, and
     // is then bound by the name and id that environment's deploy recorded.
     let databases = bynk_emit::emitter::wrangler::d1_database_entries(&text)?;
-    if needed.is_empty() && buckets.is_empty() && limiters.is_empty() && databases.is_empty() {
+    // #3301: each `StoredSecret` must have been linked by a deploy, and is
+    // then bound by the store id that deploy recorded.
+    let stored = bynk_emit::emitter::wrangler::stored_secret_entries(&text)?;
+    if needed.is_empty()
+        && buckets.is_empty()
+        && limiters.is_empty()
+        && databases.is_empty()
+        && stored.is_empty()
+    {
         return Ok(false);
     }
     let lock = read_lock(&project_root.join(LOCK_FILE))?;
@@ -1258,7 +1324,22 @@ pub fn materialise_deploy_state(
             (recorded.name.clone(), recorded.id.clone()),
         );
     }
+    let mut store_ids = BTreeMap::new();
+    for (binding, _, _) in &stored {
+        let Some(link) = recorded_stored_secret(&lock, worker, binding, environment) else {
+            return Err(format!(
+                "remote Secrets Store secret `{binding}` for `{worker}` has not been linked under environment `{environment}`; run `bynk deploy --env {environment}` first"
+            ));
+        };
+        store_ids.insert(binding.clone(), link.store_id.clone());
+    }
     let mut changed = false;
+    if !store_ids.is_empty() {
+        if !materialise_stored_secret_stores(config, &store_ids) {
+            return Err("could not write generated configuration".into());
+        }
+        changed = true;
+    }
     if !d1.is_empty() {
         if !materialise_d1_databases(config, &d1) {
             return Err("could not write generated configuration".into());
@@ -1613,6 +1694,17 @@ pub(crate) mod tests {
                                     name: "api-orders-old".into(),
                                     id: "0d1d0000-0000-4000-8000-000000000000".into(),
                                 }],
+                            },
+                        )]),
+                    )]),
+                    stored_secret_links: BTreeMap::from([(
+                        "api".into(),
+                        BTreeMap::from([(
+                            "SECRET_STRIPE_KEY".into(),
+                            StoredSecretLink {
+                                store: "payments".into(),
+                                store_id: "0b5e1c2a3d4f45678901234567890abc".into(),
+                                secret: "stripe-live".into(),
                             },
                         )]),
                     )]),

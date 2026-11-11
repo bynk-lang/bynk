@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { StoredSecret }
+
+// #3301: a bare `StoredSecret` names no store and no secret.
+service probe {
+  on call() -> Effect[Int] given StoredSecret {
+    let key <- StoredSecret.get()
+    Effect.pure(0)
+  }
+}

@@ -1519,6 +1519,8 @@ fn option_sample(option: &str) -> &'static str {
         "period" => "60.seconds",
         "jurisdiction" => "\"eu\"",
         "name" => "\"order-events\"",
+        "store" => "\"payments\"",
+        "secret" => "\"stripe-live\"",
         _ => "\"legacy-billing\"",
     }
 }
@@ -4806,7 +4808,8 @@ fn Box.size(self) -> Int { 1 }
                 "Queue",
                 "Analytics",
                 "D1",
-                "EdgeCache"
+                "EdgeCache",
+                "StoredSecret"
             ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
@@ -4823,6 +4826,13 @@ fn Box.size(self) -> Int { 1 }
         let options = instance_declaration_completions("capability OrderEvents = Queue ");
         assert_eq!(options[0].0, "@name(…)");
         assert_eq!(options[0].2, "@name(${1:\"order-events\"})");
+        // #3301: a `StoredSecret` names its store and its secret.
+        let options = instance_declaration_completions("capability StripeKey = StoredSecret ");
+        assert_eq!(options[0].0, "@store(…) @secret(…)");
+        assert_eq!(
+            options[0].2,
+            "@store(${1:\"payments\"}) @secret(${2:\"stripe-live\"})"
+        );
         // A kind with no required option, or a line already carrying them,
         // gets nothing; nor does any other line.
         assert!(instance_declaration_completions("capability A = R2 ").is_empty());

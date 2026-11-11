@@ -1271,6 +1271,7 @@ fresh for each case:
 | `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
 | `Analytics` | each instance accepts every write within the platform's limits (20 blobs totalling 16 KB, 20 finite doubles, a 96-byte index) and faults on one over them — at `integration` and `system` each Worker binds a recorder |
 | `Version` | `current()` is a fixed version: id `"test"`, no tag, `deployed` at the epoch — at `system` each Worker binds version `"integration"` |
+| `StoredSecret` | each instance's `get()` **faults** until stubbed: a test never reads the Secrets Store, and the stubbed value is never printed |
 | `Service` | each instance's `send(_)` **faults** until stubbed: a test never reaches the Worker behind it |
 | `Fetch` | `send(_)`, `sendWith(_, _)`, `receiveBytes(_, _)`, `sendBytes(_, _, _)`, `receiveStream(_, _)` and `sendStream(_, _, _)` **fault**: a test never reaches the network |
 

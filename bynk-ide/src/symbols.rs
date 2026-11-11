@@ -2934,6 +2934,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "D1" {
         out.push_str("\nEmits `[[d1_databases]]`: the database is named for the context and the capability (`shop.cart`'s `Orders` is `shop-cart-orders`), environment-qualified, created by `bynk deploy`, which records its id.\n");
     }
+    // #3301: an account-level secret, linked by deploy and never created.
+    if d.base.name == "StoredSecret" {
+        out.push_str("\nEmits `[[secrets_store_secrets]]`: a distinct instance of `StoredSecret`, reading the secret in the Secrets Store the declaration names. `bynk deploy` links it (it resolves the store's id and checks the secret exists, and creates neither) and fails when either is missing.\n");
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }

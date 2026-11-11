@@ -124,6 +124,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "the-running-version-version",
         &["current"],
     ),
+    (
+        "bynk.cloudflare",
+        "StoredSecret",
+        "account-secrets-storedsecret",
+        &["get"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

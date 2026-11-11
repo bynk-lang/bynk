@@ -379,6 +379,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
+| **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -730,6 +731,60 @@ version (id `"test"`, no tag, `deployed` at the epoch), so a result never
 depends on when or where the test runs, and `stub Version.current() returns …`
 gives another. A `system` test's Workers report id `"integration"`. `Version` is
 experimental: list `"bynk.cloudflare.Version"` under `[unstable] allow`.
+
+### Account secrets: `StoredSecret`
+
+`StoredSecret` reads one secret of a Cloudflare [Secrets Store](https://developers.cloudflare.com/secrets-store/).
+A Secrets Store belongs to the account, not to a Worker: its secrets are shared
+across Workers, rotated in one place, and bound one secret to a binding. That is
+what separates it from [`bynk.Secrets`](#the-portable-surface--bynk), whose per-Worker
+secrets are portable and are read by name at run time. Each stored secret is a
+named instance that says which store and which secret; both options are
+required, and a bare `given StoredSecret` is refused
+(`bynk.capability.instance_only`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { StoredSecret }
+
+capability StripeKey = StoredSecret @store("payments") @secret("stripe-live")
+
+type Charged = { ok: Bool }
+
+service billing from http {
+	on POST("/charge") () -> Effect[HttpResult[Charged]] by Visitor given StripeKey {
+		let key <- StripeKey.get()
+		Ok(Charged { ok: key.length() > 0 })
+	}
+}
+```
+
+`StripeKey` binds as `env.SECRET_STRIPE_KEY`, a `[[secrets_store_secrets]]`
+entry. `@store` and `@secret` are names, each 1 to 255 letters, digits, `-` or
+`_` (`bynk.capability.invalid_option`); the store is named, never given by id,
+so ids stay out of source.
+
+`get()` returns the value as a `String`, not an `Option`. The binding exists
+only if `bynk deploy` found the secret, so a missing value at run time is a
+platform fault, not something a handler can act on. Bynk never logs the value;
+nor should a handler.
+
+`bynk deploy` **links** a stored secret and never creates one. It resolves the
+store by name through Cloudflare's API, checks the secret is in it, and records
+the store's id in `bynk.deploy.lock`, keyed by environment, Worker and
+binding. A missing store or secret fails the deploy before anything is pushed,
+naming both and the command that creates the secret
+(`wrangler secrets-store secret create`). It needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "Secrets Store: Read"; see
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#account-secrets-secrets-store).
+
+Under `bynk dev` the secret is read from the local store, not the account's:
+create it with `wrangler secrets-store secret create <store> --name <secret>
+--scopes workers` (without `--remote`), where `<store>` is the name written in
+`@store`. A test never reads a store: `get()` **faults** until
+`stub StripeKey.get() returns "…"` gives it a value, and the value is not
+printed by a passing or a failing test. `StoredSecret` is experimental: list
+`"bynk.cloudflare.StoredSecret"` under `[unstable] allow`.
 
 ### SQL databases: `D1`
 
