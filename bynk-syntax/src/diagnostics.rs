@@ -3145,9 +3145,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 which also see the target's declarations (services and agents \
                 included) and those of the commons it `uses`. A helper with \
                 one of those names would silently change which function a \
-                call reaches, so it is refused instead of shadowing. Names \
-                `deps` and `__…` are reserved for the runner. Rename the \
-                helper. A type or constant clashing is \
+                call reaches, so it is refused instead of shadowing. A \
+                fixture of the suite counts too, and `deps` and names \
+                beginning `__` are reserved for the runner. Rename the helper. A type or constant clashing is \
                 `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`.",
         example: "// demo/desk.bynk\n\
                   fn double(n: Int) -> Int { n * 2 }\n\n\
