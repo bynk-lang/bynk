@@ -1,0 +1,10 @@
+context api
+
+type SignupForm = { email: String }
+
+service api from http {
+    @form
+    on POST("/signup") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

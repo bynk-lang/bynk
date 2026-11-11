@@ -1794,6 +1794,23 @@ codes and result; the tag's syntax is checked at run time
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
 
+A **`from email("address")`** service (#3328) claims one recipient address, written
+`local@domain` or, for a domain's catch-all, `*@domain`; any other form is
+`bynk.email.invalid_address`. Two services of a context MUST NOT claim the same
+address, compared without regard to case (`bynk.email.duplicate_address`); a literal
+address and the catch-all of its domain MAY both be claimed, the literal address
+winning. The service MUST declare exactly one handler, `on message(mail:
+InboundEmail) -> Effect[EmailVerdict]`: one parameter of the first-party
+`InboundEmail` (`bynk.email.bad_params`), and the first-party verdict
+`EmailVerdict` (`bynk.email.return_not_email_verdict`), with a second `on message`
+being `bynk.email.duplicate_handler`. The verdict is `Accept`, `Reject(reason)`,
+`Forward(to)` or `Reply(message)`; `InboundEmail`, `EmailVerdict` and `EmailReply`
+are exported by `bynk.cloudflare`, not hard-wired as `QueueResult` is. The default
+actor is `Sender`. Inbound email is Cloudflare's: a context declaring a
+`from email` service is platform-native to `cloudflare`, so another `--platform`
+is `bynk.target.vendor_required`, and a deployable `--target workers` build is
+refused until the Worker mapping lands (`bynk.email.workers_unsupported`).
+
 ### §5.7.1 CORS policy (v0.131) {#cors}
 
 A `from http` service MAY declare a single **`cors { }`** policy in header position
@@ -2135,9 +2152,9 @@ body runs.
 
 A handler consumes an actor on its `by (<binder>:)? <Actor>` clause. The named
 actor MUST resolve to a declared actor or a prelude actor (`Visitor`,
-`Scheduler`, `Producer`, `Caller`) (`bynk.actor.unknown_actor`), and its scheme
+`Scheduler`, `Producer`, `Sender`, `Caller`) (`bynk.actor.unknown_actor`), and its scheme
 MUST be admissible on the handler's protocol — HTTP admits `None`, `Bearer`,
-`Signature`, and `Oidc`; the internal protocols (call/cron/queue) admit `Internal`,
+`Signature`, and `Oidc`; the internal protocols (call/cron/queue/email) admit `Internal`,
 and `call` admits `Foreign` too (`bynk.actor.scheme_not_admissible`). In a sum,
 `Foreign` peers are exempt from the one-peer-per-scheme rule, since each is told
 apart by name. A `Signature` handler MUST take a `body`

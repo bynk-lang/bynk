@@ -10607,6 +10607,16 @@
     "type": "service_protocol",
     "named": true,
     "fields": {
+      "address": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      },
       "event_type": {
         "multiple": false,
         "required": false,
@@ -13990,6 +14000,10 @@
   },
   {
     "type": "else",
+    "named": false
+  },
+  {
+    "type": "email",
     "named": false
   },
   {

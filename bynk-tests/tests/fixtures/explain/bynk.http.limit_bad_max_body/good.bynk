@@ -1,0 +1,10 @@
+context api
+
+type Note = { text: String }
+
+service api from http {
+    @limit(maxBody: 1_048_576)
+    on POST("/notes") (body: Note) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

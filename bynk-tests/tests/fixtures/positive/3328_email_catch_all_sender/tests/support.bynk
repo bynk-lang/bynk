@@ -1,0 +1,13 @@
+suite shop.support {
+  case "the named service is the default Sender's" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
+    expect r is Forward("team@shop.example")
+  }
+
+  case "the catch-all handles the rest" {
+    let a <- everything.message(InboundEmail { from: "a@b.example", to: "sales@shop.example" })
+    expect a is Accept
+    let b <- everything.message(InboundEmail { from: "a@b.example", to: "nobody@shop.example" })
+    expect b is Reject("no such mailbox")
+  }
+}

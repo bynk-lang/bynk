@@ -4513,6 +4513,15 @@ fn native_platforms_of_context(
     // S4a (#1966): a derived capability reaches its base's platform unit, so
     // a context whose only Cloudflare use is a named instance is still locked.
     referenced.extend(table.derived.values().map(|d| d.base_unit.clone()));
+    // #3328 (DECISION I): inbound email is Cloudflare's, whether or not the
+    // context reaches a capability — the types alone would not lock it.
+    if table
+        .services
+        .values()
+        .any(|s| matches!(s.protocol, ServiceProtocol::Email { .. }))
+    {
+        referenced.insert(crate::firstparty::CLOUDFLARE_UNIT.to_string());
+    }
     let mut out = BTreeMap::new();
     for unit in referenced {
         if let Some(p) = firstparty::platform_of(&unit) {
@@ -4742,6 +4751,7 @@ pub fn phase_workers_unprovided_capabilities(
     unit_tables: &HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
+    crate::email::phase_workers_email_unsupported(target, parsed, groups, kinds, errors);
     if target != BuildTarget::Workers {
         return;
     }

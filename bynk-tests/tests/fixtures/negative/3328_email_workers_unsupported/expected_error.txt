@@ -1,0 +1,2 @@
+bynk.email.workers_unsupported inbound email is not yet emitted for Workers (#3328 slice 2)
+# exact

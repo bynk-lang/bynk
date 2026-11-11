@@ -1,0 +1,7 @@
+context shop
+
+service api from http {
+  on POST("/echo") (body: String) -> Effect[HttpResult[String]] by who: Visitor {
+    Ok("ok")
+  }
+}

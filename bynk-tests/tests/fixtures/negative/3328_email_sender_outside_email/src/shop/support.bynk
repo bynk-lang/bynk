@@ -1,0 +1,7 @@
+context shop.support
+
+service sweeper from cron {
+  on schedule("*/5 * * * *") () -> Effect[Result[(), String]] by s: Sender {
+    Ok(())
+  }
+}

@@ -1,0 +1,7 @@
+context shop
+
+service api from http {
+  on GET("/health") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+}

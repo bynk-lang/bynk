@@ -1430,6 +1430,14 @@ pub enum ServiceProtocol {
         pattern: Option<EventPattern>,
         schema_dispatch: Option<SchemaDispatch>,
     },
+    /// `from email("support@shop.example")` or `from email("*@shop.example")` —
+    /// inbound email (#3328, ADR 0079's seventh member). `address` is the
+    /// literal recipient address this service claims, or `*@domain` for the
+    /// domain's catch-all. `email` is a contextual identifier, matched as plain
+    /// `Ident` text the way `websocket` is, so no lexer reservation. The
+    /// service's handler is `on message(mail: InboundEmail) ->
+    /// Effect[EmailVerdict]`.
+    Email { address: String },
 }
 
 /// An agent declaration (v0.5 §3.6). Agents are state-bearing entities
