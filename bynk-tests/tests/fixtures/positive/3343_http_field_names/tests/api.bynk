@@ -1,0 +1,48 @@
+suite web.api {
+	case "a renamed cookies field reaches the handler under its own name" {
+		let r <- api.GET("/me", Session { sid: Some("abc"), theme: "dark" })
+		expect r is Ok("abc dark")
+	}
+
+	case "a renamed query field reaches the handler under its own name" {
+		let r <- api.GET("/items", Filter { pageSize: 5, status: Some("open"), owner: None })
+		expect r is Ok("5 open")
+	}
+
+	case "a renamed form field reaches the handler under its own name" {
+		let r <- api.POST("/signup", Signup { email: "a@b.c", remember: true })
+		expect r is Ok("a@b.c true")
+	}
+}
+
+suite web.api as system {
+	case "a __Host- cookie is read into its field" {
+		let r <- api.GET("/me", Wire("__Host-sid=abc; theme=dark"))
+		expect r is Handled(Ok("abc dark"))
+	}
+
+	case "the field's own name is not the cookie's key" {
+		let r <- api.GET("/me", Wire("sid=abc"))
+		expect r is Handled(Ok("- light"))
+	}
+
+	case "a typed cookies record is written under its wire name" {
+		let r <- api.GET("/me", Session { sid: Some("xyz"), theme: "dark" })
+		expect r is Ok("xyz dark")
+	}
+
+	case "a renamed query key is read, and its refinement is still checked" {
+		let r <- api.GET("/items", Wire("?page-size=7&filter%5Bstatus%5D=done"))
+		expect r is Handled(Ok("7 done"))
+	}
+
+	case "a renamed form key is read" {
+		let r <- api.POST("/signup", Wire("e-mail=a%40b.c&remember-me=on"))
+		expect r is Handled(Ok("a@b.c true"))
+	}
+
+	case "a typed form is written under its wire names" {
+		let r <- api.POST("/signup", Signup { email: "a@b.c", remember: true })
+		expect r is Ok("a@b.c true")
+	}
+}

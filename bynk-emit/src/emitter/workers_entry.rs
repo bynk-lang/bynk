@@ -2869,26 +2869,10 @@ pub(crate) fn record_field_specs(
                 query_leaf_kind(inner, types, allow_file),
                 list,
                 option,
-                field_wire_name(f),
+                f.wire_name(),
             )
         })
         .collect()
-}
-
-/// #3343: the key a field's `@name("…")` gives it on the wire, if it has one. The
-/// checker has already refused a `@name` that is not one string literal.
-pub(crate) fn field_wire_name(f: &bynk_syntax::ast::RecordField) -> Option<String> {
-    use bynk_syntax::ast::ExprKind;
-    f.annotations
-        .iter()
-        .find(|a| a.name.name == "name")
-        .and_then(|a| match a.args.as_slice() {
-            [arg] => match &arg.value.kind {
-                ExprKind::StrLit(s) => Some(s.clone()),
-                _ => None,
-            },
-            _ => None,
-        })
 }
 
 /// #2858: whether any `from http` route in `table` writes plain JSON, so the
