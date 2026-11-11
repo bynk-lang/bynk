@@ -13,6 +13,7 @@ import {
   parseInbound,
   pickRoute,
   readRaw,
+  rejectReason,
   replyMime,
   replySubject,
 } from "../src/email.ts";
@@ -649,4 +650,48 @@ test("property: dmarcVerdict never trusts a header whose authserv-id is not mx.c
     const value = `${ids[Math.floor(rand() * ids.length)]}; ${junk[Math.floor(rand() * junk.length)]}; ${junk[Math.floor(rand() * junk.length)]}`;
     assert.deepEqual(dmarcVerdict(h(["authentication-results", value])), { tag: "DmarcNone" }, value);
   }
+});
+
+test("rejectReason: one line, no control characters, capped, never empty", () => {
+  assert.equal(rejectReason("no such mailbox"), "no such mailbox");
+  assert.equal(rejectReason("bad\r\nBcc: x@y.example\0 subject"), "bad Bcc: x@y.example subject");
+  assert.equal(rejectReason("x".repeat(500)).length, 200);
+  assert.equal(rejectReason(""), "message could not be processed");
+  assert.equal(rejectReason("\r\n"), "message could not be processed");
+});
+
+test("Reject: a reason built from the message cannot carry a line break into the rejection", async () => {
+  const f = fake(mime());
+  await handleEmail(f.message, [route("support@shop.example", { tag: "Reject", reason: "no: a\r\nX-Evil: 1" })], factory, () => {});
+  assert.deepEqual(f.calls.rejects, ["no: a X-Evil: 1"]);
+});
+
+test("dmarcVerdict: a quoted pvalue cannot smuggle in a result", () => {
+  assert.deepEqual(
+    dmarcVerdict(h(["authentication-results", 'mx.cloudflare.net; spf=pass smtp.mailfrom="x;dmarc=pass"@evil.example; dmarc=fail'])),
+    { tag: "DmarcFail" },
+  );
+  assert.deepEqual(
+    dmarcVerdict(h(["authentication-results", 'mx.cloudflare.net; dkim=pass header.i="a;dmarc=pass"'])),
+    { tag: "DmarcNone" },
+  );
+  // a `(` inside a quoted string is not a comment
+  assert.deepEqual(
+    dmarcVerdict(h(["authentication-results", 'mx.cloudflare.net; x="(" ; dmarc=pass'])),
+    { tag: "DmarcPass" },
+  );
+});
+
+test("a failure building the routes is a fixed reject, not a throw", async () => {
+  const f = fake(mime());
+  await handleEmail(
+    f.message,
+    () => {
+      throw new Error("compose failed with SECRET");
+    },
+    factory,
+    (l) => f.calls.logs.push(l),
+  );
+  assert.deepEqual(f.calls.rejects, ["message could not be processed"]);
+  assert.ok(!f.calls.logs.join("").includes("SECRET"));
 });

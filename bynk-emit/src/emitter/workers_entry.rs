@@ -32,7 +32,7 @@ use bynk_ts::{
 // this track's own established per-file scoping (each Arc C slice's own
 // helpers are added narrowly, not factored into a shared cross-file module).
 
-pub(super) fn ident(s: impl Into<String>) -> TsExpr {
+fn ident(s: impl Into<String>) -> TsExpr {
     TsExpr::Ident(s.into())
 }
 
@@ -69,7 +69,7 @@ fn index_expr(object: TsExpr, idx: TsExpr) -> TsExpr {
     }
 }
 
-pub(super) fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
+fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
     TsExpr::Call {
         callee: Box::new(callee),
         args,
@@ -143,7 +143,7 @@ fn return_(expr: Option<TsExpr>) -> TsStmt {
     TsStmt::return_stmt(expr, None)
 }
 
-pub(super) fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
+fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
     TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
 }
 

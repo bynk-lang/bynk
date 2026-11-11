@@ -14,7 +14,6 @@
 use bynk_syntax::ast::ServiceProtocol;
 use bynk_ts::{TsExpr, TsParam, TsStmt, TsType};
 
-use super::workers_entry::{call, const_, ident};
 use bynk_check::symbols::UnitTable;
 use bynk_ts::TsObjectEntry;
 
@@ -72,15 +71,21 @@ pub(super) fn emit_email_handler(
         },
     ];
     params.extend(exec_params.iter().cloned());
-    let mut text = String::from("    await __handleEmail(message, [\n");
+    // The routes are built inside a thunk, so composing the surface is guarded
+    // with everything else: nothing escapes `email()` as a throw.
+    let args: Vec<String> = compose_args.iter().map(bynk_ts::print_expr).collect();
+    let mut text = format!(
+        "    await __handleEmail(message, () => {{\n      const surface = compose({});\n      return [\n",
+        args.join(", ")
+    );
     for r in routes {
         let method = crate::emitter::queue_handler_method_name(&r.service, 0);
         text.push_str(&format!(
-            "      {{ address: {:?}, handle: (mail, sender) => surface.{method}(mail, sender) }},\n",
+            "        {{ address: {:?}, handle: (mail, sender) => surface.{method}(mail, sender) }},\n",
             r.address
         ));
     }
-    text.push_str("    ]);\n");
+    text.push_str("      ];\n    });\n");
     TsObjectEntry::Method {
         name: "email".to_string(),
         is_async: true,
@@ -92,9 +97,6 @@ pub(super) fn emit_email_handler(
         )),
         doc: None,
         inline: false,
-        body: vec![
-            const_("surface", call(ident("compose"), compose_args.to_vec())),
-            TsStmt::raw(text, None),
-        ],
+        body: vec![TsStmt::raw(text, None)],
     }
 }

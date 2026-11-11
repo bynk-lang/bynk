@@ -43,11 +43,13 @@ export default {
     }
   },
   async email(message: __InboundMessage, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
-    const surface = compose(env);
-    await __handleEmail(message, [
-      { address: "Support@Shop.Example", handle: (mail, sender) => surface.queue_support_0(mail, sender) },
-      { address: "billing@shop.example", handle: (mail, sender) => surface.queue_billing_0(mail, sender) },
-      { address: "*@shop.example", handle: (mail, sender) => surface.queue_everything_0(mail, sender) },
-    ]);
+    await __handleEmail(message, () => {
+      const surface = compose(env);
+      return [
+        { address: "Support@Shop.Example", handle: (mail, sender) => surface.queue_support_0(mail, sender) },
+        { address: "billing@shop.example", handle: (mail, sender) => surface.queue_billing_0(mail, sender) },
+        { address: "*@shop.example", handle: (mail, sender) => surface.queue_everything_0(mail, sender) },
+      ];
+    });
   },
 };

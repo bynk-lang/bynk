@@ -186,14 +186,26 @@ export function pickRoute(routes: readonly EmailRoute[], recipient: string): Ema
 
 // -------------------------------------------------------------------- DMARC
 
-/** Drop RFC 5322 comments (`(…)`, nesting allowed) from a header value. */
+/**
+ * Drop RFC 5322 comments (`(…)`, nesting allowed) from a header value. A quoted
+ * string is copied whole, so a `(` inside one is not a comment and a `)` cannot
+ * close one.
+ */
 function stripComments(value: string): string {
   let out = "";
   let depth = 0;
+  let quoted = false;
   for (let i = 0; i < value.length; i++) {
     const c = value[i]!;
-    if (c === "\\" && depth > 0) {
+    if (c === "\\" && (depth > 0 || quoted)) {
+      if (depth === 0) out += c + (value[i + 1] ?? "");
       i++;
+    } else if (quoted) {
+      out += c;
+      if (c === '"') quoted = false;
+    } else if (c === '"' && depth === 0) {
+      quoted = true;
+      out += c;
     } else if (c === "(") {
       depth++;
     } else if (c === ")" && depth > 0) {
@@ -205,9 +217,33 @@ function stripComments(value: string): string {
   return out;
 }
 
+/** Split on `;` outside quoted strings (RFC 8601 pvalues may be quoted). */
+function splitFields(value: string): string[] {
+  const fields: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i]!;
+    if (c === "\\" && quoted) {
+      cur += c + (value[i + 1] ?? "");
+      i++;
+    } else if (c === '"') {
+      quoted = !quoted;
+      cur += c;
+    } else if (c === ";" && !quoted) {
+      fields.push(cur);
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  fields.push(cur);
+  return fields;
+}
+
 /** The authserv-id of an `Authentication-Results` value, lower-cased. */
 function authservId(value: string): string {
-  const head = stripComments(value).split(";", 1)[0] ?? "";
+  const head = splitFields(stripComments(value))[0] ?? "";
   return (head.trim().split(/\s+/, 1)[0] ?? "").toLowerCase();
 }
 
@@ -228,7 +264,7 @@ export function dmarcVerdict(headers: readonly { readonly key: string; readonly 
   const header = headers.find((h) => h.key === "authentication-results");
   if (header === undefined || authservId(header.value) !== "mx.cloudflare.net") return { tag: "DmarcNone" };
   // The first `;`-separated field is the authserv-id; the rest are results.
-  const results = stripComments(header.value).split(";").slice(1);
+  const results = splitFields(stripComments(header.value)).slice(1);
   for (const result of results) {
     const m = /^\s*dmarc\s*=\s*([A-Za-z]+)/i.exec(result);
     if (m === null) continue;
@@ -529,6 +565,19 @@ function errorName(e: unknown): string {
   return typeof name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name) ? name : "Error";
 }
 
+/** The longest rejection text sent: SMTP lines are short, and a reason is one line. */
+export const EMAIL_MAX_REJECT_REASON = 200;
+
+/**
+ * A handler's `Reject` reason as the SMTP rejection text: one line, no control
+ * characters (a reason built from the message, such as its subject, could carry a
+ * line break), capped, and never empty.
+ */
+export function rejectReason(reason: string): string {
+  const line = oneLine(String(reason)).replace(/ {2,}/g, " ").slice(0, EMAIL_MAX_REJECT_REASON).trim();
+  return line === "" ? EMAIL_REJECT_FAULT : line;
+}
+
 const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply"]);
 
 /**
@@ -539,11 +588,21 @@ const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply"]);
  */
 export async function handleEmail(
   message: InboundMessage,
-  routes: readonly EmailRoute[],
+  routes: readonly EmailRoute[] | (() => readonly EmailRoute[]),
   makeReply: ReplyFactory = platformReply,
   log: EmailLog = defaultLog,
 ): Promise<void> {
-  const route = pickRoute(routes, message.to);
+  // A thunk, so building the routes (the Worker's composition) is inside the same
+  // guard as everything else: nothing escapes as a throw.
+  let table: readonly EmailRoute[];
+  try {
+    table = typeof routes === "function" ? routes() : routes;
+  } catch (e) {
+    log(`email: setting up the routes failed (${errorName(e)})`);
+    message.setReject(EMAIL_REJECT_FAULT);
+    return;
+  }
+  const route = pickRoute(table, message.to);
   if (route === undefined) {
     message.setReject(EMAIL_REJECT_UNKNOWN_RECIPIENT);
     return;
@@ -588,7 +647,7 @@ export async function handleEmail(
     case "Accept":
       return;
     case "Reject":
-      message.setReject(verdict.reason);
+      message.setReject(rejectReason(verdict.reason));
       return;
     case "Forward":
       try {

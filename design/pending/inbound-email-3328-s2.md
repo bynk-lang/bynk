@@ -91,6 +91,7 @@ covers what slice 2 decides beyond ADR 0805.
   `deps.identity`, as `Caller` threads the calling context. A suite has no Email
   Routing: a handler that binds `Sender` reads the envelope sender with `DmarcNone`
   (the case lowering supplies it), so `bynk test` of such a handler runs.
+- **E0. Hardening after review.** A handler's `Reject` reason is sent as one line (control characters removed, 200 characters at most, never empty), because a reason built from the message could carry a line break into the SMTP rejection. The DMARC header parser skips quoted strings, so a quoted pvalue such as `smtp.mailfrom="x;dmarc=pass"@evil.example` cannot smuggle in a result. The generated `email()` builds its routes in a thunk, so composing the surface is guarded with everything else.
 - **E. Faults (ADR 0805 G, now implemented).** Every outcome is settled by the
   runtime and nothing escapes as a throw: a handler fault, or a return that is not a
   verdict, is `setReject("message could not be processed")`; a parse failure is
