@@ -756,16 +756,16 @@ There are **813** codes in total.
 | `bynk.resolve.duplicate_fn` | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.resolve.duplicate_message_code` | A message bundle declares the same code twice in one block. |  | — |
 | `bynk.resolve.duplicate_message_locale` | Two `messages` blocks in one bundle declare the same locale tag. |  | — |
-| [`bynk.resolve.duplicate_method`](/book/spec/static-semantics/#51-name-resolution-visibility) | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| [`bynk.resolve.duplicate_param`](/book/spec/static-semantics/#51-name-resolution-visibility) | A parameter name is repeated. | [`param`](/book/reference/grammar/#rule-param) | — |
+| [`bynk.resolve.duplicate_method`](/book/spec/static-semantics/) | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.resolve.duplicate_param`](/book/spec/static-semantics/) | A parameter name is repeated. | [`param`](/book/reference/grammar/#rule-param) | — |
 | `bynk.resolve.duplicate_provider` | A capability is provided more than once. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.resolve.duplicate_service` | Two services share a name. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.resolve.duplicate_type`](/book/spec/static-semantics/) | Two types share a name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.resolve.duplicate_variant`](/book/reference/types/#sum-types) | A sum type declares a variant twice. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
-| [`bynk.resolve.fn_without_call`](/book/spec/static-semantics/#51-name-resolution-visibility) | A function was referenced without being called. |  | — |
+| [`bynk.resolve.fn_without_call`](/book/spec/static-semantics/) | A function was referenced without being called. |  | — |
 | [`bynk.resolve.let_shadows_fn`](/book/guides/program-structure/how-a-program-is-shaped/) | A `let` binding shadows a function. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
 | [`bynk.resolve.let_shadows_type`](/book/guides/program-structure/how-a-program-is-shaped/) | A `let` binding shadows a type. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
-| [`bynk.resolve.method_unknown_type`](/book/spec/static-semantics/#51-name-resolution-visibility) | A method is defined on an unknown type. |  | — |
+| [`bynk.resolve.method_unknown_type`](/book/spec/static-semantics/) | A method is defined on an unknown type. |  | — |
 | [`bynk.resolve.missing_field`](/book/reference/types/#record-types) | A record construction omits a required field. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | [`bynk.resolve.name_conflict`](/book/spec/static-semantics/) | Two declarations share a name. |  | — |
 | [`bynk.resolve.not_a_record_type`](/book/reference/types/#sum-types) | Record syntax was used on a non-record type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
@@ -775,9 +775,9 @@ There are **813** codes in total.
 | [`bynk.resolve.reserved_builtin_type`](/book/reference/keywords/#built-in-type-names) | A type declaration reuses a compiler-known built-in type name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.resolve.reserved_host_name`](/book/spec/emission/) | A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals. | [`type_decl`](/book/reference/grammar/#rule-type_decl), [`fn_decl`](/book/reference/grammar/#rule-fn_decl), [`agent_decl`](/book/reference/grammar/#rule-agent_decl), [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.resolve.reserved_payload_field`](/book/reference/types/#sum-types) | A sum variant declares a payload field named `kind`, the variant's wire discriminant. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
-| [`bynk.resolve.self_outside_method`](/book/spec/static-semantics/#51-name-resolution-visibility) | `self` referenced outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
+| [`bynk.resolve.self_outside_method`](/book/spec/static-semantics/) | `self` referenced outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
 | [`bynk.resolve.type_as_function`](/book/reference/types/#record-types) | A type name was called as if it were a function. | [`call`](/book/reference/grammar/#rule-call) | — |
-| [`bynk.resolve.type_in_expr`](/book/spec/static-semantics/#51-name-resolution-visibility) | A type name was used where a value is expected. |  | — |
+| [`bynk.resolve.type_in_expr`](/book/spec/static-semantics/) | A type name was used where a value is expected. |  | — |
 | [`bynk.resolve.unconsumed_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context's service was called, or its capability named in `given`, without a `consumes` declaration. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.resolve.unknown_field`](/book/reference/types/#record-types) | A record construction names a field the record type does not declare. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | [`bynk.resolve.unknown_function`](/book/guides/program-structure/how-a-program-is-shaped/) | Called a function that does not exist. | [`call`](/book/reference/grammar/#rule-call) | — |

@@ -2670,14 +2670,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "A method is looked up by its type and name, so `p.norm()` has to mean one body. A second `fn Point.norm` would leave the call with nothing to choose between. Delete the repeat, or give it a different name if it does something else.",
         example: "type Point = { x: Int }\n\nfn Point.norm(self) -> Int { self.x }\n\nfn Point.norm(self) -> Int { 0 }                  // ✗ `Point.norm` is already declared\n\nfn Point.isOrigin(self) -> Bool { self.x == 0 }   // ✓ a different name",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.duplicate_param",
         blurb: "A function's parameters are read by name in its body, and a call passes them in order, so each name may appear once in the list. A repeat is usually two different parameters meant, and the body could see only one of them. Rename one of the two, or remove it.",
         example: "fn area(w: Int, w: Int) -> Int { w * w }   // ✗ `w` declared twice\n\nfn area(w: Int, h: Int) -> Int { w * h }   // ✓ distinct names",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.duplicate_type",
@@ -2703,7 +2703,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "A function's name on its own is the function, not its result. It is a value only where a function type is expected, such as an argument to `map`; anywhere else it is nearly always a forgotten call. Call it with its arguments, or pass it where a function is wanted.",
         example: "fn double(x: Int) -> Int { x * 2 }\n\nfn run() -> Int {\n    let d = double      // ✗ the function itself, not a call\n    5\n}\n\nfn run() -> Int {\n    let d = double(5)   // ✓ the result of calling it\n    d\n}",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.let_shadows_fn",
@@ -2724,7 +2724,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "A method is declared on a type, as in `fn Order.total(self)`, and the type has to be declared in the same unit, so that every value of it can reach the method. A misspelt or missing type is the usual cause. Correct the name, or declare the type next to the method.",
         example: "fn Order.total(self) -> Int { 1 }         // ✗ there is no type `Order` here\n\ntype Order = { id: Int }\n\nfn Order.total(self) -> Int { self.id }   // ✓ `Order` is declared in this unit",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.missing_field",
@@ -2808,7 +2808,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "`self` is the value a method was called on, so it exists only in the body of a method, declared as `fn Type.name(self, …)`. A plain function has no receiver. Make the function a method of the type, or take the value as an ordinary parameter.",
         example: "type Counter = { n: Int }\n\nfn read(c: Counter) -> Int {\n    self.n                         // ✗ a plain function has no `self`\n}\n\nfn Counter.read(self) -> Int {     // ✓ a method declares `self`\n    self.n\n}",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.type_as_function",
@@ -2822,7 +2822,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "A type's name stands for a set of values, not for one, so it cannot be used where a value is expected. This is usually a missing constructor. Build a value in the type's own way: `Type { … }` for a record, a variant name for a sum, `Type.of(value)` for a refined type. A type used as a call, `Type(…)`, is `bynk.resolve.type_as_function`.",
         example: "type Metres = Int where NonNegative\n\nfn grow(x: Int) -> Int { x + Metres }   // ✗ `Metres` is a type, not a value\n\nfn grow(x: Int) -> Result[Metres, ValidationError] { Metres.of(x + 1) }   // ✓ build a `Metres`",
         page: "/book/spec/static-semantics",
-        anchor: "51-name-resolution-visibility",
+        anchor: "",
     },
     Explain {
         code: "bynk.resolve.unconsumed_context",
