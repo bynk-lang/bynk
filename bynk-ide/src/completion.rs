@@ -2325,9 +2325,13 @@ fn member_candidates_from(
         }
     });
     // #2865: a derived `D1`'s typed reads, which the compiler lowers.
-    if derived_base.as_deref() == Some("D1") {
+    // Hyperdrive H3 (#3320): and a derived `Postgres`'s.
+    if let Some(base) = derived_base
+        .as_deref()
+        .filter(|b| crate::signature_help::TYPED_READ_BASES.contains(b))
+    {
         for member in ["select", "firstAs"] {
-            if let Some(sig) = crate::signature_help::d1_typed_read(member)
+            if let Some(sig) = crate::signature_help::typed_read(base, member)
                 && seen.insert(member.to_string())
             {
                 out.push(Completion::item(
@@ -4096,6 +4100,30 @@ mod tests {
                 "`{op}` offered"
             );
         }
+    }
+
+    /// Hyperdrive H3 (#3320): a derived `Postgres` offers the typed reads and
+    /// `transaction` beside `all`, `first` and `run`.
+    #[test]
+    fn a_derived_postgres_offers_the_typed_reads_and_transaction() {
+        let doc =
+            "context a.b\n\nconsumes bynk.cloudflare { Postgres }\n\ncapability Main = Postgres\n";
+        let items = complete("    Main.", doc, None);
+        for op in ["select", "firstAs", "transaction", "all", "first", "run"] {
+            assert!(
+                find(&items, op, CompletionKind::Member).is_some(),
+                "`{op}` offered"
+            );
+        }
+        let select = find(&items, "select", CompletionKind::Member).expect("`select`");
+        assert!(
+            select
+                .detail
+                .as_deref()
+                .is_some_and(|d| d.contains("PgReadError")),
+            "{:?}",
+            select.detail
+        );
     }
 
     #[test]

@@ -11,9 +11,10 @@
 //   1. **`prepare: true` on every `sql.unsafe` call** (ADR 0799 A). In
 //      postgres.js 3.4.5's `workerd` build `sql.unsafe()` defaults to
 //      `prepare: false`, which makes it send type-discovery messages before each
-//      query that Hyperdrive does not cache. The call below is the only
-//      `sql.unsafe` in the runtime, and `postgres.test.ts` fails if any call
-//      reaches the driver without the option.
+//      query that Hyperdrive does not cache. The two calls below (a statement's,
+//      and a transaction's `tx.unsafe`, #3320) are the only `unsafe` calls in the
+//      runtime, and `postgres.test.ts` fails if any call reaches the driver
+//      without the option.
 //   2. **The connection**, opened from the binding's `connectionString` for one
 //      statement and ended before the statement's outcome is returned. A
 //      Worker may not carry an I/O object (a socket) from one request into
@@ -60,13 +61,34 @@ export type PgOutcome =
   | { readonly ok: true; readonly rows: readonly Record<string, unknown>[]; readonly rowCount: number }
   | { readonly ok: false; readonly failure: PgFailure };
 
-/** Opens, runs one statement against, and closes a database. */
-export type PgExecute = (connectionString: string, sql: string, params: readonly PgParam[]) => Promise<PgOutcome>;
+/** One statement of a `Postgres.transaction`, as the binding hands it over. */
+export type PgStatementParam = { readonly sql: string; readonly params: readonly PgParam[] };
+
+/** A transaction's outcome: every statement's row count, or the first failure (nothing applied). */
+export type PgTxOutcome =
+  | { readonly ok: true; readonly rowCounts: readonly number[] }
+  | { readonly ok: false; readonly failure: PgFailure };
+
+/**
+ * Opens, runs one statement against, and closes a database. `transaction` (Hyperdrive
+ * H3, #3320) runs a fixed list of statements in order on one connection, in one
+ * database transaction: all apply, or none do.
+ */
+export interface PgExecute {
+  (connectionString: string, sql: string, params: readonly PgParam[]): Promise<PgOutcome>;
+  readonly transaction: (connectionString: string, statements: readonly PgStatementParam[]) => Promise<PgTxOutcome>;
+}
 
 /** The part of postgres.js's `Sql` this module uses. */
 interface PgSql {
   unsafe(sql: string, params: readonly unknown[], options: { prepare: boolean }): PromiseLike<PgRows>;
+  /** `sql.begin`: runs `fn` in a transaction, which commits when `fn` returns and rolls back when it throws. */
+  begin<T>(fn: (tx: PgTx) => Promise<T>): Promise<T>;
   end(options?: { timeout?: number | null }): Promise<void>;
+}
+/** The transaction handle `sql.begin` passes: the same `unsafe`, on the transaction's connection. */
+interface PgTx {
+  unsafe(sql: string, params: readonly unknown[], options: { prepare: boolean }): PromiseLike<PgRows>;
 }
 interface PgRows extends ReadonlyArray<Record<string, unknown>> {
   readonly count?: number | null;
@@ -187,32 +209,70 @@ export function jsonRow(row: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * An executor over `factory` (postgres.js's default export, or a fake). One
- * client of one connection per statement, ended before the outcome returns,
- * whether the statement succeeded or not.
+ * client of one connection per statement (or per transaction), ended before the
+ * outcome returns, whether it succeeded or not.
  */
 export function makePgExecute(factory: PgFactory): PgExecute {
-  return async (connectionString, sql, params) => {
-    let client: PgSql | undefined;
+  // `max: 1`: one statement needs one connection. `fetch_types: false` is the
+  // `workerd` build's default, written down so it is not left to it.
+  const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false });
+  const close = async (client: PgSql | undefined): Promise<void> => {
+    if (client === undefined) return;
     try {
-      // `max: 1`: one statement needs one connection. `fetch_types: false` is
-      // the `workerd` build's default, written down so it is not left to it.
-      client = factory(connectionString, { max: 1, fetch_types: false });
-      const result = await client.unsafe(sql, params.map(driverParam), { prepare: true });
-      const rows = Array.from(result, jsonRow);
-      return { ok: true, rows, rowCount: typeof result.count === "number" ? result.count : rows.length };
-    } catch (e) {
-      const failure = classifyPgError(e);
-      return { ok: false, failure: { ...failure, message: redactSecret(failure.message, connectionString) } };
-    } finally {
-      if (client !== undefined) {
-        try {
-          await client.end();
-        } catch {
-          // The statement's outcome stands; a failed close is not another one.
-        }
-      }
+      await client.end();
+    } catch {
+      // The outcome stands; a failed close is not another one.
     }
   };
+  const failed = (e: unknown, connectionString: string): { ok: false; failure: PgFailure } => {
+    const failure = classifyPgError(e);
+    return { ok: false, failure: { ...failure, message: redactSecret(failure.message, connectionString) } };
+  };
+  const countOf = (result: PgRows): number => (typeof result.count === "number" ? result.count : result.length);
+
+  const execute = async (connectionString: string, sql: string, params: readonly PgParam[]): Promise<PgOutcome> => {
+    let client: PgSql | undefined;
+    try {
+      client = open(connectionString);
+      const result = await client.unsafe(sql, params.map(driverParam), { prepare: true });
+      const rows = Array.from(result, jsonRow);
+      return { ok: true, rows, rowCount: countOf(result) };
+    } catch (e) {
+      return failed(e, connectionString);
+    } finally {
+      await close(client);
+    }
+  };
+
+  // Hyperdrive H3 (#3320): `sql.begin` holds one connection and one database
+  // transaction. The statements run one after another, in order, each with
+  // `{ prepare: true }` (ADR 0799 A); the first to fail throws, which rolls
+  // back every earlier one and ends the transaction, so the failure is returned
+  // and no later statement runs.
+  const transaction = async (
+    connectionString: string,
+    statements: readonly PgStatementParam[],
+  ): Promise<PgTxOutcome> => {
+    let client: PgSql | undefined;
+    try {
+      client = open(connectionString);
+      const rowCounts = await client.begin(async (tx) => {
+        const counts: number[] = [];
+        for (const statement of statements) {
+          const result = await tx.unsafe(statement.sql, statement.params.map(driverParam), { prepare: true });
+          counts.push(countOf(result));
+        }
+        return counts;
+      });
+      return { ok: true, rowCounts };
+    } catch (e) {
+      return failed(e, connectionString);
+    } finally {
+      await close(client);
+    }
+  };
+
+  return Object.assign(execute, { transaction });
 }
 
 /** The executor a Worker's compose gives `WorkersPostgres`: postgres.js. */
@@ -220,4 +280,4 @@ export const pgExecute: PgExecute = makePgExecute(postgres as unknown as PgFacto
 
 // #1653: the `__` aliases emitted code imports.
 export { pgExecute as __pgExecute };
-export type { PgExecute as __PgExecute, PgOutcome as __PgOutcome, PgParam as __PgParam };
+export type { PgExecute as __PgExecute, PgOutcome as __PgOutcome, PgParam as __PgParam, PgStatementParam as __PgStatementParam, PgTxOutcome as __PgTxOutcome };

@@ -2357,6 +2357,7 @@ fn lower_d1_select_call(
         row,
         sql,
         first,
+        pg,
     }) = cx.commons().callees.get(&e.id).cloned()
         && let Some(params) = args.get(1)
     {
@@ -2366,7 +2367,20 @@ fn lower_d1_select_call(
         } else {
             tys.intern(Ty::List(row))
         };
-        let decoder = json_decoder_fn(target, DecodeSource::Sql, cx)
+        // Hyperdrive H3 (#3320): a `Postgres` read decodes Postgres' text
+        // forms and fails as a `PgReadError`, whose variants are `PgSql` and
+        // `PgDecode` (`Sql` and `Decode` are `SqlReadError`'s).
+        let source = if pg {
+            DecodeSource::Pg
+        } else {
+            DecodeSource::Sql
+        };
+        let (sql_tag, decode_tag) = if pg {
+            ("PgSql", "PgDecode")
+        } else {
+            ("Sql", "Decode")
+        };
+        let decoder = json_decoder_fn(target, source, cx)
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
@@ -2379,21 +2393,25 @@ fn lower_d1_select_call(
             let (op, decode) = if first {
                 (
                     "first",
-                    "if (__r.value.tag === \"None\") return Ok(None); \
-                     const __d = __decode(__r.value.value); \
-                     return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({ tag: \"Decode\" as const, error: __d.error });",
+                    format!(
+                        "if (__r.value.tag === \"None\") return Ok(None); \
+                         const __d = __decode(__r.value.value); \
+                         return __d.tag === \"Ok\" ? Ok(Some(__d.value)) : Err({{ tag: \"{decode_tag}\" as const, error: __d.error }});"
+                    ),
                 )
             } else {
                 (
                     "all",
-                    "const __d = __decode(__r.value); \
-                     return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\" as const, error: __d.error });",
+                    format!(
+                        "const __d = __decode(__r.value); \
+                         return __d.tag === \"Ok\" ? Ok(__d.value) : Err({{ tag: \"{decode_tag}\" as const, error: __d.error }});"
+                    ),
                 )
             };
             return Some(format!(
                 "(async () => {{ const __decode = {decoder}; \
                  const __r = await {deps}.{cap}.{op}(\"{sql}\", {params}); \
-                 if (__r.tag === \"Err\") return Err({{ tag: \"Sql\" as const, error: __r.error }}); \
+                 if (__r.tag === \"Err\") return Err({{ tag: \"{sql_tag}\" as const, error: __r.error }}); \
                  {decode} }})()"
             ));
         }
@@ -4725,6 +4743,9 @@ enum DecodeSource {
     Json,
     /// `Json.decodeSql` and the typed `D1` reads: JSON, with SQLite's `0`/`1` flags read as `Bool`.
     Sql,
+    /// Hyperdrive H3 (#3320), the typed `Postgres` reads: JSON, with an `int8`'s
+    /// text read at an `Int` field and a `timestamptz`'s text at an `Instant`.
+    Pg,
     /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
     Yaml,
     /// #3276, `Form.decode`: the text is a form body, read by the router's own rules.
@@ -4782,6 +4803,8 @@ fn json_decoder_fn(
     };
     let sql_bools = if sql {
         sql_bool_pass(t, cx)
+    } else if source == DecodeSource::Pg {
+        pg_row_pass(t, cx)
     } else {
         String::new()
     };
@@ -4975,6 +4998,43 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> String {
          const __row = __o as {{ [k: string]: __JsonValue }}; \
          for (const __k of [{keys}]) {{ if (__row[__k] === 0 || __row[__k] === 1) __row[__k] = __row[__k] === 1; }} }}; \
          if (globalThis.Array.isArray(__j)) __j.forEach(__flags); else __flags(__j); "
+    )
+}
+
+/// Hyperdrive H3 (#3320): a typed `Postgres` read's pass over the parsed rows
+/// before the ordinary codec runs, the counterpart of [`sql_bool_pass`]. The
+/// codec reads an `Instant` as epoch milliseconds and an `Int` as a number; a
+/// Postgres row carries a `timestamptz` as ISO-8601 text and an `int8` as text
+/// (ADR 0799 F), so the runtime's `__bynkPgRow` converts exactly the row's
+/// `Instant` and `Int` fields, and leaves anything it cannot convert for the
+/// codec to refuse. Empty when the row has neither.
+fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> String {
+    let tys = cx.commons().tys();
+    let row = match &*tys.get(t) {
+        Ty::List(r) => *r,
+        _ => t,
+    };
+    let Ty::Named { name, .. } = &*tys.get(row) else {
+        return String::new();
+    };
+    let types = &cx.commons().types;
+    let instants = bynk_check::checker::row_base_fields(name, types, BaseType::Instant);
+    let ints = bynk_check::checker::row_base_fields(name, types, BaseType::Int);
+    if instants.is_empty() && ints.is_empty() {
+        return String::new();
+    }
+    cx.runtime_use().note_pg_rows();
+    let list = |names: &[String]| {
+        names
+            .iter()
+            .map(|f| format!("\"{f}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let (instants, ints) = (list(&instants), list(&ints));
+    format!(
+        "const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [{instants}], [{ints}]); \
+         if (globalThis.Array.isArray(__j)) __j.forEach(__fix); else __fix(__j); "
     )
 }
 

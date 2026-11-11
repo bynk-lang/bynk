@@ -1,0 +1,2 @@
+bynk.types.sql_not_literal a `PgStatement`'s `sql` must be a string literal or a `String` constant bound to one
+# exact

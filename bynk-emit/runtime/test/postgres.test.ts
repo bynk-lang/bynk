@@ -17,6 +17,8 @@ interface Call {
 
 function fake(answer: (call: Call) => unknown) {
   const calls: Call[] = [];
+  // The order of what the fake saw, so a test can read a transaction's shape.
+  const events: string[] = [];
   const opened: { url: string; options: Record<string, unknown> }[] = [];
   let ended = 0;
   const factory: PgFactory = (url, options) => {
@@ -27,10 +29,36 @@ function fake(answer: (call: Call) => unknown) {
       unsafe(sql: string, params: readonly unknown[], options: { prepare: boolean }) {
         const call: Call = { sql, params, options };
         calls.push(call);
+        events.push(`unsafe ${sql}`);
         try {
           return Promise.resolve(answer(call) as never);
         } catch (e) {
           return Promise.reject(e);
+        }
+      },
+      // Mirrors `sql.begin`: the callback's `tx.unsafe` is the same method; a
+      // throw rolls back (and rethrows), a return commits.
+      async begin<T>(fn: (tx: never) => Promise<T>): Promise<T> {
+        events.push("begin");
+        const tx = {
+          unsafe: (sql: string, params: readonly unknown[], options: { prepare: boolean }) => {
+            const call: Call = { sql, params, options };
+            calls.push(call);
+            events.push(`unsafe ${sql}`);
+            try {
+              return Promise.resolve(answer(call) as never);
+            } catch (e) {
+              return Promise.reject(e);
+            }
+          },
+        };
+        try {
+          const out = await fn(tx as never);
+          events.push("commit");
+          return out;
+        } catch (e) {
+          events.push("rollback");
+          throw e;
         }
       },
       async end() {
@@ -38,7 +66,7 @@ function fake(answer: (call: Call) => unknown) {
       },
     };
   };
-  return { factory, calls, opened, ended: () => ended };
+  return { factory, calls, events, opened, ended: () => ended };
 }
 
 function rows(list: Record<string, unknown>[], count?: number) {
@@ -227,4 +255,76 @@ test("the real default executor is postgres.js's, and reports an unreachable hos
   assert.equal(out.failure.kind, "connection");
   assert.ok(!out.failure.message.includes("s3cr3t"));
   assert.ok(!out.failure.message.includes("127.0.0.1"));
+});
+
+// Hyperdrive H3 (#3320): `transaction`.
+
+test("a transaction runs its statements in order in one begin, each with { prepare: true }, and commits", async () => {
+  const f = fake((call) => {
+    assert.deepEqual(call.options, { prepare: true });
+    return rows([], call.sql.startsWith("insert") ? 1 : 4);
+  });
+  const out = await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [
+    { sql: "insert into a values ($1)", params: [T("x")] },
+    { sql: "update b set n = 1", params: [] },
+  ]);
+  assert.deepEqual(out, { ok: true, rowCounts: [1, 4] });
+  assert.deepEqual(f.events, ["begin", "unsafe insert into a values ($1)", "unsafe update b set n = 1", "commit"]);
+  assert.deepEqual(f.calls[0]!.params, ["x"]);
+  assert.equal(f.opened.length, 1);
+  assert.equal(f.ended(), 1);
+});
+
+test("a failing second statement rolls back the first and stops; the SQLSTATE is kept", async () => {
+  const f = fake((call) => {
+    if (call.sql === "insert into b values (1)") {
+      throw Object.assign(new Error("duplicate key"), { code: "23505" });
+    }
+    return rows([], 1);
+  });
+  const out = await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [
+    { sql: "insert into a values (1)", params: [] },
+    { sql: "insert into b values (1)", params: [] },
+    { sql: "insert into c values (1)", params: [] },
+  ]);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.deepEqual([out.failure.kind, out.failure.sqlstate], ["constraint", "23505"]);
+  // Rolled back after the second statement; the third never ran.
+  assert.deepEqual(f.events, ["begin", "unsafe insert into a values (1)", "unsafe insert into b values (1)", "rollback"]);
+  assert.equal(f.ended(), 1);
+});
+
+test("a transaction's connection failure keeps the secret out of the message and ends the client", async () => {
+  const f = fake(() => {
+    throw Object.assign(new Error(`write CONNECTION_CLOSED ${URL_WITH_SECRET}`), { code: "CONNECTION_CLOSED" });
+  });
+  const out = await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [{ sql: "select 1", params: [] }]);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.equal(out.failure.kind, "connection");
+  assert.ok(!out.failure.message.includes("s3cr3t"));
+  assert.equal(f.ended(), 1);
+  const refused = await makePgExecute(() => {
+    throw new Error(`Invalid URL ${URL_WITH_SECRET}`);
+  }).transaction(URL_WITH_SECRET, []);
+  assert.ok(!refused.ok);
+  if (!refused.ok) assert.ok(!refused.failure.message.includes("s3cr3t"));
+});
+
+test("a transaction's parameters reach the driver in their driver form", async () => {
+  const f = fake(() => rows([]));
+  await makePgExecute(f.factory).transaction(URL_WITH_SECRET, [
+    { sql: "select $1, $2", params: [{ tag: "PgNull" }, { tag: "PgTimestamp", value: 1_700_000_000_000 }] },
+  ]);
+  assert.equal(f.calls[0]!.params[0], null);
+  assert.deepEqual(f.calls[0]!.params[1], new Date(1_700_000_000_000));
+});
+
+test("the real default executor's transaction reports an unreachable host as a connection failure", async () => {
+  const out = await pgExecute.transaction("postgres://app:s3cr3t@127.0.0.1:1/db", [{ sql: "select 1", params: [] }]);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.equal(out.failure.kind, "connection");
+  assert.ok(!out.failure.message.includes("s3cr3t"));
 });

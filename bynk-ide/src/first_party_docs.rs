@@ -140,7 +140,7 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "bynk.cloudflare",
         "Postgres",
         "postgres-databases-postgres",
-        &["all", "first", "run"],
+        &["all", "first", "run", "transaction"],
     ),
 ];
 
