@@ -246,6 +246,10 @@
             "link": "/book/guides/effects-and-capabilities/query-rows-into-a-record/"
           },
           {
+            "label": "Connect an existing Postgres database",
+            "link": "/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/"
+          },
+          {
             "label": "Apply webhook events that arrive late, twice or out of order",
             "link": "/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/"
           },

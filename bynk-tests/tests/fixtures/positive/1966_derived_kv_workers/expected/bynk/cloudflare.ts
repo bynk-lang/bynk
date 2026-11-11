@@ -500,6 +500,75 @@ export const SenderIdentity = {
 };
 
 /**
+ * A value bound to a `$n` parameter of a `Postgres` statement. `PgInteger`
+ * binds a whole number and `PgReal` a float; `PgText` binds text, `PgBytea` bytes
+ * and `PgBoolean` a flag. `PgTimestamp` binds an `Instant` as a `timestamptz`.
+ * `PgJson` binds JSON text and `PgNumeric` a decimal as text, each as text
+ * the server types from the column or cast it meets (`$1::jsonb`,
+ * `$2::numeric`), so neither loses a digit to a float. The variants carry the
+ * `Pg` prefix because a bare `Null`, `Integer`, `Real`, `Text` or `Boolean`
+ * would resolve to `SqlValue`'s, and `Json` and `Timestamp` to a built-in.
+ */
+export type PgValue =
+    { readonly tag: "PgNull" }
+  | { readonly tag: "PgInteger"; readonly value: number }
+  | { readonly tag: "PgReal"; readonly value: number }
+  | { readonly tag: "PgText"; readonly value: string }
+  | { readonly tag: "PgBytea"; readonly value: globalThis.Uint8Array }
+  | { readonly tag: "PgBoolean"; readonly value: boolean }
+  | { readonly tag: "PgTimestamp"; readonly value: number }
+  | { readonly tag: "PgJson"; readonly value: string }
+  | { readonly tag: "PgNumeric"; readonly value: string };
+
+export const PgValue = {
+  PgNull: { tag: "PgNull" } as PgValue,
+  PgInteger: (value: number): PgValue => ({ tag: "PgInteger", value }),
+  PgReal: (value: number): PgValue => ({ tag: "PgReal", value }),
+  PgText: (value: string): PgValue => ({ tag: "PgText", value }),
+  PgBytea: (value: globalThis.Uint8Array): PgValue => ({ tag: "PgBytea", value }),
+  PgBoolean: (value: boolean): PgValue => ({ tag: "PgBoolean", value }),
+  PgTimestamp: (value: number): PgValue => ({ tag: "PgTimestamp", value }),
+  PgJson: (value: string): PgValue => ({ tag: "PgJson", value }),
+  PgNumeric: (value: string): PgValue => ({ tag: "PgNumeric", value }),
+};
+
+/**
+ * What a `Postgres.run` changed: the rows the statement inserted, updated or
+ * deleted (or, for a `SELECT`, returned).
+ */
+export interface PgRun {
+  readonly rowCount: number;
+}
+
+export const PgRun = {
+};
+
+/**
+ * Why a `Postgres` statement failed, with the SQLSTATE where Postgres gave
+ * one. `PgConstraint` is an integrity-constraint violation (class `23`: a
+ * unique, not-null, check or foreign-key violation), an outcome a handler
+ * answers (with a `409`, say). `PgSerialization` is a serialization failure
+ * (`40001`), which a retry may clear. `PgConnection` is a connection that could not
+ * be made or was lost; its message names the driver's code and never the
+ * host or the connection string. `PgFailed` is anything else, with its SQLSTATE
+ * (empty when the driver reported none) and the database's message. Postgres has further failure
+ * kinds, so a `match` over this type needs a wildcard. The variants carry the
+ * `Pg` prefix because `Constraint` and `Failed` are `SqlError`'s.
+ */
+export type PgError =
+    { readonly tag: "PgConstraint"; readonly sqlstate: string; readonly message: string }
+  | { readonly tag: "PgSerialization"; readonly message: string }
+  | { readonly tag: "PgConnection"; readonly message: string }
+  | { readonly tag: "PgFailed"; readonly sqlstate: string; readonly message: string };
+
+export const PgError = {
+  PgConstraint: (sqlstate: string, message: string): PgError => ({ tag: "PgConstraint", sqlstate, message }),
+  PgSerialization: (message: string): PgError => ({ tag: "PgSerialization", message }),
+  PgConnection: (message: string): PgError => ({ tag: "PgConnection", message }),
+  PgFailed: (sqlstate: string, message: string): PgError => ({ tag: "PgFailed", sqlstate, message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -858,6 +927,42 @@ export interface Email {
 }
 
 export const __EmailToken: symbol = globalThis.Symbol("Email");
+
+/**
+ * A Postgres database reached through Cloudflare Hyperdrive, over postgres.js:
+ * SQL text and positional parameters (`$1`, `$2`, …) bound from `PgValue`s,
+ * never spliced into the text. The SQL is a string literal, so data reaches
+ * a statement only as a parameter. Used only through a named instance,
+ * `capability Main = Postgres`, which binds as `HYPERDRIVE_MAIN`, a
+ * `[[hyperdrive]]` entry; a bare `given Postgres` names no database and is
+ * refused. Experimental.
+ *
+ * `bynk deploy` does not create the Hyperdrive configuration yet. The
+ * generated `wrangler.toml` carries a placeholder `id`; create the
+ * configuration with `wrangler hyperdrive create` and put its id there, and
+ * for `bynk dev` set `localConnectionString` (see "Connect an existing
+ * Postgres database" in the Book).
+ *
+ * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+ * array of objects keyed by column name, `first` the first row as one object,
+ * or `None` when there is none. `int8` (`bigint`) and `numeric` arrive as
+ * strings, so nothing past 2^53 is lost; `timestamptz` as ISO-8601 text;
+ * `bytea` as base64 (a `Bytes` field decodes it); `json` and `jsonb` nested as
+ * JSON. A `boolean` arrives as `true` or `false`, not `0` or `1`.
+ *
+ * `run` executes a write and reports the rows it changed. Every operation
+ * gives a `PgError` rather than faulting. Each statement uses its own
+ * connection, opened and closed around it, and Cloudflare allows six
+ * simultaneous connections per Worker invocation, so a `par` over more than
+ * six queries waits for its turn.
+ */
+export interface Postgres {
+  all(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<string, PgError>>;
+  first(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<Option<string>, PgError>>;
+  run(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<PgRun, PgError>>;
+}
+
+export const __PostgresToken: symbol = globalThis.Symbol("Postgres");
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
@@ -1416,6 +1521,206 @@ export function __deserialise_KvPut(json: __JsonValue, path: string = "$"): Resu
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ expiration: __expiration, metadata: __metadata } as KvPut);
+}
+
+export function __serialise_PgError(value: PgError): __JsonValue {
+  switch (value.tag) {
+    case "PgConstraint": {
+      return { kind: "PgConstraint", sqlstate: value.sqlstate as __JsonValue, message: value.message as __JsonValue };
+    }
+    case "PgSerialization": {
+      return { kind: "PgSerialization", message: value.message as __JsonValue };
+    }
+    case "PgConnection": {
+      return { kind: "PgConnection", message: value.message as __JsonValue };
+    }
+    case "PgFailed": {
+      return { kind: "PgFailed", sqlstate: value.sqlstate as __JsonValue, message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_PgError(json: __JsonValue, path: string = "$"): Result<PgError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "PgConstraint": {
+  if (typeof obj["sqlstate"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sqlstate`, expected: "string", actual: typeof obj["sqlstate"] });
+  }
+  const __sqlstate = obj["sqlstate"];
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "PgConstraint", sqlstate: __sqlstate, message: __message } as PgError);
+    }
+    case "PgSerialization": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "PgSerialization", message: __message } as PgError);
+    }
+    case "PgConnection": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "PgConnection", message: __message } as PgError);
+    }
+    case "PgFailed": {
+  if (typeof obj["sqlstate"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sqlstate`, expected: "string", actual: typeof obj["sqlstate"] });
+  }
+  const __sqlstate = obj["sqlstate"];
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "PgFailed", sqlstate: __sqlstate, message: __message } as PgError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_PgRun(value: PgRun): __JsonValue {
+  return {
+    rowCount: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rowCount),
+  };
+}
+
+export function __deserialise_PgRun(json: __JsonValue, path: string = "$"): Result<PgRun, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["rowCount"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "number", actual: typeof obj["rowCount"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["rowCount"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "safe integer", actual: String(obj["rowCount"]) });
+  }
+  const __rowCount = obj["rowCount"];
+  return Ok({ rowCount: __rowCount } as PgRun);
+}
+
+export function __serialise_PgValue(value: PgValue): __JsonValue {
+  switch (value.tag) {
+    case "PgNull":
+      return { kind: "PgNull" };
+    case "PgInteger": {
+      return { kind: "PgInteger", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "PgReal": {
+      return { kind: "PgReal", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "PgText": {
+      return { kind: "PgText", value: value.value as __JsonValue };
+    }
+    case "PgBytea": {
+      return { kind: "PgBytea", value: __bynkBytesToBase64(value.value) as __JsonValue };
+    }
+    case "PgBoolean": {
+      return { kind: "PgBoolean", value: value.value as __JsonValue };
+    }
+    case "PgTimestamp": {
+      return { kind: "PgTimestamp", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "PgJson": {
+      return { kind: "PgJson", value: value.value as __JsonValue };
+    }
+    case "PgNumeric": {
+      return { kind: "PgNumeric", value: value.value as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Result<PgValue, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "PgNull":
+      return Ok({ tag: "PgNull" } as PgValue);
+    case "PgInteger": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgInteger", value: __value } as PgValue);
+    }
+    case "PgReal": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isFinite(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgReal", value: __value } as PgValue);
+    }
+    case "PgText": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgText", value: __value } as PgValue);
+    }
+    case "PgBytea": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "base64 string", actual: typeof obj["value"] });
+  }
+  const __b_value = __bynkBytesFromBase64(obj["value"]);
+  if (__b_value.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __value = __b_value.value;
+      return Ok({ tag: "PgBytea", value: __value } as PgValue);
+    }
+    case "PgBoolean": {
+  if (typeof obj["value"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "boolean", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgBoolean", value: __value } as PgValue);
+    }
+    case "PgTimestamp": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgTimestamp", value: __value } as PgValue);
+    }
+    case "PgJson": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgJson", value: __value } as PgValue);
+    }
+    case "PgNumeric": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "PgNumeric", value: __value } as PgValue);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_QueueSend(value: QueueSend): __JsonValue {
