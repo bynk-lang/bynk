@@ -63,7 +63,7 @@ pulls in `oxc`.
 
 ```toml
 [dependencies]
-bynk-strip = "0.551"
+bynk-strip = "0.552"
 ```
 
 ```rust

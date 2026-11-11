@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A bare variant name that two sums in scope declare (two enums a consumed unit exports, say) builds the sum the expected type names, from an annotated `let`, a parameter, a return type or a `stub`'s operation, and is `bynk.resolve.ambiguous_variant` only when nothing picks one; the message names each qualified form, and a `stub` value no longer reports it as `bynk.stub.rhs_type` (#3344)
----
+# 0807 — A variant name several sums share resolves by the expected type, never by picking one
 
-## ADR: shared-variant-by-expected-type
-title: A variant name several sums share resolves by the expected type, never by picking one
-summary: Expected type picks the owner; otherwise `bynk.resolve.ambiguous_variant`
+- **Status:** Accepted (v0.552)
 
 **Context.** A bare variant name builds a value of the sum that declares it.
 When two sums in scope declare it, the resolver reported
