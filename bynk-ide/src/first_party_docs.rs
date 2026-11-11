@@ -118,6 +118,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "edge-caching-edgecache",
         &["purge"],
     ),
+    (
+        "bynk.cloudflare",
+        "Version",
+        "the-running-version-version",
+        &["current"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

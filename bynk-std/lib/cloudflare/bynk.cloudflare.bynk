@@ -1,6 +1,6 @@
 adapter bynk.cloudflare {
 	consumes bynk { Fetch }
-	exports capability { Kv, Service, R2, RateLimit, Queue, Analytics, EdgeCache, D1 }
+	exports capability { Kv, Service, R2, RateLimit, Queue, Analytics, EdgeCache, D1, Version }
 	exports transparent {
 		KvExpiration,
 		KvPut,
@@ -24,6 +24,7 @@ adapter bynk.cloudflare {
 		SqlRun,
 		SqlError,
 		SqlReadError,
+		WorkerVersion,
 	}
 
 	---
@@ -508,6 +509,32 @@ adapter bynk.cloudflare {
 		fn batch(statements: List[SqlStatement]) -> Effect[Result[List[SqlRun], SqlError]]
 	}
 
+	---
+	The version of this Worker that is running, as `Version.current()`
+	reports it. `id` is the version's id, `tag` its tag (`None` when the
+	version was uploaded without one), and `deployed` when the version was
+	created.
+	---
+	type WorkerVersion = {
+		id: String,
+		tag: Option[String],
+		deployed: Instant,
+	}
+
+	---
+	The running Worker's version, from Cloudflare's Version metadata binding.
+	It is bound once per Worker, so it is used bare (`given Version`) and has
+	no named instances. Only a Worker that uses it declares the binding.
+	`current()` gives the same value for every call in a deployment: report it
+	from a health route, or write it beside an `Analytics` point, to tell
+	which version served a request. Under `bynk dev` the id is local; in a
+	test the value is fixed (id `"test"`, no tag, `deployed` at the epoch) and
+	`stub Version.current() returns …` replaces it.
+	---
+	capability Version {
+		fn current() -> Effect[WorkerVersion]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -523,4 +550,6 @@ adapter bynk.cloudflare {
 	provides EdgeCache = WorkersEdgeCache
 
 	provides D1 = WorkersD1
+
+	provides Version = WorkersVersion
 }

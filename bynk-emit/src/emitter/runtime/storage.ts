@@ -930,6 +930,27 @@ export function makeIntegrationD1(migrations: readonly (readonly [string, string
   };
 }
 
+/**
+ * Version metadata (#3300): Cloudflare's Version metadata binding, which
+ * `WorkersVersion` reads. `timestamp` is the version's creation time as an
+ * ISO-8601 string; `tag` is empty when the version has none.
+ */
+export interface WorkerVersionMetadata {
+  readonly id: string;
+  readonly tag: string;
+  readonly timestamp: string;
+}
+
+/**
+ * The Version metadata binding of a multi-Worker integration test participant,
+ * bound as its `env.CF_VERSION_METADATA`: a fixed version (id `"integration"`,
+ * no tag, created at the epoch), so a case's assertions do not depend on when
+ * it runs.
+ */
+export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
+  return { id: "integration", tag: "", timestamp: "1970-01-01T00:00:00.000Z" };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeTestState as __makeTestState };
-export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter };
+export { makeIntegrationAnalytics as __makeIntegrationAnalytics, makeIntegrationD1 as __makeIntegrationD1, makeIntegrationKv as __makeIntegrationKv, makeIntegrationQueue as __makeIntegrationQueue, makeIntegrationR2 as __makeIntegrationR2, makeIntegrationRateLimit as __makeIntegrationRateLimit, makeIntegrationVersionMetadata as __makeIntegrationVersionMetadata, makeTestState as __makeTestState };
+export type { AnalyticsDataset as __AnalyticsDataset, D1Database as __D1Database, DurableObjectState as __DurableObjectState, KVNamespace as __KVNamespace, QueueProducer as __QueueProducer, R2Bucket as __R2Bucket, RateLimiter as __RateLimiter, WorkerVersionMetadata as __WorkerVersionMetadata };
