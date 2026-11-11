@@ -1,12 +1,6 @@
----
-level: patch
-probes: ts_writes
-changelog: A `store Map`, `Set`, `Cache` and `Log` field is held in an agent's state as an insertion-ordered handle, so a `Map`'s keys, values and entries enumerate in insertion order for integer-like keys too, on both targets, in a handler and, for state written in the per-entry layout, after a reload (#3254)
----
+# 0794 — An agent's store collections are insertion-ordered handles
 
-## ADR: ordered-store-collection-handles
-title: An agent's store collections are insertion-ordered handles
-summary: A store collection is held as a handle backed by a JS `Map`, not a plain object, behind an interface every method of which may be asynchronous
+- **Status:** Accepted (v0.542.2)
 
 **Context.** The spec makes a `Map` insertion-ordered, but an agent's `store Map` was held in memory as a plain JS object, which enumerates integer-like keys (`"2"`, `"10"`) in ascending numeric order before every other key. A map put as `10, 2, a, 5` was read back as `2, 5, 10, a`, in a handler as much as after a reload. Per-entry storage (#3189) already stores each entry's insertion sequence, so the stored form could carry the order; the in-memory form could not.
 

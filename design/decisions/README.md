@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0794](0794-ordered-store-collection-handles.md) | **An agent's store collections are insertion-ordered handles** (v0.542.2) — A store collection is held as a handle backed by a JS `Map`, not a plain object, behind an interface every method of which may be asynchronous | Accepted (v0.542.2) |
 | [0793](0793-multipart-request-bodies.md) | **A `@multipart` handler annotation decodes a multipart body into a record with `File` parts** (v0.542) — The file part type, the caps and buffering, the parser, and the MalformedForm rejection that breaks exhaustive matches | Accepted (v0.542) |
 | [0792](0792-form-request-bodies.md) | **A `@form` handler annotation decodes a urlencoded form body into a record** (v0.541) — How a route declares a form body, how keys map to record fields, the form-specific leaf rules, and the 415 and 400 answers | Accepted (v0.541) |
 | [0791](0791-cache-reaping-at-commit.md) | **Expired Cache entries are deleted at commit, by the clock the program read** (v0.540) — A commit deletes up to 64 expired entries of an agent's Cache fields, judged by the injected Clock the handler's Cache operations read, so reaping cannot be seen by a program and never runs on the runtime's own clock | Accepted (v0.540) |
