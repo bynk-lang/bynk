@@ -1,0 +1,11 @@
+context demo
+
+service sweeper from cron {
+    on schedule("*/5 * * * *") () -> Effect[Result[(), String]] {
+        Effect.pure(Ok(()))
+    }
+
+    on schedule("0 * * * *") () -> Effect[Result[(), String]] {
+        Effect.pure(Ok(()))
+    }
+}

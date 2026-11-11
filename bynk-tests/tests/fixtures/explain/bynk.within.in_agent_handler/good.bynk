@@ -1,0 +1,18 @@
+context demo
+
+consumes bynk { TimedOut }
+
+agent Slow {
+    key id: String
+    store n: Cell[Int] = 0
+
+    on call get() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}
+
+service quotes {
+    on call() -> Effect[Result[Int, TimedOut]] {
+        Slow("a").get().within(1.seconds)
+    }
+}

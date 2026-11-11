@@ -1,0 +1,14 @@
+context demo
+
+type Order = { customerId: String, region: Int }
+type Customer = { code: String, region: Int }
+
+agent A {
+    key k: String
+    store orders: Map[String, Order]
+    store customers: Map[String, Customer]
+
+    on call joined() -> Effect[Int] {
+        orders.joinOn(customers, (o) => o.customerId, (c) => c.code, (o, c) => c.region).count()
+    }
+}
