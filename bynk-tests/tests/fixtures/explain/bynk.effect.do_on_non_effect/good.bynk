@@ -1,0 +1,9 @@
+commons demo
+
+fn ping() -> Effect[()] {
+  Effect.pure(())
+}
+
+fn clear() -> Effect[()] {
+  do ping()
+}

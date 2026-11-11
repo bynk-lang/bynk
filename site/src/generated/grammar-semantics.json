@@ -1447,7 +1447,7 @@
   "record_type": [
     {
       "code": "bynk.resolve.duplicate_field",
-      "summary": "A record declares a field twice."
+      "summary": "A record, or one variant's payload, declares a field twice."
     },
     {
       "code": "bynk.resolve.recursive_record_field",

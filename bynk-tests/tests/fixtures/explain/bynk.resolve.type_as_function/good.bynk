@@ -1,0 +1,7 @@
+commons shop
+
+type Amount = Int where NonNegative
+
+fn price() -> Result[Amount, ValidationError] {
+  Amount.of(5)
+}

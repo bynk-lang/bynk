@@ -1,0 +1,10 @@
+context shop
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = Fixed {
+  fn now() -> Effect[Int] { Effect.pure(0) }
+  fn zone() -> Effect[String] { Effect.pure("UTC") }
+}

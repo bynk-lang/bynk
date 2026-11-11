@@ -1,0 +1,9 @@
+commons demo
+
+fn count() -> Effect[Int] {
+  Effect.pure(5)
+}
+
+fn run() -> Effect[()] {
+  do count()
+}

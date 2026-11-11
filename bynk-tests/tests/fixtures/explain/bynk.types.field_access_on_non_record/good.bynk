@@ -1,0 +1,5 @@
+commons demo
+
+fn size(name: String) -> Int {
+    name.length()
+}
