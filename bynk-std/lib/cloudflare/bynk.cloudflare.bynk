@@ -462,10 +462,7 @@ adapter bynk.cloudflare {
 	(the header is absent or reports none). The variants carry the `Dmarc`
 	prefix because a bare `None` would resolve to `Option`'s.
 	---
-	type DmarcVerdict =
-		| DmarcPass
-		| DmarcFail
-		| DmarcNone
+	type DmarcVerdict = enum { DmarcPass, DmarcFail, DmarcNone }
 
 	---
 	The identity of the `Sender` actor, the default actor of a `from email`

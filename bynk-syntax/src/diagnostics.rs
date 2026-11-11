@@ -459,14 +459,14 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.email.duplicate_address",
         blurb: "Inbound mail is dispatched to a service by its envelope recipient, so each address belongs to one service. Addresses compare without regard to case. A literal address and the catch-all `*@domain` for the same domain may both be claimed: the literal address wins, and the catch-all takes everything else. Merge the two handlers, or claim different addresses.",
-        example: "service support  from email(\"support@shop.example\") { … }\nservice helpdesk from email(\"Support@shop.example\") { … }   // ✗ the same address\n\nservice helpdesk from email(\"help@shop.example\") { … }      // ✓ its own address",
+        example: "service support from email(\"support@shop.example\") { … }\nservice helpdesk from email(\"Support@shop.example\") { … }   // ✗ the same address\n\nservice helpdesk from email(\"help@shop.example\") { … }   // ✓ its own address",
         page: "/book/reference/inbound-email",
         anchor: "addresses",
     },
     Explain {
         code: "bynk.email.duplicate_handler",
         blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
         page: "/book/reference/inbound-email",
         anchor: "handler-form",
     },
