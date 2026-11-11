@@ -321,7 +321,7 @@ There are **813** codes in total.
 | [`bynk.actor.bearer_missing_secret`](/book/reference/actors/#schemes) | A `Bearer` actor does not name its signing secret. |  | — |
 | [`bynk.actor.binder_shadows_param`](/book/reference/actors/#the-by-clause) | A `by` actor binder collides with a handler parameter of the same name. |  | — |
 | [`bynk.actor.by_on_agent`](/book/reference/actors/#the-by-clause) | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
-| `bynk.actor.duplicate_sum_scheme` | Two peers in a multi-actor sum share an authentication scheme. |  | — |
+| [`bynk.actor.duplicate_sum_scheme`](/book/reference/actors/#the-by-clause) | Two peers in a multi-actor sum share an authentication scheme. |  | — |
 | `bynk.actor.foreign_context_name_unkeyable` | A context declaring a `Foreign` actor has a name no call key can be named from. |  | — |
 | `bynk.actor.foreign_duplicate_secret` | A `Foreign` actor's secret is also another actor's secret in the same context. |  | — |
 | `bynk.actor.foreign_identity_unsupported` | A `Foreign` actor declares an `identity`. |  | — |
@@ -329,29 +329,29 @@ There are **813** codes in total.
 | `bynk.actor.foreign_name_is_context_name` | A `Foreign` actor's name could be read as a context's name. |  | — |
 | `bynk.actor.foreign_reserved_secret` | A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name. |  | — |
 | `bynk.actor.foreign_secret_not_string` | A `Foreign` actor's secret is not a string. |  | — |
-| `bynk.actor.identity_not_sealed` | An actor identity type is not a context-ownable (sealed) value type. |  | — |
+| [`bynk.actor.identity_not_sealed`](/book/reference/actors/#schemes) | An actor identity type is not a context-ownable (sealed) value type. |  | — |
 | [`bynk.actor.missing_by_on_http`](/book/reference/actors/#the-by-clause) | An HTTP handler lacks the required `by` actor clause. |  | — |
-| `bynk.actor.oidc_identity_not_string_constructible` | An `Oidc` actor's identity is not a string-constructible type. |  | — |
-| `bynk.actor.oidc_missing_audience` | An `Oidc` actor does not name its `audience`. |  | — |
-| `bynk.actor.oidc_missing_issuer` | An `Oidc` actor does not name its `issuer`. |  | — |
-| `bynk.actor.oidc_missing_jwks` | An `Oidc` actor does not name its `jwks` endpoint. |  | — |
-| `bynk.actor.oidc_not_in_sum` | An `Oidc` actor appears as a member of a multi-actor sum. |  | — |
+| [`bynk.actor.oidc_identity_not_string_constructible`](/book/reference/actors/#schemes) | An `Oidc` actor's identity is not a string-constructible type. |  | — |
+| [`bynk.actor.oidc_missing_audience`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `audience`. |  | — |
+| [`bynk.actor.oidc_missing_issuer`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `issuer`. |  | — |
+| [`bynk.actor.oidc_missing_jwks`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `jwks` endpoint. |  | — |
+| [`bynk.actor.oidc_not_in_sum`](/book/reference/actors/#the-by-clause) | An `Oidc` actor appears as a member of a multi-actor sum. |  | — |
 | `bynk.actor.oidc_trust_from_is_secret` | An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`. |  | — |
 | `bynk.actor.oidc_trust_from_not_string` | An `Oidc` actor's `trustFrom` isn't a string naming an environment variable. |  | — |
-| `bynk.actor.outside_context` | An `actor` was declared outside a context (e.g. in a commons). |  | — |
-| `bynk.actor.refinement_base_unsupported` | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
-| `bynk.actor.refinement_in_sum` | A refinement actor appears as a member of a multi-actor sum. |  | — |
-| `bynk.actor.refinement_predicate_unsupported` | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
+| [`bynk.actor.outside_context`](/book/reference/actors/#declaration) | An `actor` was declared outside a context (e.g. in a commons). |  | — |
+| [`bynk.actor.refinement_base_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
+| [`bynk.actor.refinement_in_sum`](/book/reference/actors/#the-by-clause) | A refinement actor appears as a member of a multi-actor sum. |  | — |
+| [`bynk.actor.refinement_predicate_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
 | [`bynk.actor.scheme_not_admissible`](/book/reference/actors/#schemes) | An actor's scheme is not admissible on this handler's protocol. |  | — |
 | `bynk.actor.signature_identity_unsupported` | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
-| `bynk.actor.signature_missing_header` | A `Signature` actor does not name its signature header. |  | — |
-| `bynk.actor.signature_missing_secret` | A `Signature` actor does not name its signing secret. |  | — |
-| `bynk.actor.signature_requires_body` | A `Signature` handler does not take a `body` parameter. |  | — |
-| `bynk.actor.signature_tolerance_without_timestamp` | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
+| [`bynk.actor.signature_missing_header`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signature header. |  | — |
+| [`bynk.actor.signature_missing_secret`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signing secret. |  | — |
+| [`bynk.actor.signature_requires_body`](/book/reference/actors/#schemes) | A `Signature` handler does not take a `body` parameter. |  | — |
+| [`bynk.actor.signature_tolerance_without_timestamp`](/book/reference/actors/#schemes) | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
 | [`bynk.actor.sum_requires_binder`](/book/reference/actors/#the-by-clause) | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
 | [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
 | [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |
-| `bynk.actor.unreachable_sum_arm` | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
+| [`bynk.actor.unreachable_sum_arm`](/book/reference/actors/#the-by-clause) | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
 | `bynk.adapter.consumes_context` | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.adapter.consumes_requires_selection` | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.adapter.disallowed_item`](/book/reference/adapters/#anatomy) | An `adapter` declared a `service`, `agent`, or other item it may not contain. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
@@ -381,7 +381,7 @@ There are **813** codes in total.
 | [`bynk.email.duplicate_handler`](/book/reference/inbound-email/#handler-form) | A `from email` service declares more than one `on message` handler; it has exactly one. |  | — |
 | [`bynk.email.invalid_address`](/book/reference/inbound-email/#addresses) | A `from email("…")` binding is not a recipient address a service can claim. |  | — |
 | [`bynk.email.return_not_email_verdict`](/book/reference/inbound-email/#the-verdict) | An email `on message` handler does not return `Effect[EmailVerdict]`. |  | — |
-| `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
+| [`bynk.event.bad_params`](/book/guides/events/understand-events/#the-envelope-and-idempotent-handling) | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
 | `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |
 | [`bynk.event.duplicate_handler`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events` service declares more than one `on event` handler; it has exactly one. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
@@ -391,13 +391,13 @@ There are **813** codes in total.
 | `bynk.event.non_additive_schema_change` | An event's field shape changed in a way the schema registry cannot evolve additively — a field was removed, retyped, added without a default, or lost a default it previously had. Give the new shape a new event type name, or make the change additive. |  | — |
 | [`bynk.event.outside_context`](/book/guides/events/understand-events/#the-three-pieces) | An `event` was declared outside a context. |  | — |
 | `bynk.event.pattern_duplicate_field` | A `from Events(E { ... })` subscription pattern listed the same field more than once. |  | — |
-| `bynk.event.pattern_type_mismatch` | A `from Events(E { ... })` subscription pattern field's matched value is not compatible with that field's declared type. |  | — |
-| `bynk.event.pattern_unknown_field` | A `from Events(E { ... })` subscription pattern named a field that `E` does not declare. |  | — |
-| `bynk.event.pattern_unknown_variant` | A `from Events(E { ... })` subscription pattern's variant value names a variant that does not exist on the field's declared sum type. |  | — |
-| `bynk.event.pattern_variant_payload` | A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload. |  | — |
+| [`bynk.event.pattern_type_mismatch`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern field's matched value is not compatible with that field's declared type. |  | — |
+| [`bynk.event.pattern_unknown_field`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern named a field that `E` does not declare. |  | — |
+| [`bynk.event.pattern_unknown_variant`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern's variant value names a variant that does not exist on the field's declared sum type. |  | — |
+| [`bynk.event.pattern_variant_payload`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload. |  | — |
 | [`bynk.event.return_not_effect_unit`](/book/guides/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit) | An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
 | `bynk.event.schema_version_mismatch` | An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history. |  | — |
-| `bynk.event.unknown_annotation` | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
+| [`bynk.event.unknown_annotation`](/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman) | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | [`bynk.event.unknown_subscription`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.exec.unavailable` | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |

@@ -1,0 +1,12 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor One { auth = Bearer(secret = "KEY_A"), identity = UserId }
+actor Two { auth = Bearer(secret = "KEY_B"), identity = UserId }
+
+service api from http {
+  on POST("/x") () -> Effect[HttpResult[String]] by who: One | Two {
+    Ok("x")
+  }
+}

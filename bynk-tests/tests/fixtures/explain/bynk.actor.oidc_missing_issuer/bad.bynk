@@ -1,0 +1,5 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor User { auth = Oidc(audience = "my-api", jwks = "https://issuer.example/jwks"), identity = UserId }
