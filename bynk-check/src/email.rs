@@ -127,19 +127,6 @@ pub fn check_email_services(table: &crate::symbols::UnitTable, errors: &mut Vec<
                 .with_label(messages[0].span, "the service's first `on message` handler"),
             );
         }
-        if messages.is_empty() {
-            errors.push(
-                CompileError::new(
-                    "bynk.email.missing_handler",
-                    service.name.span,
-                    format!(
-                        "the `from email` service `{}` has no `on message` handler — it needs exactly one",
-                        service.name.name
-                    ),
-                )
-                .with_note("write `on message(mail: InboundEmail) -> Effect[EmailVerdict] { … }`"),
-            );
-        }
         for handler in messages {
             validate_handler(handler, table, errors);
         }

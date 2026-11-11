@@ -106,9 +106,9 @@ not built yet. This record covers every decision, so slice 2 follows it.
   yet emitted for Workers (#3328 slice 2)") rather than half-working output.
   `bynk test` runs on the bundle target and is unaffected.
 
-**Consequences.** The set has seven members. The checker gains six codes
+**Consequences.** The set has seven members. The checker gains five codes
 (`bynk.email.invalid_address`, `duplicate_address`, `bad_params`,
-`return_not_email_verdict`, `duplicate_handler`, `missing_handler`) and the slice-1 refusal.
+`return_not_email_verdict`, `duplicate_handler`; an empty service is already `bynk.parse.empty_service`) and the slice-1 refusal.
 `bynk.cloudflare` exports six more types, so the golden type lists of the
 fixtures that consume it move. Editors: `email` completes after `from`,
 the verdict's names complete on `EmailVerdict.`, tree-sitter highlights `email`
