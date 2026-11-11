@@ -1,0 +1,1 @@
+bynk.email.return_not_email_verdict

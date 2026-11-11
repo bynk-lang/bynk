@@ -1434,7 +1434,7 @@ fn check_provider_agent_calls(
 /// `uses`/`consumes` targets, `typed.types`); `table.types` holds only this
 /// unit's own, so a check that fails closed on an unknown name must use the
 /// former, as the HTTP path-param rule does.
-fn check_service_protocols(
+pub(crate) fn check_service_protocols(
     table: &UnitTable,
     visible_types: &HashMap<String, Arc<TypeDecl>>,
     errors: &mut Vec<CompileError>,
@@ -1769,6 +1769,7 @@ fn check_service_protocols(
                     | (ServiceProtocol::Http, HandlerKind::Rejected)
                     | (ServiceProtocol::Cron, HandlerKind::Cron { .. })
                     | (ServiceProtocol::Queue { .. }, HandlerKind::Message)
+                    | (ServiceProtocol::Email { .. }, HandlerKind::Message)
                     // v0.103/v0.106: a `from websocket` admits `on open` (the
                     // upgrade), and the inbound/close lifecycle `on message`/`on
                     // close` (slice 3b-iii).
@@ -1776,8 +1777,7 @@ fn check_service_protocols(
                         ServiceProtocol::WebSocket { .. },
                         HandlerKind::Open | HandlerKind::Message | HandlerKind::Close
                     )
-                    // Events track, slice 0 (spine #936): `from Events(E)`
-                    // admits exactly `on event(e: E)`.
+                    // Events (#936): `from Events(E)` admits exactly `on event(e: E)`.
                     | (ServiceProtocol::Events { .. }, HandlerKind::Event)
             );
             if matches_protocol {
@@ -1931,6 +1931,7 @@ fn protocol_label(p: &ServiceProtocol) -> &'static str {
         ServiceProtocol::Queue { .. } => "from queue",
         ServiceProtocol::WebSocket { .. } => "from websocket",
         ServiceProtocol::Events { .. } => "from Events",
+        ServiceProtocol::Email { .. } => "from email",
     }
 }
 
@@ -2812,7 +2813,7 @@ fn check_service_decls(
 ) {
     // v0.44: a service is one protocol adapter — every handler's form must
     // match the service's `from <protocol>` header.
-    check_service_protocols(table, &typed.types, errors, tys);
+    crate::email::check_service_protocols_and_email(table, &typed.types, errors, tys);
 
     // v0.45: actor-contract well-formedness and the handler `by`-clause checks.
     check_actor_contracts(table, resolved, refs, errors);
@@ -3235,6 +3236,9 @@ fn actor_identity_ty_guarded<'a>(
         Some(Identity::CallerId) => {
             tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String))
         }
+        // #3328: `Sender`'s `SenderIdentity` is minted by the Workers `email()`
+        // entry (slice 2); until then it reads as the unit value, like the
+        // other platform-tag actors.
         _ => tys.intern(checker::Ty::Unit),
     }
 }

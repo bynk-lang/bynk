@@ -171,6 +171,16 @@ queue handler returns `Effect[QueueResult]`; the runtime routes `Ack` →
 |---|---|
 | `QueueResult` | the verdict type and its `Ack` / `Retry(reason)` constructor namespace |
 
+`EmailVerdict` (#3328) is the verdict of the email protocol, by the same agency
+rule, but declared in `bynk.cloudflare` as an ordinary sum rather than built in:
+`Accept`, `Reject(reason: String)`, `Forward(to: String)` and `Reply(message:
+EmailReply)`. It travels with `InboundEmail` (the message, whose `from` is a
+claim), `EmailReply` (the content of a reply; the runtime fills in `From`, `To`
+and the threading headers), `InboundAttachment`, `DmarcVerdict` (`DmarcPass`,
+`DmarcFail`, `DmarcNone`) and `SenderIdentity` (`address` and `dmarc`, the
+identity of the `Sender` actor). The Worker mapping that produces and acts on
+them is a later slice.
+
 ## §7.4.3a Composite keys
 
 *(constrained-generics slice 2, #2684)* A value `Map` or `Set` whose key type is a
