@@ -1,0 +1,9 @@
+context demo.desk
+
+fn double(n: Int) -> Int { n * 2 }
+
+type Count = Int where NonNegative
+
+service local {
+  on call(n: Int) -> Effect[Int] { n + 1 }
+}

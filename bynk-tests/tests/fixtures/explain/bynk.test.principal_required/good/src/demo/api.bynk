@@ -1,0 +1,11 @@
+context demo.api
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "S"), identity = UserId }
+type Title = String where NonEmpty
+
+service api from http {
+  on GET("/items") () -> Effect[HttpResult[Title]] by u: User {
+    Ok("x")
+  }
+}

@@ -1,0 +1,7 @@
+commons demo.c
+
+fn inc(x: Int) -> Int
+  ensures bigger: result > x
+{
+  x + 1
+}

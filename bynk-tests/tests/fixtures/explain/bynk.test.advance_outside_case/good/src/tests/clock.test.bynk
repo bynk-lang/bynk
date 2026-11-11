@@ -1,0 +1,6 @@
+suite demo.clock {
+  case "time moves on" {
+    advance Clock by 5.minutes
+    expect 1 == 1
+  }
+}

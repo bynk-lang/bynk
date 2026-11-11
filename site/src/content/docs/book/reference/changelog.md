@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.555.1** | `bynk explain` explains twenty more codes under `contract`, `fixture`, `observe`, `property`, `stub`, `suite` and `test` (Refs #3163) |
 | **v0.555.0** | `Form.decode[T](s)` and `Form.encode(v)` expose the `@form` mapping as a codec, so a `@raw` handler, a webhook or a test reads and writes form text with `DecodeError`s rooted at `$` (#3276, slice 3; closes #3276) |
 | **v0.554.2** | `bynk explain` covers twenty more codes under the resolve, uses, exports and generics prefixes |
 | **v0.554.1** | `bynk explain` covers 26 more `parse` and `lex` diagnostics, each with a compiled bad and good example |
