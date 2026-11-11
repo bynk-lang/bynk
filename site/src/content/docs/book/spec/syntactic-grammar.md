@@ -559,7 +559,7 @@ use. Well-formedness: §5.
 
 A `service` groups the handlers that respond to calls and external triggers.
 
-### §4.4.1 service_decl
+### §4.4.1 service_decl {#441-service_decl}
 
 {{#grammar service_decl}}
 
@@ -1040,7 +1040,7 @@ arrow, shared with `match` arms — `->` stays the type arrow. Well-formedness
 (contextual parameter typing, the unannotated rule, bottom-up effectfulness):
 §5.
 
-### §4.6.9b lambda_param
+### §4.6.9b lambda_param {#469b-lambda_param}
 
 {{#grammar lambda_param}}
 
@@ -1126,7 +1126,7 @@ An expression followed by `?`. Well-formedness: §5.
 
 `None` — the absent constructor of `Option`.
 
-### §4.6.19 effect_pure_expr
+### §4.6.19 effect_pure_expr {#4619-effect_pure_expr}
 
 {{#grammar effect_pure_expr}}
 
@@ -1262,7 +1262,7 @@ same names at the same types, against one value type, is well-formedness:
 A pattern in parentheses: transparent grouping, most useful around an
 or-pattern. It never admits a refined pattern inside.
 
-### §4.7.10 refined_pattern
+### §4.7.10 refined_pattern {#4710-refined_pattern}
 
 {{#grammar refined_pattern}}
 
@@ -1392,7 +1392,7 @@ Well-formedness: §5.
 `let`, a binding name, an optional type annotation, `<-`, and an effect
 expression. Well-formedness: §5.
 
-### §4.8.4a let_else_stmt (#2010)
+### §4.8.4a let_else_stmt (#2010) {#484a-let_else_stmt-2010}
 
 {{#grammar let_else_stmt}}
 

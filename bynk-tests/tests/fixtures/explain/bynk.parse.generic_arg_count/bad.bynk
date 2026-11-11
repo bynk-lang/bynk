@@ -1,0 +1,5 @@
+commons demo
+
+fn parse(s: String) -> Result[Int] {
+    Ok(1)
+}

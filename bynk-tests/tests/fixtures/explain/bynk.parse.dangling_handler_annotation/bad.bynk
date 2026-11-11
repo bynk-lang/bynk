@@ -1,0 +1,11 @@
+context shop
+
+type Row = { id: String }
+
+service api from http {
+    on GET("/rows") () -> Effect[HttpResult[List[Row]]] by v: Visitor {
+        Ok([])
+    }
+
+    @cache(maxAge: 5.minutes)
+}

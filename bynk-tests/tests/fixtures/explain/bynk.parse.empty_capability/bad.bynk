@@ -1,0 +1,4 @@
+context shop
+
+capability Clock {
+}

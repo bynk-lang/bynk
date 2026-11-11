@@ -1,0 +1,6 @@
+context shop
+
+agent Tally {
+    key id: String
+    store count: Cell[Int]
+}
