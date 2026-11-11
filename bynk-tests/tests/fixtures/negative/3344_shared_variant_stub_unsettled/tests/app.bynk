@@ -1,0 +1,10 @@
+suite app
+
+// #3344: `audit` fails with a `String`, so its type settles neither sum that
+// declares `Failed`. The value is reported as ambiguous, not folded into
+// `bynk.stub.rhs_type`.
+case "a stub value the operation does not settle" {
+  stub Mailer.audit(_) returns Err(Failed("down"))
+  let r <- go.call("a")
+  expect r is Err(_)
+}

@@ -1341,6 +1341,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.ambiguous_variant",
+        blurb: "A bare variant name such as `Failed(\"down\")` builds a value of the sum that declares it. When two sums in scope declare the name (two of your own, or two that a consumed unit exports, like an adapter's error enums), the compiler reads the expected type: an annotated `let`, a parameter, a return type, or a `stub`'s operation. It builds the sum that type names. With nothing expecting either sum it cannot know which you meant, and it never picks one, so the name is refused. Qualify it as `TypeName.Variant`, or give the value a type. A `match` arm needs neither, because it reads its scrutinee's sum.",
+        example: "type DbError = | Constraint(message: String) | Failed(message: String)\n\
+                  type MailError = | RateLimited | Failed(message: String)\n\n\
+                  let e = Failed(\"down\")       // ✗ `DbError` or `MailError`?\n\n\
+                  fn mail() -> Result[Int, MailError] {\n\
+                  \x20   Err(Failed(\"down\"))          // ✓ the return type picks `MailError`\n\
+                  }\n\n\
+                  DbError.Failed(\"down\")       // ✓ qualified",
+        page: "/book/reference/types",
+        anchor: "shared-variant-names",
+    },
+    Explain {
         code: "bynk.resolve.arity_mismatch",
         blurb: "A call to a declared `fn` must pass exactly as many arguments as it has parameters. Bynk has no optional or variadic parameters and fills nothing in, so a missing or extra argument is always a mistake, and the compiler cannot tell which one was meant. Add or remove the argument, or change the declaration. The error points at the call and labels the declaration. A call through a function value or a built-in operation is `bynk.types.call_arity`, and a method is `bynk.types.method_arity`.",
         example: "fn double(x: Int) -> Int {\n    x * 2\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a, b)             // ✗ `double` takes one argument\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a) + double(b)    // ✓ one argument each call\n}",
@@ -4447,7 +4460,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.resolve.ambiguous_variant",
-        "A variant name is ambiguous across several sum types.",
+        "A bare variant name is declared by several sum types in scope, and no expected type picks one.",
     ),
     dg(
         "bynk.resolve.arity_mismatch",

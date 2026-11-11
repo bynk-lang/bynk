@@ -1,0 +1,51 @@
+context app
+
+// #3344: a bare `Failed` builds the sum the expected type names: a return
+// type, an annotated `let`, a parameter, and (in the suite) a `stub`'s
+// operation. A `match` arm reads its scrutinee's sum.
+
+consumes mail { Mailer, MailError, DbError }
+
+fn mailFailure() -> Result[Int, MailError] {
+  Err(Failed("mail"))
+}
+
+fn dbFailure() -> DbError {
+  let e: DbError = Failed("db")
+  e
+}
+
+fn describe(e: MailError) -> String {
+  match e {
+    Failed(m) => "mail: \(m)"
+    RateLimited => "slow down"
+  }
+}
+
+fn describeDb(e: DbError) -> String {
+  match e {
+    Failed(m) => "db: \(m)"
+    Constraint(m) => "constraint: \(m)"
+  }
+}
+
+service go {
+  on call(to: String) -> Effect[String] given Mailer {
+    let r <- Mailer.send(to)
+    match r {
+      Ok(id) => id
+      Err(e) => describe(e)
+    }
+  }
+}
+
+service local {
+  on call() -> Effect[String] {
+    let m = match mailFailure() {
+      Ok(_) => "none"
+      Err(e) => describe(e)
+    }
+    let viaParam = describe(Failed("arg"))
+    "\(m) / \(describeDb(dbFailure())) / \(viaParam)"
+  }
+}

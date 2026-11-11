@@ -1,0 +1,12 @@
+context app
+
+// #3344: two sums the consumed adapter exports declare `Failed`, and nothing
+// here expects either, so the bare name is ambiguous; the compiler never
+// picks one of them silently.
+
+consumes mail { Mailer, MailError, DbError }
+
+fn n() -> Int {
+  let x = Failed("x")
+  1
+}

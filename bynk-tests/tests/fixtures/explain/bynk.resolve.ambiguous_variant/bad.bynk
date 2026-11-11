@@ -1,0 +1,9 @@
+commons demo
+
+type DbError = | Constraint(message: String) | Failed(message: String)
+type MailError = | RateLimited | Failed(message: String)
+
+fn oops() -> Int {
+    let e = Failed("down")
+    1
+}

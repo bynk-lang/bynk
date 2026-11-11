@@ -301,34 +301,32 @@ pub(crate) fn check_ident(
         return None;
     }
     // Bare variant of a unique-owner sum type (nullary variants).
-    let owners: Vec<&TypeDecl> = ctx
+    let owners: Vec<&std::sync::Arc<TypeDecl>> = ctx
         .input
         .types
         .values()
-        .map(std::sync::Arc::as_ref)
         .filter(|t| matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == id.name)))
         .collect();
-    if owners.len() == 1 {
-        let owner = owners[0];
-        if let TypeBody::Sum(s) = &owner.body
-            && let Some(variant) = s.variants.iter().find(|v| v.name.name == id.name)
-        {
-            if !variant.payload.is_empty() {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.types.variant_missing_payload",
-                        id.span,
-                        format!(
-                            "variant `{}` of `{}` has a payload — call it with arguments: `{}(...)`",
-                            id.name, owner.name.name, id.name
-                        ),
-                    )
-                    .with_label(variant.span, "variant declared here"),
-                );
-                return None;
-            }
-            return nullary_variant_ty(owner, id.name.as_str(), id.span, expected, ctx);
+    // #3344: several sums in scope share the name; the expected type picks one.
+    if let Some(owner) = variant_owner(&owners, expected, ctx.tys).map(|o| o.as_ref())
+        && let TypeBody::Sum(s) = &owner.body
+        && let Some(variant) = s.variants.iter().find(|v| v.name.name == id.name)
+    {
+        if !variant.payload.is_empty() {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.variant_missing_payload",
+                    id.span,
+                    format!(
+                        "variant `{}` of `{}` has a payload — call it with arguments: `{}(...)`",
+                        id.name, owner.name.name, id.name
+                    ),
+                )
+                .with_label(variant.span, "variant declared here"),
+            );
+            return None;
         }
+        return nullary_variant_ty(owner, id.name.as_str(), id.span, expected, ctx);
     }
     // Nothing owns the name. The resolver's reference walk reports these in
     // `fn`/method bodies, but handler/service/agent bodies and test bodies
@@ -342,14 +340,8 @@ pub(crate) fn check_ident(
     // its uses absorb, so the exemption only hid real unknown names — which
     // then reached test-module emission as `Ty::Error` and panicked.
     if owners.len() > 1 {
-        ctx.errors.push(CompileError::new(
-            "bynk.resolve.ambiguous_variant",
-            id.span,
-            format!(
-                "the variant name `{}` is declared on multiple sum types — qualify it as `TypeName.{}`",
-                id.name, id.name
-            ),
-        ));
+        ctx.errors
+            .push(ambiguous_variant_error(&id.name, id.span, &owners, false));
         return None;
     }
     // #1925: the local declaration of another kind (a type, event, service,
@@ -1868,6 +1860,70 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
 /// carries no arguments to infer from, so the binding's expected type is the
 /// only ground — `let o: Opt[Int] = Nil`. With no such expectation the type
 /// arguments are uninferable.
+/// #3344: the sum a bare variant name builds. One sum in scope declaring the
+/// name is it; when several do (two enums of one consumed unit sharing
+/// `Failed`, say), the expected type picks the one it names, so
+/// `let e: MailError = Failed("x")`, `Err(Failed("x"))` in a body returning
+/// `Result[_, MailError]`, and a `stub`'s value for an operation returning
+/// one all build `MailError.Failed`. With no deciding expected type there is
+/// no owner, and the caller reports [`ambiguous_variant_error`]: a shared
+/// name is never resolved by picking one of its owners.
+pub(crate) fn variant_owner<'a, D: AsRef<TypeDecl>>(
+    owners: &[&'a D],
+    expected: Option<TyId>,
+    tys: &Types,
+) -> Option<&'a D> {
+    if let [only] = owners {
+        return Some(only);
+    }
+    let exp = expected?;
+    let Ty::Named { name, .. } = &*tys.get(exp) else {
+        return None;
+    };
+    owners
+        .iter()
+        .copied()
+        .find(|o| (*o).as_ref().name.name == *name)
+}
+
+/// `bynk.resolve.ambiguous_variant`: a bare variant name several sums in scope
+/// declare, with no expected type to pick one (#1662, #3344). Names every
+/// owner, sorted, so the suggested qualification can be copied.
+pub(crate) fn ambiguous_variant_error<D: AsRef<TypeDecl>>(
+    variant: &str,
+    span: Span,
+    owners: &[&D],
+    called: bool,
+) -> CompileError {
+    let mut names: Vec<&str> = owners
+        .iter()
+        .map(|o| (*o).as_ref().name.name.as_str())
+        .collect();
+    names.sort_unstable();
+    let args = if called { "(...)" } else { "" };
+    let forms = names
+        .iter()
+        .map(|n| format!("`{n}.{variant}{args}`"))
+        .collect::<Vec<_>>()
+        .join(" or ");
+    CompileError::new(
+        "bynk.resolve.ambiguous_variant",
+        span,
+        format!(
+            "the variant name `{variant}` is declared on multiple sum types ({}) — qualify it as {forms}",
+            names
+                .iter()
+                .map(|n| format!("`{n}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    )
+    .with_note(
+        "nothing here expects one of these types; an annotated `let`, a parameter, a \
+         return type, a `match` scrutinee or a `stub`'s operation would pick the sum",
+    )
+}
+
 pub(crate) fn nullary_variant_ty(
     owner: &TypeDecl,
     variant_name: &str,

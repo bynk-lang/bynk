@@ -1,0 +1,12 @@
+commons demo
+
+type DbError = | Constraint(message: String) | Failed(message: String)
+type MailError = | RateLimited | Failed(message: String)
+
+fn mail() -> Result[Int, MailError] {
+    Err(Failed("down"))
+}
+
+fn db() -> DbError {
+    DbError.Failed("down")
+}
