@@ -1,0 +1,5 @@
+commons shop
+
+fn apply(n: Int) -> Int {
+  n(5)
+}

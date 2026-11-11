@@ -1,0 +1,9 @@
+context shop
+
+consumes pay
+
+service checkout {
+  on call() -> Effect[Int] {
+    pay.charge(1)
+  }
+}

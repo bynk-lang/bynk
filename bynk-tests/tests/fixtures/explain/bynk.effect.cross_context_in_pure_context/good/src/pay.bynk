@@ -1,0 +1,7 @@
+context pay
+
+service charge {
+  on call(amount: Int) -> Effect[Int] {
+    Effect.pure(amount)
+  }
+}

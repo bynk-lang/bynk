@@ -1,0 +1,7 @@
+commons shop
+
+type Box[T] = { value: T }
+
+fn open(b: Box[Int]) -> Int {
+  0
+}
