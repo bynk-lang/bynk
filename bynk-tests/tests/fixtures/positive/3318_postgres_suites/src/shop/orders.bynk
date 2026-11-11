@@ -1,0 +1,42 @@
+context shop.orders
+
+// Hyperdrive H1 (#3318, DECISION A): a `Postgres` instance has no test double
+// of its own. A test never reaches a database, so every operation faults until
+// the case stubs it, as a `Service` does. `PgError` is a value a handler
+// answers, so a stub can force each variant.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgValue, PgRun }
+
+capability Main = Postgres
+
+service add {
+	on call(name: String) -> Effect[Result[PgRun, PgError]] given Main {
+		Main.run("insert into orders (name) values ($1)", [PgText(name)])
+	}
+
+}
+
+service list {
+	on call() -> Effect[Result[String, PgError]] given Main {
+		Main.all("select id, name from orders where id > $1", [PgInteger(0)])
+	}
+
+}
+
+service find {
+	on call(id: Int) -> Effect[Result[Option[String], PgError]] given Main {
+		Main.first("select name from orders where id = $1", [PgInteger(id)])
+	}
+}
+
+service api from http {
+	on POST("/orders") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("insert into orders (name) values ($1)", [PgText("x")])
+		match ran {
+			Ok(r) => Ok("inserted")
+			Err(PgConstraint(_, _)) => Ok("duplicate")
+			Err(_) => Ok("failed")
+		}
+	}
+}

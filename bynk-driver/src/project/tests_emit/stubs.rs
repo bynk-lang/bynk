@@ -1357,6 +1357,23 @@ pub(super) fn platform_double(
         // and a message gets a deterministic id. `stub Mail.send(_) returns
         // Err(…)` forces an `EmailError`.
         ("bynk.cloudflare", "Email") => "  return new bynk_cloudflare__binding.WorkersEmail({ EMAIL: __makeIntegrationEmail() }, \"EMAIL\");\n".to_string(),
+        // Hyperdrive H1 (#3318, DECISION A): a test never reaches Postgres, so
+        // each instance faults until its operation is stubbed, as `Service`
+        // does. The message names the instance and never a connection string:
+        // there is none to name.
+        ("bynk.cloudflare", "Postgres") => {
+            let op = |op: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches Postgres — add `stub {name}.{op}(_, _) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}  }};\n",
+                op("all"),
+                op("first"),
+                op("run")
+            )
+        }
         // #3300: a fixed version (id `"test"`, no tag, created at the
         // epoch), so a case's result never depends on the deployment;
         // `stub Version.current() returns …` gives another.

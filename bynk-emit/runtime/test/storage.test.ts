@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret } from "../src/storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -273,4 +273,11 @@ test("makeIntegrationEmail keeps every builder in order and numbers its ids", as
   const second = await mail.send({ from: "a@x.example", to: ["c@y.example"], subject: "two" });
   assert.deepEqual([first.messageId, second.messageId], ["test-message-1", "test-message-2"]);
   assert.deepEqual(mail.sent.map((b) => b.subject), ["one", "two"]);
+});
+
+// #3318: a test never reaches Postgres, so reading the connection string
+// faults, naming the binding, until a case stubs the instance.
+test("makeIntegrationHyperdrive faults on the connection string, naming the binding", () => {
+  const h = makeIntegrationHyperdrive("HYPERDRIVE_MAIN");
+  assert.throws(() => h.connectionString, /HYPERDRIVE_MAIN.*stub/);
 });

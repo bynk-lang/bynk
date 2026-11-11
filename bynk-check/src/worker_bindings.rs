@@ -130,6 +130,11 @@ pub enum BindingSource {
         allowed_recipients: Vec<String>,
         allowed_senders: Vec<String>,
     },
+    /// Hyperdrive H1 (#3318): the `[[hyperdrive]]` binding of a `Postgres`
+    /// instance (`capability Main = Postgres`). Its `id` is a placeholder until
+    /// the Hyperdrive configuration exists (created by hand until H2). Never
+    /// seen by handlers: they reach it through the instance's `WorkersPostgres`.
+    Postgres { capability: String },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -182,6 +187,9 @@ impl BindingSource {
             ),
             Self::Email { capability, .. } => {
                 format!("the `[[send_email]]` binding of derived capability `{capability}`")
+            }
+            Self::Postgres { capability } => {
+                format!("the `[[hyperdrive]]` binding of derived capability `{capability}`")
             }
             Self::Singleton { capability } => format!(
                 "the `{capability}` binding of `{}`",
@@ -311,6 +319,7 @@ fn declared_at(
             | BindingSource::AnalyticsDataset { capability }
             | BindingSource::StoredSecret { capability, .. }
             | BindingSource::Email { capability, .. }
+            | BindingSource::Postgres { capability }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;

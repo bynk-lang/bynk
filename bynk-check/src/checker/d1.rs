@@ -252,16 +252,22 @@ pub(crate) fn sql_literal_text(e: &Expr, ctx: &Ctx) -> Option<String> {
 }
 
 fn sql_not_literal(span: Span, what: &str) -> CompileError {
+    sql_not_literal_with(span, what, "`?1`, `?2`")
+}
+
+/// [`sql_not_literal`], naming the placeholders of the dialect the call is in
+/// (`$1`, `$2` for `Postgres`, #3318).
+fn sql_not_literal_with(span: Span, what: &str, placeholders: &str) -> CompileError {
     CompileError::new(
         "bynk.types.sql_not_literal",
         span,
         format!("{what} must be a string literal or a `String` constant bound to one"),
     )
-    .with_note(
-        "pass values as `?1`, `?2`, … parameters in `params`, which are bound, never \
+    .with_note(format!(
+        "pass values as {placeholders}, … parameters in `params`, which are bound, never \
          spliced into the text; SQL built at run time could be injected. A `const` \
-         `String` bound to a literal is accepted, since its value is fixed at compile time",
-    )
+         `String` bound to a literal is accepted, since its value is fixed at compile time"
+    ))
 }
 
 /// A call to a derived instance of `D1`: its SQL argument must be a literal.
@@ -277,7 +283,25 @@ pub(crate) fn check_sql_argument(
     let Some((unit, base)) = derived_from else {
         return;
     };
-    if unit != crate::firstparty::CLOUDFLARE_UNIT || base != "D1" {
+    if unit != crate::firstparty::CLOUDFLARE_UNIT {
+        return;
+    }
+    // Hyperdrive H1 (#3318, ADR 0666 B): a `Postgres` statement's SQL is a
+    // literal too. It is not recorded as a site: the schema a site is prepared
+    // against is a D1 migration's SQLite, which says nothing of Postgres.
+    if base == "Postgres" && SQL_TEXT_OPS.contains(&method) {
+        if let Some(sql) = args.first()
+            && sql_literal_text(sql, ctx).is_none()
+        {
+            ctx.errors.push(sql_not_literal_with(
+                sql.span,
+                &format!("the SQL of `{cap}.{method}`"),
+                "`$1`, `$2`",
+            ));
+        }
+        return;
+    }
+    if base != "D1" {
         return;
     }
     if method == "batch" {

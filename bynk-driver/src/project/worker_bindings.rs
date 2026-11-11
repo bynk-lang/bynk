@@ -229,6 +229,7 @@ pub(super) fn context_bindings(
                     store: d.store().unwrap_or_default().to_string(),
                     secret: d.stored_secret().unwrap_or_default().to_string(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "Postgres") => BindingSource::Postgres { capability },
                 (firstparty::CLOUDFLARE_UNIT, "Email") => BindingSource::Email {
                     capability,
                     to: d.email_to().map(str::to_string),

@@ -10,7 +10,9 @@
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
-// `WorkersEmail` (#3302) against a `send_email` binding fake.
+// `WorkersEmail` (#3302) against a `send_email` binding fake, and
+// `WorkersPostgres` (Hyperdrive H1, #3318) against a driver-executor fake (the
+// driver seam itself, with the `prepare: true` guard, is tested in the runtime).
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -22,7 +24,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1504,4 +1506,93 @@ t("WorkersEmail.send: a fault never carries the message body or an attachment's 
   }
   assert.ok(seen.length > 0);
   assert.ok(!seen.includes(secretBody) && !seen.includes("TOP-SECRET-FILE") && !seen.includes(Buffer.from(secretFile).toString("base64")), seen);
+});
+
+// Hyperdrive H1 (#3318): `WorkersPostgres`, against a fake of the executor a
+// Worker's compose hands it (the runtime's `pgExecute`) and a fake of the
+// Hyperdrive binding. The binding itself never touches the driver.
+const SECRET_URL = "postgres://app:s3cr3t@db.internal.example:5432/shop";
+
+function pgEnv(answer) {
+  const calls = [];
+  const execute = async (connectionString, sql, params) => {
+    calls.push({ connectionString, sql, params });
+    return answer(sql, params);
+  };
+  return { env: { HYPERDRIVE_MAIN: { connectionString: SECRET_URL } }, execute, calls };
+}
+
+const pgOk = (rows, rowCount = rows.length) => ({ ok: true, rows, rowCount });
+const pgFail = (kind, sqlstate, message) => ({ ok: false, failure: { kind, sqlstate, message } });
+
+t("WorkersPostgres.all: gives every row as JSON text, reading the connection string from the binding", async () => {
+  const { env, execute, calls } = pgEnv(() => pgOk([{ id: "9007199254740993", name: "a" }, { id: "2", name: "b" }]));
+  const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).all("select id, name from t where id > $1", [{ tag: "PgInteger", value: 0 }]);
+  assert.equal(r.tag, "Ok");
+  assert.deepEqual(JSON.parse(r.value), [{ id: "9007199254740993", name: "a" }, { id: "2", name: "b" }]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].connectionString, SECRET_URL);
+  assert.equal(calls[0].sql, "select id, name from t where id > $1");
+  assert.deepEqual(calls[0].params, [{ tag: "PgInteger", value: 0 }]);
+});
+
+t("WorkersPostgres.first: the first row, or None when there is none", async () => {
+  const some = pgEnv(() => pgOk([{ n: 1 }, { n: 2 }]));
+  const a = await new WorkersPostgres(some.env, "HYPERDRIVE_MAIN", some.execute).first("select n from t", []);
+  assert.equal(a.tag, "Ok");
+  assert.equal(a.value.tag, "Some");
+  assert.deepEqual(JSON.parse(a.value.value), { n: 1 });
+  const none = pgEnv(() => pgOk([]));
+  const b = await new WorkersPostgres(none.env, "HYPERDRIVE_MAIN", none.execute).first("select n from t", []);
+  assert.deepEqual([b.tag, b.value.tag], ["Ok", "None"]);
+});
+
+t("WorkersPostgres.run: reports the row count", async () => {
+  const { env, execute } = pgEnv(() => pgOk([], 3));
+  const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).run("delete from t", []);
+  assert.deepEqual([r.tag, r.value], ["Ok", { rowCount: 3 }]);
+});
+
+t("WorkersPostgres: each failure kind is its PgError variant, carrying the SQLSTATE where there is one", async () => {
+  const cases = [
+    [pgFail("constraint", "23505", "duplicate key"), { tag: "PgConstraint", sqlstate: "23505", message: "duplicate key" }],
+    [pgFail("serialization", "40001", "could not serialize"), { tag: "PgSerialization", message: "could not serialize" }],
+    [pgFail("connection", "", "could not reach the database (CONNECTION_CLOSED)"), { tag: "PgConnection", message: "could not reach the database (CONNECTION_CLOSED)" }],
+    [pgFail("failed", "42P01", "no such table"), { tag: "PgFailed", sqlstate: "42P01", message: "no such table" }],
+  ];
+  for (const [answer, error] of cases) {
+    const { env, execute } = pgEnv(() => answer);
+    const pg = new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute);
+    for (const r of [await pg.all("x", []), await pg.first("x", []), await pg.run("x", [])]) {
+      assert.equal(r.tag, "Err");
+      assert.deepEqual(r.error, error);
+    }
+  }
+});
+
+t("WorkersPostgres: a missing binding or driver faults, naming the binding and never a value", async () => {
+  const noBinding = new WorkersPostgres({}, "HYPERDRIVE_MAIN", async () => pgOk([]));
+  await assert.rejects(() => noBinding.all("x", []), /requires a Hyperdrive binding \(env\.HYPERDRIVE_MAIN\)/);
+  const emptyString = new WorkersPostgres({ HYPERDRIVE_MAIN: { connectionString: "" } }, "HYPERDRIVE_MAIN", async () => pgOk([]));
+  await assert.rejects(() => emptyString.run("x", []), /requires a Hyperdrive binding/);
+  const noDriver = new WorkersPostgres({ HYPERDRIVE_MAIN: { connectionString: SECRET_URL } }, "HYPERDRIVE_MAIN");
+  let seen = "";
+  try {
+    await noDriver.first("x", []);
+  } catch (e) {
+    seen = e.message;
+  }
+  assert.match(seen, /needs the Postgres driver/);
+  assert.ok(!seen.includes("s3cr3t") && !seen.includes(SECRET_URL), seen);
+});
+
+t("WorkersPostgres: an integration binding's faulting connection string surfaces as a fault", async () => {
+  const env = { HYPERDRIVE_MAIN: { get connectionString() { throw new Error("bynk: Hyperdrive binding `HYPERDRIVE_MAIN` has no database in a test"); } } };
+  await assert.rejects(() => new WorkersPostgres(env, "HYPERDRIVE_MAIN", async () => pgOk([])).all("x", []), /no database in a test/);
+});
+
+t("WorkersPostgres: the connection string reaches the executor and nothing else", async () => {
+  const { env, execute } = pgEnv(() => pgFail("failed", "28P01", "password authentication failed for user app"));
+  const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).run("x", []);
+  assert.ok(!JSON.stringify(r).includes("s3cr3t") && !JSON.stringify(r).includes(SECRET_URL));
 });

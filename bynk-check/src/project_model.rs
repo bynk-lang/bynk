@@ -1099,6 +1099,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "D1" => "Orders",
         "StoredSecret" => "StripeKey",
         "Email" => "Mail",
+        "Postgres" => "Main",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);

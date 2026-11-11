@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres }
+
+capability Main = Postgres
+
+service probe {
+  on call() -> Effect[Int] given Main {
+    Effect.pure(0)
+  }
+}
