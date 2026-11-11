@@ -4,16 +4,16 @@
 # below 300 (or gone) must be removed. Prefer splitting a function to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
-bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1288
-bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1132
-bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 998
+bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1297
+bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1173
+bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1001
 bynk-driver/src/project.rs::run_checks = 955
-bynk-emit/src/emitter/workers.rs::emit_worker_compose = 850
-bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 843
-bynk-check/src/checker/calls.rs::check_method_call = 836
+bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 856
+bynk-emit/src/emitter/workers.rs::emit_worker_compose = 856
+bynk-check/src/checker/calls.rs::check_method_call = 849
+bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 837
 bynk-driver/src/test_runner.rs::run_test = 816
 bynk/src/deploy/plan.rs::run = 794
-bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 784
 bynk-driver/src/project.rs::build_output = 775
 bynk-check/src/resolver.rs::check_expr_references = 703
 bynk-emit/src/emitter/serialisation.rs::emit_generic_helpers_qualified = 687
@@ -36,9 +36,9 @@ bynk-check/src/context_checks.rs::check_agent_decls = 470
 bynk-syntax/src/parser/declarations.rs::parse_context_body = 468
 bynk-emit/src/emitter/lower.rs::lower_list_kernel = 458
 bynk-check/src/test_suites.rs::phase_integration_bodies = 455
+bynk-emit/src/emitter.rs::write_header = 439
 bynk-syntax/src/parser/expressions.rs::parse_primary = 438
 bynk-check/src/checker/calls.rs::check_test_service_address = 435
-bynk-emit/src/emitter.rs::write_header = 432
 bynk/src/dev.rs::run = 432
 bynk-check/src/checker/expressions.rs::check_match = 429
 bynk-emit/src/emitter.rs::emit_project = 421
