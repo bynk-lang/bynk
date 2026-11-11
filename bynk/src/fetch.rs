@@ -715,24 +715,34 @@ fn npm_requirements(dirs: &BTreeMap<String, PathBuf>, members: &[PathBuf]) -> Ve
 
 /// ADR 0799 C: the toolchain's own npm dependencies a project uses, one
 /// `first-party` row each, required by `bynk-std`: those whose binding the
-/// project's own sources use ([`bynk_check::firstparty::FirstPartyNpm::source_marker`]).
+/// project's own contexts reach ([`bynk_check::firstparty::FirstPartyNpm::reached_by`]).
 /// They never need approval. Like an adapter's, a row records what *could* enter
 /// a build.
 fn first_party_rows(members: &[PathBuf]) -> Vec<LockedNpm> {
-    let mut sources = String::new();
+    let mut units = Vec::new();
     for member in members {
         let Some(doc) = read_manifest(member) else {
             continue;
         };
         for root in bynk_project::packages::package_source_roots(member, &doc) {
             for file in bynk_project::discover_bynk_files(&root, &[]).unwrap_or_default() {
-                sources.push_str(&std::fs::read_to_string(file).unwrap_or_default());
+                let text = std::fs::read_to_string(file).unwrap_or_default();
+                // A file that does not parse reaches nothing; the build reports it.
+                if let Ok(tokens) = bynk_syntax::lexer::tokenize(&text)
+                    && let Ok(unit) = bynk_syntax::parser::parse_unit(&tokens, &text)
+                {
+                    units.push(unit);
+                }
             }
         }
     }
     bynk_check::firstparty::FIRST_PARTY_NPM
         .iter()
-        .filter(|d| sources.contains(d.source_marker))
+        .filter(|d| {
+            units
+                .iter()
+                .any(|u| bynk_check::firstparty::unit_reaches(u, &d.reached_by))
+        })
         .map(|d| LockedNpm {
             package: d.package.to_string(),
             range: d.version.to_string(),

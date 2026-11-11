@@ -26,9 +26,12 @@ covers what slice 2 decides beyond ADR 0805.
   never carries `postal-mime`. The driver writes the pin into `out/package.json`.
   Hyperdrive H1 (#3318) adds `postgres` as a row and a runtime module, and nothing
   else. `bynk.lock` records each row as an `[[npm]]` with `first-party = true`,
-  `required-by = ["bynk-std"]`, never `approved`; it is written when the project's own sources use the
-  binding (a `source_marker` text, `from email` for `postal-mime`), so a lock records
-  what the project could bring into its build and not every pin the toolchain has. It never reaches `bynk.requires.unapproved` (that check
+  `required-by = ["bynk-std"]`, never `approved`; it is written when the project's own contexts reach the
+  binding (`reached_by` in the table: a service of protocol `email` for
+  `postal-mime`, decided on the parsed declarations, so a comment or a string that
+  spells the words reaches nothing), so a lock records what the project could bring
+  into its build and not every pin the toolchain has. H1 adds a `Reach` variant for
+  the capability that needs `postgres`. It never reaches `bynk.requires.unapproved` (that check
   covers fetched packages' adapters only) and never appears among `bynk approve`'s
   pending rows (the listing calls it `built-in`). An adapter, in any package, that
   requires the same package at a different version is
@@ -149,7 +152,7 @@ Routing prepends its `Authentication-Results`.
 the build, they check that every package the emitted `package.json` lists is in
 `node_modules` beside it, and stop before wrangler otherwise, naming the packages and
 the `npm install` to run in the build directory (so a `from email` project fails with
-an instruction, not a bundling error). `--dry-run` is stopped too. Automatic install is
+an instruction, not a bundling error). `--dry-run` only warns (it reports and pushes nothing). Automatic install is
 left to a follow-up.
 
 **Routing removals are gated (ADR 0805 F).** Wrangler deletes the rule of an

@@ -569,7 +569,7 @@ pub fn run(
     if !workers::compile_once_reporting(
         project_root,
         &build_dir,
-        true,
+        workers::Build::new(true, opts.dry_run),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;

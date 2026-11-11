@@ -716,7 +716,8 @@ either. A forward the platform refuses is rejected `forward refused` and logged.
 The Worker needs `postal-mime` installed beside it: the build's `package.json`
 lists it, exactly pinned, so run `npm install` in `.bynk/deploy` before
 deploying. `bynk deploy` (and `bynk dev`) stop before wrangler and name any
-listed package that is not installed, `--dry-run` included.
+listed package that is not installed; `--dry-run` only warns, since it installs and
+pushes nothing.
 
 ### Workers outside the project
 

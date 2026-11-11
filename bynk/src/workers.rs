@@ -28,20 +28,43 @@ use crate::probe::Provenance;
 /// `bynk-tests/tests/e2e.rs`'s in-place fixtures have — an unconditional write
 /// would leave a real `bynk.schema.lock` in the tree on every test run.
 pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool) -> bool {
-    compile_once_reporting(project_root, build_dir, schema_registry, None)
+    compile_once_reporting(
+        project_root,
+        build_dir,
+        Build::new(schema_registry, false),
+        None,
+    )
+}
+
+/// How a build is made: whether it reconciles `bynk.schema.lock`, and whether it
+/// only reports what a deploy would do (`--dry-run`), which a missing npm package
+/// must not stop (#3328).
+#[derive(Clone, Copy)]
+pub struct Build {
+    schema_registry: bool,
+    dry_run: bool,
+}
+
+impl Build {
+    pub fn new(schema_registry: bool, dry_run: bool) -> Self {
+        Build {
+            schema_registry,
+            dry_run,
+        }
+    }
 }
 
 /// [`compile_once`], reporting each context to `progress` as it compiles (#3100).
 pub fn compile_once_reporting(
     project_root: &Path,
     build_dir: &Path,
-    schema_registry: bool,
+    build: Build,
     progress: Option<bynk_driver::project::ProgressSink>,
 ) -> bool {
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read its
     // current content here (verified-absent `None` for a fresh project) and
     // hand it in; write the reconciled content back after a clean compile.
-    let schema_lock = if schema_registry {
+    let schema_lock = if build.schema_registry {
         match bynk_driver::schema_lock::read(project_root) {
             Ok(existing) => SchemaLock::On { existing },
             Err(e) => {
@@ -103,14 +126,29 @@ pub fn compile_once_reporting(
     );
     let missing = missing_npm_dependencies(build_dir);
     if !missing.is_empty() {
+        // A dry run only reports what a deploy would do, so it warns; a real
+        // deploy and `bynk dev` stop before wrangler.
         eprintln!(
-            "bynk: the build needs npm packages that are not installed: {}. Run `npm install` in `{}`, then try again",
-            missing.join(", "),
-            build_dir.display()
+            "{}",
+            missing_npm_message(&missing, build_dir, build.dry_run)
         );
-        return false;
+        return build.dry_run;
     }
     true
+}
+
+/// The preflight's message: an error for a real run, a warning for a dry run.
+fn missing_npm_message(missing: &[String], build_dir: &Path, dry_run: bool) -> String {
+    let (label, tail) = if dry_run {
+        ("warning: ", "a real deploy will stop until they are")
+    } else {
+        ("", "then try again")
+    };
+    format!(
+        "bynk: {label}the build needs npm packages that are not installed: {}. Run `npm install` in `{}`, {tail}",
+        missing.join(", "),
+        build_dir.display()
+    )
 }
 
 /// The npm packages the emitted `package.json` lists (an adapter's, and the
@@ -306,6 +344,24 @@ mod npm_preflight_tests {
         std::fs::write(installed.join("package.json"), "{}").unwrap();
         assert_eq!(missing_npm_dependencies(&d), ["jose"]);
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_dry_run_warns_where_a_real_run_stops() {
+        let missing = vec!["postal-mime".to_string()];
+        let d = std::path::Path::new(".bynk/deploy");
+        let real = super::missing_npm_message(&missing, d, false);
+        let dry = super::missing_npm_message(&missing, d, true);
+        assert!(
+            real.starts_with("bynk: the build needs npm packages"),
+            "{real}"
+        );
+        assert!(real.contains("postal-mime") && real.contains("`npm install` in `.bynk/deploy`"));
+        assert!(
+            dry.starts_with("bynk: warning: the build needs npm packages"),
+            "{dry}"
+        );
+        assert!(dry.contains("a real deploy will stop"), "{dry}");
     }
 
     #[test]

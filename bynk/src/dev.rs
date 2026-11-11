@@ -481,7 +481,7 @@ pub fn run(
     if !crate::workers::compile_once_reporting(
         project_root,
         &build_dir,
-        true,
+        crate::workers::Build::new(true, false),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;

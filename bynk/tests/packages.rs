@@ -393,6 +393,18 @@ fn a_first_party_npm_package_is_a_lock_row_that_needs_no_approval() {
             .unwrap()
             .contains("[[npm]]")
     );
+    // Words in a comment or a string reach nothing: no email service, no row.
+    write(
+        &shop.join("src/shop/notes.bynk"),
+        "// a `from email(\"x@y.example\")` service would need postal-mime\ncontext shop.notes\n\nconst WORDS: String = \"from email(\\\"a@b.example\\\")\"\n",
+    );
+    let (code, out) = short(&shop);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        !std::fs::read_to_string(root.join("bynk.lock"))
+            .unwrap()
+            .contains("postal-mime")
+    );
     write(
         &shop.join("src/shop/mail.bynk"),
         "context shop.mail\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"help@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    Accept\n  }\n}\n",

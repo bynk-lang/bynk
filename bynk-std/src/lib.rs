@@ -80,6 +80,15 @@ pub const BYNK_SURFACE_CAPABILITIES: &[&str] = &[
     "Events",
 ];
 
+/// What reaches a first-party npm dependency (see [`FirstPartyNpm::reached_by`]),
+/// by the construct that needs it, never by text in a source file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reach {
+    /// A context declares a service whose protocol is this one (`from email(…)`
+    /// is `"email"`).
+    ServiceProtocol(&'static str),
+}
+
 /// A first-party npm dependency (ADR 0799 C, #3328): an npm package the
 /// toolchain itself emits into `out/package.json` for a built-in binding.
 ///
@@ -103,11 +112,12 @@ pub struct FirstPartyNpm {
     pub version: &'static str,
     /// The `@bynk/runtime` module (`__bynk_runtime/<name>.ts`) importing it.
     pub runtime_module: &'static str,
-    /// Text a project's `.bynk` source holds when it uses the binding that
-    /// needs the package. `bynk.lock`'s first-party row is written only for a
-    /// project that holds it, so a lock records what the project *could* bring
-    /// into its build and not every pin the toolchain has.
-    pub source_marker: &'static str,
+    /// What, in a project's own checked model, brings the package into a build.
+    /// `bynk.lock`'s first-party row is written only for a project that reaches
+    /// it, so a lock records what the project *could* bring into its build and not
+    /// every pin the toolchain has. Data, so Hyperdrive H1 adds `postgres` with the
+    /// variant for the capability that needs it.
+    pub reached_by: Reach,
 }
 
 /// Every first-party npm dependency. Hyperdrive H1 (#3318) adds `postgres`
@@ -119,7 +129,7 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
         package: "postal-mime",
         version: "4.1.4",
         runtime_module: "email",
-        source_marker: "from email",
+        reached_by: Reach::ServiceProtocol("email"),
     },
 ];
 
