@@ -237,7 +237,17 @@ fn heading_slugs(markdown: &str) -> BTreeSet<String> {
             continue;
         }
         if trimmed.starts_with('#') {
-            let s = slug(trimmed.trim_start_matches('#'));
+            let text = trimmed.trim_start_matches('#').trim();
+            // A trailing `{#id}` is a custom heading id, which the site uses in
+            // place of the slug of the text.
+            if let Some(id) = text
+                .strip_suffix('}')
+                .and_then(|t| t.rsplit_once("{#"))
+                .map(|(_, id)| id)
+            {
+                slugs.insert(id.to_string());
+            }
+            let s = slug(text);
             if !s.is_empty() {
                 slugs.insert(s);
             }

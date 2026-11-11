@@ -225,7 +225,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
                   xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
         page: "/book/reference/capabilities",
-        anchor: "joining-independent-effects-par-par",
+        anchor: "par",
     },
     Explain {
         code: "bynk.parse.bare_expression_statement",
