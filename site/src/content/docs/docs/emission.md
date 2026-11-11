@@ -260,7 +260,7 @@ The router, the boundary validation it performs, and the response encoding
 ### `wrangler.toml`
 
 One `wrangler.toml` is generated per Worker, pinned to a compile-time
-`compatibility_date` (currently `2026-07-01`). Its contents are derived from the
+`compatibility_date` (currently `2026-08-04`). Its contents are derived from the
 context's closure, so the config always matches what the code actually reaches:
 
 - **`name`** and **`main = "index.ts"`** — the Worker identity and entry.
