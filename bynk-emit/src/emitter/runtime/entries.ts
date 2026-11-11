@@ -1,5 +1,6 @@
 import type { DurableObjectListOptions, DurableObjectStorage, DurableObjectTransaction } from "./storage.ts";
 import { STORAGE_BATCH_LIMIT, utf8Compare } from "./storage.ts";
+import { entriesOf, noteOrder } from "./store.ts";
 
 // Per-entry agent storage: the runtime half (#3189, track #3195,
 // `design/tracks/per-entry-storage.md`).
@@ -392,13 +393,6 @@ interface EntryBase {
 
 const bases = new WeakMap<object, EntryBase>();
 
-// A key a JS object enumerates before its other keys (an array index). Their order
-// in a Record is by value, not insertion, so a Record cannot show their insertion
-// order and one handler's reinsertion of them cannot be seen in it.
-function indexLike(k: string): boolean {
-  return /^(0|[1-9][0-9]*)$/.test(k) && Number(k) < 4294967295;
-}
-
 function copyStored<T>(v: T): T {
   return globalThis.structuredClone(v);
 }
@@ -447,8 +441,9 @@ export async function readStored<S extends object>(
 // on the record as the *stored* version shaped it, so a collection the current version
 // removed, or re-kinded, must be joined as it was stored. A collection field is rebuilt
 // from the prefix its entries are under (`m/` a Map, or a Cache when its entries carry an
-// expiry; `s/` a Set; `l/` a Log) and its index postings from `i/`. A field that has an
-// inline value in the record and no entries is left as it is.
+// expiry; `s/` a Set; `l/` a Log). An index posting is not joined: a `Map` handle rebuilds
+// its postings from the entries it is filled with. A field that has an inline value in the
+// record and no entries is left as it is.
 function joinStored(
   stored: Readonly<Record<string, unknown>>,
   entries: ReadonlyMap<string, unknown>,
@@ -458,7 +453,6 @@ function joinStored(
   const maps = new Map<string, Array<[string, Record<string, unknown>]>>();
   const sets = new Map<string, Array<[string, Record<string, unknown>]>>();
   const logs = new Map<string, Array<[string, unknown]>>();
-  const postings = new Map<string, Array<[string, string]>>();
   const split = (key: string, parts: number): string[] => {
     const all = key.slice(2).split("/");
     return all.length === parts ? all.map(decodeKeyPart) : [];
@@ -474,11 +468,6 @@ function joinStored(
       const [field] = split(key, 2);
       if (field === undefined) continue;
       logs.set(field, [...(logs.get(field) ?? []), [key, value]]);
-    } else if (tag === "i/") {
-      const [field, index, by, pk] = split(key, 4);
-      if (field === undefined || index === undefined || by === undefined || pk === undefined) continue;
-      const name = `${field}__idx_${index}`;
-      postings.set(`${field}\u0000${name}`, [...(postings.get(`${field}\u0000${name}`) ?? []), [by, pk]]);
     }
   }
   const define = (name: string, value: unknown): void => {
@@ -487,31 +476,36 @@ function joinStored(
   const record = (
     own: Array<[string, Record<string, unknown>]>,
     read: (env: Record<string, unknown>) => unknown,
-  ): { value: Record<string, unknown>; order: Map<string, number> } => {
+  ): Record<string, unknown> => {
     own.sort(([, a], [, b]) => orderOf(a) - orderOf(b));
     const value: Record<string, unknown> = {};
-    const order = new Map<string, number>();
     for (const [k, env] of own) {
-      order.set(k, orderOf(env));
       Object.defineProperty(value, k, { value: read(env), enumerable: true, writable: true, configurable: true });
     }
-    return { value, order };
+    // A record enumerates integer-like keys first, whatever order they went in: note the
+    // insertion order beside it for the handle that is filled from it.
+    noteOrder(
+      value,
+      own.map(([k]) => k),
+    );
+    return value;
   };
-  const owners = new Map<string, Map<string, number>>();
   for (const [field, own] of maps) {
     const cache = own.every(([, env]) => Object.hasOwn(env, "exp"));
-    const { value, order } = record(own, (env) => {
-      if (!cache) return copyStored(env.v);
-      const { i: _i, ...rest } = env;
-      return copyStored(rest);
-    });
-    owners.set(field, order);
-    define(field, value);
+    define(
+      field,
+      record(own, (env) => {
+        if (!cache) return copyStored(env.v);
+        const { i: _i, ...rest } = env;
+        return copyStored(rest);
+      }),
+    );
   }
   for (const [field, own] of sets) {
-    const { value, order } = record(own, () => true);
-    owners.set(field, order);
-    define(field, value);
+    define(
+      field,
+      record(own, () => true),
+    );
   }
   for (const [field, own] of logs) {
     own.sort(([a], [b]) => utf8Compare(a, b));
@@ -519,23 +513,6 @@ function joinStored(
       field,
       own.map(([, v]) => copyStored(v)),
     );
-  }
-  for (const [id, own] of postings) {
-    const [field, name] = id.split("\u0000") as [string, string];
-    const order = owners.get(field);
-    const sorted = own
-      .map(([by, pk]): [string, string, number] => [by, pk, order?.get(pk) ?? Number.MAX_SAFE_INTEGER])
-      .sort((a, b) => a[2] - b[2]);
-    const buckets: Record<string, string[]> = {};
-    for (const [by, pk] of sorted) {
-      Object.defineProperty(buckets, by, {
-        value: [...(globalThis.Object.hasOwn(buckets, by) ? (buckets[by] as string[]) : []), pk],
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-    }
-    define(name, buckets);
   }
   return out;
 }
@@ -604,39 +581,33 @@ function planEntries(
     }
     const keyOf = f.kind === "set" ? setKey : mapKey;
     let maxSeen = -1;
-    let collection = inline as Record<string, unknown>;
+    // The collection in insertion order (the wire record notes it; see `entriesOf`).
+    let collection = entriesOf(inline as Record<string, unknown>);
     // Cache reaping (#3189): an entry the program can no longer see (its `exp` is not after the
     // clock the program last read) is not written back, so its key and its expiry entry are
     // deleted by the diff. Bounded per commit, oldest expiry first.
     if (f.kind === "cache" && now !== undefined && reapBudget > 0) {
-      const expired = Object.entries(collection as Record<string, { exp?: unknown }>)
-        .filter(([, c]) => typeof c.exp === "number" && c.exp <= now)
-        .sort((a, b) => (a[1].exp as number) - (b[1].exp as number))
+      const expired = collection
+        .filter(([, c]) => typeof (c as { exp?: unknown }).exp === "number" && (c as { exp: number }).exp <= now)
+        .sort((a, b) => (a[1] as { exp: number }).exp - (b[1] as { exp: number }).exp)
         .slice(0, reapBudget);
       if (expired.length > 0) {
         reapBudget -= expired.length;
         const gone = new Set(expired.map(([k]) => k));
-        const kept: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(collection)) {
-          if (!gone.has(k)) Object.defineProperty(kept, k, { value: v, enumerable: true, writable: true, configurable: true });
-        }
-        collection = kept;
+        collection = collection.filter(([k]) => !gone.has(k));
       }
     }
-    for (const [k, v] of Object.entries(collection)) {
+    for (const [k, v] of collection) {
       const old = base.get(keyOf(f.name, k)) as Seq | undefined;
       let i: number;
-      if (old === undefined) {
-        i = seq;
-        seq += 1;
-      } else if (!indexLike(k) && old.i < maxSeen) {
-        // Inserted again after later keys: it moved to the end of the record.
+      if (old === undefined || old.i < maxSeen) {
+        // A new key, or one inserted again after later keys (it moved to the end).
         i = seq;
         seq += 1;
       } else {
         i = old.i;
       }
-      if (!indexLike(k)) maxSeen = Math.max(maxSeen, i);
+      maxSeen = Math.max(maxSeen, i);
       if (f.kind === "set") entries[keyOf(f.name, k)] = { i };
       else if (f.kind === "map") entries[keyOf(f.name, k)] = { i, v };
       else {
@@ -651,7 +622,7 @@ function planEntries(
         for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
       }
     }
-    const size = Object.keys(collection).length;
+    const size = collection.length;
     if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
   }
   record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;

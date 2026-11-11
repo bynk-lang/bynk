@@ -376,6 +376,9 @@ test("sameStored compares plain data structurally, whatever the key order", () =
 
 // The codec: the stored record read and written per entry (#3189, slice 2).
 import { CACHE_REAP_LIMIT, commitStored, noteClock, readStored } from "../src/entries.ts";
+import { StoreMap, StoreSet, entriesOf, fillMap, fillSet, orderedRecord, wireMap, wireSet } from "../src/store.ts";
+
+const keysOf = (record: Record<string, unknown>): string[] => entriesOf(record).map(([k]) => k);
 import type { EntryField } from "../src/entries.ts";
 
 const FIELDS: EntryField[] = [
@@ -396,7 +399,7 @@ test("codec: a state commits per entry and reads back in insertion order, intege
   await load(self, s);
   await commitStored(self, s as never, {
     __v: 1, n: 3,
-    users: { b: { t: "x" }, "10": { t: "y" }, a: { t: "x" } },
+    users: orderedRecord([["b", { t: "x" }], ["10", { t: "y" }], ["a", { t: "x" }]]),
     users__idx_byTeam: { x: ["b", "a"], y: ["10"] },
     tags: { z: true, y: true },
     hits: { k: { v: 1, exp: 50 } },
@@ -407,10 +410,11 @@ test("codec: a state commits per entry and reads back in insertion order, intege
   assert.equal(state.users, undefined);
   assert.equal(state.n, 3);
   const back = await load({}, s);
-  assert.deepEqual(Object.keys(back.users), ["10", "b", "a"].sort((p, q) => (p === "10" ? -1 : q === "10" ? 1 : 0)));
-  // insertion order b, 10, a is kept in the stored `i`, so the postings read in it.
-  assert.deepEqual(back.users__idx_byTeam.x, ["b", "a"]);
-  assert.deepEqual(Object.keys(back.tags), ["z", "y"]);
+  // insertion order b, 10, a is kept in the stored `i`, and read back in it.
+  assert.deepEqual(keysOf(back.users), ["b", "10", "a"]);
+  // A posting is written per entry, and is not joined back: a Map handle rebuilds its own.
+  assert.equal(back.users__idx_byTeam, undefined);
+  assert.deepEqual(keysOf(back.tags), ["z", "y"]);
   assert.deepEqual(back.hits, { k: { v: 1, exp: 50 } });
   assert.deepEqual(back.audit, [{ t: 5, v: "p" }, { t: 5, v: "q" }]);
 });
@@ -424,14 +428,14 @@ test("codec: an overwrite keeps its place; a removed key inserted again goes to 
   st.users.a = 10; // overwrite
   await commitStored(self, s as never, st, FIELDS);
   st = await load(self, s);
-  assert.deepEqual(Object.keys(st.users), ["a", "b", "c"]);
+  assert.deepEqual(keysOf(st.users), ["a", "b", "c"]);
   delete st.users.a; // remove, then a later handler inserts it again
   await commitStored(self, s as never, st, FIELDS);
   st = await load(self, s);
   st.users.a = 11;
   await commitStored(self, s as never, st, FIELDS);
   st = await load(self, s);
-  assert.deepEqual(Object.keys(st.users), ["b", "c", "a"]);
+  assert.deepEqual(keysOf(st.users), ["b", "c", "a"]);
 });
 
 test("codec: a commit writes only the entries that changed", async () => {
@@ -503,9 +507,9 @@ test("codec: a write that throws leaves storage and the base as they were", asyn
   (s as any).transaction = async () => { throw new Error("boom"); };
   await assert.rejects(commitStored(self, s as never, st, FIELDS), /boom/);
   (s as any).transaction = real;
-  assert.deepEqual(Object.keys((await load({}, s)).users), ["a"]);
+  assert.deepEqual(keysOf((await load({}, s)).users), ["a"]);
   await commitStored(self, s as never, st, FIELDS); // the base still says only `a` is stored
-  assert.deepEqual(Object.keys((await load({}, s)).users), ["a", "b"]);
+  assert.deepEqual(keysOf((await load({}, s)).users), ["a", "b"]);
 });
 
 test("codec: a log keeps its order and prunes its oldest", async () => {
@@ -635,4 +639,31 @@ test("noteClock keeps the latest clock a handler read", async () => {
   noteClock(state, 30); // an earlier read does not lower it
   await commitStored(self, s as never, state, CACHE_ONLY, state);
   assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 0);
+});
+
+test("codec: integer-like keys keep their insertion order through a commit and a reload (#3254)", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  const users = new StoreMap<number>();
+  for (const k of ["10", "2", "a", "5"]) users.put(k, 1);
+  const tags = new StoreSet();
+  for (const k of ["10", "2", "a", "5"]) tags.add(k);
+  await commitStored(self, s as never, { users: wireMap(users), tags: wireSet(tags) }, FIELDS);
+  let back = await load(self, s);
+  let reloaded = new StoreMap<number>();
+  fillMap(reloaded, back.users);
+  assert.deepEqual(reloaded.keys(), ["10", "2", "a", "5"]);
+  // An overwrite keeps its place; a removed key put again goes to the end.
+  reloaded.put("2", 9);
+  reloaded.remove("10");
+  reloaded.put("10", 3);
+  await commitStored(self, s as never, { users: wireMap(reloaded), tags: wireSet(StoreSet.from(back.tags && entriesOf(back.tags).map(([k]) => k))) }, FIELDS);
+  back = await load(self, s);
+  reloaded = new StoreMap<number>();
+  fillMap(reloaded, back.users);
+  assert.deepEqual(reloaded.keys(), ["2", "a", "5", "10"]);
+  const set = new StoreSet();
+  fillSet(set, back.tags);
+  assert.deepEqual(set.keys(), ["10", "2", "a", "5"]);
 });

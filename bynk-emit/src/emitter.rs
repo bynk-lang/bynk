@@ -4050,6 +4050,21 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             // Cache reaping (#3189): a `Cache` op notes the clock it read.
             parts.push("__noteClock");
         }
+        // Ordered store collections (#3254): the handle classes an agent's state is made
+        // of, and the helpers that put them in wire form and fill them back.
+        let mut state_names: Vec<&'static str> = commons
+            .commons
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                CommonsItem::Agent(a) => Some(emit::agent_state_runtime_names(a, &commons.types)),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        state_names.sort_unstable();
+        state_names.dedup();
+        parts.extend(state_names);
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
             _ => false,

@@ -3714,19 +3714,17 @@ fn lower_store_held_map_call(
             // be dropped unclosed. Re-putting the same connection under its own
             // key (the same connection id) leaves it open.
             "put" => format!(
-                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {2}; return undefined; }})()",
-                a[0],
-                a[1],
-                own_set(&m, "__k", "__new")
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = {m}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {m}.put(__k, __new); return undefined; }})()",
+                a[0], a[1]
             ),
             "remove" => format!(
-                "(async () => {{ const __k = String({0}); const __cid = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} delete {m}[__k]; }} return undefined; }})()",
+                "(async () => {{ const __k = String({0}); const __cid = {m}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} {m}.remove(__k); }} return undefined; }})()",
                 a[0]
             ),
-            "contains" => format!("globalThis.Object.hasOwn({m}, String({}))", a[0]),
-            "size" => format!("globalThis.Object.keys({m}).length"),
+            "contains" => format!("{m}.has(String({}))", a[0]),
+            "size" => format!("{m}.size()"),
             "get" => format!(
-                "(() => {{ const __k = String({0}); return globalThis.Object.hasOwn({m}, __k) ? __resolveConnection<{f_ts}>(this.state, {m}[__k]) : None; }})()",
+                "(() => {{ const __cid = {m}.get(String({0})); return __cid !== undefined ? __resolveConnection<{f_ts}>(this.state, __cid) : None; }})()",
                 a[0]
             ),
             // Any non-entry op is a lazy query lifting the map into a scan over its
@@ -3740,7 +3738,7 @@ fn lower_store_held_map_call(
                     .unwrap_or_default();
                 lower_query_by_name(
                     format!(
-                        "globalThis.Object.values({m}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
+                        "{m}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
                     ),
                     method,
                     &a,
@@ -3802,54 +3800,41 @@ fn lower_store_map_call(
         // v0.93 (ADR 0118): the value-record fields this map is `@indexed(by:)` on.
         let idx_fields: Vec<String> = cx.agent_store_index_fields(&id.name);
         // Route an equality `filter` on an indexed field to a posting-list lookup
-        // (`<map>__idx_<f>[v]`) instead of a full `Object.values` scan. The lookup
-        // reads the staged map, so it stays read-your-writes (the index is
-        // maintained in the same commit).
+        // (`<map>.byIndex(f, v)`) instead of a full scan. The lookup reads the staged
+        // handle, so it stays read-your-writes (the index is maintained by every put).
         if method.name == "filter"
             && let [arg] = args
             && let ExprKind::Lambda(lam) = &arg.kind
-            && let Some(routed) = pre.absorb_opt(route_indexed_filter(
-                &m,
-                &var,
-                &id.name,
-                &idx_fields,
-                lam,
-                cx,
-            ))
+            && let Some(routed) = pre.absorb_opt(route_indexed_filter(&m, &idx_fields, lam, cx))
         {
             return Some(routed);
         }
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        // A key may be a number or a branded value: the handle is keyed by its string.
+        let k = a
+            .first()
+            .map(|x| format!("String({x})"))
+            .unwrap_or_default();
         return Some(match method.name.as_str() {
-            // v0.93: an indexed map's mutators keep the sibling posting-lists exact
-            // inside the same staged commit (re-index on last-write-wins).
-            "put" if !idx_fields.is_empty() => idx_map_put(&m, &var, &id.name, &idx_fields, &a),
-            "remove" if !idx_fields.is_empty() => {
-                idx_map_remove(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "update" if !idx_fields.is_empty() => {
-                idx_map_update(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "upsert" if !idx_fields.is_empty() => {
-                idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
-            }
-            // #3261: on the bundle, `put` over a key that already holds a
-            // `Connection` closes the displaced `TestConnection` first, as
-            // `remove` does and as the Workers build does; re-putting the same
-            // connection under its own key leaves it open (compared by identity).
+            // #3254: the map is an insertion-ordered handle, and an `@indexed` map's handle
+            // keeps its own posting lists exact on every `put`/`remove` (re-indexing on
+            // last-write-wins), so the mutators are the plain ones.
+            //
+            // #3261: on the bundle, `put` over a key that already holds a `Connection`
+            // closes the displaced `TestConnection` first, as `remove` does and as the
+            // Workers build does; re-putting the same connection under its own key leaves
+            // it open (compared by identity).
             "put"
                 if cx
                     .agent_store_map_value_ts(&id.name)
                     .is_some_and(|v| v.starts_with("Connection<")) =>
             {
                 format!(
-                    "(async () => {{ const __k = {0}; const __new = {1}; if (globalThis.Object.hasOwn({m}, __k) && {m}[__k] !== __new) {{ await {m}[__k].close(); }} {2}; return undefined; }})()",
-                    a[0],
-                    a[1],
-                    own_set(&m, "__k", "__new")
+                    "(async () => {{ const __k = {0}; const __new = {1}; const __old = {m}.get(__k); if (__old !== undefined && __old !== __new) {{ await __old.close(); }} {m}.put(__k, __new); return undefined; }})()",
+                    k, a[1]
                 )
             }
-            "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
+            "put" => format!("({m}.put({}, {}), undefined)", k, a[1]),
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
             // ordinary in-memory map of `TestConnection`s (the Workers build
             // persists connection ids instead and takes `lower_store_held_map_call`), so `remove` must still honour the §2.9 contract that it
@@ -3861,32 +3846,24 @@ fn lower_store_map_call(
                     .is_some_and(|v| v.starts_with("Connection<")) =>
             {
                 format!(
-                    "(async () => {{ const __k = {0}; if (globalThis.Object.hasOwn({m}, __k)) {{ await {m}[__k].close(); delete {m}[__k]; }} return undefined; }})()",
-                    a[0]
+                    "(async () => {{ const __k = {0}; const __o = {m}.get(__k); if (__o !== undefined) {{ await __o.close(); {m}.remove(__k); }} return undefined; }})()",
+                    k
                 )
             }
-            "remove" => format!("((delete {m}[{}]), undefined)", a[0]),
-            "contains" => format!("globalThis.Object.hasOwn({m}, {})", a[0]),
-            "size" => format!("globalThis.Object.keys({m}).length"),
+            "remove" => format!("({m}.remove({}), undefined)", k),
+            "contains" => format!("{m}.has({})", k),
+            "size" => format!("{m}.size()"),
             "get" => format!(
-                "(() => {{ const __k = {0}; return globalThis.Object.hasOwn({m}, __k) ? Some({m}[__k]) : None; }})()",
-                a[0]
+                "(() => {{ const __k = {0}; return {m}.has(__k) ? Some({m}.get(__k)!) : None; }})()",
+                k
             ),
             "update" => format!(
-                "(() => {{ const __k = {0}; if (!globalThis.Object.hasOwn({m}, __k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} {m}[__k] = ({1})({m}[__k]); return undefined; }})()",
-                a[0], a[1]
+                "(() => {{ const __k = {0}; if (!{m}.has(__k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} {m}.put(__k, ({1})({m}.get(__k)!)); return undefined; }})()",
+                k, a[1]
             ),
             "upsert" => format!(
-                "(() => {{ const __k = {0}; {set}; return undefined; }})()",
-                a[0],
-                set = own_set(
-                    &m,
-                    "__k",
-                    &format!(
-                        "({})(globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : ({}))",
-                        a[2], a[1]
-                    )
-                ),
+                "(() => {{ const __k = {0}; {m}.put(__k, ({2})({m}.has(__k) ? {m}.get(__k)! : ({1}))); return undefined; }})()",
+                k, a[1], a[2]
             ),
             // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
             // map into a scan over its values (`Object.values`).
@@ -3910,7 +3887,7 @@ fn lower_store_map_call(
                     .map(|_| join_other_elem_ts(args, cx))
                     .unwrap_or_default();
                 lower_query_by_name(
-                    format!("globalThis.Object.values({m})"),
+                    format!("{m}.values()"),
                     method,
                     &a,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
@@ -3954,11 +3931,15 @@ fn lower_store_set_call(
         let var = cx.agent_store_var().to_string();
         let s = format!("{var}.{}", id.name);
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let k = a
+            .first()
+            .map(|x| format!("String({x})"))
+            .unwrap_or_default();
         return Some(match method.name.as_str() {
-            "add" => format!("({}, undefined)", own_set(&s, &a[0], "true")),
-            "remove" => format!("((delete {s}[{}]), undefined)", a[0]),
-            "contains" => format!("globalThis.Object.hasOwn({s}, {})", a[0]),
-            "size" => format!("globalThis.Object.keys({s}).length"),
+            "add" => format!("({s}.add({}), undefined)", k),
+            "remove" => format!("({s}.remove({}), undefined)", k),
+            "contains" => format!("{s}.has({})", k),
+            "size" => format!("{s}.size()"),
             other => format!("(/* unsupported Set op {other} */ undefined)"),
         });
     }
@@ -3998,36 +3979,34 @@ fn lower_store_cache_call(
             cx.cap_deps_expr()
         );
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let k = a
+            .first()
+            .map(|x| format!("String({x})"))
+            .unwrap_or_default();
         return Some(match method.name.as_str() {
-            "remove" => format!("((delete {c}[{}]), undefined)", a[0]),
+            "remove" => format!("({c}.remove({}), undefined)", k),
             "put" => format!(
-                "(async () => {{ const __now = {now}; {set}; return undefined; }})()",
-                set = own_set(&c, &a[0], &format!("{{ v: {}, exp: __now + {ttl} }}", a[1])),
+                "(async () => {{ const __now = {now}; {c}.put({0}, {{ v: {1}, exp: __now + {ttl} }}); return undefined; }})()",
+                k, a[1]
             ),
             "get" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? Some({c}[__k].v) : None; }})()",
-                a[0]
+                "(async () => {{ const __now = {now}; const __e = {c}.get({0}); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; }})()",
+                k
             ),
             "contains" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now; }})()",
-                a[0]
+                "(async () => {{ const __now = {now}; const __e = {c}.get({0}); return __e !== undefined && __e.exp > __now; }})()",
+                k
             ),
-            "size" => format!(
-                "(async () => {{ const __now = {now}; return globalThis.Object.values({c}).filter((__e) => __e.exp > __now).length; }})()"
-            ),
+            "size" => {
+                format!("(async () => {{ const __now = {now}; return {c}.liveSize(__now); }})()")
+            }
             "update" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; if (!(globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} {c}[__k] = {{ v: ({1})({c}[__k].v), exp: __now + {ttl} }}; return undefined; }})()",
-                a[0], a[1]
+                "(async () => {{ const __now = {now}; const __k = {0}; const __e = {c}.get(__k); if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} {c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}); return undefined; }})()",
+                k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __cur = (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? {c}[__k].v : ({1}); {set}; return undefined; }})()",
-                a[0],
-                a[1],
-                set = own_set(
-                    &c,
-                    "__k",
-                    &format!("{{ v: ({})(__cur), exp: __now + {ttl} }}", a[2])
-                ),
+                "(async () => {{ const __now = {now}; const __k = {0}; const __e = {c}.get(__k); const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); {c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}); return undefined; }})()",
+                k, a[1], a[2]
             ),
             other => format!("(/* unsupported Cache op {other} */ undefined)"),
         });
@@ -4069,38 +4048,24 @@ fn lower_store_log_call(
         if method.name == "append" {
             let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
             let prune = match retain {
-                Some(ms) => format!(
-                    " for (let __i = {g}.length - 1; __i >= 0; __i--) {{ if ({g}[__i].t < __now - {ms}) {g}.splice(__i, 1); }}"
-                ),
+                Some(ms) => format!(" {g}.prune(__now - {ms});"),
                 None => String::new(),
             };
             return Some(format!(
-                "(async () => {{ const __now = {now}; {g}.push({{ t: __now, v: {0} }});{prune} return undefined; }})()",
+                "(async () => {{ const __now = {now}; {g}.append({0}, __now);{prune} return undefined; }})()",
                 a[0]
             ));
         }
-        // The values array feeding the general query pipeline.
-        let values = format!("{g}.map((__e) => __e.v)");
+        // The values feeding the general query pipeline.
+        let values = format!("{g}.values()");
         let thunk = |body: String| format!("(() => {body})");
         return Some(match method.name.as_str() {
             // Time-window roots → a `Query` thunk over the windowed values.
-            "since" => thunk(format!(
-                "{g}.filter((__e) => __e.t >= ({0})).map((__e) => __e.v)",
-                a[0]
-            )),
-            "before" => thunk(format!(
-                "{g}.filter((__e) => __e.t < ({0})).map((__e) => __e.v)",
-                a[0]
-            )),
-            "between" => thunk(format!(
-                "{g}.filter((__e) => __e.t >= ({0}) && __e.t <= ({1})).map((__e) => __e.v)",
-                a[0], a[1]
-            )),
-            "recent" => thunk(format!(
-                "{g}.slice(globalThis.Math.max(0, {g}.length - globalThis.Math.max(0, {0}))).reverse().map((__e) => __e.v)",
-                a[0]
-            )),
-            "reversed" => thunk(format!("[...{g}].reverse().map((__e) => __e.v)")),
+            "since" => thunk(format!("{g}.since({0})", a[0])),
+            "before" => thunk(format!("{g}.before({0})", a[0])),
+            "between" => thunk(format!("{g}.between({0}, {1})", a[0], a[1])),
+            "recent" => thunk(format!("{g}.recent({0})", a[0])),
+            "reversed" => thunk(format!("{g}.reversed()")),
             // The general query vocabulary over the entry values.
             //
             // Review of #1460: `elem_ts` is this log's own element type `T`
@@ -6123,112 +6088,18 @@ fn lower_query_method(
     })
 }
 
-/// #1685: a store collection is a plain object, and its keys come from user
-/// data. A property *set* of `__proto__` hits `Object.prototype`'s accessor (a
-/// primitive value is dropped, an object value reassigns the prototype), so
-/// every write that may create a key *defines* it instead. Reads of a key that
-/// may be absent go through `Object.hasOwn`, never `in` or a bare index, so an
-/// inherited name (`constructor`, `toString`) is not read as present. A write to
-/// a key already known to be own (after an `Object.hasOwn` check) may stay a set.
-fn own_set(obj: &str, key: &str, value: &str) -> String {
-    format!(
-        "globalThis.Object.defineProperty({obj}, {key}, {{ value: {value}, writable: true, enumerable: true, configurable: true }})"
-    )
-}
-
 // ---- v0.93 (ADR 0118): `@indexed` secondary-index emission ----------------
 //
-// For a `store Map[K, V] @indexed(by: f)` field `m`, a sibling state record
-// `m__idx_f: Record<string, string[]>` maps a (stringified) field value to the
-// primary keys whose value carries it. The mutators maintain it inside the same
-// staged commit; an equality `filter` on `f` reads it instead of scanning.
-
-/// Fragment that *removes* `pk` from the posting-list of every indexed field of
-/// the value bound to `val_local` (used before overwriting/deleting an entry).
-fn idx_unindex(var: &str, map: &str, fields: &[String], val_local: &str, pk: &str) -> String {
-    fields
-        .iter()
-        .map(|f| {
-            let idx = format!("{var}.{map}__idx_{f}");
-            format!(
-                "{{ const __ik = String(({val_local}).{f}); const __ia = globalThis.Object.hasOwn({idx}, __ik) ? {idx}[__ik] : undefined; if (__ia) {{ const __ii = __ia.indexOf({pk}); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete {idx}[__ik]; }} }}"
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// Fragment that *adds* `pk` to the posting-list of every indexed field of the
-/// value bound to `val_local` (used after writing an entry).
-fn idx_reindex(var: &str, map: &str, fields: &[String], val_local: &str, pk: &str) -> String {
-    fields
-        .iter()
-        .map(|f| {
-            let idx = format!("{var}.{map}__idx_{f}");
-            format!(
-                "{{ const __ik = String(({val_local}).{f}); if (!globalThis.Object.hasOwn({idx}, __ik)) {}; {idx}[__ik].push({pk}); }}",
-                own_set(&idx, "__ik", "[]")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// `put` with index maintenance: drop the prior value's postings (if any), write,
-/// then post the new value. Last-write-wins re-indexing.
-fn idx_map_put(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    let re = idx_reindex(var, map, fields, "__v", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); const __v = {v}; const __o = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__o !== undefined) {{ {un} }} {set}; {re} return undefined; }})()",
-        k = a[0],
-        v = a[1],
-        set = own_set(m, "__k", "__v"),
-    )
-}
-
-/// `remove` with index maintenance: drop the value's postings, then delete.
-fn idx_map_remove(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); const __o = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__o !== undefined) {{ {un} delete {m}[__k]; }} return undefined; }})()",
-        k = a[0],
-    )
-}
-
-/// `update` with index maintenance: the key must exist (else a fault); re-index
-/// from old value to new.
-fn idx_map_update(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    let re = idx_reindex(var, map, fields, "__v", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); if (!globalThis.Object.hasOwn({m}, __k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} const __o = {m}[__k]; {un} const __v = ({f})(__o); {m}[__k] = __v; {re} return undefined; }})()",
-        k = a[0],
-        f = a[1],
-    )
-}
-
-/// `upsert` with index maintenance: re-index from the prior value (if present)
-/// to the computed new value.
-fn idx_map_upsert(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    let re = idx_reindex(var, map, fields, "__v", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); const __e = globalThis.Object.hasOwn({m}, __k); const __o = __e ? {m}[__k] : undefined; if (__e) {{ {un} }} const __v = ({f})(__e ? __o : ({d})); {set}; {re} return undefined; }})()",
-        k = a[0],
-        d = a[1],
-        f = a[2],
-        set = own_set(m, "__k", "__v"),
-    )
-}
+// For a `store Map[K, V] @indexed(by: f)` field, the map's handle keeps a posting list
+// per index: a (stringified) field value maps to the primary keys whose value carries
+// it, in insertion order (#3254). Its `put`/`remove` maintain it; an equality `filter`
+// on `f` reads it through `byIndex` instead of scanning.
 
 /// If `lam` is `(p) => p.<field> == <value>` (either order) where `<field>` is
 /// indexed and `<value>` does not mention `p`, lower it to a posting-list lookup
-/// thunk `() => idx[v].map(pk => map[pk])`. Otherwise `None` (fall back to scan).
+/// thunk `() => map.byIndex(f, v)`. Otherwise `None` (fall back to scan).
 fn route_indexed_filter(
     m: &str,
-    var: &str,
-    map: &str,
     fields: &[String],
     lam: &LambdaExpr,
     cx: &mut LowerCtx,
@@ -6253,9 +6124,7 @@ fn route_indexed_filter(
         return None;
     }
     let v = pre.lower(value, cx);
-    let text: Option<String> = Some(format!(
-        "(() => {{ const __s = String({v}); const __ia = {var}.{map}__idx_{field}; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => {m}[__pk]); }})"
-    ));
+    let text: Option<String> = Some(format!("(() => {m}.byIndex(\"{field}\", String({v})))"));
     text.map(|expr| pre.finish(expr))
 }
 
@@ -7463,7 +7332,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     {
         let var = cx.agent_store_var();
         return format!(
-            "(() => globalThis.Object.values({var}.{name}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }}))",
+            "(() => {var}.{name}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }}))",
             name = id.name
         );
     }
@@ -7473,13 +7342,13 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // the same deferred thunk a query builder yields: `() => Object.values(map)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_map(&id.name) {
         let var = cx.agent_store_var();
-        return format!("(() => globalThis.Object.values({var}.{}))", id.name);
+        return format!("(() => {var}.{}.values())", id.name);
     }
     // v0.95 (ADR 0121): a bare `store Log` ident used as a value is a lazy
     // `Query` over its entry values — `() => log.map((__e) => __e.v)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_log(&id.name) {
         let var = cx.agent_store_var();
-        return format!("(() => {var}.{}.map((__e) => __e.v))", id.name);
+        return format!("(() => {var}.{}.values())", id.name);
     }
     // v0.9: a nullary HttpResult variant (whose checker type is
     // `HttpResult[_]`) constructs an HttpResult.<Variant>.
@@ -8303,20 +8172,20 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         let var = cx.agent_store_var().to_string();
         let m = format!("{var}.{}", id.name);
         return pre.finish(match field.name.as_str() {
-            map_query::VALUES => format!("(() => globalThis.Object.values({m}))"),
+            map_query::VALUES => format!("(() => {m}.values())"),
             map_query::KEYS => {
                 let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
                 if decoded == "__k" {
-                    format!("(() => globalThis.Object.keys({m}))")
+                    format!("(() => {m}.keys())")
                 } else {
-                    format!("(() => globalThis.Object.keys({m}).map((__k) => {decoded}))")
+                    format!("(() => {m}.keys().map((__k) => {decoded}))")
                 }
             }
             // entries
             _ => {
                 let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
                 format!(
-                    "(() => globalThis.Object.entries({m}).map(([__k, __v]) => ({{ key: {decoded}, value: __v }})))"
+                    "(() => {m}.entries().map(([__k, __v]) => ({{ key: {decoded}, value: __v }})))"
                 )
             }
         });

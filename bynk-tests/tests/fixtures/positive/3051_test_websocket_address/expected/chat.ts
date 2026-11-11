@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __StoreMap, __StoreSet, __fillHeld, __fillSet, __wireEntries, __wireHeld, __wireHeldOrder, __wireSet } from "./__bynk_runtime/store.js";
 import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
@@ -63,22 +64,30 @@ export const ChatGateway = {
 };
 
 export interface RoomState {
-  readonly conns: globalThis.Record<string, Connection<ServerFrame>>;
-  readonly members: globalThis.Record<string, boolean>;
+  readonly conns: __StoreMap<Connection<ServerFrame>>;
+  readonly members: __StoreSet;
 }
 
 const __RoomRegistry = new __StateRegistry();
-function __zeroOfRoomState(): RoomState { return { conns: {}, members: {} }; }
+function __zeroOfRoomState(): RoomState { return { conns: new __StoreMap<Connection<ServerFrame>>(), members: new __StoreSet() }; }
 
 const __entryFieldsOfRoom = [{ name: "members", kind: "set" }] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
-  for (const __k of globalThis.Object.keys(s.conns)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
-  for (const __k of globalThis.Object.keys(s.members)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+}
+
+function __hydrateRoomState(s: RoomState, stored: RoomState): void {
+  const __z = __zeroOfRoomState();
+  const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "members")) { __fillSet(__z.members, __r["members"] as never); __w.members = __z.members; }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {
-  return { ...s };
+  return { ...s, conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns), members: __wireSet(s.members) };
 }
 
 export class Room {
@@ -96,6 +105,7 @@ export class Room {
     __reportUnknownStoredKeys("Room", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateRoomState(__merged, __wholesale);
+    __hydrateRoomState(__merged, __wholesale);
     return __merged;
   }
 
@@ -106,8 +116,8 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.members, u, { value: true, writable: true, enumerable: true, configurable: true }), undefined);
-      const __r1 = await (async () => { const __k = u; const __new = conn; if (globalThis.Object.hasOwn(__state.conns, __k) && __state.conns[__k] !== __new) { await __state.conns[__k].close(); } globalThis.Object.defineProperty(__state.conns, __k, { value: __new, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (__state.members.add(String(u)), undefined);
+      const __r1 = await (async () => { const __k = String(u); const __new = conn; const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { await __old.close(); } __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -117,8 +127,8 @@ export class Room {
   async leave(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await ((delete __state.members[u]), undefined);
-      const __r1 = await (async () => { const __k = u; if (globalThis.Object.hasOwn(__state.conns, __k)) { await __state.conns[__k].close(); delete __state.conns[__k]; } return undefined; })();
+      const __r0 = await (__state.members.remove(String(u)), undefined);
+      const __r1 = await (async () => { const __k = String(u); const __o = __state.conns.get(__k); if (__o !== undefined) { await __o.close(); __state.conns.remove(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -127,7 +137,7 @@ export class Room {
 
   async post(sender: UserId, text: string, deps: {}): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __r0 = await (async () => { await __bynkSettleAll(globalThis.Object.values(__state.conns).map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })();
+    const __r0 = await (async () => { await __bynkSettleAll(__state.conns.values().map((__x) => () => (async (c: Connection<ServerFrame>) => (c).send({ text: text }))(__x))); })();
     return undefined;
   }
 
