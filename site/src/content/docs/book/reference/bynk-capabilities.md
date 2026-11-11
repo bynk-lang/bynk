@@ -388,7 +388,7 @@ For more than one namespace, declare each as a derived capability:
 `capability Sessions = Kv` is a distinct instance of `Kv`, with `Kv`'s
 operations and its own namespace, bound as `env.KV_SESSIONS`. A context may use
 the bare `Kv` alongside its instances, and the bare `KV` stanza is emitted only
-when it does. See [Derived capabilities](/book/reference/capabilities/#derived-capabilities-capability-x--k).
+when it does. See [Derived capabilities](/book/reference/capabilities/#derived-capabilities).
 
 ### Metadata, expiry and binary values
 

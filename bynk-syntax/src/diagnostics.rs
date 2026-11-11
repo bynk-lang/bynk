@@ -145,7 +145,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   capability Orders = D1\n\
                   on call() -> Effect[()] given Orders {        // ✓ a named instance",
         page: "/book/reference/capabilities",
-        anchor: "derived-capabilities-capability-x-k",
+        anchor: "derived-capabilities",
     },
     Explain {
         code: "bynk.cell.self_reference",

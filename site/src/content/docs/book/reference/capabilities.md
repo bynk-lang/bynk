@@ -294,7 +294,7 @@ A capability may not depend on itself, directly or transitively
 (`bynk.provider.dependency_cycle`) — including the trivial `provides X = … given
 X`.
 
-## Derived capabilities (`capability X = K`)
+## Derived capabilities (`capability X = K`) {#derived-capabilities}
 
 A **derived** capability is a distinct instance of a platform resource, such as
 a second KV namespace:
