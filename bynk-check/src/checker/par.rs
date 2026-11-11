@@ -483,7 +483,7 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: 
         )
         .with_label(method.span, format!("`{name}` runs the closure for every element at once"))
         .with_note(
-            "run the loop with `forEach` instead (`traverseAll` or `traverseTry` for the collecting forms); a single-call `update` or `upsert` is atomic per key there, because each element finishes before the next starts",
+            "run the loop with `forEach` instead (`traverseAll` or `traverseTry` for the collecting forms); a single-call `update` or `upsert` is atomic per key there, because each element finishes before the next starts. A store write reads the entry before it stages the write, so the sequential form reads one entry at a time; per-key atomicity is the reason for the rule",
         )
         .with_note(
             "or keep the concurrent part in the closure and do the writes after it: collect with `parTraverseAll`, then write in a `forEach`",

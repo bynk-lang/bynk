@@ -219,9 +219,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 between, and their updates are lost. A single call such as `update` is atomic \
                 per key, but it is refused here too, so the two rules stay equal. Run the \
                 loop with `forEach` (or `traverseAll` / `traverseTry`), where each element \
-                finishes before the next starts, so a single-call `update` stays atomic. To keep \
-                 the concurrent part, collect with \
-                `parTraverseAll` and write afterwards.",
+                finishes before the next starts, so a single-call `update` stays atomic. A store \
+                write reads the entry before it stages the write, so the sequential form \
+                reads one entry at a time; per-key atomicity is the reason for the rule. To \
+                keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
         example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
                   xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
         page: "/book/reference/capabilities",
