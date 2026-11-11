@@ -3850,7 +3850,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.DELETE(\"/a\")                  // ✓\n\
                   expect r is Rejected(MethodNotAllowed)",
         page: "/book/reference/testing",
-        anchor: "testing-the-wrong-method-the-405-fall-through",
+        anchor: "wrong-method",
     },
     Explain {
         code: "bynk.test.service_bad_address",

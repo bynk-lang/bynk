@@ -767,7 +767,7 @@ the deployed Worker fetches its own JWKS, which the driver cannot answer, so a
 call that mints an `Oidc` token fails with a message saying so; `by Nobody` still
 works there.
 
-### Testing the wrong method — the `405` fall-through
+### Testing the wrong method — the `405` fall-through {#wrong-method}
 
 Address an **existing path with a method it declares no handler for** to test the
 router's method fall-through. The path must be a declared route (a genuinely
