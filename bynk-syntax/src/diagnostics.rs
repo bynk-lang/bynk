@@ -166,8 +166,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 reaches for, so a reader (and the compiler) can see a handler's \
                 full reach from its signature alone. Using a capability that is \
                 not in `given` is the missing half of that contract.",
-        example: "on call() -> Effect[()] {                // ✗ uses Logger without declaring it\n    \
-                    Logger.log(\"hi\")\n}\n\n\
+        example: "on call() -> Effect[()] {\n    \
+                    Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\n\
                   on call() -> Effect[()] given Logger {   // ✓ declared, then used\n    \
                     Logger.log(\"hi\")\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
@@ -262,9 +262,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                     key name: String\n    \
                     store hits: Cell[Int]\n    \
                     on call withdraw() -> Effect[()] given Files { … }\n}\n\n\
-                  provides Takedown = Bucket given Clock {         // ✗ `withdraw` needs `Files`\n    \
-                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}\n\n\
-                  provides Takedown = Bucket given Clock, Files {  // ✓\n    \
+                  provides Takedown = Bucket given Clock {\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }   // ✗ `withdraw` needs `Files`\n}\n\n\
+                  provides Takedown = Bucket given Clock, Files {  // ✓ `Files` is listed\n    \
                     fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
         page: "/book/guides/effects-and-capabilities/compose-a-provider",
         anchor: "the-rules",
@@ -406,7 +406,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 says one is needed, and where a `match` is too complex for it to prove \
                 exhaustive it asks for `_` too.",
         example: "type Status = enum { Pending, Active, Done }\n\n\
-                  match s {\n    Pending => \"p\"\n    Active => \"a\"       // ✗ `Done` is not covered\n}\n\n\
+                  match s {                // ✗ `Done` is not covered\n    Pending => \"p\"\n    Active => \"a\"\n}\n\n\
                   match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",

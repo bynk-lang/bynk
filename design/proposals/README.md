@@ -104,8 +104,9 @@ Concretely, the implementing PR must, *where the increment touches them*:
   `bynk-syntax/src/diagnostics.rs`): why the rule exists and a before-and-after
   example. The example is backed by a compiled pair,
   `bynk-tests/tests/fixtures/explain/<code>/bad.bynk` and `good.bynk`: the first
-  must fail with that code alone, the second must compile, and each line of the
-  example must appear in one of them (`explain_examples.rs`). Warnings and
+  must fail with that code alone, reported on a line the example marks `✗`,
+  the second must compile, and each line of the example must appear in one of
+  them (`explain_examples.rs`). Warnings and
   internal codes may be left to the one-line registry summary. The `explained_codes` probe ratchets coverage
   upwards; the backlog is tracked in #3163.
 - **Keep examples consistent and compiling.** Snippets demonstrating the same

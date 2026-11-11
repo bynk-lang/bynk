@@ -11,10 +11,10 @@
 //! The snippet is tied to the pair line by line. A line marked `✗` must appear
 //! in `bad.bynk`, a line marked `✓` in `good.bynk`, and an unmarked line in
 //! either, compared without the trailing comment and the indentation; a line
-//! that elides with `…` is compared up to the `…`. So the line an explanation
-//! calls wrong is in a program the compiler refuses for the reason given, the
-//! line it calls right is in one it accepts, and a syntax change that breaks
-//! either fails here.
+//! that elides with `…` is compared up to the `…`. The compiler must also report
+//! the code on a line marked `✗`. So the line an explanation calls wrong is the
+//! one the compiler refuses, for the reason given, the line it calls right is
+//! in a program it accepts, and a syntax change that breaks either fails here.
 //!
 //! A program that starts `commons …` is compiled as a single file, and one that
 //! starts `context …` as a one-file project, as `doc_examples.rs` does.
@@ -44,8 +44,18 @@ fn fixtures_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/explain")
 }
 
-/// Compile one program, returning the codes of its errors (empty on success).
-fn error_codes(source: &str, tag: &str) -> Vec<String> {
+/// Compile one program, returning each error's code and the 1-indexed line it
+/// is reported on (empty on success).
+fn errors_of(source: &str, tag: &str) -> Vec<(String, usize)> {
+    let located = |errors: &[bynk_syntax::error::CompileError]| {
+        errors
+            .iter()
+            .map(|e| {
+                let (line, _) = bynk_syntax::span::line_col(source, e.span.start);
+                (e.category.to_string(), line)
+            })
+            .collect()
+    };
     let header = source
         .lines()
         .map(str::trim)
@@ -65,17 +75,22 @@ fn error_codes(source: &str, tag: &str) -> Vec<String> {
         let _ = fs::remove_dir_all(&root);
         match result {
             Ok(_) => Vec::new(),
-            Err(errors) => errors.iter().map(|e| e.category.to_string()).collect(),
+            Err(errors) => located(&errors),
         }
     } else {
         match bynk_emit::compile(source, tag) {
             Ok(_) => Vec::new(),
-            Err(errors) => errors.iter().map(|e| e.category.to_string()).collect(),
+            Err(errors) => located(&errors),
         }
     }
 }
 
 /// A line's code, without its trailing `//` comment and its indentation.
+///
+/// This reads text, not tokens. It assumes no string literal in an example
+/// holds a `//` after whitespace, or a `✗` or `✓`: none does today, and one
+/// that did would fail the gate, not pass it, because its line would be cut
+/// short or marked and then not found.
 fn code_of(line: &str) -> &str {
     // A `//` inside a string literal (a URL, say) is not a comment: take the
     // last `//` that is preceded by whitespace or starts the line.
@@ -107,20 +122,34 @@ fn example_lines(example: &str) -> Vec<(&str, Option<bool>)> {
         .collect()
 }
 
-/// Whether `program` has the marked line `code`. A `code` that elides with `…`
-/// matches a line that starts with what precedes the `…`.
-fn has_line(program: &str, code: &str) -> bool {
+/// The 1-indexed lines of `program` that are the example line `code`. A `code`
+/// that elides with `…` matches a line that starts with what precedes the `…`;
+/// with nothing before the `…` there is nothing to compare, so it matches none.
+fn lines_matching(program: &str, code: &str) -> Vec<usize> {
     let (want, elided) = match code.split_once('…') {
         Some((before, _)) => (before.trim(), true),
         None => (code, false),
     };
-    program.lines().map(code_of).any(|have| {
-        if elided {
-            have.starts_with(want)
-        } else {
-            have == want
-        }
-    })
+    if want.is_empty() {
+        return Vec::new();
+    }
+    program
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| {
+            let have = code_of(line);
+            if elided {
+                have.starts_with(want)
+            } else {
+                have == want
+            }
+        })
+        .map(|(i, _)| i + 1)
+        .collect()
+}
+
+fn has_line(program: &str, code: &str) -> bool {
+    !lines_matching(program, code).is_empty()
 }
 
 #[test]
@@ -142,17 +171,17 @@ fn every_explanation_example_is_backed_by_a_compiled_pair() {
             continue;
         };
 
-        let bad_codes = error_codes(&bad, &format!("{}-bad", e.code));
-        if bad_codes.is_empty() || bad_codes.iter().any(|c| c != e.code) {
+        let bad_errors = errors_of(&bad, &format!("{}-bad", e.code));
+        if bad_errors.is_empty() || bad_errors.iter().any(|(c, _)| c != e.code) {
             failures.push(format!(
-                "{}: bad.bynk must fail with this code alone, but its errors are {bad_codes:?}",
+                "{}: bad.bynk must fail with this code alone, but its errors are {bad_errors:?}",
                 e.code
             ));
         }
-        let good_codes = error_codes(&good, &format!("{}-good", e.code));
-        if !good_codes.is_empty() {
+        let good_errors = errors_of(&good, &format!("{}-good", e.code));
+        if !good_errors.is_empty() {
             failures.push(format!(
-                "{}: good.bynk must compile, but its errors are {good_codes:?}",
+                "{}: good.bynk must compile, but its errors are {good_errors:?}",
                 e.code
             ));
         }
@@ -167,7 +196,32 @@ fn every_explanation_example_is_backed_by_a_compiled_pair() {
                 ));
             }
         }
+        // The compiler must report the code on a line the example marks `✗`:
+        // the marked line is then the cause, not merely a line of a program
+        // that fails somewhere else.
+        let marked_bad: BTreeSet<usize> = lines
+            .iter()
+            .filter(|(_, mark)| *mark == Some(true))
+            .flat_map(|(code, _)| lines_matching(&bad, code))
+            .collect();
+        if !bad_errors.is_empty() && !bad_errors.iter().any(|(_, l)| marked_bad.contains(l)) {
+            failures.push(format!(
+                "{}: bad.bynk reports its errors at {bad_errors:?}, on no line the example \
+                 marks `✗` (lines {marked_bad:?} of bad.bynk)",
+                e.code
+            ));
+        }
         for (code, mark) in lines {
+            if code
+                .split_once('…')
+                .is_some_and(|(before, _)| before.trim().is_empty())
+            {
+                failures.push(format!(
+                    "{}: the example's line `{code}` has nothing before its `…` to compare",
+                    e.code
+                ));
+                continue;
+            }
             let (found, place) = match mark {
                 Some(true) => (has_line(&bad, code), "bad.bynk"),
                 Some(false) => (has_line(&good, code), "good.bynk"),
@@ -245,4 +299,7 @@ fn marked_lines_are_compared_without_comment_or_indent() {
     ));
     assert!(has_line("  x.name  // why", "x.name"));
     assert!(!has_line("x.names", "x.name"));
+    // Nothing before the `…`: no line to hold the program to.
+    assert!(!has_line("fn f() {\n  1\n}", "…"));
+    assert_eq!(lines_matching("a\n  b // c\nb", "b"), vec![2, 3]);
 }
