@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../../__bynk_runtime/entries.js";
+import { __attachLazy } from "../../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../../__bynk_runtime/agent.js";
 
@@ -36,6 +37,8 @@ function __encodeBinState(s: BinState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => __serialise_Crate(__v)) };
 }
 
+const __lazyFieldsOfBin = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Crate((__w as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Crate; return __serialise_Crate(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); } }] as const;
+
 export class Bin {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -46,12 +49,12 @@ export class Bin {
     const stored = await this.state.storage.get<BinState>("state");
     if (stored === undefined) return __zeroOfBinState();
     __checkStoredLayout("Bin", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfBinState();
     __reportUnknownStoredKeys("Bin", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBinState(__merged, __wholesale);
-    __hydrateBinState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBin); } else { __hydrateBinState(__merged, __wholesale) }
     return __merged;
   }
 

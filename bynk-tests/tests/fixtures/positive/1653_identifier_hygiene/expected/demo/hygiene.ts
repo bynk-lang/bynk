@@ -7,7 +7,8 @@ import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMo
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wireSet } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -442,6 +443,8 @@ function __encodeBagState(s: BagState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), seen: __wireSet(s.seen) };
 }
 
+const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }, { name: "seen", kind: "set", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }] as const;
+
 export class Bag {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -452,12 +455,12 @@ export class Bag {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
     __checkStoredLayout("Bag", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBagState(__merged, __wholesale);
-    __hydrateBagState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBag); } else { __hydrateBagState(__merged, __wholesale) }
     return __merged;
   }
 

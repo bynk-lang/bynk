@@ -12,8 +12,9 @@
 // in batches, and a `Log` window is a key range. A scan (`keys`, `values`, `entries`) lists the
 // collection in pages. Order is the entry's insertion sequence `i`, as `entries.ts` writes it.
 
-import { EntryOverlay, decodeKeyPart, expiredRange, expiryKey, logKey, logPrefix, logRange, mapKey, mapPrefix, metaKey, parseExpiryKey, parseLogKey, postingKey, postingPrefix, sameStored, setKey, setPrefix } from "./entries.ts";
-import type { DurableObjectListOptions } from "./storage.ts";
+import { EntryOverlay, setLazyContext, decodeKeyPart, expiredRange, expiryKey, logKey, logPrefix, logRange, mapKey, mapPrefix, metaKey, parseExpiryKey, parseLogKey, postingKey, postingPrefix, sameStored, setKey, setPrefix } from "./entries.ts";
+import type { DurableObjectListOptions, DurableObjectStorage } from "./storage.ts";
+import type { StoreMap } from "./store.ts";
 import type { CacheEntry, Indexer, LogEntry, StoreCacheHandle, StoreLogHandle, StoreMapHandle, StoreSetHandle } from "./store.ts";
 
 /** How many keys one page of a scan lists. */
@@ -51,9 +52,29 @@ async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptio
   }
 }
 
+// Runs the steps of one key one after another. A step reads what it is about to change, so two on the
+// same key would each read the old state; steps on different keys do not wait for each other.
+class KeyChains {
+  private readonly tails = new Map<string, Promise<unknown>>();
+
+  run<T>(key: string, step: () => Promise<T>): Promise<T> {
+    const prior = this.tails.get(key) ?? Promise.resolve();
+    const result = prior.then(step, step);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.tails.set(key, tail);
+    void tail.then(() => {
+      if (this.tails.get(key) === tail) this.tails.delete(key);
+    });
+    return result;
+  }
+}
+
 class MetaCell {
   private value: Meta = { size: 0, seq: 0, skew: undefined };
-  private loaded = false;
+  private loading: Promise<Meta> | undefined;
   private existed = false;
   private changed = false;
   private readonly overlay: EntryOverlay;
@@ -64,15 +85,16 @@ class MetaCell {
     this.key = metaKey(field);
   }
 
-  async load(): Promise<Meta> {
-    if (!this.loaded) {
+  load(): Promise<Meta> {
+    // Memoised: a handler's concurrent operations share one read, and one `Meta` they all update.
+    this.loading ??= (async () => {
       const stored = await this.overlay.get<Partial<Meta>>(this.key);
       this.existed = stored !== undefined;
       // A collection with no metadata at all is empty: it has nothing clamped, so its skew is known to be 0.
       this.value = { size: stored?.size ?? 0, seq: stored?.seq ?? 0, skew: stored === undefined ? 0 : typeof stored.skew === "number" ? stored.skew : undefined };
-      this.loaded = true;
-    }
-    return this.value;
+      return this.value;
+    })();
+    return this.loading;
   }
 
   touch(): void {
@@ -102,17 +124,22 @@ export interface MapEnvelope<V> {
 
 /** The storage-backed `store Map` handle (and, with `expiryOf`, the `store Cache` one). */
 export class LazyStoreMap<V> implements StoreMapHandle<V> {
+  /** Marks a storage-backed handle: it holds no record a wire encoder could carry (`store.ts`). */
+  readonly lazy = true;
   protected readonly overlay: EntryOverlay;
   protected readonly field: string;
   protected readonly meta: MetaCell;
+  private readonly chains = new KeyChains();
   private readonly envelope: MapEnvelope<V>;
   private readonly indexers: readonly Indexer<V>[];
+  private readonly keyCheck: ((key: string) => void) | undefined;
 
-  constructor(overlay: EntryOverlay, field: string, envelope: MapEnvelope<V>, indexers: readonly Indexer<V>[] = []) {
+  constructor(overlay: EntryOverlay, field: string, envelope: MapEnvelope<V>, indexers: ReadonlyArray<Indexer<V>> = [], keyCheck?: (key: string) => void) {
     this.overlay = overlay;
     this.field = field;
     this.envelope = envelope;
     this.indexers = indexers;
+    this.keyCheck = keyCheck;
     this.meta = new MetaCell(overlay, field);
   }
 
@@ -133,9 +160,22 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     return raw === undefined ? undefined : this.env(raw);
   }
 
-  async put(key: string, value: V): Promise<void> {
+  put(key: string, value: V): Promise<void> {
+    return this.chains.run(key, () => this.putNow(key, value));
+  }
+
+  modify(key: string, f: (current: V | undefined, present: boolean) => V): Promise<void> {
+    return this.chains.run(key, async () => {
+      const raw = await this.overlay.get(mapKey(this.field, key));
+      const present = raw !== undefined;
+      await this.putNow(key, f(present ? this.env(raw) : undefined, present), { old: raw as Envelope | undefined });
+    });
+  }
+
+  // `read` is the entry as the caller already read it, so a read-modify-write reads it once.
+  private async putNow(key: string, value: V, read?: { old: Envelope | undefined }): Promise<void> {
     const mk = mapKey(this.field, key);
-    const old = await this.overlay.get<Envelope>(mk);
+    const old = read === undefined ? await this.overlay.get<Envelope>(mk) : read.old;
     const meta = await this.meta.load();
     let i: number;
     const written = (n: number): unknown => this.envelope.write(value, n);
@@ -172,7 +212,11 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     if (!sameStored(old, next)) this.overlay.put(mk, next);
   }
 
-  async remove(key: string): Promise<boolean> {
+  remove(key: string): Promise<boolean> {
+    return this.chains.run(key, () => this.removeNow(key));
+  }
+
+  private async removeNow(key: string): Promise<boolean> {
     const mk = mapKey(this.field, key);
     const old = await this.overlay.get<Envelope>(mk);
     if (old === undefined) return false;
@@ -197,7 +241,9 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
   private async scan(): Promise<Array<[string, Envelope]>> {
     const prefix = mapPrefix(this.field);
     const all = await listAll<Envelope>(this.overlay, { prefix });
-    return all.map(([k, e]): [string, Envelope] => [decodeKeyPart(k.slice(prefix.length)), e]).sort((a, b) => a[1].i - b[1].i);
+    const keyed = all.map(([k, e]): [string, Envelope] => [decodeKeyPart(k.slice(prefix.length)), e]);
+    if (this.keyCheck !== undefined) for (const [k] of keyed) this.keyCheck(k);
+    return keyed.sort((a, b) => a[1].i - b[1].i);
   }
 
   async keys(): Promise<readonly string[]> {
@@ -217,6 +263,7 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     const prefix = postingPrefix(this.field, index, by);
     const postings = await listAll<unknown>(this.overlay, { prefix });
     const pks = postings.map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+    if (this.keyCheck !== undefined) for (const pk of pks) this.keyCheck(pk);
     const found = await this.overlay.getMany<Envelope>(pks.map((pk) => mapKey(this.field, pk)));
     return [...found.values()].sort((a, b) => a.i - b.i).map((e) => this.env(e));
   }
@@ -255,13 +302,18 @@ export class LazyStoreCache<V> extends LazyStoreMap<CacheEntry<V>> implements St
 
 /** The storage-backed `store Set` handle. */
 export class LazyStoreSet implements StoreSetHandle {
+  /** Marks a storage-backed handle: it holds no record a wire encoder could carry (`store.ts`). */
+  readonly lazy = true;
   private readonly overlay: EntryOverlay;
   private readonly field: string;
   private readonly meta: MetaCell;
+  private readonly chains = new KeyChains();
+  private readonly keyCheck: ((key: string) => void) | undefined;
 
-  constructor(overlay: EntryOverlay, field: string) {
+  constructor(overlay: EntryOverlay, field: string, keyCheck?: (key: string) => void) {
     this.overlay = overlay;
     this.field = field;
+    this.keyCheck = keyCheck;
     this.meta = new MetaCell(overlay, field);
   }
 
@@ -269,7 +321,11 @@ export class LazyStoreSet implements StoreSetHandle {
     return (await this.overlay.get(setKey(this.field, key))) !== undefined;
   }
 
-  async add(key: string): Promise<void> {
+  add(key: string): Promise<void> {
+    return this.chains.run(key, () => this.addNow(key));
+  }
+
+  private async addNow(key: string): Promise<void> {
     const sk = setKey(this.field, key);
     if ((await this.overlay.get(sk)) !== undefined) return;
     const meta = await this.meta.load();
@@ -279,7 +335,11 @@ export class LazyStoreSet implements StoreSetHandle {
     this.meta.touch();
   }
 
-  async remove(key: string): Promise<boolean> {
+  remove(key: string): Promise<boolean> {
+    return this.chains.run(key, () => this.removeNow(key));
+  }
+
+  private async removeNow(key: string): Promise<boolean> {
     const sk = setKey(this.field, key);
     if ((await this.overlay.get(sk)) === undefined) return false;
     const meta = await this.meta.load();
@@ -296,7 +356,9 @@ export class LazyStoreSet implements StoreSetHandle {
   async keys(): Promise<readonly string[]> {
     const prefix = setPrefix(this.field);
     const all = await listAll<Envelope>(this.overlay, { prefix });
-    return all.sort((a, b) => a[1].i - b[1].i).map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+    const keys = all.sort((a, b) => a[1].i - b[1].i).map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+    if (this.keyCheck !== undefined) for (const k of keys) this.keyCheck(k);
+    return keys;
   }
 
   finish(): void {
@@ -317,11 +379,14 @@ interface StoredLogEntry {
 
 /** The storage-backed `store Log` handle. */
 export class LazyStoreLog<V> implements StoreLogHandle<V> {
+  /** Marks a storage-backed handle: it holds no record a wire encoder could carry (`store.ts`). */
+  readonly lazy = true;
   private readonly overlay: EntryOverlay;
   private readonly field: string;
   private readonly meta: MetaCell;
   private readonly codec: LogCodec<V>;
   private lastKeyTime: number | undefined;
+  private readonly chains = new KeyChains();
 
   constructor(overlay: EntryOverlay, field: string, codec: LogCodec<V>) {
     this.overlay = overlay;
@@ -349,7 +414,11 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
     return meta;
   }
 
-  async append(value: V, now: number): Promise<void> {
+  append(value: V, now: number): Promise<void> {
+    return this.chains.run("", () => this.appendNow(value, now));
+  }
+
+  private async appendNow(value: V, now: number): Promise<void> {
     const meta = await this.establishSkew();
     if (this.lastKeyTime === undefined) {
       const last = await this.overlay.list<unknown>({ prefix: logPrefix(this.field), reverse: true, limit: 1 });
@@ -366,10 +435,14 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
     this.meta.touch();
   }
 
-  async prune(cutoff: number): Promise<void> {
+  prune(cutoff: number): Promise<void> {
+    return this.chains.run("", () => this.pruneNow(cutoff));
+  }
+
+  private async pruneNow(cutoff: number): Promise<void> {
     const meta = await this.establishSkew();
     // An entry with `t < cutoff` has a key time below `cutoff + skew`.
-    const stale = await listAll<StoredLogEntry>(this.overlay, { ...logRange(this.field, undefined, cutoff + (meta.skew as number)) });
+    const stale = await listAll<StoredLogEntry>(this.overlay, { ...this.range(undefined, cutoff + (meta.skew as number)) });
     let removed = 0;
     for (const [k, e] of stale) {
       if (e.t < cutoff) {
@@ -387,12 +460,18 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
     return (await this.meta.load()).size;
   }
 
+  // The key range of key times `[from, to)`. Key times are never negative, so a bound below zero is zero.
+  private range(from: number | undefined, to: number | undefined): DurableObjectListOptions {
+    const clamp = (n: number | undefined): number | undefined => (n === undefined ? undefined : Math.max(n, 0));
+    return logRange(this.field, clamp(from), clamp(to));
+  }
+
   private async window(from: number | undefined, to: number | undefined, keep: (t: number) => boolean): Promise<LogEntry<V>[]> {
     const skew = (await this.meta.load()).skew;
     // The key time is never below an entry's `t` and at most `skew` above it; with no known skew an
     // upper bound cannot be trusted, so the window reads to the end of the log and filters.
     const upper = to === undefined || skew === undefined ? undefined : to + skew;
-    const all = await listAll<StoredLogEntry>(this.overlay, logRange(this.field, from, upper));
+    const all = await listAll<StoredLogEntry>(this.overlay, this.range(from, upper));
     return all.filter(([, e]) => keep(e.t)).map(([, e]) => this.entry(e));
   }
 
@@ -430,4 +509,80 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
   finish(): void {
     this.meta.finish();
   }
+}
+
+/** How one collection field decodes and encodes its values, for the handle attached to it. */
+export interface LazyFieldSpec {
+  readonly name: string;
+  readonly kind: "map" | "cache" | "set" | "log";
+  /** Wire value to domain value; throws on a value that does not decode (a rehydration violation). */
+  readonly decode?: (wire: unknown) => unknown;
+  /** Domain value to wire value. */
+  readonly encode?: (value: unknown) => unknown;
+  /** For a `Map` or `Set` with a refined textual key: checks a key read back from storage, throwing the rehydration fault. */
+  readonly checkKey?: (key: string) => void;
+}
+
+const identity = (v: unknown): unknown => v;
+
+/**
+ * Give a freshly merged state its storage-backed collection handles, in place of the in-memory
+ * ones its zero carries (#3189, the lazy-read slice). The handles share one overlay, which the
+ * commit flushes with the `"state"` record. `loadState` calls this instead of filling the
+ * handles when `readStored` found a current-version per-entry record. An `@indexed` map keeps the
+ * indexers its zero handle was built with.
+ */
+export function attachLazy(storage: DurableObjectStorage, state: object, specs: readonly LazyFieldSpec[]): void {
+  const overlay = new EntryOverlay(storage);
+  const slots = state as Record<string, unknown>;
+  const handles: object[] = [];
+  const finishers: Array<() => void> = [];
+  const reapers: Array<(now: number, limit: number) => Promise<number>> = [];
+  for (const spec of specs) {
+    const decode = spec.decode ?? identity;
+    const encode = spec.encode ?? identity;
+    const was = slots[spec.name] as { indexers?: readonly Indexer<unknown>[] } | undefined;
+    switch (spec.kind) {
+      case "map": {
+        const h = new LazyStoreMap<unknown>(
+          overlay,
+          spec.name,
+          { read: (e: { v: unknown }) => decode(e.v), write: (v, i) => ({ i, v: encode(v) }) },
+          was?.indexers ?? [],
+          spec.checkKey,
+        );
+        slots[spec.name] = h;
+        handles.push(h);
+        finishers.push(() => h.finish());
+        break;
+      }
+      case "cache": {
+        const h = new LazyStoreCache<unknown>(overlay, spec.name, {
+          read: (e: { v: unknown; exp: number }) => ({ v: decode(e.v), exp: e.exp }),
+          write: (c, i) => ({ v: encode(c.v), exp: c.exp, i }),
+          expiryOf: (e: { exp?: number }) => e.exp,
+        });
+        slots[spec.name] = h;
+        handles.push(h);
+        finishers.push(() => h.finish());
+        reapers.push((now, limit) => h.reap(now, limit));
+        break;
+      }
+      case "set": {
+        const h = new LazyStoreSet(overlay, spec.name, spec.checkKey);
+        slots[spec.name] = h;
+        handles.push(h);
+        finishers.push(() => h.finish());
+        break;
+      }
+      case "log": {
+        const h = new LazyStoreLog<unknown>(overlay, spec.name, { decode: decode as (w: never) => unknown, encode });
+        slots[spec.name] = h;
+        handles.push(h);
+        finishers.push(() => h.finish());
+        break;
+      }
+    }
+  }
+  setLazyContext(handles, { overlay, finish: () => finishers.forEach((f) => f()), reapers });
 }

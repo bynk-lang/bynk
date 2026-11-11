@@ -8,7 +8,8 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
-import { commitStored, noteClock, readStored, then } from "./entries.ts";
+import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
+import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
@@ -41,6 +42,7 @@ export {
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
   callService as __callService,
+  attachLazy as __attachLazy,
   commitStored as __commitStored,
   checkStoredLayout as __checkStoredLayout,
   checkStoredSchemaVersion as __checkStoredSchemaVersion,
@@ -78,6 +80,7 @@ export {
   multipartMediaTypeMatches as __multipartMediaTypeMatches,
   multipartObject as __multipartObject,
   readStored as __readStored,
+  readsLazily as __readsLazily,
   then as __bynkThen,
   requestHeaders as __requestHeaders,
   formMediaTypeMatches as __formMediaTypeMatches,
