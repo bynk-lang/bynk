@@ -4904,6 +4904,12 @@ fn validate_http_handler(
         if is_query {
             validate_query_param(p, types, errors);
         }
+        // #3277: `cookies` is the request's cookies, a record `T` the router decodes
+        // and validates.
+        let is_cookies = !is_path && p.name.name == "cookies";
+        if is_cookies {
+            validate_cookies_param(p, types, errors);
+        }
         // #3276: the `body` of a `@form` handler is a record of form leaves.
         if is_body
             && let Some(kind) = handler
@@ -4926,18 +4932,18 @@ fn validate_http_handler(
                 );
             }
         }
-        if !is_path && !is_body && !is_headers && !is_query {
+        if !is_path && !is_body && !is_headers && !is_query && !is_cookies {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers` or `query`",
+                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers`, `query` or `cookies`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers` or `query`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers`, `query` or `cookies`",
                 ),
             );
         }
@@ -5018,6 +5024,58 @@ fn is_query_field_type(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> b
     match r {
         TypeRef::Option(inner, _) | TypeRef::List(inner, _) => is_query_leaf(inner, types),
         other => is_query_leaf(other, types),
+    }
+}
+
+/// #3277: an HTTP handler's `cookies` parameter is a record whose fields are each
+/// a leaf a cookie can carry (the typed-`query` set: a `String`, `Int`, `Bool` or
+/// `Decimal`, a refined or opaque type over one, an enum), an `Option` of one, or
+/// a `List` of one (a name sent twice).
+fn validate_cookies_param(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.cookies_wrong_type",
+                p.type_ref.span(),
+                format!(
+                    "an HTTP handler's `cookies` parameter must be a record type (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "`cookies: Session` decodes the request's `Cookie` header into the record `Session`, one field per cookie name, and answers `400` when it does not fit",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cookies_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `cookies` record has type `{}`, which a cookie cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a cookie field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a name sent twice)",
+                ),
+            );
+        }
     }
 }
 
@@ -5138,6 +5196,22 @@ fn validate_handler_annotations(
                     continue;
                 }
                 validate_cache_args(ann, errors);
+                // #3277: a response that depends on the request's cookies is one
+                // user's, so it must not be stored by a shared cache.
+                let public = ann.args.iter().any(|a| {
+                    a.label.as_ref().is_some_and(|n| n.name == "scope")
+                        && matches!(&a.value.kind, ExprKind::Ident(id) if id.name == "public")
+                });
+                if public && handler.params.iter().any(|p| p.name.name == "cookies") {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_public_reads_cookies",
+                            ann.span,
+                            "a `@cache(scope: public)` handler reads `cookies`, so a shared cache could replay one user's response to another",
+                        )
+                        .with_note("use `scope: private`, or drop the `cookies` parameter"),
+                    );
+                }
             }
             "limit" => {
                 if seen_limit {
@@ -5371,6 +5445,18 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
         ),
         _ => false,
     }
+}
+
+/// #3277: whether `decl` (the type table's entry for `name`) is a type the `bynk`
+/// adapter exports, found by its first-party span.
+pub fn is_std_bynk_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    decl: &TypeDecl,
+) -> bool {
+    types.get(name).is_some_and(|d| d.span == decl.span)
+        && crate::firstparty::unit(bynk_std::BYNK_UNIT)
+            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
 }
 
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its

@@ -922,6 +922,34 @@
       "summary": "A GET or DELETE handler declares a `body` parameter."
     },
     {
+      "code": "bynk.http.cache_public_reads_cookies",
+      "summary": "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another."
+    },
+    {
+      "code": "bynk.http.cookie_host_prefix",
+      "summary": "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`."
+    },
+    {
+      "code": "bynk.http.cookie_partitioned_insecure",
+      "summary": "A `partitioned` cookie literal is not `secure`."
+    },
+    {
+      "code": "bynk.http.cookie_samesite_none_insecure",
+      "summary": "A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`."
+    },
+    {
+      "code": "bynk.http.cookie_script_readable",
+      "summary": "A cookie literal sets `httpOnly: false`, so page scripts can read it (warning)."
+    },
+    {
+      "code": "bynk.http.cookie_secure_prefix",
+      "summary": "A `__Secure-` cookie literal is not `secure`."
+    },
+    {
+      "code": "bynk.http.cookies_field_not_stringy",
+      "summary": "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry."
+    },
+    {
       "code": "bynk.http.duplicate_route",
       "summary": "Two handlers share the same method and route."
     },

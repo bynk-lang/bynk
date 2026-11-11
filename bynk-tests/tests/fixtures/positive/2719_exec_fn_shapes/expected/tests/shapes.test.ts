@@ -227,8 +227,9 @@ class __Stub_Quotes {
     const { Box, Dice, bounded, guarded, hedged, middle, outer, rolled, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;
     type Dice = __ns_shapes.Dice;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -238,6 +239,7 @@ class __Stub_Quotes {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -293,8 +295,9 @@ async function test_every_call_shape_threads_the_context() {
     const { Box, Dice, Roller, __makeRoller, bounded, guarded, hedged, middle, outer, rolled, run, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;
     type Dice = __ns_shapes.Dice;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -304,6 +307,7 @@ async function test_every_call_shape_threads_the_context() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -326,8 +330,9 @@ async function test_a_send_from_a_helper_runs_on_the_handler_s_context() {
     const { Box, Dice, Roller, __makeRoller, bounded, guarded, hedged, middle, outer, rolled, run, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;
     type Dice = __ns_shapes.Dice;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -337,6 +342,7 @@ async function test_a_send_from_a_helper_runs_on_the_handler_s_context() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -359,8 +365,9 @@ async function test_a_helper_that_bounds_a_call_runs_on_virtual_time() {
     const { Box, Dice, Roller, __makeRoller, bounded, guarded, hedged, middle, outer, rolled, run, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;
     type Dice = __ns_shapes.Dice;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -370,6 +377,7 @@ async function test_a_helper_that_bounds_a_call_runs_on_virtual_time() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -392,8 +400,9 @@ async function test_a_fast_call_is_within_the_bound() {
     const { Box, Dice, Roller, __makeRoller, bounded, guarded, hedged, middle, outer, rolled, run, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;
     type Dice = __ns_shapes.Dice;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -403,6 +412,7 @@ async function test_a_fast_call_is_within_the_bound() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -425,8 +435,9 @@ async function test_a_method_that_bounds_a_call() {
     const { Box, Dice, Roller, __makeRoller, bounded, guarded, hedged, middle, outer, rolled, run, tick, twice, viaLambda } = __ns_shapes;
     type Box = __ns_shapes.Box;
     type Dice = __ns_shapes.Dice;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -436,6 +447,7 @@ async function test_a_method_that_bounds_a_call() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;

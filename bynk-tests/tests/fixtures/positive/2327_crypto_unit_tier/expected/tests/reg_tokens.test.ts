@@ -75,8 +75,9 @@ class __Stub_Crypto {
     return true;
   }
   async digest(algorithm: __ns_bynk_crypto.Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -86,6 +87,7 @@ class __Stub_Crypto {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -161,8 +163,9 @@ async function test_a_token_is_hashed_with_SHA_256() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -172,6 +175,7 @@ async function test_a_token_is_hashed_with_SHA_256() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -197,8 +201,9 @@ async function test_equal_digests_match_and_different_ones_do_not() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -208,6 +213,7 @@ async function test_equal_digests_match_and_different_ones_do_not() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -235,8 +241,9 @@ async function test_an_HMAC_matches_RFC_4231_test_case_2() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -246,6 +253,7 @@ async function test_an_HMAC_matches_RFC_4231_test_case_2() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -271,8 +279,9 @@ async function test_a_webhook_MAC_verifies__and_a_wrong_one_does_not() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -282,6 +291,7 @@ async function test_a_webhook_MAC_verifies__and_a_wrong_one_does_not() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -311,8 +321,9 @@ async function test_random_bytes_are_deterministic_under_test() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -322,6 +333,7 @@ async function test_random_bytes_are_deterministic_under_test() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -347,8 +359,9 @@ async function test_an_Ed25519_signature_matches_RFC_8032_test_1() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -358,6 +371,7 @@ async function test_an_Ed25519_signature_matches_RFC_8032_test_1() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -383,8 +397,9 @@ async function test_that_signature_verifies__and_fails_for_other_data() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -394,6 +409,7 @@ async function test_that_signature_verifies__and_fails_for_other_data() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -422,8 +438,9 @@ async function test_a_bad_key_is_an_error_value__not_a_fault() {
   try {
     const deps = __makeTestDeps();
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -433,6 +450,7 @@ async function test_a_bad_key_is_an_error_value__not_a_fault() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -459,8 +477,9 @@ async function test_a_stubbed_digest_is_observed() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["digest", "equal", "hmac", "importSigningKey", "importVerifyJwk", "importVerifyKey", "sign", "verify", "verifyHmac"], Random: ["bytes", "int", "uuid"] }, __obs);
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -470,6 +489,7 @@ async function test_a_stubbed_digest_is_observed() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;

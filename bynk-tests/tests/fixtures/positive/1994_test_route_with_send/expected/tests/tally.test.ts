@@ -83,8 +83,9 @@ async function test_a_route_that_sends_answers() {
     __ns_tally.__resetAgents();
     const deps = __makeTestDeps();
     const { Counter, __makeCounter, api } = __ns_tally;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -94,6 +95,7 @@ async function test_a_route_that_sends_answers() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -114,8 +116,9 @@ async function test_the_send_has_run_before_the_expectations() {
     __ns_tally.__resetAgents();
     const deps = __makeTestDeps();
     const { Counter, __makeCounter, api } = __ns_tally;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -125,6 +128,7 @@ async function test_the_send_has_run_before_the_expectations() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -146,8 +150,9 @@ async function test_the_route_answers_at_the_integration_tier() {
     __ns_tally.__resetAgents();
     const deps = __makeTestDeps();
     const { Counter, __makeCounter, api } = __ns_tally;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -157,6 +162,7 @@ async function test_the_route_answers_at_the_integration_tier() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;

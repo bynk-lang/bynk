@@ -540,7 +540,10 @@ fn operation(
         } else if name == "query" {
             // #2854: a typed `query` record is one `in: query` parameter per
             // field; the raw `RequestQuery` view declares none.
-            parameters.extend(query_parameters(r, components, &p.type_ref));
+            parameters.extend(query_parameters(r, components, &p.type_ref, "query"));
+        } else if name == "cookies" {
+            // #3277: a typed `cookies` record is one `in: cookie` parameter per field.
+            parameters.extend(query_parameters(r, components, &p.type_ref, "cookie"));
         }
         // Any other param is a `headers` (the request's headers, read-only and
         // untyped here); the checker admits no other.
@@ -565,7 +568,12 @@ fn operation(
 /// default `form` style with `explode`). Refinements reach the schema as they do
 /// for a path parameter. The raw `RequestQuery` view is not a record, so it
 /// declares none.
-fn query_parameters(r: &Renderer, components: &mut Components, ty: &TypeRef) -> Vec<Value> {
+fn query_parameters(
+    r: &Renderer,
+    components: &mut Components,
+    ty: &TypeRef,
+    location: &str,
+) -> Vec<Value> {
     let TypeRef::Named(id) = ty else {
         return Vec::new();
     };
@@ -590,7 +598,7 @@ fn query_parameters(r: &Renderer, components: &mut Components, ty: &TypeRef) -> 
             };
             let mut param = Map::new();
             param.insert("name".into(), json!(f.name.name));
-            param.insert("in".into(), json!("query"));
+            param.insert("in".into(), json!(location));
             param.insert("required".into(), json!(!optional && f.init.is_none()));
             if let Some(d) = &f.documentation {
                 param.insert("description".into(), json!(d.text.trim()));
