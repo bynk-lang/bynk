@@ -1,0 +1,11 @@
+context counter
+
+agent Counter {
+  key id: String
+  store counts: Map[String, Int]
+
+  on call bump() -> Effect[()] {
+    let _ <- counts.upsert("k", 1, (v) => v + 1)
+    Effect.pure(())
+  }
+}

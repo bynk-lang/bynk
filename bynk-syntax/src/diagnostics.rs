@@ -427,6 +427,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sending-and-broadcasting",
     },
     Explain {
+        code: "bynk.held.leak",
+        blurb: "A held value such as a `Connection[F]` has one owner, who must dispose of it before its scope ends: close it, store it (in a `Map[K, Connection[F]]` or a `Cell[Option[Connection[F]]]`), or pass it to a function or agent call that takes it. A dropped connection would stay open with nothing able to close it. The error is reported at the binding: a handler or function parameter, or a `let`. The connection `on open` receives is owned; the one `on message` and `on close` receive is only lent, so it carries no such duty. See `bynk.held.use_after_consume` (used after disposal) and `bynk.held.consume_on_borrow` (disposed of while borrowed).",
+        example: "fn ignore(c: Connection[ServerFrame]) -> Effect[()] {   // ✗ `c` is never closed, stored or passed on\n  Effect.pure(())\n}\n\nfn finish(c: Connection[ServerFrame]) -> Effect[()] {   // ✓\n  c.close()\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.held.use_after_consume",
+        blurb: "Closing, storing or passing on a held value such as a `Connection[F]` hands its single ownership away, and after that the name no longer refers to anything you may use. A later `send`, a second `close`, or any other mention of the binding is an error, reported on that later use, because the connection may already be closed or owned by someone else. Only `send` leaves a connection owned, so do every `send` first and dispose of the connection last. `bynk.held.leak` is the other end of the same rule (never disposed), and `bynk.held.consume_on_borrow` is the case where the code never owned the connection to begin with.",
+        example: "let _ <- c.close()\nlet _ <- c.send(ServerFrame { text: \"bye\" })   // ✗ `c` was closed on the line above\n\nlet _ <- c.send(ServerFrame { text: \"bye\" })   // ✓ send first\nlet _ <- c.close()",
+        page: "/book/reference/websocket",
+        anchor: "sending-and-broadcasting",
+    },
+    Explain {
         code: "bynk.http.error_status_position",
         blurb: "An `ErrorStatus` name such as `Forbidden` stands for a status only as \
                 `RawError`'s first argument, where the compiler turns it into the \
@@ -453,6 +467,20 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.json.nested_option_plain",
+        blurb: "Plain JSON writes `Some(v)` as `v` and `None` as `null`, so it can only be read back if `v` is never itself `null`. In an `Option[Option[T]]` or an `Option[()]`, `Some(None)` and `None` (or `Some(())` and `None`) would both be written `null`, and the decoder could not tell them apart. The compiler refuses the type wherever plain encoding is asked for: in the response type of a route whose `json { options: plain }` or `@json(options: plain)` applies, or in the argument of `Json.encodePlain`, through records, sums, containers and generic arguments alike. The tagged form, which `Json.encode` and a route's default use, writes `Option` as `{\"kind\":\"Some\",\"value\":…}` and has no such ambiguity. Either flatten the type, model the distinction as a sum type, or keep that route tagged.",
+        example: "type Row = { id: String, note: Option[Option[String]] }\n\non GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ `Some(None)` and `None` both write `null`\n\ntype Row = { id: String, note: Option[String] }   // ✓",
+        page: "/book/reference/types",
+        anchor: "plain-json",
+    },
+    Explain {
+        code: "bynk.par.invalid_statement",
+        blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
+        example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "par",
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
@@ -579,6 +607,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.bad_const_initialiser",
+        blurb: "A constant's value is fixed when its module loads, so its initialiser must be static: a literal, a `Duration` literal, a record, list or variant built from static values, `Some`/`None`/`Ok`/`Err`, `T.unsafe(lit)`, an empty `List`/`Map`/`Set`, or another constant. A function call (even a pure one), an operator, an interpolated string, a field access, a lambda, `if` and `match` are not. The code is also reported when a static value is not of the declared type. Write the value out, or make it a `fn` and call it where it is used.",
+        example: "fn base() -> Int {\n  10\n}\n\nconst Limit: Int = base()   // ✗ a call is not a static value\n\nconst Limit: Int = 10   // ✓",
+        page: "/book/reference/constants",
+        anchor: "what-an-initialiser-may-be",
+    },
+    Explain {
+        code: "bynk.resolve.const_cycle",
+        blurb: "Constants may refer to each other in any order, across files and through `uses`, but a value cannot depend on itself: in a cycle no member has anything to start from. The error lists the cycle (`First` → `Second` → `First`) and is reported once, at the member declared first. Break the cycle by giving one member a literal or other static value. A reference such as `Second` is itself a static initialiser, so this is the only rule that limits constants naming each other; `bynk.resolve.bad_const_initialiser` covers initialisers that are not static at all.",
+        example: "const First: Int = Second   // ✗ `First` → `Second` → `First`\nconst Second: Int = First\n\nconst Second: Int = 10   // ✓ end the chain at a literal",
+        page: "/book/reference/constants",
+        anchor: "what-an-initialiser-may-be",
+    },
+    Explain {
         code: "bynk.resolve.duplicate_type",
         blurb: "A unit declares two types, or a type and an event, with the same name. A unit's top-level \
                 declarations share one scope in the emitted module, so a name can mean only one thing, \
@@ -617,6 +659,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   const Limit: Int = 3         // ✓ once the function is renamed `limit`",
         page: "/book/spec/static-semantics",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.reserved_builtin_type",
+        blurb: "The compiler knows a few type names itself, and the type parser reads each one as the built-in wherever it appears in a type. A `type` declaration that reused one would be shadowed at every use, or fail confusingly there, so the declaration is refused. The names are `Asset`, `BoundaryRejection`, `Connection`, `History`, `HttpResult`, `List`, `Map`, `Query`, `QueueResult`, `RequestHeaders`, `RequestQuery`, `Set`, `Stream` and `TokenClaims`. Rename the type. They are reserved in type position only, so a value may still use the word. A constant with such a name is `bynk.resolve.name_conflict` instead, and the base types and words such as `Result` are keywords that the parser refuses earlier.",
+        example: "type Set = { items: List[Int] }   // ✗ `Set` is the built-in set type\n\ntype IntSet = { items: List[Int] }   // ✓",
+        page: "/book/reference/keywords",
+        anchor: "built-in-type-names",
     },
     Explain {
         code: "bynk.resolve.unknown_field",
@@ -682,6 +731,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn greet(u: User) -> String { … }  // ✓ the declared type",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.store.unknown_op",
+        blurb: "A `store` field's methods are its storage operations, which are effectful (await with `<-`), and each kind has a fixed set. `Map` and `Cache` take `put`, `get`, `update`, `upsert`, `remove`, `contains` and `size` (a `Map` also takes query operations); `Set` takes `add`, `remove`, `contains` and `size`; a `Cell` takes only `update`, being read by name and written with `:=`; a `Log` takes `append` and lazy query reads. Any other name is refused, even one the same type has as a plain value. For a read-modify-write use `update`, or `upsert` when the key may be absent. A wrong key query (`.entries`, `.keys`, `.values`) is `bynk.store.unknown_map_accessor`.",
+        example: "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
     },
     Explain {
         code: "bynk.types.argument_mismatch",
@@ -3611,7 +3667,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.store.unknown_op",
-        "A storage-`Map`/`Set` operation is not a recognised entry/membership method.",
+        "A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations.",
     ),
     d(
         "bynk.stub.after_type",

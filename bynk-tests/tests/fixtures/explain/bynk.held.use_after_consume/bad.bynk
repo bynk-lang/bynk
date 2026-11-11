@@ -1,0 +1,9 @@
+commons room {
+  type ServerFrame = { text: String }
+
+  fn goodbye(c: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- c.close()
+    let _ <- c.send(ServerFrame { text: "bye" })
+    Effect.pure(())
+  }
+}
