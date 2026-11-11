@@ -1,0 +1,8 @@
+commons demo
+
+fn word(n: Int) -> String {
+    match n {
+        "one" => "uno"
+        _ => "other"
+    }
+}

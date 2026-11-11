@@ -1,0 +1,5 @@
+commons demo
+
+fn apply(f: (Int, Int) -> Int) -> Int {
+    f(1)
+}
