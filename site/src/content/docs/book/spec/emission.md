@@ -567,7 +567,7 @@ used by the composition root, and on `bundle` the contexts compile together.
 
 One position remains deliberately *not* codec-checked, stated here rather than
 left to be discovered: the **runtime-owned error types** (`ValidationError`,
-`JsonError`, `HttpResult`, `QueueResult`) pass through uncoded. They are declared
+`DecodeError`, `HttpResult`, `QueueResult`) pass through uncoded. They are declared
 by the runtime rather than by a type declaration the emitter can walk, so there is
 no helper to generate; their JSON shape is fixed by the runtime, so the
 pass-through is unchecked rather than wrong.
@@ -968,14 +968,14 @@ module already has:
 
 `Json.encode(v)` lowers to `globalThis.JSON.stringify(__serialise_<T>(v))` for the
 value's checked type; `Json.decode[T](s)` to a typed IIFE that
-`JSON.parse`s (a throw becomes a `Malformed` `JsonError`), dispatches to
+`JSON.parse`s (a throw becomes a `Malformed` `DecodeError`), dispatches to
 `__deserialise_<T>`, and maps a `BoundaryError` into the uniform
 `kind`/`path`/`message` record (ADR 0047). The per-type
 `__serialise_`/`__deserialise_` helpers and any generic instantiations
 (`__deserialise_List_Order`, …) are emitted **module-locally** into each
 module whose code calls the codec — the same closure machinery as the
 workers boundary path, deduped against helpers that path already emitted.
-The codec runtime types (`JsonError`, `__JsonValue`, `__BoundaryError`) are
+The codec runtime types (`DecodeError`, `__JsonValue`, `__BoundaryError`) are
 imported only by modules that use the codec, so non-codec modules emit
 byte-identically to v0.22a.
 
@@ -1015,6 +1015,43 @@ module-local `__option_value_<U>(raw, at)` that rules 3 and 4 share. A bare valu
 that fails as a `StructuralMismatch` at the `Option`'s own path has its
 `expected` extended with every form the decoder accepts.
 
+### §7.3.9a The YAML decoder (#3214) {#739a-the-yaml-decoder}
+
+`Yaml.decode[T](s)` lowers to the typed IIFE of §7.3.9 with one change: the text is
+read by the runtime's `__bynkYamlParse` in place of `JSON.parse`. The parser returns the
+value as the same JSON-shaped tree, or a `DecodeError` of its own; on success the tree
+goes to `__deserialise_<T>` and the same error mapping as `Json.decode`. The runtime
+module (`yaml.ts`) is imported, and emitted, only by a module that calls `Yaml.decode`.
+
+**Grammar read.** YAML 1.2, one document, optionally opened by `---` and closed by
+`...`: block and flow mappings and sequences; plain, single-quoted and double-quoted
+scalars, which may span lines (a line break folds to one space, a blank line to a
+newline); literal `|` and folded `>` block scalars with a chomping indicator (`-`, `+`)
+and an indentation digit; comments; and scalar mapping keys. Indentation is spaces: a
+tab is content inside a scalar or a flow collection and is never block indentation.
+
+**Resolution.** A plain scalar resolves by shape under the core schema: the empty scalar
+and `~`, `null`, `Null`, `NULL` are `null`; `true`/`True`/`TRUE` and
+`false`/`False`/`FALSE` are booleans; `[-+]?[0-9]+`, `0o[0-7]+` and `0x[0-9a-fA-F]+` are
+integers; `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?` is a float, read as
+`Number` would read it; every other plain scalar is a string. A quoted scalar and a block
+scalar are strings. A mapping key is the text of the key. No tag, anchor or other
+property affects resolution, because none is accepted.
+
+**Refusal.** The parser MUST refuse, with a `DecodeError` and no value, each of: an
+anchor (`UnsupportedAnchor`), an alias (`UnsupportedAlias`), the unquoted key `<<`
+(`UnsupportedMergeKey`), a tag (`UnsupportedTag`), a second document
+(`MultipleDocuments`), a directive, a complex key `? …`, a collection used as a key
+(`UnsupportedSyntax`), `.inf` and `.nan` in any case (`UnsupportedValue`), a repeated key
+in one mapping (`DuplicateKey`), and any syntax error (`Malformed`). The error's `path` is
+the path (`$.a.b[2]`) of the value being read when it was found, `$` before any key, and
+its `message` ends `(line L, column C)`, both counted from 1.
+
+**Limits.** Input longer than 1,048,576 bytes of UTF-8 MUST be refused up front
+(`LimitExceeded`, path `$`), and a document with collections nested more than 256 levels
+deep (the bound of §6.5, counted over both block and flow collections) MUST be refused
+(`LimitExceeded`) while it is read. `Json.decode` has no size limit of its own.
+
 ### §7.3.10 Streams and WebSockets (v0.100, v0.102+)
 
 A **`Stream[T]`** lowers to a host **`AsyncIterable<T>`**, emitted **inline** as
@@ -1051,6 +1088,16 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   in-memory side-table split out of the durable record. `parTraverse` over the map
   lowers to `await Promise.all(xs.map(f))`. Only modules that use streams or
   WebSockets emit this machinery.
+
+A held `Map[K, Connection]` closes the connections it stops holding, on **both**
+targets, so a held connection is never dropped with its socket open. `remove`
+closes the connection the key held and then deletes the entry, and `put` over a key
+that already holds a connection closes the displaced connection before storing the
+new one. A `put` of the connection the key already holds (on Workers, the same
+connection id; on the bundle, the same `TestConnection`) closes nothing. An absent
+key is a no-op for `remove`. The close happens while the handler runs, before its
+end-of-handler commit, so a handler that closes a connection and then faults has
+closed it although the entry is not committed as removed.
 
 ## §7.4 The runtime library
 

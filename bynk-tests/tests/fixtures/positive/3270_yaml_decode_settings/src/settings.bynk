@@ -1,0 +1,49 @@
+commons settings
+
+type AfterDays = Int where InRange(1, 30)
+
+type Triage = {
+  enabled: Bool,
+  labels: List[String],
+}
+
+type Nudges = {
+  enabled: Bool = false,
+  after_days: AfterDays = 3,
+}
+
+type Settings = {
+  triage: Triage,
+  nudges: Option[Nudges] = None,
+  mode: String = "auto",
+}
+
+type Flags = {
+  a: String,
+  b: String,
+  c: String,
+  d: String,
+}
+
+fn load(text: String) -> Result[Settings, DecodeError] {
+  Yaml.decode[Settings](text)
+}
+
+fn loadInferred(text: String) -> Result[Settings, DecodeError] {
+  Yaml.decode(text)
+}
+
+fn loadFlags(text: String) -> Result[Flags, DecodeError] {
+  Yaml.decode[Flags](text)
+}
+
+fn loadList(text: String) -> Result[List[Triage], DecodeError] {
+  Yaml.decode[List[Triage]](text)
+}
+
+fn describe(r: Result[Settings, DecodeError]) -> String {
+  match r {
+    Ok(s) => "ok \(s.mode)"
+    Err(e) => "\(e.kind) at \(e.path)"
+  }
+}

@@ -15,15 +15,15 @@ commons orders {
     Json.encode(o)
   }
 
-  fn load(s: String) -> Result[Order, JsonError] {
+  fn load(s: String) -> Result[Order, DecodeError] {
     Json.decode[Order](s)
   }
 
-  fn loadInferred(s: String) -> Result[Order, JsonError] {
+  fn loadInferred(s: String) -> Result[Order, DecodeError] {
     Json.decode(s)
   }
 
-  fn loadMany(s: String) -> Result[List[Order], JsonError] {
+  fn loadMany(s: String) -> Result[List[Order], DecodeError] {
     Json.decode[List[Order]](s)
   }
 

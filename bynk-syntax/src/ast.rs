@@ -1300,7 +1300,29 @@ impl LimitsPolicy {
             _ => None,
         }
     }
+
+    /// #3276: the service-wide per-file ceiling of a `@multipart` route, in bytes
+    /// (`maxFile:`); `None` leaves a file part bounded by the body cap alone.
+    pub fn max_file(&self) -> Option<i64> {
+        match self.field("maxFile").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if *value > 0 => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// #3276: the service-wide ceiling on the parts of one `@multipart` request
+    /// (`maxParts:`); `None` takes [`DEFAULT_MAX_PARTS`].
+    pub fn max_parts(&self) -> Option<i64> {
+        match self.field("maxParts").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if *value > 0 => Some(*value),
+            _ => None,
+        }
+    }
 }
+
+/// #3276: the parts a `@multipart` request may carry when no `maxParts` says
+/// otherwise.
+pub const DEFAULT_MAX_PARTS: i64 = 64;
 
 /// How an `Option` is written in an HTTP response body (#2858).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1806,6 +1828,28 @@ impl Handler {
             .iter()
             .find_map(|arg| match (&arg.label, &arg.value.kind) {
                 (Some(l), ExprKind::IntLit { value, .. }) if l.name == "maxBody" && *value > 0 => {
+                    Some(*value)
+                }
+                _ => None,
+            })
+    }
+
+    /// #3276: the handler's own `@limit(maxFile:)` per-file byte cap, if any.
+    pub fn limit_max_file(&self) -> Option<i64> {
+        self.limit_int_arg("maxFile")
+    }
+
+    /// #3276: the handler's own `@limit(maxParts:)` part-count cap, if any.
+    pub fn limit_max_parts(&self) -> Option<i64> {
+        self.limit_int_arg("maxParts")
+    }
+
+    fn limit_int_arg(&self, name: &str) -> Option<i64> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "limit")?;
+        ann.args
+            .iter()
+            .find_map(|arg| match (&arg.label, &arg.value.kind) {
+                (Some(l), ExprKind::IntLit { value, .. }) if l.name == name && *value > 0 => {
                     Some(*value)
                 }
                 _ => None,
@@ -3366,10 +3410,10 @@ pub enum TypeRef {
     /// `ValidationError` — the built-in error type used by refined-type
     /// constructors (v0.1).
     ValidationError(Span),
-    /// `JsonError` — the built-in JSON-decode error type (v0.22b). A
+    /// `DecodeError` — the built-in JSON-decode error type (v0.22b). A
     /// uniform record (`kind`/`path`/`message`, all `String`) the codec
     /// maps `BoundaryError` variants and parse failures into.
-    JsonError(Span),
+    DecodeError(Span),
     /// `()` — the unit type (v0.5).
     Unit(Span),
     /// `A -> B` / `(A, B) -> C` / `() -> B` — a function type (v0.20a).
@@ -3411,7 +3455,7 @@ impl TypeRef {
             TypeRef::Connection(_, s) => *s,
             TypeRef::History(_, s) => *s,
             TypeRef::ValidationError(s) => *s,
-            TypeRef::JsonError(s) => *s,
+            TypeRef::DecodeError(s) => *s,
             TypeRef::Unit(s) => *s,
             TypeRef::Fn(_, _, s) => *s,
             TypeRef::App { span, .. } => *span,
@@ -3462,7 +3506,7 @@ pub fn stream_path(
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => None,
         }
     }
@@ -3563,7 +3607,7 @@ fn heads(t: &TypeRef, out: &mut Vec<String>) {
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }
@@ -3708,7 +3752,7 @@ pub fn recursive_generic_path(
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => None,
         }
     }
@@ -3799,7 +3843,7 @@ pub fn polymorphic_recursion_edges(
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
-            | TypeRef::JsonError(_)
+            | TypeRef::DecodeError(_)
             | TypeRef::Unit(_) => {}
         }
     }

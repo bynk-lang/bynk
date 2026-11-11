@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -14,6 +15,8 @@ export interface TaskState {
 
 const __TaskRegistry = new __StateRegistry();
 function __zeroOfTaskState(): TaskState { return { retries: 3, done: false }; }
+
+const __entryFieldsOfTask = [] as const;
 
 function __rehydrateTaskState(s: TaskState, stored: TaskState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "retries")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "retries", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "retries", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.retries as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Task", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).retries = __r.value as unknown as (typeof s)["retries"]; }
@@ -34,15 +37,16 @@ export class Task {
     const stored = await this.state.storage.get<TaskState>("state");
     if (stored === undefined) return __zeroOfTaskState();
     __checkStoredLayout("Task", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfTaskState();
-    __reportUnknownStoredKeys("Task", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateTaskState(__merged, stored);
+    __reportUnknownStoredKeys("Task", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateTaskState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: TaskState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeTaskState(s));
+    await __commitStored(this, this.state.storage, __encodeTaskState(s), __entryFieldsOfTask, s);
   }
 
   async peek(deps: {}): globalThis.Promise<Result<void, string>> {

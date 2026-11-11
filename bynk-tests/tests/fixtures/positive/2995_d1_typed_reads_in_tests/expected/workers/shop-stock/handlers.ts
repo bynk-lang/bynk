@@ -2,7 +2,7 @@
 // context shop.stock
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { SqlReadError } from "../../bynk/cloudflare.js";
@@ -23,7 +23,7 @@ export const __StockToken: symbol = globalThis.Symbol("Stock");
 
 export const listing = {
   async call(deps: { Stock: Stock }): globalThis.Promise<Result<readonly Item[], SqlReadError>> {
-    return (async () => { const __decode = (__s: string): Result<readonly Item[], JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\" FROM items", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
+    return (async () => { const __decode = (__s: string): Result<readonly Item[], DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_List_Item(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); }; const __r = await deps.Stock.all("SELECT \"id\" FROM items", []); if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error }); const __d = __decode(__r.value); return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error }); })();
   },
 };
 

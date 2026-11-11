@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -34,6 +35,8 @@ export interface DialState {
 const __DialRegistry = new __StateRegistry();
 function __zeroOfDialState(): DialState { return { level: Level.Low }; }
 
+const __entryFieldsOfDial = [] as const;
+
 function __rehydrateDialState(s: DialState, stored: DialState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) { const __r = __deserialise_Level((s.level as unknown as __JsonValue), "level"); if (__r.tag === "Err") throw __rehydrationViolation("Dial", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"]; }
 }
@@ -52,10 +55,11 @@ export class Dial {
     const stored = await this.state.storage.get<DialState>("state");
     if (stored === undefined) return __zeroOfDialState();
     __checkStoredLayout("Dial", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfDialState();
-    __reportUnknownStoredKeys("Dial", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateDialState(__merged, stored);
+    __reportUnknownStoredKeys("Dial", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateDialState(__merged, __wholesale);
     return __merged;
   }
 
@@ -70,7 +74,7 @@ export class Dial {
         throw __invariantViolation("Dial", "low_stays_low", "transition", "desk/plants.bynk:15:14");
       }
     }
-    await this.state.storage.put("state", __encodeDialState(s));
+    await __commitStored(this, this.state.storage, __encodeDialState(s), __entryFieldsOfDial, s);
   }
 
   async turn(deps: {}): globalThis.Promise<void> {
@@ -96,6 +100,8 @@ export interface PlantState {
 const __PlantRegistry = new __StateRegistry();
 function __zeroOfPlantState(): PlantState { return { stage: Stage.Seed }; }
 
+const __entryFieldsOfPlant = [] as const;
+
 function __rehydratePlantState(s: PlantState, stored: PlantState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stage")) { const __r = __deserialise_Stage((s.stage as unknown as __JsonValue), "stage"); if (__r.tag === "Err") throw __rehydrationViolation("Plant", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"]; }
 }
@@ -114,10 +120,11 @@ export class Plant {
     const stored = await this.state.storage.get<PlantState>("state");
     if (stored === undefined) return __zeroOfPlantState();
     __checkStoredLayout("Plant", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfPlantState();
-    __reportUnknownStoredKeys("Plant", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydratePlantState(__merged, stored);
+    __reportUnknownStoredKeys("Plant", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydratePlantState(__merged, __wholesale);
     return __merged;
   }
 
@@ -132,7 +139,7 @@ export class Plant {
         throw __invariantViolation("Plant", "seeds_must_grow", "transition", "desk/plants.bynk:32:14");
       }
     }
-    await this.state.storage.put("state", __encodePlantState(s));
+    await __commitStored(this, this.state.storage, __encodePlantState(s), __entryFieldsOfPlant, s);
   }
 
   async kill(deps: {}): globalThis.Promise<void> {
@@ -159,6 +166,8 @@ export interface CounterState {
 const __CounterRegistry = new __StateRegistry();
 function __zeroOfCounterState(): CounterState { return { stage: Stage.Seed, count: 0 }; }
 
+const __entryFieldsOfCounter = [] as const;
+
 function __rehydrateCounterState(s: CounterState, stored: CounterState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "stage")) { const __r = __deserialise_Stage((s.stage as unknown as __JsonValue), "stage"); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"]; }
@@ -178,10 +187,11 @@ export class Counter {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
     __checkStoredLayout("Counter", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCounterState();
-    __reportUnknownStoredKeys("Counter", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateCounterState(__merged, stored);
+    __reportUnknownStoredKeys("Counter", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateCounterState(__merged, __wholesale);
     return __merged;
   }
 
@@ -196,7 +206,7 @@ export class Counter {
         throw __invariantViolation("Counter", "grows_count", "transition", "desk/plants.bynk:49:14");
       }
     }
-    await this.state.storage.put("state", __encodeCounterState(s));
+    await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter, s);
   }
 
   async grow(deps: {}): globalThis.Promise<void> {

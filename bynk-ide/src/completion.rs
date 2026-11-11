@@ -902,10 +902,20 @@ pub const SECURITY_FIELDS: &[(&str, &str)] = &[
 
 /// v0.142 (ADR 0165): the request-limits policy fields, offered at a field-name
 /// position inside a `limits { }` block. The closed set is this one.
-pub const LIMITS_FIELDS: &[(&str, &str)] = &[(
-    "maxBody",
-    "the maximum request body size in bytes (a positive `Int`)",
-)];
+pub const LIMITS_FIELDS: &[(&str, &str)] = &[
+    (
+        "maxBody",
+        "the maximum request body size in bytes (a positive `Int`)",
+    ),
+    (
+        "maxFile",
+        "the maximum size in bytes of one file part of a `@multipart` body (a positive `Int`)",
+    ),
+    (
+        "maxParts",
+        "the maximum number of parts of a `@multipart` body (a positive `Int`; default 64)",
+    ),
+];
 
 /// #2858: the response-JSON policy fields, offered at a field-name position
 /// inside a `json { }` block (and as `@json( … )` arguments). The closed set is
@@ -968,10 +978,20 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
 /// argument-name position inside `@limit( … )`. Its one arg is `maxBody`, the
 /// request-body byte ceiling above which a `413` is synthesised before the body
 /// is read.
-pub const LIMIT_ARGS: &[(&str, &str)] = &[(
-    "maxBody",
-    "the maximum request body size in bytes (a positive `Int`) — a `413` is synthesised past it",
-)];
+pub const LIMIT_ARGS: &[(&str, &str)] = &[
+    (
+        "maxBody",
+        "the maximum request body size in bytes (a positive `Int`) — a `413` is synthesised past it",
+    ),
+    (
+        "maxFile",
+        "on a `@multipart` route, the maximum size in bytes of one file part — a `413` past it",
+    ),
+    (
+        "maxParts",
+        "on a `@multipart` route, the maximum number of parts — a `413` past it",
+    ),
+];
 
 /// The `@raw` handler-annotation arguments, offered at an argument-name position
 /// inside `@raw( … )`. Its one arg is `contentType`, the media type the route accepts
@@ -2052,12 +2072,16 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
                 "encodePlain",
                 "encodePlain(value) -> String - Option as `v` / `null`",
             ),
-            ("decode", "decode[T](s: String) -> Result[T, JsonError]"),
+            ("decode", "decode[T](s: String) -> Result[T, DecodeError]"),
             (
                 "decodeSql",
-                "decodeSql[T](s: String) -> Result[T, JsonError]",
+                "decodeSql[T](s: String) -> Result[T, DecodeError]",
             ),
         ],
+    ),
+    (
+        "Yaml",
+        &[("decode", "decode[T](s: String) -> Result[T, DecodeError]")],
     ),
     ("List", &[("empty", "empty() -> List[T]")]),
     ("Map", &[("empty", "empty() -> Map[K, V]")]),
@@ -3215,9 +3239,9 @@ pub fn value_member_candidates(
             Some("String — the URL the platform serves the asset at".to_string()),
         ));
     }
-    // `JsonError`'s three `String` fields (#2863). Compiler-known, so there is
+    // `DecodeError`'s three `String` fields (#2863). Compiler-known, so there is
     // no declaration to resolve them from.
-    if matches!(&*tys.get(ty), Ty::JsonError) {
+    if matches!(&*tys.get(ty), Ty::DecodeError) {
         for (name, doc) in [
             (
                 "kind",
@@ -4059,6 +4083,10 @@ fn Box.size(self) -> Int { 1 }
         let j = complete("  Json.", "context a.b\n", None);
         assert!(find(&j, "encode", CompletionKind::Member).is_some());
         assert!(find(&j, "decode", CompletionKind::Member).is_some());
+        // #3214: `Yaml.` offers its one static, `decode`, and no `encode`.
+        let y = complete("  Yaml.", "context a.b\n", None);
+        assert!(find(&y, "decode", CompletionKind::Member).is_some());
+        assert!(find(&y, "encode", CompletionKind::Member).is_none());
     }
 
     #[test]
@@ -4293,7 +4321,7 @@ fn Box.size(self) -> Int { 1 }
 
     #[test]
     fn value_member_candidates_lists_json_error_fields() {
-        let err = TYS.intern(Ty::JsonError);
+        let err = TYS.intern(Ty::DecodeError);
         let items = value_member_candidates(err, &TYS, "commons m {\n}\n", None);
         for f in ["kind", "path", "message"] {
             assert!(find(&items, f, CompletionKind::Field).is_some(), "{f}");

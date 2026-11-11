@@ -24,6 +24,9 @@ toml.workspace = true
 serde.workspace = true
 regex.workspace = true
 
+[dev-dependencies]
+bynk-check.workspace = true
+
 [lib]
 path = "src/lib.rs"
 

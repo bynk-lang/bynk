@@ -542,7 +542,7 @@ pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Actor(_)
         | Ty::ActorSum(_) => {}
@@ -732,7 +732,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Actor(_)
         | Ty::ActorSum(_)
@@ -808,7 +808,7 @@ pub(crate) fn walk_ref(
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => None,
     }
 }
@@ -839,7 +839,7 @@ pub(crate) fn render(t: &TypeRef) -> String {
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),
-        TypeRef::JsonError(_) => "JsonError".to_string(),
+        TypeRef::DecodeError(_) => "DecodeError".to_string(),
         TypeRef::Unit(_) => "()".to_string(),
         TypeRef::Fn(params, ret, _) => {
             let ps: Vec<String> = params.iter().map(render).collect();

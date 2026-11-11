@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
@@ -16,6 +17,8 @@ export interface CallsState {
 
 const __CallsRegistry = new __StateRegistry();
 function __zeroOfCallsState(): CallsState { return { n: 0 }; }
+
+const __entryFieldsOfCalls = [] as const;
 
 function __rehydrateCallsState(s: CallsState, stored: CallsState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Calls", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"]; }
@@ -35,15 +38,16 @@ export class Calls {
     const stored = await this.state.storage.get<CallsState>("state");
     if (stored === undefined) return __zeroOfCallsState();
     __checkStoredLayout("Calls", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCallsState();
-    __reportUnknownStoredKeys("Calls", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateCallsState(__merged, stored);
+    __reportUnknownStoredKeys("Calls", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateCallsState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: CallsState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeCallsState(s));
+    await __commitStored(this, this.state.storage, __encodeCallsState(s), __entryFieldsOfCalls, s);
   }
 
   async bump(deps: {}): globalThis.Promise<number> {
@@ -84,6 +88,8 @@ export interface AccState {
 const __AccRegistry = new __StateRegistry();
 function __zeroOfAccState(): AccState { return { total: 0 }; }
 
+const __entryFieldsOfAcc = [] as const;
+
 function __rehydrateAccState(s: AccState, stored: AccState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Acc", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"]; }
 }
@@ -105,15 +111,16 @@ export class Acc {
     const stored = await this.state.storage.get<AccState>("state");
     if (stored === undefined) return __zeroOfAccState();
     __checkStoredLayout("Acc", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAccState();
-    __reportUnknownStoredKeys("Acc", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateAccState(__merged, stored);
+    __reportUnknownStoredKeys("Acc", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateAccState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: AccState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeAccState(s));
+    await __commitStored(this, this.state.storage, __encodeAccState(s), __entryFieldsOfAcc, s);
   }
 
   async add(n: number, deps: { env: { AG_DOUBLER: __ServiceBinding; ACC: __DurableObjectNamespace; CALLS: __DurableObjectNamespace } }): globalThis.Promise<number> {

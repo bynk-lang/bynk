@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -47,6 +48,8 @@ export interface SalesState {
 const __SalesRegistry = new __StateRegistry();
 function __zeroOfSalesState(): SalesState { return { orders: {}, lines: {} }; }
 
+const __entryFieldsOfSales = [{ name: "orders", kind: "map" }, { name: "lines", kind: "map" }] as const;
+
 function __rehydrateSalesState(s: SalesState, stored: SalesState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys(s.orders)) { const __r = __deserialise_Order((s.orders[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); s.orders[__k] = __r.value as unknown as (typeof s.orders)[string]; }
   for (const __k of globalThis.Object.keys(s.orders)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); }
@@ -68,15 +71,16 @@ export class Sales {
     const stored = await this.state.storage.get<SalesState>("state");
     if (stored === undefined) return __zeroOfSalesState();
     __checkStoredLayout("Sales", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSalesState();
-    __reportUnknownStoredKeys("Sales", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateSalesState(__merged, stored);
+    __reportUnknownStoredKeys("Sales", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateSalesState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: SalesState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeSalesState(s));
+    await __commitStored(this, this.state.storage, __encodeSalesState(s), __entryFieldsOfSales, s);
   }
 
   async report(deps: {}): globalThis.Promise<readonly Joined[]> {

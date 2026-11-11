@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -32,6 +33,8 @@ export interface WalletState {
 const __WalletRegistry = new __StateRegistry();
 function __zeroOfWalletState(): WalletState { return { balance: 0, pending: 0 }; }
 
+const __entryFieldsOfWallet = [] as const;
+
 function __rehydrateWalletState(s: WalletState, stored: WalletState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Wallet", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "pending")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "pending", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "pending", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.pending as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Wallet", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).pending = __r.value as unknown as (typeof s)["pending"]; }
@@ -51,15 +54,16 @@ export class Wallet {
     const stored = await this.state.storage.get<WalletState>("state");
     if (stored === undefined) return __zeroOfWalletState();
     __checkStoredLayout("Wallet", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfWalletState();
-    __reportUnknownStoredKeys("Wallet", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateWalletState(__merged, stored);
+    __reportUnknownStoredKeys("Wallet", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateWalletState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: WalletState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeWalletState(s));
+    await __commitStored(this, this.state.storage, __encodeWalletState(s), __entryFieldsOfWallet, s);
   }
 
   async topup(amount: number, deps: {}): globalThis.Promise<number> {

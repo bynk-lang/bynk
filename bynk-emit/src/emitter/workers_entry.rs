@@ -816,6 +816,8 @@ pub fn emit_worker_entry(
                         == bynk_syntax::ast::JsonOptions::Plain,
                     rejected: rejected_surface(service, sname),
                     query_fields,
+                    form_fields: form_field_specs(h, visible_types),
+                    multipart: multipart_spec(service.limits.as_ref(), h, visible_types),
                 });
             }
         }
@@ -1048,6 +1050,22 @@ pub fn emit_worker_entry(
     // #2854: a route taking `query` decodes it (typed) or views it (raw).
     if http_routes.iter().any(|r| r.query_fields.is_some()) {
         imports.push("__queryObject".to_string());
+    }
+    // #3276: a `@multipart` route checks its `Content-Type` and reads its parts.
+    if http_routes
+        .iter()
+        .any(|r| body_has(r) && r.multipart.is_some())
+    {
+        imports.push("__multipartMediaTypeMatches".to_string());
+        imports.push("__multipartObject".to_string());
+    }
+    // #3276: a `@form` route checks its `Content-Type` and decodes its body.
+    if http_routes
+        .iter()
+        .any(|r| body_has(r) && r.form_fields.is_some())
+    {
+        imports.push("__formMediaTypeMatches".to_string());
+        imports.push("__formObject".to_string());
     }
     if http_routes.iter().any(|r| {
         r.handler
@@ -1862,6 +1880,9 @@ pub fn emit_worker_entry(
     if runtime_use.iso_date() {
         append_missing_bindings(&mut imports, crate::emitter::ISO_DATE_RUNTIME_IMPORTS);
     }
+    if runtime_use.yaml() {
+        append_missing_bindings(&mut imports, crate::emitter::YAML_RUNTIME_IMPORTS);
+    }
     if runtime_use.settle_all() {
         append_missing_bindings(&mut imports, crate::emitter::SETTLE_ALL_RUNTIME_IMPORTS);
     }
@@ -1888,6 +1909,9 @@ pub fn emit_worker_entry(
     }
     if runtime_use.query_string() {
         append_missing_bindings(&mut imports, crate::emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
+    if runtime_use.multipart_form() {
+        append_missing_bindings(&mut imports, crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
     if runtime_use.eq() {
         append_missing_bindings(&mut imports, crate::emitter::EQ_RUNTIME_IMPORTS);
@@ -2504,6 +2528,28 @@ struct HttpRoute {
     /// `None` when the route has no typed `query` (a raw `RequestQuery` is not
     /// decoded).
     query_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    /// #3276: the fields of a `@form` handler's `body` record, as the runtime's
+    /// `formObject` reads them off an `application/x-www-form-urlencoded` body:
+    /// `(name, wire kind, list, option)`, as `query_fields`. `Some` marks the
+    /// route's `body` as a form: the router checks the `Content-Type` (`415`) and
+    /// decodes the body through the same record codec a JSON body takes.
+    form_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    /// #3276: a `@multipart` route's body fields (as `form_fields`, with the `File`
+    /// fields kind `"file"`) and its per-file and part-count caps.
+    multipart: Option<MultipartSpec>,
+}
+
+/// #3276: what the router needs to read a `@multipart` body.
+#[derive(Debug, Clone)]
+struct MultipartSpec {
+    fields: Vec<(String, &'static str, bool, bool)>,
+    /// The per-file byte cap (`@limit(maxFile:)`, else `limits { maxFile }`), if any.
+    max_file: Option<i64>,
+    /// The part-count cap (`@limit(maxParts:)`, else `limits { maxParts }`, else 64).
+    max_parts: i64,
+    /// Whether the record has a `File` field, whose real values are laid over
+    /// the decoded record.
+    has_files: bool,
 }
 
 /// #2854: the wire kind of one query-string value of type `r`, as the runtime's
@@ -2511,15 +2557,24 @@ struct HttpRoute {
 fn query_leaf_kind(
     r: &TypeRef,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    allow_file: bool,
 ) -> &'static str {
     use bynk_syntax::ast::{BaseType, TypeBody};
     let of_base = |b: &BaseType| match b {
         BaseType::Int => "int",
         BaseType::Bool => "bool",
+        // #3276: a `Decimal` is read as text (its own codec parses it), but is not a
+        // plain `String`: a form's empty value is absent for it.
+        BaseType::Decimal => "decimal",
         _ => "string",
     };
     match r {
         TypeRef::Base(b, _) => of_base(b),
+        // #3276: the `File` a `@multipart` body names a part with.
+        // The checker admits only the std `File` as a multipart file field
+        // (`bynk.http.form_field_not_stringy` refuses a user type of that name), so
+        // the name is enough here, on the multipart path alone.
+        TypeRef::Named(id) if allow_file && id.name == "File" => "file",
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
             Some(TypeBody::Refined { base, .. }) | Some(TypeBody::Opaque { base, .. }) => {
                 of_base(base)
@@ -2550,24 +2605,93 @@ fn query_field_specs(
     let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    Some(
-        rec.fields
-            .iter()
-            .map(|f| {
-                let (inner, list, option) = match &f.type_ref {
-                    TypeRef::List(inner, _) => (inner.as_ref(), true, false),
-                    TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
-                    other => (other, false, false),
-                };
-                (
-                    f.name.name.clone(),
-                    query_leaf_kind(inner, types),
-                    list,
-                    option,
-                )
-            })
-            .collect(),
-    )
+    Some(record_field_specs(rec, types, false))
+}
+
+/// #3276: the fields of a `@form` handler's `body` record, as `formObject` reads
+/// them. `None` when the handler is not a `@form` route.
+fn form_field_specs(
+    h: &Handler,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<Vec<(String, &'static str, bool, bool)>> {
+    use bynk_syntax::ast::TypeBody;
+    if !h.annotations.iter().any(|a| a.name.name == "form") {
+        return None;
+    }
+    let p = h.params.iter().find(|p| p.name.name == "body")?;
+    let TypeRef::Named(id) = &p.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    Some(record_field_specs(rec, types, false))
+}
+
+/// #3276: the body field spec of a `@form` or `@multipart` handler, as the system
+/// test drivers write the body (`(name, wire kind, list, option)`).
+pub fn form_body_specs(
+    h: &Handler,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<Vec<(String, &'static str, bool, bool)>> {
+    form_field_specs(h, types).or_else(|| multipart_spec(None, h, types).map(|m| m.fields))
+}
+
+/// #3276: a `@multipart` handler's body spec, or `None` when it is not one.
+fn multipart_spec(
+    service_limits: Option<&LimitsPolicy>,
+    h: &Handler,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<MultipartSpec> {
+    use bynk_syntax::ast::TypeBody;
+    if !h.annotations.iter().any(|a| a.name.name == "multipart") {
+        return None;
+    }
+    let p = h.params.iter().find(|p| p.name.name == "body")?;
+    let TypeRef::Named(id) = &p.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    let fields = record_field_specs(rec, types, true);
+    let has_files = fields.iter().any(|(_, kind, _, _)| *kind == "file");
+    Some(MultipartSpec {
+        fields,
+        max_file: h
+            .limit_max_file()
+            .or_else(|| service_limits.and_then(|p| p.max_file())),
+        max_parts: h
+            .limit_max_parts()
+            .or_else(|| service_limits.and_then(|p| p.max_parts()))
+            .unwrap_or(bynk_syntax::ast::DEFAULT_MAX_PARTS),
+        has_files,
+    })
+}
+
+/// The wire shape of each field of a record read off a query string or a form:
+/// `(name, leaf kind, list, option)`.
+fn record_field_specs(
+    rec: &bynk_syntax::ast::RecordBody,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    allow_file: bool,
+) -> Vec<(String, &'static str, bool, bool)> {
+    rec.fields
+        .iter()
+        .map(|f| {
+            let (inner, list, option) = match &f.type_ref {
+                TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+                TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+                other => (other, false, false),
+            };
+            (
+                f.name.name.clone(),
+                query_leaf_kind(inner, types, allow_file),
+                list,
+                option,
+            )
+        })
+        .collect()
 }
 
 /// #2858: whether any `from http` route in `table` writes plain JSON, so the
@@ -2781,6 +2905,64 @@ fn emit_http_route_dispatch(
             block(vec![return_(Some(unsupported))]),
         ));
     }
+    // #3276: a `@form` route answers `415` to any `Content-Type` but a UTF-8
+    // `application/x-www-form-urlencoded`, at the same point as a `@raw` route.
+    if has_body && route.form_fields.is_some() {
+        let unsupported = stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "UnsupportedMediaType",
+                    vec![(
+                        "details".to_string(),
+                        str_lit("expected Content-Type application/x-www-form-urlencoded (UTF-8)"),
+                    )],
+                ),
+                415,
+            ),
+            cors_const,
+            security_const,
+            rejected,
+        );
+        guarded.push(if_(
+            TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(call(
+                    ident("__formMediaTypeMatches"),
+                    vec![ident("request")],
+                )),
+            },
+            block(vec![return_(Some(unsupported))]),
+        ));
+    }
+    // #3276: a `@multipart` route answers `415` to any `Content-Type` but
+    // `multipart/form-data`; a body with no boundary is a `400 MalformedForm`, below.
+    if has_body && route.multipart.is_some() {
+        let unsupported = stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "UnsupportedMediaType",
+                    vec![(
+                        "details".to_string(),
+                        str_lit("expected Content-Type multipart/form-data"),
+                    )],
+                ),
+                415,
+            ),
+            cors_const,
+            security_const,
+            rejected,
+        );
+        guarded.push(if_(
+            TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(call(
+                    ident("__multipartMediaTypeMatches"),
+                    vec![ident("request")],
+                )),
+            },
+            block(vec![return_(Some(unsupported))]),
+        ));
+    }
     if let Some(cap) = route.max_body.filter(|_| has_body) {
         guarded.push(const_(
             "__contentLength",
@@ -2931,6 +3113,8 @@ fn emit_http_route_dispatch(
         // same `413` as the fast-reject above. A raw route is always capped.
         let counted = route.max_body;
         let raw = route.raw.is_some();
+        let form = route.form_fields.as_ref();
+        let multipart = route.multipart.as_ref();
         let decoded = || {
             method_call(
                 new_expr("globalThis.TextDecoder", vec![]),
@@ -2960,7 +3144,7 @@ fn emit_http_route_dispatch(
                 block(vec![return_(Some(too_large(cap)))]),
             ));
         }
-        if !raw {
+        if !raw && form.is_none() && multipart.is_none() {
             guarded.push(let_typed("__body_json", TsType::named("__JsonValue")));
         }
         if let Some(seam) = &route.signature {
@@ -2971,7 +3155,7 @@ fn emit_http_route_dispatch(
                 || stamp_rejection(null_response(401), cors_const, security_const, rejected);
             // What the HMAC covers: a raw route's octets as received; otherwise
             // the body's text.
-            let signed = if raw {
+            let signed = if raw || multipart.is_some() {
                 ident("__bytes")
             } else if counted.is_some() {
                 guarded.push(const_("__raw", decoded()));
@@ -3085,7 +3269,7 @@ fn emit_http_route_dispatch(
                 },
                 return_(Some(unauthorized_401())),
             ));
-            if !raw {
+            if !raw && form.is_none() && multipart.is_none() {
                 guarded.push(try_catch_stmt(
                     vec![TsStmt::assign(
                         ident("__body_json"),
@@ -3093,6 +3277,24 @@ fn emit_http_route_dispatch(
                             method_call(ident("globalThis.JSON"), "parse", vec![ident("__raw")]),
                             TsType::named("__JsonValue"),
                         ),
+                        None,
+                    )],
+                    None,
+                    vec![return_(Some(malformed_400()))],
+                ));
+            }
+        } else if multipart.is_some() {
+            // The counted bytes in `__bytes` are parsed below.
+        } else if form.is_some() {
+            // The body's text, read here; the form reader below decodes it.
+            if counted.is_some() {
+                guarded.push(const_("__raw", decoded()));
+            } else {
+                guarded.push(let_typed("__raw", TsType::named("string")));
+                guarded.push(try_catch_stmt(
+                    vec![TsStmt::assign(
+                        ident("__raw"),
+                        await_expr(method_call(ident("request"), "text", vec![])),
                         None,
                     )],
                     None,
@@ -3123,7 +3325,109 @@ fn emit_http_route_dispatch(
             // The octets, untouched: no JSON, no base64.
             guarded.push(const_("body", ident("__bytes")));
         } else {
-            let dser = deserialise_call(&body_param.type_ref, "__body_json", "$", ru);
+            // #3276: a form body is read into the JSON object the record's codec
+            // takes, naming `body.<field>` in its rejections.
+            let (source, root) = if let Some(mp) = multipart {
+                let spec: Vec<TsExpr> = mp
+                    .fields
+                    .iter()
+                    .map(|(name, kind, list, option)| {
+                        TsExpr::object(vec![
+                            ("name".to_string(), str_lit(name.clone())),
+                            ("kind".to_string(), str_lit(*kind)),
+                            ("list".to_string(), bool_lit(*list)),
+                            ("option".to_string(), bool_lit(*option)),
+                        ])
+                    })
+                    .collect();
+                let limits = TsExpr::object(vec![
+                    (
+                        "maxFile".to_string(),
+                        match mp.max_file {
+                            Some(n) => num_lit(n.to_string()),
+                            None => null_lit(),
+                        },
+                    ),
+                    ("maxParts".to_string(), num_lit(mp.max_parts.to_string())),
+                ]);
+                guarded.push(const_(
+                    "__f",
+                    await_expr(call(
+                        ident("__multipartObject"),
+                        vec![
+                            ident("__bytes"),
+                            binary(
+                                bynk_ts::TsBinaryOp::NullishCoalescing,
+                                method_call(
+                                    member(ident("request"), "headers"),
+                                    "get",
+                                    vec![str_lit("content-type")],
+                                ),
+                                str_lit(""),
+                            ),
+                            TsExpr::array(spec),
+                            limits,
+                        ],
+                    )),
+                ));
+                // A `413` (too many parts, a file over its cap) or a `400` (not a
+                // multipart body, or a part that is not its field's shape).
+                let reject = |status: i64| {
+                    stamp_rejection(
+                        json_response(member(ident("__f"), "error"), status),
+                        cors_const,
+                        security_const,
+                        rejected,
+                    )
+                };
+                guarded.push(if_(
+                    TsExpr::Unary {
+                        op: bynk_ts::TsUnaryOp::Not,
+                        expr: Box::new(member(ident("__f"), "ok")),
+                    },
+                    block(vec![return_(Some(cond_expr(
+                        strict_eq(member(ident("__f"), "status"), num_lit("413")),
+                        reject(413),
+                        reject(400),
+                    )))]),
+                ));
+                ("__f.value", "body")
+            } else if let Some(fields) = form {
+                let spec: Vec<TsExpr> = fields
+                    .iter()
+                    .map(|(name, kind, list, option)| {
+                        TsExpr::object(vec![
+                            ("name".to_string(), str_lit(name.clone())),
+                            ("kind".to_string(), str_lit(*kind)),
+                            ("list".to_string(), bool_lit(*list)),
+                            ("option".to_string(), bool_lit(*option)),
+                        ])
+                    })
+                    .collect();
+                guarded.push(const_(
+                    "__f",
+                    call(
+                        ident("__formObject"),
+                        vec![ident("__raw"), TsExpr::array(spec)],
+                    ),
+                ));
+                guarded.push(if_(
+                    TsExpr::Unary {
+                        op: bynk_ts::TsUnaryOp::Not,
+                        expr: Box::new(member(ident("__f"), "ok")),
+                    },
+                    return_(Some(stamp_rejection(
+                        json_response(member(ident("__f"), "error"), 400),
+                        cors_const,
+                        security_const,
+                        rejected,
+                    ))),
+                ));
+                ("__f.value", "body")
+            } else {
+                ("__body_json", "$")
+            };
+            let dser = deserialise_call(&body_param.type_ref, source, root, ru);
             guarded.push(const_("__r_body", dser));
             // The body-deser `400` reflects the offending input into its JSON body, so
             // stamping it (#659) matters most here — `nosniff` on a reflected value.
@@ -3137,7 +3441,22 @@ fn emit_http_route_dispatch(
                 strict_eq(member(ident("__r_body"), "tag"), str_lit("Err")),
                 return_(Some(body_reject)),
             ));
-            guarded.push(const_("body", member(ident("__r_body"), "value")));
+            if multipart.is_some_and(|mp| mp.has_files) {
+                // The `File` values, laid over the decoded record's placeholders.
+                guarded.push(const_(
+                    "body",
+                    call(
+                        ident("globalThis.Object.assign"),
+                        vec![
+                            TsExpr::object(vec![]),
+                            member(ident("__r_body"), "value"),
+                            member(ident("__f"), "files"),
+                        ],
+                    ),
+                ));
+            } else {
+                guarded.push(const_("body", member(ident("__r_body"), "value")));
+            }
         }
     }
 

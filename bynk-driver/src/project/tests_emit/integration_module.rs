@@ -131,7 +131,7 @@ pub(super) fn emit_integration_module(
         "type Result",
         "type Option",
         "type ValidationError",
-        "type JsonError",
+        "type DecodeError",
         "type __JsonValue",
         "type __BoundaryError",
         "type __ServiceBinding",
@@ -773,6 +773,9 @@ pub(super) fn emit_integration_module(
     if runtime_use.iso_date() {
         append_missing_bindings(&mut runtime_names, emitter::ISO_DATE_RUNTIME_IMPORTS);
     }
+    if runtime_use.yaml() {
+        append_missing_bindings(&mut runtime_names, emitter::YAML_RUNTIME_IMPORTS);
+    }
     if runtime_use.settle_all() {
         append_missing_bindings(&mut runtime_names, emitter::SETTLE_ALL_RUNTIME_IMPORTS);
     }
@@ -796,6 +799,9 @@ pub(super) fn emit_integration_module(
     }
     if runtime_use.query_string() {
         append_missing_bindings(&mut runtime_names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
+    if runtime_use.multipart_form() {
+        append_missing_bindings(&mut runtime_names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");

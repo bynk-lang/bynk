@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -36,6 +37,8 @@ export interface SlotState {
 const __SlotRegistry = new __StateRegistry();
 function __zeroOfSlotState(): SlotState { return { value: None }; }
 
+const __entryFieldsOfSlot = [] as const;
+
 function __rehydrateSlotState(s: SlotState, stored: SlotState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "value")) { const __r = __deserialise_Option_Int((s.value as unknown as __JsonValue), "value"); if (__r.tag === "Err") throw __rehydrationViolation("Slot", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).value = __r.value as unknown as (typeof s)["value"]; }
 }
@@ -54,15 +57,16 @@ export class Slot {
     const stored = await this.state.storage.get<SlotState>("state");
     if (stored === undefined) return __zeroOfSlotState();
     __checkStoredLayout("Slot", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfSlotState();
-    __reportUnknownStoredKeys("Slot", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateSlotState(__merged, stored);
+    __reportUnknownStoredKeys("Slot", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateSlotState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: SlotState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeSlotState(s));
+    await __commitStored(this, this.state.storage, __encodeSlotState(s), __entryFieldsOfSlot, s);
   }
 
   async assign(v: number, deps: {}): globalThis.Promise<void> {

@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
@@ -23,6 +24,8 @@ export interface CounterState {
 
 const __CounterRegistry = new __StateRegistry();
 function __zeroOfCounterState(): CounterState { return { n: 0 }; }
+
+const __entryFieldsOfCounter = [] as const;
 
 function __rehydrateCounterState(s: CounterState, stored: CounterState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"]; }
@@ -44,10 +47,11 @@ export class Counter {
     const stored = await this.state.storage.get<CounterState>("state");
     if (stored === undefined) return __zeroOfCounterState();
     __checkStoredLayout("Counter", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfCounterState();
-    __reportUnknownStoredKeys("Counter", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateCounterState(__merged, stored);
+    __reportUnknownStoredKeys("Counter", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateCounterState(__merged, __wholesale);
     return __merged;
   }
 
@@ -56,7 +60,7 @@ export class Counter {
       globalThis.console.error("InvariantViolation Counter.small", { agent: "Counter", invariant: "small" });
       throw __invariantViolation("Counter", "small", "invariant", "src/app.bynk:15:13");
     }
-    await this.state.storage.put("state", __encodeCounterState(s));
+    await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter, s);
   }
 
   async bump(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {

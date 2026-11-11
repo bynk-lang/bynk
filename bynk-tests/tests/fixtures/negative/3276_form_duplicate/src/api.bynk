@@ -1,0 +1,11 @@
+context api
+
+type Q = { q: String }
+
+service api from http {
+  @form
+  @form
+  on POST("/search") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(body.q)
+  }
+}

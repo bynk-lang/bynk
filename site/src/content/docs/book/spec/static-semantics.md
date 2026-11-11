@@ -651,7 +651,7 @@ of `v` contains an `Option` whose payload can encode as `null`
 parameter (`bynk.json.encode_plain_generic`).
 
 **The typed JSON codec** (v0.22b, ADR 0045). `Json.encode(v) -> String` and
-`Json.decode[T](s) -> Result[T, JsonError]` are compiler-backed statics on
+`Json.decode[T](s) -> Result[T, DecodeError]` are compiler-backed statics on
 the built-in `Json` module: `encode` dispatches to the generated
 `__serialise_<T>` for the value's checked type; `decode` to `JSON.parse` +
 `__deserialise_<T>`. The **domain of `T`** (and of `encode`'s argument) is any
@@ -667,19 +667,36 @@ from the declaration and the codecs of its arguments, and agrees with the codec 
 a concrete instantiation. `decode`'s target is given
 explicitly (`Json.decode[Order](s)`, any boundary-legal type-ref including
 `Json.decode[List[Order]]`) or inferred from an expected
-`Result[T, JsonError]`; with neither, `bynk.generics.uninferable_type_arg`.
+`Result[T, DecodeError]`; with neither, `bynk.generics.uninferable_type_arg`.
 `encode` is `-> String` but **throws on a value containing a non-finite
 `Float`** — the 0040 contract violation, documented rather than `Result`-ified
 (the program itself created that state). A user-declared type named `Json`
 shadows the built-in module.
 
-**`JsonError`** (v0.22b, ADR 0047). The decode error is a compiler-known
+**`Yaml.decode`** (#3214). `Yaml.decode[T](s) -> Result[T, DecodeError]` is a
+compiler-backed static on the built-in `Yaml` module, typed exactly as
+`Json.decode[T]` is: the same domain of `T` (`bynk.types.json_uncodable` otherwise,
+worded "decoded from YAML"), the same explicit or inferred type argument
+(`bynk.generics.uninferable_type_arg`), the same `Codable` rule for a type
+parameter. `Yaml` has no other static: `Yaml.encode` is
+`bynk.resolve.unknown_static_member`, and `Yaml.decodeSql` does not exist. A
+user-declared type named `Yaml` shadows the built-in module. The text is parsed as
+YAML 1.2 by the rules of [§7.3.9a](/book/spec/emission/#739a-the-yaml-decoder), and the resulting
+JSON-shaped value is decoded by the same `__deserialise_<T>` as `Json.decode`, so
+field defaults, `Option`, refinements, the nesting bound and the `$.path` of an
+error are `Json.decode`'s.
+
+**`DecodeError`** (v0.22b, ADR 0047). The decode error is a compiler-known
 record — `kind`, `path`, `message`, all `String` — putting a boundary
 failure in the program's hands for the first time (the `ValidationError`
 precedent). `kind` is `"Malformed"` for unparseable input, else the
-boundary kind (`"StructuralMismatch"`, `"RefinementViolation"`); `path` is
+boundary kind (`"StructuralMismatch"`, `"RefinementViolation"`), or, for
+`Yaml.decode`, one of the refusal kinds of [§7.3.9a](/book/spec/emission/#739a-the-yaml-decoder); `path` is
 the tracked field path (`$.items[2].qty`); decode failures are runtime
-values, never compile diagnostics.
+values, never compile diagnostics. The type was named `JsonError` until it
+became the error of every decoder (ADR 0047 is amended); `JsonError` remains a
+reserved, deprecated spelling of the same type, and a use of it is the warning
+`bynk.types.deprecated_json_error` with a machine-applicable fix.
 
 ```bynk
 commons store {
@@ -693,7 +710,7 @@ commons store {
 		Json.encode(i)
 	}
 
-	fn restore(s: String) -> Result[Item, JsonError] {
+	fn restore(s: String) -> Result[Item, DecodeError] {
 		Json.decode[Item](s)
 	}
 
@@ -1022,7 +1039,9 @@ enforces (ADR 0130):
 A held value is **non-boundary and not value-comparable** (§6.5,
 `bynk.types.held_at_boundary` / `bynk.types.held_not_comparable`). It may be stored
 **only** in `Cell[Option[Connection]]` or `Map[K, Connection]` — a `put` consumes
-the value and a `remove` removes-and-closes it — and a `Set`/`Log`/`Cache` rejects
+the value and a `remove` removes-and-closes it; a `put` over a key that already holds
+a connection closes the displaced connection first, unless it is the connection being
+put ([§7.3.10](/book/spec/emission/#7310-streams-and-websockets-v0100-v0102)) — and a `Set`/`Log`/`Cache` rejects
 it (`bynk.held.unsupported_storage`); a held `Map` rejects the transforming
 `update`/`upsert` ops (`bynk.held.unsupported_map_op`). On an abnormal exit a
 connection owned within a handler is implicitly closed by the runtime, and a stored
@@ -1116,12 +1135,20 @@ implementation's limit (30 seconds) behind the handlers ahead of it MUST fault
 (`AgentBusy`). Neither fault runs the called handler, and neither affects the handler
 already running.
 
-**The layout marker.** `__layout` is a second reserved key in the stored record,
-beside `__v`, naming how the record is laid out in storage. An absent `__layout` is the
-layout described above, the only one a build can yet read or write. A load checks
-`__layout` on the raw stored record first, whether or not the project has the lock, and
-any marker present faults, `RehydrationViolation` with detail `NewerLayout` (a later
-build wrote the record). The faulting record is never decoded, merged or written back.
+**The layout marker and per-entry storage.** `__layout` is a second reserved key in
+the stored record, beside `__v`, naming how the record is laid out in storage. A build
+writes layout 2, the per-entry layout: the `"state"` record holds the `Cell` fields, `__v`
+and `__layout`, and each entry of a `Map`, `Set`, `Cache` and `Log`, and each `@indexed`
+posting, is stored under a key of its own. An entry of a `Map` or `Set` carries its
+insertion sequence, so a `Map` is read back in insertion order: an overwrite keeps its
+place, and a key removed and inserted again goes to the end. A record with no `__layout`
+is the earlier layout, with every collection inline in `"state"`; its next commit splits
+it, in one transaction, and a record is never left half upgraded. A handler commits only
+the entries it changed. A load checks `__layout` on the raw stored record first, whether
+or not the project has the lock, and a marker this build does not know faults,
+`RehydrationViolation` with detail `NewerLayout` (a later build wrote the record). The
+faulting record is never decoded, merged or written back. A held `Map[K, Connection]`
+stays in the `"state"` record.
 
 **Migration steps.** An agent may declare `migrate from N (old: T) { … }` steps
 between its `store` fields and its handlers.
@@ -1883,6 +1910,44 @@ body, a `@raw` body and a multi-actor route (whose wrapper returns `PayloadTooLa
 `maxBody` is an `Int` byte count in this version; a byte `Size` literal is a named
 follow-on.
 
+**`@form`.** A handler annotation, `@form`, marks a handler's `body` as a form post
+(`application/x-www-form-urlencoded`). It is legal only on a `POST`/`PUT`/`PATCH`
+handler with a `body` (`bynk.http.form_on_bodyless`), at most once
+(`bynk.http.form_duplicate`), with no arguments (`bynk.http.form_unknown_arg`), and
+not together with `@raw` (`bynk.http.body_kind_conflict`) or a `by` clause that is a
+sum of actors (`bynk.http.form_on_sum_route`). The `body` MUST be a record
+(`bynk.http.form_body_not_record`) whose fields are each a string-constructible leaf
+(`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one),
+an `Option` of one, or a `List` of one (`bynk.http.form_field_not_stringy`); a `Bool`
+field with no default is a warning (`bynk.http.form_bool_without_default`). The
+router answers a missing or different `Content-Type` (parameters stripped, compared
+case-insensitively; a `charset` other than UTF-8 included) with a synthesised
+**`415 UnsupportedMediaType`** ahead of the auth seam and the body read. It reads the
+body as UTF-8 text under the route's cap, splits it into key/value pairs as the URL
+standard's `application/x-www-form-urlencoded` parser does, and reads the pairs into
+the record's JSON form field by field: unknown keys are ignored; a repeated key fills
+a `List` and is otherwise `StructuralMismatch`; an `Int` reads `-?[0-9]+` within the
+safe-integer range; a `Bool` reads `true`/`on` and `false`/`off`; an empty value is
+absent for an `Option` and for every leaf but `String`. The record's codec then
+applies refinements and defaults and a failure is a `400` whose `path` is rooted at
+`body`. See the HTTP reference.
+
+**`@multipart`.** A handler annotation, `@multipart`, marks a handler's `body` as a
+`multipart/form-data` upload. Its placement rules are `@form`'s, and it likewise excludes
+`@raw` and `@form` (`bynk.http.body_kind_conflict`). The `body` MUST be a record whose
+fields are form leaves, or `File` (the record `bynk` exports), or an `Option` or `List` of
+one. The route MUST have an effective `maxBody` (`bynk.http.multipart_body_unbounded`),
+and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
+`maxParts` are positive `Int` fields of `limits { }` and arguments of `@limit`
+(`bynk.http.limits_invalid_field`, `bynk.http.limit_bad_max_file`); in `@limit` they are legal
+only on a `@multipart` handler (`bynk.http.limit_on_non_multipart`). The router answers a
+`Content-Type` that is not `multipart/form-data` with the `415`, reads the body under the
+cap, and parses its parts: a part with a filename is a file, the rest are text parts read as
+a `@form` body's fields. A body that is not multipart is a `400` of kind `MalformedForm`; a
+part count over `maxParts`, or a file over `maxFile`, is a `413` of kind `PayloadTooLarge`;
+a part of the wrong kind for its field, or two files for a single `File`, is a
+`StructuralMismatch` at `body.<field>`.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
@@ -2394,7 +2459,8 @@ for has type `Effect[HttpOutcome[T]]` instead, where the handler returns
 Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
-PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String)`. Neither
+PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
+MalformedForm(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

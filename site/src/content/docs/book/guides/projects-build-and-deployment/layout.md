@@ -95,18 +95,56 @@ refuse there, name the projects (the first five, then a count), and exit non-zer
 
 ```text
 bynk: `.` is not a project (no `bynk.toml` here or above) but holds 3 projects that have their own: `a`, `b`, `c`.
-Run the command inside one of them, or add a `bynk.toml` here with
+Run the command inside one of them, pass `--each` to run it over each, or add a `bynk.toml` here with
 
     [workspace]
     members = ["*"]
 
-to run it over each
+to keep that choice in the repository
 ```
 
-Run the command inside one project, or add that root `bynk.toml` to make the
-directory a [workspace](#workspaces). `bynk fmt` is the exception: it formats a
-directory of projects as one tree, each file by its own project's `[fmt]`
-settings, since formatting reads no fixtures or migrations.
+You have three ways forward. Run the command inside one project. Pass `--each`
+to run it over every project in the directory this once. Or add that root
+`bynk.toml` to make the directory a [workspace](#workspaces) for good.
+`bynk fmt` is the exception: it formats a directory of projects as one tree,
+each file by its own project's `[fmt]` settings, since formatting reads no
+fixtures or migrations.
+
+### Running a directory of projects with `--each`
+
+`bynk check --each` and `bynk test --each` treat such a directory as an
+**implicit workspace**: each project directly inside it runs as a member would
+at a workspace root, under a `── alpha ──` header, every project runs even if an
+earlier one fails, and the exit code is non-zero if any does.
+
+```console
+$ bynk test --each
+── alpha ──
+…
+── beta ──
+…
+```
+
+- The projects are the **immediate subdirectories** that hold a `bynk.toml`, in
+  name order: exactly what `members = ["*"]` would select. A project inside a
+  project belongs to that project; `out`, `node_modules` and hidden directories
+  are never projects.
+- A subdirectory with `.bynk` files but no `bynk.toml` is **not** a project: it
+  is skipped, with a one-line note, rather than failing the run as a real
+  `members = ["*"]` would. If projects sit deeper, `--each` names them and asks
+  you to point it at the directory that holds them.
+- The flag is **opt-in**, so a command typed in the wrong directory never
+  quietly runs many projects. It does nothing at a workspace root (which
+  already runs every member), and is an error at a project, inside one, or on a
+  file.
+- Each project stands alone, with its own lock and dependencies, as when run by
+  itself. Code sharing between members, including a dependency's own path
+  dependencies, is what a real [workspace](#workspaces) is for.
+- `build`, `compile`, `deploy` and the other commands that act on one project
+  do not take `--each`.
+
+An editor needs none of this: the language server already treats each project in
+an opened folder as its own, whether or not the folder has a root `bynk.toml`.
 
 ## Workspaces
 

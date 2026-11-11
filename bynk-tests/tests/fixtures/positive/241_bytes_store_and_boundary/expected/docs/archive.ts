@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkBytesDecodeUtf8 } from "../__bynk_runtime/bytes.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -27,6 +28,8 @@ export interface VaultState {
 const __VaultRegistry = new __StateRegistry();
 function __zeroOfVaultState(): VaultState { return { latest: { label: "", bytes: new globalThis.Uint8Array() } }; }
 
+const __entryFieldsOfVault = [] as const;
+
 function __rehydrateVaultState(s: VaultState, stored: VaultState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "latest")) { const __r = __deserialise_Blob((s.latest as unknown as __JsonValue), "latest"); if (__r.tag === "Err") throw __rehydrationViolation("Vault", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).latest = __r.value as unknown as (typeof s)["latest"]; }
 }
@@ -45,15 +48,16 @@ export class Vault {
     const stored = await this.state.storage.get<VaultState>("state");
     if (stored === undefined) return __zeroOfVaultState();
     __checkStoredLayout("Vault", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfVaultState();
-    __reportUnknownStoredKeys("Vault", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateVaultState(__merged, stored);
+    __reportUnknownStoredKeys("Vault", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateVaultState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: VaultState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeVaultState(s));
+    await __commitStored(this, this.state.storage, __encodeVaultState(s), __entryFieldsOfVault, s);
   }
 
   async save(b: Blob, deps: {}): globalThis.Promise<Result<number, void>> {

@@ -1,0 +1,11 @@
+context api
+
+type Q = { q: String }
+
+service api from http {
+  @form
+  @limit(maxBody: 100, maxFile: 10)
+  on POST("/up") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(body.q)
+  }
+}

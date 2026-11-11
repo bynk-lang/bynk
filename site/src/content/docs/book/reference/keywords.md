@@ -16,20 +16,21 @@ A keyword is never a parameter, a `let` or lambda binding or a bare reference, s
 
 ## Hard keywords
 
-Reserved everywhere — these **60** words can never be used as an identifier.
+Reserved everywhere — these **61** words can never be used as an identifier.
 
 | Keyword | Meaning |
 |---|---|
 | `Bool` | The boolean base type. |
 | `Bytes` | The binary base type — an immutable octet sequence, erased to `Uint8Array` (`Bytes.fromUtf8(s)`). |
 | `Decimal` | The exact decimal base type — an arbitrary-precision coefficient with a scale (`1.20d`). |
+| `DecodeError` | The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `"\(e.kind) at \(e.path): \(e.message)"`. |
 | `Duration` | The time-span base type, in milliseconds (`5.minutes`). |
 | `Effect` | The effectful-computation type, `Effect[T]`. |
 | `Err` | The error variant of `Result`. |
 | `Float` | The floating-point base type. |
 | `Instant` | The absolute-time base type, in epoch milliseconds (`Clock.now()`). |
 | `Int` | The integer base type. |
-| `JsonError` | The JSON-decode error type, `Result[T, JsonError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `"\(e.kind) at \(e.path): \(e.message)"`. |
+| `JsonError` | Deprecated spelling of `DecodeError`; it still compiles, with a warning and an auto-fix. |
 | `None` | The empty variant of `Option`. |
 | `Ok` | The success variant of `Result`. |
 | `Option` | The optional-value type, `Option[T]`. |

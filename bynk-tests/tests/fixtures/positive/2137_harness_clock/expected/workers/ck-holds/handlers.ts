@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
@@ -17,6 +18,8 @@ export interface HoldState {
 
 const __HoldRegistry = new __StateRegistry();
 function __zeroOfHoldState(): HoldState { return { placed: None }; }
+
+const __entryFieldsOfHold = [] as const;
 
 function __rehydrateHoldState(s: HoldState, stored: HoldState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) { const __r = __deserialise_Option_Instant((s.placed as unknown as __JsonValue), "placed"); if (__r.tag === "Err") throw __rehydrationViolation("Hold", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"]; }
@@ -38,15 +41,16 @@ export class Hold {
     const stored = await this.state.storage.get<HoldState>("state");
     if (stored === undefined) return __zeroOfHoldState();
     __checkStoredLayout("Hold", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfHoldState();
-    __reportUnknownStoredKeys("Hold", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateHoldState(__merged, stored);
+    __reportUnknownStoredKeys("Hold", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateHoldState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: HoldState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeHoldState(s));
+    await __commitStored(this, this.state.storage, __encodeHoldState(s), __entryFieldsOfHold, s);
   }
 
   async reserve(deps: { Clock: bynk.Clock }): globalThis.Promise<void> {

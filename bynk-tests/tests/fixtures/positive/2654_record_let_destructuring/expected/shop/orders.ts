@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -110,6 +111,8 @@ export interface BasketState {
 const __BasketRegistry = new __StateRegistry();
 function __zeroOfBasketState(): BasketState { return { line: { sku: "widget", qty: 3, note: "gift" } }; }
 
+const __entryFieldsOfBasket = [] as const;
+
 function __rehydrateBasketState(s: BasketState, stored: BasketState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "line")) { const __r = __deserialise_Item((s.line as unknown as __JsonValue), "line"); if (__r.tag === "Err") throw __rehydrationViolation("Basket", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).line = __r.value as unknown as (typeof s)["line"]; }
 }
@@ -128,15 +131,16 @@ export class Basket {
     const stored = await this.state.storage.get<BasketState>("state");
     if (stored === undefined) return __zeroOfBasketState();
     __checkStoredLayout("Basket", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBasketState();
-    __reportUnknownStoredKeys("Basket", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBasketState(__merged, stored);
+    __reportUnknownStoredKeys("Basket", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBasketState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BasketState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBasketState(s));
+    await __commitStored(this, this.state.storage, __encodeBasketState(s), __entryFieldsOfBasket, s);
   }
 
   async current(deps: {}): globalThis.Promise<Item> {

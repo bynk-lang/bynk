@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -64,6 +65,8 @@ export interface AccountState {
 const __AccountRegistry = new __StateRegistry();
 function __zeroOfAccountState(): AccountState { return { charges: 0 }; }
 
+const __entryFieldsOfAccount = [] as const;
+
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "charges")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "charges", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "charges", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.charges as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).charges = __r.value as unknown as (typeof s)["charges"]; }
 }
@@ -84,15 +87,16 @@ export class Account {
     const stored = await this.state.storage.get<AccountState>("state");
     if (stored === undefined) return __zeroOfAccountState();
     __checkStoredLayout("Account", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAccountState();
-    __reportUnknownStoredKeys("Account", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateAccountState(__merged, stored);
+    __reportUnknownStoredKeys("Account", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateAccountState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: AccountState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeAccountState(s));
+    await __commitStored(this, this.state.storage, __encodeAccountState(s), __entryFieldsOfAccount, s);
   }
 
   async settle(deps: { Billing: Billing }): globalThis.Promise<number> {

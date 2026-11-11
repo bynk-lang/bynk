@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkCmpInt, __bynkCmpString } from "../__bynk_runtime/compare.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __BoundaryError, __JsonValue } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_boxes from "./../demo/boxes.js";
 import * as __ns_bynk_list from "./../bynk/list.js";

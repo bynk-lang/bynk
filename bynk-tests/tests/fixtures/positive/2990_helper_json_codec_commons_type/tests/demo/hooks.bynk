@@ -10,7 +10,7 @@ fn encAll(ps: List[Payload]) -> String {
 	Json.encode(ps)
 }
 
-fn dec(s: String) -> Result[UserRef, JsonError] {
+fn dec(s: String) -> Result[UserRef, DecodeError] {
 	Json.decode[UserRef](s)
 }
 

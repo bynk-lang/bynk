@@ -269,7 +269,7 @@ fn unchecked_word(r: UncheckedReason) -> &'static str {
     match r {
         UncheckedReason::Effect => "Effect",
         UncheckedReason::ValidationError => "ValidationError",
-        UncheckedReason::JsonError => "JsonError",
+        UncheckedReason::DecodeError => "DecodeError",
         UncheckedReason::HttpResult => "HttpResult",
         UncheckedReason::QueueResult => "QueueResult",
         UncheckedReason::Asset => "Asset",

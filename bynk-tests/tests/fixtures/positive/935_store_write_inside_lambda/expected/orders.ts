@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -21,6 +22,8 @@ export interface OrdersState {
 
 const __OrdersRegistry = new __StateRegistry();
 function __zeroOfOrdersState(): OrdersState { return { orders: {} }; }
+
+const __entryFieldsOfOrders = [{ name: "orders", kind: "map" }] as const;
 
 function __rehydrateOrdersState(s: OrdersState, stored: OrdersState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys(s.orders)) { const __r = __deserialise_Order((s.orders[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); s.orders[__k] = __r.value as unknown as (typeof s.orders)[string]; }
@@ -41,15 +44,16 @@ export class Orders {
     const stored = await this.state.storage.get<OrdersState>("state");
     if (stored === undefined) return __zeroOfOrdersState();
     __checkStoredLayout("Orders", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfOrdersState();
-    __reportUnknownStoredKeys("Orders", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateOrdersState(__merged, stored);
+    __reportUnknownStoredKeys("Orders", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateOrdersState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: OrdersState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeOrdersState(s));
+    await __commitStored(this, this.state.storage, __encodeOrdersState(s), __entryFieldsOfOrders, s);
   }
 
   async bulkAdd(items: readonly Order[], deps: {}): globalThis.Promise<void> {

@@ -236,6 +236,24 @@ a `workers` cross-context signature is diagnosed as not-yet-supported — put it
 inside a record, whose typed codec base64-encodes it, or build with `--target
 bundle`.)
 
+
+### File {#file}
+
+`File` is the record a [`@multipart`](/book/reference/http/#multipart-bodies) body
+names an uploaded file part with. It is exported by `bynk` (`consumes bynk { File }`):
+
+```text
+File = { filename: Option[String], contentType: String, bytes: Bytes }
+```
+
+`filename` is the client's name for the file, `None` for a part with no `filename`;
+`contentType` is the type the client claimed; `bytes` is the whole part, and its size is
+`bytes.length()`. The name and the type are client-controlled, so neither is a storage key
+or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
+`Option` or in a `List` (one layer); a test builds one with a record literal. It is not a boundary
+type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
+a handler's parameter or result, an event or a call argument.
+
 ## Built-in generic types
 
 | Type | Variants | Purpose |
@@ -535,12 +553,12 @@ Four compiler-backed statics decode and encode JSON at a typed boundary:
 |---|---|---|
 | `Json.encode(v)` | `String` | serialise a checked value to a JSON string |
 | `Json.encodePlain(v)` | `String` | `encode` writing an `Option` as the value or `null`, as a non-Bynk API sends it (see [Plain JSON](#plain-json)) |
-| `Json.decode[T](s)` | `Result[T, JsonError]` | parse a JSON string into `T`, validating structure (and any refinements) |
-| `Json.decodeSql[T](s)` | `Result[T, JsonError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)) |
+| `Json.decode[T](s)` | `Result[T, DecodeError]` | parse a JSON string into `T`, validating structure (and any refinements) |
+| `Json.decodeSql[T](s)` | `Result[T, DecodeError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/book/reference/bynk-capabilities/#sql-databases-d1)) |
 
 `Json.decode[T]` takes an explicit type argument and validates the decoded value
 against `T` — including refined-type predicates — so untrusted JSON enters the
-program only as a fully-checked value. `JsonError` is the error it returns
+program only as a fully-checked value. `DecodeError` is the error it returns
 (malformed JSON, or a structural/refinement mismatch). See the guide
 [Decode untrusted JSON into a typed value](/book/guides/type-system/decode-json/).
 
@@ -585,8 +603,11 @@ Two refusals keep it honest. An `Option` whose payload can itself be `null`
 witness, which writes the tagged form, so encode at a concrete type. `Queue.sendValue`
 and the other typed capability writes stay tagged, because a Bynk consumer reads them.
 
-`JsonError` is a record of three `String` fields, so a failed decode can be
-explained in Bynk:
+`DecodeError` is a record of three `String` fields, so a failed decode can be
+explained in Bynk. It was called `JsonError` before it became the error type of
+every decoder: the old spelling still compiles, as the same type, with a
+`bynk.types.deprecated_json_error` warning whose fix rewrites it (`bynk fmt`
+rewrites it too). Its fields let a failed decode be explained in Bynk:
 
 | Field | Meaning |
 |---|---|
@@ -594,7 +615,7 @@ explained in Bynk:
 | `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
 | `message` | a human-readable description, such as `expected number, got string` |
 
-A `JsonError` has no string form, so `"\(e)"` is refused
+A `DecodeError` has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
 `"\(e.kind) at \(e.path): \(e.message)"` reads `StructuralMismatch at $.a:
 expected number, got string`. `kind` is a `String`, not a sum type, so compare it
@@ -625,6 +646,65 @@ The tagged forms are recognised only when the object has exactly those keys.
 Every payload Bynk wrote decodes as before, but a hand-written tagged object
 with an extra key, such as `{"kind": "Some", "value": "d", "note": "x"}`, is
 read as a bare value, so it fails for an `Option[String]`.
+
+
+### `Yaml.decode` {#yaml-decode}
+
+`Yaml.decode[T](s)` is `Json.decode[T]` over YAML text. There is no `Yaml.encode`.
+
+| Form | Type | Purpose |
+|---|---|---|
+| `Yaml.decode[T](s)` | `Result[T, DecodeError]` | parse a YAML document into `T`, validating structure (and any refinements) |
+
+The YAML is parsed to the same tree of `null`, booleans, numbers, strings, lists and
+objects that `JSON.parse` yields, and then checked by the identical typed decode, so
+`T` is any type `Json.decode` accepts, the record mapping, field defaults,
+`Option`-for-absent-key, refinements and `$.path` errors are the same, and `T` is
+inferred from an expected `Result[T, DecodeError]` just as it is for `Json.decode`.
+See the guide [Read a YAML settings file into a typed value](/book/guides/type-system/decode-yaml/).
+
+**The subset.** YAML 1.2, one document: block and flow mappings and sequences,
+plain, single-quoted and double-quoted scalars (multi-line included), literal `|` and
+folded `>` block scalars with chomping and indentation indicators, comments, and
+scalar mapping keys. A leading `---` and a trailing `...` are accepted.
+
+**Scalar resolution** is the YAML 1.2 core schema, by shape, for plain scalars only:
+
+| Written | Is |
+|---|---|
+| `null`, `Null`, `NULL`, `~`, or nothing | `null` |
+| `true`, `True`, `TRUE`, `false`, `False`, `FALSE` | a boolean |
+| `12`, `-3`, `+7`, `0o17`, `0x1F` | an integer |
+| `1.5`, `-.5`, `1e3`, `5.` | a float |
+| anything else | a string |
+
+So `on`, `off`, `yes`, `no`, `y` and `n` are strings, as are `2001-12-14`, `1_000` and
+`0b101`. A quoted scalar is always a string. A mapping key is always text: `1: a`
+has the key `"1"`. An integer beyond 2^53 is read as `JSON.parse` would read it.
+
+**Refusals.** Each is a `DecodeError` with its own `kind`, the `$.path` where it was
+found (`$` before any key), and `line L, column C` in `message`. Nothing is decoded
+partially.
+
+| `kind` | Cause |
+|---|---|
+| `Malformed` | a syntax error, including a tab used as indentation |
+| `UnsupportedAnchor` | an anchor, `&name` |
+| `UnsupportedAlias` | an alias, `*name` |
+| `UnsupportedMergeKey` | a merge key, `<<` (a quoted `"<<"` is only a key) |
+| `UnsupportedTag` | any tag, `!tag` or `!!tag`, because resolution is by shape |
+| `MultipleDocuments` | a second document in the stream |
+| `UnsupportedSyntax` | a construct outside the subset: a complex key (`? key`), a directive (`%YAML`), a key written as a collection |
+| `UnsupportedValue` | `.inf`, `-.inf` or `.nan`: the decoded tree cannot hold a non-finite number |
+| `DuplicateKey` | the same key twice in one mapping (the same rule as a duplicate `Map` key) |
+| `LimitExceeded` | input over 1,048,576 bytes of UTF-8, or collections nested more than 256 levels |
+
+**Limits.** The depth limit is the recursive-codec bound ([§6](/book/spec/type-system/)),
+applied while parsing so that a deeply nested document is refused rather than unwound.
+The size limit is the HTTP body limit. `Json.decode` has no size limit of its own.
+
+An error from the typed step after parsing (`StructuralMismatch`,
+`RefinementViolation`) names its field path exactly as it does for JSON.
 
 ## Deliberate faults: `unreachable` and `todo` {#faults}
 
@@ -849,7 +929,7 @@ fn save(page: Paginated[User]) -> String {
   Json.encode(page)                          // __serialise_Paginated_User
 }
 
-fn load(s: String) -> Result[Paginated[User], JsonError] {
+fn load(s: String) -> Result[Paginated[User], DecodeError] {
   Json.decode[Paginated[User]](s)            // __deserialise_Paginated_User
 }
 ```

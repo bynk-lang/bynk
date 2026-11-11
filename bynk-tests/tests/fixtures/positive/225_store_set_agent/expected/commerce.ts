@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -13,6 +14,8 @@ export interface AudienceState {
 
 const __AudienceRegistry = new __StateRegistry();
 function __zeroOfAudienceState(): AudienceState { return { members: {} }; }
+
+const __entryFieldsOfAudience = [{ name: "members", kind: "set" }] as const;
 
 function __rehydrateAudienceState(s: AudienceState, stored: AudienceState): void {
   for (const __k of globalThis.Object.keys(s.members)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error); }
@@ -32,15 +35,16 @@ export class Audience {
     const stored = await this.state.storage.get<AudienceState>("state");
     if (stored === undefined) return __zeroOfAudienceState();
     __checkStoredLayout("Audience", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfAudienceState();
-    __reportUnknownStoredKeys("Audience", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateAudienceState(__merged, stored);
+    __reportUnknownStoredKeys("Audience", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateAudienceState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: AudienceState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeAudienceState(s));
+    await __commitStored(this, this.state.storage, __encodeAudienceState(s), __entryFieldsOfAudience, s);
   }
 
   async join(who: string, deps: {}): globalThis.Promise<void> {

@@ -8,8 +8,9 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
+import { commitStored, noteClock, readStored } from "./entries.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, corsPreflightResponse, edgeCacheGuard, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter } from "./storage.ts";
 
@@ -24,6 +25,7 @@ export {
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
   callService as __callService,
+  commitStored as __commitStored,
   checkStoredLayout as __checkStoredLayout,
   checkStoredSchemaVersion as __checkStoredSchemaVersion,
   connIdOf as __connIdOf,
@@ -53,8 +55,16 @@ export {
   makeIntegrationRateLimit as __makeIntegrationRateLimit,
   makeTestState as __makeTestState,
   matchPath as __matchPath,
+  noteClock as __noteClock,
   mediaTypeMatches as __mediaTypeMatches,
+  multipartForm as __multipartForm,
+  multipartMediaTypeMatches as __multipartMediaTypeMatches,
+  multipartObject as __multipartObject,
+  readStored as __readStored,
   requestHeaders as __requestHeaders,
+  formMediaTypeMatches as __formMediaTypeMatches,
+  formObject as __formObject,
+  formString as __formString,
   queryObject as __queryObject,
   queryString as __queryString,
   requestQuery as __requestQuery,

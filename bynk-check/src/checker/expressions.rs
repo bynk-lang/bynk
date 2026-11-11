@@ -3561,9 +3561,9 @@ pub(crate) fn check_field_access(
             }
         };
     }
-    // v0.22b: `JsonError` is a compiler-known record (ADR 0047) — uniform
+    // v0.22b: `DecodeError` is a compiler-known record (ADR 0047) — uniform
     // `String` fields so a decode failure is inspectable in Bynk.
-    if recv_ty == tys.intern(Ty::JsonError) {
+    if recv_ty == tys.intern(Ty::DecodeError) {
         return match field.name.as_str() {
             "kind" | "path" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
             other => {
@@ -3571,7 +3571,7 @@ pub(crate) fn check_field_access(
                     "bynk.types.unknown_field",
                     field.span,
                     format!(
-                        "`JsonError` has no field `{other}` — its fields are `kind`, `path`, `message`"
+                        "`DecodeError` has no field `{other}` — its fields are `kind`, `path`, `message`"
                     ),
                 ));
                 None
@@ -3598,7 +3598,7 @@ pub(crate) fn check_field_access(
     }
     // v0.158 (ADR 0184): `MapEntry[K, V]` is a compiler-known generic record
     // (the element of a map's `.entries` query) with exactly `.key`/`.value` —
-    // it has no user `TypeDecl`, so its fields resolve here (like `JsonError`),
+    // it has no user `TypeDecl`, so its fields resolve here (like `DecodeError`),
     // reading the two type arguments.
     if let Ty::Named {
         name,

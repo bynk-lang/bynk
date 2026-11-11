@@ -2,6 +2,7 @@ import type { DurableObjectState } from "./storage.ts";
 import { makeTestState } from "./storage.ts";
 import type { BoundaryError, JsonValue } from "./boundary.ts";
 import { boundaryError } from "./boundary.ts";
+import { LAYOUT_PER_ENTRY } from "./entries.ts";
 import type { Result } from "./result.ts";
 import { Ok } from "./result.ts";
 
@@ -325,7 +326,7 @@ export async function sweepAgentInstances(
   // The storage layout this build writes (#3189): 1 is the wholesale layout every
   // build wrote before per-entry storage. Reported to the sweep, which uses it only
   // to say how far the layout upgrade has got.
-  layout: number = 1,
+  layout: number = LAYOUT_PER_ENTRY,
 ): Promise<Response> {
   let ids: unknown;
   try {
@@ -377,7 +378,7 @@ export async function wakeForMigration<S>(
   commit: (state: S) => Promise<void>,
   // The storage layout this build writes. `load` upgrades an older record to it
   // (the lazy upgrade), so a record that woke without a fault is in it afterwards.
-  layout: number = 1,
+  layout: number = LAYOUT_PER_ENTRY,
 ): Promise<Response> {
   const json = (value: object) =>
     new Response(JSON.stringify(value), {
@@ -400,9 +401,11 @@ export async function wakeForMigration<S>(
         : null;
   try {
     const state = await load();
-    // A record in an older layout is written by `load` itself; a commit is still
-    // owed only when the schema version is older.
-    if (before === null || before < current) await commit(state);
+    // A collection in an older layout is written by `load` itself. A commit is owed when
+    // the schema version is older, or when the record has no layout marker yet (an agent
+    // with no collections has nothing for `load` to write, and the marker is stamped by
+    // its commit).
+    if (before === null || before < current || layoutBefore !== layout) await commit(state);
     return json({ before, after: current, layoutBefore, layoutAfter: layout });
   } catch (e) {
     return json({ before, layoutBefore, fault: migrationFaultKind(e) });

@@ -3791,6 +3791,8 @@ impl LanguageServer for Backend {
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
+        // #3276: at a service-body item start, offer the `@form` snippet.
+        items.extend(form_completions(&text, offset, &line_prefix));
         // #2854: in an `on http` handler's parameter list, offer the special
         // parameter names (`query`, `headers`, `body`).
         items.extend(http_param_completions(&text, offset));
@@ -5542,6 +5544,34 @@ fn raw_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem>
         }];
     }
     Vec::new()
+}
+
+/// #3276: the `@form` and `@multipart` annotation snippets, at a service-body item
+/// start. Neither takes arguments, so there is no argument position to complete.
+fn form_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if !completion::in_service_body_item_position(text, offset, line) {
+        return Vec::new();
+    }
+    [
+        (
+            "@form",
+            "decode `body: T` from an `application/x-www-form-urlencoded` form — a `415` for any other content type",
+        ),
+        (
+            "@multipart",
+            "decode `body: T` from a `multipart/form-data` body, with `File` parts — a `415` for any other content type; needs a body cap",
+        ),
+    ]
+    .into_iter()
+    .map(|(label, detail)| CompletionItem {
+        label: label.to_string(),
+        kind: Some(CompletionItemKind::SNIPPET),
+        detail: Some(detail.to_string()),
+        insert_text: Some(label.to_string()),
+        insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+        ..Default::default()
+    })
+    .collect()
 }
 
 fn contract_param_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
@@ -10327,6 +10357,48 @@ mod tests {
             backend.analysis_for(&ax).await.is_some(),
             "a warmed project answers index requests with no `did_open`",
         );
+    }
+
+    /// #3274: a workspace folder that is no project but holds projects (the
+    /// manifest-less directory `bynk check --each` runs) needs no editor
+    /// support of its own. Each project directly inside it is its own root,
+    /// routed by its nearest `bynk.toml`, so two projects that declare the same
+    /// unit name neither collide nor merge.
+    #[tokio::test]
+    async fn a_manifestless_folder_of_projects_is_analysed_per_project() {
+        let unit = "commons shared\n\nfn twice(n: Int) -> Int {\n  n + n\n}\n";
+        let s = scratch_project(
+            "e_each_folder",
+            &[
+                ("one/bynk.toml", "[project]\nname=\"one\"\n"),
+                ("one/src/shared.bynk", unit),
+                ("two/bynk.toml", "[project]\nname=\"two\"\n"),
+                ("two/src/shared.bynk", unit),
+                // Not a project: no `bynk.toml`, so it is no root.
+                ("docs/notes.bynk", "commons notes\n"),
+            ],
+        );
+        let backend = bare_backend().await;
+        set_folders(&backend, &[&s.0]).await;
+        backend.initialized(InitializedParams {}).await;
+
+        assert_eq!(
+            backend.state.read().await.projects.len(),
+            2,
+            "each project directly inside the folder is a root; the folder is not",
+        );
+        let one = file_uri(&s.0, "one/src/shared.bynk");
+        let two = file_uri(&s.0, "two/src/shared.bynk");
+        let root_one = backend.root_for_uri(&one).await.expect("routes");
+        let root_two = backend.root_for_uri(&two).await.expect("routes");
+        assert_ne!(root_one, root_two, "the same unit name routes per project");
+        assert!(root_one.ends_with("one") && root_two.ends_with("two"));
+        for uri in [&one, &two] {
+            assert!(
+                backend.analysis_for(uri).await.is_some(),
+                "each project answers on its own, with no cross-project collision",
+            );
+        }
     }
 
     /// The implicit-`src/` project (#485 — a `src/` tree with no `bynk.toml`) is

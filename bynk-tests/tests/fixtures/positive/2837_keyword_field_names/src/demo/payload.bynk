@@ -47,7 +47,7 @@ fn changed(c: Change) -> String {
 
 fn count(xs: List[String]) -> Int { Sorted.from(xs).do() }
 
-fn load(s: String) -> Result[Event, JsonError] { Json.decode[Event](s) }
+fn load(s: String) -> Result[Event, DecodeError] { Json.decode[Event](s) }
 
 fn save(e: Event) -> String { Json.encode(e) }
 

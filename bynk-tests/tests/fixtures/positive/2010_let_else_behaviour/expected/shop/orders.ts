@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -81,6 +82,8 @@ export interface OrderState {
 const __OrderRegistry = new __StateRegistry();
 function __zeroOfOrderState(): OrderState { return { status: "new" }; }
 
+const __entryFieldsOfOrder = [] as const;
+
 function __rehydrateOrderState(s: OrderState, stored: OrderState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "status")) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "status", expected: "string", actual: typeof __v } as __BoundaryError))((s.status as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Order", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).status = __r.value as unknown as (typeof s)["status"]; }
 }
@@ -99,15 +102,16 @@ export class Order {
     const stored = await this.state.storage.get<OrderState>("state");
     if (stored === undefined) return __zeroOfOrderState();
     __checkStoredLayout("Order", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfOrderState();
-    __reportUnknownStoredKeys("Order", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateOrderState(__merged, stored);
+    __reportUnknownStoredKeys("Order", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateOrderState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: OrderState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeOrderState(s));
+    await __commitStored(this, this.state.storage, __encodeOrderState(s), __entryFieldsOfOrder, s);
   }
 
   async open(deps: {}): globalThis.Promise<Result<void, Problem>> {
@@ -162,6 +166,8 @@ export interface StockState {
 const __StockRegistry = new __StateRegistry();
 function __zeroOfStockState(): StockState { return { held: 0 }; }
 
+const __entryFieldsOfStock = [] as const;
+
 function __rehydrateStockState(s: StockState, stored: StockState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "held")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.held as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Stock", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).held = __r.value as unknown as (typeof s)["held"]; }
 }
@@ -180,15 +186,16 @@ export class Stock {
     const stored = await this.state.storage.get<StockState>("state");
     if (stored === undefined) return __zeroOfStockState();
     __checkStoredLayout("Stock", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfStockState();
-    __reportUnknownStoredKeys("Stock", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateStockState(__merged, stored);
+    __reportUnknownStoredKeys("Stock", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateStockState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: StockState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeStockState(s));
+    await __commitStored(this, this.state.storage, __encodeStockState(s), __entryFieldsOfStock, s);
   }
 
   async reserve(qty: number, deps: {}): globalThis.Promise<Result<void, Problem>> {

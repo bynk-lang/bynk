@@ -2,7 +2,7 @@ context shop
 
 consumes pay
 
-fn parse[T: Codable](s: String) -> Result[T, JsonError] { Json.decode[T](s) }
+fn parse[T: Codable](s: String) -> Result[T, DecodeError] { Json.decode[T](s) }
 
 service check {
   on call(raw: String) -> Effect[Bool] {

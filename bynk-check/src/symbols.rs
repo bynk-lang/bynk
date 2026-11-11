@@ -2379,7 +2379,7 @@ pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }

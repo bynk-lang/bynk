@@ -175,6 +175,13 @@ impl ErrorSink {
             self.push_for(file.as_deref(), e);
         }
     }
+    /// Append everything `other` collected (#3243 S2.3): the per-file scratch
+    /// sink a file's check wrote into, folded into the project's in the order
+    /// the checks ran, so the result is what one shared sink would hold.
+    pub fn absorb(&mut self, other: ErrorSink) {
+        self.entries.extend(other.entries);
+        self.warnings.extend(other.warnings);
+    }
     /// True when no **error-severity** diagnostic has been collected — the
     /// build-failure gate. Warnings do not count (ADR 0117).
     pub fn is_empty(&self) -> bool {
@@ -1882,7 +1889,11 @@ pub fn check_function_type_boundary_items(
                             );
                             continue;
                         }
-                        if !type_ref_is_held(&p.type_ref) && !http_headers {
+                        // #3276: a `@multipart` handler's `body` is where its `File`
+                        // parts are received.
+                        let multipart_body = p.name.name == "body"
+                            && h.annotations.iter().any(|a| a.name.name == "multipart");
+                        if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
                             reject_fn_types(
                                 &p.type_ref,
                                 "a service handler signature",
@@ -5866,7 +5877,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }

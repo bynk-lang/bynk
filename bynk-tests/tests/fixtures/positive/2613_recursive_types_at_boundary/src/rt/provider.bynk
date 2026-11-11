@@ -47,6 +47,6 @@ agent Keeper {
   }
 }
 
-fn roundTrip(t: Tree) -> Result[Tree, JsonError] {
+fn roundTrip(t: Tree) -> Result[Tree, DecodeError] {
   Json.decode[Tree](Json.encode(t))
 }

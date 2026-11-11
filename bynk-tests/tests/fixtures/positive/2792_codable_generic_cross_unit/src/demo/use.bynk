@@ -11,4 +11,4 @@ fn shown(c: Card, code: Code) -> String {
   forward(e)
 }
 
-fn read(s: String) -> Result[Envelope[Card], JsonError] { decode[Card](s) }
+fn read(s: String) -> Result[Envelope[Card], DecodeError] { decode[Card](s) }

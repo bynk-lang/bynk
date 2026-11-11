@@ -1,0 +1,1 @@
+bynk.generics.uninferable_type_arg cannot infer the target type of `Yaml.decode`

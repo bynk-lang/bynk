@@ -6,7 +6,7 @@ exports opaque { Token }
 
 type Token = opaque String where Matches("T-[0-9]+")
 
-fn parse(raw: String) -> Result[Token, JsonError] { Json.decode[Token](raw) }
+fn parse(raw: String) -> Result[Token, DecodeError] { Json.decode[Token](raw) }
 
 service authorise {
   on call(amount: Money) -> Effect[Result[Token, Int]] {

@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **785** codes in total.
+There are **799** codes in total.
 
 ## Agents
 
@@ -193,6 +193,7 @@ There are **785** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
+| `bynk.http.body_kind_conflict` | A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`. |  | — |
 | `bynk.http.body_on_get_or_delete` | A GET or DELETE handler declares a `body` parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cache_bad_immutable` | A `@cache` annotation's `immutable` is not a `Bool` literal. |  | — |
 | `bynk.http.cache_bad_max_age` | A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal. |  | — |
@@ -210,6 +211,13 @@ There are **785** codes in total.
 | `bynk.http.duplicate_route` | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
 | `bynk.http.extra_param` | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.form_body_not_record` | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.form_bool_without_default` | A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
+| `bynk.http.form_duplicate` | A handler carries more than one `@form` annotation. |  | — |
+| `bynk.http.form_field_not_stringy` | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.form_on_bodyless` | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
+| `bynk.http.form_on_sum_route` | A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself. |  | — |
+| `bynk.http.form_unknown_arg` | A `@form` annotation is given an argument; it takes none. |  | — |
 | `bynk.http.header_question_not_found` | `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`). |  | Warning |
 | `bynk.http.headers_wrong_type` | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.invalid_path` | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
@@ -221,12 +229,16 @@ There are **785** codes in total.
 | `bynk.http.json_unknown_arg` | A `@json` annotation has an argument outside the closed set (`options`). |  | — |
 | `bynk.http.json_unknown_field` | A `json { }` policy declares a field outside the closed set (`options`). |  | — |
 | `bynk.http.limit_bad_max_body` | A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal. |  | — |
+| `bynk.http.limit_bad_max_file` | A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal. |  | — |
 | `bynk.http.limit_duplicate` | A handler carries more than one `@limit` annotation. |  | — |
 | `bynk.http.limit_on_bodyless` | A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE). |  | — |
+| `bynk.http.limit_on_non_multipart` | A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`. |  | — |
 | `bynk.http.limit_unknown_arg` | A `@limit` annotation has an argument outside the closed set (`maxBody`). |  | — |
 | `bynk.http.limits_invalid_field` | A `limits` policy field (`maxBody`) has the wrong value shape. |  | — |
 | `bynk.http.limits_not_http` | A `limits { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.limits_unknown_field` | A `limits { }` policy declares a field outside the closed set. |  | — |
+| `bynk.http.multipart_body_unbounded` | A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`). |  | — |
+| `bynk.http.multipart_large_cap` | A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning). |  | Warning |
 | `bynk.http.path_param_not_stringy` | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.query_field_not_stringy` | A field of an HTTP handler's `query` record has a type a query string cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.query_not_http` | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
@@ -844,6 +856,7 @@ There are **785** codes in total.
 | `bynk.types.constructor_base_mismatch` | A `.of` constructor was given an argument of the wrong base type. |  | — |
 | `bynk.types.decimal_division_unscaled` | `/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622). |  | — |
 | `bynk.types.decimal_negation_too_large` | A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622). |  | — |
+| `bynk.types.deprecated_json_error` | `JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable). |  | Warning |
 | `bynk.types.derives_automatic` | A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.derives_field_not_orderable` | A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.duplicate_example` | A refinement carries more than one `@example`. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
@@ -865,6 +878,7 @@ There are **785** codes in total.
 | `bynk.types.field_default_on_variant` | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
 | `bynk.types.field_refinement_not_base` | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | `bynk.types.field_value_mismatch` | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
+| `bynk.types.file_at_boundary` | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |
 | `bynk.types.function_at_boundary` | A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary. | [`function_type_ref`](/book/reference/grammar/#rule-function_type_ref) | — |
 | `bynk.types.guard_not_bool` | A match-arm `if` guard is not a `Bool` expression. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.headers_at_boundary` | `RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |

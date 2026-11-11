@@ -81,7 +81,7 @@ pub use events_fanout::emit_events_fanout_do;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers::emit_worker_compose;
-pub use workers_entry::{emit_worker_entry, table_has_plain_json};
+pub use workers_entry::{emit_worker_entry, form_body_specs, table_has_plain_json};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;
@@ -870,14 +870,14 @@ pub fn agent_cross_context_targets(
 /// line each (which wrapper variant stops the recursion and reports `true`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TypeRefMarker {
-    JsonError,
+    DecodeError,
     HttpResult,
     Connection,
     /// Closes the `ts_any` residual (#1319): `has_queue` (`write_header`'s
     /// own `QueueResult` import gate) only detected a real `from queue on
     /// message` consumer handler, never a bare field/type-declaration
     /// mention — the one gap among the four runtime-owned error types that
-    /// `JsonError`/`HttpResult` already closed via this same marker
+    /// `DecodeError`/`HttpResult` already closed via this same marker
     /// mechanism (`ValidationError` needs no marker at all; it's imported
     /// unconditionally).
     QueueResult,
@@ -893,7 +893,7 @@ enum TypeRefMarker {
 /// each original's own "recurse" bucket did.
 fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
     match t {
-        TypeRef::JsonError(_) => marker == TypeRefMarker::JsonError,
+        TypeRef::DecodeError(_) => marker == TypeRefMarker::DecodeError,
         TypeRef::HttpResult(a, _) => {
             marker == TypeRefMarker::HttpResult || type_ref_mentions(a, marker)
         }
@@ -966,9 +966,9 @@ fn commons_mentions_type(commons: &TypedCommons, marker: TypeRefMarker) -> bool 
 }
 
 /// v0.22b: whether any signature or type declaration in this file names
-/// `JsonError` — drives the conditional `type JsonError` runtime import.
+/// `DecodeError` — drives the conditional `type DecodeError` runtime import.
 fn file_mentions_json_error(commons: &TypedCommons) -> bool {
-    commons_mentions_type(commons, TypeRefMarker::JsonError)
+    commons_mentions_type(commons, TypeRefMarker::DecodeError)
 }
 
 /// Closes the `ts_any` residual (#1319): true if any signature or type
@@ -1072,7 +1072,7 @@ pub fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         ),
         Ty::Unit => TypeRef::Unit(sp),
         Ty::ValidationError => TypeRef::ValidationError(sp),
-        Ty::JsonError => TypeRef::JsonError(sp),
+        Ty::DecodeError => TypeRef::DecodeError(sp),
         // R4.3: `Ty::Error` has no codec — same as the other non-boundary
         // types below, but for the additional reason that a checked program
         // should never contain one at a codec-generation site.
@@ -1202,7 +1202,8 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
             else {
                 return;
             };
-            if *ns != JSON {
+            // #3214: `Yaml.decode[T]` decodes through the same codec helpers.
+            if *ns != JSON && *ns != YAML {
                 return;
             }
             match op.as_str() {
@@ -2945,7 +2946,7 @@ fn collect_refs_in_typeref(
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
-        | TypeRef::JsonError(_)
+        | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
 }
@@ -3352,7 +3353,7 @@ fn record_ty_refs(
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Unit
         | Ty::Var(_) => {}
     }
@@ -3930,12 +3931,12 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             "type ValidationError",
         ];
         // v0.22b: the codec types are imported only when the file uses the
-        // `Json` codec (or names `JsonError` in a signature) — keeping every
+        // `Json` codec (or names `DecodeError` in a signature) — keeping every
         // non-codec module's header byte-identical to v0.22a.
         let uses_codec = uses_json_codec(commons);
         let mentions_json_error = file_mentions_json_error(commons);
         if uses_codec || mentions_json_error {
-            parts.push("type JsonError");
+            parts.push("type DecodeError");
         }
         // v0.102: a file naming `Connection[F]` imports the runtime interface.
         if file_mentions_connection(commons) {
@@ -4042,6 +4043,12 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
             // Per-entry storage slice 0 (#3189): faults on a `__layout` marker
             // a later build wrote.
             parts.push("__checkStoredLayout");
+            // Per-entry storage (#3189): the codec between the stored record
+            // and the wholesale-shaped state a handler reads.
+            parts.push("__readStored");
+            parts.push("__commitStored");
+            // Cache reaping (#3189): a `Cache` op notes the clock it read.
+            parts.push("__noteClock");
         }
         let has_versioned_agent = commons.commons.items.iter().any(|i| match i {
             CommonsItem::Agent(a) => ctx.agent_schema_versions.contains_key(&a.name.name),
@@ -4173,6 +4180,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.yaml() {
+            parts.extend(YAML_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
+        }
         if ctx.runtime_use.settle_all() {
             parts.extend(
                 SETTLE_ALL_RUNTIME_IMPORTS
@@ -4209,6 +4219,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if ctx.runtime_use.query_string() {
             parts.extend(
                 QUERY_STRING_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
+        if ctx.runtime_use.multipart_form() {
+            parts.extend(
+                MULTIPART_FORM_RUNTIME_IMPORTS
                     .trim_start_matches(", ")
                     .split(", "),
             );
@@ -4276,9 +4293,9 @@ fn write_header_single(
         // v0.22b: codec imports only when the file uses the `Json` codec.
         let uses_codec = uses_json_codec(commons);
         let codec_imports = if uses_codec {
-            ", type JsonError, type __JsonValue, type __BoundaryError"
+            ", type DecodeError, type __JsonValue, type __BoundaryError"
         } else if file_mentions_json_error(commons) {
-            ", type JsonError"
+            ", type DecodeError"
         } else {
             ""
         };
@@ -4304,6 +4321,12 @@ fn write_header_single(
         // K2 (#2594): the percent-encoding helpers, imported only when called.
         let iso_date_imports = if runtime_use.iso_date() {
             ISO_DATE_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
+        // #3214: the YAML parser, imported only by a module that calls `Yaml.decode`.
+        let yaml_imports = if runtime_use.yaml() {
+            YAML_RUNTIME_IMPORTS
         } else {
             ""
         };
@@ -4354,6 +4377,11 @@ fn write_header_single(
         } else {
             ""
         };
+        let multipart_form_imports = if runtime_use.multipart_form() {
+            MULTIPART_FORM_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #1652: the structural-equality walker, imported only when a
         // non-primitive `==`/`!=` lowered to it.
         let eq_imports = if runtime_use.eq() {
@@ -4384,7 +4412,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4407,6 +4435,9 @@ pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
 /// query driver turn a record's wire form into a query string with.
 pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
+
+/// #3276: the `FormData` a system driver sends a typed `@multipart` body as.
+pub const MULTIPART_FORM_RUNTIME_IMPORTS: &str = ", __multipartForm";
 /// #2854: the key suffix under which a route's typed `query` (position and
 /// declared type) sits in the same per-route map as its body param.
 pub const QUERY_ROUTE_SUFFIX: &str = "?query";
@@ -4414,12 +4445,19 @@ pub const QUERY_ROUTE_SUFFIX: &str = "?query";
 /// headers in a `__extraHeaders` slot (a route that declares no `headers:`).
 pub const EXTRA_HEADERS_ROUTE_SUFFIX: &str = "?extra-headers";
 
+/// #3276: marks a `@form` route in the system drivers' route-body map, so a typed
+/// body in a mixed typed-and-`Wire` call is written as a form (`a=1&b=x`), not JSON.
+pub const FORM_ROUTE_SUFFIX: &str = "?form";
+
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
 pub const TIME_OPS_RUNTIME_IMPORTS: &str = ", __bynkInstantToIso, __bynkInstantFromIso";
 
 /// #2867: the `IsoDate` predicate's check, appended only when a refinement check uses it.
 pub const ISO_DATE_RUNTIME_IMPORTS: &str = ", __bynkIsIsoDate";
+
+/// #3214: the YAML parser behind `Yaml.decode[T]`, appended only when a body has one.
+pub const YAML_RUNTIME_IMPORTS: &str = ", __bynkYamlParse";
 
 /// #2640: the join a `par { … }` block awaits, appended only when a body has one.
 pub const SETTLE_ALL_RUNTIME_IMPORTS: &str = ", __bynkSettleAll";
@@ -4474,7 +4512,7 @@ const MESSAGES_RUNTIME_IMPORTS: &str = ", __selectPluralArm, __formatIcuNumber, 
 pub const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str = ", Ok, Err, type Result, type __BoundaryError";
 
 /// #914: the names the `Json.decode[T]` wrapper puts in the module — its own
-/// `Result<T, JsonError>` signature and the `JsonValue` it parses into
+/// `Result<T, DecodeError>` signature and the `JsonValue` it parses into
 /// (`lower_json_codec_call`, `bynk-emit/src/emitter/lower.rs`).
 ///
 /// A sibling group rather than part of [`BOUNDARY_CODEC_RUNTIME_IMPORTS`]: the
@@ -4498,7 +4536,7 @@ pub const BOUNDARY_CODEC_RUNTIME_IMPORTS: &str = ", Ok, Err, type Result, type _
 /// `918_json_decode_in_test_case` (base type, delegation-free) and
 /// `919_json_decode_named_record_in_test_case` (named record, delegating).
 pub const JSON_CODEC_RUNTIME_IMPORTS: &str =
-    ", Ok, Err, type Result, type __JsonValue, type JsonError";
+    ", Ok, Err, type Result, type __JsonValue, type DecodeError";
 
 /// Emit the commons-level doc block (if any) at the current position.
 /// #1478: real-node-internally already (a single `TsStmtKind::DocComment`,
@@ -6769,7 +6807,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
             TsType::named("{ readonly tag: string; readonly detail: string }")
         }
         TypeRef::ValidationError(_) => TsType::named("ValidationError"),
-        TypeRef::JsonError(_) => TsType::named("JsonError"),
+        TypeRef::DecodeError(_) => TsType::named("DecodeError"),
         TypeRef::Unit(_) => TsType::named("void"),
         // v0.157 (ADR 0183): `Name[Arg, …]` lowers to the erased TS generic
         // `Name<Arg, …>` — the generic record's interface is emitted with the
@@ -6950,7 +6988,7 @@ mod ts_type_ref_tests {
             ts_type_ref(&TypeRef::ValidationError(sp())),
             "ValidationError"
         );
-        assert_eq!(ts_type_ref(&TypeRef::JsonError(sp())), "JsonError");
+        assert_eq!(ts_type_ref(&TypeRef::DecodeError(sp())), "DecodeError");
         assert_eq!(ts_type_ref(&TypeRef::Unit(sp())), "void");
     }
 
@@ -7206,7 +7244,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         Ty::RequestQuery => request_query_ts_type(),
         Ty::TokenClaims => token_claims_ts_type(),
         Ty::ValidationError => TsType::named("ValidationError"),
-        Ty::JsonError => TsType::named("JsonError"),
+        Ty::DecodeError => TsType::named("DecodeError"),
         Ty::Unit => TsType::named("void"),
         Ty::Fn { params, ret } => TsType::Fn {
             params: params.iter().map(|p| ts_ty_to_ts_type(*p, tys)).collect(),
@@ -7382,7 +7420,7 @@ mod ts_ty_tests {
             ts_ty(tys.intern(Ty::ValidationError), &tys),
             "ValidationError"
         );
-        assert_eq!(ts_ty(tys.intern(Ty::JsonError), &tys), "JsonError");
+        assert_eq!(ts_ty(tys.intern(Ty::DecodeError), &tys), "DecodeError");
         assert_eq!(ts_ty(tys.intern(Ty::Unit), &tys), "void");
 
         let int = tys.intern(Ty::Base(BaseType::Int));
@@ -7979,7 +8017,7 @@ mod type_ref_mentions_tests {
     }
 
     fn json_error() -> TypeRef {
-        TypeRef::JsonError(bynk_syntax::span::Span::new(0, 0))
+        TypeRef::DecodeError(bynk_syntax::span::Span::new(0, 0))
     }
 
     #[test]
@@ -7991,7 +8029,7 @@ mod type_ref_mentions_tests {
         let t = http_result(base(BaseType::String));
         assert!(type_ref_mentions(&t, TypeRefMarker::HttpResult));
         assert!(!type_ref_mentions(&t, TypeRefMarker::Connection));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::JsonError));
+        assert!(!type_ref_mentions(&t, TypeRefMarker::DecodeError));
     }
 
     #[test]
@@ -8002,13 +8040,13 @@ mod type_ref_mentions_tests {
         let t = http_result(connection(base(BaseType::String)));
         assert!(type_ref_mentions(&t, TypeRefMarker::Connection));
         assert!(type_ref_mentions(&t, TypeRefMarker::HttpResult));
-        assert!(!type_ref_mentions(&t, TypeRefMarker::JsonError));
+        assert!(!type_ref_mentions(&t, TypeRefMarker::DecodeError));
     }
 
     #[test]
     fn json_error_has_no_inner_type_to_recurse_into() {
         let t = json_error();
-        assert!(type_ref_mentions(&t, TypeRefMarker::JsonError));
+        assert!(type_ref_mentions(&t, TypeRefMarker::DecodeError));
         assert!(!type_ref_mentions(&t, TypeRefMarker::HttpResult));
         assert!(!type_ref_mentions(&t, TypeRefMarker::Connection));
     }
@@ -8016,7 +8054,7 @@ mod type_ref_mentions_tests {
     #[test]
     fn a_plain_base_type_matches_no_marker() {
         let t = base(BaseType::Int);
-        assert!(!type_ref_mentions(&t, TypeRefMarker::JsonError));
+        assert!(!type_ref_mentions(&t, TypeRefMarker::DecodeError));
         assert!(!type_ref_mentions(&t, TypeRefMarker::HttpResult));
         assert!(!type_ref_mentions(&t, TypeRefMarker::Connection));
     }

@@ -8,6 +8,6 @@ uses demo.shapes
 
 fn encode[T: Codable](e: Envelope[T]) -> String { Json.encode(e) }
 
-fn decode[T: Codable](s: String) -> Result[Envelope[T], JsonError] { Json.decode[Envelope[T]](s) }
+fn decode[T: Codable](s: String) -> Result[Envelope[T], DecodeError] { Json.decode[Envelope[T]](s) }
 
 fn forward[T: Codable](e: Envelope[T]) -> String { encode(e) }

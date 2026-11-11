@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -34,6 +35,8 @@ export interface BoxState {
 const __BoxRegistry = new __StateRegistry();
 function __zeroOfBoxState(): BoxState { return { items: {} }; }
 
+const __entryFieldsOfBox = [{ name: "items", kind: "map" }] as const;
+
 function __rehydrateBoxState(s: BoxState, stored: BoxState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
   for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); }
@@ -53,15 +56,16 @@ export class Box {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
     __checkStoredLayout("Box", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfBoxState();
-    __reportUnknownStoredKeys("Box", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateBoxState(__merged, stored);
+    __reportUnknownStoredKeys("Box", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateBoxState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: BoxState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeBoxState(s));
+    await __commitStored(this, this.state.storage, __encodeBoxState(s), __entryFieldsOfBox, s);
   }
 
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
@@ -98,6 +102,8 @@ export interface ByKeyState {
 const __ByKeyRegistry = new __StateRegistry();
 function __zeroOfByKeyState(): ByKeyState { return { items: {} }; }
 
+const __entryFieldsOfByKey = [{ name: "items", kind: "map" }] as const;
+
 function __rehydrateByKeyState(s: ByKeyState, stored: ByKeyState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
   for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Sku((__k as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); }
@@ -117,15 +123,16 @@ export class ByKey {
     const stored = await this.state.storage.get<ByKeyState>("state");
     if (stored === undefined) return __zeroOfByKeyState();
     __checkStoredLayout("ByKey", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfByKeyState();
-    __reportUnknownStoredKeys("ByKey", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateByKeyState(__merged, stored);
+    __reportUnknownStoredKeys("ByKey", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateByKeyState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: ByKeyState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeByKeyState(s));
+    await __commitStored(this, this.state.storage, __encodeByKeyState(s), __entryFieldsOfByKey, s);
   }
 
   async add(k: string, n: number, deps: {}): globalThis.Promise<void> {
@@ -176,6 +183,8 @@ export interface LedgerState {
 const __LedgerRegistry = new __StateRegistry();
 function __zeroOfLedgerState(): LedgerState { return { balances: {} }; }
 
+const __entryFieldsOfLedger = [{ name: "balances", kind: "map" }] as const;
+
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) for (const __k of globalThis.Object.keys(s.balances)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balances[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); s.balances[__k] = __r.value as unknown as (typeof s.balances)[string]; }
 }
@@ -194,15 +203,16 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfLedgerState();
-    __reportUnknownStoredKeys("Ledger", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateLedgerState(__merged, stored);
+    __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateLedgerState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: LedgerState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeLedgerState(s));
+    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger, s);
   }
 
   async open(a: number, n: number, deps: {}): globalThis.Promise<void> {

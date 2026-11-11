@@ -5,6 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __BynkKeyMap, __bynkMapInsert } from "./__bynk_runtime/keys.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -22,6 +23,8 @@ export interface RegistryState {
 
 const __RegistryRegistry = new __StateRegistry();
 function __zeroOfRegistryState(): RegistryState { return { totals: new globalThis.Map<OrderId, number>() }; }
+
+const __entryFieldsOfRegistry = [] as const;
 
 function __rehydrateRegistryState(s: RegistryState, stored: RegistryState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "totals")) { const __r = __deserialise_Map_OrderId_Int((s.totals as unknown as __JsonValue), "totals"); if (__r.tag === "Err") throw __rehydrationViolation("Registry", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).totals = __r.value as unknown as (typeof s)["totals"]; }
@@ -41,15 +44,16 @@ export class Registry {
     const stored = await this.state.storage.get<RegistryState>("state");
     if (stored === undefined) return __zeroOfRegistryState();
     __checkStoredLayout("Registry", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfRegistryState();
-    __reportUnknownStoredKeys("Registry", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateRegistryState(__merged, stored);
+    __reportUnknownStoredKeys("Registry", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateRegistryState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: RegistryState): globalThis.Promise<void> {
-    await this.state.storage.put("state", __encodeRegistryState(s));
+    await __commitStored(this, this.state.storage, __encodeRegistryState(s), __entryFieldsOfRegistry, s);
   }
 
   async tally(order: OrderId, qty: number, deps: {}): globalThis.Promise<number> {

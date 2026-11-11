@@ -2,7 +2,7 @@
 // test target: shop.ledger
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
-import type { ValidationError, JsonError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __BoundaryError, __JsonValue } from "../__bynk_runtime/boundary.js";
 import * as __ns_shop_ledger from "./../shop/ledger.js";
 import * as __ns_shop_order from "./../shop/order.js";
@@ -58,7 +58,7 @@ async function test_decodes_the_visible_Tag() {
           }
         }
         throw new globalThis.Error("non-exhaustive match");
-      })(((__s: string): Result<__ns_labels.Tag, JsonError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Tag(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_labels.Tag); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"name\": \"tea\"}")));
+      })(((__s: string): Result<__ns_labels.Tag, DecodeError> => { let __j: __JsonValue; try { __j = globalThis.JSON.parse(__s) as __JsonValue; } catch (__e) { return Err({ kind: "Malformed", path: "$", message: String(__e) }); } const __r = __deserialise_Tag(__j, "$"); if (__r.tag === "Ok") return Ok(__r.value as __ns_labels.Tag); const __be = __r.error; return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details }); })("{\"name\": \"tea\"}")));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -740,6 +740,23 @@ fn bench(args: &[String]) -> ExitCode {
                     }
                 }
             }
+            "--shape" => {
+                let Some(v) = value("--shape") else {
+                    return ExitCode::from(2);
+                };
+                opts.shapes = match v.as_str() {
+                    "independent" => vec![xtask::bench::Shape::Independent],
+                    "linked" => vec![xtask::bench::Shape::Linked],
+                    "both" => vec![
+                        xtask::bench::Shape::Independent,
+                        xtask::bench::Shape::Linked,
+                    ],
+                    _ => {
+                        eprintln!("xtask bench: --shape is independent, linked or both");
+                        return ExitCode::from(2);
+                    }
+                };
+            }
             "--runs" | "--edits" => {
                 let Some(v) = value(a) else {
                     return ExitCode::from(2);
@@ -761,6 +778,15 @@ fn bench(args: &[String]) -> ExitCode {
             }
         }
     }
+    // A record is read back by the `keystroke_latency` probe, which needs the
+    // independent shape's `sizes`; a record of one shape would shadow earlier
+    // complete ones. Measure one shape freely, but record only both.
+    if record && opts.shapes.len() != 2 {
+        eprintln!(
+            "xtask bench: --record needs both shapes (--shape both), so the record is complete"
+        );
+        return ExitCode::from(2);
+    }
     let root = repo_root();
     let result = match xtask::bench::run(&root, &opts, &|m| eprintln!("bench: {m}")) {
         Ok(r) => r,
@@ -773,6 +799,9 @@ fn bench(args: &[String]) -> ExitCode {
     // The accepted budget is a per-release check, not a CI gate: say so loudly,
     // but still print and (with --record) write the result.
     if let Some(warning) = xtask::bench::budget_warning(&result) {
+        eprintln!("bench: WARNING: {warning}");
+    }
+    if let Some(warning) = xtask::bench::trigger_warning(&result) {
         eprintln!("bench: WARNING: {warning}");
     }
     if record {
@@ -835,7 +864,7 @@ fn release_notes(args: &[String]) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

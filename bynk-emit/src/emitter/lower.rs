@@ -2280,698 +2280,70 @@ fn lower_method_call(
     args: &[Expr],
     cx: &mut LowerCtx,
 ) -> Lowered {
-    let tys = cx.commons().tys();
     let mut pre = Pre::new();
-    // v0.104/v0.105 (real-time track slice 3b): a held-`Map` operation —
-    // `<map>.<op>(…)` on a `store Map[K, Connection]` field on Workers. The live
-    // socket cannot be persisted, so the durable record stores the **connection id**
-    // (`__state.<map>` is a `Record<string(K), connId>`) and each `Connection` is
-    // re-resolved from its connId via `resolveConnection` — so a stored connection
-    // survives DO eviction (§2.9.6, slice 3b-ii). `put` records the connection's id
-    // (`connIdOf`); `get` resolves it (or `None` if the socket has since closed);
-    // `remove` resolves-closes-deletes (the §2.9 "removes-and-closes" contract). The
-    // record mutation is staged in `__state` and flushed by the same end-of-handler
-    // commit as any other persisted field.
-    // P6.21 (partial, continued): the receiver test reads the checker's own
-    // `Callee::Store`/`Callee::Query` (P6.0) instead of
-    // `!cx.is_local(&id.name)` — a real instance of R6.5's name-matched-
-    // receiver defect class. A held `store Map[K, Connection]` field's
-    // method calls resolve through the same `StoreField::Map` checker
-    // dispatch as any other storage map — entry ops (`put`/`remove`/
-    // `contains`/`size`/`get`) as `Callee::Store`, lifted query ops (e.g.
-    // `parTraverse`) as `Callee::Query` — so both variants are matched here,
-    // mirroring the ordinary (non-held) Map branch's own guard just below.
-    // `agent_held_map_frame` stays: it answers which *kind* of store field
-    // this is (held vs ordinary), not the shadowing question `Callee`
-    // already settles.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Store { .. } | Callee::Query { .. })
-        )
-        && let Some(f_ts) = cx.agent_held_map_frame(&id.name).cloned()
-    {
-        let var = cx.agent_store_var().to_string();
-        let m = format!("{var}.{}", id.name);
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-        return pre.finish(match method.name.as_str() {
-            "put" => format!(
-                "({}, undefined)",
-                own_set(&m, &format!("String({})", a[0]), &format!("__connIdOf({})", a[1]))
-            ),
-            "remove" => format!(
-                "(async () => {{ const __k = String({0}); const __cid = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} delete {m}[__k]; }} return undefined; }})()",
-                a[0]
-            ),
-            "contains" => format!("globalThis.Object.hasOwn({m}, String({}))", a[0]),
-            "size" => format!("globalThis.Object.keys({m}).length"),
-            "get" => format!(
-                "(() => {{ const __k = String({0}); return globalThis.Object.hasOwn({m}, __k) ? __resolveConnection<{f_ts}>(this.state, {m}[__k]) : None; }})()",
-                a[0]
-            ),
-            // Any non-entry op is a lazy query lifting the map into a scan over its
-            // **resolved** connections (the present ones — a connId whose socket has
-            // closed drops out).
-            _ => {
-                note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
-                lower_query_by_name(
-                    format!(
-                        "globalThis.Object.values({m}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
-                    ),
-                    method,
-                    &a,
-                    cx.commons().expr_types.get(&e.id).map(|te| te.ty),
-                    &QueryShape {
-                        elem_ts: &f_ts,
-                        other_elem_ts: &other_elem_ts,
-                        keyed: query_keyed(e, method, args, cx),
-                        key_cmp: query_key_cmp(method, args, cx),
-                    },
-                    tys,
-                )
-            }
-            .unwrap_or_else(|| {
-                format!("(/* unsupported held Map op {} */ undefined)", method.name)
-            }),
-        });
-    }
-    // v0.82 (ADR 0110): a storage-`Map` operation — `<map>.<op>(…)` on a `store
-    // Map[K, V]` field. Lowers to an entry op over `__state.<map>` (a
-    // `Record<string, V>`): mutating the working record (`put`/`remove`/`update`/
-    // `upsert`) or reading it (`get`/`contains`/`size`). The surface op is
-    // `Effect`-typed and awaited with `<-`, but the working-record mutation is
-    // synchronous (the durable write is the single end-of-handler flush), so an
-    // awaited expression suffices. `update` on an absent key throws (a fault →
-    // nothing commits).
-    //
-    // P6.21 (partial, continued): the receiver test reads the checker's own
-    // `Callee::Store`/`Callee::Query` (P6.0) instead of `!cx.is_local(&id.name)`
-    // — a real instance of R6.5's name-matched-receiver defect class, the same
-    // one `body_writes_state`/#1196 already closed for write-detection.
-    // `cx.is_agent_store_map` stays: it answers a different question (which
-    // *kind* of store field this is, needed to pick this branch over
-    // Set/Cache/Log/Cell's own), not the shadowing question `Callee` already
-    // settles.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Store { .. } | Callee::Query { .. })
-        )
-        && cx.is_agent_store_map(&id.name)
-    {
-        let var = cx.agent_store_var().to_string();
-        let m = format!("{var}.{}", id.name);
-        // v0.93 (ADR 0118): the value-record fields this map is `@indexed(by:)` on.
-        let idx_fields: Vec<String> = cx.agent_store_index_fields(&id.name);
-        // Route an equality `filter` on an indexed field to a posting-list lookup
-        // (`<map>__idx_<f>[v]`) instead of a full `Object.values` scan. The lookup
-        // reads the staged map, so it stays read-your-writes (the index is
-        // maintained in the same commit).
-        if method.name == "filter"
-            && let [arg] = args
-            && let ExprKind::Lambda(lam) = &arg.kind
-            && let Some(routed) = pre.absorb_opt(route_indexed_filter(
-                &m,
-                &var,
-                &id.name,
-                &idx_fields,
-                lam,
-                cx,
-            ))
-        {
-            return pre.finish(routed);
-        }
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-        return pre.finish(match method.name.as_str() {
-            // v0.93: an indexed map's mutators keep the sibling posting-lists exact
-            // inside the same staged commit (re-index on last-write-wins).
-            "put" if !idx_fields.is_empty() => idx_map_put(&m, &var, &id.name, &idx_fields, &a),
-            "remove" if !idx_fields.is_empty() => {
-                idx_map_remove(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "update" if !idx_fields.is_empty() => {
-                idx_map_update(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "upsert" if !idx_fields.is_empty() => {
-                idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
-            // #3224: on the bundle target a held `store Map[K, Connection]` is an
-            // ordinary in-memory map of `TestConnection`s (the Workers build
-            // persists connection ids instead and takes the held-map branch
-            // above), so `remove` must still honour the §2.9 contract that it
-            // removes *and closes*: close the connection the entry holds, then
-            // delete it, as the Workers lowering does.
-            "remove"
-                if cx
-                    .agent_store_map_value_ts(&id.name)
-                    .is_some_and(|v| v.starts_with("Connection<")) =>
-            {
-                format!(
-                    "(async () => {{ const __k = {0}; if (globalThis.Object.hasOwn({m}, __k)) {{ await {m}[__k].close(); delete {m}[__k]; }} return undefined; }})()",
-                    a[0]
-                )
-            }
-            "remove" => format!("((delete {m}[{}]), undefined)", a[0]),
-            "contains" => format!("globalThis.Object.hasOwn({m}, {})", a[0]),
-            "size" => format!("globalThis.Object.keys({m}).length"),
-            "get" => format!(
-                "(() => {{ const __k = {0}; return globalThis.Object.hasOwn({m}, __k) ? Some({m}[__k]) : None; }})()",
-                a[0]
-            ),
-            "update" => format!(
-                "(() => {{ const __k = {0}; if (!globalThis.Object.hasOwn({m}, __k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} {m}[__k] = ({1})({m}[__k]); return undefined; }})()",
-                a[0], a[1]
-            ),
-            "upsert" => format!(
-                "(() => {{ const __k = {0}; {set}; return undefined; }})()",
-                a[0],
-                set = own_set(
-                    &m,
-                    "__k",
-                    &format!("({})(globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : ({}))", a[2], a[1])
-                ),
-            ),
-            // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
-            // map into a scan over its values (`Object.values`).
-            //
-            // Review of #1460: `elem_ts` is this map's own value type `V`
-            // (`agent_store_map_value_ts`, mirroring `f_ts` above's held-map
-            // equivalent) — falls back to `unknown` only for an
-            // already-diagnosed program the checker recorded no type for
-            // (`join_other_elem_ts`'s own identical fallback posture), not a
-            // real case on a certified one: this arm is only reached when
-            // `cx.is_agent_store_map` already matched, so `map_values` always
-            // has an entry for `id.name` here.
-            _ => {
-                let elem_ts = cx
-                    .agent_store_map_value_ts(&id.name)
-                    .cloned()
-                    .unwrap_or_else(|| "unknown".to_string());
-                note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
-                lower_query_by_name(
-                    format!("globalThis.Object.values({m})"),
-                    method,
-                    &a,
-                    cx.commons().expr_types.get(&e.id).map(|te| te.ty),
-                    &QueryShape {
-                        elem_ts: &elem_ts,
-                        other_elem_ts: &other_elem_ts,
-                        keyed: query_keyed(e, method, args, cx),
-                        key_cmp: query_key_cmp(method, args, cx),
-                    },
-                    tys,
-                )
-                .unwrap_or_else(|| format!("(/* unsupported Map op {} */ undefined)", method.name))
-            }
-        });
-    }
-    // v0.83: a storage-`Set` operation — `<set>.<op>(…)` on a `store Set[T]` field.
-    // Lowers to an entry op over `__state.<set>` (a `Record<string, boolean>`):
-    // `add`/`remove` mutate the working record, `contains`/`size` read it.
-    //
-    // P6.21 (partial, continued): reads `Callee::Store` (P6.0) instead of
-    // `!cx.is_local(&id.name)` — see the storage-`Map` branch above for the
-    // full reasoning. `Set` never gets `Callee::Query` (checker.rs's own
-    // `StoreField::Set` arm records only `Store`), unlike `Map`/`Log`.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Store { .. }))
-        && cx.is_agent_store_set(&id.name)
-    {
-        let var = cx.agent_store_var().to_string();
-        let s = format!("{var}.{}", id.name);
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-        return pre.finish(match method.name.as_str() {
-            "add" => format!("({}, undefined)", own_set(&s, &a[0], "true")),
-            "remove" => format!("((delete {s}[{}]), undefined)", a[0]),
-            "contains" => format!("globalThis.Object.hasOwn({s}, {})", a[0]),
-            "size" => format!("globalThis.Object.keys({s}).length"),
-            other => format!("(/* unsupported Set op {other} */ undefined)"),
-        });
-    }
-    // v0.87 (ADR 0113): a storage-`Cache` operation — `<cache>.<op>(…)` on a
-    // `store Cache[K, V]` field. Lowers to an entry op over `__state.<cache>` (a
-    // `Record<string, { v, exp }>`) that applies TTL expiry against the injected
-    // `Clock`: every op but `remove` reads `now()` (an awaited `Effect`), so the
-    // op is an async IIFE. `put`/`update`/`upsert` stamp `exp = now() + ttl`;
-    // `get`/`contains`/`size` treat an entry past `exp` as absent.
-    //
-    // P6.21 (partial, continued): reads `Callee::Store` instead of
-    // `!cx.is_local(&id.name)` — see the storage-`Map` branch above. `Cache`
-    // never gets `Callee::Query`, same as `Set`.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Store { .. }))
-        && let Some(ttl) = cx.agent_store_cache_ttl(&id.name)
-    {
-        let var = cx.agent_store_var().to_string();
-        let c = format!("{var}.{}", id.name);
-        let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-        return pre.finish(match method.name.as_str() {
-            "remove" => format!("((delete {c}[{}]), undefined)", a[0]),
-            "put" => format!(
-                "(async () => {{ const __now = {now}; {set}; return undefined; }})()",
-                set = own_set(&c, &a[0], &format!("{{ v: {}, exp: __now + {ttl} }}", a[1])),
-            ),
-            "get" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? Some({c}[__k].v) : None; }})()",
-                a[0]
-            ),
-            "contains" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now; }})()",
-                a[0]
-            ),
-            "size" => format!(
-                "(async () => {{ const __now = {now}; return globalThis.Object.values({c}).filter((__e) => __e.exp > __now).length; }})()"
-            ),
-            "update" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; if (!(globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} {c}[__k] = {{ v: ({1})({c}[__k].v), exp: __now + {ttl} }}; return undefined; }})()",
-                a[0], a[1]
-            ),
-            "upsert" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __cur = (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? {c}[__k].v : ({1}); {set}; return undefined; }})()",
-                a[0],
-                a[1],
-                set = own_set(&c, "__k", &format!("{{ v: ({})(__cur), exp: __now + {ttl} }}", a[2])),
-            ),
-            other => format!("(/* unsupported Cache op {other} */ undefined)"),
-        });
-    }
-    // v0.95 (ADR 0121): a storage-`Log` operation — `<log>.<op>(…)` on a
-    // `store Log[T]` field (an array of `{ t, v }`). `append` stamps the clock
-    // and pushes (pruning past `@retain`); the time-window roots and the general
-    // query vocabulary lower to a lazy pipeline over the entry values.
-    //
-    // P6.21 (partial, continued): reads `Callee::Store`/`Callee::Query`
-    // instead of `!cx.is_local(&id.name)` — see the storage-`Map` branch
-    // above. `Log` gets both variants, same as `Map` (`append` is `Store`;
-    // the window-root/query vocabulary is `Query`, checker.rs's own
-    // `StoreField::Log` arm).
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Store { .. } | Callee::Query { .. })
-        )
-        && let Some(retain) = cx.agent_store_log_retain(&id.name)
-    {
-        let var = cx.agent_store_var().to_string();
-        let g = format!("{var}.{}", id.name);
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-        if method.name == "append" {
-            let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
-            let prune = match retain {
-                Some(ms) => format!(
-                    " for (let __i = {g}.length - 1; __i >= 0; __i--) {{ if ({g}[__i].t < __now - {ms}) {g}.splice(__i, 1); }}"
-                ),
-                None => String::new(),
-            };
-            return pre.finish(format!(
-                "(async () => {{ const __now = {now}; {g}.push({{ t: __now, v: {0} }});{prune} return undefined; }})()",
-                a[0]
-            ));
-        }
-        // The values array feeding the general query pipeline.
-        let values = format!("{g}.map((__e) => __e.v)");
-        let thunk = |body: String| format!("(() => {body})");
-        return pre.finish(match method.name.as_str() {
-            // Time-window roots → a `Query` thunk over the windowed values.
-            "since" => thunk(format!(
-                "{g}.filter((__e) => __e.t >= ({0})).map((__e) => __e.v)",
-                a[0]
-            )),
-            "before" => thunk(format!(
-                "{g}.filter((__e) => __e.t < ({0})).map((__e) => __e.v)",
-                a[0]
-            )),
-            "between" => thunk(format!(
-                "{g}.filter((__e) => __e.t >= ({0}) && __e.t <= ({1})).map((__e) => __e.v)",
-                a[0], a[1]
-            )),
-            "recent" => thunk(format!(
-                "{g}.slice(globalThis.Math.max(0, {g}.length - globalThis.Math.max(0, {0}))).reverse().map((__e) => __e.v)",
-                a[0]
-            )),
-            "reversed" => thunk(format!("[...{g}].reverse().map((__e) => __e.v)")),
-            // The general query vocabulary over the entry values.
-            //
-            // Review of #1460: `elem_ts` is this log's own element type `T`
-            // (`agent_store_log_value_ts`) — same construction and fallback
-            // posture as the plain-Map scan above.
-            _ => {
-                let elem_ts = cx
-                    .agent_store_log_value_ts(&id.name)
-                    .cloned()
-                    .unwrap_or_else(|| "unknown".to_string());
-                note_par_fan_out(cx, method);
-                let other_elem_ts = args
-                    .first()
-                    .map(|_| join_other_elem_ts(args, cx))
-                    .unwrap_or_default();
-                lower_query_by_name(
-                    values,
-                    method,
-                    &a,
-                    cx.commons().expr_types.get(&e.id).map(|te| te.ty),
-                    &QueryShape {
-                        elem_ts: &elem_ts,
-                        other_elem_ts: &other_elem_ts,
-                        keyed: query_keyed(e, method, args, cx),
-                        key_cmp: query_key_cmp(method, args, cx),
-                    },
-                    tys,
-                )
-                .unwrap_or_else(|| format!("(/* unsupported Log op {} */ undefined)", method.name))
-            }
-        });
-    }
-    // v0.98 (ADR 0125): a storage-`Cell` operation — `<cell>.update(f)` on a
-    // `store Cell[T]` field. Lowers to a staged read-modify-write over
-    // `__state.<cell>` (`Map.update`'s lowering minus the key-absent guard — a
-    // cell is always present, so there is no fault path). The mutation is
-    // synchronous against the working state (read-your-writes); the single
-    // end-of-handler `commitState` flush runs the invariant gate before the
-    // durable write, exactly as `:=` does.
-    // Note: unlike the other store kinds, a `Cell` field is deliberately bound
-    // into checker scope (self_scope) as a bare local of its element type, so
-    // the checker always resolves a same-named identifier to the cell — no
-    // `is_local` guard belongs here without also changing that scope
-    // construction, or the emitter would disagree with what the checker typed.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx
-            .agent_store_cells()
-            .is_some_and(|(_, cells)| cells.contains(&id.name))
-    {
-        let var = cx.agent_store_var().to_string();
-        let n = format!("{var}.{}", id.name);
-        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-        return pre.finish(match method.name.as_str() {
-            "update" => format!("(() => {{ {n} = ({0})({n}); return undefined; }})()", a[0]),
-            other => format!("(/* unsupported Cell op {other} */ undefined)"),
-        });
-    }
-    // v0.9: explicit `HttpResult.Variant(args)` construction. The
-    // checker has already recorded the expression's type — emit it
-    // directly through the runtime's HttpResult namespace.
-    //
-    // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` (the sink
-    // #1251 added) instead of `id.name == HTTP_RESULT` — closes the last
-    // real instance of R6.5's name-matched-receiver defect class this
-    // session's own P6.21 slices left open, since Decision C originally
-    // excluded this shape for lack of a `Callee` to read.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
-        )
-    {
-        cx.note_http_result();
-        let args_lowered = lower_http_variant_args(&method.name, args, &mut pre, cx);
-        return pre.finish(format!(
-            "HttpResult.{}({})",
-            method.name,
-            args_lowered.join(", ")
-        ));
-    }
-    // v0.20b: built-in collection statics — `List.empty()` /
-    // `Map.empty()`. The checker recorded the instantiated type;
-    // emit it explicitly so the TS value doesn't infer as `never[]`
-    // / `Map<unknown, unknown>` outside contextually-typed positions.
-    //
-    // P6.21 (partial, continued — the earlier #1247 attempt reverted this
-    // exact conversion after a zero-diff bless caught it silently dropping
-    // `Instant`/`Bytes` statics inside `.test.bynk` bodies; root-caused and
-    // fixed separately — `typecheck_case_body` now returns its own
-    // `callees` map instead of discarding it, so `Callee::Intrinsic` is
-    // populated for test-case bodies too): reads `Callee::Intrinsic` (P6.0)
-    // instead of `id.name == LIST || id.name == MAP` plus
-    // `!cx.commons().types.contains_key` — the checker's own
-    // `check_method_call` already resolves the identical shadowing question
-    // (`ctx.lookup(...).is_none() && !ctx.input.types.contains_key(...)`,
-    // `calls.rs`) before ever recording this `Callee`, closing a real gap
-    // the emitter's own guard left open: no `cx.is_local(&id.name)` check,
-    // unlike every other branch this session already converted.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
-        )
-        && args.is_empty()
-    {
-        match cx.commons().expr_ty(e.id).as_deref() {
-            // K6a (#2596).
-            Some(Ty::Set(t)) => {
-                return pre.finish(format!("new globalThis.Set<{}>()", ts_ty(*t, tys)));
-            }
-            Some(Ty::List(t)) => {
-                return pre.finish(format!(
-                    "([] as readonly {}[])",
-                    ts_array_elem(&ts_ty(*t, tys))
-                ));
-            }
-            Some(Ty::Map(k, v)) => {
-                return pre.finish(format!(
-                    "new globalThis.Map<{}, {}>()",
-                    ts_ty(*k, tys),
-                    ts_ty(*v, tys)
-                ));
-            }
-            _ => {}
-        }
-    }
-    // K6a (#2596): `Set.of(xs)` — a set of the list's elements; the first
-    // occurrence keeps its position.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
-        )
-        && args.len() == 1
-        && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
-    {
-        let t = *t;
-        let xs = pre.lower(&args[0], cx);
-        if !key_is_plain(t, tys) {
-            cx.runtime_use().note_key("__bynkSetOf");
-            return pre.finish(format!("__bynkSetOf<{}>({xs})", ts_ty(t, tys)));
-        }
-        return pre.finish(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
-    }
-    // v0.22b: the typed JSON codec (ADR 0045).
-    if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
+    // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
+    if let Some(s) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(s);
     }
-    // K6b (#2598): `Float.pi()` and `Float.e()`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
-        )
-        && args.is_empty()
-    {
-        let constant = if method.name == "pi" { "PI" } else { "E" };
-        return pre.finish(format!("globalThis.Math.{constant}"));
+    // Intrinsic statics: scalar and collection constructors, then runtime values (#3167).
+    if let Some(s) = lower_scalar_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // v0.22a: the numeric parse statics — `Int.parse(s)` /
-    // `Float.parse(s)` (ADR 0048). #1657 (runtime-semantics track §3.4): the
-    // whole string must match a strict decimal grammar before `Number(…)` sees
-    // it. `Number` alone accepts surrounding whitespace, `0x`/`0b`/`0o` prefixes
-    // and (for `Int`) exponents, so `" 7 "`, `"0x10"` and `"1e3"` parsed. `Int`
-    // is `[+-]?digits`, then a safe integer (`+ 0` turns `-0` into `0`); `Float`
-    // is a decimal with an optional exponent, then finite (the 0040 posture).
-    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
-    // `id.name == INT || id.name == FLOAT` — see the `List`/`Map` branch
-    // above. `Int`/`Float` are lexically reserved (the parser only admits
-    // them here followed by `.`), so unlike `List`/`Map` this specific guard
-    // never had a real shadowing gap to close — converted for consistency
-    // with every other static-constructor branch in this function.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
-        )
-        && args.len() == 1
-    {
-        let s = pre.lower(&args[0], cx);
-        let (grammar, value, guard) = if id.name == INT {
-            (
-                "/^[+-]?[0-9]+$/",
-                "globalThis.Number(__s) + 0",
-                "globalThis.Number.isSafeInteger(__n)",
-            )
-        } else {
-            (
-                "/^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$/",
-                "globalThis.Number(__s)",
-                "globalThis.Number.isFinite(__n)",
-            )
-        };
-        return pre.finish(format!(
-            "((__s: string) => {{ if (!{grammar}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({s})"
-        ));
+    if let Some(s) = lower_runtime_value_static_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // v0.86 (ADR 0112): `Duration.millis(n)` — the runtime `Int`→`Duration`
-    // constructor. A `Duration` lowers to its milliseconds, so this is the
-    // identity on the argument.
-    //
-    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
-    // `id.name == DURATION` — see the `List`/`Map` branch above for why this
-    // closes a real shadowing gap the bare name check left open (the checker
-    // itself guards `ctx.lookup(DURATION).is_none()` before ever recording
-    // this `Callee`; the same applies to `Instant`/`Bytes`/`Stream` below).
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
-        )
-        && args.len() == 1
-    {
-        let inner = pre.lower(&args[0], cx);
-        return pre.finish(inner);
+    // Capability, cross-context, events and static-type calls (#3167).
+    if let Some(s) = lower_d1_select_call(e, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
-        )
-        && args.len() == 1
-    {
-        let s = pre.lower(&args[0], cx);
-        cx.note_time_ops();
-        return pre.finish(format!("__bynkInstantFromIso({s})"));
+    if let Some(s) = lower_cross_context_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
-    // its epoch milliseconds, so this is the identity on the argument.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
-        )
-        && args.len() == 1
-    {
-        let inner = pre.lower(&args[0], cx);
-        return pre.finish(inner);
+    if let Some(s) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
-    // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
-    // decode returning `Option` (`None` on invalid base64); `empty` is the
-    // zero octet sequence.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == BYTES)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("fromUtf8", 1) => {
-                let s = pre.lower(&args[0], cx);
-                return pre.finish(format!("new globalThis.TextEncoder().encode({s})"));
-            }
-            ("fromBase64", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes();
-                return pre.finish(format!("__bynkBytesFromBase64({s})"));
-            }
-            // #2016: the guarded hex and base64url decodes, `None` on bad input.
-            ("fromHex", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes_ops();
-                return pre.finish(format!("__bynkBytesFromHex({s})"));
-            }
-            ("fromBase64Url", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_bytes_ops();
-                return pre.finish(format!("__bynkBytesFromBase64Url({s})"));
-            }
-            ("empty", 0) => {
-                return pre.finish("new globalThis.Uint8Array()".to_string());
-            }
-            _ => {}
-        }
+    if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("parse", 1) => {
-                let s = pre.lower(&args[0], cx);
-                cx.note_decimal("__bynkDecimalParse");
-                return pre.finish(format!("__bynkDecimalParse({s})"));
-            }
-            ("fromInt", 1) => {
-                let n = pre.lower(&args[0], cx);
-                cx.note_decimal("__bynkDecimalFromInt");
-                return pre.finish(format!("__bynkDecimalFromInt({n})"));
-            }
-            _ => {}
-        }
+    if let Some(s) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        cx.note_token_claims();
-        return pre.finish(format!("__tokenClaims({xs})"));
+    // Test-case and system-tier service addresses, then agent invocations (#3167).
+    if let Some(s) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
-    // the runtime's headers view from `"name: value"` lines.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_headers();
-                return pre.finish(format!("__requestHeaders({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_headers();
-                return pre.finish("__requestHeaders([])".to_string());
-            }
-            _ => {}
-        }
+    if let Some(s) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
-    // runtime's query view from `"name=value"` pairs.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
-    {
-        match (method.name.as_str(), args.len()) {
-            ("of", 1) => {
-                let xs = pre.lower(&args[0], cx);
-                cx.note_request_query();
-                return pre.finish(format!("__requestQuery({xs})"));
-            }
-            ("empty", 0) => {
-                cx.note_request_query();
-                return pre.finish("__requestQuery([])".to_string());
-            }
-            _ => {}
-        }
+    if let Some(s) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
-    // lowers to a host async iterable; `of` wraps a list as an async generator.
-    // Emitted inline (no runtime import), like the collection kernels.
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callee(e.id),
-            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
-        )
-        && args.len() == 1
-    {
-        let xs = pre.lower(&args[0], cx);
-        return pre.finish(format!(
-            "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
-        ));
+    if let Some(s) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
+    if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
+    }
+    if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
+    }
+    // v0.20b: built-in kernel methods, resolved by the checker (#3164).
+    if let Some(s) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
+    }
+    // Instance call: UFCS lowering with the receiver as first arg.
+    let call = lower_ufcs_method_call(e, receiver, method, type_args, args, cx, &mut pre);
+    pre.finish(call)
+}
+
+/// Lower a derived-`D1` `select`/`firstAs` call (#2865), or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_d1_select_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     // a derived `D1`. The checker wrote the statement (`SELECT` + the column
     // list from `T` + the literal tail); this runs it through `all`/`first`
@@ -2979,7 +2351,7 @@ fn lower_method_call(
     // Keyed on the recorded callee, not the method name. #2957: the error
     // tags are `as const` — `Err<E>` infers `E` from the literal, and a bare
     // `"Sql"` widens to `string`, so a match on `Err(Sql(e))` would not narrow
-    // and `e` would reach tsc as `JsonError | SqlError`.
+    // and `e` would reach tsc as `DecodeError | SqlError`.
     if let Some(Callee::D1Select {
         cap,
         row,
@@ -2994,7 +2366,7 @@ fn lower_method_call(
         } else {
             tys.intern(Ty::List(row))
         };
-        let decoder = json_decoder_fn(target, true, cx)
+        let decoder = json_decoder_fn(target, DecodeSource::Sql, cx)
             .expect("a checked D1 select row type has a JSON decoder");
         {
             let params = pre.lower(params, cx);
@@ -3018,7 +2390,7 @@ fn lower_method_call(
                      return __d.tag === \"Ok\" ? Ok(__d.value) : Err({ tag: \"Decode\" as const, error: __d.error });",
                 )
             };
-            return pre.finish(format!(
+            return Some(format!(
                 "(async () => {{ const __decode = {decoder}; \
                  const __r = await {deps}.{cap}.{op}(\"{sql}\", {params}); \
                  if (__r.tag === \"Err\") return Err({{ tag: \"Sql\" as const, error: __r.error }}); \
@@ -3026,6 +2398,20 @@ fn lower_method_call(
             ));
         }
     }
+    None
+}
+
+/// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_cross_context_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // v0.15 cross-context capability call: `B.Cap.op(args)` /
     // `Alias.Cap.op(args)`. The provider is instantiated locally in
     // the composition root, so this lowers to an in-process
@@ -3043,7 +2429,7 @@ fn lower_method_call(
         );
         let wire = capability_wire(e, cx);
         encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        return pre.finish(format!(
+        return Some(format!(
             "{}.{}.{}{}({})",
             cx.cap_deps_expr(),
             cap,
@@ -3062,8 +2448,21 @@ fn lower_method_call(
         && let Some(s) =
             pre.absorb_opt(lower_cross_context_service_call(receiver, method, args, cx))
     {
-        return pre.finish(s);
+        return Some(s);
     }
+    None
+}
+
+/// Lower `Events.emit[E](event)`, buffered into the handler's `__events` until commit, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_events_emit_call(
+    e: &Expr,
+    receiver: &Expr,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // Events track, slice 0 (spine #936): `Events.emit[E](event)` never
     // calls through a provider like an ordinary capability op — release-
     // at-commit (the retired events track's §3.0, `design/archive/retired-tracks.md`) buffers it into the handler's own
@@ -3122,10 +2521,24 @@ fn lower_method_call(
         // still a future slice (3c, the cross-build schema registry).
         let schema_version = cx.event_schema_version(&event_name);
         let publisher_id = escape_ts_string(cx.owning_context().unwrap_or_default());
-        return pre.finish(format!(
+        return Some(format!(
             "(async () => {{ __events.push({{ type: \"{event_name}\", payload: {payload}, envelope: {{ eventId: globalThis.crypto.randomUUID(), publisherId: \"{publisher_id}\", emittedAt: globalThis.Date.now(), schemaVersion: {schema_version} }} }}); }})()"
         ));
     }
+    None
+}
+
+/// Lower a capability call: in a test `case` body, or on a capability named in `given`, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_capability_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // #1975: a capability call in a test `case` body (`Greeter.hello("ann")`)
     // reaches the case's own `deps`, built by `__makeTestDeps`: the checker
     // puts the target's capabilities in scope there, so it records the call
@@ -3139,7 +2552,7 @@ fn lower_method_call(
         )
     {
         let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        return pre.finish(format!(
+        return Some(format!(
             "deps.{}.{}({})",
             id.name,
             method.name,
@@ -3171,7 +2584,7 @@ fn lower_method_call(
         scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
         let wire = capability_wire(e, cx);
         encode_capability_args(wire.as_deref(), &mut args_lowered, cx);
-        return pre.finish(format!(
+        return Some(format!(
             "{}.{}.{}{}({})",
             cx.cap_deps_expr(),
             id.name,
@@ -3180,6 +2593,20 @@ fn lower_method_call(
             args_lowered.join(", ")
         ));
     }
+    None
+}
+
+/// Lower a static call on a declared type (`Box.empty[Int]()`), or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_type_static_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // Static call: receiver is a bare ident naming a declared type — unless
     // the checker resolved it as a test-service address, which a target's
     // service named like a `uses`-imported type it hides is (#1927).
@@ -3214,12 +2641,24 @@ fn lower_method_call(
             capability_call_type_args_ts(type_args, None),
             args_lowered.join(", ")
         );
-        return pre.finish(if needs_exec {
+        return Some(if needs_exec {
             settle_exec_call(call, cx)
         } else {
             call
         });
     }
+    None
+}
+
+/// Lower a test `case` asset fetch (`svc.GET(asset)`), or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_test_asset_fetch_call(
+    e: &Expr,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // v0.7 / v0.182: local service call inside a test case body. `svc.call(args)`
     // lowers to `svc.call(args, deps)`. An http address `svc.<VERB>("/path", …)`
     // (#664) lowers to the emitted handler key `svc.http_<VERB>_<path>(<rest>,
@@ -3238,8 +2677,20 @@ fn lower_method_call(
         && let Some(first) = args.first()
     {
         let asset = pre.lower(first, cx);
-        return pre.finish(format!("__bynkAssetGet(({asset}).url)"));
+        return Some(format!("__bynkAssetGet(({asset}).url)"));
     }
+    None
+}
+
+/// Lower a `system`-tier cron or queue address, driven through the participant Worker, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_system_schedule_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // #2136: a `system`-tier cron or queue address drives the participant
     // Worker's real `scheduled` / `queue` entry through a driver, which builds
     // the platform-shaped event and settles the execution context itself.
@@ -3252,9 +2703,22 @@ fn lower_method_call(
         if let Some(driver) = driver {
             let skip = usize::from(method.name == "schedule");
             let rest: Vec<String> = args[skip..].iter().map(|a| pre.lower(a, cx)).collect();
-            return pre.finish(format!("{driver}({})", rest.join(", ")));
+            return Some(format!("{driver}({})", rest.join(", ")));
         }
     }
+    None
+}
+
+/// Lower a `system`-tier http address, driven through a real `worker.fetch`, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_system_http_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     if let ExprKind::Ident(id) = &receiver.kind
         && cx.is_system_http_service(&id.name)
         && let Some(verb) = IrHttpMethod::from_ident(&method.name)
@@ -3268,7 +2732,7 @@ fn lower_method_call(
         let route_declared =
             cx.has_system_http_route(&(id.name.clone(), verb.as_str().to_string(), path.clone()));
         if !route_declared {
-            return pre.finish(format!(
+            return Some(format!(
                 "__sysdrive_wrongmethod_{}({:?}, {:?})",
                 id.name,
                 verb.as_str(),
@@ -3330,6 +2794,15 @@ fn lower_method_call(
         } else {
             None
         };
+        // #3276: a `@form` route's typed body is written as a form, not JSON.
+        let form_route = is_raw
+            && cx
+                .system_http_route_body(&(
+                    id.name.clone(),
+                    verb.as_str().to_string(),
+                    format!("{path}{}", crate::emitter::FORM_ROUTE_SUFFIX),
+                ))
+                .is_some();
         let rest: Vec<String> = args[1..]
             .iter()
             .enumerate()
@@ -3391,6 +2864,20 @@ fn lower_method_call(
                     // the boundary (`bynk_ts::print_expr`), the same
                     // treatment cluster 4's own `lower.rs:2552` call site
                     // already established.
+                    Some((body_idx, ty)) if *body_idx == i && form_route => {
+                        cx.note_query_string();
+                        format!(
+                            "__queryString({}).slice(1)",
+                            bynk_ts::print_expr(
+                                &crate::emitter::serialisation::serialise_expr_via(
+                                    ty,
+                                    &format!("({lowered} as any)"),
+                                    cx.system_http_type_ns(),
+                                    cx.runtime_use()
+                                )
+                            )
+                        )
+                    }
                     Some((body_idx, ty)) if *body_idx == i => format!(
                         "globalThis.JSON.stringify({})",
                         bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
@@ -3452,7 +2939,7 @@ fn lower_method_call(
         {
             all.push(actor);
         }
-        return pre.finish(format!(
+        return Some(format!(
             "{}_{}_{}({})",
             driver,
             id.name,
@@ -3460,6 +2947,19 @@ fn lower_method_call(
             all.join(", ")
         ));
     }
+    None
+}
+
+/// Lower a local service call inside a test `case` body, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_test_service_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // #2024: a case `let` may shadow a service of the target; the local wins.
     if let ExprKind::Ident(id) = &receiver.kind
         && cx.is_test_service(&id.name)
@@ -3552,7 +3052,7 @@ fn lower_method_call(
             let rest: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
             let mut all = rest;
             all.push(deps_expr);
-            return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+            return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
         }
         // cron/queue address: the emitted key is position-indexed among the
         // service's same-kind handlers, so recover the index from the handler
@@ -3577,7 +3077,7 @@ fn lower_method_call(
                 let rest: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
                 let mut all = rest;
                 all.push(deps_expr);
-                return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+                return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
             }
             // #3051: the websocket lifecycle addresses. The `TestConnection`
             // remembers the route values and `deps` (the principal) from `open`;
@@ -3654,7 +3154,7 @@ fn lower_method_call(
                         )
                     }
                 };
-                return pre.finish(settle(call));
+                return Some(settle(call));
             }
             if method.name == "message"
                 && handlers
@@ -3667,7 +3167,7 @@ fn lower_method_call(
                 let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 let mut all = args_lowered;
                 all.push(deps_expr);
-                return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+                return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
             }
             // #2052: an event address delivers through the module's
             // `__bynkEvent_<svc>` helper (`tests_emit::event_delivery_helper`),
@@ -3689,7 +3189,7 @@ fn lower_method_call(
                     .get(1)
                     .map(|a| pre.lower(a, cx))
                     .unwrap_or_else(|| "undefined".to_string());
-                return pre.finish(settle(format!(
+                return Some(settle(format!(
                     "__bynkEvent_{}({payload}, {envelope}, {deps_expr})",
                     id.name
                 )));
@@ -3699,13 +3199,26 @@ fn lower_method_call(
         let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
         let mut all = args_lowered;
         all.push(deps_expr);
-        return pre.finish(settle(format!(
+        return Some(settle(format!(
             "{}.{}({})",
             id.name,
             method.name,
             all.join(", ")
         )));
     }
+    None
+}
+
+/// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_inline_agent_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // v0.9.2: inline agent invocation. Source form is
     // `Agent(<key>).method(args)`; receiver parses as
     // `Call(Agent, [<key>])`. Lower to
@@ -3744,7 +3257,7 @@ fn lower_method_call(
             let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
             let mut all = args_lowered;
             all.push("deps".to_string());
-            return pre.finish(format!(
+            return Some(format!(
                 "this.{method}({args})",
                 method = method.name,
                 args = all.join(", ")
@@ -3760,12 +3273,25 @@ fn lower_method_call(
         let mut all = args_lowered;
         // #2355: `this.deps` in a provider body.
         all.push(cx.cap_deps_expr().to_string());
-        return pre.finish(format!(
+        return Some(format!(
             "{instance}.{method}({args})",
             method = method.name,
             args = all.join(", ")
         ));
     }
+    None
+}
+
+/// Lower a method call on a let-bound agent instance, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_let_bound_agent_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
     // Let-bound agent invocation. `let x = Agent(key); x.method(args)`
     // — the statement emitter recorded `x` as an agent variable when
     // it lowered the let. Method calls on `x` go straight to the
@@ -3793,12 +3319,877 @@ fn lower_method_call(
         let recv = cx
             .resolved_local_name(&id.name)
             .unwrap_or_else(|| id.name.clone());
-        return pre.finish(format!("{}.{}({})", recv, method.name, all.join(", ")));
+        return Some(format!("{}.{}({})", recv, method.name, all.join(", ")));
     }
-    // v0.20b: built-in kernel methods on the collection types,
-    // dispatched on the receiver's checked type. Emitted inline
-    // (typed IIFEs / spreads) — no runtime imports, so files that
-    // never touch collections emit byte-identically to v0.20a.
+    None
+}
+
+/// Lower the built-in scalar and collection statics (`HttpResult.*`, `List.empty`, `Map.empty`, `Set.empty`/`of`, the JSON codec, `Float.pi`/`e`, the numeric parses, `Duration.millis`, `Instant.from*`), or `None` when the call is none of them. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_scalar_static_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.9: explicit `HttpResult.Variant(args)` construction. The
+    // checker has already recorded the expression's type — emit it
+    // directly through the runtime's HttpResult namespace.
+    //
+    // P6.21/P6.23 (review of #1251): reads `Callee::Intrinsic` (the sink
+    // #1251 added) instead of `id.name == HTTP_RESULT` — closes the last
+    // real instance of R6.5's name-matched-receiver defect class this
+    // session's own P6.21 slices left open, since Decision C originally
+    // excluded this shape for lack of a `Callee` to read.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, .. }) if *ns == HTTP_RESULT
+        )
+    {
+        cx.note_http_result();
+        let args_lowered = lower_http_variant_args(&method.name, args, pre, cx);
+        return Some(format!(
+            "HttpResult.{}({})",
+            method.name,
+            args_lowered.join(", ")
+        ));
+    }
+    // v0.20b: built-in collection statics — `List.empty()` /
+    // `Map.empty()`. The checker recorded the instantiated type;
+    // emit it explicitly so the TS value doesn't infer as `never[]`
+    // / `Map<unknown, unknown>` outside contextually-typed positions.
+    //
+    // P6.21 (partial, continued — the earlier #1247 attempt reverted this
+    // exact conversion after a zero-diff bless caught it silently dropping
+    // `Instant`/`Bytes` statics inside `.test.bynk` bodies; root-caused and
+    // fixed separately — `typecheck_case_body` now returns its own
+    // `callees` map instead of discarding it, so `Callee::Intrinsic` is
+    // populated for test-case bodies too): reads `Callee::Intrinsic` (P6.0)
+    // instead of `id.name == LIST || id.name == MAP` plus
+    // `!cx.commons().types.contains_key` — the checker's own
+    // `check_method_call` already resolves the identical shadowing question
+    // (`ctx.lookup(...).is_none() && !ctx.input.types.contains_key(...)`,
+    // `calls.rs`) before ever recording this `Callee`, closing a real gap
+    // the emitter's own guard left open: no `cx.is_local(&id.name)` check,
+    // unlike every other branch this session already converted.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if (*ns == LIST || *ns == MAP || *ns == SET) && op == "empty"
+        )
+        && args.is_empty()
+    {
+        match cx.commons().expr_ty(e.id).as_deref() {
+            // K6a (#2596).
+            Some(Ty::Set(t)) => {
+                return Some(format!("new globalThis.Set<{}>()", ts_ty(*t, tys)));
+            }
+            Some(Ty::List(t)) => {
+                return Some(format!(
+                    "([] as readonly {}[])",
+                    ts_array_elem(&ts_ty(*t, tys))
+                ));
+            }
+            Some(Ty::Map(k, v)) => {
+                return Some(format!(
+                    "new globalThis.Map<{}, {}>()",
+                    ts_ty(*k, tys),
+                    ts_ty(*v, tys)
+                ));
+            }
+            _ => {}
+        }
+    }
+    // K6a (#2596): `Set.of(xs)` — a set of the list's elements; the first
+    // occurrence keeps its position.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == SET && op == "of"
+        )
+        && args.len() == 1
+        && let Some(Ty::Set(t)) = cx.commons().expr_ty(e.id).as_deref()
+    {
+        let t = *t;
+        let xs = pre.lower(&args[0], cx);
+        if !key_is_plain(t, tys) {
+            cx.runtime_use().note_key("__bynkSetOf");
+            return Some(format!("__bynkSetOf<{}>({xs})", ts_ty(t, tys)));
+        }
+        return Some(format!("new globalThis.Set<{}>({xs})", ts_ty(t, tys)));
+    }
+    // v0.22b: the typed JSON codec (ADR 0045).
+    if let Some(s) = pre.absorb_opt(lower_json_codec_call(e, receiver, method, args, cx)) {
+        return Some(s);
+    }
+    // K6b (#2598): `Float.pi()` and `Float.e()`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == FLOAT && (op == "pi" || op == "e")
+        )
+        && args.is_empty()
+    {
+        let constant = if method.name == "pi" { "PI" } else { "E" };
+        return Some(format!("globalThis.Math.{constant}"));
+    }
+    // v0.22a: the numeric parse statics — `Int.parse(s)` /
+    // `Float.parse(s)` (ADR 0048). #1657 (runtime-semantics track §3.4): the
+    // whole string must match a strict decimal grammar before `Number(…)` sees
+    // it. `Number` alone accepts surrounding whitespace, `0x`/`0b`/`0o` prefixes
+    // and (for `Int`) exponents, so `" 7 "`, `"0x10"` and `"1e3"` parsed. `Int`
+    // is `[+-]?digits`, then a safe integer (`+ 0` turns `-0` into `0`); `Float`
+    // is a decimal with an optional exponent, then finite (the 0040 posture).
+    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
+    // `id.name == INT || id.name == FLOAT` — see the `List`/`Map` branch
+    // above. `Int`/`Float` are lexically reserved (the parser only admits
+    // them here followed by `.`), so unlike `List`/`Map` this specific guard
+    // never had a real shadowing gap to close — converted for consistency
+    // with every other static-constructor branch in this function.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if (*ns == INT || *ns == FLOAT) && op == "parse"
+        )
+        && args.len() == 1
+    {
+        let s = pre.lower(&args[0], cx);
+        let (grammar, value, guard) = if id.name == INT {
+            (
+                "/^[+-]?[0-9]+$/",
+                "globalThis.Number(__s) + 0",
+                "globalThis.Number.isSafeInteger(__n)",
+            )
+        } else {
+            (
+                "/^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$/",
+                "globalThis.Number(__s)",
+                "globalThis.Number.isFinite(__n)",
+            )
+        };
+        return Some(format!(
+            "((__s: string) => {{ if (!{grammar}.test(__s)) return None; const __n = {value}; return {guard} ? Some(__n) : None; }})({s})"
+        ));
+    }
+    // v0.86 (ADR 0112): `Duration.millis(n)` — the runtime `Int`→`Duration`
+    // constructor. A `Duration` lowers to its milliseconds, so this is the
+    // identity on the argument.
+    //
+    // P6.21 (partial, continued): reads `Callee::Intrinsic` instead of
+    // `id.name == DURATION` — see the `List`/`Map` branch above for why this
+    // closes a real shadowing gap the bare name check left open (the checker
+    // itself guards `ctx.lookup(DURATION).is_none()` before ever recording
+    // this `Callee`; the same applies to `Instant`/`Bytes`/`Stream` below).
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == DURATION && op == "millis"
+        )
+        && args.len() == 1
+    {
+        let inner = pre.lower(&args[0], cx);
+        return Some(inner);
+    }
+    // K3 (#2592): `Instant.fromIso(s)`, a guarded RFC 3339 read.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromIso"
+        )
+        && args.len() == 1
+    {
+        let s = pre.lower(&args[0], cx);
+        cx.note_time_ops();
+        return Some(format!("__bynkInstantFromIso({s})"));
+    }
+    // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
+    // its epoch milliseconds, so this is the identity on the argument.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == INSTANT && op == "fromEpochMillis"
+        )
+        && args.len() == 1
+    {
+        let inner = pre.lower(&args[0], cx);
+        return Some(inner);
+    }
+    None
+}
+
+/// Lower the statics that build a runtime value (`Bytes.*`, `Decimal.*`, `TokenClaims.of`, `RequestHeaders.*`, `RequestQuery.*`, `Stream.of`), or `None` when the call is none of them. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_runtime_value_static_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.110 (ADR 0142 D2): the `Bytes` static constructors. `fromUtf8` is the
+    // UTF-8 encoding of a string (total); `fromBase64` is a guarded base64
+    // decode returning `Option` (`None` on invalid base64); `empty` is the
+    // zero octet sequence.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == BYTES)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("fromUtf8", 1) => {
+                let s = pre.lower(&args[0], cx);
+                return Some(format!("new globalThis.TextEncoder().encode({s})"));
+            }
+            ("fromBase64", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_bytes();
+                return Some(format!("__bynkBytesFromBase64({s})"));
+            }
+            // #2016: the guarded hex and base64url decodes, `None` on bad input.
+            ("fromHex", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_bytes_ops();
+                return Some(format!("__bynkBytesFromHex({s})"));
+            }
+            ("fromBase64Url", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_bytes_ops();
+                return Some(format!("__bynkBytesFromBase64Url({s})"));
+            }
+            ("empty", 0) => {
+                return Some("new globalThis.Uint8Array()".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #2622: `Decimal.parse(s)` and `Decimal.fromInt(n)`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == DECIMAL)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("parse", 1) => {
+                let s = pre.lower(&args[0], cx);
+                cx.note_decimal("__bynkDecimalParse");
+                return Some(format!("__bynkDecimalParse({s})"));
+            }
+            ("fromInt", 1) => {
+                let n = pre.lower(&args[0], cx);
+                cx.note_decimal("__bynkDecimalFromInt");
+                return Some(format!("__bynkDecimalFromInt({n})"));
+            }
+            _ => {}
+        }
+    }
+    // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, op }) if *ns == TOKEN_CLAIMS && op == "of")
+        && args.len() == 1
+    {
+        let xs = pre.lower(&args[0], cx);
+        cx.note_token_claims();
+        return Some(format!("__tokenClaims({xs})"));
+    }
+    // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
+    // the runtime's headers view from `"name: value"` lines.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_HEADERS)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_headers();
+                return Some(format!("__requestHeaders({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_headers();
+                return Some("__requestHeaders([])".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
+    // runtime's query view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_QUERY)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_query();
+                return Some(format!("__requestQuery({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_query();
+                return Some("__requestQuery([])".to_string());
+            }
+            _ => {}
+        }
+    }
+    // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
+    // lowers to a host async iterable; `of` wraps a list as an async generator.
+    // Emitted inline (no runtime import), like the collection kernels.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic { ns, op }) if *ns == STREAM && op == "of"
+        )
+        && args.len() == 1
+    {
+        let xs = pre.lower(&args[0], cx);
+        return Some(format!(
+            "(async function* () {{ for (const __e of {xs}) {{ yield __e; }} }})()"
+        ));
+    }
+    None
+}
+
+/// The persisted-store receivers of a method call: a `store` field of the
+/// current agent used as `<field>.<op>(…)`. Each kind has its own function, tried
+/// in order; `None` means the receiver is none of them.
+fn lower_store_method_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    lower_store_held_map_call(e, receiver, method, args, cx, pre)
+        .or_else(|| lower_store_map_call(e, receiver, method, args, cx, pre))
+        .or_else(|| lower_store_set_call(e, receiver, method, args, cx, pre))
+        .or_else(|| lower_store_cache_call(e, receiver, method, args, cx, pre))
+        .or_else(|| lower_store_log_call(e, receiver, method, args, cx, pre))
+        .or_else(|| lower_store_cell_call(receiver, method, args, cx, pre))
+}
+
+/// Lower a held `store Map[K, Connection]` operation (Workers: connection ids are persisted), or `None` when the receiver is not that kind of store
+/// field. Moved out of `lower_method_call` (#3167) unchanged.
+fn lower_store_held_map_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.104/v0.105 (real-time track slice 3b): a held-`Map` operation —
+    // `<map>.<op>(…)` on a `store Map[K, Connection]` field on Workers. The live
+    // socket cannot be persisted, so the durable record stores the **connection id**
+    // (`__state.<map>` is a `Record<string(K), connId>`) and each `Connection` is
+    // re-resolved from its connId via `resolveConnection` — so a stored connection
+    // survives DO eviction (§2.9.6, slice 3b-ii). `put` records the connection's id
+    // (`connIdOf`); `get` resolves it (or `None` if the socket has since closed);
+    // `remove` resolves-closes-deletes (the §2.9 "removes-and-closes" contract). The
+    // record mutation is staged in `__state` and flushed by the same end-of-handler
+    // commit as any other persisted field.
+    // P6.21 (partial, continued): the receiver test reads the checker's own
+    // `Callee::Store`/`Callee::Query` (P6.0) instead of
+    // `!cx.is_local(&id.name)` — a real instance of R6.5's name-matched-
+    // receiver defect class. A held `store Map[K, Connection]` field's
+    // method calls resolve through the same `StoreField::Map` checker
+    // dispatch as any other storage map — entry ops (`put`/`remove`/
+    // `contains`/`size`/`get`) as `Callee::Store`, lifted query ops (e.g.
+    // `parTraverse`) as `Callee::Query` — so both variants are matched here,
+    // mirroring `lower_store_map_call`'s own guard.
+    // `agent_held_map_frame` stays: it answers which *kind* of store field
+    // this is (held vs ordinary), not the shadowing question `Callee`
+    // already settles.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Store { .. } | Callee::Query { .. })
+        )
+        && let Some(f_ts) = cx.agent_held_map_frame(&id.name).cloned()
+    {
+        let var = cx.agent_store_var().to_string();
+        let m = format!("{var}.{}", id.name);
+        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        return Some(match method.name.as_str() {
+            // #3261: `put` over a key that already holds a connection closes the
+            // displaced one first, as `remove` does, so a held connection cannot
+            // be dropped unclosed. Re-putting the same connection under its own
+            // key (the same connection id) leaves it open.
+            "put" => format!(
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {2}; return undefined; }})()",
+                a[0],
+                a[1],
+                own_set(&m, "__k", "__new")
+            ),
+            "remove" => format!(
+                "(async () => {{ const __k = String({0}); const __cid = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} delete {m}[__k]; }} return undefined; }})()",
+                a[0]
+            ),
+            "contains" => format!("globalThis.Object.hasOwn({m}, String({}))", a[0]),
+            "size" => format!("globalThis.Object.keys({m}).length"),
+            "get" => format!(
+                "(() => {{ const __k = String({0}); return globalThis.Object.hasOwn({m}, __k) ? __resolveConnection<{f_ts}>(this.state, {m}[__k]) : None; }})()",
+                a[0]
+            ),
+            // Any non-entry op is a lazy query lifting the map into a scan over its
+            // **resolved** connections (the present ones — a connId whose socket has
+            // closed drops out).
+            _ => {
+                note_par_fan_out(cx, method);
+                let other_elem_ts = args
+                    .first()
+                    .map(|_| join_other_elem_ts(args, cx))
+                    .unwrap_or_default();
+                lower_query_by_name(
+                    format!(
+                        "globalThis.Object.values({m}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
+                    ),
+                    method,
+                    &a,
+                    cx.commons().expr_types.get(&e.id).map(|te| te.ty),
+                    &QueryShape {
+                        elem_ts: &f_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
+                    },
+                    tys,
+                )
+            }
+            .unwrap_or_else(|| {
+                format!("(/* unsupported held Map op {} */ undefined)", method.name)
+            }),
+        });
+    }
+    None
+}
+
+/// Lower a persisted `store Map[K, V]` operation, including the `@indexed` posting-list maintenance, or `None` when the receiver is not that kind of store
+/// field. Moved out of `lower_method_call` (#3167) unchanged.
+fn lower_store_map_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.82 (ADR 0110): a storage-`Map` operation — `<map>.<op>(…)` on a `store
+    // Map[K, V]` field. Lowers to an entry op over `__state.<map>` (a
+    // `Record<string, V>`): mutating the working record (`put`/`remove`/`update`/
+    // `upsert`) or reading it (`get`/`contains`/`size`). The surface op is
+    // `Effect`-typed and awaited with `<-`, but the working-record mutation is
+    // synchronous (the durable write is the single end-of-handler flush), so an
+    // awaited expression suffices. `update` on an absent key throws (a fault →
+    // nothing commits).
+    //
+    // P6.21 (partial, continued): the receiver test reads the checker's own
+    // `Callee::Store`/`Callee::Query` (P6.0) instead of `!cx.is_local(&id.name)`
+    // — a real instance of R6.5's name-matched-receiver defect class, the same
+    // one `body_writes_state`/#1196 already closed for write-detection.
+    // `cx.is_agent_store_map` stays: it answers a different question (which
+    // *kind* of store field this is, needed to pick this branch over
+    // Set/Cache/Log/Cell's own), not the shadowing question `Callee` already
+    // settles.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Store { .. } | Callee::Query { .. })
+        )
+        && cx.is_agent_store_map(&id.name)
+    {
+        let var = cx.agent_store_var().to_string();
+        let m = format!("{var}.{}", id.name);
+        // v0.93 (ADR 0118): the value-record fields this map is `@indexed(by:)` on.
+        let idx_fields: Vec<String> = cx.agent_store_index_fields(&id.name);
+        // Route an equality `filter` on an indexed field to a posting-list lookup
+        // (`<map>__idx_<f>[v]`) instead of a full `Object.values` scan. The lookup
+        // reads the staged map, so it stays read-your-writes (the index is
+        // maintained in the same commit).
+        if method.name == "filter"
+            && let [arg] = args
+            && let ExprKind::Lambda(lam) = &arg.kind
+            && let Some(routed) = pre.absorb_opt(route_indexed_filter(
+                &m,
+                &var,
+                &id.name,
+                &idx_fields,
+                lam,
+                cx,
+            ))
+        {
+            return Some(routed);
+        }
+        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        return Some(match method.name.as_str() {
+            // v0.93: an indexed map's mutators keep the sibling posting-lists exact
+            // inside the same staged commit (re-index on last-write-wins).
+            "put" if !idx_fields.is_empty() => idx_map_put(&m, &var, &id.name, &idx_fields, &a),
+            "remove" if !idx_fields.is_empty() => {
+                idx_map_remove(&m, &var, &id.name, &idx_fields, &a)
+            }
+            "update" if !idx_fields.is_empty() => {
+                idx_map_update(&m, &var, &id.name, &idx_fields, &a)
+            }
+            "upsert" if !idx_fields.is_empty() => {
+                idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
+            }
+            // #3261: on the bundle, `put` over a key that already holds a
+            // `Connection` closes the displaced `TestConnection` first, as
+            // `remove` does and as the Workers build does; re-putting the same
+            // connection under its own key leaves it open (compared by identity).
+            "put"
+                if cx
+                    .agent_store_map_value_ts(&id.name)
+                    .is_some_and(|v| v.starts_with("Connection<")) =>
+            {
+                format!(
+                    "(async () => {{ const __k = {0}; const __new = {1}; if (globalThis.Object.hasOwn({m}, __k) && {m}[__k] !== __new) {{ await {m}[__k].close(); }} {2}; return undefined; }})()",
+                    a[0],
+                    a[1],
+                    own_set(&m, "__k", "__new")
+                )
+            }
+            "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
+            // #3224: on the bundle target a held `store Map[K, Connection]` is an
+            // ordinary in-memory map of `TestConnection`s (the Workers build
+            // persists connection ids instead and takes `lower_store_held_map_call`), so `remove` must still honour the §2.9 contract that it
+            // removes *and closes*: close the connection the entry holds, then
+            // delete it, as the Workers lowering does.
+            "remove"
+                if cx
+                    .agent_store_map_value_ts(&id.name)
+                    .is_some_and(|v| v.starts_with("Connection<")) =>
+            {
+                format!(
+                    "(async () => {{ const __k = {0}; if (globalThis.Object.hasOwn({m}, __k)) {{ await {m}[__k].close(); delete {m}[__k]; }} return undefined; }})()",
+                    a[0]
+                )
+            }
+            "remove" => format!("((delete {m}[{}]), undefined)", a[0]),
+            "contains" => format!("globalThis.Object.hasOwn({m}, {})", a[0]),
+            "size" => format!("globalThis.Object.keys({m}).length"),
+            "get" => format!(
+                "(() => {{ const __k = {0}; return globalThis.Object.hasOwn({m}, __k) ? Some({m}[__k]) : None; }})()",
+                a[0]
+            ),
+            "update" => format!(
+                "(() => {{ const __k = {0}; if (!globalThis.Object.hasOwn({m}, __k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} {m}[__k] = ({1})({m}[__k]); return undefined; }})()",
+                a[0], a[1]
+            ),
+            "upsert" => format!(
+                "(() => {{ const __k = {0}; {set}; return undefined; }})()",
+                a[0],
+                set = own_set(
+                    &m,
+                    "__k",
+                    &format!(
+                        "({})(globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : ({}))",
+                        a[2], a[1]
+                    )
+                ),
+            ),
+            // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
+            // map into a scan over its values (`Object.values`).
+            //
+            // Review of #1460: `elem_ts` is this map's own value type `V`
+            // (`agent_store_map_value_ts`, mirroring `f_ts` above's held-map
+            // equivalent) — falls back to `unknown` only for an
+            // already-diagnosed program the checker recorded no type for
+            // (`join_other_elem_ts`'s own identical fallback posture), not a
+            // real case on a certified one: this arm is only reached when
+            // `cx.is_agent_store_map` already matched, so `map_values` always
+            // has an entry for `id.name` here.
+            _ => {
+                let elem_ts = cx
+                    .agent_store_map_value_ts(&id.name)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string());
+                note_par_fan_out(cx, method);
+                let other_elem_ts = args
+                    .first()
+                    .map(|_| join_other_elem_ts(args, cx))
+                    .unwrap_or_default();
+                lower_query_by_name(
+                    format!("globalThis.Object.values({m})"),
+                    method,
+                    &a,
+                    cx.commons().expr_types.get(&e.id).map(|te| te.ty),
+                    &QueryShape {
+                        elem_ts: &elem_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
+                    },
+                    tys,
+                )
+                .unwrap_or_else(|| format!("(/* unsupported Map op {} */ undefined)", method.name))
+            }
+        });
+    }
+    None
+}
+
+/// Lower a persisted `store Set[T]` operation, or `None` when the receiver is not that kind of store
+/// field. Moved out of `lower_method_call` (#3167) unchanged.
+fn lower_store_set_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.83: a storage-`Set` operation — `<set>.<op>(…)` on a `store Set[T]` field.
+    // Lowers to an entry op over `__state.<set>` (a `Record<string, boolean>`):
+    // `add`/`remove` mutate the working record, `contains`/`size` read it.
+    //
+    // P6.21 (partial, continued): reads `Callee::Store` (P6.0) instead of
+    // `!cx.is_local(&id.name)` — see `lower_store_map_call` for the
+    // full reasoning. `Set` never gets `Callee::Query` (checker.rs's own
+    // `StoreField::Set` arm records only `Store`), unlike `Map`/`Log`.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Store { .. }))
+        && cx.is_agent_store_set(&id.name)
+    {
+        let var = cx.agent_store_var().to_string();
+        let s = format!("{var}.{}", id.name);
+        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        return Some(match method.name.as_str() {
+            "add" => format!("({}, undefined)", own_set(&s, &a[0], "true")),
+            "remove" => format!("((delete {s}[{}]), undefined)", a[0]),
+            "contains" => format!("globalThis.Object.hasOwn({s}, {})", a[0]),
+            "size" => format!("globalThis.Object.keys({s}).length"),
+            other => format!("(/* unsupported Set op {other} */ undefined)"),
+        });
+    }
+    None
+}
+
+/// Lower a persisted `store Cache[K, V]` operation (TTL expiry against the injected `Clock`), or `None` when the receiver is not that kind of store
+/// field. Moved out of `lower_method_call` (#3167) unchanged.
+fn lower_store_cache_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.87 (ADR 0113): a storage-`Cache` operation — `<cache>.<op>(…)` on a
+    // `store Cache[K, V]` field. Lowers to an entry op over `__state.<cache>` (a
+    // `Record<string, { v, exp }>`) that applies TTL expiry against the injected
+    // `Clock`: every op but `remove` reads `now()` (an awaited `Effect`), so the
+    // op is an async IIFE. `put`/`update`/`upsert` stamp `exp = now() + ttl`;
+    // `get`/`contains`/`size` treat an entry past `exp` as absent.
+    //
+    // P6.21 (partial, continued): reads `Callee::Store` instead of
+    // `!cx.is_local(&id.name)` — see `lower_store_map_call`. `Cache`
+    // never gets `Callee::Query`, same as `Set`.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Store { .. }))
+        && let Some(ttl) = cx.agent_store_cache_ttl(&id.name)
+    {
+        let var = cx.agent_store_var().to_string();
+        let c = format!("{var}.{}", id.name);
+        // Cache reaping (#3189): note the clock the op read against the state the handler
+        // commits, so the commit can delete the entries that clock says are expired.
+        let now = format!(
+            "__noteClock({var}, await {}.Clock.now())",
+            cx.cap_deps_expr()
+        );
+        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        return Some(match method.name.as_str() {
+            "remove" => format!("((delete {c}[{}]), undefined)", a[0]),
+            "put" => format!(
+                "(async () => {{ const __now = {now}; {set}; return undefined; }})()",
+                set = own_set(&c, &a[0], &format!("{{ v: {}, exp: __now + {ttl} }}", a[1])),
+            ),
+            "get" => format!(
+                "(async () => {{ const __now = {now}; const __k = {0}; return (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? Some({c}[__k].v) : None; }})()",
+                a[0]
+            ),
+            "contains" => format!(
+                "(async () => {{ const __now = {now}; const __k = {0}; return globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now; }})()",
+                a[0]
+            ),
+            "size" => format!(
+                "(async () => {{ const __now = {now}; return globalThis.Object.values({c}).filter((__e) => __e.exp > __now).length; }})()"
+            ),
+            "update" => format!(
+                "(async () => {{ const __now = {now}; const __k = {0}; if (!(globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} {c}[__k] = {{ v: ({1})({c}[__k].v), exp: __now + {ttl} }}; return undefined; }})()",
+                a[0], a[1]
+            ),
+            "upsert" => format!(
+                "(async () => {{ const __now = {now}; const __k = {0}; const __cur = (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? {c}[__k].v : ({1}); {set}; return undefined; }})()",
+                a[0],
+                a[1],
+                set = own_set(
+                    &c,
+                    "__k",
+                    &format!("{{ v: ({})(__cur), exp: __now + {ttl} }}", a[2])
+                ),
+            ),
+            other => format!("(/* unsupported Cache op {other} */ undefined)"),
+        });
+    }
+    None
+}
+
+/// Lower a persisted `store Log[T]` operation (append, time windows, the query vocabulary), or `None` when the receiver is not that kind of store
+/// field. Moved out of `lower_method_call` (#3167) unchanged.
+fn lower_store_log_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.95 (ADR 0121): a storage-`Log` operation — `<log>.<op>(…)` on a
+    // `store Log[T]` field (an array of `{ t, v }`). `append` stamps the clock
+    // and pushes (pruning past `@retain`); the time-window roots and the general
+    // query vocabulary lower to a lazy pipeline over the entry values.
+    //
+    // P6.21 (partial, continued): reads `Callee::Store`/`Callee::Query`
+    // instead of `!cx.is_local(&id.name)` — see the storage-`Map` branch
+    // above. `Log` gets both variants, same as `Map` (`append` is `Store`;
+    // the window-root/query vocabulary is `Query`, checker.rs's own
+    // `StoreField::Log` arm).
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Store { .. } | Callee::Query { .. })
+        )
+        && let Some(retain) = cx.agent_store_log_retain(&id.name)
+    {
+        let var = cx.agent_store_var().to_string();
+        let g = format!("{var}.{}", id.name);
+        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        if method.name == "append" {
+            let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
+            let prune = match retain {
+                Some(ms) => format!(
+                    " for (let __i = {g}.length - 1; __i >= 0; __i--) {{ if ({g}[__i].t < __now - {ms}) {g}.splice(__i, 1); }}"
+                ),
+                None => String::new(),
+            };
+            return Some(format!(
+                "(async () => {{ const __now = {now}; {g}.push({{ t: __now, v: {0} }});{prune} return undefined; }})()",
+                a[0]
+            ));
+        }
+        // The values array feeding the general query pipeline.
+        let values = format!("{g}.map((__e) => __e.v)");
+        let thunk = |body: String| format!("(() => {body})");
+        return Some(match method.name.as_str() {
+            // Time-window roots → a `Query` thunk over the windowed values.
+            "since" => thunk(format!(
+                "{g}.filter((__e) => __e.t >= ({0})).map((__e) => __e.v)",
+                a[0]
+            )),
+            "before" => thunk(format!(
+                "{g}.filter((__e) => __e.t < ({0})).map((__e) => __e.v)",
+                a[0]
+            )),
+            "between" => thunk(format!(
+                "{g}.filter((__e) => __e.t >= ({0}) && __e.t <= ({1})).map((__e) => __e.v)",
+                a[0], a[1]
+            )),
+            "recent" => thunk(format!(
+                "{g}.slice(globalThis.Math.max(0, {g}.length - globalThis.Math.max(0, {0}))).reverse().map((__e) => __e.v)",
+                a[0]
+            )),
+            "reversed" => thunk(format!("[...{g}].reverse().map((__e) => __e.v)")),
+            // The general query vocabulary over the entry values.
+            //
+            // Review of #1460: `elem_ts` is this log's own element type `T`
+            // (`agent_store_log_value_ts`) — same construction and fallback
+            // posture as the plain-Map scan above.
+            _ => {
+                let elem_ts = cx
+                    .agent_store_log_value_ts(&id.name)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string());
+                note_par_fan_out(cx, method);
+                let other_elem_ts = args
+                    .first()
+                    .map(|_| join_other_elem_ts(args, cx))
+                    .unwrap_or_default();
+                lower_query_by_name(
+                    values,
+                    method,
+                    &a,
+                    cx.commons().expr_types.get(&e.id).map(|te| te.ty),
+                    &QueryShape {
+                        elem_ts: &elem_ts,
+                        other_elem_ts: &other_elem_ts,
+                        keyed: query_keyed(e, method, args, cx),
+                        key_cmp: query_key_cmp(method, args, cx),
+                    },
+                    tys,
+                )
+                .unwrap_or_else(|| format!("(/* unsupported Log op {} */ undefined)", method.name))
+            }
+        });
+    }
+    None
+}
+
+/// Lower a `store Cell[T]` update, or `None` when the receiver is not that kind of store
+/// field. Moved out of `lower_method_call` (#3167) unchanged.
+fn lower_store_cell_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.98 (ADR 0125): a storage-`Cell` operation — `<cell>.update(f)` on a
+    // `store Cell[T]` field. Lowers to a staged read-modify-write over
+    // `__state.<cell>` (`Map.update`'s lowering minus the key-absent guard — a
+    // cell is always present, so there is no fault path). The mutation is
+    // synchronous against the working state (read-your-writes); the single
+    // end-of-handler `commitState` flush runs the invariant gate before the
+    // durable write, exactly as `:=` does.
+    // Note: unlike the other store kinds, a `Cell` field is deliberately bound
+    // into checker scope (self_scope) as a bare local of its element type, so
+    // the checker always resolves a same-named identifier to the cell — no
+    // `is_local` guard belongs here without also changing that scope
+    // construction, or the emitter would disagree with what the checker typed.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && cx
+            .agent_store_cells()
+            .is_some_and(|(_, cells)| cells.contains(&id.name))
+    {
+        let var = cx.agent_store_var().to_string();
+        let n = format!("{var}.{}", id.name);
+        let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        return Some(match method.name.as_str() {
+            "update" => format!("(() => {{ {n} = ({0})({n}); return undefined; }})()", a[0]),
+            other => format!("(/* unsupported Cell op {other} */ undefined)"),
+        });
+    }
+    None
+}
+
+/// A built-in method call the checker resolved to a typed [`KernelOp`] (#3164):
+/// the one place the emitter turns a kernel operation into TypeScript, matching
+/// on the receiver kind and the operation. `None` when the operation has no
+/// inline lowering here, so the caller falls through to the UFCS lowering; any
+/// hoisted statements the attempt produced stay in `pre`.
+fn lower_kernel_method_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    // v0.20b: built-in kernel methods on the collection types, dispatched on the
+    // receiver's checked type. Emitted inline (typed IIFEs / spreads) — no runtime
+    // imports, so files that never touch collections emit byte-identically to v0.20a.
     // The checker resolved this call to a typed `KernelOp` (#3164), so each arm
     // matches on the resolved operation, not on the method's spelling, and the
     // receiver's type arguments are read off its checked type.
@@ -3820,7 +4211,7 @@ fn lower_method_call(
                 };
                 if let Some(s) = pre.absorb_opt(lower_list_kernel(e, receiver, op, args, *elem, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.91 (ADR 0119): a chained op on a lazy `Query` — the source is
@@ -3851,7 +4242,7 @@ fn lower_method_call(
                     },
                     tys,
                 ) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.100: a chained op on a `Stream` — the receiver already *is* an
@@ -3861,7 +4252,7 @@ fn lower_method_call(
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
                 if let Some(s) = lower_stream_method(recv, op, &a) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #3051: a case's recording `TestConnection[F]`.
@@ -3872,7 +4263,7 @@ fn lower_method_call(
                     TestConnectionOp::Closed => format!("({recv}).closed"),
                     TestConnectionOp::Connection => format!("({recv}).mint()"),
                 };
-                return pre.finish(s);
+                return Some(s);
             }
             // v0.102: the held-resource operations on a `Connection[F]` lower to
             // method calls on the runtime `Connection` object — `send(frame)` and
@@ -3880,7 +4271,7 @@ fn lower_method_call(
             KernelOp::Connection(op) => {
                 let recv = pre.lower(receiver, cx);
                 let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
-                return pre.finish(format!("({recv}).{}({})", op.name(), a.join(", ")));
+                return Some(format!("({recv}).{}({})", op.name(), a.join(", ")));
             }
             KernelOp::Map(op) => {
                 let Ty::Map(key, val) = &recv_ty else {
@@ -3889,7 +4280,7 @@ fn lower_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_map_kernel(receiver, op, args, *key, *val, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // K6a (#2596): the `Set` kernel.
@@ -3898,7 +4289,7 @@ fn lower_method_call(
                     mismatch(kop)
                 };
                 if let Some(s) = pre.absorb_opt(lower_set_kernel(receiver, op, args, *elem, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.21: the numeric kernel. `toFloat` is the identity
@@ -3907,12 +4298,12 @@ fn lower_method_call(
             // v0.22a extends it (abs/min/max/clamp, isNaN/isFinite).
             KernelOp::Int(op) => {
                 if let Some(s) = pre.absorb_opt(lower_int_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             KernelOp::Float(op) => {
                 if let Some(s) = pre.absorb_opt(lower_float_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.86 (ADR 0112): the `Duration` kernel. `toMillis` is the identity
@@ -3920,7 +4311,7 @@ fn lower_method_call(
             // renders the number.
             KernelOp::Duration(op) => {
                 if let Some(s) = pre.absorb_opt(lower_duration_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.90 (ADR 0114): the `Instant` kernel. `toEpochMillis` is the
@@ -3928,7 +4319,7 @@ fn lower_method_call(
             // renders the number.
             KernelOp::Instant(op) => {
                 if let Some(s) = pre.absorb_opt(lower_instant_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
@@ -3936,26 +4327,26 @@ fn lower_method_call(
             KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                return pre.finish(format!("({recv}).{}({})", kop.name(), args.join(", ")));
+                return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
             }
             // v0.110 (ADR 0142): the `Bytes` kernel. `length` is the octet
             // count; `toBase64` encodes; `decodeUtf8` is a guarded UTF-8 decode
             // returning `Option`.
             KernelOp::Bytes(op) => {
                 if let Some(s) = pre.absorb_opt(lower_bytes_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
                 if let Some(s) = pre.absorb_opt(lower_decimal_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.22a: the string kernel (ADR 0046).
             KernelOp::String(op) => {
                 if let Some(s) = pre.absorb_opt(lower_string_kernel(receiver, op, args, cx)) {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // v0.22a: Option/Result combinators (ADR 0048).
@@ -3966,7 +4357,7 @@ fn lower_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_option_kernel(e, receiver, op, args, *inner, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             KernelOp::Result(op) => {
@@ -3976,7 +4367,7 @@ fn lower_method_call(
                 if let Some(s) =
                     pre.absorb_opt(lower_result_kernel(e, receiver, op, args, *ok, *err, cx))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
             // #2683 / #2711: `within` and `race`, on every `Effect[T]`.
@@ -3989,8 +4380,7 @@ fn lower_method_call(
                         cx.note_within();
                         let recv = pre.lower(receiver, cx);
                         let after = pre.lower(&args[0], cx);
-                        return pre
-                            .finish(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
+                        return Some(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
                     }
                     // #2711: `a.race(b)` takes the first side to succeed and
                     // hands the rest to the same execution context, uncancelled.
@@ -4027,7 +4417,7 @@ fn lower_method_call(
                         operands.reverse();
                         let lowered: Vec<String> =
                             operands.into_iter().map(|o| pre.lower(o, cx)).collect();
-                        return pre.finish(format!(
+                        return Some(format!(
                             "__bynkRace([{}], {})",
                             lowered.join(", "),
                             cx.exec_expr()
@@ -4048,11 +4438,27 @@ fn lower_method_call(
                         e, receiver, op, args, *ok, *err, cx,
                     ))
                 {
-                    return pre.finish(s);
+                    return Some(s);
                 }
             }
         }
     }
+    None
+}
+
+/// The instance-call fallback (UFCS lowering, #3167): the receiver becomes the
+/// first argument of the namespace function for the receiver's checked type. The
+/// result is the call expression; hoisted statements go to `pre`.
+fn lower_ufcs_method_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> String {
+    let tys = cx.commons().tys();
     // Instance call: UFCS lowering with the receiver as first arg. The
     // namespace comes from the receiver's checked type. Every method call the
     // checker accepts has one: a test-service call's outcome is typed by its
@@ -4119,11 +4525,11 @@ fn lower_method_call(
         }
     };
     let call = format!("{ns}.{}{explicit}({})", method.name, all.join(", "));
-    pre.finish(if needs_exec {
+    if needs_exec {
         settle_exec_call(call, cx)
     } else {
         call
-    })
+    }
 }
 
 /// #2795: whether a type's TypeScript spelling is in scope in every emitted
@@ -4142,7 +4548,7 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
 /// `JSON.parse` + `deserialise_*`, mapping a parse failure to a `Malformed`
-/// JsonError and a BoundaryError to the uniform `kind`/`path`/`message`
+/// DecodeError and a BoundaryError to the uniform `kind`/`path`/`message`
 /// record (ADR 0047). Returns `None` when the receiver is not `Json` or the
 /// shape does not match, so the dispatcher falls through.
 ///
@@ -4170,6 +4576,19 @@ fn lower_json_codec_call(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
+    // #3214: `Yaml.decode[T](text)` is `Json.decode[T]` with the YAML parser in
+    // place of `JSON.parse`; the typed decode and its errors are the same.
+    if matches!(
+        cx.commons().callees.get(&e.id),
+        Some(Callee::Intrinsic { ns, .. }) if *ns == YAML
+    ) && args.len() == 1
+        && method.name == "decode"
+        && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
+        && let Some(decoder) = json_decoder_fn(t, DecodeSource::Yaml, cx)
+    {
+        let arg = pre.lower(&args[0], cx);
+        return Some(pre.finish(format!("({decoder})({arg})")));
+    }
     if matches!(
         cx.commons().callees.get(&e.id),
         Some(Callee::Intrinsic { ns, .. }) if *ns == JSON
@@ -4183,7 +4602,15 @@ fn lower_json_codec_call(
         }
         if matches!(method.name.as_str(), "decode" | "decodeSql")
             && let Some(Ty::Result(t, _)) = cx.commons().expr_ty(e.id).as_deref().cloned()
-            && let Some(decoder) = json_decoder_fn(t, method.name == "decodeSql", cx)
+            && let Some(decoder) = json_decoder_fn(
+                t,
+                if method.name == "decodeSql" {
+                    DecodeSource::Sql
+                } else {
+                    DecodeSource::Json
+                },
+                cx,
+            )
         {
             let arg = pre.lower(&args[0], cx);
             return Some(pre.finish(format!("({decoder})({arg})")));
@@ -4193,12 +4620,28 @@ fn lower_json_codec_call(
     text.map(|expr| pre.finish(expr))
 }
 
-/// The arrow function that decodes JSON text into `t`:
-/// `((__s: string): Result<T, JsonError> => …)`, for `Json.decode` /
-/// `Json.decodeSql` (`sql`: SQLite's `0`/`1` flags read as `Bool`) and for the
-/// typed `D1` reads (#2865), which apply it to the rows `all`/`first` return.
-/// `None` when `t` has no TS rendering.
-fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -> Option<String> {
+/// Which text front end feeds a typed decode.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DecodeSource {
+    /// `Json.decode`: the text is JSON.
+    Json,
+    /// `Json.decodeSql` and the typed `D1` reads: JSON, with SQLite's `0`/`1` flags read as `Bool`.
+    Sql,
+    /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
+    Yaml,
+}
+
+/// The arrow function that decodes text into `t`:
+/// `((__s: string): Result<T, DecodeError> => …)`, for `Json.decode` /
+/// `Json.decodeSql` / `Yaml.decode` (`source`) and for the typed `D1` reads
+/// (#2865), which apply it to the rows `all`/`first` return. `None` when `t`
+/// has no TS rendering.
+fn json_decoder_fn(
+    t: bynk_check::checker::TyId,
+    source: DecodeSource,
+    cx: &mut LowerCtx,
+) -> Option<String> {
+    let sql = source == DecodeSource::Sql;
     let tys = cx.commons().tys();
     let rigid = super::codec::has_var(t, cx.commons());
     let tref = if rigid {
@@ -4221,7 +4664,7 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     if cx.records_codec_roots() {
         note_ground_roots(t, cx);
     }
-    // #914: the wrapper below names `Result`, `JsonValue` and `JsonError`
+    // #914: the wrapper below names `Result`, `JsonValue` and `DecodeError`
     // in its own signature and body, whichever arm the inner deserialiser
     // takes — including the delegating ones, which record nothing. A
     // module that curates its import list (the test-scaffold modules)
@@ -4242,11 +4685,23 @@ fn json_decoder_fn(t: bynk_check::checker::TyId, sql: bool, cx: &mut LowerCtx) -
     } else {
         String::new()
     };
+    // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
+    // are already positioned `DecodeError`s.
+    let parse = if source == DecodeSource::Yaml {
+        cx.runtime_use().note_yaml();
+        "const __p = __bynkYamlParse(__s); \
+         if (__p.tag === \"Err\") return Err(__p.error); \
+         const __j: __JsonValue = __p.value; "
+            .to_string()
+    } else {
+        "let __j: __JsonValue; \
+         try { __j = globalThis.JSON.parse(__s) as __JsonValue; } \
+         catch (__e) { return Err({ kind: \"Malformed\", path: \"$\", message: String(__e) }); } "
+            .to_string()
+    };
     Some(format!(
-        "(__s: string): Result<{ts}, JsonError> => {{ \
-         let __j: __JsonValue; \
-         try {{ __j = globalThis.JSON.parse(__s) as __JsonValue; }} \
-         catch (__e) {{ return Err({{ kind: \"Malformed\", path: \"$\", message: String(__e) }}); }} \
+        "(__s: string): Result<{ts}, DecodeError> => {{ \
+         {parse}\
          {sql_bools}const __r = {des}; \
          if (__r.tag === \"Ok\") return Ok(__r.value as {ts}); \
          const __be = __r.error; \
@@ -7743,7 +8198,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::RequestQuery
         | Ty::TokenClaims
         | Ty::ValidationError
-        | Ty::JsonError
+        | Ty::DecodeError
         | Ty::Actor(_)
         | Ty::ActorSum(_)
         | Ty::Var(_) => EqualityLowering::Structural,

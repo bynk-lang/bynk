@@ -172,12 +172,12 @@ To route an equality filter through a maintained index, annotate the map with
 
 ### Keep an agent's state small
 
-An agent's whole state, every entry of every `Map`, `Set`, `Cache` and `Log` and
-their `@indexed` posting lists included, is persisted as **one stored value** of
-about 8 MB at most, and each handler call reads and rewrites all of it. So a handler
-costs in proportion to the whole state, not to what it touches, and a collection
-that keeps growing will eventually stop persisting ([#3159](https://github.com/bynk-lang/bynk/issues/3159) tracks the planned fix).
-Keep the collections an agent holds small and bounded:
+Each entry of every `Map`, `Set`, `Cache` and `Log`, and each `@indexed` posting, is
+stored under its own key, and a handler writes only the entries it changed, so what
+a handler writes follows what it touches. Reads are not lazy yet: every call loads
+every entry before the handler runs, so a handler's time and memory still grow with
+the size of the agent's state ([#3159](https://github.com/bynk-lang/bynk/issues/3159)
+tracks lazy reads). Keep the collections an agent holds small and bounded:
 
 - key agents finely: one per customer, order or channel, not one per system;
 - bound a `Log` with `@retain(...)`; a `Cache`'s `@ttl(...)` hides expired entries

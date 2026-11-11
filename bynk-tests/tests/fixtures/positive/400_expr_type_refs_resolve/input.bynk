@@ -12,7 +12,7 @@ commons demo {
     f(n)
   }
 
-  fn decode_int(s: String) -> Result[Int, JsonError] {
+  fn decode_int(s: String) -> Result[Int, DecodeError] {
     Json.decode[Int](s)
   }
 }

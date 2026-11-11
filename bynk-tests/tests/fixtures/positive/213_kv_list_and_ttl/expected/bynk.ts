@@ -191,6 +191,24 @@ export const BytesResponse = {
 };
 
 /**
+ * A file part of a `@multipart` request body: what the browser sent for one
+ * `<input type=file>`. `filename` is the client's name for the file (`None` for
+ * a part with no `filename`), `contentType` the type the client claimed
+ * (`application/octet-stream` when it claimed none), and `bytes` the whole part.
+ * Both are client-controlled: never use `filename` as a storage key or path, and
+ * do not trust `contentType`. The size is `bytes.length()`. A `File` is only a
+ * field of a `@multipart` body record, and is not a JSON boundary type.
+ */
+export interface File {
+  readonly filename: Option<string>;
+  readonly contentType: string;
+  readonly bytes: globalThis.Uint8Array;
+}
+
+export const File = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -485,6 +503,37 @@ export function __deserialise_FetchOptions(json: __JsonValue, path: string = "$"
   if (__r_redirect.tag === "Err") return __r_redirect;
   const __redirect = __r_redirect.value;
   return Ok({ timeout: __timeout, redirect: __redirect } as FetchOptions);
+}
+
+export function __serialise_File(value: File): __JsonValue {
+  return {
+    filename: __serialise_Option_String(value.filename),
+    contentType: value.contentType as __JsonValue,
+    bytes: __bynkBytesToBase64(value.bytes) as __JsonValue,
+  };
+}
+
+export function __deserialise_File(json: __JsonValue, path: string = "$"): Result<File, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_filename = __deserialise_Option_String(obj["filename"], `${path}.filename`);
+  if (__r_filename.tag === "Err") return __r_filename;
+  const __filename = __r_filename.value;
+  if (typeof obj["contentType"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.contentType`, expected: "string", actual: typeof obj["contentType"] });
+  }
+  const __contentType = obj["contentType"];
+  if (typeof obj["bytes"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytes`, expected: "base64 string", actual: typeof obj["bytes"] });
+  }
+  const __b_bytes = __bynkBytesFromBase64(obj["bytes"]);
+  if (__b_bytes.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytes`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __bytes = __b_bytes.value;
+  return Ok({ filename: __filename, contentType: __contentType, bytes: __bytes } as File);
 }
 
 export function __serialise_LogLevel(value: LogLevel): __JsonValue {

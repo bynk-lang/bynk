@@ -1,0 +1,12 @@
+commons orders {
+  type Order = { id: String, qty: Int }
+
+  // The deprecated spelling still compiles, as the same type as `DecodeError`.
+  fn load(s: String) -> Result[Order, JsonError] {
+    Json.decode[Order](s)
+  }
+
+  fn describe(e: DecodeError) -> String {
+    "\(e.kind) at \(e.path): \(e.message)"
+  }
+}

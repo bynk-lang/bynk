@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -28,6 +29,8 @@ export interface WalletState {
 const __WalletRegistry = new __StateRegistry();
 function __zeroOfWalletState(): WalletState { return { balance: 0 }; }
 
+const __entryFieldsOfWallet = [] as const;
+
 function __rehydrateWalletState(s: WalletState, stored: WalletState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Wallet", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
 }
@@ -46,10 +49,11 @@ export class Wallet {
     const stored = await this.state.storage.get<WalletState>("state");
     if (stored === undefined) return __zeroOfWalletState();
     __checkStoredLayout("Wallet", stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored);
     const __zero = __zeroOfWalletState();
-    __reportUnknownStoredKeys("Wallet", stored, __zero);
-    const __merged = { ...__zero, ...stored };
-    __rehydrateWalletState(__merged, stored);
+    __reportUnknownStoredKeys("Wallet", __wholesale, __zero);
+    const __merged = { ...__zero, ...__wholesale };
+    __rehydrateWalletState(__merged, __wholesale);
     return __merged;
   }
 
@@ -58,7 +62,7 @@ export class Wallet {
       globalThis.console.error("InvariantViolation Wallet.nonneg", { agent: "Wallet", invariant: "nonneg" });
       throw __invariantViolation("Wallet", "nonneg", "invariant", "demo/wallet.bynk:10:13");
     }
-    await this.state.storage.put("state", __encodeWalletState(s));
+    await __commitStored(this, this.state.storage, __encodeWalletState(s), __entryFieldsOfWallet, s);
   }
 
   async topUp(amount: Amount, deps: {}): globalThis.Promise<void> {
@@ -88,7 +92,7 @@ export function __makeWallet(key: string, env?: { WALLET?: __DurableObjectNamesp
 export async function __bynkDriveHistory_Wallet(seq: globalThis.Array<{ h: number, args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown }>> {
   __WalletRegistry.reset();
   const __inst = __makeWallet("") as any;
-  const __load = async (): globalThis.Promise<WalletState> => { const __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfWalletState(); __checkStoredLayout("Wallet", __s); const __m = { ...__zeroOfWalletState(), ...__s }; __rehydrateWalletState(__m, __s); return __m; };
+  const __load = async (): globalThis.Promise<WalletState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfWalletState(); __checkStoredLayout("Wallet", __s); __s = await __readStored(__inst, __inst.state.storage, __s); const __m = { ...__zeroOfWalletState(), ...__s }; __rehydrateWalletState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
   const __steps: globalThis.Array<{ call: any, accepted: boolean, old: WalletState, new: WalletState, refusal?: unknown }> = [];
   const __ce = globalThis.console.error;
