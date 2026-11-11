@@ -1,0 +1,11 @@
+context api
+
+type Prefs = { dark: Bool }
+
+type Session = { dark: Bool }
+
+service api from http {
+    on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

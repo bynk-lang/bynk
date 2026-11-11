@@ -1,0 +1,3 @@
+context shop
+
+actor Hook { auth = Signature(secret = "WEBHOOK_KEY", header = "X-Sig", timestamp = "X-Time", tolerance = 300) }

@@ -1,0 +1,5 @@
+commons demo
+
+fn same(a: Stream[Int], b: Stream[Int]) -> Bool {
+    a == b
+}

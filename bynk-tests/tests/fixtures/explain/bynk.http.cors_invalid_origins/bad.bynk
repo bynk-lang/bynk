@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+    cors { origins: "https://app.example.com" }
+
+    on GET("/items") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}
