@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __fillMap, __wireEntries, __wireHeld, __wireHeldOrder, __wireMap } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection } from "../../__bynk_runtime/connection.js";
@@ -220,7 +220,7 @@ export class Audit {
   async note(text: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.notes.put(String(text), 1), undefined);
+      const __r0 = await (async () => { await __state.notes.put(String(text), 1); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillHeld, __fillSet, __wireEntries, __wireHeld, __wireHeldOrder, __wireSet } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { QueueResult } from "../../__bynk_runtime/queue.js";
@@ -168,7 +168,7 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.members.add(String(u)), undefined);
+      const __r0 = await (async () => { await __state.members.add(String(u)); return undefined; })();
       const __r1 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();

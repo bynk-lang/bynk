@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap, __wirePostings } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -69,7 +69,7 @@ export class Inventory {
   async reserve(rid: string, r: Reservation, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.reservations.put(String(rid), r), undefined);
+      const __r0 = await (async () => { await __state.reservations.put(String(rid), r); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -79,7 +79,7 @@ export class Inventory {
   async retag(rid: string, oid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(rid); if (!__state.reservations.has(__k)) { throw new globalThis.Error("Map.update: key absent"); } __state.reservations.put(__k, ((r: Reservation) => ({ ...r, orderId: oid }))(__state.reservations.get(__k)!)); return undefined; })();
+      const __r0 = await (async () => { const __k = String(rid); if (!(await __state.reservations.has(__k))) { throw new globalThis.Error("Map.update: key absent"); } await __state.reservations.put(__k, ((r: Reservation) => ({ ...r, orderId: oid }))((await __state.reservations.get(__k))!)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -89,7 +89,7 @@ export class Inventory {
   async drop(rid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.reservations.remove(String(rid)), undefined);
+      const __r0 = await (async () => { await __state.reservations.remove(String(rid)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -98,17 +98,17 @@ export class Inventory {
 
   async countForOrder(oid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.reservations.byIndex("orderId", String(oid))))().length;
+    return __bynkThen(((() => __state.reservations.byIndex("orderId", String(oid))))(), (__q) => __q.length);
   }
 
   async qtyForOrder(oid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.reservations.byIndex("orderId", String(oid))))().reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0);
+    return __bynkThen(((() => __state.reservations.byIndex("orderId", String(oid))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0));
   }
 
   async countById(rid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.reservations.byIndex("id", String(rid))))().length;
+    return __bynkThen(((() => __state.reservations.byIndex("id", String(rid))))(), (__q) => __q.length);
   }
 
 }

@@ -6,7 +6,7 @@ import { __bynkCmpFloat, __bynkCmpSum } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -89,7 +89,7 @@ export class Board {
   async add(name: string, priority: Priority, due: number, score: number, div: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.jobs.put(String(name), { name: name, priority: priority, due: due, score: score, div: div }), undefined);
+      const __r0 = await (async () => { await __state.jobs.put(String(name), { name: name, priority: priority, due: due, score: score, div: div }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -98,27 +98,27 @@ export class Board {
 
   async byPriority(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...__state.jobs.values()].sort((__a, __b) => __c(((j: Job) => j.priority)(__b), ((j: Job) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((j: Job) => j.priority)(__b), ((j: Job) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {})))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byDue(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...__state.jobs.values()].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byDueAscending(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...__state.jobs.values()].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byScore(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...__state.jobs.values()].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__b), ((j: Job) => j.score / j.div)(__a)))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__b), ((j: Job) => j.score / j.div)(__a))))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async topTwo(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => [...__state.jobs.values()].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().slice(0, globalThis.Math.max(0, 2))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 2)))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
 }

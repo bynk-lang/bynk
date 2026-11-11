@@ -375,7 +375,7 @@ test("sameStored compares plain data structurally, whatever the key order", () =
 });
 
 // The codec: the stored record read and written per entry (#3189, slice 2).
-import { CACHE_REAP_LIMIT, commitStored, noteClock, readStored } from "../src/entries.ts";
+import { CACHE_REAP_LIMIT, commitStored, noteClock, readStored, then } from "../src/entries.ts";
 import { StoreMap, StoreSet, entriesOf, fillMap, fillSet, orderedRecord, wireMap, wireSet } from "../src/store.ts";
 
 const keysOf = (record: Record<string, unknown>): string[] => entriesOf(record).map(([k]) => k);
@@ -666,4 +666,14 @@ test("codec: integer-like keys keep their insertion order through a commit and a
   const set = new StoreSet();
   fillSet(set, back.tags);
   assert.deepEqual(set.keys(), ["10", "2", "a", "5"]);
+});
+
+test("then runs at once on a value and after a promise settles", async () => {
+  assert.equal(then(2, (x) => x + 1), 3, "a value is mapped at once, not wrapped");
+  const later = then(Promise.resolve(2), (x) => x + 1);
+  assert.ok(later instanceof Promise);
+  assert.equal(await later, 3);
+  const chained = then(Promise.resolve([1, 2]), async (xs) => xs.map((x) => x * 2));
+  assert.deepEqual(await chained, [2, 4]);
+  await assert.rejects(Promise.resolve(then(Promise.reject(new Error("boom")), (x) => x)), /boom/);
 });

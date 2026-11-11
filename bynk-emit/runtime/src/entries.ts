@@ -684,3 +684,13 @@ export function noteClock(state: object, now: number): number {
   if (seen === undefined || now > seen) clocks.set(state, now);
   return now;
 }
+
+/**
+ * Apply `f` to a value that may or may not have arrived yet. The emitted store queries chain
+ * through it: an in-memory handle returns its values at once and `f` runs at once; a handle
+ * backed by storage returns a promise and `f` runs when it settles. (A store query is a
+ * deferred producer whose elements are either, #3189.)
+ */
+export function then<T, R>(value: T | Promise<T>, f: (value: T) => R | Promise<R>): R | Promise<R> {
+  return value instanceof Promise ? value.then(f) : f(value);
+}

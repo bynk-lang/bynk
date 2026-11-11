@@ -7,7 +7,7 @@ import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMo
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wireSet } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -468,8 +468,8 @@ export class Bag {
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (__state.items.put(String(k), v), undefined);
-      const __r1 = await (__state.seen.add(String(k)), undefined);
+      const __r0 = await (async () => { await __state.items.put(String(k), v); return undefined; })();
+      const __r1 = await (async () => { await __state.seen.add(String(k)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -478,7 +478,7 @@ export class Bag {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (() => { const __k = String(k); return __state.items.has(__k) ? Some(__state.items.get(__k)!) : None; })();
+    const r = await (async () => { const __k = String(k); return (await __state.items.has(__k)) ? Some((await __state.items.get(__k))!) : None; })();
     return r;
   }
 
