@@ -1,0 +1,6 @@
+context demo
+
+fn first(a: Effect[Int], b: Effect[Int]) -> Int {
+    let c = a.race(b)
+    0
+}

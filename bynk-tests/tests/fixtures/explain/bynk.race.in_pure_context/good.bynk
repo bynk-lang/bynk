@@ -1,0 +1,5 @@
+context demo
+
+fn first(a: Effect[Int], b: Effect[Int]) -> Effect[Int] {
+    a.race(b)
+}
