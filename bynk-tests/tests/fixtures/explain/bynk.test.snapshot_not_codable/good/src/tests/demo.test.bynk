@@ -1,0 +1,5 @@
+suite demo {
+  case "reads" {
+    expect [1, 2] matches snapshot "items"
+  }
+}

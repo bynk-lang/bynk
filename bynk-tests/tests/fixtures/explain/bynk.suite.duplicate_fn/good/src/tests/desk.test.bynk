@@ -1,0 +1,9 @@
+suite demo.desk {
+  fn twice(n: Int) -> Int { n * 2 }
+  fn thrice(n: Int) -> Int { n * 3 }
+
+  case "uses both" {
+    expect twice(2) == 4
+    expect thrice(2) == 6
+  }
+}
