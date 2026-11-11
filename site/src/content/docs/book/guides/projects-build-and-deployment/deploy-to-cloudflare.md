@@ -695,6 +695,13 @@ wrangler manages no routing rule for it. Two services in the project claiming on
 address, even in different contexts, is a compile error
 (`bynk.email.duplicate_address`), because Email Routing keeps one rule per address.
 
+The plan lists each address as an advisory line (`email address
+support@shop.example (Email Routing rule; advisory — wrangler reconciles it)`),
+and `--format json` carries them as the context's `email_addresses`: wrangler,
+not Bynk, owns the rules. Removing an address from the source, or every
+`from email` service, removes its rule on the next push; that removal is not yet
+behind `--prune`'s confirmation.
+
 Email Routing must be turned on for the domain, and a `Forward(to)` destination
 must be a verified destination address in the account; deploy does not check
 either. A forward the platform refuses is rejected `forward refused` and logged.

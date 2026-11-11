@@ -150,6 +150,11 @@ struct ContextPlan<'a> {
     /// Interop I5 (#1972): its Service Bindings to Workers outside the
     /// project, in binding order. Bound, never provisioned.
     foreign_services: Vec<PlanForeignService<'a>>,
+    /// #3328: the addresses the Worker's `from email` services claim, in address
+    /// order. Advisory: wrangler reconciles the Email Routing rules to this list
+    /// on the push, so one no longer listed loses its rule.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    email_addresses: Vec<&'a str>,
 }
 
 /// #3301: one `StoredSecret` instance's link. No action: `bynk deploy`
@@ -1994,6 +1999,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         service.binding, service.worker
                     ));
                 }
+                // #3328: Email Routing rules, reconciled by the push.
+                for address in &context.email_addresses {
+                    out.push_str(&format!(
+                        "email address {address} (Email Routing rule; advisory — wrangler reconciles it)\n"
+                    ));
+                }
                 // Between the provisioning lines and the push, because that is
                 // where it happens: the `exports` declaration rides the config
                 // `wrangler deploy` reads rather than being a step of its own.
@@ -2284,6 +2295,11 @@ pub(crate) fn derive_plan<'a>(
                             binding: &f.binding,
                             worker: &f.worker,
                         })
+                        .collect(),
+                    email_addresses: declared
+                        .email_addresses
+                        .iter()
+                        .map(String::as_str)
                         .collect(),
                 }
             })
@@ -3126,6 +3142,34 @@ pub(crate) mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
         assert!(json["contexts"][0].get("stored_secrets").is_none());
+    }
+
+    // ---- #3328: Email Routing rules, reconciled by wrangler ----
+
+    #[test]
+    fn an_email_address_is_an_advisory_plan_line() {
+        let resources = project(vec![(
+            "shop-support",
+            Resources::default().email_addresses(&["*@shop.example", "support@shop.example"]),
+        )]);
+        let order = names(&["shop-support"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        assert_eq!(
+            plan_report(&plan, DeployFormat::Short),
+            "email address *@shop.example (Email Routing rule; advisory — wrangler reconciles it)\nemail address support@shop.example (Email Routing rule; advisory — wrangler reconciles it)\ndeploy shop-support\n"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert_eq!(
+            json["contexts"][0]["email_addresses"],
+            serde_json::json!(["*@shop.example", "support@shop.example"])
+        );
+        // A project with no email service has no such key.
+        let plain = project(vec![("shop-support", Resources::default())]);
+        let plan = plan_of(&order, &plain, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        assert!(json["contexts"][0].get("email_addresses").is_none());
     }
 
     // ---- interop I5 (#1972): Service Bindings to foreign Workers ----
