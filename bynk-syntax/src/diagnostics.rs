@@ -1085,7 +1085,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 caller to rely on. Make the arms agree, converting where needed. The rule also \
                 holds for `let … else`, whose `else` must produce the type of the rest of its \
                 block.",
-        example: "fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => 1           // ✗ an `Int`, where the others are `String`\n        Done => \"finished\"\n    }\n}\n\n\
+        example: "type Status = enum { Pending, Active, Done }\n\nfn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => 1           // ✗ an `Int`, where the others are `String`\n        Done => \"finished\"\n    }\n}\n\n\
                   fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => \"running\"   // ✓\n        Done => \"finished\"\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
