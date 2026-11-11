@@ -1,0 +1,8 @@
+suite demo {
+  case "x" {
+    stub Clock.now() returns 0
+    let k = 1
+    let t <- probe.call()
+    expect t == 0
+  }
+}
