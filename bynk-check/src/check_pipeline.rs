@@ -273,17 +273,22 @@ type MethodDigests<'a> = (&'a String, Vec<(&'a String, u64)>, Vec<(&'a String, u
 /// The digest of each distinct shared declaration, computed once per analysis
 /// round (#3243). Units share their `uses` targets' declarations as `Arc`s, so
 /// the same few types and functions are part of hundreds of files' digests;
-/// rendering each of them once per file was most of the digest's cost. Keyed by
-/// address, which is safe for one round: the unit tables hold every `Arc` for
-/// the round's whole duration, so an address is never reused for another
-/// declaration while the cache lives. Never kept across rounds: the memo drops it
-/// when the round ends (and asserts it is empty when the next begins), because
-/// the parse cache builds fresh declarations each time and a later allocation
-/// could reuse an address.
+/// rendering each of them once per file was most of the digest's cost.
+///
+/// Keyed by address, so an address must never be reused for another declaration
+/// while an entry for it exists. That is guaranteed by construction, not by
+/// argument: each entry **holds a clone of the `Arc`** it was computed from, so
+/// the allocation cannot be freed, and its address cannot be handed to a new
+/// declaration, for as long as the cache lives (one refcount bump per distinct
+/// declaration). Even a temporary `Arc` built and dropped mid-round cannot be
+/// followed by a stale hash. The cache is also never kept across rounds: the
+/// memo drops it when the round ends (and asserts it is empty when the next
+/// begins), so it does not keep a round's declarations alive, and the parse
+/// cache's fresh declarations are never confused with an earlier round's.
 #[derive(Default)]
 pub struct DeclDigests {
-    types: HashMap<usize, u64>,
-    fns: HashMap<usize, u64>,
+    types: HashMap<usize, (Arc<TypeDecl>, u64)>,
+    fns: HashMap<usize, (Arc<bynk_syntax::ast::FnDecl>, u64)>,
 }
 
 impl DeclDigests {
@@ -302,17 +307,17 @@ fn debug_digest(value: &dyn std::fmt::Debug) -> u64 {
 
 impl DeclDigests {
     fn ty(&mut self, decl: &Arc<TypeDecl>) -> u64 {
-        *self
-            .types
+        self.types
             .entry(Arc::as_ptr(decl) as usize)
-            .or_insert_with(|| debug_digest(&**decl))
+            .or_insert_with(|| (Arc::clone(decl), debug_digest(&**decl)))
+            .1
     }
 
     fn func(&mut self, decl: &Arc<bynk_syntax::ast::FnDecl>) -> u64 {
-        *self
-            .fns
+        self.fns
             .entry(Arc::as_ptr(decl) as usize)
-            .or_insert_with(|| debug_digest(&**decl))
+            .or_insert_with(|| (Arc::clone(decl), debug_digest(&**decl)))
+            .1
     }
 
     /// A map of type declarations as `(name, digest)` in key order.
@@ -985,8 +990,41 @@ pub fn check_file_core(
 
 #[cfg(test)]
 mod tests {
-    use super::{Arc, BTreeMap, CrossContextViewsCache};
+    use super::{Arc, BTreeMap, CrossContextViewsCache, DeclDigests};
     use crate::testkit::analyse;
+
+    /// #3243 S2.4a: the digest cache is keyed by address, so it must keep every
+    /// `Arc` it hashed alive: a dropped declaration's address could otherwise be
+    /// reused by a new one and be handed the old hash.
+    #[test]
+    fn the_declaration_digests_keep_what_they_hashed_alive() {
+        let source = "commons shapes\n\ntype Id = String where NonEmpty\n";
+        let tokens = bynk_syntax::lexer::tokenize(source).expect("lexes");
+        let commons = bynk_syntax::parser::parse(&tokens, source).expect("parses");
+        let decl = commons
+            .items
+            .iter()
+            .find_map(|i| match i {
+                bynk_syntax::ast::CommonsItem::Type(t) => Some(t.clone()),
+                _ => None,
+            })
+            .expect("a type");
+        let temporary = Arc::new(decl);
+        let weak = Arc::downgrade(&temporary);
+        let mut digests = DeclDigests::default();
+        let first = digests.ty(&temporary);
+        // The caller's handle goes away, as a temporary `Arc` built mid-round would.
+        drop(temporary);
+        assert!(
+            weak.upgrade().is_some(),
+            "the cache must still hold the declaration its address is keyed by"
+        );
+        assert_eq!(digests.len(), 1);
+        // Only dropping the cache (the end of the round) releases it.
+        drop(digests);
+        assert!(weak.upgrade().is_none());
+        let _ = first;
+    }
 
     /// #3229: every unit shares one set of views; a per-unit rebuild deep-cloned
     /// the whole project once per context, which made a check quadratic.
