@@ -1351,6 +1351,12 @@ pub(super) fn platform_double(
             "  return new bynk_cloudflare__binding.WorkersD1({{ D1: __makeIntegrationD1({}) }}, \"D1\");\n",
             d1_migrations_text(d1_migrations.unwrap_or_default())
         ),
+        // #3302: the real `WorkersEmail` over an in-memory outbox, so a test
+        // sees the binding's own limit and header faults, `expect Mail.send
+        // called with …` works with no stub (observation records the call),
+        // and a message gets a deterministic id. `stub Mail.send(_) returns
+        // Err(…)` forces an `EmailError`.
+        ("bynk.cloudflare", "Email") => "  return new bynk_cloudflare__binding.WorkersEmail({ EMAIL: __makeIntegrationEmail() }, \"EMAIL\");\n".to_string(),
         // #3300: a fixed version (id `"test"`, no tag, created at the
         // epoch), so a case's result never depends on the deployment;
         // `stub Version.current() returns …` gives another.

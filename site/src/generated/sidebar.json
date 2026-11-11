@@ -254,6 +254,10 @@
             "link": "/book/guides/effects-and-capabilities/rate-limit-a-route/"
           },
           {
+            "label": "Send transactional email",
+            "link": "/book/guides/effects-and-capabilities/send-transactional-email/"
+          },
+          {
             "label": "Cache responses at Cloudflare's edge",
             "link": "/book/guides/effects-and-capabilities/cache-at-the-edge/"
           },

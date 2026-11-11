@@ -2938,6 +2938,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "StoredSecret" {
         out.push_str("\nEmits `[[secrets_store_secrets]]`: a distinct instance of `StoredSecret`, reading the secret in the Secrets Store the declaration names. `bynk deploy` links it (it resolves the store's id and checks the secret exists, and creates neither) and fails when either is missing.\n");
     }
+    // #3302: outbound email, restricted by its annotations.
+    if d.base.name == "Email" {
+        out.push_str("\nEmits `[[send_email]]`, keyed by `name`, with the instance's `@to`, `@allowedRecipients` and `@allowedSenders` as `destination_address`, `allowed_destination_addresses` and `allowed_sender_addresses`. `bynk deploy` checks each `@allowedSenders` domain has Email Sending enabled on the account, and never configures one. A call that breaks a platform limit or sets a reserved header faults before it is sent.\n");
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }

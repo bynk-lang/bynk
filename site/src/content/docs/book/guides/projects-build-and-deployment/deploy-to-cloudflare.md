@@ -653,6 +653,29 @@ shared across Workers, rotated once in the store, and Cloudflare-only. Use
 `bynk.Secrets` unless several Workers must share one value or you rotate it
 centrally.
 
+### Sender domains: Email Sending
+
+An `Email` instance with `@allowedSenders`
+(`capability Mail = Email @allowedSenders(["orders@shop.example"])`) may send
+only as those addresses, and Cloudflare sends only from a domain onboarded to
+Email Sending. Onboarding is DNS and a dashboard step, so deploy **checks** it
+and never configures it. Before anything is pushed, `bynk deploy` finds each
+distinct sender domain's zone on the account and checks Email Sending is enabled
+on the domain (or on a wildcard covering it); every domain that is not fails the
+deploy, together, naming the domain:
+
+```
+bynk: `EMAIL_MAIL` of `shop-orders` may send as `orders@shop.example`: `shop.example` does not have Email Sending enabled on this account; onboard it under Email Service > Email Sending in the dashboard (`bynk deploy` checks a sender domain and never configures one)
+```
+
+`--dry-run` stays offline and does not ask. The lookup calls Cloudflare's API, so
+it needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token able to
+read the zone and its Email Sending settings; a refusal says so. Cloudflare's API
+reports whether Email Sending is *enabled* on a domain, not whether its DNS
+records have propagated, so a domain still propagating can pass the check and be
+refused at run time as `SenderNotVerified`, which a handler can answer. An
+instance without `@allowedSenders` asks nothing.
+
 ### Workers outside the project
 
 A [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/)
