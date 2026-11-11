@@ -1,0 +1,6 @@
+commons compat.page
+
+type Page = {
+    title: String,
+    style: String,
+}

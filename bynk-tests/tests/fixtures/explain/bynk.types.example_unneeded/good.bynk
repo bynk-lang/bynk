@@ -1,0 +1,3 @@
+commons demo.d
+
+type Sku = String where NonEmpty

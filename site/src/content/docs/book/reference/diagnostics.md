@@ -146,16 +146,16 @@ There are **815** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.embed.binary_content` | An `embed` names a file with a NUL byte, so it is binary, not text. |  | — |
-| `bynk.embed.duplicate` | An `embed` name is declared more than once in the same unit. |  | — |
+| [`bynk.embed.binary_content`](/book/reference/embeds/#what-the-text-is) | An `embed` names a file with a NUL byte, so it is binary, not text. |  | — |
+| [`bynk.embed.duplicate`](/book/reference/embeds/#declaring-an-embed) | An `embed` name is declared more than once in the same unit. |  | — |
 | [`bynk.embed.invalid_encoding`](/book/reference/embeds/#what-the-text-is) | An `embed` names a file that is not valid UTF-8. |  | — |
 | [`bynk.embed.missing_file`](/book/reference/embeds/#declaring-an-embed) | An `embed` names a file that is not in the project's `embeds/` folder. |  | — |
 | `bynk.embed.needs_project` | A single-file build met an `embed` declaration, which needs a project's `embeds/` folder. |  | — |
 | `bynk.embed.outside_context_or_commons` | An `embed` declaration appears outside a context or commons. |  | — |
-| `bynk.embed.outside_embeds_dir` | An `embed` names a file outside the project's `embeds/` folder. |  | — |
+| [`bynk.embed.outside_embeds_dir`](/book/reference/embeds/#declaring-an-embed) | An `embed` names a file outside the project's `embeds/` folder. |  | — |
 | `bynk.embed.too_large` | An `embed` names a file over 256 KiB, or the project's embedded files total over 1 MiB. |  | — |
 | `bynk.embed.unreadable_file` | An `embed` names a file in the project's `embeds/` folder that could not be read. |  | — |
-| `bynk.embed.unsafe_path` | An `embed` path is empty, absolute, or contains a `..` segment. |  | — |
+| [`bynk.embed.unsafe_path`](/book/reference/embeds/#declaring-an-embed) | An `embed` path is empty, absolute, or contains a `..` segment. |  | — |
 
 ## Expectations
 
@@ -370,9 +370,9 @@ There are **815** codes in total.
 | `bynk.d1.migration_name` | A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database. |  | — |
 | `bynk.d1.migration_unreadable` | A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text. |  | — |
 | `bynk.d1.migrations_unused` | A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning). |  | Warning |
-| `bynk.d1.select_field_missing` | A record read from a literal D1 statement has a field with no column of that name. For a `select[T]` / `firstAs[T]` row type, the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build; for a `Json.decodeSql[T]` of the rows of a literal `all` / `first`, a required (non-`Option`) field of `T` has no result column. |  | — |
-| `bynk.d1.sql_invalid` | A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column. |  | — |
-| `bynk.d1.sql_param_count` | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
+| [`bynk.d1.select_field_missing`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A record read from a literal D1 statement has a field with no column of that name. For a `select[T]` / `firstAs[T]` row type, the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build; for a `Json.decodeSql[T]` of the rows of a literal `all` / `first`, a required (non-`Option`) field of `T` has no result column. |  | — |
+| [`bynk.d1.sql_invalid`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column. |  | — |
+| [`bynk.d1.sql_param_count`](/book/reference/bynk-capabilities/#sql-checked-against-the-migrations) | A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds. |  | — |
 | `bynk.dependency.path_outside_root` | A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace. |  | — |
 | `bynk.deploy.contract_skew` | A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it. |  | — |
 | `bynk.deploy.foreign_contract_skew` | A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it. |  | — |
@@ -811,16 +811,16 @@ There are **815** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.asset.duplicate` | An `asset` name is declared more than once in the same unit. |  | — |
-| `bynk.asset.invalid_at_path` | An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`. |  | — |
+| [`bynk.asset.duplicate`](/book/reference/assets/#declaring-an-asset) | An `asset` name is declared more than once in the same unit. |  | — |
+| [`bynk.asset.invalid_at_path`](/book/reference/assets/#fixed-paths) | An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`. |  | — |
 | `bynk.asset.may_shadow_route` | A parameterised HTTP route matches a fixed asset path, so it never sees requests for that path (a warning). |  | Warning |
 | [`bynk.asset.missing_file`](/book/reference/assets/#declaring-an-asset) | An `asset` names a file that is not in the project's `assets/` folder. |  | — |
 | `bynk.asset.needs_project` | A single-file build met an `asset` declaration; assets need a project build. |  | — |
 | `bynk.asset.not_served` | A deployable Bundle build met an `asset`; a Bundle ships no files, so its `.url` would not be served (a warning). |  | Warning |
 | [`bynk.asset.outside_assets_dir`](/book/reference/assets/#declaring-an-asset) | An `asset` path does not name a file in the project's `assets/` folder. |  | — |
 | `bynk.asset.outside_context_or_commons` | An `asset` declaration appears outside a context or commons. |  | — |
-| `bynk.asset.path_conflict` | Two different asset files would be served at one fixed path by the same Worker. |  | — |
-| `bynk.asset.shadows_route` | A fixed asset path equals a literal HTTP route, which the platform-served asset makes unreachable. |  | — |
+| [`bynk.asset.path_conflict`](/book/reference/assets/#fixed-paths) | Two different asset files would be served at one fixed path by the same Worker. |  | — |
+| [`bynk.asset.shadows_route`](/book/reference/assets/#fixed-paths) | A fixed asset path equals a literal HTTP route, which the platform-served asset makes unreachable. |  | — |
 | `bynk.asset.unreadable_file` | An `asset` names a file in the project's `assets/` folder that could not be read. |  | — |
 | [`bynk.asset.unsafe_path`](/book/reference/assets/#declaring-an-asset) | An `asset` path is empty, absolute, or contains a `..` segment. |  | — |
 
@@ -859,7 +859,7 @@ There are **815** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.types.argument_mismatch`](/book/reference/types/) | A call, method, capability, or constructor argument has the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
-| `bynk.types.asset_at_boundary` | An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead. |  | — |
+| [`bynk.types.asset_at_boundary`](/book/reference/assets/#the-url) | An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead. |  | — |
 | [`bynk.types.bad_field_default`](/book/reference/types/#field-defaults) | A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant of a type this context may construct (not a `uses`-sourced commons sum, which is `bynk.context.rebrand_construction`), `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter has no default, and a default may not hold for one instantiation only: for a record field that applies a user generic (`Page[String]`, or `Page[T]` inside a generic record; an event or old-state field may not) it is a closed-form value at the instantiated type, writing nothing of the enclosing record's own type parameters. (Earlier versions reported this as `bynk.event.bad_field_default`.) |  | — |
 | [`bynk.types.call_arity`](/book/reference/types/) | A function value, a built-in `Map`/`Set`/`Cell`/`Cache`/`Log` operation, or `unreachable`/`todo` was called with the wrong number of arguments (a declared `fn` is `bynk.resolve.arity_mismatch`). | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.types.cannot_infer_option_type_param`](/book/guides/type-system/result-and-optionals/#construct-values) | The value type of `None` could not be inferred. | [`none_expr`](/book/reference/grammar/#rule-none_expr) | — |
@@ -869,7 +869,7 @@ There are **815** codes in total.
 | [`bynk.types.combinator_return_mismatch`](/book/reference/types/#built-in-generic-types) | A callback passed to a combinator (`map`/`andThen`/`flatMap`/`traverseAll`/…) returns the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.types.constructor_arity`](/book/reference/refined-types/) | `T.of` (or `T.unsafe`) on a refined or opaque type got the wrong number of arguments. |  | — |
 | [`bynk.types.constructor_base_mismatch`](/book/guides/type-system/define-and-validate/#validate-with-of) | A `.of` constructor was given an argument of the wrong base type. |  | — |
-| `bynk.types.decimal_division_unscaled` | `/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622). |  | — |
+| [`bynk.types.decimal_division_unscaled`](/book/reference/types/#decimal) | `/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622). |  | — |
 | `bynk.types.decimal_negation_too_large` | A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622). |  | — |
 | `bynk.types.deprecated_json_error` | `JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable). |  | Warning |
 | `bynk.types.derives_automatic` | A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
@@ -878,26 +878,26 @@ There are **815** codes in total.
 | [`bynk.types.duplicate_literal_arm`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` has two arms for the same literal value. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | [`bynk.types.duplicate_pattern_field`](/book/reference/types/#record-patterns) | A record pattern lists the same field twice. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.types.duplicate_variant_arm`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` has two arms for the same variant. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
-| `bynk.types.embeds_ambiguous` | A type is embedded by more than one variant of a sum, so `?`'s conversion would be ambiguous. |  | — |
-| `bynk.types.embeds_unknown_variant` | An `embeds … as V` clause names a variant the sum does not declare. |  | — |
-| `bynk.types.embeds_variant_shape` | An `embeds E as V` target variant must have exactly one payload field, of type `E`. |  | — |
+| [`bynk.types.embeds_ambiguous`](/book/reference/types/#error-embeddings) | A type is embedded by more than one variant of a sum, so `?`'s conversion would be ambiguous. |  | — |
+| [`bynk.types.embeds_unknown_variant`](/book/reference/types/#error-embeddings) | An `embeds … as V` clause names a variant the sum does not declare. |  | — |
+| [`bynk.types.embeds_variant_shape`](/book/reference/types/#error-embeddings) | An `embeds E as V` target variant must have exactly one payload field, of type `E`. |  | — |
 | [`bynk.types.empty_range_pattern`](/book/reference/types/#range-patterns) | A range pattern or `via schema(...)` range has its bounds inverted (`lo > hi`), so it can never match. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
 | [`bynk.types.empty_refinement`](/book/reference/refined-types/#predicates) | A refinement admits no values (contradictory predicates). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.err_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | An `Err` payload has the wrong type. | [`err_expr`](/book/reference/grammar/#rule-err_expr) | — |
-| `bynk.types.example_not_literal` | An `@example` is not exactly one literal of the base type. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.example_on_named_field` | An `@example` on a field whose type is a named type (it belongs on the named type). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.example_unneeded` | An `@example` on a refinement `Val` can already generate (only `Matches` and `IsoDate` take one). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.example_violates` | An `@example` does not satisfy its refinement's predicates. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.example_not_literal`](/book/reference/testing/#val-example) | An `@example` is not exactly one literal of the base type. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.example_on_named_field`](/book/reference/testing/#val-example) | An `@example` on a field whose type is a named type (it belongs on the named type). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.example_unneeded`](/book/reference/testing/#val-example) | An `@example` on a refinement `Val` can already generate (only `Matches` and `IsoDate` take one). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.example_violates`](/book/reference/testing/#val-example) | An `@example` does not satisfy its refinement's predicates. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.extensible_match_needs_wildcard`](/book/reference/bynk-capabilities/#extensible-enums) | A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release. |  | — |
 | [`bynk.types.field_access_on_non_record`](/book/reference/types/#record-types) | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
-| `bynk.types.field_default_on_variant` | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
+| [`bynk.types.field_default_on_variant`](/book/reference/types/#field-defaults) | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
 | [`bynk.types.field_refinement_not_base`](/book/reference/types/#record-types) | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_value_mismatch`](/book/reference/types/#record-types) | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.types.file_at_boundary` | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |
 | [`bynk.types.function_at_boundary`](/book/reference/types/) | A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary. | [`function_type_ref`](/book/reference/grammar/#rule-function_type_ref) | — |
 | [`bynk.types.guard_not_bool`](/book/reference/types/#matching) | A match-arm `if` guard is not a `Bool` expression. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.headers_at_boundary` | `RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
-| `bynk.types.held_at_boundary` | A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2). |  | — |
+| [`bynk.types.held_at_boundary`](/book/reference/types/#connection) | A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2). |  | — |
 | [`bynk.types.held_not_comparable`](/book/reference/types/#connection) | A held value (`Connection[F]`) is compared with `==`/`!=` — held values have identity, not value-equality (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.types.if_branch_mismatch`](/book/spec/static-semantics/) | The branches of an `if` have different types. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
 | [`bynk.types.if_non_bool_cond`](/book/spec/static-semantics/) | An `if` condition is not a `Bool`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |

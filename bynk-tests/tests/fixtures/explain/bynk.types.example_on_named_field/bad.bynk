@@ -1,0 +1,4 @@
+commons demo.d
+
+type Code = String where Matches("[A-Z]{3}")
+type Ticket = { code: Code where Matches("[A-Z]+") @example("ABC") }

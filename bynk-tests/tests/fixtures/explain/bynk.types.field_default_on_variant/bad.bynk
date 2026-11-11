@@ -1,0 +1,5 @@
+commons demo.retry
+
+type Retry =
+    | Never
+    | Times(n: Int = 3)
