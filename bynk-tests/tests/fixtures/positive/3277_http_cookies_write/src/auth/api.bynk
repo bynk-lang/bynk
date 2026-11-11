@@ -22,7 +22,7 @@ service api from http {
 	// Several cookies, a script-readable preference among them.
 	on POST("/prefs") () -> Effect[HttpResult[()]] by v: Visitor {
 		NoContent
-			.withCookie(Cookie { name: "theme", value: "dark", httpOnly: false, path: "/app" })
+			.withCookie(Cookie { name: "theme", value: "dark", path: "/app" })
 			.withCookie(Cookie { name: "lang", value: "fr", maxAge: Some(1.days) })
 	}
 

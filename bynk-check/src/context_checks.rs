@@ -5192,6 +5192,22 @@ fn validate_handler_annotations(
                     continue;
                 }
                 validate_cache_args(ann, errors);
+                // #3277: a response that depends on the request's cookies is one
+                // user's, so it must not be stored by a shared cache.
+                let public = ann.args.iter().any(|a| {
+                    a.label.as_ref().is_some_and(|n| n.name == "scope")
+                        && matches!(&a.value.kind, ExprKind::Ident(id) if id.name == "public")
+                });
+                if public && handler.params.iter().any(|p| p.name.name == "cookies") {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_public_reads_cookies",
+                            ann.span,
+                            "a `@cache(scope: public)` handler reads `cookies`, so a shared cache could replay one user's response to another",
+                        )
+                        .with_note("use `scope: private`, or drop the `cookies` parameter"),
+                    );
+                }
             }
             "limit" => {
                 if seen_limit {

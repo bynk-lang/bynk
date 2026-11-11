@@ -254,6 +254,21 @@ or proof of the content. A `File` is a field of a `@multipart` body record, alon
 type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
 a handler's parameter or result, an event or a call argument.
 
+### Cookie and SameSite {#cookie}
+
+`Cookie` is the record a handler attaches to a result with
+[`withCookie`](/book/reference/http/#setting-cookies). It is exported by `bynk`
+(`consumes bynk { Cookie }`), with `SameSite = enum { Strict, Lax, Unrestricted }`
+(`Unrestricted` is `SameSite=None`):
+
+```text
+Cookie = { name: String, value: String,
+           maxAge: Option[Duration] = None, expires: Option[Instant] = None,
+           domain: Option[String] = None, path: String = "/",
+           secure: Bool = true, httpOnly: Bool = true,
+           sameSite: SameSite = Lax, partitioned: Bool = false }
+```
+
 ## Built-in generic types
 
 | Type | Variants | Purpose |

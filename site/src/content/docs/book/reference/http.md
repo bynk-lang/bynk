@@ -409,8 +409,54 @@ so is a `cookies` that is not a record (`bynk.http.cookies_wrong_type`).
 - **An empty cookie** (`a=`) is a value, not an absent one.
 
 A cookie is not authentication: it reaches the router from the client, so treat every field
-as input to check. Writing cookies, and a cookie-backed actor, are separate. See
+as input to check. A cookie-backed actor is separate. See
 [#3181](https://github.com/bynk-lang/bynk/issues/3181).
+
+### Setting cookies
+
+`bynk` exports a `Cookie` record and a `SameSite` enum (`Strict`, `Lax`, `Unrestricted`;
+the last is `SameSite=None`). `withCookie` attaches a cookie to any `HttpResult`, and the
+router sends one `Set-Cookie` header for each.
+
+```bynk,fragment
+on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
+  Created("ok").withCookie(Cookie { name: "sid", value: "abc", maxAge: Some(30.minutes) })
+}
+```
+
+The defaults are the safe ones: `path: "/"`, `secure: true`, `httpOnly: true`,
+`sameSite: Lax`, `partitioned: false`, and no `domain`, `maxAge` or `expires`, so the
+cookie ends with the browser session. A literal that sets one of these unsafe is refused
+or warned about:
+
+| Diagnostic | When |
+|---|---|
+| `bynk.http.cookie_samesite_none_insecure` | `sameSite: SameSite.Unrestricted` with `secure: false` |
+| `bynk.http.cookie_partitioned_insecure` | `partitioned: true` with `secure: false` |
+| `bynk.http.cookie_host_prefix` | a `__Host-` name that is not `secure`, has a `domain`, or a `path` other than `/` |
+| `bynk.http.cookie_secure_prefix` | a `__Secure-` name that is not `secure` |
+| `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
+| `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
+
+Only a literal is judged. A computed cookie is checked when it is sent: a name that is not
+a token, a value with whitespace, a quote, `,`, `;`, `\` or a control character, an
+unsafe `Domain` or `Path`, an `Expires` outside the range of dates, or a header over
+4096 bytes faults the request (`500`) rather than sending a malformed or unsafe header.
+
+`clearCookie(c)` removes a cookie: it sends `c` again, empty, with `Max-Age=0` and an
+epoch `Expires`, under the same name, `Domain` and `Path`, which is what a browser matches
+on. It keeps the cookie's own `secure` and `sameSite`, so build it as the cookie was set.
+
+```bynk,fragment
+on POST("/logout") () -> Effect[HttpResult[()]] by v: Visitor {
+  NoContent.clearCookie(Cookie { name: "sid", value: "" })
+}
+```
+
+A response that sets a cookie is one user's, so a `public` cache may not keep it: at
+runtime a response carrying `Set-Cookie` is always sent `Cache-Control: private`, and a
+conditional-`GET` `304` keeps the `Set-Cookie` of the response it replaces. In a test,
+`result.cookies()` reads the `List[Cookie]` a result carries.
 
 ## Method semantics
 

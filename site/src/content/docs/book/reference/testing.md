@@ -351,6 +351,21 @@ suite web.api as system {
 }
 ```
 
+### Reading the cookies a result sets — `cookies()` {#result-cookies}
+
+A result that [sets cookies](/book/reference/http/#setting-cookies) carries them, and
+`result.cookies()` reads them as a `List[Cookie]`, at every tier. At `system` they are the
+`Set-Cookie` headers the router sent, parsed back, so a case sees what a browser would:
+
+```bynk,fragment
+suite auth.api as system {
+	case "login sets the session cookie" {
+		let r <- api.POST("/login", Login { user: "ada" })
+		expect r.cookies().map((c) => c.name) == ["sid"]
+	}
+}
+```
+
 ### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
 
 A handler that declares a [`query`](/book/reference/http/#query-strings) takes it as

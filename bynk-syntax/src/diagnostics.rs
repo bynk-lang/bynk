@@ -1885,9 +1885,39 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cache_on_non_get",
         "A `@cache` annotation is placed on a handler that is not `on http GET`.",
     ),
+    dg(
+        "bynk.http.cache_public_reads_cookies",
+        "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another.",
+        &["http_handler"],
+    ),
     d(
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
+    ),
+    dg(
+        "bynk.http.cookie_host_prefix",
+        "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.cookie_partitioned_insecure",
+        "A `partitioned` cookie literal is not `secure`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.cookie_samesite_none_insecure",
+        "A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.cookie_script_readable",
+        "A cookie literal sets `httpOnly: false`, so page scripts can read it (warning).",
+        &["http_handler"],
+    )),
+    dg(
+        "bynk.http.cookie_secure_prefix",
+        "A `__Secure-` cookie literal is not `secure`.",
+        &["http_handler"],
     ),
     dg(
         "bynk.http.cookies_field_not_stringy",

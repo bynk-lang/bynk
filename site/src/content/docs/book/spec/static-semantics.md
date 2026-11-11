@@ -1972,6 +1972,23 @@ form by the rules of a typed `query` (unknown names ignored; a name repeated on 
 non-`List` field is `StructuralMismatch`), and applies the record's codec, so refinements and
 defaults hold; a failure is a `400` whose `path` is rooted at `cookies`.
 
+**Setting cookies.** `HttpResult[T]` has three methods, available once the `bynk` `Cookie` type
+is in scope: `withCookie(c)` and `clearCookie(c)`, each taking a `Cookie` and answering the same
+`HttpResult[T]` with the cookie attached, and `cookies()`, answering the `List[Cookie]` a result
+carries. The router sends one `Set-Cookie` header for each cookie, in order; `clearCookie` sends
+the cookie empty with `Max-Age=0` and an epoch `Expires`. A `Cookie { … }` literal is refused
+when it has `sameSite: SameSite.Unrestricted` or `partitioned: true` with `secure: false`
+(`bynk.http.cookie_samesite_none_insecure`, `bynk.http.cookie_partitioned_insecure`), a `__Host-`
+name that is not `secure`, has a `domain`, or a `path` other than `/`
+(`bynk.http.cookie_host_prefix`), or a `__Secure-` name that is not `secure`
+(`bynk.http.cookie_secure_prefix`); it draws a warning for `httpOnly: false`
+(`bynk.http.cookie_script_readable`). A `@cache(scope: public)` handler MUST NOT take a `cookies`
+parameter (`bynk.http.cache_public_reads_cookies`). A computed cookie that is not valid at
+emission (a name that is not a token, a value outside the cookie-octet set, an unsafe `Domain` or
+`Path`, an `Expires` outside the date range, a violated prefix rule, or a header over 4096 bytes)
+faults the request. A response carrying a `Set-Cookie` is sent with `Cache-Control: private`
+whatever its `@cache` scope.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at

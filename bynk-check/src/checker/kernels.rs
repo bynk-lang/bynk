@@ -1778,6 +1778,97 @@ pub(crate) fn check_bytes_kernel_method(
     Some(tys.intern(ret))
 }
 
+/// #3277: refuse, at compile time, the unsafe `Cookie { … }` literals the runtime
+/// would otherwise fault on, and warn about a script-readable cookie. Only a
+/// literal is judged: a computed field is left to the runtime backstop.
+fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
+    use bynk_syntax::ast::ExprKind;
+    let ExprKind::RecordConstruction {
+        type_name, fields, ..
+    } = &arg.kind
+    else {
+        return;
+    };
+    if type_name.name != "Cookie" {
+        return;
+    }
+    let field = |name: &str| {
+        fields
+            .iter()
+            .find(|f| f.name.name == name)
+            .and_then(|f| f.value.as_ref())
+    };
+    let bool_of = |name: &str| match field(name).map(|e| &e.kind) {
+        Some(ExprKind::BoolLit(b)) => Some(*b),
+        _ => None,
+    };
+    let insecure = bool_of("secure") == Some(false);
+    let mut refuse = |code: &'static str, span: Span, msg: String, note: &str| {
+        ctx.errors
+            .push(CompileError::new(code, span, msg).with_note(note));
+    };
+    if insecure
+        && matches!(
+            field("sameSite").map(|e| &e.kind),
+            Some(ExprKind::FieldAccess { field, .. }) if field.name == "Unrestricted"
+        )
+    {
+        refuse(
+            "bynk.http.cookie_samesite_none_insecure",
+            arg.span,
+            "a cookie with `sameSite: SameSite.Unrestricted` must be `secure`".to_string(),
+            "browsers reject `SameSite=None` without `Secure`; remove `secure: false`",
+        );
+    }
+    if insecure && bool_of("partitioned") == Some(true) {
+        refuse(
+            "bynk.http.cookie_partitioned_insecure",
+            arg.span,
+            "a `partitioned` cookie must be `secure`".to_string(),
+            "`Partitioned` requires `Secure`; remove `secure: false`",
+        );
+    }
+    if let Some(ExprKind::StrLit(name)) = field("name").map(|e| &e.kind) {
+        if name.starts_with("__Host-") {
+            let has_domain = matches!(
+                field("domain").map(|e| &e.kind),
+                Some(ExprKind::Some(_) | ExprKind::Call { .. })
+            );
+            let bad_path = matches!(
+                field("path").map(|e| &e.kind),
+                Some(ExprKind::StrLit(p)) if p != "/"
+            );
+            if insecure || has_domain || bad_path {
+                refuse(
+                    "bynk.http.cookie_host_prefix",
+                    arg.span,
+                    format!(
+                        "the `__Host-` cookie `{name}` must be `secure`, have no `domain`, and use `path: \"/\"`"
+                    ),
+                    "a `__Host-` name binds the cookie to one origin; browsers drop it otherwise",
+                );
+            }
+        } else if name.starts_with("__Secure-") && insecure {
+            refuse(
+                "bynk.http.cookie_secure_prefix",
+                arg.span,
+                format!("the `__Secure-` cookie `{name}` must be `secure`"),
+                "browsers drop a `__Secure-` cookie that is not `Secure`; remove `secure: false`",
+            );
+        }
+    }
+    if bool_of("httpOnly") == Some(false) {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_script_readable",
+                arg.span,
+                "this cookie is readable by page scripts (`httpOnly: false`)".to_string(),
+            )
+            .with_note("keep `httpOnly` on unless a script genuinely needs to read the cookie"),
+        );
+    }
+}
+
 /// #3277: the `Cookie` record of the `bynk` adapter, parsed once from the
 /// embedded source. A system suite sees only the types of the context it
 /// tests, so this is how `HttpResult.cookies()` still names `Cookie` there.
@@ -1881,6 +1972,8 @@ pub(crate) fn check_http_result_method(
             &format!("the `HttpResult.{}` cookie", method.name),
             ctx,
         );
+
+        lint_cookie_literal(a, ctx);
     }
     Some(match op {
         HttpResultOp::WithCookie | HttpResultOp::ClearCookie => recv_ty,
