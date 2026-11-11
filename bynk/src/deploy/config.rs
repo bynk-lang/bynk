@@ -1210,6 +1210,9 @@ service = "payment"
 binding = "KV"
 id = "<KV_NAMESPACE_ID>" # set at deploy time
 
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [[durable_objects.bindings]]
 name = "ORDER_ENTITY"
 class_name = "OrderEntity"
@@ -1320,6 +1323,13 @@ max_batch_size = 10
             env["services"][0]["binding"].as_str(),
             Some("PAYMENT"),
             "the binding name carries over unqualified"
+        );
+        // #3300: bindings are not inherited, and Version metadata names no
+        // resource, so the environment repeats it as it is.
+        assert_eq!(
+            env["version_metadata"]["binding"].as_str(),
+            Some("CF_VERSION_METADATA"),
+            "the Version metadata binding is repeated, or `Version.current()` faults in the environment"
         );
         assert_eq!(
             env["services"][0]["service"].as_str(),
