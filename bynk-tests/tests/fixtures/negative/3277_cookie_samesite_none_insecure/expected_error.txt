@@ -1,0 +1,1 @@
+bynk.http.cookie_samesite_none_insecure

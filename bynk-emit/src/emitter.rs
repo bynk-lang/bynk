@@ -4241,6 +4241,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
         if ctx.runtime_use.form_codec() {
             parts.extend(
                 FORM_CODEC_RUNTIME_IMPORTS
+        if ctx.runtime_use.cookie_string() {
+            parts.extend(
+                COOKIE_STRING_RUNTIME_IMPORTS
                     .trim_start_matches(", ")
                     .split(", "),
             );
@@ -4401,6 +4404,8 @@ fn write_header_single(
         };
         let form_codec_imports = if runtime_use.form_codec() {
             FORM_CODEC_RUNTIME_IMPORTS
+        let cookie_string_imports = if runtime_use.cookie_string() {
+            COOKIE_STRING_RUNTIME_IMPORTS
         } else {
             ""
         };
@@ -4439,7 +4444,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{form_codec_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{form_codec_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4468,6 +4473,8 @@ pub const MULTIPART_FORM_RUNTIME_IMPORTS: &str = ", __multipartForm";
 
 /// #3276: the form codec behind `Form.decode[T]` / `Form.encode(v)`.
 pub const FORM_CODEC_RUNTIME_IMPORTS: &str = ", __formDecode, __formString";
+/// #3277: the `Cookie` header a system driver sends a typed `cookies` record as.
+pub const COOKIE_STRING_RUNTIME_IMPORTS: &str = ", __cookieString";
 /// #2854: the key suffix under which a route's typed `query` (position and
 /// declared type) sits in the same per-route map as its body param.
 pub const QUERY_ROUTE_SUFFIX: &str = "?query";
@@ -4478,6 +4485,10 @@ pub const EXTRA_HEADERS_ROUTE_SUFFIX: &str = "?extra-headers";
 /// #3276: marks a `@form` route in the system drivers' route-body map, so a typed
 /// body in a mixed typed-and-`Wire` call is written as a form (`a=1&b=x`), not JSON.
 pub const FORM_ROUTE_SUFFIX: &str = "?form";
+
+/// #3277: marks a route's `cookies` record in the system drivers' route-body map, so a
+/// typed record in a mixed typed-and-`Wire` call is sent as a `Cookie` header.
+pub const COOKIES_ROUTE_SUFFIX: &str = "?cookies";
 
 /// K3 (#2592): the `Instant` ISO-8601 helpers (`toIso`, `Instant.fromIso`),
 /// appended only when the body calls one.
@@ -6042,6 +6053,16 @@ impl<'a> LowerCtx<'a> {
     /// Record that this lowering turned a typed query into a query string (#2854).
     fn note_query_string(&self) {
         self.runtime_use().note_query_string();
+    }
+
+    /// Record that this lowering used an `HttpResult` cookie method (#3277).
+    fn note_http_result_cookie(&self) {
+        self.runtime_use().note_http_result_cookie();
+    }
+
+    /// Record that this lowering turned a typed `cookies` record into a `Cookie` header (#3277).
+    fn note_cookie_string(&self) {
+        self.runtime_use().note_cookie_string();
     }
 
     /// Record that this lowering built a `TokenClaims` value (#2380).

@@ -1,0 +1,9 @@
+context svc
+
+type Msg = { a: String }
+
+service worker from queue("jobs") {
+  on message(message: Msg) -> Effect[QueueResult] {
+    Ack
+  }
+}

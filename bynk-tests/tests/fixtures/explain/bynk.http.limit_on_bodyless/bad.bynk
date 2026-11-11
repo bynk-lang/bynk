@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+    @limit(maxBody: 1_000_000)
+    on GET("/notes") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

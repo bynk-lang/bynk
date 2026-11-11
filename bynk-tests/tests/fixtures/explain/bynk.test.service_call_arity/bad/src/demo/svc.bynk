@@ -1,0 +1,7 @@
+context demo.svc
+
+service echo {
+	on call(x: Int) -> Effect[Int] {
+		x + 1
+	}
+}

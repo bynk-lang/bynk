@@ -1,0 +1,5 @@
+suite demo.count {
+	case "bump adds one" {
+		expect bump(1) == 2
+	}
+}

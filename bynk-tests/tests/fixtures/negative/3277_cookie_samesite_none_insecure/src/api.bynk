@@ -1,0 +1,9 @@
+context api
+
+consumes bynk { Cookie, SameSite }
+
+service api from http {
+  on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
+    Created("ok").withCookie(Cookie { name: "sid", value: "a", sameSite: SameSite.Unrestricted, secure: false })
+  }
+}

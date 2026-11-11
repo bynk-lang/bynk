@@ -1,0 +1,3 @@
+commons demo.count
+
+fn bump(n: Int) -> Int { n + 1 }

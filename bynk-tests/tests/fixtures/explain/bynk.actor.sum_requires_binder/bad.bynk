@@ -1,0 +1,11 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "JWT_KEY"), identity = UserId }
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[String]] by User | Visitor {
+    Ok("x")
+  }
+}

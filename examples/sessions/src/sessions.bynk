@@ -1,11 +1,19 @@
 context sessions
 
 uses tokens
-consumes bynk { Clock }
+consumes bynk { Clock, Cookie, Random }
 
 type LoginRequest = {
-	token: Token,
 	user: UserId,
+}
+
+---
+The cookies a request carries. `sid` is the session token: the router
+decodes and validates it before the handler runs, so a malformed token never
+reaches the cache. A missing cookie is `None`.
+---
+type SessionCookies = {
+	sid: Option[Token],
 }
 
 ---
@@ -44,22 +52,51 @@ agent Sessions {
 }
 
 service api from http {
-	on POST("/sessions") (body: LoginRequest) -> Effect[HttpResult[String]] by Visitor {
-		do Sessions("default").login(body.token, body.user)
-		Created("ok")
-	}
-
-	on GET("/sessions/:token") (token: Token) -> Effect[HttpResult[UserId]] by Visitor {
-		let who <- Sessions("default").whoami(token)
-		match who {
-			Some(user) => Ok(user),
-			None => NotFound,
+	// Log in: mint an unguessable token, store the session under it, and hand it
+	// to the browser in a cookie (`Secure`, `HttpOnly` and `SameSite=Lax` by
+	// default). A `__Host-` prefix would bind it to this origin, but a hyphenated
+	// name cannot be a record field yet, so the typed reader cannot name it.
+	on POST("/sessions") (
+		body: LoginRequest
+	) -> Effect[HttpResult[String]] by Visitor given Random {
+		let raw <- Random.bytes(16)
+		let text = raw.toBase64Url()
+		match Token.of(text) {
+			Ok(token) => {
+				do Sessions("default").login(token, body.user)
+				Created("ok").withCookie(Cookie {
+					name: "sid",
+					value: text,
+					maxAge: Some(30.minutes),
+				})
+			},
+			Err(_) => ServerError("could not mint a session token"),
 		}
 	}
 
-	on POST("/sessions/:token/logout") (token: Token) -> Effect[HttpResult[String]] by Visitor {
-		do Sessions("default").logout(token)
-		NoContent
+	// Who am I? The session cookie is read as a typed `cookies` record.
+	on GET("/me") (cookies: SessionCookies) -> Effect[HttpResult[UserId]] by Visitor {
+		match cookies.sid {
+			None => Unauthorized,
+			Some(token) => {
+				let who <- Sessions("default").whoami(token)
+				match who {
+					Some(user) => Ok(user),
+					None => Unauthorized,
+				}
+			},
+		}
+	}
+
+	// Log out: end the session and clear the cookie.
+	on POST("/logout") (cookies: SessionCookies) -> Effect[HttpResult[String]] by Visitor {
+		match cookies.sid {
+			None => NoContent,
+			Some(token) => {
+				do Sessions("default").logout(token)
+				NoContent.clearCookie(Cookie { name: "sid", value: "" })
+			},
+		}
 	}
 
 	on GET("/sessions") () -> Effect[HttpResult[Int]] by Visitor {

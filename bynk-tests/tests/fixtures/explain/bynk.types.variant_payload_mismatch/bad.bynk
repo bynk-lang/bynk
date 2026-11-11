@@ -1,0 +1,9 @@
+commons demo
+
+type Shape =
+  | Circle(radius: Int)
+  | Dot
+
+fn make() -> Shape {
+    Circle("big")
+}

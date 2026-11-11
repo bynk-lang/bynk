@@ -179,6 +179,11 @@ pub enum ProtocolIr {
     Queue {
         name: String,
     },
+    /// `from email("addr")` (#3328): the claimed recipient address or
+    /// `*@domain` catch-all.
+    Email {
+        address: String,
+    },
     /// `from websocket(in: …, out: …)` — the two frame types, resolved
     /// (each through the `Ty::Unit` fallback `bynk_model::lower_protocol_ir`
     /// documents, since the checker itself does not reject an unresolvable

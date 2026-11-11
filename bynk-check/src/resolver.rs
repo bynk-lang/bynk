@@ -1279,7 +1279,8 @@ fn check_signature_refs(
                 ServiceProtocol::Call
                 | ServiceProtocol::Http
                 | ServiceProtocol::Cron
-                | ServiceProtocol::Queue { .. } => {}
+                | ServiceProtocol::Queue { .. }
+                | ServiceProtocol::Email { .. } => {}
             }
             for h in &s.handlers {
                 handler(h, sinks);
@@ -2347,7 +2348,8 @@ fn gate_items(g: &mut Gate<'_>, items: &[CommonsItem]) {
                     ServiceProtocol::Call
                     | ServiceProtocol::Http
                     | ServiceProtocol::Cron
-                    | ServiceProtocol::Queue { .. } => {}
+                    | ServiceProtocol::Queue { .. }
+                    | ServiceProtocol::Email { .. } => {}
                 }
                 for h in &s.handlers {
                     g.signature(&h.params, &h.return_type);

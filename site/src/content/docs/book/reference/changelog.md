@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.549**.
+written against **v0.550**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,15 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.550.8** | `bynk explain` explains twenty more codes for writing tests, under `expect`, `stub`, `suite`, `test` and `val` (Refs #3163) |
+| **v0.550.7** | `bynk explain` explains eighteen more codes under `cron`, `held`, `queue`, `record_spread`, `send` and `store` (Refs #3163) |
+| **v0.550.6** | `bynk explain` covers twenty more codes (`lex` and `parse` prefixes) |
+| **v0.550.5** | `bynk explain` explains 27 more codes across effect, provider, consumes, exports, resolve and generics (Refs #3163) |
+| **v0.550.4** | `bynk explain` explains twenty-four more `types` codes (`if`, `?`, constructors, patterns, opaque types, inference) (Refs #3163) |
+| **v0.550.3** | `bynk explain` covers fifteen more codes, in the `service`, `event` and `ws` families |
+| **v0.550.2** | `bynk explain` explains sixteen more codes under `actor` and `agent` (Refs #3163) |
+| **v0.550.1** | `bynk explain` explains eighteen more `http` codes (routes, path and query parameters, request bodies, `@cache`, `@limit`, `cors`, `on rejected`) (Refs #3163) |
+| **v0.550.0** | A service can receive email, `service support from email("support@shop.example")`, with an `on message(mail: InboundEmail) -> Effect[EmailVerdict]` handler tested in a suite; the Workers mapping follows (#3328 slice 1) |
 | **v0.549.4** | Every emitted Worker now targets compatibility date `2026-08-04`, with Node.js compatibility on by default, and the minimum `wrangler` is 4.120.1 (#3317) |
 | **v0.549.3** | `bynk explain` covers twelve more codes (`agents`, `effect`, `given`, `par`, `resolve`, `send` and `store` prefixes) |
 | **v0.549.2** | `bynk explain` explains eleven more codes that cross a unit boundary (boundary, capability options, consumes, context, exports, val, visibility) (Refs #3163) |

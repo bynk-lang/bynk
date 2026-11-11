@@ -1,0 +1,7 @@
+suite demo.vault {
+	case "a failing vault faults" {
+		stub Vault.open() fails
+		let label = "sealed"
+		expect label.length() faults
+	}
+}

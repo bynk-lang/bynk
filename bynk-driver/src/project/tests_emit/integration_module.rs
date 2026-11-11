@@ -783,6 +783,9 @@ pub(super) fn emit_integration_module(
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut runtime_names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
     }
+    if runtime_use.cookie_string() {
+        append_missing_bindings(&mut runtime_names, emitter::COOKIE_STRING_RUNTIME_IMPORTS);
+    }
     if runtime_use.request_header_pairs() {
         append_missing_bindings(&mut runtime_names, ", __requestHeaderPairs");
     }
@@ -810,10 +813,20 @@ pub(super) fn emit_integration_module(
         append_missing_bindings(&mut runtime_names, emitter::INT_RUNTIME_IMPORTS);
     }
     append_missing_bindings(&mut runtime_names, &runtime_use.cmp_imports());
-    stmts.splice(
-        import_idx..import_idx,
-        emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import),
-    );
+    let mut head =
+        emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import);
+    // #3277: a case that reads a result's cookies names the `Cookie` type.
+    if runtime_use.http_result_cookie() {
+        head.push(TsStmt::decl(
+            TsDecl::Import {
+                type_only: true,
+                names: vec!["Cookie".to_string()],
+                from: "../bynk.js".to_string(),
+            },
+            None,
+        ));
+    }
+    stmts.splice(import_idx..import_idx, head);
 
     let module_file = module_path
         .file_name()

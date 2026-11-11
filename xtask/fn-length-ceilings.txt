@@ -4,16 +4,16 @@
 # below 300 (or gone) must be removed. Prefer splitting a function to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
-bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1291
-bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1132
+bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1297
+bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1150
 bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 1001
 bynk-driver/src/project.rs::run_checks = 955
-bynk-check/src/checker/calls.rs::check_method_call = 853
+bynk-check/src/checker/calls.rs::check_method_call = 851
 bynk-emit/src/emitter/workers.rs::emit_worker_compose = 839
-bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 823
+bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 833
 bynk-driver/src/test_runner.rs::run_test = 816
+bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 802
 bynk/src/deploy/plan.rs::run = 794
-bynk-emit/src/emitter/workers_entry.rs::emit_http_route_dispatch = 784
 bynk-driver/src/project.rs::build_output = 775
 bynk-check/src/resolver.rs::check_expr_references = 706
 bynk-emit/src/emitter/serialisation.rs::emit_generic_helpers_qualified = 687

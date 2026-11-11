@@ -209,6 +209,49 @@ export const File = {
 };
 
 /**
+ * The `SameSite` attribute of a `Cookie`: whether a browser sends it on a
+ * cross-site request. `Lax` (the default) sends it on top-level navigations,
+ * `Strict` only on same-site requests, and `Unrestricted` (`SameSite=None` on the
+ * wire) on every request, which a browser accepts only for a `Secure` cookie.
+ */
+export type SameSite =
+    { readonly tag: "Strict" }
+  | { readonly tag: "Lax" }
+  | { readonly tag: "Unrestricted" };
+
+export const SameSite = {
+  Strict: { tag: "Strict" } as SameSite,
+  Lax: { tag: "Lax" } as SameSite,
+  Unrestricted: { tag: "Unrestricted" } as SameSite,
+};
+
+/**
+ * A cookie to set on an HTTP response, attached with `result.withCookie(c)`. The
+ * defaults are the safe ones: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no
+ * `Domain` (the cookie goes to the exact host), and no `maxAge` or `expires` (a
+ * session cookie, gone when the browser closes). `maxAge` and `expires` are both
+ * sent when both are given; browsers prefer `Max-Age`. A cookie name is an RFC
+ * 6265 token and a value is `cookie-octet`s (no whitespace, `"`, `,`, `;` or `\`);
+ * a name starting `__Host-` needs `secure`, `path: "/"` and no `domain`, and
+ * `__Secure-` needs `secure`.
+ */
+export interface Cookie {
+  readonly name: string;
+  readonly value: string;
+  readonly maxAge: Option<number>;
+  readonly expires: Option<number>;
+  readonly domain: Option<string>;
+  readonly path: string;
+  readonly secure: boolean;
+  readonly httpOnly: boolean;
+  readonly sameSite: SameSite;
+  readonly partitioned: boolean;
+}
+
+export const Cookie = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -408,6 +451,73 @@ export function __deserialise_BytesResponse(json: __JsonValue, path: string = "$
   }
   const __body = __b_body.value;
   return Ok({ status: __status, headers: __headers, body: __body } as BytesResponse);
+}
+
+export function __serialise_Cookie(value: Cookie): __JsonValue {
+  return {
+    name: value.name as __JsonValue,
+    value: value.value as __JsonValue,
+    maxAge: __serialise_Option_Duration(value.maxAge),
+    expires: __serialise_Option_Instant(value.expires),
+    domain: __serialise_Option_String(value.domain),
+    path: value.path as __JsonValue,
+    secure: value.secure as __JsonValue,
+    httpOnly: value.httpOnly as __JsonValue,
+    sameSite: __serialise_SameSite(value.sameSite),
+    partitioned: value.partitioned as __JsonValue,
+  };
+}
+
+export function __deserialise_Cookie(json: __JsonValue, path: string = "$"): Result<Cookie, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["name"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
+  }
+  const __name = obj["name"];
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+  const __d_maxAge: __JsonValue = "maxAge" in obj ? obj["maxAge"] : { kind: "None" };
+  const __r_maxAge = __deserialise_Option_Duration(__d_maxAge, `${path}.maxAge`);
+  if (__r_maxAge.tag === "Err") return __r_maxAge;
+  const __maxAge = __r_maxAge.value;
+  const __d_expires: __JsonValue = "expires" in obj ? obj["expires"] : { kind: "None" };
+  const __r_expires = __deserialise_Option_Instant(__d_expires, `${path}.expires`);
+  if (__r_expires.tag === "Err") return __r_expires;
+  const __expires = __r_expires.value;
+  const __d_domain: __JsonValue = "domain" in obj ? obj["domain"] : { kind: "None" };
+  const __r_domain = __deserialise_Option_String(__d_domain, `${path}.domain`);
+  if (__r_domain.tag === "Err") return __r_domain;
+  const __domain = __r_domain.value;
+  const __d_path: __JsonValue = "path" in obj ? obj["path"] : "/";
+  if (typeof __d_path !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.path`, expected: "string", actual: typeof __d_path });
+  }
+  const __path = __d_path;
+  const __d_secure: __JsonValue = "secure" in obj ? obj["secure"] : true;
+  if (typeof __d_secure !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.secure`, expected: "boolean", actual: typeof __d_secure });
+  }
+  const __secure = __d_secure;
+  const __d_httpOnly: __JsonValue = "httpOnly" in obj ? obj["httpOnly"] : true;
+  if (typeof __d_httpOnly !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.httpOnly`, expected: "boolean", actual: typeof __d_httpOnly });
+  }
+  const __httpOnly = __d_httpOnly;
+  const __d_sameSite: __JsonValue = "sameSite" in obj ? obj["sameSite"] : { kind: "Lax" };
+  const __r_sameSite = __deserialise_SameSite(__d_sameSite, `${path}.sameSite`);
+  if (__r_sameSite.tag === "Err") return __r_sameSite;
+  const __sameSite = __r_sameSite.value;
+  const __d_partitioned: __JsonValue = "partitioned" in obj ? obj["partitioned"] : false;
+  if (typeof __d_partitioned !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.partitioned`, expected: "boolean", actual: typeof __d_partitioned });
+  }
+  const __partitioned = __d_partitioned;
+  return Ok({ name: __name, value: __value, maxAge: __maxAge, expires: __expires, domain: __domain, path: __path, secure: __secure, httpOnly: __httpOnly, sameSite: __sameSite, partitioned: __partitioned } as Cookie);
 }
 
 export function __serialise_EventEnvelope(value: EventEnvelope): __JsonValue {
@@ -707,6 +817,35 @@ export function __deserialise_Response(json: __JsonValue, path: string = "$"): R
   return Ok({ status: __status, headers: __headers, body: __body } as Response);
 }
 
+export function __serialise_SameSite(value: SameSite): __JsonValue {
+  switch (value.tag) {
+    case "Strict":
+      return { kind: "Strict" };
+    case "Lax":
+      return { kind: "Lax" };
+    case "Unrestricted":
+      return { kind: "Unrestricted" };
+  }
+}
+
+export function __deserialise_SameSite(json: __JsonValue, path: string = "$"): Result<SameSite, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Strict":
+      return Ok({ tag: "Strict" } as SameSite);
+    case "Lax":
+      return Ok({ tag: "Lax" } as SameSite);
+    case "Unrestricted":
+      return Ok({ tag: "Unrestricted" } as SameSite);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_TimedOut(value: TimedOut): __JsonValue {
   return {
     after: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.after),
@@ -817,6 +956,50 @@ export function __deserialise_Option_Duration(json: __JsonValue, path: string = 
     }
   }
   const __b = __option_value_Duration(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_Instant(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Instant(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Instant(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Instant(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as number) as Option<number>);
   }

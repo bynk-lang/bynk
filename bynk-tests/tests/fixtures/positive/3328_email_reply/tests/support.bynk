@@ -1,0 +1,14 @@
+suite shop.support {
+  case "a reply carries the content" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "order" })
+    match r {
+      Reply(m) => expect m.text == Some("We have your message about order.")
+      _ => expect false
+    }
+  }
+
+  case "a reply is a value" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "order" })
+    expect r is Reply(EmailReply { subject: None, .. })
+  }
+}

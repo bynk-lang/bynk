@@ -65,8 +65,9 @@ class __Stub_Billing {
     return true;
   }
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -76,14 +77,20 @@ class __Stub_Billing {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, EmailAttachment, EmailError, EmailMessage, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
     type EmailError = __ns_bynk_cloudflare.EmailError;
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -100,6 +107,7 @@ class __Stub_Billing {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
@@ -126,8 +134,9 @@ class __Stub_Ledger {
     return true;
   }
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -137,14 +146,20 @@ class __Stub_Ledger {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, EmailAttachment, EmailError, EmailMessage, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
     type EmailError = __ns_bynk_cloudflare.EmailError;
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -161,6 +176,7 @@ class __Stub_Ledger {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
@@ -228,8 +244,9 @@ async function test_a_stubbed_instance_answers() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Billing: ["send"], Ledger: ["send"], Service: ["send"] }, __obs);
     const { audit, charge } = __ns_shop_billing;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -239,14 +256,20 @@ async function test_a_stubbed_instance_answers() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, EmailAttachment, EmailError, EmailMessage, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
     type EmailError = __ns_bynk_cloudflare.EmailError;
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -263,6 +286,7 @@ async function test_a_stubbed_instance_answers() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
@@ -287,8 +311,9 @@ async function test_a_failing_call_is_the_instance_s_error() {
   try {
     const deps = __makeTestDeps("a failing call is the instance's error");
     const { audit, charge } = __ns_shop_billing;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -298,14 +323,20 @@ async function test_a_failing_call_is_the_instance_s_error() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, EmailAttachment, EmailError, EmailMessage, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
     type EmailError = __ns_bynk_cloudflare.EmailError;
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -322,6 +353,7 @@ async function test_a_failing_call_is_the_instance_s_error() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;
@@ -345,8 +377,9 @@ async function test_an_instance_is_stubbed_under_its_own_name_at_integration() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("an instance is stubbed under its own name at integration"), { Billing: ["send"], Ledger: ["send"], Service: ["send"] }, __obs);
     const { audit, charge } = __ns_shop_billing;
-    const { BytesResponse, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
@@ -356,14 +389,20 @@ async function test_an_instance_is_stubbed_under_its_own_name_at_integration() {
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { DataPoint, EmailAttachment, EmailError, EmailMessage, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
     type EmailError = __ns_bynk_cloudflare.EmailError;
     type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -380,6 +419,7 @@ async function test_an_instance_is_stubbed_under_its_own_name_at_integration() {
     type R2Put = __ns_bynk_cloudflare.R2Put;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
     type SqlError = __ns_bynk_cloudflare.SqlError;
     type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
     type SqlRun = __ns_bynk_cloudflare.SqlRun;

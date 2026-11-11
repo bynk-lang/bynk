@@ -320,6 +320,13 @@ kernel_ops! {
         Bearer = "bearer", "bearer() -> Option[String]";
         ClientIp = "clientIp", "clientIp() -> Option[String]";
     }
+/// `HttpResult[T]` (#3277): attach a cookie to a response, clear one, or read the
+/// cookies a result carries (a test's view of what the router will send).
+    HttpResultOp {
+        WithCookie = "withCookie", "withCookie(c: Cookie) -> HttpResult[T]";
+        ClearCookie = "clearCookie", "clearCookie(c: Cookie) -> HttpResult[T]";
+        Cookies = "cookies", "cookies() -> List[Cookie]";
+    }
 /// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
 /// query string.
     RequestQueryOp {
@@ -390,6 +397,7 @@ pub enum KernelOp {
     Duration(DurationOp),
     Instant(InstantOp),
     RequestHeaders(RequestHeadersOp),
+    HttpResult(HttpResultOp),
     RequestQuery(RequestQueryOp),
     TokenClaims(TokenClaimsOp),
     Bytes(BytesOp),
@@ -419,6 +427,7 @@ impl KernelOp {
             KernelOp::Duration(o) => o.name(),
             KernelOp::Instant(o) => o.name(),
             KernelOp::RequestHeaders(o) => o.name(),
+            KernelOp::HttpResult(o) => o.name(),
             KernelOp::RequestQuery(o) => o.name(),
             KernelOp::TokenClaims(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
@@ -480,6 +489,7 @@ mod tests {
             DurationOp,
             InstantOp,
             RequestHeadersOp,
+            HttpResultOp,
             RequestQueryOp,
             TokenClaimsOp,
             BytesOp,

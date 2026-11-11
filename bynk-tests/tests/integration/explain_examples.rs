@@ -49,6 +49,10 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// examples show a lockfile or a command line, which no compile can check.
 const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
     (
+        "bynk.email.workers_unsupported",
+        "the example is a `bynk build` command line, and the gate compiles for the bundle target",
+    ),
+    (
         "bynk.registry.withdrawn",
         "the example is the rendered diagnostic and a `bynk update` command",
     ),

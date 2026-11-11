@@ -1,0 +1,15 @@
+context shop
+
+event Paid = { id: String }
+
+service onPaid from Events(Paid) {
+  on event(e: Paid) -> Effect[()] {
+    Effect.pure(())
+  }
+}
+
+service onPaidAudit from Events(Paid) {
+  on event(e: Paid) -> Effect[()] {
+    Effect.pure(())
+  }
+}

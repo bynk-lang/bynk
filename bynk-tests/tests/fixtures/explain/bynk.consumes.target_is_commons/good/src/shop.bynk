@@ -1,0 +1,9 @@
+context shop
+
+uses money
+
+service checkout {
+  on call() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}

@@ -1,0 +1,11 @@
+context s
+
+agent Shop {
+  key id: String
+
+  store total: Cell[String, Int]
+
+  on call ping() -> Effect[()] {
+    Effect.pure(())
+  }
+}
