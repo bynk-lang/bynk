@@ -1,0 +1,9 @@
+commons demo
+
+type Order = { id: String, total: Int }
+
+fn total(o: Order) -> Int {
+    match o {
+        Order { total, .. } => total
+    }
+}

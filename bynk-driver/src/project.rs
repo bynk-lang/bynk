@@ -3345,15 +3345,14 @@ fn build_output(
         &unit_flattened,
         true,
     );
-    // S4a (#1966): the same, counting only the bare resources, so a named
-    // instance never brings in an unreachable bare `KV` namespace.
-    let context_bare_native = worker_bindings::contexts_native(
+    // S4a (#1966): the bare resources only, so a named instance never brings
+    // in an unreachable bare `KV`; #3300: and the singletons reached bare.
+    let (context_bare_native, context_singletons) = worker_bindings::bare_resources(
         &kinds,
         &unit_tables,
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_flattened,
-        false,
     );
 
     // Events track, slice 0 (spine #936): project-wide "who subscribes to
@@ -3510,6 +3509,7 @@ fn build_output(
                     &called_contexts,
                     &own_event_routes,
                     needs_kv,
+                    worker_bindings::singletons_of(&context_singletons, ctx_name),
                     ctx_uses_emit,
                 );
                 // #2719: the context's handlers that hand work to the execution
@@ -4030,6 +4030,62 @@ fn native_platforms_of_context(
     // `KV` namespace) is used, which a named instance alone must not imply.
     with_derived: bool,
 ) -> std::collections::BTreeMap<Platform, String> {
+    let referenced = referenced_units_of_context(
+        ctx,
+        table,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        with_derived,
+    );
+    let mut out = std::collections::BTreeMap::new();
+    for unit in referenced {
+        if let Some(p) = bynk_check::firstparty::platform_of(&unit) {
+            out.entry(p).or_insert(unit);
+        }
+    }
+    out
+}
+
+/// #3300: the one-per-Worker capabilities (`Version`) context `ctx`'s
+/// closure reaches bare, as `(unit, capability)`, in order: the bare-resources
+/// walk's [`bare_singleton_marker`]s.
+fn bare_singletons_of_context(
+    ctx: &str,
+    table: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+) -> Vec<(String, String)> {
+    referenced_units_of_context(
+        ctx,
+        table,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        false,
+    )
+    .iter()
+    .filter_map(|entry| {
+        parse_bare_singleton_marker(entry).map(|(u, c)| (u.to_string(), c.to_string()))
+    })
+    .collect()
+}
+
+/// The units (and, on the bare walk, [`bare_singleton_marker`]s) context
+/// `ctx`'s providers and cross-context capabilities instantiate.
+fn referenced_units_of_context(
+    ctx: &str,
+    table: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+    with_derived: bool,
+) -> BTreeSet<String> {
     // Arc F slice 2 (#1452): repointed at the tree-native twin — only the
     // `referenced` side effect matters here, the returned `TsExpr` (vs. the
     // old `String`) is discarded either way.
@@ -4073,13 +4129,7 @@ fn native_platforms_of_context(
     if with_derived {
         referenced.extend(table.derived.values().map(|d| d.base_unit.clone()));
     }
-    let mut out = std::collections::BTreeMap::new();
-    for unit in referenced {
-        if let Some(p) = bynk_check::firstparty::platform_of(&unit) {
-            out.entry(p).or_insert(unit);
-        }
-    }
-    out
+    referenced
 }
 
 /// #527: the DO-side deps plan for one workers context. Capability providers

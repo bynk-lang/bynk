@@ -177,6 +177,10 @@ pub(super) fn emit_integration_harness<'a>(
                         &binding.name,
                     ))),
                 ),
+                // #3300: a fixed version, the same for every participant.
+                BindingSource::Singleton { .. } => {
+                    call(ident("__makeIntegrationVersionMetadata"), vec![])
+                }
                 // Interop I5 (#1972): the foreign Worker is not here, so its
                 // binding answers as `bynk dev`'s default double does.
                 BindingSource::ForeignService { worker, .. } => {

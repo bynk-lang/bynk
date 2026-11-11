@@ -13,11 +13,13 @@ use bynk_check::checker::{Callee, ExprId};
 use bynk_check::firstparty::{self, Platform};
 
 use super::{
-    BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable, native_platforms_of_context,
-    unit_table_uses_emit,
+    BuildTarget, ErrorSink, ParsedFile, UnitKind, UnitTable, bare_singletons_of_context,
+    native_platforms_of_context, unit_table_uses_emit,
 };
 use bynk_emit::emitter::agent_cross_context_targets;
-use bynk_emit::emitter::wrangler::{BindingSource, WorkerBinding, worker_bindings};
+use bynk_emit::emitter::wrangler::{
+    BindingSource, WorkerBinding, singleton_binding, worker_bindings,
+};
 
 /// v0.19 (decision 0025): each context whose in-process closure reaches a
 /// platform-native unit, with those platforms. Drives env threading (bundle)
@@ -47,6 +49,76 @@ pub(super) fn contexts_native(
             (!native.is_empty()).then(|| (name.clone(), native))
         })
         .collect()
+}
+
+/// #3300: each context whose closure reaches a one-per-Worker capability of
+/// `bynk.cloudflare` bare (`Version`), with those capabilities in name order.
+/// A context absent from the map reaches none.
+pub(super) fn contexts_singletons(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+) -> HashMap<String, Vec<String>> {
+    kinds
+        .iter()
+        .filter(|(_, k)| **k == UnitKind::Context)
+        .filter_map(|(name, _)| {
+            let table = unit_tables.get(name)?;
+            let caps: Vec<String> = bare_singletons_of_context(
+                name,
+                table,
+                unit_tables,
+                unit_consumes,
+                unit_consumes_aliases,
+                unit_flattened,
+            )
+            .into_iter()
+            .filter(|(unit, _)| unit == firstparty::CLOUDFLARE_UNIT)
+            .map(|(_, cap)| cap)
+            .collect();
+            (!caps.is_empty()).then(|| (name.clone(), caps))
+        })
+        .collect()
+}
+
+/// Each context's platform-native units, by platform ([`contexts_native`]).
+pub(super) type ContextsNative = HashMap<String, BTreeMap<Platform, String>>;
+
+/// Each context's one-per-Worker capabilities ([`contexts_singletons`]).
+pub(super) type ContextsSingletons = HashMap<String, Vec<String>>;
+
+/// The bare-resources view of every context: [`contexts_native`] counting
+/// only bare resources (S4a, #1966), and [`contexts_singletons`] (#3300).
+pub(super) fn bare_resources(
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+    unit_flattened: &HashMap<String, HashMap<String, String>>,
+) -> (ContextsNative, ContextsSingletons) {
+    let native = contexts_native(
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+        false,
+    );
+    let singletons = contexts_singletons(
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+    );
+    (native, singletons)
+}
+
+/// Context `ctx`'s entry in [`contexts_singletons`]' map: none when absent.
+pub(super) fn singletons_of<'a>(map: &'a HashMap<String, Vec<String>>, ctx: &str) -> &'a [String] {
+    map.get(ctx).map(Vec::as_slice).unwrap_or_default()
 }
 
 /// v0.19 (C1): a Worker needs the KV namespace binding when its in-process
@@ -110,6 +182,9 @@ pub(super) fn context_bindings(
     called: &[String],
     own_event_routes: &BTreeMap<String, Vec<(String, String)>>,
     needs_kv: bool,
+    // #3300: the one-per-Worker capabilities the closure reaches
+    // ([`contexts_singletons`]' entry).
+    singletons: &[String],
     uses_emit: bool,
 ) -> Vec<WorkerBinding> {
     let consumes = service_targets(called, own_event_routes);
@@ -165,7 +240,15 @@ pub(super) fn context_bindings(
         .collect();
     instances.sort_by(|a, b| a.0.cmp(b.0));
     let instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
-    worker_bindings(&agents, &consumes, needs_kv, &instances, uses_emit)
+    let singletons: Vec<WorkerBinding> = singletons.iter().map(|c| singleton_binding(c)).collect();
+    worker_bindings(
+        &agents,
+        &consumes,
+        needs_kv,
+        &instances,
+        &singletons,
+        uses_emit,
+    )
 }
 
 /// Every context's bindings ([`context_bindings`]), as its `wrangler.toml`
@@ -193,6 +276,13 @@ pub(super) fn all_context_bindings(
         unit_flattened,
         false,
     );
+    let context_singletons = contexts_singletons(
+        kinds,
+        unit_tables,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_flattened,
+    );
     let mut bindings = BTreeMap::new();
     for (ctx, kind) in kinds {
         if *kind != UnitKind::Context {
@@ -217,6 +307,7 @@ pub(super) fn all_context_bindings(
                 ),
                 &own_event_routes(ctx, event_subscribers),
                 needs_kv(&context_native, ctx),
+                singletons_of(&context_singletons, ctx),
                 unit_table_uses_emit(table, unit_callees.get(ctx)),
             ),
         );

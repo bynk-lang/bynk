@@ -1,0 +1,20 @@
+suite shop.status
+
+// #3300: the unit double reports a fixed version, and a stub replaces it.
+
+case "the test version is fixed" {
+	let r <- api.GET("/health") by Visitor
+	expect r is Ok(Health { version: "test", tag: None, .. })
+	expect Version.current called once
+}
+
+case "a stub replaces the version" {
+	stub Version.current() returns WorkerVersion { id: "v42", tag: Some("canary"), deployed: Instant.fromEpochMillis(0) }
+	let r <- api.GET("/health") by Visitor
+	expect r is Ok(Health { version: "v42", tag: Some("canary"), .. })
+}
+
+case "a provider reaches the version through its given" {
+	let s <- about.call()
+	expect s == "version test"
+}
