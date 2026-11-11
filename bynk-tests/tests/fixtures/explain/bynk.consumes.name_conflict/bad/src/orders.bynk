@@ -1,0 +1,6 @@
+context orders
+
+uses money
+consumes payment
+
+type Order = { total: Amount }

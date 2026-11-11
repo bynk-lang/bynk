@@ -1,0 +1,11 @@
+context payment
+
+exports transparent { AuthId }
+
+type AuthId = String where Matches("AUTH-[0-9]+")
+
+service issue {
+	on call() -> Effect[AuthId] {
+		Effect.pure("AUTH-1")
+	}
+}
