@@ -1,0 +1,9 @@
+commons demo
+
+fn parity(n: Int) -> Int {
+    n.rem(2)
+}
+
+fn slot(n: Int) -> Int {
+    n.mod(2)
+}
