@@ -2568,7 +2568,8 @@ imposed; entries keep the order they were retired in.
     and chaining store queries through `__bynkThen`
     ([ADR 0796](../decisions/0796-async-ready-store-lowering.md)); and `loadState`/`commitState`
     attaching those handles to a current-version record, with per-key read-modify-write and refined
-    keys checked as they are read back (ADR LAZYADR). A handler's storage cost now follows what it
+    keys checked as they are read back
+    ([ADR 0801](../decisions/0801-lazy-load-and-commit.md)). A handler's storage cost now follows what it
     touches: a write to a 2000-entry `Map` fell from 29.9 ms to 3.6 ms on workerd while the
     hand-written twin stayed flat.
   - **Docs** ([#3323](https://github.com/bynk-lang/bynk/pull/3323)): the agents reference, the two
