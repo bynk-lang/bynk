@@ -3747,10 +3747,10 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.test.extra_headers_authorization",
         blurb: "A case sends a credential only through its `by` clause: the driver \
                 builds the `Authorization` header (or the signature headers) from \
-                the actor it acts as. Putting an `Authorization` header in \
-                `RequestHeaders.of` as well would give the request two competing \
-                credentials, so it is refused. Choose the actor with `by`, and \
-                keep `RequestHeaders` for other headers.",
+                the actor it acts as. Sending an `Authorization` header as an \
+                extra request header, in `RequestHeaders.of`, would give the \
+                request two competing credentials, so it is refused. Choose the \
+                actor with `by`, and keep `RequestHeaders` for other headers.",
         example: "// tests/api.test.bynk\n\
                   let r <- api.GET(\"/health\", RequestHeaders.of([\"Authorization: Bearer x\"])) by Visitor   // ✗\n\
                   let r <- api.GET(\"/health\", RequestHeaders.of([\"X-Trace: 1\"])) by Visitor                // ✓",
@@ -3759,12 +3759,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.test.faults_needs_in_process",
-        blurb: "`expect <call> faults` claims that the handler throws. A request \
-                sent `by Nobody`, `Forged` or `Stale` is turned away by the auth \
-                seam, which exists only in a `system` case, and there a fault is \
-                never a throw but an error response. So the claim cannot hold. \
-                Assert the rejection in a `system` case instead, with `expect r is \
-                Rejected(Unauthorized)`.",
+        blurb: "`expect <call> faults` claims that a handler throws. At `system` a \
+                fault reaches the case as an error response from the deployed \
+                Worker, not a throw, so claim it at `unit` or `integration`, or \
+                assert the response. A claim driven `by Nobody`, `Forged` or \
+                `Stale` fails at every tier: only a `system` case reaches the auth \
+                seam that refuses the request. Assert `Rejected(Unauthorized)` in \
+                a `system` case instead.",
         example: "// tests/api.test.bynk\n\
                   expect api.GET(\"/a\") by Nobody faults     // ✗ a seam rejects, nothing throws\n\n\
                   case \"no token is refused\" as system {    // ✓\n\
@@ -3780,8 +3781,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 send a forged or out-of-date credential to the real auth seam, \
                 which only a `system` case reaches. In process the seam is skipped \
                 and the identity is simply given, so there is nothing to refuse. \
-                Move the case to `system` with `as system`. For `Nobody`, see \
-                `bynk.test.credential_needs_system`.",
+                Move the case to `system` with `as system`.",
         example: "// tests/api.test.bynk\n\
                   case \"a forged token is refused\" {            // ✗ not a system case\n\
                   case \"a forged token is refused\" as system {  // ✓\n\
