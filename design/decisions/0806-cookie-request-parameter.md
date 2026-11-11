@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A handler reads cookies through a typed `cookies: T` parameter and sets them with `Cookie`, `SameSite`, `withCookie`, `clearCookie` and `cookies()` on an `HttpResult` (#3277, slices 1 and 2; #3181 stays open for signing and the actor scheme)
-probes: emit_diagnostics, ts_writes, ts_any, diagnostic_coverage, explained_codes
----
+# 0806 — A handler reads cookies through a `cookies: T` record parameter and sets them with `withCookie`
 
-## ADR: cookie-request-parameter
-title: A handler reads cookies through a `cookies: T` record parameter and sets them with `withCookie`
-summary: How a route declares the cookies it reads, how the Cookie header parses, and how a result attaches the cookies it sets
+- **Status:** Accepted (v0.551)
 
 **Context.** There was no cookie support: a handler could read the raw `Cookie` header through `headers.get`, with no parsing and no validation. The typed `query` (#2854) already reads a flat key/value string into a record through the record's own codec, and `@form` (#3276) generalised that reader. Proposed in #3277 (slices 1 and 2; the compile-time refusals follow).
 
