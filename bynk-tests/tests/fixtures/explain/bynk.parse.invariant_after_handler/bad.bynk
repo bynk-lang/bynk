@@ -1,0 +1,12 @@
+context shop
+
+agent Tally {
+    key id: String
+    store count: Cell[Int]
+
+    on call get() -> Effect[Result[Int, String]] {
+        Ok(count)
+    }
+
+    invariant nonNegative: count >= 0
+}

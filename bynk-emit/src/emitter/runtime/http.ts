@@ -1,4 +1,5 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
+import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
 import type { HttpResult } from "./httpresult.ts";
 
@@ -1065,6 +1066,27 @@ export function formObject(
   return fieldsObject(new URLSearchParams(text), fields, "body", true);
 }
 
+/** #3276 (decision G): `Form.decode[T]` — the text of a form body read into the
+ *  JSON object `T`'s codec decodes, by exactly the rules the router applies to a
+ *  `@form` body. A failure is a `DecodeError` whose `path` is rooted at `$` (as
+ *  `Json.decode`'s is), where the router's would be rooted at `body`. */
+export function formDecode(
+  text: string,
+  fields: readonly QueryField[],
+): Result<JsonValue, DecodeError> {
+  const r = formObject(text, fields);
+  if (r.ok) return { tag: "Ok", value: r.value } as Result<JsonValue, DecodeError>;
+  const e = r.error;
+  const path = e.kind === "StructuralMismatch" ? "$" + e.path.slice("body".length) : "$";
+  const message =
+    e.kind === "StructuralMismatch"
+      ? "expected " + e.expected + ", got " + String(e.actual)
+      : e.kind === "RefinementViolation"
+        ? e.violation.message
+        : e.details;
+  return { tag: "Err", error: { kind: e.kind, path, message } } as Result<JsonValue, DecodeError>;
+}
+
 function fieldsObject(
   search: URLSearchParams,
   fields: readonly QueryField[],
@@ -1615,5 +1637,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formObject as __formObject, formString as __formString, cookieObject as __cookieObject, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cookieObject as __cookieObject, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

@@ -1,0 +1,8 @@
+commons demo
+
+fn band(n: Int) -> Int {
+    match n {
+        _ where InRange(0, 100) => 1
+        _ => 0
+    }
+}

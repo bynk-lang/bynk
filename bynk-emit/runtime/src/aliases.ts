@@ -12,7 +12,7 @@ import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.t
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, corsPreflightResponse, edgeCacheGuard, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, corsPreflightResponse, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
 import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerVersionMetadata } from "./storage.ts";
@@ -88,6 +88,7 @@ export {
   then as __bynkThen,
   requestHeaders as __requestHeaders,
   formMediaTypeMatches as __formMediaTypeMatches,
+  formDecode as __formDecode,
   formObject as __formObject,
   formString as __formString,
   cookieObject as __cookieObject,

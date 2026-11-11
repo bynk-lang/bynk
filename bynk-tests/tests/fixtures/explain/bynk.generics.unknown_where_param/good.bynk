@@ -1,0 +1,3 @@
+commons demo
+
+fn same[T](a: T) -> T where T: Eq { a }

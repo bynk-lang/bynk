@@ -1,0 +1,11 @@
+context demo
+
+exports opaque { OrderId }
+
+type OrderId = String where Matches("ORD-[0-9]+")
+
+service probe {
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}

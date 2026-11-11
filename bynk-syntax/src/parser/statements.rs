@@ -1432,7 +1432,7 @@ fn starts_statement_or_expression(kind: TokenKind) -> bool {
 /// root of one of these is not a capability.
 const PURE_NAMESPACES: &[&str] = &[
     "Bool", "Bytes", "Decimal", "Duration", "Float", "Instant", "Int", "Json", "List", "Map",
-    "Option", "Result", "Set", "String", "Yaml",
+    "Option", "Result", "Set", "String", "Yaml", "Form",
 ];
 
 /// #3161: does `expr` look like a call made for its effect? The parser has no
