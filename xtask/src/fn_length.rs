@@ -14,6 +14,9 @@
 //! file from the tree. Lowering a ceiling is always allowed; raising one is the
 //! review conversation this probe exists to force.
 //!
+//! A method name repeated in one file (`fn emit` in two `impl` blocks) is keyed `name`,
+//! `name#2`, … in source order, so each over-threshold one has its own ceiling.
+//!
 //! The measurement reuses the greenfield probes' scanner, which skips braces inside
 //! strings, character literals and comments, and the extents of `#[cfg(test)]`
 //! modules. What is counted: every function in a workspace crate's `src/`. What is
@@ -56,9 +59,18 @@ fn declared_fn_name(line: &str) -> Option<&str> {
     let mut rest = line.trim_start();
     loop {
         let before = rest;
-        for prefix in ["pub ", "const ", "async ", "unsafe "] {
+        for prefix in ["pub ", "default ", "const ", "async ", "unsafe "] {
             if let Some(r) = rest.strip_prefix(prefix) {
                 rest = r.trim_start();
+            }
+        }
+        // `extern fn` and `extern "C" fn`.
+        if let Some(r) = rest.strip_prefix("extern ") {
+            rest = r.trim_start();
+            if let Some(abi) = rest.strip_prefix('"')
+                && let Some(end) = abi.find('"')
+            {
+                rest = abi[end + 1..].trim_start();
             }
         }
         if let Some(r) = rest.strip_prefix("pub(")
@@ -75,6 +87,25 @@ fn declared_fn_name(line: &str) -> Option<&str> {
         .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
         .unwrap_or(after.len());
     (end > 0).then(|| &after[..end])
+}
+
+/// `line` without a trailing `//` comment, so a declaration such as `fn a(&self); // note`
+/// or `fn c() -> u8 { 1 } // why` still ends in `;` or `}`. A `//` inside a string literal
+/// (an odd number of unescaped quotes before it) is not a comment.
+fn without_trailing_comment(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    let mut quotes = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 1,
+            b'"' => quotes += 1,
+            b'/' if quotes % 2 == 0 && bytes.get(i + 1) == Some(&b'/') => return &line[..i],
+            _ => {}
+        }
+        i += 1;
+    }
+    line
 }
 
 /// Every function in `source` (non-test), as `(name, lines)`.
@@ -123,14 +154,17 @@ pub fn measure_source(source: &str) -> Vec<(String, usize)> {
             if !o.opened
                 && depth == o.depth_before
                 && line.contains('{')
-                && line.trim_end().ends_with('}')
+                && without_trailing_comment(line).trim_end().ends_with('}')
             {
                 let o = open.remove(k);
                 out.push((o.name, i - o.start + 1));
                 continue;
             }
             // A declaration with no body (`fn f();`) never opens.
-            if !o.opened && depth == o.depth_before && line.trim_end().ends_with(';') {
+            if !o.opened
+                && depth == o.depth_before
+                && without_trailing_comment(line).trim_end().ends_with(';')
+            {
                 open.remove(k);
                 continue;
             }
@@ -140,9 +174,31 @@ pub fn measure_source(source: &str) -> Vec<(String, usize)> {
     out
 }
 
+/// The functions of one file at or over [`THRESHOLD`], with a same-named later one (a
+/// method of the same name in another `impl` block) keyed `name#2`, `name#3`, in source
+/// order, so each is held to its own ceiling.
+fn disambiguate(file: &str, measured: Vec<(String, usize)>) -> Vec<FnLen> {
+    let mut seen: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut out = Vec::new();
+    for (name, lines) in measured {
+        if lines < THRESHOLD {
+            continue;
+        }
+        let n = seen.entry(name.clone()).or_insert(0);
+        *n += 1;
+        let name = if *n == 1 { name } else { format!("{name}#{n}") };
+        out.push(FnLen {
+            file: file.to_string(),
+            name,
+            lines,
+        });
+    }
+    out
+}
+
 /// Every non-test function in the workspace over [`THRESHOLD`] lines, longest first.
 pub fn measure(root: &Path) -> Vec<FnLen> {
-    let mut by_key: std::collections::BTreeMap<String, FnLen> = std::collections::BTreeMap::new();
+    let mut all: Vec<FnLen> = Vec::new();
     for krate in top_level_crate_dirs(root) {
         for (path, contents) in rust_files(&krate.join("src")) {
             let file = path
@@ -150,23 +206,10 @@ pub fn measure(root: &Path) -> Vec<FnLen> {
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .replace('\\', "/");
-            for (name, lines) in measure_source(&contents) {
-                if lines < THRESHOLD {
-                    continue;
-                }
-                let f = FnLen {
-                    file: file.clone(),
-                    name,
-                    lines,
-                };
-                let slot = by_key.entry(f.key()).or_insert_with(|| f.clone());
-                if f.lines > slot.lines {
-                    *slot = f;
-                }
-            }
+            all.extend(disambiguate(&file, measure_source(&contents)));
         }
     }
-    let mut v: Vec<FnLen> = by_key.into_values().collect();
+    let mut v = all;
     v.sort_by(|a, b| b.lines.cmp(&a.lines).then_with(|| a.key().cmp(&b.key())));
     v
 }
@@ -237,6 +280,49 @@ pub fn violations(measured: &[FnLen], ceilings: &[(String, usize)]) -> Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_trailing_comment_does_not_leave_a_declaration_open() {
+        // A commented bodiless declaration must not borrow the next function's span.
+        let src =
+            "trait T {\n    fn a(&self); // note\n}\nimpl S {\n    fn b() {\n        1\n    }\n}\n";
+        assert_eq!(measure_source(src), vec![("b".to_string(), 3)]);
+        // A one-line body followed by a comment is a one-line function.
+        let src = "fn c() -> u8 { 1 } // why\nimpl S {\n    fn d() {\n        1\n    }\n}\n";
+        assert_eq!(
+            measure_source(src),
+            vec![("c".to_string(), 1), ("d".to_string(), 3)]
+        );
+    }
+
+    #[test]
+    fn a_double_slash_inside_a_string_is_not_a_comment() {
+        assert_eq!(
+            without_trailing_comment("let u = \"http://x\"; // c"),
+            "let u = \"http://x\"; "
+        );
+        assert_eq!(
+            without_trailing_comment("fn f() { g(\"//\") }"),
+            "fn f() { g(\"//\") }"
+        );
+    }
+
+    #[test]
+    fn extern_functions_are_measured() {
+        let src = "pub unsafe extern \"C\" fn a() {\n    1\n}\nextern fn b() {\n}\n";
+        assert_eq!(
+            measure_source(src),
+            vec![("a".to_string(), 3), ("b".to_string(), 2)]
+        );
+    }
+
+    #[test]
+    fn same_named_functions_in_one_file_get_their_own_keys() {
+        let long = |n: usize| (String::from("emit"), n);
+        let v = disambiguate("c/src/a.rs", vec![long(350), long(10), long(320)]);
+        let names: Vec<(&str, usize)> = v.iter().map(|f| (f.name.as_str(), f.lines)).collect();
+        assert_eq!(names, vec![("emit", 350), ("emit#2", 320)]);
+    }
 
     #[test]
     fn a_function_is_measured_from_its_signature_to_its_closing_brace() {

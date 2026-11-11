@@ -7,6 +7,7 @@
 bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 1288
 bynk-driver/src/project/tests_emit/system_support.rs::emit_system_http_support = 1132
 bynk-driver/src/project/tests_emit/test_module.rs::emit_test_module = 998
+bynk-driver/src/project.rs::run_checks = 955
 bynk-emit/src/emitter/workers.rs::emit_worker_compose = 850
 bynk-driver/src/project/tests_emit/integration_module.rs::emit_integration_module = 843
 bynk-check/src/checker/calls.rs::check_method_call = 836
@@ -52,6 +53,7 @@ bynk-syntax/src/parser/declarations.rs::parse_adapter_body = 378
 bynk/src/registry/conformance.rs::publishing = 375
 bynk-check/src/checker.rs::type_of_block = 369
 bynk-check/src/checker/expressions.rs::check_field_access = 363
+bynk-driver/src/project/tests_emit/test_deps.rs::emit_test_deps = 360
 bynk-syntax/src/parser/types.rs::parse_type_atom = 358
 bynk-emit/src/emitter/client.rs::emit_client = 351
 bynk-emit/src/emitter.rs::emit_boundary_helpers = 344
