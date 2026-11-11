@@ -179,7 +179,7 @@ fn fixture_platform(dir: &Path) -> bynk_check::firstparty::Platform {
 /// v0.9.1: compile a project-form fixture. If the fixture root has a
 /// `bynk.toml`, use split-paths mode rooted at the fixture root. Otherwise,
 /// fall back to the legacy single-tree mode rooted at `src/`.
-fn compile_fixture(
+pub(super) fn compile_fixture(
     fixture_root: &Path,
     target: bynk_driver::project::BuildTarget,
 ) -> Result<bynk_driver::project::ProjectOutput, bynk_driver::project::ProjectFailure> {

@@ -1,0 +1,3 @@
+commons shipping
+
+type Amount = Int where NonNegative

@@ -1,0 +1,7 @@
+commons shop
+
+uses pricing
+
+fn cost(i: Item) -> Int {
+  lineTotal(i)
+}

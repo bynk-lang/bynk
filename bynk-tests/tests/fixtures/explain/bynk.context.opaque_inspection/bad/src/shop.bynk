@@ -1,0 +1,13 @@
+context shop
+
+consumes pay
+
+service checkout {
+  on call() -> Effect[Bool] {
+    let s <- pay.charge(1)
+    match s {
+      Paid => Effect.pure(true)
+      Declined => Effect.pure(false)
+    }
+  }
+}

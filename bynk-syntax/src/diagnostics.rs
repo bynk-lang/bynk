@@ -71,6 +71,14 @@ pub struct Explain {
     /// marked `✗` and the corrected one `✓` in a trailing comment. Written to be
     /// read, so it may elide with `…`; `bynk-tests`' `explain_examples.rs` holds
     /// every line of it to a compiled pair of whole programs (#3163).
+    ///
+    /// An example that spans files says which one each snippet is in with a
+    /// comment-only line holding just a path: `// shop.bynk`, the file's path
+    /// under the project's `src/` (`// shop/till.bynk` if nested), or
+    /// `// bynk.toml`. The label applies until the next, and the gate holds each
+    /// line under it to that file (the bad project's if marked `✗`, the good
+    /// project's if `✓`, either's if unmarked). A label must name a file of the
+    /// fixture, and only a directory-form fixture may use one.
     pub example: &'static str,
     /// The target Book page as a site-root-relative path, no extension and no
     /// trailing slash, e.g. `/book/reference/types`. Used verbatim as an
@@ -112,7 +120,9 @@ impl Explain {
 /// newcomer-facing codes first). Kept sorted by code; every `code` must be a
 /// real [`REGISTRY`] entry and every `page` an existing Book page — both
 /// enforced by `tests/diagnostics_registry.rs`. Every `example` needs its
-/// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`.
+/// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`: `bad.bynk`
+/// and `good.bynk`, or, for a rule that needs a second unit or a `bynk.toml`,
+/// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.agents.non_zeroable_state_field",
@@ -148,6 +158,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.capability.invalid_option",
+        blurb: "A derived capability, `capability Name = Kind`, can take options after the kind, each \
+                one positional literal that the compiler reads while it checks the program: \
+                `Service` takes `@worker(\"name\")`, `R2` an optional `@jurisdiction(\"eu\")`, \
+                `RateLimit` a `@limit(n)` and a `@period(d)`, and `Queue` a `@name(\"queue\")`. \
+                The value must be a literal of the option's kind, and one the platform accepts: \
+                `@limit` a positive `Int`, `@period` `10.seconds` or `60.seconds`, \
+                `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@worker` a Worker name and `@name` a \
+                queue name, each of 1 to 63 lowercase letters, digits and `-` (a Worker name \
+                may also hold `_`). Each option is given once, and an `@worker` must name a Worker \
+                outside the project, since a context of your own is reached with `consumes`. A bad \
+                value would otherwise surface only when the platform refuses the deployment, so \
+                it is refused here. Use one of the values the note lists. `RateLimit` is \
+                experimental, so the project opts in under `[unstable]` in `bynk.toml`.",
+        example: "// bynk.toml\n\
+                  [unstable]\n\
+                  allow = [\"bynk.cloudflare.RateLimit\"]\n\n\
+                  // login.bynk\n\
+                  context login\n\n\
+                  consumes bynk.cloudflare { RateLimit }\n\n\
+                  capability LoginLimit = RateLimit @limit(20) @period(30.seconds)    // ✗ a window is 10 or 60 seconds\n\
+                  capability LoginLimit = RateLimit @limit(20) @period(60.seconds)    // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -159,6 +195,29 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
+    },
+    Explain {
+        code: "bynk.context.opaque_inspection",
+        blurb: "A context that writes `exports opaque { T }` lets other contexts hold a `T`, pass it on and \
+                call its methods, but not look inside it: they cannot `match` on it, read a field, \
+                match a record pattern against it, or name one of its variants. Only the owning \
+                context sees the shape, so it can change the representation, or keep an invariant \
+                the type's constructors enforce, without breaking a consumer. Ask the owner for \
+                what you need instead: a service that returns the answer as a plain value, such as \
+                a `Bool`. If the shape is meant to be public, the owner exports it with \
+                `exports transparent { T }`.",
+        example: "// pay.bynk\n\
+                  context pay\n\n\
+                  exports opaque { Status }        // the owner hides the shape\n\n\
+                  type Status = | Paid | Declined\n\n\
+                  // shop.bynk\n\
+                  context shop\n\n\
+                  consumes pay\n\n\
+                  service checkout {\n    on call() -> Effect[Bool] {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n\
+                  // pay.bynk\n\
+                  exports transparent { Status }   // ✓ the owner shares the shape",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
     },
     Explain {
         code: "bynk.effect.fn_value_in_pure_context",
@@ -1100,6 +1159,50 @@ pub const EXPLANATIONS: &[Explain] = &[
         page: "/book/reference/types",
         anchor: "sum-types",
     },
+    Explain {
+        code: "bynk.uses.name_conflict",
+        blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
+                and embeds) in scope under their own names, with no prefix. If two commons it uses \
+                both declare the same name, a mention of it could mean either, so the compiler \
+                refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the \
+                declarations, drop one of the `uses`, or mark the declaration `private` if only \
+                its own commons needs it, since a `private` declaration is never imported and so \
+                never conflicts.",
+        example: "// billing.bynk\n\
+                  commons billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // shipping.bynk\n\
+                  commons shipping\n\n\
+                  type Amount = Int where NonNegative    // both declare `Amount`\n\
+                  type Postage = Int where NonNegative   // ✓ renamed\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses billing\n\
+                  uses shipping                          // ✗ `Amount` is also declared by `billing`",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.visibility.private_item",
+        blurb: "A `private` function, type, constant, asset or embed (or a `private` method) is visible only \
+                within its own unit, across all of that unit's files, and to the unit's suites. It is \
+                never visible through `uses`, so a unit that uses the commons cannot name it. The \
+                compiler reports that the name is private, not that it is unknown, so you know it \
+                exists. `private` keeps a helper out of the public surface, so it can change \
+                without breaking anyone. Call the commons' public function that does the job, or, \
+                if the item really belongs to the public surface, remove `private` where it is \
+                declared.",
+        example: "// pricing.bynk\n\
+                  commons pricing\n\n\
+                  fn total(items: List[Item]) -> Int { … }\n\
+                  private fn lineTotal(i: Item) -> Int { … }\n\n\
+                  // shop.bynk\n\
+                  commons shop\n\n\
+                  uses pricing\n\n\
+                  fn cost(i: Item) -> Int {\n    lineTotal(i)      // ✗ `lineTotal` is a private function of `pricing`\n    total([i])        // ✓ the public function does the same job\n}",
+        page: "/book/guides/program-structure/design-a-public-surface",
+        anchor: "",
+    },
 ];
 
 /// The curated explanation for a diagnostic `code`, or `None` when the code has
@@ -1519,7 +1622,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.capability.invalid_option",
-        "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`).",
+        "A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`).",
         &["capability_decl"],
     ),
     dg(
@@ -4615,7 +4718,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.uses.name_conflict",
-        "A `uses` name collides with another name, a value crosses between a unit's code and an imported declaration's position whose type the unit shadows, or a reference names an import the unit's own declaration shadows.",
+        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
         &["uses_decl"],
     ),
     dg(
