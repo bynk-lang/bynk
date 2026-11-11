@@ -1,0 +1,6 @@
+commons demo
+
+fn run() -> Int {
+    let r: Result[Int, String] = Ok(1)
+    1
+}

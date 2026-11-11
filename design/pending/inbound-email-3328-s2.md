@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, ast_importers, ts_writes, ts_any, diagnostic_coverage
+probes: emit_diagnostics, ast_importers, ts_writes, ts_any, diagnostic_coverage, explained_codes
 changelog: Inbound email on Workers (`from email`, #3328 slice 2): the `email()` export parses the message with `postal-mime`, dispatches by envelope recipient, mints the `Sender` identity from Cloudflare's DMARC verdict, applies the verdict, and routes via wrangler `addresses`; the first-party npm dependency mechanism of ADR 0799 C lands
 ---
 

@@ -1,0 +1,10 @@
+context shop
+
+consumes pay
+
+service probe {
+  on call() -> Effect[Int] {
+    let f = (n: Int) => pay.charge(n)
+    Effect.pure(1)
+  }
+}

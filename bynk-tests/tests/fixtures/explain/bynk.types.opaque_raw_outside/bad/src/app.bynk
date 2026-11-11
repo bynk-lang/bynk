@@ -1,0 +1,7 @@
+commons app
+
+uses token
+
+fn show(t: Token) -> String {
+    t.raw
+}
