@@ -416,7 +416,7 @@ export interface LazyContext {
 // commit finds the overlay of the handler whose state it is committing, whatever else has loaded since.
 const lazyContexts = new WeakMap<object, LazyContext>();
 // Instances whose last `readStored` chose the lazy read: `loadState` then attaches handles.
-const lazyReads = new WeakSet<object>();
+const lazyReads = new WeakMap<object, true>();
 
 /** Register the context every one of `handles` belongs to. */
 export function setLazyContext(handles: readonly object[], ctx: LazyContext): void {
@@ -483,7 +483,7 @@ export async function readStored<S extends object>(
   if (lazySteps !== undefined && canReadLazily(stored, lazySteps)) {
     // Lazy read: the Cell fields are the whole record; the collections are read by their handles.
     bases.delete(self);
-    lazyReads.add(self);
+    lazyReads.set(self, true);
     const out: Record<string, unknown> = { ...stored };
     delete out[LAYOUT_KEY];
     return out as S;

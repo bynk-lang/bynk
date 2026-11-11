@@ -34,7 +34,7 @@ function __encodeAudienceState(s: AudienceState): globalThis.Record<string, unkn
   return { ...s, members: __wireSet(s.members) };
 }
 
-const __lazyFieldsOfAudience = [{ name: "members", kind: "set" }] as const;
+const __lazyFieldsOfAudience = [{ name: "members", kind: "set", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error); } }] as const;
 
 export class Audience {
   state: __DurableObjectState;

@@ -43,7 +43,7 @@ function __encodeOrdersState(s: OrdersState): globalThis.Record<string, unknown>
   return { ...s, orders: __wireMap(s.orders, (__v) => __serialise_Order(__v)) };
 }
 
-const __lazyFieldsOfOrders = [{ name: "orders", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Order((__w as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Order; return __serialise_Order(__v); } }] as const;
+const __lazyFieldsOfOrders = [{ name: "orders", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Order((__w as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Order; return __serialise_Order(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); } }] as const;
 
 export class Orders {
   state: __DurableObjectState;

@@ -200,3 +200,32 @@ test("a commit flushes the overlay of the state it commits, whatever else loaded
   await commit(self, storage, b);
   assert.ok((await storage.get("m/items/from-b")) !== undefined, "B's commit flushes B's write");
 });
+
+test("a key read back from storage is checked on every path that produces it", async () => {
+  const storage = new InMemoryStorage();
+  await storage.put("state", { count: 0, __layout: 2 });
+  await storage.put("m/items/ok", { i: 0, v: { team: "red", n: 1 } });
+  await storage.put("m/items/bad", { i: 1, v: { team: "red", n: 2 } });
+  await storage.put("i/items/by/red/ok", 1);
+  await storage.put("i/items/by/red/bad", 1);
+  await storage.put("c/items", { size: 2, seq: 2, skew: 0 });
+  await storage.put("s/tags/ok", { i: 0 });
+  await storage.put("s/tags/bad", { i: 1 });
+  await storage.put("c/tags", { size: 2, seq: 2 });
+  const checkKey = (k: string): void => {
+    if (k === "bad") throw new Error("RehydrationViolation");
+  };
+  const stored = (await storage.get<Record<string, unknown>>("state")) as Record<string, unknown>;
+  const s = { ...(await readStored({}, storage, stored, [])), items: new StoreMap<Item>([BY]) } as unknown as State;
+  attachLazy(storage, s, [
+    { name: "items", kind: "map", checkKey },
+    { name: "tags", kind: "set", checkKey },
+  ]);
+  const items = s.items as unknown as StoreMap<Item>;
+  assert.equal((await items.get("ok"))?.n, 1, "a key the program supplies is not checked, and a good key reads");
+  await assert.rejects(Promise.resolve(items.keys()), /RehydrationViolation/);
+  await assert.rejects(Promise.resolve(items.values()), /RehydrationViolation/);
+  await assert.rejects(Promise.resolve(items.entries()), /RehydrationViolation/);
+  await assert.rejects(Promise.resolve(items.byIndex("by", "red")), /RehydrationViolation/);
+  await assert.rejects(Promise.resolve((s.tags as unknown as StoreSet).keys()), /RehydrationViolation/);
+});

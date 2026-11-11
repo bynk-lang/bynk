@@ -37,7 +37,7 @@ function __encodeBinState(s: BinState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => __serialise_Crate(__v)) };
 }
 
-const __lazyFieldsOfBin = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Crate((__w as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Crate; return __serialise_Crate(__v); } }] as const;
+const __lazyFieldsOfBin = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Crate((__w as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Crate; return __serialise_Crate(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bin", __r.error); } }] as const;
 
 export class Bin {
   state: __DurableObjectState;

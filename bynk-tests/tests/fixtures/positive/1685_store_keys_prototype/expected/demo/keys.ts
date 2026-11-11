@@ -97,7 +97,7 @@ function __encodeBagState(s: BagState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
-const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }] as const;
 
 export class Bag {
   state: __DurableObjectState;
@@ -211,7 +211,7 @@ function __encodePointsState(s: PointsState): globalThis.Record<string, unknown>
   return { ...s, pts: __wireMap(s.pts, (__v) => __serialise_Pt(__v)) };
 }
 
-const __lazyFieldsOfPoints = [{ name: "pts", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Pt((__w as unknown as __JsonValue), "pts"); if (__r.tag === "Err") throw __rehydrationViolation("Points", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Pt; return __serialise_Pt(__v); } }] as const;
+const __lazyFieldsOfPoints = [{ name: "pts", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Pt((__w as unknown as __JsonValue), "pts"); if (__r.tag === "Err") throw __rehydrationViolation("Points", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Pt; return __serialise_Pt(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "pts", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Points", __r.error); } }] as const;
 
 export class Points {
   state: __DurableObjectState;
@@ -288,7 +288,7 @@ function __encodeTagsState(s: TagsState): globalThis.Record<string, unknown> {
   return { ...s, tags: __wireSet(s.tags) };
 }
 
-const __lazyFieldsOfTags = [{ name: "tags", kind: "set" }] as const;
+const __lazyFieldsOfTags = [{ name: "tags", kind: "set", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "tags", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Tags", __r.error); } }] as const;
 
 export class Tags {
   state: __DurableObjectState;
@@ -479,7 +479,7 @@ function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown>
   return { ...s, entries: __wireMap(s.entries, (__v) => __serialise_Entry(__v)), entries__idx_tag: __wirePostings(s.entries, "tag") };
 }
 
-const __lazyFieldsOfLedger = [{ name: "entries", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Entry((__w as unknown as __JsonValue), "entries"); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Entry; return __serialise_Entry(__v); } }] as const;
+const __lazyFieldsOfLedger = [{ name: "entries", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Entry((__w as unknown as __JsonValue), "entries"); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Entry; return __serialise_Entry(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "entries", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); } }] as const;
 
 export class Ledger {
   state: __DurableObjectState;
@@ -574,7 +574,7 @@ function __encodeSalesState(s: SalesState): globalThis.Record<string, unknown> {
   return { ...s, orders: __wireMap(s.orders, (__v) => __serialise_Order(__v)), lines: __wireMap(s.lines, (__v) => __serialise_Line(__v)) };
 }
 
-const __lazyFieldsOfSales = [{ name: "orders", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Order((__w as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Order; return __serialise_Order(__v); } }, { name: "lines", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Line((__w as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Line; return __serialise_Line(__v); } }] as const;
+const __lazyFieldsOfSales = [{ name: "orders", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Order((__w as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Order; return __serialise_Order(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); } }, { name: "lines", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Line((__w as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Line; return __serialise_Line(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); } }] as const;
 
 export class Sales {
   state: __DurableObjectState;

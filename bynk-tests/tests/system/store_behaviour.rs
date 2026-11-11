@@ -1422,6 +1422,78 @@ await t.viaGetPut(0, {});
 console.log("ALL OK");
 "#;
 
+// A refined textual key read back from storage is checked on every path that produces it, as the
+// whole-record gate checks every one at load (#3189): the lazy path faults when a scan reaches a
+// stored key that fails its refinement, the eager path faults at load, and a keyed read that never
+// touches the bad key does not fault.
+const REFINED_KEY_SOURCE: &str = "context shop\n\
+\n\
+type Tag = String where NonEmpty\n\
+\n\
+agent Cart {\n\
+  key id: String\n\
+  store items: Map[Tag, Int]\n\
+\n\
+  on call fetch(k: Tag) -> Effect[Option[Int]] {\n\
+    let r <- items.get(k)\n\
+    Effect.pure(r)\n\
+  }\n\
+  on call countKeys() -> Effect[Int] {\n\
+    let all <- items.keys.collect()\n\
+    Effect.pure(all.length())\n\
+  }\n\
+}\n";
+
+const REFINED_KEY_DRIVER_TS: &str = r#"
+import { Cart } from "./shop.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function fakeState(seed: Record<string, unknown>) {
+  const m = new Map<string, unknown>(Object.entries(seed));
+  return {
+    storage: {
+      async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+      async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") m.set(a, structuredClone(v)); else for (const [k, x] of Object.entries(a)) m.set(k, structuredClone(x)); },
+      async delete(a: any): Promise<any> { if (typeof a === "string") return m.delete(a); let n = 0; for (const k of a as string[]) if (m.delete(k)) n++; return n; },
+      async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.startAfter === undefined || k > o.startAfter) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+      async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
+    },
+  };
+}
+
+async function faults(f: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await f();
+    return false;
+  } catch (e) {
+    return String((e as { message?: string }).message ?? e).includes("RehydrationViolation") || String((e as { name?: string }).name ?? "").includes("Rehydration");
+  }
+}
+
+// Eager path: a wholesale record with a key that fails `NonEmpty` faults at load.
+const eager = new Cart(fakeState({ state: { items: { "": 1, a: 2 } } }) as never);
+assert(await faults(() => eager.countKeys({})), "the eager path faults on a stored key that fails the refinement");
+
+// Lazy path: a per-entry record. A keyed read of a good key does not touch the bad one.
+const bad = {
+  state: { __layout: 2 },
+  "m/items/": { i: 0, v: 1 },
+  "m/items/a": { i: 1, v: 2 },
+  "c/items": { size: 2, seq: 2, skew: 0 },
+};
+const lazy = new Cart(fakeState(bad) as never);
+const one = await lazy.fetch("a" as never, {});
+assert(one.tag === "Some" && one.value === 2, "a keyed read that never touches the bad key does not fault");
+assert(await faults(() => lazy.countKeys({})), "a scan that reaches a stored key failing the refinement faults on the lazy path");
+
+console.log("ALL OK");
+"#;
+
 #[test]
 fn store_cell_agent_runtime_semantics() {
     verify("cell", SOURCE, DRIVER_TS);
@@ -1435,6 +1507,11 @@ fn store_cell_update_runtime_semantics() {
 #[test]
 fn par_traverse_on_one_key_runtime_semantics() {
     verify("par_key", PAR_SOURCE, PAR_DRIVER_TS);
+}
+
+#[test]
+fn refined_keys_are_checked_when_read_back_runtime_semantics() {
+    verify("refined_keys", REFINED_KEY_SOURCE, REFINED_KEY_DRIVER_TS);
 }
 
 #[test]

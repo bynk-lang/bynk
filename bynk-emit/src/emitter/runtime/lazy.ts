@@ -132,12 +132,14 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
   private readonly chains = new KeyChains();
   private readonly envelope: MapEnvelope<V>;
   private readonly indexers: readonly Indexer<V>[];
+  private readonly keyCheck: ((key: string) => void) | undefined;
 
-  constructor(overlay: EntryOverlay, field: string, envelope: MapEnvelope<V>, indexers: ReadonlyArray<Indexer<V>> = []) {
+  constructor(overlay: EntryOverlay, field: string, envelope: MapEnvelope<V>, indexers: ReadonlyArray<Indexer<V>> = [], keyCheck?: (key: string) => void) {
     this.overlay = overlay;
     this.field = field;
     this.envelope = envelope;
     this.indexers = indexers;
+    this.keyCheck = keyCheck;
     this.meta = new MetaCell(overlay, field);
   }
 
@@ -166,13 +168,14 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     return this.chains.run(key, async () => {
       const raw = await this.overlay.get(mapKey(this.field, key));
       const present = raw !== undefined;
-      await this.putNow(key, f(present ? this.env(raw) : undefined, present));
+      await this.putNow(key, f(present ? this.env(raw) : undefined, present), { old: raw as Envelope | undefined });
     });
   }
 
-  private async putNow(key: string, value: V): Promise<void> {
+  // `read` is the entry as the caller already read it, so a read-modify-write reads it once.
+  private async putNow(key: string, value: V, read?: { old: Envelope | undefined }): Promise<void> {
     const mk = mapKey(this.field, key);
-    const old = await this.overlay.get<Envelope>(mk);
+    const old = read === undefined ? await this.overlay.get<Envelope>(mk) : read.old;
     const meta = await this.meta.load();
     let i: number;
     const written = (n: number): unknown => this.envelope.write(value, n);
@@ -238,7 +241,9 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
   private async scan(): Promise<Array<[string, Envelope]>> {
     const prefix = mapPrefix(this.field);
     const all = await listAll<Envelope>(this.overlay, { prefix });
-    return all.map(([k, e]): [string, Envelope] => [decodeKeyPart(k.slice(prefix.length)), e]).sort((a, b) => a[1].i - b[1].i);
+    const keyed = all.map(([k, e]): [string, Envelope] => [decodeKeyPart(k.slice(prefix.length)), e]);
+    if (this.keyCheck !== undefined) for (const [k] of keyed) this.keyCheck(k);
+    return keyed.sort((a, b) => a[1].i - b[1].i);
   }
 
   async keys(): Promise<readonly string[]> {
@@ -258,6 +263,7 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     const prefix = postingPrefix(this.field, index, by);
     const postings = await listAll<unknown>(this.overlay, { prefix });
     const pks = postings.map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+    if (this.keyCheck !== undefined) for (const pk of pks) this.keyCheck(pk);
     const found = await this.overlay.getMany<Envelope>(pks.map((pk) => mapKey(this.field, pk)));
     return [...found.values()].sort((a, b) => a.i - b.i).map((e) => this.env(e));
   }
@@ -302,10 +308,12 @@ export class LazyStoreSet implements StoreSetHandle {
   private readonly field: string;
   private readonly meta: MetaCell;
   private readonly chains = new KeyChains();
+  private readonly keyCheck: ((key: string) => void) | undefined;
 
-  constructor(overlay: EntryOverlay, field: string) {
+  constructor(overlay: EntryOverlay, field: string, keyCheck?: (key: string) => void) {
     this.overlay = overlay;
     this.field = field;
+    this.keyCheck = keyCheck;
     this.meta = new MetaCell(overlay, field);
   }
 
@@ -348,7 +356,9 @@ export class LazyStoreSet implements StoreSetHandle {
   async keys(): Promise<readonly string[]> {
     const prefix = setPrefix(this.field);
     const all = await listAll<Envelope>(this.overlay, { prefix });
-    return all.sort((a, b) => a[1].i - b[1].i).map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+    const keys = all.sort((a, b) => a[1].i - b[1].i).map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+    if (this.keyCheck !== undefined) for (const k of keys) this.keyCheck(k);
+    return keys;
   }
 
   finish(): void {
@@ -509,6 +519,8 @@ export interface LazyFieldSpec {
   readonly decode?: (wire: unknown) => unknown;
   /** Domain value to wire value. */
   readonly encode?: (value: unknown) => unknown;
+  /** For a `Map` or `Set` with a refined textual key: checks a key read back from storage, throwing the rehydration fault. */
+  readonly checkKey?: (key: string) => void;
 }
 
 const identity = (v: unknown): unknown => v;
@@ -537,6 +549,7 @@ export function attachLazy(storage: DurableObjectStorage, state: object, specs: 
           spec.name,
           { read: (e: { v: unknown }) => decode(e.v), write: (v, i) => ({ i, v: encode(v) }) },
           was?.indexers ?? [],
+          spec.checkKey,
         );
         slots[spec.name] = h;
         handles.push(h);
@@ -556,7 +569,7 @@ export function attachLazy(storage: DurableObjectStorage, state: object, specs: 
         break;
       }
       case "set": {
-        const h = new LazyStoreSet(overlay, spec.name);
+        const h = new LazyStoreSet(overlay, spec.name, spec.checkKey);
         slots[spec.name] = h;
         handles.push(h);
         finishers.push(() => h.finish());

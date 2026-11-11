@@ -64,7 +64,7 @@ function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
   return { ...s, jobs: __wireMap(s.jobs, (__v) => __serialise_Job(__v)) };
 }
 
-const __lazyFieldsOfBoard = [{ name: "jobs", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Job((__w as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Job; return __serialise_Job(__v); } }] as const;
+const __lazyFieldsOfBoard = [{ name: "jobs", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Job((__w as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Job; return __serialise_Job(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); } }] as const;
 
 export class Board {
   state: __DurableObjectState;

@@ -55,7 +55,7 @@ function __encodeCartState(s: CartState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)) };
 }
 
-const __lazyFieldsOfCart = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Item((__w as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Item; return __serialise_Item(__v); } }] as const;
+const __lazyFieldsOfCart = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Item((__w as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Item; return __serialise_Item(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Cart", __r.error); } }] as const;
 
 export class Cart {
   state: __DurableObjectState;

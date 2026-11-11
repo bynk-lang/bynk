@@ -5214,6 +5214,22 @@ fn emit_lazy_field_spec(
             ", decode: (__w: unknown) => {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); return __r.value; }}, encode: (__u: unknown) => {{ const __v = __u as {value_ts}; return {e}; }}"
         )
     };
+    // A refined textual `Map` key or `Set` element is checked as it is read back, as the whole-record
+    // gate checks every one at load (a key the program supplies is typed and is not checked).
+    let key_check = |key_ty: Option<&TypeRef>, path: &str| -> String {
+        let Some(k) = key_ty.filter(|k| type_base_is_string(k, &commons.types)) else {
+            return String::new();
+        };
+        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+            k,
+            "(__k as unknown as __JsonValue)",
+            path,
+            &ctx.runtime_use,
+        ));
+        format!(
+            ", checkKey: (__k: string) => {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); }}"
+        )
+    };
     let field = |name: &str, kind: &str, tail: String| {
         format!("{{ name: \"{name}\", kind: \"{kind}\"{tail} }}")
     };
@@ -5224,10 +5240,15 @@ fn emit_lazy_field_spec(
             .get(&name.name)
             .cloned()
             .unwrap_or_default();
-        spec.push(field(&name.name, "map", codec(v, &name.name, &ts)));
+        let checked = key_check(store_field_key_type(a, &name.name), &name.name);
+        spec.push(field(
+            &name.name,
+            "map",
+            codec(v, &name.name, &ts) + &checked,
+        ));
     }
-    for name in &layout.set_field_names {
-        spec.push(field(name, "set", String::new()));
+    for (name, elem) in &layout.store_set_fields {
+        spec.push(field(&name.name, "set", key_check(Some(elem), &name.name)));
     }
     for (name, v, _) in &layout.store_cache_fields {
         let ts = match layout.store_field_ty.get(name.name.as_str()) {
