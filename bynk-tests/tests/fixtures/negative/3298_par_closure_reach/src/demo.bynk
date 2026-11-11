@@ -2,7 +2,8 @@ context demo
 
 // #3298: how far the check sees. A write in a closure over a store `Query`
 // receiver, in a lambda nested inside the closure, and in a lambda bound to a
-// name and passed by name are all refused.
+// name and passed by name, called inside the closure, or aliased are all refused;
+// a lambda parameter that shadows the name is not.
 
 agent Tally {
   key id: String
@@ -22,6 +23,26 @@ agent Tally {
   on call named(n: Int) -> Effect[()] {
     let f = (x: Int) => counts.put("k", x)
     let _ <- [1, 2, 3].parTraverse(f)
+    Effect.pure(())
+  }
+
+  on call called(n: Int) -> Effect[()] {
+    let f = (x: Int) => counts.put("k", x)
+    let _ <- [1, 2, 3].parTraverse((x: Int) => f(x))
+    Effect.pure(())
+  }
+
+  on call aliased(n: Int) -> Effect[()] {
+    let f = (x: Int) => counts.put("k", x)
+    let g = f
+    let _ <- [1, 2, 3].parTraverse(g)
+    Effect.pure(())
+  }
+
+  on call shadowed(n: Int) -> Effect[()] {
+    let f = (x: Int) => counts.put("k", x)
+    let _ <- [1, 2, 3].forEach(f)
+    let _ <- [1, 2, 3].parTraverse((f: Int) => Effect.pure(()))
     Effect.pure(())
   }
 }

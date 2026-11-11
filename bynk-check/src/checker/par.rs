@@ -319,8 +319,11 @@ struct StoreAccess {
 
 /// #3298: every store call and `:=` under `e`, lambdas, blocks, `match` arms
 /// and statements included. `expr_children` flattens statements to their
-/// expressions, which drops a `:=` itself, so blocks are walked here.
-fn scan_store_access(e: &Expr, ctx: &Ctx, out: &mut Vec<StoreAccess>) {
+/// expressions, which drops a `:=` itself, so blocks are walked here. A name
+/// `let`-bound to a lambda that writes a store counts as a write wherever it is
+/// mentioned or called (the closure may call it, or hand it on), unless an inner
+/// lambda parameter, `let` or pattern binds the same name.
+fn scan_store_access(e: &Expr, ctx: &Ctx, shadow: &mut Vec<String>, out: &mut Vec<StoreAccess>) {
     if let Some(Callee::Store { field, op }) = ctx.callees.get(&e.id) {
         out.push(StoreAccess {
             span: e.span,
@@ -329,38 +332,75 @@ fn scan_store_access(e: &Expr, ctx: &Ctx, out: &mut Vec<StoreAccess>) {
             writes: crate::store_ops::is_mutating_any(op),
         });
     }
+    let named = |name: &Ident, shadow: &[String]| {
+        (!shadow.contains(&name.name))
+            .then(|| ctx.store_writing_lambdas.get(&name.name))
+            .flatten()
+    };
+    let push_named = |name: &Ident, shadow: &[String], out: &mut Vec<StoreAccess>| {
+        if let Some((field, op)) = named(name, shadow) {
+            out.push(StoreAccess {
+                span: name.span,
+                field: field.clone(),
+                op: op.clone(),
+                writes: true,
+            });
+        }
+    };
+    let mark = shadow.len();
     match &e.kind {
-        ExprKind::Block(b) => scan_block_access(b, ctx, out),
+        ExprKind::Ident(id) => push_named(id, shadow, out),
+        ExprKind::Call { name, args, .. } => {
+            push_named(name, shadow, out);
+            for a in args {
+                scan_store_access(a, ctx, shadow, out);
+            }
+        }
+        ExprKind::Lambda(l) => {
+            shadow.extend(l.params.iter().map(|p| p.name.name.clone()));
+            scan_store_access(&l.body, ctx, shadow, out);
+        }
+        ExprKind::Block(b) => scan_block_access(b, ctx, shadow, out),
         ExprKind::If {
             cond,
             then_block,
             else_block,
         } => {
-            scan_store_access(cond, ctx, out);
-            scan_block_access(then_block, ctx, out);
-            scan_block_access(else_block, ctx, out);
+            scan_store_access(cond, ctx, shadow, out);
+            scan_block_access(then_block, ctx, shadow, out);
+            scan_block_access(else_block, ctx, shadow, out);
         }
         ExprKind::Match { discriminant, arms } => {
-            scan_store_access(discriminant, ctx, out);
+            scan_store_access(discriminant, ctx, shadow, out);
             for arm in arms {
+                let arm_mark = shadow.len();
+                shadow.extend(
+                    arm.pattern
+                        .bound_names()
+                        .into_iter()
+                        .map(|i| i.name.clone()),
+                );
                 if let Some(g) = &arm.guard {
-                    scan_store_access(g, ctx, out);
+                    scan_store_access(g, ctx, shadow, out);
                 }
                 match &arm.body {
-                    MatchBody::Expr(x) => scan_store_access(x, ctx, out),
-                    MatchBody::Block(b) => scan_block_access(b, ctx, out),
+                    MatchBody::Expr(x) => scan_store_access(x, ctx, shadow, out),
+                    MatchBody::Block(b) => scan_block_access(b, ctx, shadow, out),
                 }
+                shadow.truncate(arm_mark);
             }
         }
         _ => {
             for child in expr_children(e) {
-                scan_store_access(child, ctx, out);
+                scan_store_access(child, ctx, shadow, out);
             }
         }
     }
+    shadow.truncate(mark);
 }
 
-fn scan_block_access(b: &Block, ctx: &Ctx, out: &mut Vec<StoreAccess>) {
+fn scan_block_access(b: &Block, ctx: &Ctx, shadow: &mut Vec<String>, out: &mut Vec<StoreAccess>) {
+    let mark = shadow.len();
     for st in &b.statements {
         if let Statement::Assign(a) = st {
             out.push(StoreAccess {
@@ -373,10 +413,14 @@ fn scan_block_access(b: &Block, ctx: &Ctx, out: &mut Vec<StoreAccess>) {
         let mut exprs = Vec::new();
         statement_exprs(st, &mut exprs);
         for x in exprs {
-            scan_store_access(x, ctx, out);
+            scan_store_access(x, ctx, shadow, out);
+        }
+        if let Statement::Let(l) | Statement::EffectLet(l) = st {
+            shadow.push(l.name.name.clone());
         }
     }
-    scan_store_access(&b.tail, ctx, out);
+    scan_store_access(&b.tail, ctx, shadow, out);
+    shadow.truncate(mark);
 }
 
 /// The first store write in a lambda expression's body, as `(field, op)`.
@@ -390,7 +434,7 @@ pub(super) fn lambda_store_write(e: &Expr, ctx: &Ctx) -> Option<(String, String)
         return None;
     }
     let mut found = Vec::new();
-    scan_store_access(e, ctx, &mut found);
+    scan_store_access(e, ctx, &mut Vec::new(), &mut found);
     found
         .into_iter()
         .find(|a| a.writes)
@@ -417,20 +461,7 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: 
         inner = i;
     }
     let mut accesses = Vec::new();
-    match &inner.kind {
-        ExprKind::Lambda(_) => scan_store_access(inner, ctx, &mut accesses),
-        ExprKind::Ident(id) => {
-            if let Some((field, op)) = ctx.store_writing_lambdas.get(&id.name) {
-                accesses.push(StoreAccess {
-                    span: inner.span,
-                    field: field.clone(),
-                    op: op.clone(),
-                    writes: true,
-                });
-            }
-        }
-        _ => {}
-    }
+    scan_store_access(inner, ctx, &mut Vec::new(), &mut accesses);
     let reads: Vec<String> = accesses
         .iter()
         .filter(|a| !a.writes)
@@ -452,7 +483,7 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: 
         )
         .with_label(method.span, format!("`{name}` runs the closure for every element at once"))
         .with_note(
-            "run the loop with `forEach` instead (`traverseAll` or `traverseTry` for the collecting forms); a single-call `update` or `upsert` is atomic per key there, and no concurrency is lost, because a store write is staged in memory",
+            "run the loop with `forEach` instead (`traverseAll` or `traverseTry` for the collecting forms); a single-call `update` or `upsert` is atomic per key there, because each element finishes before the next starts",
         )
         .with_note(
             "or keep the concurrent part in the closure and do the writes after it: collect with `parTraverseAll`, then write in a `forEach`",
@@ -469,7 +500,12 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: 
 /// #3298: after a `let` is typed, remember (or forget) that its name is a lambda
 /// that writes a store, so passing it by name to `parTraverse` is refused too.
 pub(super) fn note_let_lambda(l: &LetStmt, ctx: &mut Ctx) {
-    match lambda_store_write(&l.value, ctx) {
+    // A lambda that writes, or a bare alias of a name already recorded.
+    let write = lambda_store_write(&l.value, ctx).or_else(|| match &l.value.kind {
+        ExprKind::Ident(id) => ctx.store_writing_lambdas.get(&id.name).cloned(),
+        _ => None,
+    });
+    match write {
         Some(write) => {
             ctx.store_writing_lambdas.insert(l.name.name.clone(), write);
         }
