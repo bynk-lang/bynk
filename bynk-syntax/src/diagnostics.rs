@@ -3142,12 +3142,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.suite.fn_name_clash",
         blurb: "A suite helper is called by bare name from the suite's cases, \
-                which also see the target's declarations and those of the \
-                commons it `uses`. A helper with one of those names would \
-                silently change which function a call reaches, so it is \
-                refused instead of shadowing. Rename the helper. A type or \
-                constant clashing is `bynk.suite.type_name_clash` or \
-                `bynk.suite.const_name_clash`.",
+                which also see the target's declarations (services and agents \
+                included) and those of the commons it `uses`. A helper with \
+                one of those names would silently change which function a \
+                call reaches, so it is refused instead of shadowing. Names \
+                `deps` and `__…` are reserved for the runner. Rename the \
+                helper. A type or constant clashing is \
+                `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`.",
         example: "// demo/desk.bynk\n\
                   fn double(n: Int) -> Int { n * 2 }\n\n\
                   // tests/desk.test.bynk\n\
