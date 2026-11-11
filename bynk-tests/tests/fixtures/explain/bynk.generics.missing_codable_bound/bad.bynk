@@ -1,0 +1,5 @@
+commons demo
+
+fn encode[T](v: T) -> String {
+  Json.encode(v)
+}

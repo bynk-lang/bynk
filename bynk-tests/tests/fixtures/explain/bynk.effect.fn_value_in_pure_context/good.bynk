@@ -1,0 +1,6 @@
+commons demo
+
+fn sneak(f: Int -> Effect[Int], x: Int) -> Effect[Int] {
+  let y <- f(x)
+  Effect.pure(y)
+}
