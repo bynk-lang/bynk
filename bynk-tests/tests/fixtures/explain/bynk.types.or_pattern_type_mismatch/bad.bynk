@@ -1,0 +1,9 @@
+commons demo
+
+type Key = | Id(n: Int) | Name(n: String)
+
+fn show(k: Key) -> String {
+    match k {
+        Id(n) | Name(n) => "key"
+    }
+}

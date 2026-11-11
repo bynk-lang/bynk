@@ -1,0 +1,9 @@
+commons demo
+
+fn check(n: Int) -> Result[Int, String] {
+    if n > 0 { Ok(n) } else { Err("not positive") }
+}
+
+fn all(xs: List[Int]) -> Result[List[Int], List[String]] {
+    xs.map(check).sequenceAll()
+}
