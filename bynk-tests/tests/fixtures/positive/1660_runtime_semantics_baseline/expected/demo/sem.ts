@@ -354,7 +354,7 @@ export class Bag {
     __reportUnknownStoredKeys("Bag", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBagState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfBag); } else { __hydrateBagState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBag); } else { __hydrateBagState(__merged, __wholesale) }
     return __merged;
   }
 

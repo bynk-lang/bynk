@@ -6578,7 +6578,7 @@ fn hydrate_or_attach_stmt(
     };
     bynk_ts::TsStmt::raw(
         format!(
-            "    if (__readsLazily(this)) {{ __attachLazy(this, this.state.storage, __merged, {spec}); }} else {{ {} }}\n",
+            "    if (__readsLazily(this)) {{ __attachLazy(this.state.storage, __merged, {spec}); }} else {{ {} }}\n",
             bynk_ts::print_expr(&hydrate)
         ),
         None,

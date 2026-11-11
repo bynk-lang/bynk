@@ -412,12 +412,26 @@ export interface LazyContext {
   readonly reapers: ReadonlyArray<(now: number, limit: number) => Promise<number>>;
 }
 
+// Keyed by the storage-backed handles of the state a handler loaded, not by the agent instance: the
+// commit finds the overlay of the handler whose state it is committing, whatever else has loaded since.
 const lazyContexts = new WeakMap<object, LazyContext>();
 // Instances whose last `readStored` chose the lazy read: `loadState` then attaches handles.
 const lazyReads = new WeakSet<object>();
 
-export function setLazyContext(self: object, ctx: LazyContext): void {
-  lazyContexts.set(self, ctx);
+/** Register the context every one of `handles` belongs to. */
+export function setLazyContext(handles: readonly object[], ctx: LazyContext): void {
+  for (const h of handles) lazyContexts.set(h, ctx);
+}
+
+// The context of the lazy handles in `state`'s collection slots, if it holds any.
+function lazyContextOf(state: object | undefined, fields: readonly EntryField[]): LazyContext | undefined {
+  if (state === undefined) return undefined;
+  for (const f of fields) {
+    const handle = (state as Record<string, unknown>)[f.name];
+    const ctx = typeof handle === "object" && handle !== null ? lazyContexts.get(handle) : undefined;
+    if (ctx !== undefined) return ctx;
+  }
+  return undefined;
 }
 
 /** Whether `self`'s last `readStored` took the lazy read (its collections are not in the record it returned). */
@@ -465,7 +479,6 @@ export async function readStored<S extends object>(
   lazySteps?: ReadonlyArray<readonly [number, number]>,
 ): Promise<S> {
   const stored = storedState as Readonly<Record<string, unknown>>;
-  lazyContexts.delete(self);
   lazyReads.delete(self);
   if (lazySteps !== undefined && canReadLazily(stored, lazySteps)) {
     // Lazy read: the Cell fields are the whole record; the collections are read by their handles.
@@ -754,7 +767,7 @@ export async function commitStored(
   state?: object,
 ): Promise<void> {
   const now = state === undefined ? undefined : clocks.get(state);
-  const lazy = lazyContexts.get(self);
+  const lazy = lazyContextOf(state, fields);
   if (lazy !== undefined) {
     await commitLazy(lazy, encoded as Readonly<Record<string, unknown>>, fields, now);
     return;

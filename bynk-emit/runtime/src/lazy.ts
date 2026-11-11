@@ -520,9 +520,10 @@ const identity = (v: unknown): unknown => v;
  * handles when `readStored` found a current-version per-entry record. An `@indexed` map keeps the
  * indexers its zero handle was built with.
  */
-export function attachLazy(self: object, storage: DurableObjectStorage, state: object, specs: readonly LazyFieldSpec[]): void {
+export function attachLazy(storage: DurableObjectStorage, state: object, specs: readonly LazyFieldSpec[]): void {
   const overlay = new EntryOverlay(storage);
   const slots = state as Record<string, unknown>;
+  const handles: object[] = [];
   const finishers: Array<() => void> = [];
   const reapers: Array<(now: number, limit: number) => Promise<number>> = [];
   for (const spec of specs) {
@@ -538,6 +539,7 @@ export function attachLazy(self: object, storage: DurableObjectStorage, state: o
           was?.indexers ?? [],
         );
         slots[spec.name] = h;
+        handles.push(h);
         finishers.push(() => h.finish());
         break;
       }
@@ -548,6 +550,7 @@ export function attachLazy(self: object, storage: DurableObjectStorage, state: o
           expiryOf: (e: { exp?: number }) => e.exp,
         });
         slots[spec.name] = h;
+        handles.push(h);
         finishers.push(() => h.finish());
         reapers.push((now, limit) => h.reap(now, limit));
         break;
@@ -555,16 +558,18 @@ export function attachLazy(self: object, storage: DurableObjectStorage, state: o
       case "set": {
         const h = new LazyStoreSet(overlay, spec.name);
         slots[spec.name] = h;
+        handles.push(h);
         finishers.push(() => h.finish());
         break;
       }
       case "log": {
         const h = new LazyStoreLog<unknown>(overlay, spec.name, { decode: decode as (w: never) => unknown, encode });
         slots[spec.name] = h;
+        handles.push(h);
         finishers.push(() => h.finish());
         break;
       }
     }
   }
-  setLazyContext(self, { overlay, finish: () => finishers.forEach((f) => f()), reapers });
+  setLazyContext(handles, { overlay, finish: () => finishers.forEach((f) => f()), reapers });
 }

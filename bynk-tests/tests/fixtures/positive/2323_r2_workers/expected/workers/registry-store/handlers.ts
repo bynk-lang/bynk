@@ -88,7 +88,7 @@ export class Projection {
     __reportUnknownStoredKeys("Projection", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateProjectionState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfProjection); } else { __hydrateProjectionState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfProjection); } else { __hydrateProjectionState(__merged, __wholesale) }
     return __merged;
   }
 

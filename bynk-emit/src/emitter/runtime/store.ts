@@ -344,12 +344,16 @@ export class StoreLog<V> implements StoreLogHandle<V> {
 
 const recordOrders = new WeakMap<object, readonly string[]>();
 
-/** A record holding `pairs`, with their order noted so {@link entriesOf} reads it back. */
-/** Whether a handle is storage-backed (`lazy.ts`): it holds nothing a wire record could carry. */
+/**
+ * Whether a handle is storage-backed (`lazy.ts`): it holds nothing a wire record could carry. The wire
+ * encoders answer an empty placeholder for one, because `commitState` encodes the whole state and the lazy
+ * commit then drops those slots; the encoder is not a way to read a lazily loaded state out.
+ */
 export function isLazy(handle: object): boolean {
   return (handle as { lazy?: unknown }).lazy === true;
 }
 
+/** A record holding `pairs`, with their order noted so {@link entriesOf} reads it back. */
 export function orderedRecord<T>(pairs: Iterable<readonly [string, T]>): Record<string, T> {
   const record: Record<string, T> = {};
   const keys: string[] = [];

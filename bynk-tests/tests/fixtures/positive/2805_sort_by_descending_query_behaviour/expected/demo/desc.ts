@@ -81,7 +81,7 @@ export class Board {
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoardState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfBoard); } else { __hydrateBoardState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBoard); } else { __hydrateBoardState(__merged, __wholesale) }
     return __merged;
   }
 

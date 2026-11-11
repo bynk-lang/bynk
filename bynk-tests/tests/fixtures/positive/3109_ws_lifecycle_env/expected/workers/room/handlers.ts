@@ -212,7 +212,7 @@ export class Audit {
     __reportUnknownStoredKeys("Audit", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAuditState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfAudit); } else { __hydrateAuditState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfAudit); } else { __hydrateAuditState(__merged, __wholesale) }
     return __merged;
   }
 

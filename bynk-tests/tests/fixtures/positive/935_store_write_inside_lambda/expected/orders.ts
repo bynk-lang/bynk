@@ -60,7 +60,7 @@ export class Orders {
     __reportUnknownStoredKeys("Orders", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateOrdersState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfOrders); } else { __hydrateOrdersState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfOrders); } else { __hydrateOrdersState(__merged, __wholesale) }
     return __merged;
   }
 

@@ -42,7 +42,7 @@ async function load(self: object, storage: InMemoryStorage, steps: Array<[number
   if (stored === undefined) return zero;
   const src = await readStored(self, storage, stored, steps);
   const merged = { ...zero, ...src } as State;
-  if (readsLazily(self)) attachLazy(self, storage, merged, SPECS);
+  if (readsLazily(self)) attachLazy(storage, merged, SPECS);
   return merged;
 }
 
@@ -124,7 +124,7 @@ test("a corrupt entry faults when touched, not when untouched", async () => {
   const stored = (await storage.get<Record<string, unknown>>("state")) as Record<string, unknown>;
   const src = await readStored(self, storage, stored, []);
   const s = { ...src, items: new StoreMap<Item>([BY]) } as unknown as State;
-  attachLazy(self, storage, s, specs);
+  attachLazy(storage, s, specs);
   assert.equal((await s.items.get("k0"))?.n, 0, "an untouched corrupt entry does not fault");
   await assert.rejects(Promise.resolve(s.items.get("k1")), /RehydrationViolation/);
 });
@@ -177,10 +177,26 @@ test("a log record written before `skew` existed reads every entry, clamped ones
   const stored = (await storage.get<Record<string, unknown>>("state")) as Record<string, unknown>;
   const src = await readStored(self, storage, stored, []);
   const s = { ...src } as Record<string, unknown>;
-  attachLazy(self, storage, s, [{ name: "audit", kind: "log" }]);
+  attachLazy(storage, s, [{ name: "audit", kind: "log" }]);
   const log = s["audit"] as { before(t: number): Promise<readonly unknown[]>; between(a: number, b: number): Promise<readonly unknown[]>; since(t: number): Promise<readonly unknown[]> };
   assert.deepEqual(await log.before(200), ["b"], "the clamped entry is found below its key time");
   assert.deepEqual(await log.between(50, 150), ["b"]);
   assert.deepEqual(await log.since(-1_000_000), ["a", "b"], "a bound below zero reads from the start");
   assert.deepEqual(await log.before(-5), [], "nothing is older than a negative time");
+});
+
+test("a commit flushes the overlay of the state it commits, whatever else loaded in between", async () => {
+  // Handlers on one instance are serialised in production (#3217); this pins that the commit does
+  // not depend on it for finding its own writes: the context is found from the state's handles.
+  const storage = await seed(2);
+  const self = {};
+  const a = await load(self, storage);
+  await a.items.put("from-a", { team: "red", n: 1 });
+  const b = await load(self, storage); // a second load on the same instance, before A commits
+  await b.items.put("from-b", { team: "red", n: 2 });
+  await commit(self, storage, a);
+  assert.deepEqual(await storage.get("m/items/from-a"), { i: 2, v: { team: "red", n: 1 } }, "A's write is flushed by A's commit");
+  assert.equal(await storage.get("m/items/from-b"), undefined, "B's write is not flushed by A's commit");
+  await commit(self, storage, b);
+  assert.ok((await storage.get("m/items/from-b")) !== undefined, "B's commit flushes B's write");
 });

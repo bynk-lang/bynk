@@ -67,7 +67,7 @@ export class Inventory {
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfInventory); } else { __hydrateInventoryState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfInventory); } else { __hydrateInventoryState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -153,7 +153,7 @@ export class Ledger {
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfLedger); } else { __hydrateLedgerState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfLedger); } else { __hydrateLedgerState(__merged, __wholesale) }
     return __merged;
   }
 

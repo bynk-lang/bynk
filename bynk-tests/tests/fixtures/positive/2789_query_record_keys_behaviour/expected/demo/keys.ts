@@ -124,7 +124,7 @@ export class Log {
     __reportUnknownStoredKeys("Log", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLogState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfLog); } else { __hydrateLogState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfLog); } else { __hydrateLogState(__merged, __wholesale) }
     return __merged;
   }
 

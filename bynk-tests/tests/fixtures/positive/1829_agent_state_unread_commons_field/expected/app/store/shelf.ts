@@ -54,7 +54,7 @@ export class Bin {
     __reportUnknownStoredKeys("Bin", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBinState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfBin); } else { __hydrateBinState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBin); } else { __hydrateBinState(__merged, __wholesale) }
     return __merged;
   }
 

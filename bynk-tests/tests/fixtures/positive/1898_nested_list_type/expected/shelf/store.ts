@@ -72,7 +72,7 @@ export class Shelf {
     __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateShelfState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfShelf); } else { __hydrateShelfState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfShelf); } else { __hydrateShelfState(__merged, __wholesale) }
     return __merged;
   }
 

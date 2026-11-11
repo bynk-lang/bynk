@@ -62,7 +62,7 @@ export class Widget {
     __reportUnknownStoredKeys("Widget", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateWidgetState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfWidget); } else { __hydrateWidgetState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfWidget); } else { __hydrateWidgetState(__merged, __wholesale) }
     return __merged;
   }
 

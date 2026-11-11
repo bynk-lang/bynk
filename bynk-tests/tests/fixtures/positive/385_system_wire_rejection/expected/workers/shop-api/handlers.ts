@@ -85,7 +85,7 @@ export class Cart {
     __reportUnknownStoredKeys("Cart", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateCartState(__merged, __wholesale);
-    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfCart); } else { __hydrateCartState(__merged, __wholesale) }
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfCart); } else { __hydrateCartState(__merged, __wholesale) }
     return __merged;
   }
 
