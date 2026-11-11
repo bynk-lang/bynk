@@ -1,0 +1,8 @@
+commons demo
+
+fn band(n: Int) -> String {
+    match n {
+        9..3 => "mid"
+        _ => "other"
+    }
+}

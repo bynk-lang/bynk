@@ -1,0 +1,9 @@
+commons demo
+
+fn apply(f: Int -> Int, x: Int) -> Int {
+    f(x)
+}
+
+fn total() -> Int {
+    apply((a, b) => a + b, 5)
+}

@@ -894,6 +894,32 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "built-in-generic-types",
     },
     Explain {
+        code: "bynk.types.empty_range_pattern",
+        blurb: "A range pattern `lo..hi` matches every `Int` from `lo` to `hi`, both \
+                inclusive, so the low bound comes first. With `lo > hi` no value can match, \
+                so the arm is dead and almost certainly a typo, and the same goes for a range \
+                in a `via schema(...)` clause. Swap the bounds. A refinement \
+                written `InRange(150, 0)` is the separate `bynk.types.inverted_range`.",
+        example: "fn band(n: Int) -> String {\n    match n {\n        9..3 => \"mid\"    // ✗ the low bound is above the high bound\n        _ => \"other\"\n    }\n}\n\n\
+                  fn band(n: Int) -> String {\n    match n {\n        3..9 => \"mid\"    // ✓\n        _ => \"other\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "range-patterns",
+    },
+    Explain {
+        code: "bynk.types.empty_refinement",
+        blurb: "A refinement is a base type plus predicates, and a value must satisfy all of \
+                them. When the predicates contradict each other, nothing can satisfy them: \
+                the type has no values, and every `.of` and every boundary check would fail. \
+                The compiler works out the combined range of `Positive`, `NonNegative` and \
+                `InRange`, and the combined length of the length predicates, and refuses one \
+                that is empty. Drop or correct the predicate that conflicts, and read the \
+                note, which gives the empty range it found.",
+        example: "type Debt = Int where Positive && InRange(-10, -1)    // ✗ positive, yet at most -1\n\n\
+                  type Debt = Int where Positive && InRange(1, 10)      // ✓",
+        page: "/book/reference/refined-types",
+        anchor: "predicates",
+    },
+    Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
                 extensible: a minor release may add a variant. A `match` that names every \
@@ -942,6 +968,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "rule-string_interpolation",
     },
     Explain {
+        code: "bynk.types.invalid_regex",
+        blurb: "A `Matches` pattern, and the pattern of a regex method such as `containsRegex`, \
+                must be a valid regular expression. The emitted check runs it under \
+                JavaScript's `RegExp`, so the compiler validates it with those rules: a \
+                pattern the Rust `regex` crate accepts, such as `(?P<name>…)`, may be refused \
+                here, and the compiler would otherwise ship a check that throws at run time. \
+                A regex method's pattern may open with one inline-flag group of `i`, `m` \
+                and `s`, each at most once. Fix the syntax; the note carries the parser's \
+                message. A valid but dangerous pattern is `bynk.types.catastrophic_regex`.",
+        example: "type Code = String where Matches(\"[A-Z\")     // ✗ the class is never closed\n\n\
+                  type Code = String where Matches(\"[A-Z]+\")   // ✓",
+        page: "/book/reference/types",
+        anchor: "regular-expressions",
+    },
+    Explain {
+        code: "bynk.types.inverted_range",
+        blurb: "`InRange(lo, hi)` is inclusive at both ends, so it needs `lo <= hi`. With the \
+                bounds the wrong way round the refinement admits no value, which is almost \
+                certainly a slip, so the compiler refuses it. Swap them; the diagnostic \
+                offers that fix. On an `Int` or `Float` the empty range is also reported as \
+                `bynk.types.empty_refinement`, which is what contradictory predicates give \
+                too. An inverted range in a `match` arm is `bynk.types.empty_range_pattern`.",
+        example: "type Price = Decimal where InRange(100.00d, 0.00d)    // ✗ the minimum is above the maximum\n\n\
+                  type Price = Decimal where InRange(0.00d, 100.00d)    // ✓",
+        page: "/book/reference/refined-types",
+        anchor: "predicates",
+    },
+    Explain {
         code: "bynk.types.json_uncodable",
         blurb: "`Json.encode` and `Json.decode` work on values that have a wire form, and a \
                 function does not: a value that can run has no JSON text to stand for it. \
@@ -953,6 +1007,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
         page: "/book/reference/types",
         anchor: "the-json-codec",
+    },
+    Explain {
+        code: "bynk.types.key_at_boundary",
+        blurb: "A `bynk.crypto` `SigningKey` or `VerifyKey` is a handle to a key the platform \
+                holds non-extractable, and it lives only for the call that imported it. \
+                Storing, serialising, logging or sending it would either leak the secret or \
+                mean nothing on the other side, so one cannot be a `store` field, a record or \
+                event field, or a handler parameter or result. Keep the key's bytes, such as \
+                the PKCS#8 `Bytes`, in `Secrets` or a field, and import the key again with \
+                `Crypto.importSigningKey` where you sign. A capability operation may take one.",
+        example: "type Credentials = {\n    owner: String,\n    key: SigningKey,    // ✗ a key cannot be held in a type\n}\n\n\
+                  type Credentials = {\n    owner: String,\n    pkcs8: Bytes,       // ✓ keep the bytes, import the key where it signs\n}",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.key_not_orderable",
+        blurb: "`sortBy`, `sortByDescending`, `min` and `max` order a list, or a storage \
+                `Query`, by the value the key function returns, so that value needs a \
+                total order. A record or sum is not ordered by accident, because opting in \
+                makes field and variant order significant. Return a field that is already \
+                orderable, or add `derives Ord` to the type. The operators `<` and `>` on an \
+                unordered type are `bynk.types.not_orderable`.",
+        example: "type Item = { id: Int }\n\n\
+                  fn byId(items: List[Item]) -> List[Item] {\n    items.sortBy((i) => i)       // ✗ `Item` has no order\n}\n\n\
+                  fn byId(items: List[Item]) -> List[Item] {\n    items.sortBy((i) => i.id)    // ✓ `Int` does\n}",
+        page: "/book/reference/types",
+        anchor: "ordering-your-own-types",
+    },
+    Explain {
+        code: "bynk.types.lambda_mismatch",
+        blurb: "A lambda is checked against the function type expected where it is written, \
+                such as the parameter it is passed for. It must take the same number of \
+                parameters, any annotation on a parameter must match that parameter's type, \
+                and its body must produce the result type, because the function it is passed \
+                to calls it with that shape and uses what comes back. Change the lambda to \
+                fit, or change the function type if that is what is wrong.",
+        example: "fn apply(f: Int -> Int, x: Int) -> Int {\n    f(x)\n}\n\n\
+                  fn total() -> Int {\n    apply((a, b) => a + b, 5)    // ✗ `f` takes one argument\n}\n\n\
+                  fn total() -> Int {\n    apply((a) => a + 1, 5)       // ✓\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-lambda_expr",
     },
     Explain {
         code: "bynk.types.let_annotation_mismatch",
@@ -967,6 +1063,32 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn run() -> Int {\n    let n: Int = 3          // ✓\n    n\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.list_pattern_on_non_list",
+        blurb: "A list pattern such as `[x, ..]` matches a value by its length and its elements, \
+                so the value must be a `List[T]`. A `Set`, a `Map`, an `Int` or a record has no \
+                such shape, and a record or sum is matched by its own pattern. Convert the \
+                value first, as `s.toList()` does for a `Set`, or match on what the value \
+                actually is. The same rule applies to a list pattern after `is` and in \
+                `let … else`.",
+        example: "fn first(s: Set[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✗ a `Set` is not a `List`\n        _ => 0\n    }\n}\n\n\
+                  fn first(s: List[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✓\n        _ => 0\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "list-patterns",
+    },
+    Explain {
+        code: "bynk.types.match_arm_mismatch",
+        blurb: "A `match` is an expression, so its arms must produce one type: the least upper \
+                bound of their types, where a refined type and its base agree at the base. If \
+                one arm gives a `String` and another an `Int`, there is no single type for the \
+                caller to rely on. Make the arms agree, converting where needed. The rule also \
+                holds for `let … else`, whose `else` must produce the type of the rest of its \
+                block.",
+        example: "type Status = enum { Pending, Active, Done }\n\nfn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => 1           // ✗ an `Int`, where the others are `String`\n        Done => \"finished\"\n    }\n}\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => \"running\"   // ✓\n        Done => \"finished\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
     },
     Explain {
         code: "bynk.types.method_arity",
@@ -998,6 +1120,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.never_inferred",
+        blurb: "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the \
+                bottom type `never returns`, which stands in for any type. If an unannotated \
+                `let` or `<-` binding took it, every later use would type-check whatever it \
+                was used as, and the type cannot be written in source to say otherwise. Annotate \
+                the binding with the type it is meant to have. A lambda that only faults is \
+                annotated with a function type.",
+        example: "fn later() -> Int {\n    let x = unreachable(\"never\")    // ✗ `x` would have no usable type\n    x\n}\n\n\
+                  fn later() -> Int {\n    let x: Int = unreachable(\"never\")    // ✓\n    x\n}",
+        page: "/book/reference/types",
+        anchor: "faults",
+    },
+    Explain {
         code: "bynk.types.no_numeric_coercion",
         blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
                 a comparison or an `InRange` bound. Each conversion can lose or invent \
@@ -1024,6 +1159,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                   match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.not_codable",
+        blurb: "A type parameter declared `T: Codable`, on a generic `fn` or a capability \
+                operation, accepts only the types `Json.decode` can read. A call that makes `T` \
+                a function, an `Effect`, a `Stream` or a type carrying one, a `bynk.crypto` \
+                key or `()` is refused, because such a value has no wire form. Pass a plain \
+                value, or use a function whose parameter is not `Codable`. Calling \
+                `Json.encode` or `Json.decode` on such a type directly is \
+                `bynk.types.json_uncodable`.",
+        example: "fn keep[T: Codable](x: T) -> T { x }\n\n\
+                  fn run(f: Int -> Int) -> Int {\n    let _ = keep(f)    // ✗ a function has no wire form\n    1\n}\n\n\
+                  fn run(n: Int) -> Int {\n    keep(n)    // ✓ an `Int` does\n}",
+        page: "/book/reference/generics",
+        anchor: "bounds",
     },
     Explain {
         code: "bynk.types.not_comparable",
@@ -1071,6 +1221,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "ordering-your-own-types",
     },
     Explain {
+        code: "bynk.types.pattern_arity",
+        blurb: "A variant pattern takes one binding for each payload field the variant \
+                declares, in order, or none to ignore the payload. A different count, or any \
+                binding on a variant with no payload, is refused: an extra name has nothing to \
+                hold, and a missing one would silently drop a field. Use `_` for a field you \
+                do not need, or name the fields you want (`radius: r`). Building a variant \
+                with the wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\n\
+                  fn size(s: Shape) -> Int {\n    match s {\n        Circle(r, extra) => r    // ✗ `Circle` has one field\n        Dot => 0\n    }\n}\n\n\
+                  fn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r           // ✓\n        Dot => 0\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
         code: "bynk.types.pattern_type_mismatch",
         blurb: "A pattern can only match values of the type it describes, so a pattern of \
                 another kind than the value being matched can never succeed and is refused. \
@@ -1084,6 +1248,21 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn word(n: Int) -> String {\n    match n {\n        1 => \"uno\"        // ✓\n        _ => \"other\"\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.polynomial_regex",
+        blurb: "A `Matches` pattern runs under a backtracking `RegExp` on untrusted input. Two \
+                repetitions in sequence that can match the same characters, as in `\\d*\\d*`, \
+                let the engine split a run between them many ways, so the time grows as a \
+                power of the input's length. That is slower to hurt than \
+                `bynk.types.catastrophic_regex` but can still stall a handler. A `MaxLength`, \
+                `Length` or `IsoDate` predicate that keeps the input short enough makes it \
+                the warning `bynk.types.polynomial_regex_capped`; a regex method has no such \
+                bound. Rewrite it so the repetitions cannot overlap.",
+        example: "type Digits = String where Matches(\"\\\\d*\\\\d*\")    // ✗ two loops over the same digits\n\n\
+                  type Digits = String where Matches(\"\\\\d*\")         // ✓ one way to match",
+        page: "/book/reference/types",
+        anchor: "regular-expressions",
     },
     Explain {
         code: "bynk.types.return_mismatch",
@@ -1104,6 +1283,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.stream_at_boundary",
+        blurb: "A `Stream[T]` is a live, lazily read source, built and consumed where it is \
+                made. It cannot be persisted or serialised, so it cannot be a service or agent \
+                handler parameter or result, a store field or an event field, nor can a record \
+                or sum that carries one in a field, at any depth. Drain it with `collect()` \
+                and send or keep the resulting `List`. A capability operation may take or \
+                return a stream, since its provider runs in the caller's own isolate.",
+        example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
+                  service s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "stream",
+    },
+    Explain {
         code: "bynk.types.type_mismatch",
         blurb: "An operator or a built-in method was given an operand of a type it does not \
                 accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on \
@@ -1116,6 +1308,18 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn isAdult(age: Int) -> Bool {\n    age == 18      // ✓ both `Int`\n}",
         page: "/book/reference/operators",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.uninferable_element_type",
+        blurb: "An empty `[]`, `List.empty()`, `Set.empty()` or `Map.empty()` has no elements to \
+                take a type from, and the compiler will not guess, because the element type \
+                becomes part of the type of everything the collection touches. Give it one: \
+                annotate the binding, as `let xs: List[Int] = []`, or use the empty value \
+                where a type is expected, such as an argument or a return value.",
+        example: "fn count() -> Int {\n    let xs = []                  // ✗ a list of what?\n    xs.length()\n}\n\n\
+                  fn count() -> Int {\n    let xs: List[Int] = []       // ✓\n    xs.length()\n}",
+        page: "/book/reference/types",
+        anchor: "built-in-generic-types",
     },
     Explain {
         code: "bynk.types.unknown_field",

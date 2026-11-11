@@ -1,0 +1,7 @@
+commons demo
+
+type Item = { id: Int }
+
+fn byId(items: List[Item]) -> List[Item] {
+    items.sortBy((i) => i)
+}

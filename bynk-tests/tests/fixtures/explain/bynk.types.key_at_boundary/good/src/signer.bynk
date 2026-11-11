@@ -1,0 +1,8 @@
+context signer
+
+consumes bynk.crypto { Crypto }
+
+type Credentials = {
+    owner: String,
+    pkcs8: Bytes,
+}

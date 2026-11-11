@@ -1,0 +1,3 @@
+commons demo
+
+type Price = Decimal where InRange(100.00d, 0.00d)
