@@ -14,6 +14,7 @@ use bynk_syntax::error::CompileError;
 /// `ErrorSink`, `ProjectAnalysis`, `ProjectFailure`, `ContextSequenceInfo`,
 /// and `ContextBoundaryInfo` all stay in `bynk-emit` (each is a fact about
 /// how the pipeline is driven or consumed, not about the project model).
+#[derive(Clone)]
 pub struct AttributedError {
     pub source_path: Option<PathBuf>,
     pub error: CompileError,

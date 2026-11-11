@@ -49,7 +49,7 @@ pub type FileLocals = HashMap<PathBuf, Vec<LocalBinding>>;
 
 /// Records local bindings per file. A fresh sink records nothing until
 /// [`enter_file`](Self::enter_file) attributes it.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LocalsSink {
     files: FileLocals,
     file: Option<PathBuf>,

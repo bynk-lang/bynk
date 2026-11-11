@@ -152,7 +152,7 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
 
 /// A [`CrossContextInfo`] with every map and set in sorted order. Its fields are
 /// maps of maps, so `Debug` on the whole would print hash order.
-fn cross_context(c: &CrossContextInfo) -> String {
+pub(crate) fn cross_context(c: &CrossContextInfo) -> String {
     // Exhaustive (no `..`), like `canonical_report`: a field added to
     // `CrossContextInfo` must be accounted for here.
     let CrossContextInfo {

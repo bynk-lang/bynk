@@ -25,7 +25,7 @@ use bynk_check::analysis::{ProjectAnalysis, analyse_project};
 use bynk_check::memo::{AnalysisMemo, analyse_project_memoised};
 use bynk_check::oracle::canonical_report;
 use bynk_project::{Roots, SchemaLock};
-use xtask::bench::{Shape, edit_source, generate_project_shaped};
+use xtask::bench::{Shape, edit_body, edit_source, generate_project_shaped};
 
 static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
 
@@ -152,6 +152,11 @@ fn examples_agree_cold_and_warm() {
             &mut memo,
             &format!("example {name}, warm"),
         );
+        // Nothing changed, so nothing is re-checked. A digest input that renders
+        // differently from one round to the next (a `HashMap`'s iteration order,
+        // say) would miss here, and would silently cost the memo its gain.
+        let warm = memo.stats();
+        assert_eq!(warm.misses, 0, "example {name}: {warm:?}");
     }
 }
 
@@ -406,4 +411,74 @@ fn the_report_distinguishes_a_changed_diagnostic() {
         "a body edit in util changes leak0's diagnostics"
     );
     assert!(leaked.contains("bynk.exec.unavailable"), "{leaked}");
+}
+
+// --- reuse --------------------------------------------------------------------
+
+/// Run one round of `project` through `memo`, checking it against a fresh one.
+fn round(project: &Project, memo: &mut AnalysisMemo, ctx: &str) {
+    check_round(
+        &Roots::Single(project.root.clone()),
+        &project.overlay,
+        memo,
+        ctx,
+    );
+}
+
+#[test]
+fn an_unchanged_round_replays_every_file() {
+    let project = Project::create(Shape::Independent, 6, "replay");
+    let mut memo = AnalysisMemo::new();
+    round(&project, &mut memo, "cold");
+    let cold = memo.stats();
+    assert_eq!(cold.hits, 0, "nothing to reuse on the first round");
+    assert!(cold.misses > 0);
+    round(&project, &mut memo, "warm");
+    let warm = memo.stats();
+    assert_eq!(
+        warm.misses, 0,
+        "an unchanged project re-checks nothing: {warm:?}"
+    );
+    assert_eq!(warm.hits, cold.misses);
+}
+
+#[test]
+fn an_edit_re_checks_only_the_files_it_can_reach() {
+    let mut project = Project::create(Shape::Independent, 8, "reach");
+    let mut memo = AnalysisMemo::new();
+    round(&project, &mut memo, "cold");
+    let files = memo.stats().misses;
+    let edited = project.root.join("src/ctx0.bynk");
+    let text = project.overlay[&edited].clone();
+    project.overlay.insert(edited, edit_body(&text, false));
+    round(&project, &mut memo, "body edit");
+    let after = memo.stats();
+    // Independent contexts share nothing: the edited file is the only miss.
+    assert_eq!(after.misses, 1, "{after:?}");
+    assert_eq!(after.hits, files - 1);
+}
+
+#[test]
+fn the_type_table_stays_bounded_over_a_long_edit_sequence() {
+    // Tight limits so the reset is reached; every round is still compared to a
+    // fresh analysis by `check_round`, so a reset must not change an answer.
+    let (factor, floor) = (1, 0);
+    let mut project = Project::create(Shape::Linked, 6, "bounded");
+    let mut memo = AnalysisMemo::with_limits(factor, floor);
+    let mut rng = Rng(0xFEED_FACE);
+    round(&project, &mut memo, "initial");
+    let first = memo.stats().type_table_len;
+    let mut largest = first;
+    for step in 0..60 {
+        let what = random_edit(&mut project, &mut rng, step);
+        round(&project, &mut memo, &format!("step {step}: {what}"));
+        largest = largest.max(memo.stats().type_table_len);
+    }
+    // Between resets the table may grow to `factor` times a cold round's, plus
+    // what one more round adds; it never grows without bound.
+    assert!(
+        largest <= first * (factor + 2),
+        "the type table grew to {largest} from {first} over 60 edits"
+    );
+    assert!(memo.stats().resets > 0, "the reset path was never reached");
 }

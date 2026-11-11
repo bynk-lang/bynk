@@ -43,7 +43,7 @@ pub type FileHints = HashMap<PathBuf, Vec<Hint>>;
 
 /// Records inferred-type hints per file. A fresh sink records nothing
 /// until [`enter_file`](Self::enter_file) attributes it.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct HintSink {
     files: FileHints,
     file: Option<PathBuf>,
