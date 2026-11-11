@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "provides": {
+    "attaching": "9c1ea6a5d0a4067a",
+    "empty": "00825b5929f4842c",
+    "fanout": "8e64b233c9fd44c0",
+    "receipts": "beab67b6a7af0448",
+    "tagged": "ac841d85a7b6d417"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "attaching": "Svc(\"attaching\",Ret(R(B(\"String\"),N(\"EmailError\"))))",
+    "empty": "Svc(\"empty\",Ret(R(B(\"String\"),N(\"EmailError\"))))",
+    "fanout": "Svc(\"fanout\",P(\"over\",B(\"Bool\")),Ret(R(B(\"String\"),N(\"EmailError\"))))",
+    "receipts": "Svc(\"receipts\",P(\"to\",B(\"String\")),Ret(R(B(\"String\"),N(\"EmailError\"))))",
+    "tagged": "Svc(\"tagged\",P(\"name\",B(\"String\")),P(\"value\",B(\"String\")),Ret(R(B(\"String\"),N(\"EmailError\"))))"
+  }
+}

@@ -1,0 +1,8 @@
+commons demo
+
+fn keep[T: Codable](x: T) -> T { x }
+
+fn run(f: Int -> Int) -> Int {
+    let _ = keep(f)
+    1
+}

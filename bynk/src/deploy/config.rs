@@ -43,6 +43,19 @@ struct WranglerConfig {
     /// #3301: the `[[secrets_store_secrets]]` of the `StoredSecret` instances.
     #[serde(default)]
     secrets_store_secrets: Vec<StoredSecretBinding>,
+    /// #3302: the `[[send_email]]` of the `Email` instances.
+    #[serde(default)]
+    send_email: Vec<SendEmailBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SendEmailBinding {
+    /// `EMAIL_<SNAKE>`: the instance's binding.
+    name: String,
+    /// The addresses the instance may send as (`@allowedSenders`); absent when
+    /// the instance is unrestricted.
+    #[serde(default)]
+    allowed_sender_addresses: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +66,18 @@ struct StoredSecretBinding {
     /// replaces with the id it resolves.
     store_id: String,
     secret_name: String,
+}
+
+/// #3302: one `Email` instance's sender restriction, as the emitted config
+/// declares it. Checked, never configured: `bynk deploy` asks the account
+/// whether each address's domain has Email Sending enabled and fails when one
+/// does not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EmailSendersDecl {
+    /// `EMAIL_<SNAKE>`, the instance's binding.
+    pub(crate) binding: String,
+    /// Each address the instance may send as, as `@allowedSenders` wrote it.
+    pub(crate) senders: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -280,6 +305,10 @@ pub(crate) struct Resources {
     /// config before the push; nothing is created, and nothing is deleted
     /// when an instance goes.
     pub(crate) stored_secrets: Vec<StoredSecretDecl>,
+    /// #3302: the `@allowedSenders` of the `Email` instances that have any, in
+    /// binding order. Only checked (each domain must be enabled for Email
+    /// Sending on the account); nothing is created, recorded or deleted.
+    pub(crate) email_senders: Vec<EmailSendersDecl>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -347,6 +376,7 @@ impl Default for Resources {
             ratelimits: Vec::new(),
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
+            email_senders: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -541,6 +571,16 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect();
     stored_secrets.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut email_senders: Vec<EmailSendersDecl> = parsed
+        .send_email
+        .into_iter()
+        .filter(|e| !e.allowed_sender_addresses.is_empty())
+        .map(|e| EmailSendersDecl {
+            binding: e.name,
+            senders: e.allowed_sender_addresses,
+        })
+        .collect();
+    email_senders.sort_by(|a, b| a.binding.cmp(&b.binding));
     let worker_dir = config
         .parent()
         .ok_or_else(|| "configuration has no directory".to_string())?;
@@ -592,6 +632,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         ratelimits,
         analytics_datasets,
         stored_secrets,
+        email_senders,
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -1029,6 +1070,14 @@ pub(crate) fn synthesise_environment_block(
         env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
     }
 
+    // #3302: each email binding as written, restrictions included: it names
+    // no resource of the build, so it is the same in every environment, and
+    // bindings are not inherited by `[env.*]`, or a staging Worker has no
+    // `EMAIL_MAIL` to send through.
+    if let Some(send_email) = doc.get("send_email") {
+        env_block.insert("send_email".to_string(), send_email.clone());
+    }
+
     // #3300: the Version metadata binding, which names no resource, so it is
     // the same in every environment; bindings are not inherited by `[env.*]`.
     if let Some(version_metadata) = doc.get("version_metadata") {
@@ -1188,6 +1237,18 @@ pub(crate) mod tests {
                 .collect();
             self
         }
+        /// Derived `Email` instances with `@allowedSenders`, as `(binding,
+        /// senders)` (#3302).
+        pub(crate) fn email_senders(mut self, instances: &[(&str, &[&str])]) -> Self {
+            self.email_senders = instances
+                .iter()
+                .map(|(binding, senders)| EmailSendersDecl {
+                    binding: binding.to_string(),
+                    senders: senders.iter().map(|s| s.to_string()).collect(),
+                })
+                .collect();
+            self
+        }
         /// Derived `D1` instances, as `(binding, derived name)` (P4a, #2602).
         pub(crate) fn d1_databases(mut self, databases: &[(&str, &str)]) -> Self {
             self.d1_databases = databases
@@ -1276,6 +1337,26 @@ pub(crate) mod tests {
         resources
     }
 
+    /// #3302: only an `Email` instance with `@allowedSenders` is read, with
+    /// its addresses, in binding order; an unrestricted one asks nothing.
+    #[test]
+    fn email_senders_are_read_from_the_send_email_stanzas() {
+        let resources = parse_config(
+            "email-senders",
+            "name = \"shop\"\n\n[[send_email]]\nname = \"EMAIL_OPS\"\ndestination_address = \"ops@shop.example\"\n\n[[send_email]]\nname = \"EMAIL_MAIL\"\nallowed_sender_addresses = [\"orders@shop.example\", \"billing@shop.example\"]\n\n[[send_email]]\nname = \"EMAIL_ALERTS\"\n",
+        );
+        assert_eq!(
+            resources.email_senders,
+            [EmailSendersDecl {
+                binding: "EMAIL_MAIL".to_string(),
+                senders: vec![
+                    "orders@shop.example".to_string(),
+                    "billing@shop.example".to_string()
+                ],
+            }]
+        );
+    }
+
     /// A config carrying every v1 binding kind — mirrors what
     /// `emit_wrangler_toml` actually writes (`bynk-emit/src/emitter/
     /// wrangler.rs`), so a gap here is a gap the real emitter output would
@@ -1284,7 +1365,7 @@ pub(crate) mod tests {
 # Generated by bynk — do not edit by hand.
 name = "api"
 main = "index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[services]]
@@ -1297,6 +1378,10 @@ id = "<KV_NAMESPACE_ID>" # set at deploy time
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
+
+[[send_email]]
+name = "EMAIL_MAIL"
+allowed_sender_addresses = ["orders@shop.example"]
 
 [[secrets_store_secrets]]
 binding = "SECRET_STRIPE_KEY"
@@ -1425,6 +1510,14 @@ max_batch_size = 10
             Some("0b5e1c2a3d4f45678901234567890abc")
         );
         assert_eq!(secrets[0]["secret_name"].as_str(), Some("stripe-live"));
+        // #3302: the email binding is repeated with its restrictions.
+        let mail = env["send_email"].as_array().unwrap();
+        assert_eq!(mail.len(), 1);
+        assert_eq!(mail[0]["name"].as_str(), Some("EMAIL_MAIL"));
+        assert_eq!(
+            mail[0]["allowed_sender_addresses"][0].as_str(),
+            Some("orders@shop.example")
+        );
         // #3300: bindings are not inherited, and Version metadata names no
         // resource, so the environment repeats it as it is.
         assert_eq!(
@@ -1549,7 +1642,7 @@ max_batch_size = 10
                 r#"
 name = "commerce-orders"
 main = "index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[services]]
@@ -1578,7 +1671,7 @@ service = "commerce-payment"
                 r#"
 name = "jobs"
 main = "index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[queues.consumers]]
@@ -1649,7 +1742,7 @@ max_batch_size = 10
                 r#"
 name = "cart"
 main = "index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[durable_objects.bindings]]
@@ -1677,7 +1770,7 @@ storage = "sqlite"
                 r#"
 name = "ops-hub"
 main = "index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[kv_namespaces]]
@@ -2074,7 +2167,7 @@ mod foreign_service_tests {
     const WITH_FOREIGN: &str = r#"
 name = "shop-billing"
 main = "index.ts"
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
 
 [[services]]

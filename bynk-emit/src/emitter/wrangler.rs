@@ -13,7 +13,7 @@ use bynk_project::worker_dir_name;
 /// is the policy in `design/bynk-release-discipline.md` ("Part 3 — The Workers
 /// compatibility date", #1677): reviewed at each release, and moved only after
 /// the workerd smokes pass on the new date.
-pub const COMPATIBILITY_DATE: &str = "2026-07-01";
+pub const COMPATIBILITY_DATE: &str = "2026-08-04";
 
 /// #1890: the compatibility flags every emitted Worker carries, ahead of the
 /// project's own (`bynk.toml`'s `[workers] compatibility_flags`).
@@ -61,7 +61,7 @@ pub fn compatibility_flags(extra: &[String]) -> (Vec<String>, Vec<String>) {
 /// compatibility-date review that sets the date (Part 3's lag rule keeps it at
 /// least three months old). `bynk-emit/tests/compat_date_policy.rs` checks the
 /// policy doc names both.
-pub const WRANGLER_MIN: &str = "4.107.0";
+pub const WRANGLER_MIN: &str = "4.120.1";
 
 /// Events track, slice 0 (spine #936, ADR 0284): the class name of a
 /// publishing context's fan-out Durable Object (`emitter::events_fanout`).
@@ -383,6 +383,12 @@ pub fn emit_wrangler_toml(
             BindingSource::StoredSecret { store, secret, .. } => {
                 stored_secret_block(name, store, secret)
             }
+            BindingSource::Email {
+                to,
+                allowed_recipients,
+                allowed_senders,
+                ..
+            } => email_block(name, to.as_deref(), allowed_recipients, allowed_senders),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -425,8 +431,8 @@ pub fn emit_wrangler_toml(
     // deploy Cloudflare compares the declared set with the Worker's
     // namespaces and creates what's missing, so the config stays a pure
     // function of the source and the ledger still records nothing (ADR 0194
-    // D1's principle). Wrangler reads `exports` from 4.107.0, which is
-    // [`WRANGLER_MIN`], and `wrangler dev` takes each class's backend from
+    // D1's principle). Wrangler reads `exports` from 4.107.0, so
+    // [`WRANGLER_MIN`] is past it, and `wrangler dev` takes each class's backend from
     // it too.
     //
     // Every class is SQLite-backed (#1779, ADR 0438): the emitted agent uses
@@ -592,6 +598,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::StoredSecret { .. }))
             .cloned(),
     );
+    // #3302: the outbound email bindings, after the Secrets Store secrets.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::Email { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -656,6 +669,36 @@ fn stored_secret_block(binding: TomlValue, store: &str, secret: &str) -> TomlBlo
     )
 }
 
+/// #3302: the `[[send_email]]` entry of an `Email` instance. Its key is `name`,
+/// not `binding` (as `[[ratelimits]]`'s is), and each restriction is written
+/// only when the declaration carries it: `destination_address` pins every
+/// message to one recipient, and the two lists limit recipients and senders.
+fn email_block(
+    name: TomlValue,
+    to: Option<&str>,
+    allowed_recipients: &[String],
+    allowed_senders: &[String],
+) -> TomlBlock {
+    let list = |items: &[String]| TomlValue::Array(items.iter().map(TomlValue::str).collect());
+    let mut entries = vec![TomlEntry::kv("name", name)];
+    if let Some(to) = to {
+        entries.push(TomlEntry::kv("destination_address", TomlValue::str(to)));
+    }
+    if !allowed_recipients.is_empty() {
+        entries.push(TomlEntry::kv(
+            "allowed_destination_addresses",
+            list(allowed_recipients),
+        ));
+    }
+    if !allowed_senders.is_empty() {
+        entries.push(TomlEntry::kv(
+            "allowed_sender_addresses",
+            list(allowed_senders),
+        ));
+    }
+    TomlBlock::array_table("send_email", entries)
+}
+
 /// A test of a binding's kind (`|s| matches!(s, BindingSource::Kv)`), as
 /// the tables pairing each platform-resource kind with what it needs use.
 pub type BindingKind = fn(&BindingSource) -> bool;
@@ -672,6 +715,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
         BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
+        BindingSource::Email { .. } => "__SendEmail",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             other => unreachable!("singleton `{other}` has no `env` type"),
@@ -1267,7 +1311,7 @@ mod patch_tests {
 # Generated by bynk — do not edit by hand.
 name = \"ops-hub\"
 main = \"index.ts\"
-compatibility_date = \"2026-07-01\"
+compatibility_date = \"2026-08-04\"
 compatibility_flags = [\"global_fetch_strictly_public\"]
 
 [[services]]

@@ -235,7 +235,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -926,8 +926,9 @@ fn seed_local_secret(dir: &std::path::Path) -> Option<String> {
 const ANALYTICS_SOURCE: &str = "context a.smoke
 
 consumes bynk
-consumes bynk.cloudflare { Analytics, Version, StoredSecret }
+consumes bynk.cloudflare { Analytics, Version, StoredSecret, Email, EmailMessage, EmailAttachment }
 
+capability Mail = Email @allowedSenders([\"orders@smoke.example\"])
 capability Signups = Analytics
 capability StripeKey = StoredSecret @store(\"payments\") @secret(\"stripe-live\")
 capability MissingKey = StoredSecret @store(\"payments\") @secret(\"absent\")
@@ -959,6 +960,28 @@ service api from http {
 \t\tOk(\"read\")
 \t}
 
+\ton GET(\"/mail\") () -> Effect[HttpResult[String]] by Visitor given Mail {
+\t\tlet sent <- Mail.send(EmailMessage { from: \"orders@smoke.example\", to: [\"buyer@example.com\"], subject: \"Smoke\", text: Some(\"smoke-body-secret\") })
+\t\tmatch sent {
+\t\t\tOk(id) => if id == \"\" { Ok(\"no id\") } else { Ok(\"sent\") }
+\t\t\tErr(_) => Ok(\"refused\")
+\t\t}
+\t}
+
+\ton GET(\"/mail-attached\") () -> Effect[HttpResult[String]] by Visitor given Mail {
+\t\tlet file = EmailAttachment { filename: \"a.bin\", contentType: \"application/octet-stream\", content: Bytes.fromUtf8(\"smoke-file-secret\") }
+\t\tlet sent <- Mail.send(EmailMessage { from: \"orders@smoke.example\", to: [\"buyer@example.com\"], subject: \"Smoke\", html: Some(\"<p>hi</p>\"), attachments: [file] })
+\t\tmatch sent {
+\t\t\tOk(_) => Ok(\"sent\")
+\t\t\tErr(_) => Ok(\"refused\")
+\t\t}
+\t}
+
+\ton GET(\"/mail-empty\") () -> Effect[HttpResult[String]] by Visitor given Mail {
+\t\tlet _ <- Mail.send(EmailMessage { from: \"orders@smoke.example\", to: [\"buyer@example.com\"], subject: \"Nothing\" })
+\t\tOk(\"sent\")
+\t}
+
 \ton GET(\"/wide\") () -> Effect[HttpResult[String]] by Visitor given Signups {
 \t\tlet _ <- Signups.write(DataPoint { index: None, blobs: [], doubles: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0] })
 \t\tOk(\"written\")
@@ -983,6 +1006,12 @@ fn workers_analytics_writes_on_workerd() {
     // checked not to hold it. A secret the local store lacks faults at the
     // read, as the platform answers it, which is the platform fault the
     // checker's `String` (not `Option`) result stands on.
+    //
+    // #3302: and an `Email`. Under `wrangler dev` the `[[send_email]]` binding
+    // is simulated locally: it answers a message id and writes nothing out. A
+    // `Bytes` attachment goes to it as base64 text, which the simulator takes
+    // (an `ArrayBuffer` it cannot serialise). The log is checked not to hold a
+    // body or an attachment's content.
     let Some((failures, log)) = run_smoke_with(
         "a-smoke",
         "a",
@@ -1000,6 +1029,13 @@ fn workers_analytics_writes_on_workerd() {
                     ("/version", 200, r#""versioned""#),
                     ("/secret", 200, r#""matched""#),
                     ("/missing", 500, ""),
+                    // #3302: `[[send_email]]` binds under `wrangler dev`, a
+                    // send answers a message id, an attachment (as base64
+                    // text) is accepted by the local simulator, and a message
+                    // with neither text nor html faults before the platform.
+                    ("/mail", 200, r#""sent""#),
+                    ("/mail-attached", 200, r#""sent""#),
+                    ("/mail-empty", 500, ""),
                     ("/wide", 500, ""),
                 ],
             )
@@ -1016,6 +1052,10 @@ fn workers_analytics_writes_on_workerd() {
         !log.contains(LOCAL_SECRET_VALUE),
         "the wrangler log holds a Secrets Store value"
     );
+    // #3302: nor a message body or an attachment's content.
+    for secret in ["smoke-body-secret", "smoke-file-secret"] {
+        assert!(!log.contains(secret), "the wrangler log holds `{secret}`");
+    }
 }
 
 const D1_SOURCE: &str = "context d.smoke

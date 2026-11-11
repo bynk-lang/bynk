@@ -66,6 +66,7 @@
     - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
     - [Apply webhook events that arrive late, twice or out of order](guides/effects-and-capabilities/apply-webhook-events-out-of-order.md)
     - [Rate-limit a route](guides/effects-and-capabilities/rate-limit-a-route.md)
+    - [Send transactional email](guides/effects-and-capabilities/send-transactional-email.md)
     - [Cache responses at Cloudflare's edge](guides/effects-and-capabilities/cache-at-the-edge.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
   - [Agents & state](guides/agents-and-state/index.md)

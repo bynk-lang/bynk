@@ -1,0 +1,6 @@
+suite demo.codes {
+	case "a code equals itself" {
+		let c = Val[Code]
+		expect c == c
+	}
+}

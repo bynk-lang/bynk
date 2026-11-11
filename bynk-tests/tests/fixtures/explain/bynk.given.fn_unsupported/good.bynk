@@ -1,0 +1,7 @@
+context demo
+
+consumes bynk { Logger }
+
+fn size(sku: String) -> Effect[Int] given Logger {
+  Effect.pure(3)
+}

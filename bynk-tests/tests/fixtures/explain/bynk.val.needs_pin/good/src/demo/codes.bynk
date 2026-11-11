@@ -1,0 +1,3 @@
+commons demo.codes
+
+type Code = String where Matches("[a-z]+")

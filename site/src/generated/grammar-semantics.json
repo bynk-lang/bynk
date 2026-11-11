@@ -513,7 +513,7 @@
     },
     {
       "code": "bynk.resolve.unconsumed_context",
-      "summary": "A context's service was called without a `consumes` declaration."
+      "summary": "A context's service was called, or its capability named in `given`, without a `consumes` declaration."
     },
     {
       "code": "bynk.target.vendor_conflict",
@@ -871,7 +871,7 @@
     },
     {
       "code": "bynk.given.cross_context_unknown_capability",
-      "summary": "`given B.Cap` names a capability the consumed context does not export."
+      "summary": "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export."
     },
     {
       "code": "bynk.given.fn_outside_context",

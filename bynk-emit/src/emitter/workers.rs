@@ -2762,7 +2762,7 @@ fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
 /// `type __X` import entries.
 fn platform_binding_type_imports(bindings: &[WorkerBinding]) -> Vec<String> {
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 8] = [
+    let kinds: [(crate::emitter::wrangler::BindingKind, &str); 9] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__KVNamespace",
@@ -2791,6 +2791,7 @@ fn platform_binding_type_imports(bindings: &[WorkerBinding]) -> Vec<String> {
             |s| matches!(s, BindingSource::StoredSecret { .. }),
             "__SecretsStoreSecret",
         ),
+        (|s| matches!(s, BindingSource::Email { .. }), "__SendEmail"),
         (
             |s| matches!(s, BindingSource::Singleton { .. }),
             "__WorkerVersionMetadata",

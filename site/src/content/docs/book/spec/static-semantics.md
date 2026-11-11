@@ -1430,8 +1430,8 @@ and `expect` apply to it unchanged. The rules:
 - `K` MUST be a capability the unit selects with `consumes U { K }`
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache` and
-  `StoredSecret` have them
+  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
+  `StoredSecret` and `Email` have them
   (`bynk.capability.base_not_instantiable`). `Version` is bound once per Worker
   and has none: it is used bare (#3300).
 - Each `@annotation` MUST be one of `K`'s instance options
@@ -1454,10 +1454,15 @@ and `expect` apply to it unchanged. The rules:
   1 to 255 letters, digits, `-` or `_` (`bynk.capability.invalid_option`): the
   Secrets Store and the secret in it. A `StoredSecret` is a *linked* resource
   (#3301): it belongs to the account, so a deploy resolves and checks it and
-  never creates it.
+  never creates it. `Email` takes `@to("addr")`, `@allowedRecipients([…])` and
+  `@allowedSenders([…])`, each optional, a string literal or a non-empty list of
+  string literals, every address being `local@domain` with no whitespace,
+  control, angle-bracket, quote or comma character
+  (`bynk.capability.invalid_option`) (#3302). A deploy checks each allowed
+  sender's domain and never configures it.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
-  `Queue`, `Analytics` and `EdgeCache` are such kinds.
+  `Queue`, `Analytics`, `EdgeCache` and `Email` are such kinds.
 - A context MUST declare at most one `EdgeCache` instance
   (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
   makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent

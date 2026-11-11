@@ -1,0 +1,8 @@
+// #3302: at `system`, each participant Worker binds its own in-memory outbox
+// as `env.EMAIL_MAIL`, so a send over the wire answers a message id.
+suite shop.orders as system {
+	case "the participant's binding sends and answers an id" {
+		let r <- api.POST("/receipt") by Visitor
+		expect r is Ok("test-message-1")
+	}
+}

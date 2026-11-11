@@ -323,6 +323,73 @@ export const SqlReadError = {
 };
 
 /**
+ * One file attached to an outbound `EmailMessage`. `content` is the file's bytes,
+ * `contentType` its MIME type (`"application/pdf"`) and `filename` the name
+ * the recipient sees. `inline` sends it for display inside the body (an
+ * image the `html` refers to as `cid:logo.png`, its content id being its
+ * filename) rather than as a download.
+ */
+export interface EmailAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: globalThis.Uint8Array;
+  readonly inline: boolean;
+}
+
+export const EmailAttachment = {
+};
+
+/**
+ * One outbound email for `Email.send`. Addresses are plain `String`s
+ * (`"orders@shop.example"` or `"Shop <orders@shop.example>"`); the platform,
+ * not Bynk, judges their syntax. At least one of `text` and `html` is
+ * required. `headers` adds custom headers: `From`, `To`, `Cc`, `Bcc`,
+ * `Subject` and `Reply-To` are set by the fields above and may not be set
+ * here, and a name or value with a line break is refused, since either would
+ * let data inject a header.
+ */
+export interface EmailMessage {
+  readonly from: string;
+  readonly to: readonly string[];
+  readonly cc: readonly string[];
+  readonly bcc: readonly string[];
+  readonly replyTo: Option<string>;
+  readonly subject: string;
+  readonly text: Option<string>;
+  readonly html: Option<string>;
+  readonly attachments: readonly EmailAttachment[];
+  readonly headers: ReadonlyMap<string, string>;
+}
+
+export const EmailMessage = {
+};
+
+/**
+ * Why an `Email.send` was refused by the platform. `SenderNotVerified` is a
+ * `from` address outside a domain verified for sending; `RecipientNotAllowed`
+ * a recipient the instance's `@to` or `@allowedRecipients` (or the account)
+ * does not permit; `RateLimited` and `DailyLimit` the per-second and
+ * per-day sending limits. All are outcomes a handler can act on (retry
+ * later, alert); `SendFailed` is any other refusal, with the platform's
+ * message. Cloudflare has further error codes, so a `match` over this type
+ * needs a wildcard.
+ */
+export type EmailError =
+    { readonly tag: "SenderNotVerified" }
+  | { readonly tag: "RecipientNotAllowed" }
+  | { readonly tag: "RateLimited" }
+  | { readonly tag: "DailyLimit" }
+  | { readonly tag: "SendFailed"; readonly message: string };
+
+export const EmailError = {
+  SenderNotVerified: { tag: "SenderNotVerified" } as EmailError,
+  RecipientNotAllowed: { tag: "RecipientNotAllowed" } as EmailError,
+  RateLimited: { tag: "RateLimited" } as EmailError,
+  DailyLimit: { tag: "DailyLimit" } as EmailError,
+  SendFailed: (message: string): EmailError => ({ tag: "SendFailed", message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -642,6 +709,46 @@ export interface StoredSecret {
 
 export const __StoredSecretToken: symbol = globalThis.Symbol("StoredSecret");
 
+/**
+ * Outbound email through Cloudflare Email Service. Used only through a named
+ * instance, `capability Mail = Email @allowedSenders(["orders@shop.example"])`,
+ * which binds as `EMAIL_MAIL`, a `[[send_email]]` entry. The options are
+ * all optional deploy-time policy: `@to("ops@shop.example")` pins every
+ * message to one recipient, `@allowedRecipients([…])` limits the recipients
+ * and `@allowedSenders([…])` limits the senders. An unknown annotation is
+ * refused.
+ *
+ * `send` returns the platform's message id, or an `EmailError` for an
+ * outcome a handler acts on. A call that breaks a documented limit is a
+ * programming error and faults before it reaches the platform: more than
+ * 50 recipients across `to`, `cc` and `bcc`, more than 32 attachments,
+ * more than 25 MiB in total (attachments counted as base64, as sent), no
+ * recipient at all, neither `text` nor
+ * `html`, a reserved header (see `EmailMessage`) or a line break in a header's
+ * name or value. Attachments go to the platform as base64 text, which both
+ * the platform and `wrangler dev` accept; message bodies and attachment
+ * content are never logged by Bynk.
+ *
+ * `bynk deploy` checks, for each `@allowedSenders` address, that its domain
+ * has Email Sending enabled on the account, and fails naming the domain
+ * when it does not; it never configures a domain. It needs
+ * `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Without
+ * `@allowedSenders`, an unverified `from` surfaces at run time as
+ * `SenderNotVerified`.
+ *
+ * A handler that sends mail is a spam relay if anyone can call it: put a
+ * `RateLimit` in front of it. Under `bynk dev`, a message with an
+ * attachment the local simulator cannot serialise should be tried with
+ * `--remote`. A test records every sent `EmailMessage` without a stub, so
+ * `expect Mail.send called with …` works, and a stub can force an
+ * `EmailError`.
+ */
+export interface Email {
+  send(message: EmailMessage): globalThis.Promise<Result<string, EmailError>>;
+}
+
+export const __EmailToken: symbol = globalThis.Symbol("Email");
+
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
     index: __serialise_Option_String(value.index),
@@ -665,6 +772,149 @@ export function __deserialise_DataPoint(json: __JsonValue, path: string = "$"): 
   if (__r_doubles.tag === "Err") return __r_doubles;
   const __doubles = __r_doubles.value;
   return Ok({ index: __index, blobs: __blobs, doubles: __doubles } as DataPoint);
+}
+
+export function __serialise_EmailAttachment(value: EmailAttachment): __JsonValue {
+  return {
+    filename: value.filename as __JsonValue,
+    contentType: value.contentType as __JsonValue,
+    content: __bynkBytesToBase64(value.content) as __JsonValue,
+    inline: value.inline as __JsonValue,
+  };
+}
+
+export function __deserialise_EmailAttachment(json: __JsonValue, path: string = "$"): Result<EmailAttachment, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["filename"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.filename`, expected: "string", actual: typeof obj["filename"] });
+  }
+  const __filename = obj["filename"];
+  if (typeof obj["contentType"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.contentType`, expected: "string", actual: typeof obj["contentType"] });
+  }
+  const __contentType = obj["contentType"];
+  if (typeof obj["content"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.content`, expected: "base64 string", actual: typeof obj["content"] });
+  }
+  const __b_content = __bynkBytesFromBase64(obj["content"]);
+  if (__b_content.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.content`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __content = __b_content.value;
+  const __d_inline: __JsonValue = "inline" in obj ? obj["inline"] : false;
+  if (typeof __d_inline !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.inline`, expected: "boolean", actual: typeof __d_inline });
+  }
+  const __inline = __d_inline;
+  return Ok({ filename: __filename, contentType: __contentType, content: __content, inline: __inline } as EmailAttachment);
+}
+
+export function __serialise_EmailError(value: EmailError): __JsonValue {
+  switch (value.tag) {
+    case "SenderNotVerified":
+      return { kind: "SenderNotVerified" };
+    case "RecipientNotAllowed":
+      return { kind: "RecipientNotAllowed" };
+    case "RateLimited":
+      return { kind: "RateLimited" };
+    case "DailyLimit":
+      return { kind: "DailyLimit" };
+    case "SendFailed": {
+      return { kind: "SendFailed", message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_EmailError(json: __JsonValue, path: string = "$"): Result<EmailError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "SenderNotVerified":
+      return Ok({ tag: "SenderNotVerified" } as EmailError);
+    case "RecipientNotAllowed":
+      return Ok({ tag: "RecipientNotAllowed" } as EmailError);
+    case "RateLimited":
+      return Ok({ tag: "RateLimited" } as EmailError);
+    case "DailyLimit":
+      return Ok({ tag: "DailyLimit" } as EmailError);
+    case "SendFailed": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "SendFailed", message: __message } as EmailError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_EmailMessage(value: EmailMessage): __JsonValue {
+  return {
+    from: value.from as __JsonValue,
+    to: __serialise_List_String(value.to),
+    cc: __serialise_List_String(value.cc),
+    bcc: __serialise_List_String(value.bcc),
+    replyTo: __serialise_Option_String(value.replyTo),
+    subject: value.subject as __JsonValue,
+    text: __serialise_Option_String(value.text),
+    html: __serialise_Option_String(value.html),
+    attachments: __serialise_List_EmailAttachment(value.attachments),
+    headers: __serialise_Map_String_String(value.headers),
+  };
+}
+
+export function __deserialise_EmailMessage(json: __JsonValue, path: string = "$"): Result<EmailMessage, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["from"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.from`, expected: "string", actual: typeof obj["from"] });
+  }
+  const __from = obj["from"];
+  const __r_to = __deserialise_List_String(obj["to"], `${path}.to`);
+  if (__r_to.tag === "Err") return __r_to;
+  const __to = __r_to.value;
+  const __d_cc: __JsonValue = "cc" in obj ? obj["cc"] : [];
+  const __r_cc = __deserialise_List_String(__d_cc, `${path}.cc`);
+  if (__r_cc.tag === "Err") return __r_cc;
+  const __cc = __r_cc.value;
+  const __d_bcc: __JsonValue = "bcc" in obj ? obj["bcc"] : [];
+  const __r_bcc = __deserialise_List_String(__d_bcc, `${path}.bcc`);
+  if (__r_bcc.tag === "Err") return __r_bcc;
+  const __bcc = __r_bcc.value;
+  const __d_replyTo: __JsonValue = "replyTo" in obj ? obj["replyTo"] : { kind: "None" };
+  const __r_replyTo = __deserialise_Option_String(__d_replyTo, `${path}.replyTo`);
+  if (__r_replyTo.tag === "Err") return __r_replyTo;
+  const __replyTo = __r_replyTo.value;
+  if (typeof obj["subject"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.subject`, expected: "string", actual: typeof obj["subject"] });
+  }
+  const __subject = obj["subject"];
+  const __d_text: __JsonValue = "text" in obj ? obj["text"] : { kind: "None" };
+  const __r_text = __deserialise_Option_String(__d_text, `${path}.text`);
+  if (__r_text.tag === "Err") return __r_text;
+  const __text = __r_text.value;
+  const __d_html: __JsonValue = "html" in obj ? obj["html"] : { kind: "None" };
+  const __r_html = __deserialise_Option_String(__d_html, `${path}.html`);
+  if (__r_html.tag === "Err") return __r_html;
+  const __html = __r_html.value;
+  const __d_attachments: __JsonValue = "attachments" in obj ? obj["attachments"] : [];
+  const __r_attachments = __deserialise_List_EmailAttachment(__d_attachments, `${path}.attachments`);
+  if (__r_attachments.tag === "Err") return __r_attachments;
+  const __attachments = __r_attachments.value;
+  const __d_headers: __JsonValue = "headers" in obj ? obj["headers"] : [];
+  const __r_headers = __deserialise_Map_String_String(__d_headers, `${path}.headers`);
+  if (__r_headers.tag === "Err") return __r_headers;
+  const __headers = __r_headers.value;
+  return Ok({ from: __from, to: __to, cc: __cc, bcc: __bcc, replyTo: __replyTo, subject: __subject, text: __text, html: __html, attachments: __attachments, headers: __headers } as EmailMessage);
 }
 
 export function __serialise_KvEntry(value: KvEntry): __JsonValue {
@@ -1381,6 +1631,25 @@ export function __deserialise_List_Float(json: __JsonValue, path: string = "$"):
   }
   const __el = item;
   out.push(__el as number);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_EmailAttachment(value: readonly EmailAttachment[]): __JsonValue {
+  return value.map((v) => __serialise_EmailAttachment(v));
+}
+
+export function __deserialise_List_EmailAttachment(json: __JsonValue, path: string = "$"): Result<readonly EmailAttachment[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: EmailAttachment[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_EmailAttachment(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as EmailAttachment);
   }
   return Ok(out);
 }

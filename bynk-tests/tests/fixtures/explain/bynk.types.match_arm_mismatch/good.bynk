@@ -1,0 +1,11 @@
+commons demo
+
+type Status = enum { Pending, Active, Done }
+
+fn label(s: Status) -> String {
+    match s {
+        Pending => "waiting"
+        Active => "running"
+        Done => "finished"
+    }
+}

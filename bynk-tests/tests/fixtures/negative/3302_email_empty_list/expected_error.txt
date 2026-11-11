@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+takes at least one address

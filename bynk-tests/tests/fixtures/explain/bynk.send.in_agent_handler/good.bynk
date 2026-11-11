@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk { Logger }
+
+agent Counter {
+  key id: String
+  store count: Cell[Int] = 0
+
+  on call bump() -> Effect[()] given Logger {
+    do Logger.info("bump")
+    do count.update((n) => n + 1)
+  }
+}

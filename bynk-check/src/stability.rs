@@ -414,6 +414,7 @@ mod tests {
                 "bynk.cloudflare.Analytics",
                 "bynk.cloudflare.Version",
                 "bynk.cloudflare.StoredSecret",
+                "bynk.cloudflare.Email",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -428,6 +429,9 @@ mod tests {
         assert!(!p.blocks("bynk.cloudflare.WorkerVersion"));
         // #3301: the capability and its operation.
         assert!(p.blocks("bynk.cloudflare.StoredSecret.get"));
+        // #3302: the capability and its operation; its records are stable.
+        assert!(p.blocks("bynk.cloudflare.Email.send"));
+        assert!(!p.blocks("bynk.cloudflare.Message"));
         // K5a (#2586): new operations of stable capabilities, alone.
         assert!(p.blocks("bynk.Fetch.sendWith"));
         assert!(!p.blocks("bynk.Fetch.send"));
