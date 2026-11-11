@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.548.1** | `bynk explain` now explains seven more codes (the effect, generics and given rules), each with a compiled bad/good example, and the `unknown_constraint` summary lists all four constraints (#3163) |
 | **v0.548.0** | `bynk.cloudflare.StoredSecret` (experimental) reads one Secrets Store secret through a named instance; `bynk deploy` links the store and the secret and never creates them |
 | **v0.547.0** | An agent's `store Map`, `Set`, `Cache` and `Log` fields are read from storage as a handler touches them, and written back as the entries it changed, so a handler's storage cost no longer grows with the size of a collection (per-entry storage, lazy-read slice, part 2b) |
 | **v0.546.7** | The language server keeps each file's checked output between analysis rounds and replays it when nothing the check read has changed, cutting edit-to-diagnostics latency on large projects (linked 200 contexts about 17% faster) for about 20% more server memory, linear in the number of files; `bynk check` and builds are unchanged |
