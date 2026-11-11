@@ -1,0 +1,30 @@
+name: Install binaryen (wasm-opt), pinned and authenticated
+description: >-
+  Puts a pinned binaryen release's bin/ (wasm-opt) on PATH, downloaded from
+  GitHub through the API with the job's token and checked against a recorded
+  sha256. Replaces `apt-get install binaryen`.
+
+# See scripts/ci/install-binaryen.sh, which holds the version and digest. On
+# 2026-11-11 the hosted runners could not resolve Ubuntu's package mirrors for
+# three hours; the apt install failed every run of the registry-core job, so no
+# Rust-touching PR could merge.
+
+runs:
+  using: composite
+  steps:
+    - name: Install binaryen (wasm-opt)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: bash scripts/ci/install-binaryen.sh
+    # GITHUB_PATH applies from the next step on: show that `wasm-opt` now
+    # resolves to the pinned binary, not to one the runner image happens to hold.
+    - name: wasm-opt on PATH
+      shell: bash
+      run: |
+        command -v wasm-opt
+        wasm-opt --version
+        case "$(command -v wasm-opt)" in
+          "$RUNNER_TEMP"/binaryen-*/bin/wasm-opt) ;;
+          *) echo "::error::wasm-opt does not resolve to the pinned binaryen"; exit 1 ;;
+        esac
