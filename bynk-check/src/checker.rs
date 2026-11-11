@@ -1753,6 +1753,7 @@ pub fn check_handler_body(
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
         let_else_removals: HashMap::new(),
+        store_writing_lambdas: HashMap::new(),
         question_let_binders: HashMap::new(),
         return_ty,
         return_ty_span,
@@ -1925,6 +1926,7 @@ pub fn check_body(
         admitted_literals: HashMap::new(),
         pattern_binding_types: HashMap::new(),
         let_else_removals: HashMap::new(),
+        store_writing_lambdas: HashMap::new(),
         question_let_binders: HashMap::new(),
         return_ty,
         return_ty_span,
@@ -2085,6 +2087,7 @@ pub fn check_invariants(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            store_writing_lambdas: HashMap::new(),
             question_let_binders: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: inv.predicate.span,
@@ -2242,6 +2245,7 @@ pub(crate) fn check_contracts(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            store_writing_lambdas: HashMap::new(),
             question_let_binders: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: c.predicate.span,
@@ -2477,6 +2481,7 @@ pub fn check_transitions(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            store_writing_lambdas: HashMap::new(),
             question_let_binders: HashMap::new(),
             return_ty: bool_ty,
             return_ty_span: tr.predicate.span,
@@ -2668,6 +2673,7 @@ pub fn check_migrations(
             admitted_literals: HashMap::new(),
             pattern_binding_types: HashMap::new(),
             let_else_removals: HashMap::new(),
+            store_writing_lambdas: HashMap::new(),
             question_let_binders: HashMap::new(),
             return_ty: tys.intern(Ty::Unit),
             return_ty_span: step.span,
@@ -3039,6 +3045,9 @@ pub(crate) struct Ctx<'a> {
     /// source ranges to delete to drop its `else` — what the
     /// "remove the `else`" fix of an `else` that can never run applies.
     pub let_else_removals: HashMap<String, Vec<Span>>,
+    /// #3298: a `let`-bound lambda whose body writes a store (field, op), by name,
+    /// so `xs.parTraverse(f)` is checked like the closure written in place.
+    pub store_writing_lambdas: HashMap<String, (String, String)>,
     /// #2839: a plain `let name = <e>?` statement's `?` expression span →
     /// the binder's span and name, so the header-`?` lint can offer the
     /// `let … else` rewrite. Only `let`s with no annotation are recorded.
@@ -4437,6 +4446,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     r
                 });
                 let rhs_ty = type_of(&l.value, annot_ty, ctx);
+                par::note_let_lambda(l, ctx);
                 check_unbound_effects(&l.value, false, ctx);
                 let final_ty = match (annot_ty, rhs_ty) {
                     (Some(annot), Some(rhs)) => {
@@ -5255,6 +5265,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 expr.span,
                                 ctx,
                             );
+                            par::reject_store_write_in_closure(method, args, ctx);
                             // P6.2 (#1143, R6.12): role is read back from
                             // this call's own resolved type where possible —
                             // `is_query_op` above only decides "lift or

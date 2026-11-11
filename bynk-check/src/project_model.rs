@@ -78,6 +78,7 @@ use bynk_syntax::span::{FileId, Span};
 /// `ProjectFailure` (the other two `diagnostics.rs` pipeline-driving types)
 /// stayed in `bynk-emit`, unaffected — neither is a dependency of anything
 /// this module needs.
+#[derive(Clone)]
 pub struct ErrorSink {
     entries: Vec<AttributedError>,
     /// v0.89 (ADR 0117): non-failing warnings, classified on push by
@@ -736,17 +737,22 @@ pub fn phase_resolve_derived(
                     continue;
                 };
                 let Some(kind) = crate::firstparty::instantiable(&owner, &d.base.name) else {
-                    errors.push_for(
-                        Some(&path),
-                        CompileError::new(
-                            "bynk.capability.base_not_instantiable",
-                            d.base.span,
-                            format!(
-                                "`{owner}.{}` has no named instances: a derived capability's base must be a platform resource kind",
-                                d.base.name
-                            ),
+                    let mut error = CompileError::new(
+                        "bynk.capability.base_not_instantiable",
+                        d.base.span,
+                        format!(
+                            "`{owner}.{}` has no named instances: a derived capability's base must be a platform resource kind",
+                            d.base.name
                         ),
                     );
+                    // #3300: a one-per-Worker capability is used bare.
+                    if crate::firstparty::singleton(&owner, &d.base.name).is_some() {
+                        error = error.with_note(format!(
+                            "a Worker has one `{0}` binding, so `{0}` is used bare: write `given {0}` where it is needed, not a capability over it",
+                            d.base.name
+                        ));
+                    }
+                    errors.push_for(Some(&path), error);
                     continue;
                 };
                 // Interop I5 (#1972): each option's value, once valid.
@@ -5748,6 +5754,14 @@ pub struct ShadowedType {
 pub struct ShadowedReaches(HashMap<(String, String), ShadowedType>);
 
 impl ShadowedReaches {
+    /// The reaches in key order, so a rendering of them is the same for two equal
+    /// values however their `HashMap`s iterate (the language server hashes it).
+    pub(crate) fn sorted(&self) -> Vec<(&(String, String), &ShadowedType)> {
+        let mut v: Vec<_> = self.0.iter().collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
+    }
+
     /// No imported declaration reaches a shadowed type.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

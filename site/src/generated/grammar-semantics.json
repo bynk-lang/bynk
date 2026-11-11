@@ -185,7 +185,7 @@
     },
     {
       "code": "bynk.capability.invalid_option",
-      "summary": "A derived capability's option is not one string literal, is given twice, or (`@worker`) is not a Worker name outside the project."
+      "summary": "A derived capability's option is not a literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a Worker outside the project, an unknown `@jurisdiction`)."
     },
     {
       "code": "bynk.capability.missing_option",
@@ -696,10 +696,6 @@
   ],
   "field_access": [
     {
-      "code": "bynk.resolve.unknown_field",
-      "summary": "Accessed a field the record does not have."
-    },
-    {
       "code": "bynk.resolve.unknown_static_member",
       "summary": "Referenced an unknown static member (e.g. `T.x`)."
     },
@@ -863,7 +859,7 @@
   "given_clause": [
     {
       "code": "bynk.capability.instance_only",
-      "summary": "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `EdgeCache`) was used bare, in a `given` clause."
+      "summary": "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1`, `EdgeCache`) was used bare, in a `given` clause."
     },
     {
       "code": "bynk.capability.not_provided",
@@ -1392,6 +1388,10 @@
     {
       "code": "bynk.resolve.opaque_record_construction",
       "summary": "An opaque type was constructed with record syntax."
+    },
+    {
+      "code": "bynk.resolve.unknown_field",
+      "summary": "A record construction names a field the record type does not declare."
     },
     {
       "code": "bynk.types.field_value_mismatch",

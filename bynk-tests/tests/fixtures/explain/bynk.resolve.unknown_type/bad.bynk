@@ -1,0 +1,7 @@
+commons demo
+
+type User = { name: String }
+
+fn greet(u: Usr) -> String {
+    "hi"
+}

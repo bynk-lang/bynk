@@ -1,0 +1,5 @@
+commons demo
+
+fn isAdult(age: Int) -> Bool {
+    age == 18
+}

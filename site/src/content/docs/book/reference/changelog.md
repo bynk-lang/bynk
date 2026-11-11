@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.544**.
+written against **v0.547**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,16 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.547.0** | An agent's `store Map`, `Set`, `Cache` and `Log` fields are read from storage as a handler touches them, and written back as the entries it changed, so a handler's storage cost no longer grows with the size of a collection (per-entry storage, lazy-read slice, part 2b) |
+| **v0.546.7** | The language server keeps each file's checked output between analysis rounds and replays it when nothing the check read has changed, cutting edit-to-diagnostics latency on large projects (linked 200 contexts about 17% faster) for about 20% more server memory, linear in the number of files; `bynk check` and builds are unchanged |
+| **v0.546.6** | `bynk explain` gains compiled-example explanations for the generics bound, inference and mismatch codes and the name-resolution codes (unknown function, static member, name conflict, duplicate type) |
+| **v0.546.5** | `bynk explain` gains compiled explanations for the agent state-zero, derived-capability instance and held-borrow errors |
+| **v0.546.4** | `bynk explain` covers eight everyday type errors, among them `bynk.types.type_mismatch`, `bynk.types.method_not_found` and `bynk.types.unreachable_arm` |
+| **v0.546.3** | Design record for Hyperdrive (H0), covering the Postgres driver, the compatibility date and the surface; no surface ships yet |
+| **v0.546.2** | Closes a gap where rebinding a writing lambda's name in an inner block let a store write through a `parTraverse` closure |
+| **v0.546.1** | Each `bynk explain` example is backed by a compiled before-and-after pair, and the examples that had drifted from the language are corrected |
+| **v0.546.0** | `bynk.cloudflare.Version` (experimental) reports the running Worker version, the first one-per-Worker platform capability, bound as `[version_metadata]` only when reached |
+| **v0.545.0** | A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` may not write a `store` (`bynk.par.store_write_in_closure`), extending the `par` block's rule that store writes stay sequential |
 | **v0.544.1** | The project analysis shares each context's agent declarations with the sequence and boundary info it retains instead of deep-copying them twice per context, which shaves editor edit latency on projects with many agents |
 | **v0.544.0** | Store collection operations and store queries in emitted agents are written so a handle backed by storage can serve them, with no change to an agent's behaviour (per-entry storage, lazy-read slice, part 2a) |
 | **v0.543.1** | A ratcheted maximum function length: `cargo xtask fn-lengths` lists the non-test functions over 300 lines, and a test fails when one grows past its committed ceiling or a new one crosses the threshold (#3167) |

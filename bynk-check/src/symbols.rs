@@ -504,7 +504,79 @@ pub struct UnitTable {
     pub derived: HashMap<String, DerivedInstance>,
 }
 
+/// One type's methods: its name, then its instance and static methods in key order.
+pub(crate) type SortedMethods<'a> = (
+    &'a String,
+    Vec<(&'a String, &'a Arc<FnDecl>)>,
+    Vec<(&'a String, &'a Arc<FnDecl>)>,
+);
+
+/// A method table with its maps in key order, so its `Debug` is the same for two
+/// equal tables however their `HashMap`s happen to iterate (#3243 S2.3b: the
+/// language server hashes the rendering).
+pub(crate) fn sorted_methods(
+    methods: &HashMap<String, ResolverMethodTable>,
+) -> Vec<SortedMethods<'_>> {
+    fn sorted(m: &HashMap<String, Arc<FnDecl>>) -> Vec<(&String, &Arc<FnDecl>)> {
+        let mut v: Vec<_> = m.iter().collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
+    }
+    let mut out: Vec<_> = methods
+        .iter()
+        .map(|(k, t)| (k, sorted(&t.instance), sorted(&t.statics)))
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(b.0));
+    out
+}
+
 impl UnitTable {
+    /// The parts of this table that are **not** a function of the unit's own
+    /// files (#3243 S2.3b): everything `phase_symbol_tables` builds from a unit's
+    /// own sources is covered by hashing those sources, so a file-check digest
+    /// takes only these, which `record_flattened_caps` and
+    /// `phase_resolve_derived` fill in from other units.
+    ///
+    /// Exhaustive on purpose: a new field must be classified here, as own-source
+    /// (named `_`) or cross-unit (returned).
+    pub(crate) fn cross_unit_facts(&self) -> impl std::fmt::Debug + '_ {
+        fn sorted<K: Ord, V>(m: &HashMap<K, V>) -> Vec<(&K, &V)> {
+            let mut v: Vec<_> = m.iter().collect();
+            v.sort_by(|a, b| a.0.cmp(b.0));
+            v
+        }
+        let UnitTable {
+            // Stamped after every unit is checked.
+            exec_plan: _,
+            kind,
+            // Built by `phase_symbol_tables` from the unit's own files.
+            types: _,
+            fns: _,
+            methods: _,
+            capabilities: _,
+            providers: _,
+            services: _,
+            agents: _,
+            removed_agents: _,
+            actors: _,
+            exported_capabilities: _,
+            events: _,
+            assets: _,
+            embeds: _,
+            consts: _,
+            // Filled in from other units.
+            flattened_caps,
+            consumed_type_aliases,
+            derived,
+        } = self;
+        (
+            *kind,
+            sorted(flattened_caps),
+            sorted(consumed_type_aliases),
+            sorted(derived),
+        )
+    }
+
     /// #2618: does this unit declare anything `private`?
     pub fn has_private(&self) -> bool {
         self.types.values().any(|d| d.private.is_some())

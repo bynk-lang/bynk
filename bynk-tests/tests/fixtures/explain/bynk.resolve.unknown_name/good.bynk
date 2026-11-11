@@ -1,0 +1,6 @@
+commons demo
+
+fn greet() -> String {
+    let greeting = "hi"
+    greeting
+}

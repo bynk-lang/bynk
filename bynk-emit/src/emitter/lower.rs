@@ -3893,11 +3893,11 @@ fn lower_store_map_call(
                 k
             ),
             "update" => format!(
-                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => {{ if (!__h) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} return __bynkThen({m}.get(__k), (__v) => __bynkThen({m}.put(__k, ({1})(__v!)), () => undefined)); }}); }})()",
+                "(async () => {{ await {m}.modify({0}, (__c, __p) => {{ if (!__p) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} return ({1})(__c!); }}); return undefined; }})()",
                 k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __bynkThen(__h ? {m}.get(__k) : ({1}), (__v) => __bynkThen({m}.put(__k, ({2})(__v!)), () => undefined))); }})()",
+                "(async () => {{ await {m}.modify({0}, (__c, __p) => ({2})(__p ? __c! : ({1}))); return undefined; }})()",
                 k, a[1], a[2]
             ),
             // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
@@ -4047,11 +4047,11 @@ fn lower_store_cache_call(
                 )
             }
             "update" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} return __bynkThen({c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}), () => undefined); }}); }})()",
+                "(async () => {{ const __now = {now}; const __k = {0}; await {c}.modify(__k, (__e) => {{ if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} return {{ v: ({1})(__e.v), exp: __now + {ttl} }}; }}); return undefined; }})()",
                 k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); return __bynkThen({c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}), () => undefined); }}); }})()",
+                "(async () => {{ const __now = {now}; const __k = {0}; await {c}.modify(__k, (__e) => {{ const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); return {{ v: ({2})(__cur), exp: __now + {ttl} }}; }}); return undefined; }})()",
                 k, a[1], a[2]
             ),
             other => format!("(/* unsupported Cache op {other} */ undefined)"),
@@ -8251,14 +8251,14 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
                 if decoded == "__k" {
                     format!("(() => {m}.keys())")
                 } else {
-                    format!("(() => {m}.keys().map((__k) => {decoded}))")
+                    format!("(() => __bynkThen({m}.keys(), (__ks) => __ks.map((__k) => {decoded})))")
                 }
             }
             // entries
             _ => {
                 let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
                 format!(
-                    "(() => {m}.entries().map(([__k, __v]) => ({{ key: {decoded}, value: __v }})))"
+                    "(() => __bynkThen({m}.entries(), (__es) => __es.map(([__k, __v]) => ({{ key: {decoded}, value: __v }}))))"
                 )
             }
         });

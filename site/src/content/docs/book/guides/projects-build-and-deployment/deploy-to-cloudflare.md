@@ -458,7 +458,7 @@ calls from Workers still on it, and the other way round. So:
 
 ### Several KV namespaces
 
-Each [derived capability](/book/reference/capabilities/#derived-capabilities-capability-x--k)
+Each [derived capability](/book/reference/capabilities/#derived-capabilities)
 (`capability Sessions = Kv`) is a namespace of its own. The plan gives it a line
 of its own, with its binding:
 

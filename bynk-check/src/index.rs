@@ -126,7 +126,7 @@ pub struct RefEdge {
 /// resolution sites only supply the span and target. A sink left in its
 /// default state (no file) discards edges — the single-file entry points
 /// resolve without recording.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RefSink {
     pub edges: Vec<RefEdge>,
     /// Synthetic namespaces (integration-test harness roots) → their `uses`

@@ -7,7 +7,8 @@ import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreCache, __StoreLog, __StoreMap, __fillLog, __fillMap, __wireEntries, __wireLog, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -510,6 +511,8 @@ function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
   return { ...s, lights: __wireMap(s.lights, (__v) => __serialise_Light(__v)) };
 }
 
+const __lazyFieldsOfBoard = [{ name: "lights", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Light((__w as unknown as __JsonValue), "lights"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Light; return __serialise_Light(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lights", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); } }] as const;
+
 export class Board {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -520,12 +523,12 @@ export class Board {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
     __checkStoredLayout("Board", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfBoardState();
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoardState(__merged, __wholesale);
-    __hydrateBoardState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBoard); } else { __hydrateBoardState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -579,6 +582,8 @@ function __encodeMemoState(s: MemoState): globalThis.Record<string, unknown> {
   return { ...s, c: __wireMap(s.c, (__e) => ({ ...__e, v: __serialise_Option_Int(__e.v) })) };
 }
 
+const __lazyFieldsOfMemo = [{ name: "c", kind: "cache", decode: (__w: unknown) => { const __r = __deserialise_Option_Int((__w as unknown as __JsonValue), "c"); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Option<number>; return __serialise_Option_Int(__v); } }] as const;
+
 export class Memo {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -589,12 +594,12 @@ export class Memo {
     const stored = await this.state.storage.get<MemoState>("state");
     if (stored === undefined) return __zeroOfMemoState();
     __checkStoredLayout("Memo", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfMemoState();
     __reportUnknownStoredKeys("Memo", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateMemoState(__merged, __wholesale);
-    __hydrateMemoState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfMemo); } else { __hydrateMemoState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -648,6 +653,8 @@ function __encodeHistoryState(s: HistoryState): globalThis.Record<string, unknow
   return { ...s, l: __wireLog(s.l, (__v) => __serialise_Shape(__v)) };
 }
 
+const __lazyFieldsOfHistory = [{ name: "l", kind: "log", decode: (__w: unknown) => { const __r = __deserialise_Shape((__w as unknown as __JsonValue), "l"); if (__r.tag === "Err") throw __rehydrationViolation("History", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Shape; return __serialise_Shape(__v); } }] as const;
+
 export class History {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -658,12 +665,12 @@ export class History {
     const stored = await this.state.storage.get<HistoryState>("state");
     if (stored === undefined) return __zeroOfHistoryState();
     __checkStoredLayout("History", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfHistoryState();
     __reportUnknownStoredKeys("History", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateHistoryState(__merged, __wholesale);
-    __hydrateHistoryState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfHistory); } else { __hydrateHistoryState(__merged, __wholesale) }
     return __merged;
   }
 

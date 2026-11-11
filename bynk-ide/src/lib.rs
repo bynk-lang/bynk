@@ -355,6 +355,31 @@ pub fn diagnose_project_with(
     overlay: &HashMap<PathBuf, String>,
     schema_lock: &SchemaLock,
 ) -> ProjectDiagnostics {
+    diagnostics_of(bynk_check::analysis::analyse_project(
+        &roots.lower(overlay),
+        overlay,
+        schema_lock,
+    ))
+}
+
+/// [`diagnose_project_with`] reusing what `memo` kept from the previous round
+/// (#3243 S2.3b): the language server's entry point, one memo per project. The
+/// answer is exactly [`diagnose_project_with`]'s.
+pub fn diagnose_project_memoised(
+    roots: &AnalysisRoots,
+    overlay: &HashMap<PathBuf, String>,
+    schema_lock: &SchemaLock,
+    memo: &mut bynk_check::memo::AnalysisMemo,
+) -> ProjectDiagnostics {
+    diagnostics_of(bynk_check::memo::analyse_project_memoised(
+        &roots.lower(overlay),
+        overlay,
+        schema_lock,
+        memo,
+    ))
+}
+
+fn diagnostics_of(analysis: bynk_check::analysis::ProjectAnalysis) -> ProjectDiagnostics {
     // #43: destructured (not `analysis.field`-by-field) so that a field added
     // to `ProjectAnalysis` without a matching update *here* is a compile
     // error (an unmentioned field in a struct pattern), not a silently
@@ -376,7 +401,7 @@ pub fn diagnose_project_with(
         boundary_info,
         doc_scope,
         contract_diff,
-    } = bynk_check::analysis::analyse_project(&roots.lower(overlay), overlay, schema_lock);
+    } = analysis;
     let mut by_file: HashMap<PathBuf, Vec<Diagnostic>> = HashMap::new();
     let mut unattributed = Vec::new();
     for ae in errors {

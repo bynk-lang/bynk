@@ -323,6 +323,21 @@ export const SqlReadError = {
 };
 
 /**
+ * The version of this Worker that is running, as `Version.current()`
+ * reports it. `id` is the version's id, `tag` its tag (`None` when the
+ * version was uploaded without one), and `deployed` when the version was
+ * created.
+ */
+export interface WorkerVersion {
+  readonly id: string;
+  readonly tag: Option<string>;
+  readonly deployed: number;
+}
+
+export const WorkerVersion = {
+};
+
+/**
  * A Cloudflare Workers KV namespace: a key/value store with optional per-entry
  * expiry and prefix listing.
  *
@@ -582,6 +597,22 @@ export interface D1 {
 }
 
 export const __D1Token: symbol = globalThis.Symbol("D1");
+
+/**
+ * The running Worker's version, from Cloudflare's Version metadata binding.
+ * It is bound once per Worker, so it is used bare (`given Version`) and has
+ * no named instances. Only a Worker that uses it declares the binding.
+ * `current()` gives the same value for every call in a deployment: report it
+ * from a health route, or write it beside an `Analytics` point, to tell
+ * which version served a request. Under `bynk dev` the id is local; in a
+ * test the value is fixed (id `"test"`, no tag, `deployed` at the epoch) and
+ * `stub Version.current() returns …` replaces it.
+ */
+export interface Version {
+  current(): globalThis.Promise<WorkerVersion>;
+}
+
+export const __VersionToken: symbol = globalThis.Symbol("Version");
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
@@ -1209,6 +1240,36 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_WorkerVersion(value: WorkerVersion): __JsonValue {
+  return {
+    id: value.id as __JsonValue,
+    tag: __serialise_Option_String(value.tag),
+    deployed: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.deployed),
+  };
+}
+
+export function __deserialise_WorkerVersion(json: __JsonValue, path: string = "$"): Result<WorkerVersion, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["id"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
+  }
+  const __id = obj["id"];
+  const __r_tag = __deserialise_Option_String(obj["tag"], `${path}.tag`);
+  if (__r_tag.tag === "Err") return __r_tag;
+  const __tag = __r_tag.value;
+  if (typeof obj["deployed"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "number", actual: typeof obj["deployed"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["deployed"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "safe integer", actual: String(obj["deployed"]) });
+  }
+  const __deployed = obj["deployed"];
+  return Ok({ id: __id, tag: __tag, deployed: __deployed } as WorkerVersion);
 }
 
 

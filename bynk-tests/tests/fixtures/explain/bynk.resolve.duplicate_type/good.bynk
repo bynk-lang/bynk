@@ -1,0 +1,4 @@
+commons demo
+
+type Money = Int
+type Label = String

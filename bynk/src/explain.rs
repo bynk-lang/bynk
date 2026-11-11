@@ -111,10 +111,10 @@ mod tests {
     fn known_but_unexplained_code_is_graceful() {
         // Pick a real registry code with no curated explanation. If this ever
         // gains one, swap it — the point is a code that exists but isn't curated.
-        let code = "bynk.resolve.duplicate_type";
+        let code = "bynk.resolve.duplicate_fn";
         assert!(diagnostics::explain(code).is_none());
         assert!(matches!(lookup(code), Lookup::KnownUnexplained(_)));
-        let out = render_known_unexplained(code, "Two types share a name.");
+        let out = render_known_unexplained(code, "Two functions share a name.");
         assert!(out.contains(code));
         assert!(out.contains("No extended explanation"));
     }

@@ -1,0 +1,13 @@
+context room
+
+type ServerFrame = { text: String }
+
+agent Room {
+    key id: String
+
+    store conns: Map[String, Connection[ServerFrame]]
+
+    on call shutdown() -> Effect[()] {
+        conns.forEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: "closing" }))
+    }
+}

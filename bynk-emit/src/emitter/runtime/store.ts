@@ -36,6 +36,12 @@ export interface StoreMapHandle<V> {
   get(key: string): Awaitable<V | undefined>;
   /** Insert or overwrite. An existing key keeps its position. Maintains the postings. */
   put(key: string, value: V): Awaitable<void>;
+  /**
+   * Read the entry, compute its replacement, write it: one step per key. `f` gets the current value (`undefined` when
+   * absent) and whether the key is present, and may throw to leave the entry as it was. A storage-backed handle runs
+   * the steps of one key one after another, so a read-modify-write is not interleaved with another on that key.
+   */
+  modify(key: string, f: (current: V | undefined, present: boolean) => V): Awaitable<void>;
   /** Remove a key, if present, and its postings. Resolves to whether it was present. */
   remove(key: string): Awaitable<boolean>;
   size(): Awaitable<number>;
@@ -70,7 +76,8 @@ interface Slot<V> {
 /** The eager, in-memory `store Map` handle. */
 export class StoreMap<V> implements StoreMapHandle<V> {
   private readonly slots = new Map<string, Slot<V>>();
-  private readonly indexers: readonly Indexer<V>[];
+  /** The `@indexed` indexers this handle keeps postings for (a storage-backed handle takes the same ones). */
+  readonly indexers: readonly Indexer<V>[];
   // index name -> index value -> primary keys in rank (insertion) order.
   private readonly postings = new Map<string, Map<string, string[]>>();
   private nextRank = 0;
@@ -98,6 +105,12 @@ export class StoreMap<V> implements StoreMapHandle<V> {
 
   get(key: string): V | undefined {
     return this.slots.get(key)?.value;
+  }
+
+  /** Read, compute and write in one step: nothing runs between them. */
+  modify(key: string, f: (current: V | undefined, present: boolean) => V): void {
+    const present = this.slots.has(key);
+    this.put(key, f(present ? this.slots.get(key)!.value : undefined, present));
   }
 
   put(key: string, value: V): void {
@@ -331,6 +344,15 @@ export class StoreLog<V> implements StoreLogHandle<V> {
 
 const recordOrders = new WeakMap<object, readonly string[]>();
 
+/**
+ * Whether a handle is storage-backed (`lazy.ts`): it holds nothing a wire record could carry. The wire
+ * encoders answer an empty placeholder for one, because `commitState` encodes the whole state and the lazy
+ * commit then drops those slots; the encoder is not a way to read a lazily loaded state out.
+ */
+export function isLazy(handle: object): boolean {
+  return (handle as { lazy?: unknown }).lazy === true;
+}
+
 /** A record holding `pairs`, with their order noted so {@link entriesOf} reads it back. */
 export function orderedRecord<T>(pairs: Iterable<readonly [string, T]>): Record<string, T> {
   const record: Record<string, T> = {};
@@ -365,21 +387,26 @@ export function wireEntries<T>(wire: Readonly<Record<string, T>>): Array<[string
 
 /** A `Map`'s wire record, its values passed through `f` if given. */
 export function wireMap<V, W = V>(handle: StoreMap<V>, f?: (value: V) => W): Record<string, W> {
+  // A storage-backed handle is not part of the record: its entries are staged in the overlay.
+  if (isLazy(handle)) return {};
   return orderedRecord(handle.entries().map(([k, v]) => [k, f === undefined ? (v as unknown as W) : f(v)] as const));
 }
 
 /** A `Set`'s wire record: each member `true`. */
 export function wireSet(handle: StoreSet): Record<string, boolean> {
+  if (isLazy(handle)) return {};
   return orderedRecord(handle.keys().map((k) => [k, true] as const));
 }
 
 /** A `Log`'s wire array, its values passed through `f` if given. */
 export function wireLog<V, W = V>(handle: StoreLog<V>, f?: (value: V) => W): Array<{ t: number; v: W }> {
+  if (isLazy(handle)) return [];
   return handle.entries().map((e) => (f === undefined ? { ...e } : { ...e, v: f(e.v) })) as Array<{ t: number; v: W }>;
 }
 
 /** The posting lists of one `@indexed` field, as a wholesale record holds them. */
 export function wirePostings<V>(handle: StoreMap<V>, index: string): Record<string, string[]> {
+  if (isLazy(handle)) return {};
   return Object.fromEntries([...handle.postingsOf(index)].map(([by, pks]) => [by, [...pks]]));
 }
 

@@ -1,0 +1,15 @@
+context demo
+
+capability Logger {
+    fn log(message: String) -> Effect[()]
+}
+
+capability Greeter {
+    fn greet() -> Effect[()]
+}
+
+provides Greeter = Polite given Loger {
+    fn greet() -> Effect[()] {
+        Effect.pure(())
+    }
+}

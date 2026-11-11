@@ -1,0 +1,8 @@
+// #3300: at `system`, each participant Worker binds its own fixed Version
+// metadata, which the handler reports over the wire.
+suite shop.status as system {
+	case "the participant's binding reports its version" {
+		let r <- api.GET("/health") by Visitor
+		expect r is Ok(Health { version: "integration", tag: None, .. })
+	}
+}

@@ -193,6 +193,28 @@ fn cached_owner_unit<'c>(
 /// slice D, now one set per discovered project root. Every request routes by
 /// URI (via `resolve_root`) to its owning entry, so two projects analyse,
 /// version, and publish independently.
+/// One project's analysis round, through its memo when it has one (#3243 S2.3b).
+/// A memo poisoned by a panic in an earlier round is dropped, not trusted.
+fn analyse_with_memo(
+    roots: &bynk_ide::AnalysisRoots,
+    content: &std::collections::HashMap<PathBuf, String>,
+    schema_lock: &bynk_ide::SchemaLock,
+    memo: Option<&std::sync::Mutex<bynk_check::memo::AnalysisMemo>>,
+) -> bynk_ide::ProjectDiagnostics {
+    let Some(memo) = memo else {
+        return bynk_ide::diagnose_project_with(roots, content, schema_lock);
+    };
+    if memo.is_poisoned() {
+        // A panic mid-round may have left the memo half-updated: empty it, and
+        // clear the flag so later rounds keep what they learn instead of
+        // starting over every time.
+        *memo.lock().unwrap_or_else(|e| e.into_inner()) = bynk_check::memo::AnalysisMemo::new();
+        memo.clear_poison();
+    }
+    let mut guard = memo.lock().unwrap_or_else(|e| e.into_inner());
+    bynk_ide::diagnose_project_memoised(roots, content, schema_lock, &mut guard)
+}
+
 #[derive(Debug, Default)]
 struct ProjectState {
     /// Parsed `bynk.toml` configuration for this root. Defaults for missing
@@ -209,6 +231,11 @@ struct ProjectState {
     /// re-tokenising and re-parsing every file just to learn a name that only
     /// changes when the file does was about 8% of a round.
     doc_owner_cache: std::collections::HashMap<PathBuf, (u64, Option<String>)>,
+    /// #3243 S2.3b: what the last analysis round kept for the next (each
+    /// file's checked output, keyed by a digest of everything the check read).
+    /// Behind a mutex because the round runs on a blocking thread; rounds of one
+    /// project never overlap in practice, and a second would simply wait.
+    analysis_memo: Arc<std::sync::Mutex<bynk_check::memo::AnalysisMemo>>,
     /// v0.24: URIs that currently carry published project diagnostics — the
     /// previous round's dirty set, so newly-clean files get a clearing
     /// (empty) publish. Per-project (slice D): a round for this root must only
@@ -804,13 +831,20 @@ impl Backend {
         // #2081: the committed schema lock, so a non-additive event change is
         // diagnosed here as `bynk check` diagnoses it.
         let schema_lock = self.schema_lock_for(&root).await;
+        let memo = self
+            .state
+            .read()
+            .await
+            .projects
+            .get(&root)
+            .map(|ps| Arc::clone(&ps.analysis_memo));
         let joined = tokio::task::spawn_blocking(move || {
             #[cfg(test)]
             if inject_panic {
                 panic!("injected analysis panic");
             }
             let content = crate::content::sweep_project_content(&roots, &overlay);
-            bynk_ide::diagnose_project_with(&roots, &content, &schema_lock)
+            analyse_with_memo(&roots, &content, &schema_lock, memo.as_deref())
         })
         .await;
         let result = match joined {
@@ -6095,7 +6129,7 @@ mod code_description_tests {
     fn uncurated_code_gets_no_link() {
         // A real code with no curated explanation, and a nonsense code, both
         // fall back to no link (graceful — not an error).
-        assert!(code_description("bynk.resolve.duplicate_type").is_none());
+        assert!(code_description("bynk.resolve.duplicate_fn").is_none());
         assert!(code_description("bynk.not.a_real_code").is_none());
     }
 
@@ -9563,7 +9597,7 @@ mod tests {
         assert_eq!(curated.title, "bynk.resolve.unknown_type");
         assert!(
             backend
-                .explain(ask("bynk.resolve.duplicate_type"))
+                .explain(ask("bynk.resolve.duplicate_fn"))
                 .await
                 .unwrap()
                 .is_none()
@@ -11233,5 +11267,58 @@ mod owner_cache_tests {
         );
         // Unparseable text: no owner, and the miss is remembered.
         assert_eq!(cached_owner_unit(&mut cache, &file("\u{1}\u{1}")), None);
+    }
+}
+
+#[cfg(test)]
+mod analysis_memo_tests {
+    use super::analyse_with_memo;
+    use bynk_check::memo::AnalysisMemo;
+    use std::sync::{Arc, Mutex};
+
+    /// #3243 S2.3b: a memo poisoned by a panic is emptied, and the poison is
+    /// cleared, so the rounds after it keep what they learn.
+    #[test]
+    fn a_poisoned_memo_is_emptied_and_then_works_again() {
+        let root =
+            std::env::temp_dir().join(format!("bynk-lsp-memo-poison-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("bynk.toml"), "").unwrap();
+        let src =
+            "context demo\n\nservice probe {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+        std::fs::write(root.join("demo.bynk"), src).unwrap();
+        let roots = bynk_ide::AnalysisRoots::SingleTree(root.clone());
+        let content = std::collections::HashMap::from([(root.join("demo.bynk"), src.to_string())]);
+
+        let memo = Arc::new(Mutex::new(AnalysisMemo::new()));
+        let round = |memo: &Arc<Mutex<AnalysisMemo>>| {
+            analyse_with_memo(&roots, &content, &bynk_ide::SchemaLock::Off, Some(memo));
+            memo.lock().unwrap().stats()
+        };
+        assert!(round(&memo).misses > 0, "the first round checks the file");
+        assert_eq!(round(&memo).misses, 0, "the second replays it");
+
+        // Poison it the way a panicking round would.
+        let poisoner = Arc::clone(&memo);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.lock().unwrap();
+            panic!("injected");
+        })
+        .join();
+        assert!(memo.is_poisoned());
+
+        let after = round(&memo);
+        assert!(!memo.is_poisoned(), "the poison is cleared");
+        assert!(
+            after.misses > 0,
+            "the recovered memo started empty: {after:?}"
+        );
+        assert_eq!(
+            round(&memo).misses,
+            0,
+            "and keeps what it learns afterwards"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

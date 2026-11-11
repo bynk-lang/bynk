@@ -1,0 +1,9 @@
+commons demo
+
+type Age = Int where InRange(0, 150)
+
+fn count() -> Int { 3 }
+
+fn parse(n: Int) -> Result[Age, ValidationError] {
+    Age.of(n)
+}

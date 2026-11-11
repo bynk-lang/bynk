@@ -405,6 +405,51 @@ interface EntryBase {
 
 const bases = new WeakMap<object, EntryBase>();
 
+/** What a lazy load staged for the commit: the shared overlay, each handle's metadata, each `Cache`'s reaper. */
+export interface LazyContext {
+  readonly overlay: EntryOverlay;
+  finish(): void;
+  readonly reapers: ReadonlyArray<(now: number, limit: number) => Promise<number>>;
+}
+
+// Keyed by the storage-backed handles of the state a handler loaded, not by the agent instance: the
+// commit finds the overlay of the handler whose state it is committing, whatever else has loaded since.
+const lazyContexts = new WeakMap<object, LazyContext>();
+// Instances whose last `readStored` chose the lazy read: `loadState` then attaches handles.
+const lazyReads = new WeakMap<object, true>();
+
+/** Register the context every one of `handles` belongs to. */
+export function setLazyContext(handles: readonly object[], ctx: LazyContext): void {
+  for (const h of handles) lazyContexts.set(h, ctx);
+}
+
+// The context of the lazy handles in `state`'s collection slots, if it holds any.
+function lazyContextOf(state: object | undefined, fields: readonly EntryField[]): LazyContext | undefined {
+  if (state === undefined) return undefined;
+  for (const f of fields) {
+    const handle = (state as Record<string, unknown>)[f.name];
+    const ctx = typeof handle === "object" && handle !== null ? lazyContexts.get(handle) : undefined;
+    if (ctx !== undefined) return ctx;
+  }
+  return undefined;
+}
+
+/** Whether `self`'s last `readStored` took the lazy read (its collections are not in the record it returned). */
+export function readsLazily(self: object): boolean {
+  return lazyReads.has(self);
+}
+
+/**
+ * Whether a stored record is read lazily: a current-version per-entry record. A record in the
+ * wholesale layout, or one a migration step still covers (`steps` are the `[lo, from]` version
+ * ranges, as `__checkStoredSchemaVersion` takes them), is read whole.
+ */
+export function canReadLazily(stored: Readonly<Record<string, unknown>>, steps: ReadonlyArray<readonly [number, number]>): boolean {
+  if ((stored as { __layout?: unknown }).__layout !== LAYOUT_PER_ENTRY) return false;
+  const v = typeof stored["__v"] === "number" ? (stored["__v"] as number) : 1;
+  return !steps.some(([lo, from]) => v >= lo && v <= from);
+}
+
 function copyStored<T>(v: T): T {
   return globalThis.structuredClone(v);
 }
@@ -431,8 +476,18 @@ export async function readStored<S extends object>(
   self: object,
   storage: DurableObjectStorage,
   storedState: S,
+  lazySteps?: ReadonlyArray<readonly [number, number]>,
 ): Promise<S> {
   const stored = storedState as Readonly<Record<string, unknown>>;
+  lazyReads.delete(self);
+  if (lazySteps !== undefined && canReadLazily(stored, lazySteps)) {
+    // Lazy read: the Cell fields are the whole record; the collections are read by their handles.
+    bases.delete(self);
+    lazyReads.set(self, true);
+    const out: Record<string, unknown> = { ...stored };
+    delete out[LAYOUT_KEY];
+    return out as S;
+  }
   if ((stored as { __layout?: unknown }).__layout === undefined) {
     // The wholesale layout. Nothing is written on load: the record is handed back as it
     // is, for any migration step to read, and the first commit splits the migrated state
@@ -671,6 +726,33 @@ async function writeEntries(
   bases.set(self, { entries: next });
 }
 
+// A lazy handler's commit: reap expired `Cache` entries (bounded, as the eager commit does), stage
+// each handle's metadata, and write the `"state"` record with the writes the handles staged, in
+// one transaction. The collections' own writes are already in the overlay; the encoded record's
+// collection slots are empty placeholders and leave it.
+async function commitLazy(
+  ctx: LazyContext,
+  encoded: Readonly<Record<string, unknown>>,
+  fields: readonly EntryField[],
+  now: number | undefined,
+): Promise<void> {
+  if (now !== undefined) {
+    let budget = CACHE_REAP_LIMIT;
+    for (const reap of ctx.reapers) {
+      if (budget <= 0) break;
+      budget -= await reap(now, budget);
+    }
+  }
+  ctx.finish();
+  const record: Record<string, unknown> = { ...encoded };
+  for (const f of fields) {
+    delete record[f.name];
+    for (const ix of f.indexes ?? []) delete record[ix.recordField];
+  }
+  record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
+  await ctx.overlay.flush({ state: record });
+}
+
 /**
  * Write an encoded (wholesale-shaped) state record in the per-entry layout: the `"state"`
  * record, and only the entries that changed since `readStored`, in one transaction. The
@@ -685,6 +767,11 @@ export async function commitStored(
   state?: object,
 ): Promise<void> {
   const now = state === undefined ? undefined : clocks.get(state);
+  const lazy = lazyContextOf(state, fields);
+  if (lazy !== undefined) {
+    await commitLazy(lazy, encoded as Readonly<Record<string, unknown>>, fields, now);
+    return;
+  }
   await writeEntries(self, storage, encoded as Readonly<Record<string, unknown>>, fields, now);
 }
 
@@ -720,4 +807,4 @@ export function then<T, R>(value: T | Promise<T>, f: (value: T) => R | Promise<R
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { commitStored as __commitStored, noteClock as __noteClock, readStored as __readStored, then as __bynkThen };
+export { commitStored as __commitStored, noteClock as __noteClock, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };

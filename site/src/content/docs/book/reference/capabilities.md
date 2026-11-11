@@ -118,6 +118,17 @@ value; it is a statement. These are refused:
 A block with one binding is the warning `bynk.par.single_binding`: it is a plain
 `let x <- e` with extra syntax.
 
+**Store writes stay sequential in `parTraverse` too.** The closure given to
+`parTraverse`, `parTraverseAll` or `parTraverseTry` runs once per element, all at
+once, so it follows the same rule: it may not write a `store` field
+(`bynk.par.store_write_in_closure`). That covers `put`, `remove`, `update`, `upsert`,
+`add`, `append` and `:=`, in the closure, in a lambda nested in it, or in a lambda
+bound to a name and passed by name. Reads, a store used as the *receiver*
+(`conns.parTraverse(…)`), and calls to other agents are fine. A `get` then a `put` in
+a closure loses updates, because every `<-` is an await point and the branches
+interleave between the two; run the loop with `forEach` instead, where a single-call
+`update` or `upsert` is atomic per key.
+
 **If an effect faults,** the block waits for the others to settle, then raises the
 **first fault in source order**, not the first in time. A fast failure waits for a
 slow sibling; that is what keeps every effect inside the handler's lifetime and the
@@ -283,7 +294,7 @@ A capability may not depend on itself, directly or transitively
 (`bynk.provider.dependency_cycle`) — including the trivial `provides X = … given
 X`.
 
-## Derived capabilities (`capability X = K`)
+## Derived capabilities (`capability X = K`) {#derived-capabilities}
 
 A **derived** capability is a distinct instance of a platform resource, such as
 a second KV namespace:
@@ -317,6 +328,8 @@ on it unchanged.
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
   `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache`.
+  `Version` is not: a Worker has one Version metadata binding, so it is used
+  bare, with `given Version`.
 - Options follow the base as `@annotations`, from the kind's own set
   (`bynk.capability.unknown_option`), each one literal of the option's kind,
   given once (`bynk.capability.invalid_option`). `Kv` takes none. `Service`

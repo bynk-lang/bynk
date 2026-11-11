@@ -1,0 +1,7 @@
+commons demo
+
+type User = { name: String, age: Int }
+
+fn ada() -> User {
+    User { name: "Ada", age: 36 }
+}

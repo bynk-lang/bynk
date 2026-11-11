@@ -458,3 +458,62 @@ fn a_following_statement_sees_the_original_schema() {
         ["bynk.d1.sql_invalid"]
     );
 }
+
+/// #3243 S2.3b: the language server's memo must not replay a stale SQL
+/// diagnostic after a migration changes. The migrations are not in the project's
+/// `.bynk` text, so a digest that missed them would keep answering from the old
+/// schema until the unit itself was edited.
+#[test]
+fn a_memoised_round_sees_an_edited_migration() {
+    use bynk_check::memo::{AnalysisMemo, analyse_project_memoised};
+    use bynk_check::oracle::canonical_report;
+
+    let root = std::env::temp_dir().join(format!("bynk-check-d1-memo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |rel: &str, text: &str| {
+        let p: PathBuf = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    let unit = source(BAD_COLUMN);
+    write("bynk.toml", "");
+    write("demo.bynk", &unit);
+    write("migrations/demo-orders/0001_create.sql", MIGRATION);
+    let overlay = HashMap::from([(root.join("demo.bynk"), unit)]);
+    let roots = Roots::Single(root.clone());
+    let mut memo = AnalysisMemo::new();
+    let round = |memo: &mut AnalysisMemo| {
+        let memoised = analyse_project_memoised(&roots, &overlay, &SchemaLock::Off, memo);
+        let fresh = analysis::analyse_project(&roots, &overlay, &SchemaLock::Off);
+        assert_eq!(
+            canonical_report(&memoised),
+            canonical_report(&fresh),
+            "a memoised round must answer what a fresh one does"
+        );
+        memoised
+            .errors
+            .iter()
+            .map(|e| e.error.category)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        round(&mut memo),
+        ["bynk.d1.sql_invalid"],
+        "the column is missing"
+    );
+    // The migration gains the column the statement names. No `.bynk` file changed.
+    write(
+        "migrations/demo-orders/0002_status.sql",
+        "ALTER TABLE orders ADD COLUMN stauts TEXT;",
+    );
+    assert_eq!(
+        round(&mut memo),
+        Vec::<&str>::new(),
+        "the new migration makes the statement valid"
+    );
+    // And an unchanged round after that replays everything.
+    assert_eq!(round(&mut memo), Vec::<&str>::new());
+    assert_eq!(memo.stats().misses, 0, "{:?}", memo.stats());
+    let _ = std::fs::remove_dir_all(&root);
+}
