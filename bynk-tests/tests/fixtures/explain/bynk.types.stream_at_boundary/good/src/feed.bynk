@@ -1,0 +1,7 @@
+context feed
+
+service s {
+    on call(readings: List[Int]) -> Effect[Int] {
+        Effect.pure(readings.length())
+    }
+}
