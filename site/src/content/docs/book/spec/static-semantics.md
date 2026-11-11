@@ -1999,6 +1999,14 @@ form by the rules of a typed `query` (unknown names ignored; a name repeated on 
 non-`List` field is `StructuralMismatch`), and applies the record's codec, so refinements and
 defaults hold; a failure is a `400` whose `path` is rooted at `cookies`.
 
+**Raw `cookies`.** A handler's `cookies` parameter MAY instead be `RequestCookies`, a read-only
+view of the request's cookies with `get(name) -> Option[String]`, `all(name) -> List[String]`
+(header order) and `names() -> List[String]`, read by the parsing above and not decoded or
+validated. It exists for a name a record field cannot spell (`__Host-sid`). `RequestCookies`
+MAY appear only as the `cookies` parameter of an `on http` handler (`bynk.http.cookies_not_http`)
+and MUST NOT be stored, sent or returned (`bynk.types.request_cookies_at_boundary`). A test builds one with
+`RequestCookies.of(pairs)` (`"name=value"` strings, as a browser sends them) or `RequestCookies.empty()`.
+
 **Setting cookies.** `HttpResult[T]` has three methods, available once the `bynk` `Cookie` type
 is in scope: `withCookie(c)` and `clearCookie(c)`, each taking a `Cookie` and answering the same
 `HttpResult[T]` with the cookie attached, and `cookies()`, answering the `List[Cookie]` a result

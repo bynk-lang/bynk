@@ -3278,6 +3278,22 @@ pub(crate) fn check_method_call(
         );
         return check_request_query_static(method, args, span, ctx);
     }
+    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()`, the test-side
+    // way to build the raw cookies view a handler reads.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && id.name == REQUEST_COOKIES
+        && ctx.lookup(REQUEST_COOKIES).is_none()
+        && !ctx.input.types.contains_key(REQUEST_COOKIES)
+    {
+        ctx.callees.insert(
+            expr_id,
+            Callee::Intrinsic {
+                ns: REQUEST_COOKIES,
+                op: method.name.clone(),
+            },
+        );
+        return check_request_cookies_static(method, args, span, ctx);
+    }
     // v0.22b: the typed JSON codec statics (ADR 0045).
     if let ExprKind::Ident(id) = &receiver.kind
         && id.name == JSON
@@ -3475,6 +3491,19 @@ pub(crate) fn check_method_call(
                 expr_id,
                 recv_ty,
                 kop.map(KernelOp::RequestQuery),
+                method,
+                r,
+            );
+        }
+        // #3277: an HTTP handler's raw `cookies` — `get`, `all`, `names`.
+        Ty::RequestCookies => {
+            let kop = RequestCookiesOp::from_name(&method.name);
+            let r = check_request_cookies_method(method, kop, args, span, ctx);
+            return record_kernel(
+                ctx,
+                expr_id,
+                recv_ty,
+                kop.map(KernelOp::RequestCookies),
                 method,
                 r,
             );

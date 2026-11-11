@@ -351,6 +351,10 @@ suite web.api as system {
 }
 ```
 
+A raw `cookies: RequestCookies` parameter takes a `RequestCookies.of(["__Host-sid=abc", "theme=dark"])`
+(or `RequestCookies.empty()`) at every tier; at `system` the driver sends it as the `Cookie`
+header. `Wire("a=1; b=2")` sends the header text itself.
+
 ### Reading the cookies a result sets — `cookies()` {#result-cookies}
 
 A result that [sets cookies](/book/reference/http/#setting-cookies) carries them, and

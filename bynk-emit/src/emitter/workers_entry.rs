@@ -1081,6 +1081,15 @@ pub fn emit_worker_entry(
     }) {
         imports.push("__requestQuery".to_string());
     }
+    // #3277: a route taking the raw `cookies` view builds it off the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
+    }) {
+        imports.push("__requestCookies".to_string());
+    }
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
         imports.push("__renderRejection".to_string());
@@ -1908,6 +1917,12 @@ pub fn emit_worker_entry(
         append_missing_bindings(
             &mut imports,
             crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
+        );
+    }
+    if runtime_use.request_cookies() {
+        append_missing_bindings(
+            &mut imports,
+            crate::emitter::REQUEST_COOKIES_RUNTIME_IMPORTS,
         );
     }
     if runtime_use.request_query() {
@@ -3150,6 +3165,16 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("query", member(ident("__r_query"), "value")));
             call_args.push(ident("query"));
+            continue;
+        }
+        // #3277 (decision A): `cookies: RequestCookies` is the raw view of the
+        // request's cookies.
+        let cookies_is_path_raw = route.path.split('/').any(|seg| seg == ":cookies");
+        if pname == "cookies"
+            && !cookies_is_path_raw
+            && matches!(p.type_ref, TypeRef::RequestCookies(_))
+        {
+            call_args.push(call(ident("__requestCookies"), vec![ident("request")]));
             continue;
         }
         // #3277: `cookies` is decoded off the `Cookie` header and validated before

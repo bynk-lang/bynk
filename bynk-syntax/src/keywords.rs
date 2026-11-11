@@ -353,6 +353,10 @@ pub const BUILTIN_TYPE_NAMES: &[KeywordInfo] = &[
         "RequestQuery",
         "An HTTP handler's read-only view of the request's query string (`query: RequestQuery`).",
     ),
+    k(
+        "RequestCookies",
+        "An HTTP handler's read-only view of the request's cookies (`cookies: RequestCookies`).",
+    ),
     k("Set", "The immutable set type, `Set[T]`."),
     k("Stream", "The value-over-time primitive, `Stream[T]`."),
     k(

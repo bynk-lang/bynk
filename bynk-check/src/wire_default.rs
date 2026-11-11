@@ -261,6 +261,7 @@ fn wire_in(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::Query(..)

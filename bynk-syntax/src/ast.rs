@@ -3377,6 +3377,11 @@ pub enum TypeRef {
     /// of the request's query string, the type of its `query` parameter when
     /// it wants raw access: `get`, `all`, `params`. Never stored or sent.
     RequestQuery(Span),
+    /// `RequestCookies` (#3277, decision A) — an HTTP handler's read-only view
+    /// of the request's `Cookie` header, the type of its `cookies` parameter
+    /// when it wants raw access (a prefixed name such as `__Host-sid`): `get`,
+    /// `all`, `names`. Never stored or sent.
+    RequestCookies(Span),
     /// `TokenClaims` (#2380, L5) — the verified claims of an `Oidc` actor's
     /// token, read through its binder (`who.claims`). Read-only, never stored
     /// or sent.
@@ -3453,6 +3458,7 @@ impl TypeRef {
             TypeRef::Asset(s) => *s,
             TypeRef::RequestHeaders(s) => *s,
             TypeRef::RequestQuery(s) => *s,
+            TypeRef::RequestCookies(s) => *s,
             TypeRef::TokenClaims(s) => *s,
             TypeRef::BoundaryRejection(s) => *s,
             TypeRef::List(_, s) => *s,
@@ -3511,6 +3517,7 @@ pub fn stream_path(
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
             | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
@@ -3612,6 +3619,7 @@ fn heads(t: &TypeRef, out: &mut Vec<String>) {
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3757,6 +3765,7 @@ pub fn recursive_generic_path(
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
             | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
@@ -3848,6 +3857,7 @@ pub fn polymorphic_recursion_edges(
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
             | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)

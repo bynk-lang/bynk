@@ -3408,6 +3408,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry.",
         &["http_handler"],
     ),
+    dg(
+        "bynk.http.cookies_not_http",
+        "A `RequestCookies` appears on a handler that is not an HTTP route.",
+        &["http_handler"],
+    ),
     d(
         "bynk.http.cookies_wrong_type",
         "An HTTP handler's `cookies` parameter is not a record type.",
@@ -5655,6 +5660,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.request_query_at_boundary",
         "`RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
+    ),
+    d(
+        "bynk.types.request_cookies_at_boundary",
+        "`RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",

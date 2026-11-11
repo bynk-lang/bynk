@@ -921,6 +921,7 @@ fn type_ref_mentions(t: &TypeRef, marker: TypeRefMarker) -> bool {
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -1090,6 +1091,7 @@ pub fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::Fn { .. }
         | Ty::Var(_)
@@ -2943,6 +2945,7 @@ fn collect_refs_in_typeref(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3351,6 +3354,7 @@ fn record_ty_refs(
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -4224,6 +4228,13 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
+        if ctx.runtime_use.request_cookies() {
+            parts.extend(
+                REQUEST_COOKIES_RUNTIME_IMPORTS
+                    .trim_start_matches(", ")
+                    .split(", "),
+            );
+        }
         if ctx.runtime_use.request_query() {
             parts.extend(
                 REQUEST_QUERY_RUNTIME_IMPORTS
@@ -4388,6 +4399,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // #3277: the `RequestCookies` constructor, likewise.
+        let request_cookies_imports = if runtime_use.request_cookies() {
+            REQUEST_COOKIES_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #2854: the `RequestQuery` constructor, likewise.
         let request_query_imports = if runtime_use.request_query() {
             REQUEST_QUERY_RUNTIME_IMPORTS
@@ -4439,7 +4456,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4459,6 +4476,9 @@ pub const BYTES_RUNTIME_IMPORTS: &str =
 pub const REQUEST_HEADERS_RUNTIME_IMPORTS: &str = ", __requestHeaders";
 /// #2854: the `RequestQuery` constructor a test builds a raw query view with.
 pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
+/// #3277: the `RequestCookies` constructor a test builds a raw cookies view with,
+/// and the header text a system-tier driver sends for one.
+pub const REQUEST_COOKIES_RUNTIME_IMPORTS: &str = ", __requestCookies, __requestCookiesHeader";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
 /// query driver turn a record's wire form into a query string with.
 pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
@@ -6038,6 +6058,11 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_request_headers();
     }
 
+    /// Record that this lowering built a `RequestCookies` value (#3277).
+    fn note_request_cookies(&self) {
+        self.runtime_use().note_request_cookies();
+    }
+
     /// Record that this lowering built a `RequestQuery` value (#2854).
     fn note_request_query(&self) {
         self.runtime_use().note_request_query();
@@ -6730,6 +6755,31 @@ pub(crate) fn request_query_ts_type() -> TsType {
     ])
 }
 
+/// #3277: `RequestCookies` as TypeScript — structural, like `RequestQuery`:
+/// `get`, `all` and `names`. The runtime's `requestCookies(request)` builds one.
+pub(crate) fn request_cookies_ts_type() -> TsType {
+    let name = || bynk_ts::TsParam {
+        name: "name".to_string(),
+        ty: Some(TsType::named("string")),
+        optional: false,
+    };
+    let opt = TsType::union(vec![
+        TsType::Object(vec![
+            bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
+            bynk_ts::TsTypeMember::readonly_prop("value", TsType::named("string")),
+        ]),
+        TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+            "tag",
+            TsType::named("\"None\""),
+        )]),
+    ]);
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("get", vec![name()], opt),
+        bynk_ts::TsTypeMember::method("all", vec![name()], TsType::named("readonly string[]")),
+        bynk_ts::TsTypeMember::method("names", vec![], TsType::named("readonly string[]")),
+    ])
+}
+
 pub(crate) fn token_claims_ts_type() -> TsType {
     let opt = TsType::union(vec![
         TsType::Object(vec![
@@ -6846,6 +6896,7 @@ fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType
         TypeRef::Asset(_) => asset_ts_type(),
         TypeRef::RequestHeaders(_) => request_headers_ts_type(),
         TypeRef::RequestQuery(_) => request_query_ts_type(),
+        TypeRef::RequestCookies(_) => request_cookies_ts_type(),
         TypeRef::TokenClaims(_) => token_claims_ts_type(),
         TypeRef::BoundaryRejection(_) => {
             TsType::named("{ readonly tag: string; readonly detail: string }")
@@ -7300,6 +7351,7 @@ fn ts_ty_to_ts_type(t: TyId, tys: &Arc<Types>) -> TsType {
         Ty::Asset => asset_ts_type(),
         Ty::RequestHeaders => request_headers_ts_type(),
         Ty::RequestQuery => request_query_ts_type(),
+        Ty::RequestCookies => request_cookies_ts_type(),
         Ty::TokenClaims => token_claims_ts_type(),
         Ty::ValidationError => TsType::named("ValidationError"),
         Ty::DecodeError => TsType::named("DecodeError"),

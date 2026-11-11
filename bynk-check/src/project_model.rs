@@ -1999,7 +1999,10 @@ pub fn check_function_type_boundary_items(
                                 && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
                                 // #2854: and `query` is the one place `RequestQuery` may.
                                 || (p.name.name == "query"
-                                    && matches!(p.type_ref, TypeRef::RequestQuery(_))));
+                                    && matches!(p.type_ref, TypeRef::RequestQuery(_)))
+                                // #3277: and `cookies` the one place `RequestCookies` may.
+                                || (p.name.name == "cookies"
+                                    && matches!(p.type_ref, TypeRef::RequestCookies(_))));
                         // #2341 (decision C): and `on rejected`'s parameter is
                         // the one place `BoundaryRejection` may appear.
                         let http_headers = http_headers
@@ -2021,6 +2024,21 @@ pub fn check_function_type_boundary_items(
                                     "`RequestQuery` is the query string of an HTTP request, so only an `on http` handler's `query` parameter can have it",
                                 )
                                 .with_note("a handler that is not an HTTP route has no query string to read"),
+                            );
+                            continue;
+                        }
+                        // #3277: `RequestCookies` off an HTTP route has no request
+                        // whose cookies it could be.
+                        if matches!(p.type_ref, TypeRef::RequestCookies(_))
+                            && !matches!(h.kind, HandlerKind::Http { .. })
+                        {
+                            errors.push(
+                                CompileError::new(
+                                    "bynk.http.cookies_not_http",
+                                    p.type_ref.span(),
+                                    "`RequestCookies` is the cookies of an HTTP request, so only an `on http` handler's `cookies` parameter can have it",
+                                )
+                                .with_note("a handler that is not an HTTP route has no cookies to read"),
                             );
                             continue;
                         }
@@ -6027,6 +6045,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)

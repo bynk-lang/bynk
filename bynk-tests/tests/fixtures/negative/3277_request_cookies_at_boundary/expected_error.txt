@@ -1,0 +1,1 @@
+bynk.types.request_cookies_at_boundary
