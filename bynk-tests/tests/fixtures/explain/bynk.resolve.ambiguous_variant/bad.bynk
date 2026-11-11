@@ -1,10 +1,9 @@
-commons shop
+commons demo
 
-type Light = | Red | Green
+type DbError = | Constraint(message: String) | Failed(message: String)
+type MailError = | RateLimited | Failed(message: String)
 
-type Flag = | Red | Blue
-
-fn run() -> Int {
-  let x = Red
-  1
+fn oops() -> Int {
+    let e = Failed("down")
+    1
 }

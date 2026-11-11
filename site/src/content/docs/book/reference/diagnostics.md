@@ -742,7 +742,7 @@ There are **814** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| [`bynk.resolve.ambiguous_variant`](/book/reference/types/#sum-types) | A variant name is ambiguous across several sum types. |  | — |
+| [`bynk.resolve.ambiguous_variant`](/book/reference/types/#shared-variant-names) | A bare variant name is declared by several sum types in scope, and no expected type picks one. |  | — |
 | [`bynk.resolve.arity_mismatch`](/book/spec/static-semantics/) | A function was called with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.resolve.bad_const_initialiser`](/book/reference/constants/#what-an-initialiser-may-be) | A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_cycle`](/book/reference/constants/#what-an-initialiser-may-be) | Constants refer to each other in a cycle, so none of them has a value. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |

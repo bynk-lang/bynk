@@ -1,0 +1,16 @@
+// #3344: two sums one adapter exports share the variant name `Failed`.
+adapter mail {
+  binding "./mail.binding.ts"
+
+  exports capability { Mailer }
+  exports transparent { DbError, MailError }
+
+  type DbError = | Constraint(message: String) | Failed(message: String)
+  type MailError = | RateLimited | Failed(message: String)
+
+  capability Mailer {
+    fn send(to: String) -> Effect[Result[String, MailError]]
+  }
+
+  provides Mailer = RealMailer
+}

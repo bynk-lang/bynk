@@ -1,2 +1,2 @@
 bynk.resolve.ambiguous_variant
-the variant name `Red` is declared on multiple sum types — qualify it
+the variant name `Red` is declared on multiple sum types (`A`, `B`) — qualify it as `A.Red` or `B.Red`
