@@ -1,0 +1,11 @@
+context s
+
+agent Shop {
+  key id: String
+
+  store tags: Set[String]
+
+  on call ping() -> Effect[()] {
+    Effect.pure(())
+  }
+}

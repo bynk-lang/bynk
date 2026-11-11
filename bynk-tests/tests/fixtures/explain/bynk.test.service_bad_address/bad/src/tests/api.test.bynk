@@ -1,0 +1,6 @@
+suite demo.api {
+	case "an item is created" {
+		let r <- api.POST(1, "x") by Visitor
+		expect r is Created(_)
+	}
+}

@@ -1,0 +1,14 @@
+context room
+
+type ServerFrame = { text: String }
+type UserId = opaque String
+
+agent Room {
+  key id: String
+
+  store conns: Set[Connection[ServerFrame]]
+
+  on call ping() -> Effect[()] {
+    Effect.pure(())
+  }
+}

@@ -1,0 +1,5 @@
+commons demo.rules
+
+fn positive(n: Int) -> Bool {
+	n > 0
+}
