@@ -3399,14 +3399,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "An or-pattern, `Walk(steps) | Wait`, runs one arm for either alternative, so every alternative must bind the same names. If `steps` came only from `Walk`, the arm's body would read a name that does not exist when `Wait` matched. Bind the name in every alternative, bind it in none with `_`, or split the alternatives into separate arms. A shared name must also have the same type: see `bynk.types.or_pattern_type_mismatch`.",
         example: "type Move = | Walk(steps: Int) | Wait\n\nfn cost(m: Move) -> Int {\n    match m {\n        Walk(steps) | Wait => 1    // ✗ `steps` is bound by one alternative only\n    }\n}\n\nfn cost(m: Move) -> Int {\n    match m {\n        Walk(_) | Wait => 1        // ✓ neither alternative binds\n    }\n}",
         page: "/book/guides/type-system/match",
-        anchor: "match-several-patterns-with",
+        anchor: "",
     },
     Explain {
         code: "bynk.types.or_pattern_type_mismatch",
         blurb: "An or-pattern, `A(n) | B(n)`, runs one arm for either alternative, so a name it binds must mean the same thing in both: the arm's body has only one `n` to use. Here `n` is an `Int` in one alternative and a `String` in the other, so the body could not be checked. A refined type and its base count as different too. Give each alternative its own arm, or bind a value of the same type in both.",
         example: "type Key = | Id(n: Int) | Name(n: String)\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) | Name(n) => \"key\"    // ✗ `n` is an `Int` and a `String`\n    }\n}\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) => \"id\"               // ✓ one arm each\n        Name(n) => n\n    }\n}",
         page: "/book/guides/type-system/match",
-        anchor: "match-several-patterns-with",
+        anchor: "",
     },
     Explain {
         code: "bynk.types.pattern_arity",
