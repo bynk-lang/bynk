@@ -1808,8 +1808,14 @@ being `bynk.email.duplicate_handler`. The verdict is `Accept`, `Reject(reason)`,
 are exported by `bynk.cloudflare`, not hard-wired as `QueueResult` is. The default
 actor is `Sender`. Inbound email is Cloudflare's: a context declaring a
 `from email` service is platform-native to `cloudflare`, so another `--platform`
-is `bynk.target.vendor_required`, and a deployable `--target workers` build is
-refused until the Worker mapping lands (`bynk.email.workers_unsupported`).
+is `bynk.target.vendor_required`. Two contexts claiming one address is also
+`bynk.email.duplicate_address`: the check is project-wide, because routing is.
+On `--target workers` the Worker exports `email(message, env, ctx)`, which
+dispatches on the envelope recipient, parses the raw message into `InboundEmail`
+under fixed limits, mints the `Sender` identity from the
+topmost `Authentication-Results` header when its authserv-id is `mx.cloudflare.net`, runs
+the handler, and applies its verdict; a fault, a parse failure and a refused
+reply each reject the message with a fixed reason and log nothing of it.
 
 ### §5.7.1 CORS policy (v0.131) {#cors}
 
@@ -1998,6 +2004,14 @@ name/value pairs (RFC 6265 §5.4; values are not decoded), reads them into the r
 form by the rules of a typed `query` (unknown names ignored; a name repeated on a
 non-`List` field is `StructuralMismatch`), and applies the record's codec, so refinements and
 defaults hold; a failure is a `400` whose `path` is rooted at `cookies`.
+
+**Raw `cookies`.** A handler's `cookies` parameter MAY instead be `RequestCookies`, a read-only
+view of the request's cookies with `get(name) -> Option[String]`, `all(name) -> List[String]`
+(header order) and `names() -> List[String]`, read by the parsing above and not decoded or
+validated. It exists for a name a record field cannot spell (`__Host-sid`). `RequestCookies`
+MAY appear only as the `cookies` parameter of an `on http` handler (`bynk.http.cookies_not_http`)
+and MUST NOT be stored, sent or returned (`bynk.types.request_cookies_at_boundary`). A test builds one with
+`RequestCookies.of(pairs)` (`"name=value"` strings, as a browser sends them) or `RequestCookies.empty()`.
 
 **Setting cookies.** `HttpResult[T]` has three methods, available once the `bynk` `Cookie` type
 is in scope: `withCookie(c)` and `clearCookie(c)`, each taking a `Cookie` and answering the same

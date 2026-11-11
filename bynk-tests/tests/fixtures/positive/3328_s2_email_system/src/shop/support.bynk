@@ -1,0 +1,23 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailReply,
+  DmarcVerdict,
+  SenderIdentity,
+}
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+    if mail.subject == "refund" {
+      Forward("billing@shop.example")
+    } else if mail.subject == "spam" {
+      Reject("not wanted")
+    } else if s.identity.dmarc == DmarcPass {
+      Reply(EmailReply { text: Some("Thanks, we have your message.") })
+    } else {
+      Accept
+    }
+  }
+}

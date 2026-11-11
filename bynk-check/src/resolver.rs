@@ -2022,6 +2022,7 @@ impl Gate<'_> {
             | TypeRef::Asset(_)
             | TypeRef::RequestHeaders(_)
             | TypeRef::RequestQuery(_)
+            | TypeRef::RequestCookies(_)
             | TypeRef::TokenClaims(_)
             | TypeRef::BoundaryRejection(_)
             | TypeRef::ValidationError(_)
@@ -2741,6 +2742,7 @@ fn check_type_ref_resolves_in(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_) => {}
         TypeRef::List(t, _) => {
@@ -3430,16 +3432,12 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 // #2387, slice 1: an embed name is a `String` value; the
                 // checker types it (`check_ident`).
             } else if find_ambiguous_variant_owners(&id.name, cx.types).len() > 1 {
-                cx.errors.push(
-                    CompileError::new(
-                        "bynk.resolve.ambiguous_variant",
-                        id.span,
-                        format!(
-                            "the variant name `{}` is declared on multiple sum types — qualify it as `TypeName.{}`",
-                            id.name, id.name
-                        ),
-                    ),
-                );
+                // #3344: a name several sums declare is settled by the
+                // expected type, which only the checker knows; it reports
+                // `bynk.resolve.ambiguous_variant` when nothing picks one.
+                // Every position this walk covers is also typed by the
+                // checker (`fn`/method bodies, constants, field defaults),
+                // as are the handler, agent and test bodies it never walks.
             } else if cx.declared_caps.contains(&id.name) {
                 cx.errors.push(
                     CompileError::new(
@@ -3513,14 +3511,8 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         // Single owner — treat as variant construction. Type
                         // checker validates arg count and types.
                     } else if owners.len() > 1 {
-                        cx.errors.push(CompileError::new(
-                            "bynk.resolve.ambiguous_variant",
-                            name.span,
-                            format!(
-                                "the variant name `{}` is declared on multiple sum types — qualify it as `TypeName.{}(...)`",
-                                name.name, name.name
-                            ),
-                        ));
+                        // #3344: the checker picks the owner from the
+                        // expected type, or reports the ambiguity.
                     } else if let Some(s) = cx.shadowed.get(&name.name) {
                         // #1925: no local function answers the call (one would
                         // have matched above), and the local declaration of
@@ -3816,6 +3808,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         | "Decimal"
                         | "RequestHeaders"
                         | "RequestQuery"
+                        | "RequestCookies"
                         | "TokenClaims"
                 )
                 && !cx.types.contains_key(&id.name)
@@ -3851,6 +3844,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     // #2341 (L4): the test-side constructors.
                     "RequestHeaders" => &["of", "empty"],
                     "RequestQuery" => &["of", "empty"],
+                    "RequestCookies" => &["of", "empty"],
                     // #2380 (L5): the test-side constructor.
                     "TokenClaims" => &["of"],
                     // K6b (#2598): the two constants beside `parse`.

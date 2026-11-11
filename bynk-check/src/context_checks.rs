@@ -1970,6 +1970,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
         TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
+        TypeRef::RequestCookies(_) => "RequestCookies".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
@@ -3238,8 +3239,19 @@ fn actor_identity_ty_guarded<'a>(
             tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String))
         }
         // #3328: `Sender`'s `SenderIdentity` is minted by the Workers `email()`
-        // entry (slice 2); until then it reads as the unit value, like the
-        // other platform-tag actors.
+        // entry. It is the first-party record from `bynk.cloudflare`, so it types
+        // as that record when the context imports it (`consumes bynk.cloudflare
+        // { SenderIdentity, … }`) and as the unit value when it does not, as the
+        // other platform-tag actors read.
+        Some(Identity::Declared(name)) => checker::resolve_type_ref(
+            &bynk_syntax::ast::TypeRef::Named(bynk_syntax::ast::Ident {
+                name,
+                span: bynk_syntax::span::Span::default(),
+            }),
+            &resolved.types,
+            tys,
+        )
+        .unwrap_or_else(|| tys.intern(checker::Ty::Unit)),
         _ => tys.intern(checker::Ty::Unit),
     }
 }
@@ -5037,6 +5049,10 @@ fn validate_cookies_param(
     types: &HashMap<String, Arc<TypeDecl>>,
     errors: &mut Vec<CompileError>,
 ) {
+    // #3277: the raw view is the other legal form, for a name a field cannot spell.
+    if matches!(p.type_ref, TypeRef::RequestCookies(_)) {
+        return;
+    }
     let record = match &p.type_ref {
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
             Some(TypeBody::Record(r)) => Some(r),
@@ -5050,12 +5066,12 @@ fn validate_cookies_param(
                 "bynk.http.cookies_wrong_type",
                 p.type_ref.span(),
                 format!(
-                    "an HTTP handler's `cookies` parameter must be a record type (got `{}`)",
+                    "an HTTP handler's `cookies` parameter must be a record type or `RequestCookies` (got `{}`)",
                     ts_type_ref_display(&p.type_ref),
                 ),
             )
             .with_note(
-                "`cookies: Session` decodes the request's `Cookie` header into the record `Session`, one field per cookie name, and answers `400` when it does not fit",
+                "`cookies: Session` decodes the request's `Cookie` header into the record `Session`, one field per cookie name, and answers `400` when it does not fit; `cookies: RequestCookies` reads them raw, for a name a field cannot spell (`__Host-sid`)",
             ),
         );
         return;
@@ -6149,6 +6165,22 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "read the value you need (`query.get(\"…\")`) and store or send that value instead",
+                ),
+            );
+        }
+        // #3277: `RequestCookies`, the same way — read in the handler's `cookies`
+        // parameter, never stored or sent.
+        TypeRef::RequestCookies(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.request_cookies_at_boundary",
+                    *span,
+                    format!(
+                        "a `RequestCookies` type cannot appear in {what} — it is the request's cookies, read in the handler that receives it, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the value you need (`cookies.get(\"…\")`) and store or send that value instead",
                 ),
             );
         }

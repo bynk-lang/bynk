@@ -1,0 +1,5 @@
+context shop
+
+type Age = Int where NonNegative
+
+actor User { auth = Oidc(issuer = "https://issuer.example", audience = "my-api", jwks = "https://issuer.example/jwks"), identity = Age }

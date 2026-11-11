@@ -1,0 +1,12 @@
+suite app
+
+case "a stubbed bare variant builds the operation's error sum" {
+  stub Mailer.send(_) returns Err(Failed("down"))
+  let r <- go.call("a")
+  expect r == "mail: down"
+}
+
+case "return type, annotation, parameter and constant each pick the sum" {
+  let r <- local.call()
+  expect r == "mail: mail / db: db / mail: arg / red paint / red light / red paint"
+}

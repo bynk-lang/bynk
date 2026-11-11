@@ -1,0 +1,5 @@
+context api
+
+type Holder = {
+  jar: RequestCookies,
+}

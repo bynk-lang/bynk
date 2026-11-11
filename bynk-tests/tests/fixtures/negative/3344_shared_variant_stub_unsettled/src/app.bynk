@@ -1,0 +1,9 @@
+context app
+
+consumes mail { Mailer, MailError, DbError }
+
+service go {
+  on call(to: String) -> Effect[Result[String, String]] given Mailer {
+    Mailer.audit(to)
+  }
+}

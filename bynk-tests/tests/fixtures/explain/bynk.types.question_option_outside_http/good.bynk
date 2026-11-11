@@ -1,0 +1,8 @@
+commons demo
+
+fn lookup(id: Int) -> Option[Int] { Some(id) }
+
+fn double(id: Int) -> Result[Int, String] {
+    let n = lookup(id).okOr("missing")?
+    Ok(n * 2)
+}

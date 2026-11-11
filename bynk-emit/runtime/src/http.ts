@@ -1001,6 +1001,45 @@ export function cookieObject(
   return fieldsObject(search, fields, "cookies", false);
 }
 
+// #3277 (decision A, second form): an HTTP handler's `cookies: RequestCookies` — a
+// read-only view of the request's cookies, for a name a record field cannot spell
+// (`__Host-sid`). `get` is the first cookie of a name, `all` every one in header
+// order, `names` every distinct name. Values are not decoded (decision B).
+export interface RequestCookies {
+  get(name: string): Option<string>;
+  all(name: string): readonly string[];
+  names(): readonly string[];
+}
+
+const REQUEST_COOKIES_HEADER = Symbol("bynk.requestCookiesHeader");
+
+/** #3277: the request's cookies, or — in a test — `"name=value"` pairs
+ *  (`RequestCookies.of`), read as a `Cookie` header is. */
+export function requestCookies(source: Request | readonly string[]): RequestCookies {
+  const header = source instanceof Request ? source.headers.get("cookie") : source.join("; ");
+  const pairs = cookiePairs(header);
+  const view: RequestCookies = {
+    get: (name: string) => {
+      const hit = pairs.find(([n]) => n === name);
+      return hit === undefined ? { tag: "None" } : { tag: "Some", value: hit[1] };
+    },
+    all: (name: string) => pairs.filter(([n]) => n === name).map(([, v]) => v),
+    names: () => [...new Set(pairs.map(([n]) => n))],
+  };
+  // The system-tier driver sends a test's cookies on its real request.
+  Object.defineProperty(view, REQUEST_COOKIES_HEADER, {
+    value: pairs.map(([n, v]) => `${n}=${v}`).join("; "),
+    enumerable: false,
+  });
+  return view;
+}
+
+/** #3277: a `RequestCookies`' own `Cookie` header text (`a=1; b=2`, or `""`) —
+ *  what a system-tier driver sends. */
+export function requestCookiesHeader(view: RequestCookies): string {
+  return (view as unknown as Record<symbol, string | undefined>)[REQUEST_COOKIES_HEADER] ?? "";
+}
+
 /** #3277: a `cookies` record's wire form as the `Cookie` header a request for it
  *  carries (`a=1; b=x; b=y`), `""` when every field is absent. A list repeats its
  *  name, an `Option` is its value or nothing. Test drivers use it. */

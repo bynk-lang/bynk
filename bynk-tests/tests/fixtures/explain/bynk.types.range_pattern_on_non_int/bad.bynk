@@ -1,0 +1,8 @@
+commons demo
+
+fn band(x: Float) -> String {
+    match x {
+        1..3 => "low"
+        _ => "high"
+    }
+}

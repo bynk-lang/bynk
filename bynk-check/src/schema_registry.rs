@@ -103,6 +103,7 @@ fn canon_type(t: &TypeRef) -> String {
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
         TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
+        TypeRef::RequestCookies(_) => "RequestCookies".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", canon_type(t)),

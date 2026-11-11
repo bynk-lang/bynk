@@ -194,6 +194,18 @@ impl ClassTombstones {
     }
 }
 
+/// #3328: wrangler's **top-level** `addresses` (it applies to every
+/// environment, so it is never copied into an `[env.*]` table). A Worker with no
+/// email service has none, and wrangler then manages no routing rule for it.
+fn addresses_entry(addresses: &[String]) -> Option<TomlEntry> {
+    (!addresses.is_empty()).then(|| {
+        TomlEntry::kv(
+            "addresses",
+            TomlValue::Array(addresses.iter().map(TomlValue::str).collect()),
+        )
+    })
+}
+
 /// P6.x cutover slice 2 (#1191, narrowed from #1187): `crons`/`queues` arrive
 /// pre-collected, sorted and deduped by the caller (`project.rs`'s own
 /// `emit_wrangler_toml` call site) rather than being walked here off
@@ -226,6 +238,7 @@ pub fn emit_wrangler_toml(
     // v0.10b/v0.44: every `from queue("name")` service's bound queue name,
     // sorted+deduped (same reproducibility requirement as `crons`).
     queues: &[String],
+    addresses: &[String], // #3328: the `from email` addresses
     // #1890: the merged flag list, [`compatibility_flags`]' first result.
     // The same for every Worker in the project, so the caller merges (and
     // warns about duplicates) once, not per Worker.
@@ -249,6 +262,7 @@ pub fn emit_wrangler_toml(
             TomlValue::Array(flags.iter().map(TomlValue::str).collect()),
         ),
     ];
+    root.extend(addresses_entry(addresses));
     if let Some(workers_dev) = workers_dev {
         root.push(TomlEntry::kv("workers_dev", TomlValue::Bool(workers_dev)));
     }

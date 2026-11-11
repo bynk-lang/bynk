@@ -1,0 +1,5 @@
+context shop.web
+
+messages "en" @reference {
+  "cart.empty" => "Your basket is empty."
+}

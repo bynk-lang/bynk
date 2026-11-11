@@ -131,6 +131,7 @@ Compiler-known type constructors. They are not lexer keywords — you may use th
 | `Map` | The immutable map type, `Map[K, V]`. |
 | `Query` | The lazy storage-read type, `Query[T]`. |
 | `QueueResult` | The queue handler result type (non-generic). |
+| `RequestCookies` | An HTTP handler's read-only view of the request's cookies (`cookies: RequestCookies`). |
 | `RequestHeaders` | An HTTP handler's read-only view of the request's headers (`headers: RequestHeaders`). |
 | `RequestQuery` | An HTTP handler's read-only view of the request's query string (`query: RequestQuery`). |
 | `Set` | The immutable set type, `Set[T]`. |

@@ -18,13 +18,14 @@ What it shows:
 
 - **A session in a cookie** — `POST /sessions` mints an unguessable token with
   `Random.bytes(16).toBase64Url()` and returns it with
-  `Created("ok").withCookie(Cookie { name: "sid", value: token, maxAge: Some(30.minutes) })`.
+  `Created("ok").withCookie(Cookie { name: "__Host-sid", value: token, maxAge: Some(30.minutes) })`.
   The `Cookie` defaults are the safe ones (`Secure`, `HttpOnly`, `SameSite=Lax`,
-  `Path=/`). `GET /me` and `POST /logout` take a typed `cookies: SessionCookies`
-  parameter, so the token is parsed and checked against `Token` at the boundary,
-  and logout ends the session and clears the cookie with `clearCookie`.
-  A `__Host-` prefix would bind the cookie to this origin, but a hyphenated name
-  cannot be a record field yet, so the typed reader cannot name it.
+  `Path=/`). `GET /me` and `POST /logout` read it back through `cookies: RequestCookies`, the raw
+  view, because a hyphenated `__Host-sid` cannot be a record field; the handler builds its own
+  `Token`, which checks the cookie against the same refinement. The `__Host-` prefix binds the
+  cookie to this origin, and the compiler checks it: a `Cookie` literal with that name must
+  be `secure`, have `path: "/"` and no `domain`. Logout ends the session and clears the
+  cookie with `clearCookie`.
 
 - **Testing expiry without waiting** — under `bynk test` the platform `Clock`
   is a deterministic test double that reads the epoch. A case moves time on with
@@ -76,15 +77,15 @@ bynk dev
 
 ```sh
 curl -i -XPOST localhost:8787/sessions -d '{"user":"u_42"}'
-# HTTP 201, with  set-cookie: sid=<token>; Max-Age=1800; Path=/; Secure; HttpOnly; SameSite=Lax
+# HTTP 201, with  set-cookie: __Host-sid=<token>; Max-Age=1800; Path=/; Secure; HttpOnly; SameSite=Lax
 
-curl --cookie 'sid=<token>' localhost:8787/me
+curl --cookie '__Host-sid=<token>' localhost:8787/me
 # "u_42"
 
 curl localhost:8787/sessions
 # 1                                  (live session count)
 
-curl -i -XPOST --cookie 'sid=<token>' localhost:8787/logout
+curl -i -XPOST --cookie '__Host-sid=<token>' localhost:8787/logout
 # HTTP 204, clearing the cookie
 ```
 

@@ -2828,7 +2828,7 @@ fn lower_system_http_call(
                 // unconverted.
                 if matches!(
                     cx.commons().expr_ty(a.id).as_deref(),
-                    Some(Ty::RequestHeaders | Ty::RequestQuery)
+                    Some(Ty::RequestHeaders | Ty::RequestQuery | Ty::RequestCookies)
                 ) {
                     return lowered;
                 }
@@ -3192,6 +3192,18 @@ fn lower_test_service_call(
                 // `on message` handler, so the position index is 0.
                 let key = crate::emitter::queue_handler_method_name(&id.name, 0);
                 let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                // #3328: a case has no Email Routing to mint the `Sender` identity,
+                // so a handler that binds it reads the envelope sender with no
+                // DMARC verdict (`DmarcNone`) unless the case names a principal.
+                if deps_expr == "deps"
+                    && args.first().is_some_and(|a| is_inbound_email(a, cx))
+                    && let Some(mail) = args_lowered.first()
+                {
+                    return Some(settle(format!(
+                        "((__m: any) => {}.{}(__m, {{ ...deps, identity: {{ address: __m.from, dmarc: {{ tag: \"DmarcNone\" }} }} }}))({mail})",
+                        id.name, key
+                    )));
+                }
                 let mut all = args_lowered;
                 all.push(deps_expr);
                 return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
@@ -3234,6 +3246,14 @@ fn lower_test_service_call(
         )));
     }
     None
+}
+
+/// #3328: whether `e` is a first-party `InboundEmail`, the message an email
+/// service's `on message` takes (a queue's message is the user's own type).
+fn is_inbound_email(e: &Expr, cx: &LowerCtx) -> bool {
+    cx.commons().expr_types.get(&e.id).is_some_and(|te| {
+        matches!(&*cx.commons().tys().get(te.ty), bynk_check::checker::Ty::Named { name, .. } if name == "InboundEmail")
+    })
 }
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
@@ -3651,6 +3671,24 @@ fn lower_runtime_value_static_call(
             ("empty", 0) => {
                 cx.note_request_query();
                 return Some("__requestQuery([])".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
+    // runtime's cookies view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_COOKIES)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_cookies();
+                return Some(format!("__requestCookies({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_cookies();
+                return Some("__requestCookies([])".to_string());
             }
             _ => {}
         }
@@ -4357,7 +4395,10 @@ fn lower_kernel_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {
+            KernelOp::RequestHeaders(_)
+            | KernelOp::RequestQuery(_)
+            | KernelOp::RequestCookies(_)
+            | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
@@ -8213,6 +8254,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError

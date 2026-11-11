@@ -23,6 +23,8 @@ import {
   responseToUnauthOutcome,
   mediaTypeMatches,
   requestHeaders,
+  requestCookies,
+  requestCookiesHeader,
   requestHeaderPairs,
   requestQuery,
   requestQuerySearch,
@@ -1393,4 +1395,17 @@ test("a response that sets a cookie is private even with no @cache", () => {
   const res = httpResultToResponse(withCookie as never, id);
   assert.equal(res.headers.get("cache-control"), "private");
   assert.equal(httpResultToResponse(HttpResult.Ok(1), id).headers.get("cache-control"), null);
+});
+
+test("requestCookies: get, all and names read a Cookie header, prefixed names included", () => {
+  const view = requestCookies(["__Host-sid=abc", "theme=dark", "theme=light"]);
+  assert.deepEqual(view.get("__Host-sid"), { tag: "Some", value: "abc" });
+  assert.deepEqual(view.get("missing"), { tag: "None" });
+  assert.deepEqual(view.all("theme"), ["dark", "light"]);
+  assert.deepEqual(view.names(), ["__Host-sid", "theme"]);
+  assert.equal(requestCookiesHeader(view), "__Host-sid=abc; theme=dark; theme=light");
+  const real = requestCookies(new Request("http://x/", { headers: { cookie: "__Secure-id=7; a=\"q\"" } }));
+  assert.deepEqual(real.get("__Secure-id"), { tag: "Some", value: "7" });
+  assert.deepEqual(real.get("a"), { tag: "Some", value: "q" });
+  assert.deepEqual(requestCookies([]).names(), []);
 });

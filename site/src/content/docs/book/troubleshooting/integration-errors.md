@@ -25,7 +25,7 @@ input end to end, promote *that witness* as a concrete `case … as integration`
 ## `bynk.tier.system_needs_wire`
 
 ```text
-[bynk.tier.system_needs_wire] `system`-tier suite for `shop.orders` has no serialisation edge — the target consumes no other context and exposes no `http` or `queue` service
+[bynk.tier.system_needs_wire] `system`-tier suite for `shop.orders` has no serialisation edge — the target consumes no other context and exposes no `http`, `queue` or `email` service
 ```
 
 **Cause:** a `system` suite has nothing to serialise across. Its target consumes

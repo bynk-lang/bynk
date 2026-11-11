@@ -125,6 +125,15 @@ pub(crate) struct Environment {
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     renamed_classes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #3328: per Worker, the Email Routing `addresses` its last successful push
+    /// carried in this environment. Wrangler deletes the rule of an address no
+    /// longer listed, so mail to it would bounce: the next deploy compares the
+    /// list it is about to push with this record, and a removal is refused unless
+    /// confirmed (`--prune`). A record of what was pushed, never a claim about
+    /// the account's rules, which Cloudflare owns. Replaced on every push of the
+    /// Worker; additive and `default`ed, so an older ledger still reads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    email_addresses: BTreeMap<String, BTreeSet<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -339,6 +348,46 @@ impl DeployLock {
             env.deleted_classes.remove(worker);
         } else {
             env.deleted_classes.insert(worker.to_string(), classes);
+        }
+    }
+
+    /// #3328: the recorded addresses of `worker` that `current` no longer lists,
+    /// sorted. Nothing is recorded for a first deploy, so it removes nothing.
+    pub(crate) fn removed_email_addresses(
+        &self,
+        environment: &str,
+        worker: &str,
+        current: &[String],
+    ) -> Vec<String> {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.email_addresses.get(worker))
+            .map(|recorded| {
+                recorded
+                    .iter()
+                    .filter(|a| !current.contains(a))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// #3328: record the addresses a successful push of `worker` carried,
+    /// replacing what was recorded for it.
+    pub(crate) fn record_email_addresses(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        addresses: BTreeSet<String>,
+    ) {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if addresses.is_empty() {
+            env.email_addresses.remove(worker);
+        } else {
+            env.email_addresses.insert(worker.to_string(), addresses);
         }
     }
 
@@ -1413,6 +1462,12 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
             env_qualify(environment, queue)
         );
     }
+    confirm_deletion_prompt(yes, orphans.kv.len() + orphans.queues.len())
+}
+
+/// The `--yes`-or-ask tail of [`confirm_prune`], shared with the Email Routing
+/// removal gate (#3328): `count` things are about to be deleted.
+pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
     if yes {
         return true;
     }
@@ -1420,7 +1475,6 @@ pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> 
         eprintln!("bynk: refusing to prune in a non-interactive session without --yes");
         return false;
     }
-    let count = orphans.kv.len() + orphans.queues.len();
     eprint!("Delete {count} resource(s)? [y/N] ");
     let _ = io::stderr().flush();
     let mut answer = String::new();
@@ -1655,6 +1709,7 @@ pub(crate) mod tests {
                 Environment {
                     deleted_classes: BTreeMap::new(),
                     renamed_classes: BTreeMap::new(),
+                    email_addresses: BTreeMap::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(
                         "api".into(),

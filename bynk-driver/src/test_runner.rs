@@ -948,12 +948,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             "could not write {}: {e}",
             out_js_root.join("package.json").display()
         );
-        if json {
-            crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
-        } else {
-            eprintln!("{program} test: {msg}");
-        }
-        return ExitCode::FAILURE;
+        return fail_run(program, json, stream, msg);
+    }
+
+    if let Err(msg) = provision_npm_dependencies(&output_root, &out_js_root) {
+        return fail_run(program, json, stream, msg);
     }
 
     // Try a sequence of (program, prefix args) tsc invocations. In JSON mode the
@@ -1947,4 +1946,91 @@ mod output_within_tests {
             Err(e) => eprintln!("could not check for survivors ({e}); relying on the timing"),
         }
     }
+}
+
+/// #3328: a Worker built for a `system` case may import a first-party npm package
+/// (`postal-mime`, for inbound email), which `tsc` and Node resolve from
+/// `out/node_modules`. Install the npm packages the emitted `package.json` lists (the
+/// toolchain's own first-party ones, ADR 0799 C, and an adapter's), into
+/// `out/node_modules`, and make them resolvable from the compiled `out-js`.
+/// A tree that lists none needs nothing; one whose `node_modules` exists is left
+/// alone (the install is offline-safe on a re-run).
+fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<(), String> {
+    let manifest = std::fs::read_to_string(output_root.join("package.json")).unwrap_or_default();
+    if !manifest.contains("\"dependencies\"") {
+        return Ok(());
+    }
+    let modules = output_root.join("node_modules");
+    if !modules.exists() {
+        let npm = resolve_tool("npm").ok_or_else(|| {
+            "the generated project depends on npm packages, and `npm` is not on PATH to install them"
+                .to_string()
+        })?;
+        let out = ProcCommand::new(npm)
+            .args([
+                "install",
+                "--no-audit",
+                "--no-fund",
+                "--ignore-scripts",
+                "--silent",
+            ])
+            .current_dir(output_root)
+            .output()
+            .map_err(|e| format!("could not run `npm install`: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "`npm install` failed in {}:\n{}",
+                output_root.display(),
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+    }
+    let link = out_js_root.join("node_modules");
+    // A link left by an earlier run may dangle (`exists` follows it), so replace it.
+    if link.symlink_metadata().is_ok() {
+        // A symlink goes with `remove_file`, a Windows junction with `remove_dir`.
+        let _ = std::fs::remove_file(&link).or_else(|_| std::fs::remove_dir(&link));
+    }
+    // Absolute, so a relative `--output` does not leave the link pointing
+    // beside itself.
+    let target = std::fs::canonicalize(&modules)
+        .map_err(|e| format!("could not resolve {}: {e}", modules.display()))?;
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link)
+        .map_err(|e| format!("could not link {}: {e}", link.display()))?;
+    // A directory junction, which needs no privilege (a symlink does on Windows).
+    #[cfg(windows)]
+    {
+        // `canonicalize` gives a `\\?\` path, which `mklink` does not take.
+        let plain = target
+            .to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .to_string();
+        let made = ProcCommand::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(&link)
+            .arg(&plain)
+            .output()
+            .map_err(|e| format!("could not link {}: {e}", link.display()))?;
+        if !made.status.success() {
+            return Err(format!(
+                "could not link {}: {}",
+                link.display(),
+                String::from_utf8_lossy(&made.stdout)
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Report a failure of the run itself (not of a case) and give the exit code.
+fn fail_run(program: &str, json: bool, stream: bool, msg: String) -> ExitCode {
+    if json {
+        crate::test_stream::print_run(stream, &TestRun::runtime_error(msg, None));
+    } else {
+        eprintln!("{program} test: {msg}");
+    }
+    ExitCode::FAILURE
 }

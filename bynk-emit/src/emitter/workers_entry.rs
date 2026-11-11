@@ -1081,6 +1081,15 @@ pub fn emit_worker_entry(
     }) {
         imports.push("__requestQuery".to_string());
     }
+    // #3277: a route taking the raw `cookies` view builds it off the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
+    }) {
+        imports.push("__requestCookies".to_string());
+    }
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
         imports.push("__renderRejection".to_string());
@@ -1853,17 +1862,15 @@ pub fn emit_worker_entry(
         ));
     }
 
-    // v0.10b: queue (consumer) entry point. Dispatches on `batch.queue`,
-    // deserialises each message, invokes the handler, and acks on `Ok` /
-    // retries on `Err` (a deserialisation failure also retries).
-    if !queue_routes.is_empty() {
-        default_entries.push(emit_queue_handler(
-            &queue_routes,
-            &fault_exec_params,
-            &other_compose_args,
-            &runtime_use,
-        ));
-    }
+    // v0.10b: the queue (consumer) entry point; #3328: the email entry point.
+    push_message_entries(
+        table,
+        &queue_routes,
+        &fault_exec_params,
+        &other_compose_args,
+        &runtime_use,
+        (&mut imports, &mut default_entries),
+    );
 
     // v0.176 (#642): a `Bytes` may now cross a workers boundary, so the
     // entry's inbound codec can reference the base64 helpers — fold in
@@ -1908,6 +1915,12 @@ pub fn emit_worker_entry(
         append_missing_bindings(
             &mut imports,
             crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
+        );
+    }
+    if runtime_use.request_cookies() {
+        append_missing_bindings(
+            &mut imports,
+            crate::emitter::REQUEST_COOKIES_RUNTIME_IMPORTS,
         );
     }
     if runtime_use.request_query() {
@@ -2055,6 +2068,37 @@ fn emit_scheduled_handler(
         doc: None,
         inline: false,
         body,
+    }
+}
+
+/// The queue (v0.10b) and inbound-email (#3328) entry points. `queue` dispatches
+/// on `batch.queue`, deserialises each message, invokes the handler, and acks on
+/// `Ok` / retries on `Err` (a deserialisation failure also retries); `email`
+/// hands the message to the runtime with one route per `from email` service.
+fn push_message_entries(
+    table: &UnitTable,
+    queue_routes: &[QueueRoute],
+    exec_params: &[TsParam],
+    compose_args: &[TsExpr],
+    runtime_use: &RuntimeUse,
+    (imports, entries): (&mut Vec<String>, &mut Vec<TsObjectEntry>),
+) {
+    if !queue_routes.is_empty() {
+        entries.push(emit_queue_handler(
+            queue_routes,
+            exec_params,
+            compose_args,
+            runtime_use,
+        ));
+    }
+    let email_routes = super::workers_email::collect_routes(table);
+    if !email_routes.is_empty() {
+        imports.extend(super::workers_email::RUNTIME_IMPORTS.map(String::from));
+        entries.push(super::workers_email::emit_email_handler(
+            &email_routes,
+            exec_params,
+            compose_args,
+        ));
     }
 }
 
@@ -3153,6 +3197,16 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("query", member(ident("__r_query"), "value")));
             call_args.push(ident("query"));
+            continue;
+        }
+        // #3277 (decision A): `cookies: RequestCookies` is the raw view of the
+        // request's cookies.
+        let cookies_is_path_raw = route.path.split('/').any(|seg| seg == ":cookies");
+        if pname == "cookies"
+            && !cookies_is_path_raw
+            && matches!(p.type_ref, TypeRef::RequestCookies(_))
+        {
+            call_args.push(call(ident("__requestCookies"), vec![ident("request")]));
             continue;
         }
         // #3277: `cookies` is decoded off the `Cookie` header and validated before

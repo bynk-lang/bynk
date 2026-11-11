@@ -1,0 +1,7 @@
+commons demo
+
+type Frame = { text: String }
+
+fn same(a: String, b: String) -> Bool {
+    a == b
+}
