@@ -677,3 +677,33 @@ test("then runs at once on a value and after a promise settles", async () => {
   assert.deepEqual(await chained, [2, 4]);
   await assert.rejects(Promise.resolve(then(Promise.reject(new Error("boom")), (x) => x)), /boom/);
 });
+
+test("then accepts a thenable that is not a native promise", async () => {
+  const thenable = { then: (ok: (v: number) => unknown) => ok(5) } as unknown as Promise<number>;
+  assert.equal(await Promise.resolve(then(thenable, (x) => x + 1)), 6);
+});
+
+// The shape the emitter produces for Map.upsert (#3189): chained through `then`, so an
+// in-memory handle runs read and write in one tick and concurrent upserts on one key
+// cannot lose an update, while a handle that returns promises still works.
+const upsert = (m: StoreMap<number>, k: string): Promise<undefined> =>
+  (async () =>
+    then(m.has(k), (h) => then(h ? m.get(k) : 0, (v) => then(m.put(k, (v as number) + 1), () => undefined))))();
+
+test("concurrent upserts on one key through an in-memory handle lose nothing", async () => {
+  const m = new StoreMap<number>();
+  await Promise.all([upsert(m, "k"), upsert(m, "k"), upsert(m, "k")]);
+  assert.equal(m.get("k"), 3);
+});
+
+test("the same chain works against a handle whose calls return promises", async () => {
+  const inner = new StoreMap<number>();
+  const slow = {
+    has: async (k: string) => inner.has(k),
+    get: async (k: string) => inner.get(k),
+    put: async (k: string, v: number) => inner.put(k, v),
+  } as unknown as StoreMap<number>;
+  await upsert(slow, "k");
+  await upsert(slow, "k");
+  assert.equal(inner.get("k"), 2);
+});

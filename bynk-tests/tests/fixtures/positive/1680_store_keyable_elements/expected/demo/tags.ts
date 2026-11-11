@@ -115,7 +115,7 @@ export class Board {
 
   async owned(u: UserId, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(u); return (await __state.owners.has(__k)) ? Some((await __state.owners.get(__k))!) : None; })();
+    const r = await (async () => { const __k = String(u); return __bynkThen(__state.owners.has(__k), (__h) => __h ? __bynkThen(__state.owners.get(__k), (__v) => Some(__v!)) : None); })();
     return ((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(r, 0);
   }
 

@@ -545,7 +545,7 @@ export class Board {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<Light>> {
     const __state = await this.loadState();
-    const l = await (async () => { const __k = String(k); return (await __state.lights.has(__k)) ? Some((await __state.lights.get(__k))!) : None; })();
+    const l = await (async () => { const __k = String(k); return __bynkThen(__state.lights.has(__k), (__h) => __h ? __bynkThen(__state.lights.get(__k), (__v) => Some(__v!)) : None); })();
     return l;
   }
 

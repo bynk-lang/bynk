@@ -113,7 +113,7 @@ export class Room {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (async () => { await __state.members.add(String(u)); return undefined; })();
-      const __r1 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } __state.conns.put(__k, __new); return undefined; })();
+      const __r1 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
       __state.opened = Some(this.__key);
       return undefined;
     })();
@@ -125,7 +125,7 @@ export class Room {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (async () => { await __state.members.remove(String(u)); return undefined; })();
-      const __r1 = await (async () => { const __k = String(u); const __cid = __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } __state.conns.remove(__k); } return undefined; })();
+      const __r1 = await (async () => { const __k = String(u); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
       __state.left = Some(this.__key);
       return undefined;
     })();

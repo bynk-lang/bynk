@@ -79,7 +79,7 @@ export class Inventory {
   async retag(rid: string, oid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(rid); if (!(await __state.reservations.has(__k))) { throw new globalThis.Error("Map.update: key absent"); } await __state.reservations.put(__k, ((r: Reservation) => ({ ...r, orderId: oid }))((await __state.reservations.get(__k))!)); return undefined; })();
+      const __r0 = await (async () => { const __k = String(rid); return __bynkThen(__state.reservations.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.reservations.get(__k), (__v) => __bynkThen(__state.reservations.put(__k, ((r: Reservation) => ({ ...r, orderId: oid }))(__v!)), () => undefined)); }); })();
       return undefined;
     })();
     await this.commitState(__state);

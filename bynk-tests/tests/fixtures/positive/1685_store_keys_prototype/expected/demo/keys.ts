@@ -131,7 +131,7 @@ export class Bag {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(k); return (await __state.items.has(__k)) ? Some((await __state.items.get(__k))!) : None; })();
+    const r = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
     return r;
   }
 
@@ -160,7 +160,7 @@ export class Bag {
   async bump(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(k); await __state.items.put(__k, ((n: number) => n + 1)((await __state.items.has(__k)) ? (await __state.items.get(__k))! : (0))); return undefined; })();
+      const __r0 = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __bynkThen(__h ? __state.items.get(__k) : (0), (__v) => __bynkThen(__state.items.put(__k, ((n: number) => n + 1)(__v!)), () => undefined))); })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -170,7 +170,7 @@ export class Bag {
   async add10(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(k); if (!(await __state.items.has(__k))) { throw new globalThis.Error("Map.update: key absent"); } await __state.items.put(__k, ((n: number) => n + 10)((await __state.items.get(__k))!)); return undefined; })();
+      const __r0 = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.items.get(__k), (__v) => __bynkThen(__state.items.put(__k, ((n: number) => n + 10)(__v!)), () => undefined)); }); })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -432,7 +432,7 @@ export class Memo {
   async add10(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = String(k); const __e = await __state.c.get(__k); if (!(__e !== undefined && __e.exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } await __state.c.put(__k, { v: ((n: number) => n + 10)(__e.v), exp: __now + 300000 }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = String(k); return __bynkThen(__state.c.get(__k), (__e) => { if (!(__e !== undefined && __e.exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } return __bynkThen(__state.c.put(__k, { v: ((n: number) => n + 10)(__e.v), exp: __now + 300000 }), () => undefined); }); })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -516,7 +516,7 @@ export class Ledger {
   async retag(id: string, tag: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(id); if (!(await __state.entries.has(__k))) { throw new globalThis.Error("Map.update: key absent"); } await __state.entries.put(__k, ((e: Entry) => ({ ...e, tag: tag }))((await __state.entries.get(__k))!)); return undefined; })();
+      const __r0 = await (async () => { const __k = String(id); return __bynkThen(__state.entries.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.entries.get(__k), (__v) => __bynkThen(__state.entries.put(__k, ((e: Entry) => ({ ...e, tag: tag }))(__v!)), () => undefined)); }); })();
       return undefined;
     })();
     await this.commitState(__state);

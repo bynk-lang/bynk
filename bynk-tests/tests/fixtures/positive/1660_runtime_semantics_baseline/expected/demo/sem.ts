@@ -377,7 +377,7 @@ export class Bag {
 
   async has(k: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    const r = await (async () => { const __k = String(k); return (await __state.items.has(__k)) ? Some((await __state.items.get(__k))!) : None; })();
+    const r = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
     return (r.tag === "Some");
   }
 

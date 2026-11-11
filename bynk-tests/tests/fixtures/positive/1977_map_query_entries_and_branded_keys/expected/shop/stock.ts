@@ -184,7 +184,7 @@ export class ByKey {
 
   async qty(k: string, deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (async () => { const __k = String(sku(k)); return (await __state.items.has(__k)) ? Some((await __state.items.get(__k))!) : None; })();
+    return (async () => { const __k = String(sku(k)); return __bynkThen(__state.items.has(__k), (__h) => __h ? __bynkThen(__state.items.get(__k), (__v) => Some(__v!)) : None); })();
   }
 
 }

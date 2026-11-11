@@ -109,7 +109,7 @@ export class Account {
 
   async priceText(sku: string, deps: {}): globalThis.Promise<string> {
     const __state = await this.loadState();
-    const p = await (async () => { const __k = String(sku); return (await __state.prices.has(__k)) ? Some((await __state.prices.get(__k))!) : None; })();
+    const p = await (async () => { const __k = String(sku); return __bynkThen(__state.prices.has(__k), (__h) => __h ? __bynkThen(__state.prices.get(__k), (__v) => Some(__v!)) : None); })();
     switch (p.tag) {
       case "Some": {
         const d = p.value;

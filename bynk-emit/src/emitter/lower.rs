@@ -3714,11 +3714,11 @@ fn lower_store_held_map_call(
             // be dropped unclosed. Re-putting the same connection under its own
             // key (the same connection id) leaves it open.
             "put" => format!(
-                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = {m}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {m}.put(__k, __new); return undefined; }})()",
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = await {m}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} await {m}.put(__k, __new); return undefined; }})()",
                 a[0], a[1]
             ),
             "remove" => format!(
-                "(async () => {{ const __k = String({0}); const __cid = {m}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} {m}.remove(__k); }} return undefined; }})()",
+                "(async () => {{ const __k = String({0}); const __cid = await {m}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} await {m}.remove(__k); }} return undefined; }})()",
                 a[0]
             ),
             "contains" => format!("{m}.has(String({}))", a[0]),
@@ -3862,15 +3862,15 @@ fn lower_store_map_call(
             "contains" => format!("{m}.has({})", k),
             "size" => format!("{m}.size()"),
             "get" => format!(
-                "(async () => {{ const __k = {0}; return (await {m}.has(__k)) ? Some((await {m}.get(__k))!) : None; }})()",
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __h ? __bynkThen({m}.get(__k), (__v) => Some(__v!)) : None); }})()",
                 k
             ),
             "update" => format!(
-                "(async () => {{ const __k = {0}; if (!(await {m}.has(__k))) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} await {m}.put(__k, ({1})((await {m}.get(__k))!)); return undefined; }})()",
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => {{ if (!__h) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} return __bynkThen({m}.get(__k), (__v) => __bynkThen({m}.put(__k, ({1})(__v!)), () => undefined)); }}); }})()",
                 k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __k = {0}; await {m}.put(__k, ({2})((await {m}.has(__k)) ? (await {m}.get(__k))! : ({1}))); return undefined; }})()",
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __bynkThen(__h ? {m}.get(__k) : ({1}), (__v) => __bynkThen({m}.put(__k, ({2})(__v!)), () => undefined))); }})()",
                 k, a[1], a[2]
             ),
             // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
@@ -4020,11 +4020,11 @@ fn lower_store_cache_call(
                 )
             }
             "update" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __e = await {c}.get(__k); if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} await {c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}); return undefined; }})()",
+                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} return __bynkThen({c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}), () => undefined); }}); }})()",
                 k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __e = await {c}.get(__k); const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); await {c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}); return undefined; }})()",
+                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); return __bynkThen({c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}), () => undefined); }}); }})()",
                 k, a[1], a[2]
             ),
             other => format!("(/* unsupported Cache op {other} */ undefined)"),
