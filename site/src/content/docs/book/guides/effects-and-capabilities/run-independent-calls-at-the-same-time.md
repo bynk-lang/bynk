@@ -80,8 +80,10 @@ The same holds for the closure you give to `parTraverse`, `parTraverseAll` or
 (`bynk.par.store_write_in_closure`). A `get` followed by a `put` in it would lose
 updates, because the branches interleave between the two calls. Run that loop with
 `forEach`, where each element finishes before the next starts and a single-call
-`update` stays atomic per key. To keep the concurrent part, collect with
-`parTraverseAll` and write afterwards:
+`update` stays atomic per key. A store write reads the entry before it stages the
+write, so the sequential form reads one entry at a time; per-key atomicity is the
+reason for the rule. To keep the concurrent part, collect with `parTraverseAll` and
+write afterwards:
 
 ```bynk,fragment
 // refused: the closure writes `counts`
