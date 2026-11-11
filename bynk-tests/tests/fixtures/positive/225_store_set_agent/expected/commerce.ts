@@ -4,25 +4,33 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
+import { __StoreSet, __fillSet, __wireEntries, __wireSet } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface AudienceState {
-  readonly members: globalThis.Record<string, boolean>;
+  readonly members: __StoreSet;
 }
 
 const __AudienceRegistry = new __StateRegistry();
-function __zeroOfAudienceState(): AudienceState { return { members: {} }; }
+function __zeroOfAudienceState(): AudienceState { return { members: new __StoreSet() }; }
 
 const __entryFieldsOfAudience = [{ name: "members", kind: "set" }] as const;
 
 function __rehydrateAudienceState(s: AudienceState, stored: AudienceState): void {
-  for (const __k of globalThis.Object.keys(s.members)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error); }
+}
+
+function __hydrateAudienceState(s: AudienceState, stored: AudienceState): void {
+  const __z = __zeroOfAudienceState();
+  const __w = s as { -readonly [K in keyof AudienceState]: AudienceState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "members")) { __fillSet(__z.members, __r["members"] as never); __w.members = __z.members; }
 }
 
 function __encodeAudienceState(s: AudienceState): globalThis.Record<string, unknown> {
-  return { ...s };
+  return { ...s, members: __wireSet(s.members) };
 }
 
 export class Audience {
@@ -40,17 +48,18 @@ export class Audience {
     __reportUnknownStoredKeys("Audience", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAudienceState(__merged, __wholesale);
+    __hydrateAudienceState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: AudienceState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeAudienceState(s), __entryFieldsOfAudience);
+    await __commitStored(this, this.state.storage, __encodeAudienceState(s), __entryFieldsOfAudience, s);
   }
 
   async join(who: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.members, who, { value: true, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (__state.members.add(String(who)), undefined);
       return undefined;
     })();
     await this.commitState(__state);
@@ -60,7 +69,7 @@ export class Audience {
   async leave(who: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await ((delete __state.members[who]), undefined);
+      const __r0 = await (__state.members.remove(String(who)), undefined);
       return undefined;
     })();
     await this.commitState(__state);
@@ -69,13 +78,13 @@ export class Audience {
 
   async isMember(who: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    const here = await globalThis.Object.hasOwn(__state.members, who);
+    const here = await __state.members.has(String(who));
     return here;
   }
 
   async size(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await globalThis.Object.keys(__state.members).length;
+    const n = await __state.members.size();
     return n;
   }
 

@@ -1,0 +1,24 @@
+context api
+
+type Q = { q: String }
+
+service api from http {
+	@form
+	on POST("/search") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.q)
+	}
+
+	// Lists every rejection but `MalformedForm`, with no wildcard: it stops
+	// compiling when a variant is added (the fix is an arm, or a `_`).
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			MalformedJson(_) => RawError(BadRequest, Bytes.empty(), "text/plain")
+			StructuralMismatch(_) => RawError(BadRequest, Bytes.empty(), "text/plain")
+			RefinementViolation(_) => RawError(BadRequest, Bytes.empty(), "text/plain")
+			PayloadTooLarge(_) => RawError(PayloadTooLarge, Bytes.empty(), "text/plain")
+			UnsupportedMediaType(_) => RawError(UnsupportedMediaType, Bytes.empty(), "text/plain")
+			MethodNotAllowed => RawError(MethodNotAllowed, Bytes.empty(), "text/plain")
+			Unauthorized => RawError(Forbidden, Bytes.empty(), "text/plain")
+		}
+	}
+}

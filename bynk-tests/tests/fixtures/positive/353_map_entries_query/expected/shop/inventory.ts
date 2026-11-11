@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -24,21 +25,28 @@ export const Row = {
 };
 
 export interface InventoryState {
-  readonly items: globalThis.Record<string, Item>;
+  readonly items: __StoreMap<Item>;
 }
 
 const __InventoryRegistry = new __StateRegistry();
-function __zeroOfInventoryState(): InventoryState { return { items: {} }; }
+function __zeroOfInventoryState(): InventoryState { return { items: new __StoreMap<Item>() }; }
 
 const __entryFieldsOfInventory = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Item((s.items[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = __deserialise_Item((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+}
+
+function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
+  const __z = __zeroOfInventoryState();
+  const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, __serialise_Item(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)) };
 }
 
 export class Inventory {
@@ -56,41 +64,42 @@ export class Inventory {
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
+    __hydrateInventoryState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: InventoryState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory);
+    await __commitStored(this, this.state.storage, __encodeInventoryState(s), __entryFieldsOfInventory, s);
   }
 
   async rows(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    return ((() => ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))().map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x))))();
+    return ((() => ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))().map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x))))();
   }
 
   async bigRows(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...((() => ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))().filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x))))()].sort((__a, __b) => { const __ka = ((e: { readonly key: string; readonly value: Item }) => e.key)(__a), __kb = ((e: { readonly key: string; readonly value: Item }) => e.key)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x))))();
+    return ((() => ((() => [...((() => ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))().filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x))))()].sort((__a, __b) => { const __ka = ((e: { readonly key: string; readonly value: Item }) => e.key)(__a), __kb = ((e: { readonly key: string; readonly value: Item }) => e.key)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x))))();
   }
 
   async skus(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => [...((() => globalThis.Object.keys(__state.items)))()].sort((__a, __b) => { const __ka = ((k: string) => k)(__a), __kb = ((k: string) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
+    return ((() => [...((() => __state.items.keys()))()].sort((__a, __b) => { const __ka = ((k: string) => k)(__a), __kb = ((k: string) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
   }
 
   async quantities(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return ((() => ((() => globalThis.Object.values(__state.items)))().map((__x) => ((it: Item) => it.qty)(__x))))();
+    return ((() => ((() => __state.items.values()))().map((__x) => ((it: Item) => it.qty)(__x))))();
   }
 
   async hasSku(sku: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return ((() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v }))))().some((__x) => ((e: { readonly key: string; readonly value: Item }) => e.key === sku)(__x));
+    return ((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))().some((__x) => ((e: { readonly key: string; readonly value: Item }) => e.key === sku)(__x));
   }
 
   async pending(deps: {}): globalThis.Promise<readonly Row[]> {
     const __state = await this.loadState();
-    const q = (() => globalThis.Object.entries(__state.items).map(([__k, __v]) => ({ key: __k, value: __v })));
+    const q = (() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v })));
     return ((() => ((() => (q)().filter((__x) => ((e: { readonly key: string; readonly value: Item }) => e.value.qty > 0)(__x))))().map((__x) => ((e: { readonly key: string; readonly value: Item }) => ({ sku: e.key, qty: e.value.qty }))(__x))))();
   }
 
@@ -101,20 +110,27 @@ export function __makeInventory(key: string, env?: { INVENTORY?: __DurableObject
 }
 
 export interface LedgerState {
-  readonly balances: globalThis.Record<string, Item>;
+  readonly balances: __StoreMap<Item>;
 }
 
 const __LedgerRegistry = new __StateRegistry();
-function __zeroOfLedgerState(): LedgerState { return { balances: {} }; }
+function __zeroOfLedgerState(): LedgerState { return { balances: new __StoreMap<Item>() }; }
 
 const __entryFieldsOfLedger = [{ name: "balances", kind: "map" }] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) for (const __k of globalThis.Object.keys(s.balances)) { const __r = __deserialise_Item((s.balances[__k] as unknown as __JsonValue), "balances"); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); s.balances[__k] = __r.value as unknown as (typeof s.balances)[string]; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balances")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).balances as object)) { const __r = __deserialise_Item((((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "balances"); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); ((s as unknown as globalThis.Record<string, unknown>).balances as globalThis.Record<string, unknown>)[__k] = __r.value; }
+}
+
+function __hydrateLedgerState(s: LedgerState, stored: LedgerState): void {
+  const __z = __zeroOfLedgerState();
+  const __w = s as { -readonly [K in keyof LedgerState]: LedgerState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "balances")) { __fillMap(__z.balances, __r["balances"] as never); __w.balances = __z.balances; }
 }
 
 function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown> {
-  return { ...s, balances: globalThis.Object.fromEntries(globalThis.Object.entries(s.balances).map(([__k, __v]) => [__k, __serialise_Item(__v)])) };
+  return { ...s, balances: __wireMap(s.balances, (__v) => __serialise_Item(__v)) };
 }
 
 export class Ledger {
@@ -132,21 +148,22 @@ export class Ledger {
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
+    __hydrateLedgerState(__merged, __wholesale);
     return __merged;
   }
 
   private async commitState(s: LedgerState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger);
+    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger, s);
   }
 
   async accounts(deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
-    return ((() => [...((() => globalThis.Object.keys(__state.balances).map((__k) => globalThis.Number(__k))))()].sort((__a, __b) => { const __ka = ((k: number) => k)(__a), __kb = ((k: number) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
+    return ((() => [...((() => __state.balances.keys().map((__k) => globalThis.Number(__k))))()].sort((__a, __b) => { const __ka = ((k: number) => k)(__a), __kb = ((k: number) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))();
   }
 
   async maxAccount(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = ((() => globalThis.Object.entries(__state.balances).map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v }))))(); if (__a.length === 0) return None; let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]); for (const __x of __a) { const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x); if (__k > __m) __m = __k; } return Some(__m); })();
+    return (() => { const __a = ((() => __state.balances.entries().map(([__k, __v]) => ({ key: globalThis.Number(__k), value: __v }))))(); if (__a.length === 0) return None; let __m = ((e: { readonly key: number; readonly value: Item }) => e.key)(__a[0]); for (const __x of __a) { const __k = ((e: { readonly key: number; readonly value: Item }) => e.key)(__x); if (__k > __m) __m = __k; } return Some(__m); })();
   }
 
 }

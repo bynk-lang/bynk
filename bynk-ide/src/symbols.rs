@@ -1507,6 +1507,44 @@ fn render_handler_annotation_hover(
              - **Effective body cap** — {cap}."
         );
     }
+    // #3276: `@form` decodes the `body` record from a urlencoded form.
+    if ann.name.name == "form" {
+        let cap = match handler.limit_max_body().or(service_cap) {
+            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
+            None => "none (add `@limit` or `limits { maxBody }` to bound it)".to_string(),
+        };
+        return format!(
+            "```bynk\n{sig}\n```\n\n\
+             **`@form`** — decode this route's `body` record from an \
+             `application/x-www-form-urlencoded` form, with the same refinements, defaults and \
+             `Option`s as a JSON body. Any other `Content-Type` is answered `415 Unsupported \
+             Media Type`; a bad field is a `400` naming `body.<field>`.\n\n\
+             - **Fields** — a `String`, `Int`, `Bool`, `Decimal`, an enum or a refined or opaque \
+             type over one, optionally in an `Option` or a `List` (a repeated key). An unchecked \
+             checkbox sends nothing, so give a `Bool` a default.\n\
+             - **Empty values** — `name=` is absent for an `Option` or a non-`String` field, and `\"\"` \
+             for a `String`.\n\
+             - **Effective body cap** — {cap}."
+        );
+    }
+    // #3276: `@multipart` decodes the `body` record from `multipart/form-data`.
+    if ann.name.name == "multipart" {
+        let cap = match handler.limit_max_body().or(service_cap) {
+            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
+            None => "none — a `@multipart` route needs one (`bynk.http.multipart_body_unbounded`)"
+                .to_string(),
+        };
+        return format!(
+            "```bynk\n{sig}\n```\n\n\
+             **`@multipart`** — decode this route's `body` record from a `multipart/form-data` \
+             body, buffered whole under the body cap. Text parts follow the same rules as a \
+             [`@form`] body; a part with a filename is a `File` (`filename`, `contentType`, \
+             `bytes`), both client-controlled. Any other `Content-Type` is a `415`, a body \
+             that is not multipart a `400` `MalformedForm`, and a part over `maxFile` (or more \
+             than `maxParts`) a `413`.\n\n\
+             - **Effective body cap** — {cap}."
+        );
+    }
     format!("```bynk\n{sig}\n```")
 }
 
@@ -4813,6 +4851,43 @@ mod tests {
         assert!(
             hover.contains("Emits `Cache-Control: public, max-age=31536000, immutable`."),
             "{hover}"
+        );
+    }
+
+    #[test]
+    fn hover_on_form_annotation_shows_the_decoding_rule_and_effective_cap() {
+        let svc = "context api\ntype Q = { q: String }\nservice api from http {\n  limits { maxBody: 4096 }\n  @form\n  on POST(\"/s\") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(body.q)\n  }\n}\n";
+        let hover = describe_handler_annotation_at(svc, svc.find("form").unwrap() + 1)
+            .expect("hovers @form");
+        assert!(hover.contains("`@form`"), "names the annotation: {hover}");
+        assert!(
+            hover.contains("application/x-www-form-urlencoded"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("`415"),
+            "says the other-type answer: {hover}"
+        );
+        assert!(
+            hover.contains("4096 bytes"),
+            "shows the service cap: {hover}"
+        );
+    }
+
+    #[test]
+    fn hover_on_multipart_annotation_shows_the_rules_and_effective_cap() {
+        let svc = "context api\nconsumes bynk { File }\ntype Q = { f: File }\nservice api from http {\n  limits { maxBody: 4096 }\n  @multipart\n  on POST(\"/s\") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let hover = describe_handler_annotation_at(svc, svc.find("multipart").unwrap() + 1)
+            .expect("hovers @multipart");
+        assert!(
+            hover.contains("`@multipart`"),
+            "names the annotation: {hover}"
+        );
+        assert!(hover.contains("multipart/form-data"), "{hover}");
+        assert!(hover.contains("MalformedForm"), "{hover}");
+        assert!(
+            hover.contains("4096 bytes"),
+            "shows the service cap: {hover}"
         );
     }
 

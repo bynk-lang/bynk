@@ -6449,6 +6449,9 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     ("MethodNotAllowed", false),
     ("PayloadTooLarge", true),
     ("UnsupportedMediaType", true),
+    // #3276: the router's `400` to a `multipart/form-data` body that is not one
+    // (no boundary, never closed). A breaking addition to a closed sum, as ADR 0586's.
+    ("MalformedForm", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────

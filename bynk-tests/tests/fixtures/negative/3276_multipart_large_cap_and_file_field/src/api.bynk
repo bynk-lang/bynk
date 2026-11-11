@@ -1,0 +1,15 @@
+context api
+
+consumes bynk { File }
+
+type Up = { photo: File, nested: Option[Up2] }
+type Up2 = { a: String }
+
+service api from http {
+  limits { maxBody: 100_000_000 }
+
+  @multipart
+  on POST("/up") (body: Up) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkIntDiv, __bynkToInt, __bynkIntDivFloor, __bynkIntRem, __bynkIntMod, __bynkIntPow, __bynkIntAnd, __bynkIntOr, __bynkIntXor, __bynkIntAndNot, __bynkIntShl, __bynkIntShr } from "../../__bynk_runtime/int.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { QueueResult } from "../../__bynk_runtime/queue.js";
@@ -55,7 +55,7 @@ export class Counter {
   }
 
   private async commitState(s: CounterState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter);
+    await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter, s);
   }
 
   async bump(amount: number, deps: {}): globalThis.Promise<number> {
@@ -131,7 +131,7 @@ export class Ledger {
   }
 
   private async commitState(s: LedgerState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger);
+    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger, s);
   }
 
   async first(deps: {}): globalThis.Promise<boolean> {

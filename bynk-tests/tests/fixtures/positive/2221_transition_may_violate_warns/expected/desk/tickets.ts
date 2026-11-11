@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -74,7 +74,7 @@ export class Ticket {
         throw __invariantViolation("Ticket", "archived_is_final", "transition", "desk/tickets.bynk:12:14");
       }
     }
-    await __commitStored(this, this.state.storage, __encodeTicketState(s), __entryFieldsOfTicket);
+    await __commitStored(this, this.state.storage, __encodeTicketState(s), __entryFieldsOfTicket, s);
   }
 
   async archive(deps: {}): globalThis.Promise<void> {
@@ -165,7 +165,7 @@ export class Gate {
         throw __invariantViolation("Gate", "idle_must_start", "transition", "desk/tickets.bynk:43:14");
       }
     }
-    await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate);
+    await __commitStored(this, this.state.storage, __encodeGateState(s), __entryFieldsOfGate, s);
   }
 
   async ping(deps: {}): globalThis.Promise<void> {

@@ -1,0 +1,1 @@
+bynk.http.body_kind_conflict

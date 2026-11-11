@@ -1555,6 +1555,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    d(
+        "bynk.http.body_kind_conflict",
+        "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.",
+    ),
     dg(
         "bynk.http.body_on_get_or_delete",
         "A GET or DELETE handler declares a `body` parameter.",
@@ -1627,6 +1631,37 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
         &["http_handler"],
     ),
+    dg(
+        "bynk.http.form_body_not_record",
+        "The `body` of a `@form` handler is not a record type.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.form_bool_without_default",
+        "A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning).",
+        &["http_handler"],
+    )),
+    d(
+        "bynk.http.form_duplicate",
+        "A handler carries more than one `@form` annotation.",
+    ),
+    dg(
+        "bynk.http.form_field_not_stringy",
+        "A field of a `@form` body record has a type a form cannot carry.",
+        &["http_handler"],
+    ),
+    d(
+        "bynk.http.form_on_bodyless",
+        "A `@form` or `@multipart` annotation is placed on a handler that takes no body.",
+    ),
+    d(
+        "bynk.http.form_on_sum_route",
+        "A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself.",
+    ),
+    d(
+        "bynk.http.form_unknown_arg",
+        "A `@form` annotation is given an argument; it takes none.",
+    ),
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
@@ -1674,12 +1709,20 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal.",
     ),
     d(
+        "bynk.http.limit_bad_max_file",
+        "A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal.",
+    ),
+    d(
         "bynk.http.limit_duplicate",
         "A handler carries more than one `@limit` annotation.",
     ),
     d(
         "bynk.http.limit_on_bodyless",
         "A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE).",
+    ),
+    d(
+        "bynk.http.limit_on_non_multipart",
+        "A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`.",
     ),
     d(
         "bynk.http.limit_unknown_arg",
@@ -1697,6 +1740,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.limits_unknown_field",
         "A `limits { }` policy declares a field outside the closed set.",
     ),
+    d(
+        "bynk.http.multipart_body_unbounded",
+        "A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).",
+    ),
+    warn(d(
+        "bynk.http.multipart_large_cap",
+        "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).",
+    )),
     dg(
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not constructible from a string.",
@@ -3497,6 +3548,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.field_value_mismatch",
         "A record field was given a value of the wrong type.",
         &["record_construction"],
+    ),
+    d(
+        "bynk.types.file_at_boundary",
+        "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
     ),
     dg(
         "bynk.types.function_at_boundary",

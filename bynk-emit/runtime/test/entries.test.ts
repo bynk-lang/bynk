@@ -375,7 +375,10 @@ test("sameStored compares plain data structurally, whatever the key order", () =
 });
 
 // The codec: the stored record read and written per entry (#3189, slice 2).
-import { commitStored, readStored } from "../src/entries.ts";
+import { CACHE_REAP_LIMIT, commitStored, noteClock, readStored } from "../src/entries.ts";
+import { StoreMap, StoreSet, entriesOf, fillMap, fillSet, orderedRecord, wireMap, wireSet } from "../src/store.ts";
+
+const keysOf = (record: Record<string, unknown>): string[] => entriesOf(record).map(([k]) => k);
 import type { EntryField } from "../src/entries.ts";
 
 const FIELDS: EntryField[] = [
@@ -396,7 +399,7 @@ test("codec: a state commits per entry and reads back in insertion order, intege
   await load(self, s);
   await commitStored(self, s as never, {
     __v: 1, n: 3,
-    users: { b: { t: "x" }, "10": { t: "y" }, a: { t: "x" } },
+    users: orderedRecord([["b", { t: "x" }], ["10", { t: "y" }], ["a", { t: "x" }]]),
     users__idx_byTeam: { x: ["b", "a"], y: ["10"] },
     tags: { z: true, y: true },
     hits: { k: { v: 1, exp: 50 } },
@@ -407,10 +410,11 @@ test("codec: a state commits per entry and reads back in insertion order, intege
   assert.equal(state.users, undefined);
   assert.equal(state.n, 3);
   const back = await load({}, s);
-  assert.deepEqual(Object.keys(back.users), ["10", "b", "a"].sort((p, q) => (p === "10" ? -1 : q === "10" ? 1 : 0)));
-  // insertion order b, 10, a is kept in the stored `i`, so the postings read in it.
-  assert.deepEqual(back.users__idx_byTeam.x, ["b", "a"]);
-  assert.deepEqual(Object.keys(back.tags), ["z", "y"]);
+  // insertion order b, 10, a is kept in the stored `i`, and read back in it.
+  assert.deepEqual(keysOf(back.users), ["b", "10", "a"]);
+  // A posting is written per entry, and is not joined back: a Map handle rebuilds its own.
+  assert.equal(back.users__idx_byTeam, undefined);
+  assert.deepEqual(keysOf(back.tags), ["z", "y"]);
   assert.deepEqual(back.hits, { k: { v: 1, exp: 50 } });
   assert.deepEqual(back.audit, [{ t: 5, v: "p" }, { t: 5, v: "q" }]);
 });
@@ -424,14 +428,14 @@ test("codec: an overwrite keeps its place; a removed key inserted again goes to 
   st.users.a = 10; // overwrite
   await commitStored(self, s as never, st, FIELDS);
   st = await load(self, s);
-  assert.deepEqual(Object.keys(st.users), ["a", "b", "c"]);
+  assert.deepEqual(keysOf(st.users), ["a", "b", "c"]);
   delete st.users.a; // remove, then a later handler inserts it again
   await commitStored(self, s as never, st, FIELDS);
   st = await load(self, s);
   st.users.a = 11;
   await commitStored(self, s as never, st, FIELDS);
   st = await load(self, s);
-  assert.deepEqual(Object.keys(st.users), ["b", "c", "a"]);
+  assert.deepEqual(keysOf(st.users), ["b", "c", "a"]);
 });
 
 test("codec: a commit writes only the entries that changed", async () => {
@@ -503,9 +507,9 @@ test("codec: a write that throws leaves storage and the base as they were", asyn
   (s as any).transaction = async () => { throw new Error("boom"); };
   await assert.rejects(commitStored(self, s as never, st, FIELDS), /boom/);
   (s as any).transaction = real;
-  assert.deepEqual(Object.keys((await load({}, s)).users), ["a"]);
+  assert.deepEqual(keysOf((await load({}, s)).users), ["a"]);
   await commitStored(self, s as never, st, FIELDS); // the base still says only `a` is stored
-  assert.deepEqual(Object.keys((await load({}, s)).users), ["a", "b"]);
+  assert.deepEqual(keysOf((await load({}, s)).users), ["a", "b"]);
 });
 
 test("codec: a log keeps its order and prunes its oldest", async () => {
@@ -563,4 +567,103 @@ test("codec: a field re-kinded from a Map to a Set is joined as the Map it was, 
   await commitStored(self, s as never, st, asSet);
   assert.deepEqual([...(await s.list({ prefix: "m/users/" })).keys()], []);
   assert.deepEqual(Object.keys(((await readStored({}, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>).users), ["a", "b"]);
+});
+
+// Cache reaping (#3189): expired entries are deleted at commit, by the clock the program read.
+const CACHE_ONLY: EntryField[] = [{ name: "hits", kind: "cache" }];
+
+async function seedCache(s: InMemoryStorage, self: object, entries: Record<string, { v: unknown; exp: number }>) {
+  await readStored(self, s as never, {});
+  await commitStored(self, s as never, { hits: entries }, CACHE_ONLY);
+}
+
+test("cache reaping: expired entries are deleted, live ones are not", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { old: { v: 1, exp: 10 }, edge: { v: 2, exp: 50 }, live: { v: 3, exp: 51 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(state, 50); // the program's clock, not the runtime's
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  const keys = [...(await s.list({ prefix: "m/hits/" })).keys()];
+  assert.deepEqual(keys, ["m/hits/live"], "exp <= now is expired, as the read treats it");
+  assert.deepEqual([...(await s.list({ prefix: "x/hits/" })).keys()].length, 1, "and the expired entries' expiry keys go too");
+  assert.deepEqual(((await s.get("c/hits")) as any).size, 1);
+});
+
+test("cache reaping: a clock behind every entry reaps nothing, however late the real time is", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { a: { v: 1, exp: 1_000_000 }, b: { v: 2, exp: 2_000_000 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(state, 5); // a fake clock far behind Date.now()
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 2);
+});
+
+test("cache reaping: a commit with no noted clock reaps nothing", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { a: { v: 1, exp: 1 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  await commitStored(self, s as never, state, CACHE_ONLY); // and no state at all
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 1);
+});
+
+test("cache reaping: at most the bound is deleted per commit, oldest expiry first", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  const all: Record<string, { v: unknown; exp: number }> = {};
+  const n = CACHE_REAP_LIMIT + 10;
+  for (let i = 0; i < n; i++) all[`k${i}`] = { v: i, exp: i + 1 };
+  await seedCache(s, self, all);
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(state, 10_000);
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  const left = [...(await s.list({ prefix: "m/hits/" })).keys()];
+  assert.equal(left.length, 10, "64 reaped, 10 left");
+  assert.ok(left.every((k) => Number(k.slice("m/hits/k".length)) >= CACHE_REAP_LIMIT), "the oldest expiries went first");
+  // the next commit reaps the rest
+  const again = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  noteClock(again, 10_000);
+  await commitStored(self, s as never, again, CACHE_ONLY, again);
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 0);
+});
+
+test("noteClock keeps the latest clock a handler read", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await seedCache(s, self, { a: { v: 1, exp: 40 } });
+  const state = (await readStored(self, s as never, ((await s.get("state")) ?? {}) as object)) as Record<string, any>;
+  assert.equal(noteClock(state, 100), 100);
+  noteClock(state, 30); // an earlier read does not lower it
+  await commitStored(self, s as never, state, CACHE_ONLY, state);
+  assert.equal([...(await s.list({ prefix: "m/hits/" })).keys()].length, 0);
+});
+
+test("codec: integer-like keys keep their insertion order through a commit and a reload (#3254)", async () => {
+  const s = new InMemoryStorage();
+  const self = {};
+  await load(self, s);
+  const users = new StoreMap<number>();
+  for (const k of ["10", "2", "a", "5"]) users.put(k, 1);
+  const tags = new StoreSet();
+  for (const k of ["10", "2", "a", "5"]) tags.add(k);
+  await commitStored(self, s as never, { users: wireMap(users), tags: wireSet(tags) }, FIELDS);
+  let back = await load(self, s);
+  let reloaded = new StoreMap<number>();
+  fillMap(reloaded, back.users);
+  assert.deepEqual(reloaded.keys(), ["10", "2", "a", "5"]);
+  // An overwrite keeps its place; a removed key put again goes to the end.
+  reloaded.put("2", 9);
+  reloaded.remove("10");
+  reloaded.put("10", 3);
+  await commitStored(self, s as never, { users: wireMap(reloaded), tags: wireSet(StoreSet.from(back.tags && entriesOf(back.tags).map(([k]) => k))) }, FIELDS);
+  back = await load(self, s);
+  reloaded = new StoreMap<number>();
+  fillMap(reloaded, back.users);
+  assert.deepEqual(reloaded.keys(), ["2", "a", "5", "10"]);
+  const set = new StoreSet();
+  fillSet(set, back.tags);
+  assert.deepEqual(set.keys(), ["10", "2", "a", "5"]);
 });
