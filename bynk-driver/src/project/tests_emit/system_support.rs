@@ -1730,6 +1730,47 @@ pub(super) fn fanout_alias(ns: &str) -> String {
 /// participant the local key for the edge from it.
 pub(super) const HARNESS_CALLER: &str = "integration";
 
+/// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
+/// form) and the one the raw drivers send (a `Wire` string), for a handler's
+/// `cookies` parameter; empty when it has none.
+fn cookie_header_texts(
+    param: Option<&bynk_syntax::ast::Param>,
+    type_ns: &str,
+    runtime_use: &RuntimeUse,
+) -> (String, String) {
+    let Some(p) = param else {
+        return (String::new(), String::new());
+    };
+    let var = bynk_emit::emitter::ts_ident(&p.name.name);
+    runtime_use.note_cookie_string();
+    let ser = bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
+        &p.type_ref,
+        &var,
+        type_ns,
+        runtime_use,
+    ));
+    (
+        format!("\"cookie\": __cookieString({ser}), "),
+        format!("\"cookie\": {var}, "),
+    )
+}
+
+/// Record that the handler's parameter `param` is typed, so the system driver and
+/// the call lowering know its position and type.
+fn register_param_route(
+    route_body: &mut RouteBodyMap,
+    key: (String, String, String),
+    h: &bynk_syntax::ast::Handler,
+    param: &bynk_syntax::ast::Param,
+) {
+    let idx = h
+        .params
+        .iter()
+        .position(|p| p.name.name == param.name.name)
+        .expect("the parameter is drawn from the handler's own");
+    route_body.insert(key, (idx, param.type_ref.clone()));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1844,45 +1885,4 @@ mod tests {
         assert!(!names_ident("/* Region */ x()", "Region"));
         assert!(names_ident("/* a */ Region.Here", "Region"));
     }
-}
-
-/// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
-/// form) and the one the raw drivers send (a `Wire` string), for a handler's
-/// `cookies` parameter; empty when it has none.
-fn cookie_header_texts(
-    param: Option<&bynk_syntax::ast::Param>,
-    type_ns: &str,
-    runtime_use: &RuntimeUse,
-) -> (String, String) {
-    let Some(p) = param else {
-        return (String::new(), String::new());
-    };
-    let var = bynk_emit::emitter::ts_ident(&p.name.name);
-    runtime_use.note_cookie_string();
-    let ser = bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
-        &p.type_ref,
-        &var,
-        type_ns,
-        runtime_use,
-    ));
-    (
-        format!("\"cookie\": __cookieString({ser}), "),
-        format!("\"cookie\": {var}, "),
-    )
-}
-
-/// Record that the handler's parameter `param` is typed, so the system driver and
-/// the call lowering know its position and type.
-fn register_param_route(
-    route_body: &mut RouteBodyMap,
-    key: (String, String, String),
-    h: &bynk_syntax::ast::Handler,
-    param: &bynk_syntax::ast::Param,
-) {
-    let idx = h
-        .params
-        .iter()
-        .position(|p| p.name.name == param.name.name)
-        .expect("the parameter is drawn from the handler's own");
-    route_body.insert(key, (idx, param.type_ref.clone()));
 }
