@@ -493,8 +493,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.asset.unsafe_path",
-        blurb: "An asset's path must stay inside the project: it may not be absolute and it may not \
-                contain a `..` segment. Assets are public, so a path that starts at the filesystem \
+        blurb: "An asset's path must stay inside the project: it may not be empty or absolute, and it \
+                may not contain a `..` segment. Assets are public, so a path that starts at the filesystem \
                 root or climbs out of the project could publish a file that was never meant to ship. \
                 Write the path relative to the project root, inside `assets/`. A relative path that \
                 is only outside `assets/` is `bynk.asset.outside_assets_dir`.",
