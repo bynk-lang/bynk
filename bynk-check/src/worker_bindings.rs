@@ -120,6 +120,16 @@ pub enum BindingSource {
         store: String,
         secret: String,
     },
+    /// #3302: the `[[send_email]]` binding of an `Email` instance
+    /// (`capability Mail = Email @allowedSenders([…])`), with the restrictions
+    /// its annotations carry. Never seen by handlers: they reach it through
+    /// the instance's `WorkersEmail`.
+    Email {
+        capability: String,
+        to: Option<String>,
+        allowed_recipients: Vec<String>,
+        allowed_senders: Vec<String>,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -170,6 +180,9 @@ impl BindingSource {
             } => format!(
                 "the Secrets Store binding of derived capability `{capability}` (to store `{store}`)"
             ),
+            Self::Email { capability, .. } => {
+                format!("the `[[send_email]]` binding of derived capability `{capability}`")
+            }
             Self::Singleton { capability } => format!(
                 "the `{capability}` binding of `{}`",
                 firstparty::CLOUDFLARE_UNIT
@@ -297,6 +310,7 @@ fn declared_at(
             | BindingSource::QueueProducer { capability, .. }
             | BindingSource::AnalyticsDataset { capability }
             | BindingSource::StoredSecret { capability, .. }
+            | BindingSource::Email { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;

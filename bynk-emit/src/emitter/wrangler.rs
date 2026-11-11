@@ -383,6 +383,12 @@ pub fn emit_wrangler_toml(
             BindingSource::StoredSecret { store, secret, .. } => {
                 stored_secret_block(name, store, secret)
             }
+            BindingSource::Email {
+                to,
+                allowed_recipients,
+                allowed_senders,
+                ..
+            } => email_block(name, to.as_deref(), allowed_recipients, allowed_senders),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
             BindingSource::Singleton { capability } => {
@@ -592,6 +598,13 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::StoredSecret { .. }))
             .cloned(),
     );
+    // #3302: the outbound email bindings, after the Secrets Store secrets.
+    bindings.extend(
+        instances
+            .iter()
+            .filter(|b| matches!(b.source, BindingSource::Email { .. }))
+            .cloned(),
+    );
     // #3300: the one-per-Worker bindings, after the databases.
     bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
@@ -656,6 +669,36 @@ fn stored_secret_block(binding: TomlValue, store: &str, secret: &str) -> TomlBlo
     )
 }
 
+/// #3302: the `[[send_email]]` entry of an `Email` instance. Its key is `name`,
+/// not `binding` (as `[[ratelimits]]`'s is), and each restriction is written
+/// only when the declaration carries it: `destination_address` pins every
+/// message to one recipient, and the two lists limit recipients and senders.
+fn email_block(
+    name: TomlValue,
+    to: Option<&str>,
+    allowed_recipients: &[String],
+    allowed_senders: &[String],
+) -> TomlBlock {
+    let list = |items: &[String]| TomlValue::Array(items.iter().map(TomlValue::str).collect());
+    let mut entries = vec![TomlEntry::kv("name", name)];
+    if let Some(to) = to {
+        entries.push(TomlEntry::kv("destination_address", TomlValue::str(to)));
+    }
+    if !allowed_recipients.is_empty() {
+        entries.push(TomlEntry::kv(
+            "allowed_destination_addresses",
+            list(allowed_recipients),
+        ));
+    }
+    if !allowed_senders.is_empty() {
+        entries.push(TomlEntry::kv(
+            "allowed_sender_addresses",
+            list(allowed_senders),
+        ));
+    }
+    TomlBlock::array_table("send_email", entries)
+}
+
 /// A test of a binding's kind (`|s| matches!(s, BindingSource::Kv)`), as
 /// the tables pairing each platform-resource kind with what it needs use.
 pub type BindingKind = fn(&BindingSource) -> bool;
@@ -672,6 +715,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
         BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
+        BindingSource::Email { .. } => "__SendEmail",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             other => unreachable!("singleton `{other}` has no `env` type"),

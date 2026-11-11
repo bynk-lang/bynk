@@ -55,6 +55,7 @@ mod plan;
 mod provisioning;
 mod revert;
 mod secrets;
+mod senders;
 
 use config::*;
 use graph::*;
@@ -64,6 +65,7 @@ use pins::*;
 use plan::*;
 use provisioning::*;
 use secrets::*;
+use senders::*;
 
 // External facade: the paths `main.rs` and `dev.rs` already use must keep
 // resolving exactly as they did before the split.

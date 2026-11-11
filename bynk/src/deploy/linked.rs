@@ -182,13 +182,17 @@ pub(crate) fn link_stored_secrets(
     }
 }
 
-/// The linking a run does before it confirms: every stored secret of `order`
-/// resolved against the account, each problem printed, `None` when any was
-/// found (the run stops there, with nothing pushed).
+/// The account lookups a run does before it confirms: every stored secret of
+/// `order` resolved against the account, and (#3302) every `@allowedSenders`
+/// domain checked, each problem printed, `None` when any was found (the run
+/// stops there, with nothing pushed).
 pub(crate) fn link_for_run(
     order: &[String],
     resources: &BTreeMap<String, Resources>,
 ) -> Option<BTreeMap<(String, String), String>> {
+    if !check_senders_for_run(order, resources) {
+        return None;
+    }
     if !any_stored_secrets(order, resources) {
         return Some(BTreeMap::new());
     }

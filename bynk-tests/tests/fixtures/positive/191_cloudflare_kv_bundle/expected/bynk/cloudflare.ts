@@ -321,6 +321,73 @@ export const SqlReadError = {
 };
 
 /**
+ * One file attached to an outbound `EmailMessage`. `content` is the file's bytes,
+ * `contentType` its MIME type (`"application/pdf"`) and `filename` the name
+ * the recipient sees. `inline` sends it for display inside the body (an
+ * image the `html` refers to as `cid:logo.png`, its content id being its
+ * filename) rather than as a download.
+ */
+export interface EmailAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: globalThis.Uint8Array;
+  readonly inline: boolean;
+}
+
+export const EmailAttachment = {
+};
+
+/**
+ * One outbound email for `Email.send`. Addresses are plain `String`s
+ * (`"orders@shop.example"` or `"Shop <orders@shop.example>"`); the platform,
+ * not Bynk, judges their syntax. At least one of `text` and `html` is
+ * required. `headers` adds custom headers: `From`, `To`, `Cc`, `Bcc`,
+ * `Subject` and `Reply-To` are set by the fields above and may not be set
+ * here, and a name or value with a line break is refused, since either would
+ * let data inject a header.
+ */
+export interface EmailMessage {
+  readonly from: string;
+  readonly to: readonly string[];
+  readonly cc: readonly string[];
+  readonly bcc: readonly string[];
+  readonly replyTo: Option<string>;
+  readonly subject: string;
+  readonly text: Option<string>;
+  readonly html: Option<string>;
+  readonly attachments: readonly EmailAttachment[];
+  readonly headers: ReadonlyMap<string, string>;
+}
+
+export const EmailMessage = {
+};
+
+/**
+ * Why an `Email.send` was refused by the platform. `SenderNotVerified` is a
+ * `from` address outside a domain verified for sending; `RecipientNotAllowed`
+ * a recipient the instance's `@to` or `@allowedRecipients` (or the account)
+ * does not permit; `RateLimited` and `DailyLimit` the per-second and
+ * per-day sending limits. All are outcomes a handler can act on (retry
+ * later, alert); `Failed` is any other refusal, with the platform's
+ * message. Cloudflare has further error codes, so a `match` over this type
+ * needs a wildcard.
+ */
+export type EmailError =
+    { readonly tag: "SenderNotVerified" }
+  | { readonly tag: "RecipientNotAllowed" }
+  | { readonly tag: "RateLimited" }
+  | { readonly tag: "DailyLimit" }
+  | { readonly tag: "Failed"; readonly message: string };
+
+export const EmailError = {
+  SenderNotVerified: { tag: "SenderNotVerified" } as EmailError,
+  RecipientNotAllowed: { tag: "RecipientNotAllowed" } as EmailError,
+  RateLimited: { tag: "RateLimited" } as EmailError,
+  DailyLimit: { tag: "DailyLimit" } as EmailError,
+  Failed: (message: string): EmailError => ({ tag: "Failed", message }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -639,3 +706,42 @@ export interface StoredSecret {
 }
 
 export const __StoredSecretToken: symbol = globalThis.Symbol("StoredSecret");
+
+/**
+ * Outbound email through Cloudflare Email Service. Used only through a named
+ * instance, `capability Mail = Email @allowedSenders(["orders@shop.example"])`,
+ * which binds as `EMAIL_MAIL`, a `[[send_email]]` entry. The options are
+ * all optional deploy-time policy: `@to("ops@shop.example")` pins every
+ * message to one recipient, `@allowedRecipients([…])` limits the recipients
+ * and `@allowedSenders([…])` limits the senders. An unknown annotation is
+ * refused.
+ *
+ * `send` returns the platform's message id, or an `EmailError` for an
+ * outcome a handler acts on. A call that breaks a documented limit is a
+ * programming error and faults before it reaches the platform: more than
+ * 50 recipients across `to`, `cc` and `bcc`, more than 32 attachments,
+ * more than 25 MiB of message and attachments in total, neither `text` nor
+ * `html`, a reserved header (see `EmailMessage`) or a line break in a header's
+ * name or value. Attachments go to the platform as base64 text, which both
+ * the platform and `wrangler dev` accept; message bodies and attachment
+ * content are never logged by Bynk.
+ *
+ * `bynk deploy` checks, for each `@allowedSenders` address, that its domain
+ * has Email Sending enabled on the account, and fails naming the domain
+ * when it does not; it never configures a domain. It needs
+ * `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Without
+ * `@allowedSenders`, an unverified `from` surfaces at run time as
+ * `SenderNotVerified`.
+ *
+ * A handler that sends mail is a spam relay if anyone can call it: put a
+ * `RateLimit` in front of it. Under `bynk dev`, a message with an
+ * attachment the local simulator cannot serialise should be tried with
+ * `--remote`. A test records every sent `EmailMessage` without a stub, so
+ * `expect Mail.send called with …` works, and a stub can force an
+ * `EmailError`.
+ */
+export interface Email {
+  send(message: EmailMessage): globalThis.Promise<Result<string, EmailError>>;
+}
+
+export const __EmailToken: symbol = globalThis.Symbol("Email");

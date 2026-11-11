@@ -844,7 +844,7 @@ pub(super) fn emit_integration_module(
 /// D1, Version metadata), each once, in a fixed order. `binds` answers whether
 /// any participant has a binding of a kind.
 fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool) -> Vec<String> {
-    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 8] = [
+    let kinds: [(bynk_emit::emitter::wrangler::BindingKind, &str); 9] = [
         (
             |s| matches!(s, BindingSource::Kv | BindingSource::KvInstance { .. }),
             "__makeIntegrationKv",
@@ -872,6 +872,10 @@ fn platform_binding_factories(binds: &dyn Fn(fn(&BindingSource) -> bool) -> bool
         (
             |s| matches!(s, BindingSource::StoredSecret { .. }),
             "__makeIntegrationSecretsStoreSecret",
+        ),
+        (
+            |s| matches!(s, BindingSource::Email { .. }),
+            "__makeIntegrationEmail",
         ),
         (
             |s| matches!(s, BindingSource::Singleton { .. }),

@@ -1098,6 +1098,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "Analytics" => "Signups",
         "D1" => "Orders",
         "StoredSecret" => "StripeKey",
+        "Email" => "Mail",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1116,6 +1117,10 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::QUEUE_NAME_OPTION => "\"order-events\"",
         firstparty::STORED_SECRET_STORE_OPTION => "\"payments\"",
         firstparty::STORED_SECRET_SECRET_OPTION => "\"stripe-live\"",
+        firstparty::EMAIL_TO_OPTION => "\"ops@shop.example\"",
+        firstparty::EMAIL_ALLOWED_RECIPIENTS_OPTION | firstparty::EMAIL_ALLOWED_SENDERS_OPTION => {
+            "[\"orders@shop.example\"]"
+        }
         _ => "\"legacy-billing\"",
     }
 }
@@ -1172,6 +1177,40 @@ fn instance_option_value(
             );
             return None;
         }
+        (firstparty::OptionKind::StrList, ExprKind::ListLit(items, ..)) => {
+            let mut out = Vec::new();
+            for item in items {
+                let ExprKind::StrLit(text) = &item.kind else {
+                    errors.push_for(
+                        Some(path),
+                        invalid(
+                            item.span,
+                            format!("`@{option}` takes a list of string literals"),
+                        ),
+                    );
+                    return None;
+                };
+                out.push(text.clone());
+            }
+            if out.is_empty() {
+                errors.push_for(
+                    Some(path),
+                    invalid(arg.span, format!("`@{option}` takes at least one address")),
+                );
+                return None;
+            }
+            OptionValue::List(out)
+        }
+        (firstparty::OptionKind::StrList, _) => {
+            errors.push_for(
+                Some(path),
+                invalid(
+                    arg.span,
+                    format!("`@{option}` takes a list of string literals"),
+                ),
+            );
+            return None;
+        }
         (firstparty::OptionKind::PositiveInt, ExprKind::IntLit { value, .. }) if *value > 0 => {
             OptionValue::Int(*value)
         }
@@ -1210,9 +1249,43 @@ fn instance_option_value(
             return None;
         }
     };
+    if let OptionValue::List(items) = &value {
+        // Every address is checked as the platform will see it (#3302).
+        for item in items {
+            if !is_email_address(item) {
+                errors.push_for(
+                    Some(path),
+                    invalid(
+                        ann.span,
+                        format!(
+                            "`{}` is not an email address a `{base}` can use",
+                            item.escape_debug()
+                        ),
+                    )
+                    .with_note("an address is `name@domain`, with no spaces or control characters"),
+                );
+                return None;
+            }
+        }
+        return Some(value);
+    }
     let OptionValue::Str(text) = &value else {
         return Some(value);
     };
+    if base == "Email" && option == crate::firstparty::EMAIL_TO_OPTION && !is_email_address(text) {
+        errors.push_for(
+            Some(path),
+            invalid(
+                ann.span,
+                format!(
+                    "`{}` is not an email address a `{base}` can use",
+                    text.escape_debug()
+                ),
+            )
+            .with_note("an address is `name@domain`, with no spaces or control characters"),
+        );
+        return None;
+    }
     if option == crate::firstparty::R2_JURISDICTION_OPTION
         && !crate::firstparty::R2_JURISDICTIONS.contains(&text.as_str())
     {
@@ -1301,6 +1374,22 @@ pub(crate) fn is_queue_name(name: &str) -> bool {
         && name.bytes().all(|b| alnum(b) || b == b'-')
         && name.bytes().next().is_some_and(alnum)
         && name.bytes().last().is_some_and(alnum)
+}
+
+/// Whether `text` can be an email address (#3302): `local@domain`, one `@`,
+/// both sides non-empty, no whitespace, control or angle-bracket characters.
+/// The platform judges the rest; this only keeps a typo, or a header-shaped
+/// string, out of a deploy-time policy that is written into configuration.
+pub(crate) fn is_email_address(text: &str) -> bool {
+    let Some((local, domain)) = text.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && !domain.contains('@')
+        && !text
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '"' | ','))
 }
 
 /// Whether `name` is a Secrets Store's or a secret's name as Cloudflare takes

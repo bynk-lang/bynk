@@ -1,0 +1,122 @@
+context shop.orders
+
+// #3302: an `Email` at every test tier. The unit double is the binding's own
+// provider over an in-memory outbox, so a send needs no stub, is recorded for
+// `expect Mail.send called with …`, answers a deterministic id, and faults on
+// the platform's documented limits and on a reserved or line-broken header.
+// A stub forces an `EmailError`.
+
+consumes bynk
+consumes bynk.cloudflare { Email, EmailError, EmailMessage, EmailAttachment }
+
+capability Mail = Email @allowedSenders(["orders@shop.example"])
+
+service receipts {
+	on call(to: String) -> Effect[Result[String, EmailError]] given Mail {
+		Mail.send(EmailMessage {
+			from: "orders@shop.example",
+			to: [to],
+			subject: "Receipt",
+			text: Some("Thanks for your order"),
+		})
+	}
+}
+
+// Seventeen addresses: three lists of them are 51 recipients, and dropping
+// the last of the third is exactly 50, the platform's limit.
+fn seventeen() -> List[String] {
+	[
+		"buyer0@example.com",
+		"buyer1@example.com",
+		"buyer2@example.com",
+		"buyer3@example.com",
+		"buyer4@example.com",
+		"buyer5@example.com",
+		"buyer6@example.com",
+		"buyer7@example.com",
+		"buyer8@example.com",
+		"buyer9@example.com",
+		"buyer10@example.com",
+		"buyer11@example.com",
+		"buyer12@example.com",
+		"buyer13@example.com",
+		"buyer14@example.com",
+		"buyer15@example.com",
+		"buyer16@example.com",
+	]
+}
+
+fn sixteen() -> List[String] {
+	[
+		"buyer0@example.com",
+		"buyer1@example.com",
+		"buyer2@example.com",
+		"buyer3@example.com",
+		"buyer4@example.com",
+		"buyer5@example.com",
+		"buyer6@example.com",
+		"buyer7@example.com",
+		"buyer8@example.com",
+		"buyer9@example.com",
+		"buyer10@example.com",
+		"buyer11@example.com",
+		"buyer12@example.com",
+		"buyer13@example.com",
+		"buyer14@example.com",
+		"buyer15@example.com",
+	]
+}
+
+service fanout {
+	on call(over: Bool) -> Effect[Result[String, EmailError]] given Mail {
+		Mail.send(EmailMessage {
+			from: "orders@shop.example",
+			to: seventeen(),
+			cc: seventeen(),
+			bcc: if over { seventeen() } else { sixteen() },
+			subject: "Bulk",
+			text: Some("hello"),
+		})
+	}
+}
+
+service tagged {
+	on call(name: String, value: String) -> Effect[Result[String, EmailError]] given Mail {
+		let extra: Map[String, String] = Map.empty().insert(name, value)
+		Mail.send(EmailMessage {
+			from: "orders@shop.example",
+			to: ["a@example.com"],
+			subject: "Tagged",
+			text: Some("hello"),
+			headers: extra,
+		})
+	}
+}
+
+service attaching {
+	on call() -> Effect[Result[String, EmailError]] given Mail {
+		Mail.send(EmailMessage {
+			from: "orders@shop.example",
+			to: ["a@example.com"],
+			subject: "Invoice",
+			html: Some("<p>attached</p>"),
+			attachments: [EmailAttachment { filename: "invoice.txt", contentType: "text/plain", content: Bytes.fromUtf8("total: 5") }],
+		})
+	}
+}
+
+service empty {
+	on call() -> Effect[Result[String, EmailError]] given Mail {
+		Mail.send(EmailMessage { from: "orders@shop.example", to: ["a@example.com"], subject: "Nothing" })
+	}
+}
+
+service api from http {
+	on POST("/receipt") () -> Effect[HttpResult[String]] by Visitor given Mail {
+		let sent <- Mail.send(EmailMessage { from: "orders@shop.example", to: ["a@example.com"], subject: "Receipt", text: Some("Thanks") })
+		match sent {
+			Ok(id) => Ok(id)
+			Err(_) => Ok("refused")
+		}
+	}
+}

@@ -229,6 +229,12 @@ pub(super) fn context_bindings(
                     store: d.store().unwrap_or_default().to_string(),
                     secret: d.stored_secret().unwrap_or_default().to_string(),
                 },
+                (firstparty::CLOUDFLARE_UNIT, "Email") => BindingSource::Email {
+                    capability,
+                    to: d.email_to().map(str::to_string),
+                    allowed_recipients: d.email_allowed_recipients().to_vec(),
+                    allowed_senders: d.email_allowed_senders().to_vec(),
+                },
                 (firstparty::CLOUDFLARE_UNIT, "Kv") => BindingSource::KvInstance { capability },
                 (unit, base) => {
                     unreachable!("`{unit}.{base}` is instantiable but has no binding kind")

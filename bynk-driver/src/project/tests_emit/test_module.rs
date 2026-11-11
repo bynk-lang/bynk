@@ -15,6 +15,33 @@ use bynk_syntax::ast::{
 use bynk_ts::{SourceMapBuilder, TsDecl, TsProgram, TsStmt};
 use std::sync::Arc;
 
+/// The factories [`real_provider_double_factory`] names for `doubles`, each
+/// once, in a fixed order.
+fn real_provider_factories<'a>(
+    doubles: impl Iterator<Item = &'a (String, String, String)>,
+) -> Vec<String> {
+    doubles
+        .filter_map(|(owner, cap, _)| real_provider_double_factory(owner, cap))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+
+/// The runtime factory of the fake a `bynk.cloudflare` double wraps its real
+/// provider around, for the capabilities whose test double *is* the provider
+/// (P4a #2602: `D1` over in-memory SQLite; #3302: `Email` over an outbox).
+fn real_provider_double_factory(owner: &str, cap: &str) -> Option<&'static str> {
+    if owner != bynk_check::firstparty::CLOUDFLARE_UNIT {
+        return None;
+    }
+    match cap {
+        "D1" => Some("__makeIntegrationD1"),
+        "Email" => Some("__makeIntegrationEmail"),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_test_module(
     target_name: &str,
@@ -215,20 +242,16 @@ pub(super) fn emit_test_module(
             .iter()
             .chain(integration_deps.iter().flat_map(|d| d.doubles.iter()))
     };
-    let d1_double = |owner: &String, cap: &String| {
-        owner == bynk_check::firstparty::CLOUDFLARE_UNIT && cap == "D1"
-    };
     let mut binding_units: BTreeSet<&String> = deps_units.clone();
     binding_units.extend(
         all_doubles()
             .filter(|(owner, cap, _)| {
-                owner == bynk_check::firstparty::CRYPTO_UNIT || d1_double(owner, cap)
+                owner == bynk_check::firstparty::CRYPTO_UNIT
+                    || real_provider_double_factory(owner, cap).is_some()
             })
             .map(|(owner, _, _)| owner),
     );
-    if all_doubles().any(|(owner, cap, _)| d1_double(owner, cap)) {
-        runtime_names.push("__makeIntegrationD1".to_string());
-    }
+    runtime_names.extend(real_provider_factories(all_doubles()));
     for unit in &binding_units {
         // P4a (#2602): `bynk.cloudflare`'s binding is first-party, so it is
         // never in `binding_modules` (a test keeps its doubles); the `D1`

@@ -9,7 +9,8 @@
 // `WorkersD1` (standard-library P4a, #2602) against a database fake,
 // `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
 // `WorkersVersion` (#3300) against a Version metadata fake, and
-// `WorkersStoredSecret` (#3301) against a Secrets Store secret fake.
+// `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
+// `WorkersEmail` (#3302) against a `send_email` binding fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -21,7 +22,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1271,4 +1272,216 @@ t("WorkersStoredSecret.get: a missing binding names it and the stanza, and a pla
     },
   };
   await assert.rejects(new WorkersStoredSecret(refusing, "SECRET_STRIPE_KEY").get(), /not found/);
+});
+
+// #3302: `WorkersEmail`, against a fake of Cloudflare's `send_email` binding:
+// `send(builder)` resolves `{ messageId }`, or rejects with an `Error` whose
+// `code` names the refusal.
+const mail = (over = {}) => ({
+  from: "orders@shop.example",
+  to: ["a@buyer.example"],
+  cc: [],
+  bcc: [],
+  replyTo: None,
+  subject: "Your order",
+  text: Some("Thanks"),
+  html: None,
+  attachments: [],
+  headers: new Map(),
+  ...over,
+});
+const emailEnv = (impl) => {
+  const sent = [];
+  return {
+    sent,
+    env: {
+      EMAIL_MAIL: {
+        async send(builder) {
+          sent.push(builder);
+          return impl ? impl(builder) : { messageId: "msg-1" };
+        },
+      },
+    },
+  };
+};
+const refusing = (code, message = "refused") => () => {
+  const e = new Error(message);
+  e.code = code;
+  throw e;
+};
+
+t("WorkersEmail.send: builds the platform's builder and returns the message id", async () => {
+  const { env, sent } = emailEnv();
+  const r = await new WorkersEmail(env, "EMAIL_MAIL").send(
+    mail({
+      cc: ["c@buyer.example"],
+      bcc: ["d@buyer.example"],
+      replyTo: Some("help@shop.example"),
+      html: Some("<p>Thanks</p>"),
+      headers: new Map([["X-Order", "42"]]),
+    }),
+  );
+  assert.deepEqual(r, { tag: "Ok", value: "msg-1" });
+  assert.deepEqual(sent, [
+    {
+      from: "orders@shop.example",
+      to: ["a@buyer.example"],
+      subject: "Your order",
+      cc: ["c@buyer.example"],
+      bcc: ["d@buyer.example"],
+      replyTo: "help@shop.example",
+      text: "Thanks",
+      html: "<p>Thanks</p>",
+      headers: { "X-Order": "42" },
+    },
+  ]);
+});
+
+t("WorkersEmail.send: an attachment goes as base64 text, with its disposition and content id", async () => {
+  const { env, sent } = emailEnv();
+  const bytes = new Uint8Array([0, 1, 2, 250, 255]);
+  await new WorkersEmail(env, "EMAIL_MAIL").send(
+    mail({
+      attachments: [
+        { filename: "a.pdf", contentType: "application/pdf", content: bytes, inline: false },
+        { filename: "logo.png", contentType: "image/png", content: bytes, inline: true },
+      ],
+    }),
+  );
+  const b64 = Buffer.from(bytes).toString("base64");
+  assert.deepEqual(sent[0].attachments, [
+    { content: b64, filename: "a.pdf", type: "application/pdf", disposition: "attachment" },
+    { content: b64, filename: "logo.png", type: "image/png", disposition: "inline", contentId: "logo.png" },
+  ]);
+  // Never an ArrayBuffer or a view: the local simulator cannot serialise one.
+  assert.equal(typeof sent[0].attachments[0].content, "string");
+});
+
+t("WorkersEmail.send: each platform error code maps to its variant, any other to Failed", async () => {
+  const cases = [
+    ["E_SENDER_NOT_VERIFIED", { tag: "SenderNotVerified" }],
+    ["E_RECIPIENT_NOT_ALLOWED", { tag: "RecipientNotAllowed" }],
+    ["E_RATE_LIMIT_EXCEEDED", { tag: "RateLimited" }],
+    ["E_DAILY_LIMIT_EXCEEDED", { tag: "DailyLimit" }],
+    ["E_SOMETHING_NEW", { tag: "Failed", message: "boom" }],
+  ];
+  for (const [code, variant] of cases) {
+    const { env } = emailEnv(refusing(code, "boom"));
+    assert.deepEqual(await new WorkersEmail(env, "EMAIL_MAIL").send(mail()), { tag: "Err", error: variant }, code);
+  }
+  // An error with no code is a `Failed` too.
+  const { env } = emailEnv(() => {
+    throw new Error("network");
+  });
+  assert.deepEqual(await new WorkersEmail(env, "EMAIL_MAIL").send(mail()), {
+    tag: "Err",
+    error: { tag: "Failed", message: "network" },
+  });
+});
+
+t("WorkersEmail.send: a missing binding names it and the stanza", async () => {
+  await assert.rejects(
+    new WorkersEmail({}, "EMAIL_MAIL").send(mail()),
+    /requires an Email Service binding \(env\.EMAIL_MAIL\).*\[\[send_email\]\]/,
+  );
+});
+
+// A limit breach faults before the call: nothing is sent.
+const faults = async (message, pattern) => {
+  const { env, sent } = emailEnv();
+  await assert.rejects(new WorkersEmail(env, "EMAIL_MAIL").send(message), pattern);
+  assert.deepEqual(sent, []);
+};
+const addresses = (n, tag = "x") => Array.from({ length: n }, (_, i) => `${tag}${i}@buyer.example`);
+
+t("WorkersEmail.send: 50 recipients across to, cc and bcc pass and 51 fault", async () => {
+  const ok = emailEnv();
+  const r = await new WorkersEmail(ok.env, "EMAIL_MAIL").send(
+    mail({ to: addresses(20, "t"), cc: addresses(20, "c"), bcc: addresses(10, "b") }),
+  );
+  assert.equal(r.tag, "Ok");
+  await faults(
+    mail({ to: addresses(20, "t"), cc: addresses(20, "c"), bcc: addresses(11, "b") }),
+    /at most 50 recipients across to, cc and bcc, not 51/,
+  );
+});
+
+t("WorkersEmail.send: 32 attachments pass and 33 fault", async () => {
+  const file = (i) => ({ filename: `f${i}`, contentType: "text/plain", content: new Uint8Array(1), inline: false });
+  const ok = emailEnv();
+  const r = await new WorkersEmail(ok.env, "EMAIL_MAIL").send(mail({ attachments: Array.from({ length: 32 }, (_, i) => file(i)) }));
+  assert.equal(r.tag, "Ok");
+  await faults(mail({ attachments: Array.from({ length: 33 }, (_, i) => file(i)) }), /at most 32 attachments, not 33/);
+});
+
+t("WorkersEmail.send: 25 MiB in total passes and one byte more faults", async () => {
+  const limit = 25 * 1024 * 1024;
+  const body = (n) => mail({ subject: "", text: Some(""), attachments: [{ filename: "big", contentType: "application/octet-stream", content: new Uint8Array(n), inline: false }] });
+  const ok = emailEnv();
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(body(limit))).tag, "Ok");
+  await faults(body(limit + 1), /totals at most 25 MiB with its attachments/);
+  // Text and html count too.
+  await faults(mail({ text: Some("x".repeat(limit)), html: Some("y") }), /totals at most 25 MiB/);
+});
+
+t("WorkersEmail.send: neither text nor html faults, and either alone passes", async () => {
+  await faults(mail({ text: None, html: None }), /needs text, html or both/);
+  const ok = emailEnv();
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(mail({ text: None, html: Some("<p>x</p>") }))).tag, "Ok");
+});
+
+// R-16: header injection. Each reserved name, in any case, and a line break in
+// a name or a value, faults before the call; the fault never echoes a value.
+t("WorkersEmail.send: each reserved header faults, whatever its case", async () => {
+  for (const name of ["From", "To", "Cc", "Bcc", "Subject", "Reply-To", "from", "TO", "rEpLy-tO", "SUBJECT"]) {
+    await faults(mail({ headers: new Map([[name, "x"]]) }), /set by the message's own fields and may not be set in headers/);
+  }
+  // A look-alike that is not reserved passes.
+  const ok = emailEnv();
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(mail({ headers: new Map([["X-To", "x"], ["Reply-To-Id", "y"]]) }))).tag, "Ok");
+});
+
+t("WorkersEmail.send: a line break in a header name or value faults, and the value is not echoed", async () => {
+  for (const bad of ["a\r\nBcc: evil@x.example", "a\nBcc: evil@x.example", "a\rBcc: evil@x.example"]) {
+    await faults(mail({ headers: new Map([[bad, "x"]]) }), /a header name may not contain a line break/);
+    const { env, sent } = emailEnv();
+    let message = "";
+    try {
+      await new WorkersEmail(env, "EMAIL_MAIL").send(mail({ headers: new Map([["X-Note", `v${bad}`]]) }));
+    } catch (e) {
+      message = e.message;
+    }
+    assert.match(message, /the value of header "X-Note" may not contain a line break/);
+    assert.ok(!message.includes("evil@x.example"), message);
+    assert.deepEqual(sent, []);
+  }
+});
+
+t("WorkersEmail.send: an empty or malformed header name faults, and 16 KB of headers is the ceiling", async () => {
+  for (const bad of ["", "X Bad", "X:Bad", "X\u0000Bad"]) {
+    await faults(mail({ headers: new Map([[bad, "x"]]) }), /is not a header name/);
+  }
+  const ok = emailEnv();
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(mail({ headers: new Map([["X-A", "v".repeat(16 * 1024 - 3)]]) }))).tag, "Ok");
+  await faults(mail({ headers: new Map([["X-A", "v".repeat(16 * 1024 - 2)]]) }), /custom headers total at most 16 KB/);
+});
+
+t("WorkersEmail.send: a fault never carries the message body or an attachment's content", async () => {
+  const secretBody = "TOP-SECRET-BODY";
+  const secretFile = new Uint8Array(Buffer.from("TOP-SECRET-FILE"));
+  const { env } = emailEnv();
+  let seen = "";
+  try {
+    await new WorkersEmail(env, "EMAIL_MAIL").send(
+      mail({
+        text: Some(secretBody),
+        to: addresses(51),
+        attachments: [{ filename: "f", contentType: "text/plain", content: secretFile, inline: false }],
+      }),
+    );
+  } catch (e) {
+    seen = e.message;
+  }
+  assert.ok(seen.length > 0);
+  assert.ok(!seen.includes(secretBody) && !seen.includes("TOP-SECRET-FILE") && !seen.includes(Buffer.from(secretFile).toString("base64")), seen);
 });

@@ -11,6 +11,7 @@ adapter bynk.cloudflare {
 		D1,
 		Version,
 		StoredSecret,
+		Email,
 	}
 	exports transparent {
 		KvExpiration,
@@ -36,6 +37,9 @@ adapter bynk.cloudflare {
 		SqlError,
 		SqlReadError,
 		WorkerVersion,
+		EmailAttachment,
+		EmailMessage,
+		EmailError,
 	}
 
 	---
@@ -332,6 +336,59 @@ adapter bynk.cloudflare {
 		| Decode(error: DecodeError)
 
 	---
+	One file attached to an outbound `EmailMessage`. `content` is the file's bytes,
+	`contentType` its MIME type (`"application/pdf"`) and `filename` the name
+	the recipient sees. `inline` sends it for display inside the body (an
+	image the `html` refers to as `cid:logo.png`, its content id being its
+	filename) rather than as a download.
+	---
+	type EmailAttachment = {
+		filename: String,
+		contentType: String,
+		content: Bytes,
+		inline: Bool = false,
+	}
+
+	---
+	One outbound email for `Email.send`. Addresses are plain `String`s
+	(`"orders@shop.example"` or `"Shop <orders@shop.example>"`); the platform,
+	not Bynk, judges their syntax. At least one of `text` and `html` is
+	required. `headers` adds custom headers: `From`, `To`, `Cc`, `Bcc`,
+	`Subject` and `Reply-To` are set by the fields above and may not be set
+	here, and a name or value with a line break is refused, since either would
+	let data inject a header.
+	---
+	type EmailMessage = {
+		from: String,
+		to: List[String],
+		cc: List[String] = [],
+		bcc: List[String] = [],
+		replyTo: Option[String] = None,
+		subject: String,
+		text: Option[String] = None,
+		html: Option[String] = None,
+		attachments: List[EmailAttachment] = [],
+		headers: Map[String, String] = Map.empty(),
+	}
+
+	---
+	Why an `Email.send` was refused by the platform. `SenderNotVerified` is a
+	`from` address outside a domain verified for sending; `RecipientNotAllowed`
+	a recipient the instance's `@to` or `@allowedRecipients` (or the account)
+	does not permit; `RateLimited` and `DailyLimit` the per-second and
+	per-day sending limits. All are outcomes a handler can act on (retry
+	later, alert); `Failed` is any other refusal, with the platform's
+	message. Cloudflare has further error codes, so a `match` over this type
+	needs a wildcard.
+	---
+	type EmailError =
+		| SenderNotVerified
+		| RecipientNotAllowed
+		| RateLimited
+		| DailyLimit
+		| Failed(message: String)
+
+	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with
 	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -572,6 +629,43 @@ adapter bynk.cloudflare {
 		fn get() -> Effect[String]
 	}
 
+	---
+	Outbound email through Cloudflare Email Service. Used only through a named
+	instance, `capability Mail = Email @allowedSenders(["orders@shop.example"])`,
+	which binds as `EMAIL_MAIL`, a `[[send_email]]` entry. The options are
+	all optional deploy-time policy: `@to("ops@shop.example")` pins every
+	message to one recipient, `@allowedRecipients([…])` limits the recipients
+	and `@allowedSenders([…])` limits the senders. An unknown annotation is
+	refused.
+
+	`send` returns the platform's message id, or an `EmailError` for an
+	outcome a handler acts on. A call that breaks a documented limit is a
+	programming error and faults before it reaches the platform: more than
+	50 recipients across `to`, `cc` and `bcc`, more than 32 attachments,
+	more than 25 MiB of message and attachments in total, neither `text` nor
+	`html`, a reserved header (see `EmailMessage`) or a line break in a header's
+	name or value. Attachments go to the platform as base64 text, which both
+	the platform and `wrangler dev` accept; message bodies and attachment
+	content are never logged by Bynk.
+
+	`bynk deploy` checks, for each `@allowedSenders` address, that its domain
+	has Email Sending enabled on the account, and fails naming the domain
+	when it does not; it never configures a domain. It needs
+	`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Without
+	`@allowedSenders`, an unverified `from` surfaces at run time as
+	`SenderNotVerified`.
+
+	A handler that sends mail is a spam relay if anyone can call it: put a
+	`RateLimit` in front of it. Under `bynk dev`, a message with an
+	attachment the local simulator cannot serialise should be tried with
+	`--remote`. A test records every sent `EmailMessage` without a stub, so
+	`expect Mail.send called with …` works, and a stub can force an
+	`EmailError`.
+	---
+	capability Email {
+		fn send(message: EmailMessage) -> Effect[Result[String, EmailError]]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -591,4 +685,6 @@ adapter bynk.cloudflare {
 	provides Version = WorkersVersion
 
 	provides StoredSecret = WorkersStoredSecret
+
+	provides Email = WorkersEmail
 }

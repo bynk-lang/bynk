@@ -1,0 +1,31 @@
+context shop.orders
+
+// #3302: an `Email` instance is one `[[send_email]]` binding, keyed by `name`
+// (as `[[ratelimits]]` is), bound as `EMAIL_<NAME>`. Each annotation is
+// deploy-time policy written into the stanza only when given: `@to` pins every
+// message to one recipient, `@allowedRecipients` and `@allowedSenders` limit
+// them. `Alerts` takes none, so its stanza carries just its name.
+
+consumes bynk
+consumes bynk.cloudflare { Email, EmailMessage }
+
+capability Mail = Email @allowedSenders(["orders@shop.example", "billing@shop.example"]) @allowedRecipients(["audit@shop.example"])
+capability Ops = Email @to("ops@shop.example")
+capability Alerts = Email
+
+service api from http {
+	on POST("/receipt") () -> Effect[HttpResult[String]] by Visitor given Mail, Ops, Alerts {
+		let sent <- Mail.send(EmailMessage {
+			from: "orders@shop.example",
+			to: ["audit@shop.example"],
+			subject: "Receipt",
+			text: Some("Thanks for your order"),
+		})
+		let note <- Ops.send(EmailMessage { from: "orders@shop.example", to: ["ops@shop.example"], subject: "Sent", html: Some("<p>sent</p>") })
+		let _ <- Alerts.send(EmailMessage { from: "alerts@shop.example", to: ["ops@shop.example"], subject: "Alert", text: Some("up") })
+		match sent {
+			Ok(id) => Ok(id)
+			Err(_) => Ok("refused")
+		}
+	}
+}

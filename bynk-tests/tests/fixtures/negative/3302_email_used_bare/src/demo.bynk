@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Email, EmailMessage }
+
+service probe {
+  on call() -> Effect[Int] given Email {
+    Effect.pure(0)
+  }
+}

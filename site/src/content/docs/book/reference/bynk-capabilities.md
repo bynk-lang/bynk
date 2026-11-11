@@ -380,6 +380,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
+| **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -785,6 +786,99 @@ create it with `wrangler secrets-store secret create <store> --name <secret>
 `stub StripeKey.get() returns "…"` gives it a value, and the value is not
 printed by a passing or a failing test. `StoredSecret` is experimental: list
 `"bynk.cloudflare.StoredSecret"` under `[unstable] allow`.
+
+### Outbound email: `Email`
+
+`Email` sends mail through Cloudflare's [Email Service](https://developers.cloudflare.com/email-service/)
+`send_email` binding. Each use is a named instance, and a bare `given Email` is
+refused (`bynk.capability.instance_only`). The instance's annotations are
+deploy-time policy, all optional and a closed set (an unknown one is
+`bynk.capability.unknown_option`):
+
+| Annotation | Effect on `[[send_email]]` |
+|---|---|
+| `@to("ops@shop.example")` | `destination_address`: every message goes to this one recipient |
+| `@allowedRecipients(["a@x.example", …])` | `allowed_destination_addresses`: the recipients the instance may send to |
+| `@allowedSenders(["orders@shop.example", …])` | `allowed_sender_addresses`: the senders the instance may send as |
+
+An address is `name@domain`, with no spaces, control characters, angle brackets,
+quotes or commas (`bynk.capability.invalid_option`), and a list has at least one.
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Email, EmailError, EmailMessage }
+
+capability Mail = Email @allowedSenders(["orders@shop.example"])
+
+service orders from http {
+	on POST("/receipt") (to: String) -> Effect[HttpResult[String]] by Visitor given Mail {
+		let sent <- Mail.send(EmailMessage {
+			from: "orders@shop.example",
+			to: [to],
+			subject: "Your receipt",
+			text: Some("Thanks for your order"),
+		})
+		match sent {
+			Ok(id) => Ok(id)
+			Err(RateLimited) => Ok("try again later")
+			Err(_) => Ok("not sent")
+		}
+	}
+}
+```
+
+`Mail` binds as `env.EMAIL_MAIL`. `send` returns the platform's message id, or an
+`EmailError` for an outcome a handler acts on: `SenderNotVerified`,
+`RecipientNotAllowed`, `RateLimited`, `DailyLimit`, and `Failed(message)` for any
+other platform error. Cloudflare has further error codes, so `EmailError` is
+extensible and a `match` over it needs a wildcard. `Failed` is also a variant of
+`SqlError`, so a bare `Failed(…)` in a pattern or a stub names that one: write
+`EmailError.Failed(…)` there.
+
+`EmailMessage` has `from`, `to`, `subject`, and optionally `cc`, `bcc`,
+`replyTo`, `text`, `html`, `attachments` (`EmailAttachment`: `filename`,
+`contentType`, `content: Bytes`, `inline`) and `headers`. Addresses are plain
+`String`s, `"orders@shop.example"` or `"Shop <orders@shop.example>"`; the
+platform judges their syntax. An inline attachment's content id is its filename,
+so an `html` body refers to it as `cid:logo.png`.
+
+**Faults, not errors.** A platform refusal is a value, because a handler can act
+on it. Breaking a documented limit is a programming error, so the call **faults
+before anything is sent**: more than 50 recipients across `to`, `cc` and `bcc`,
+more than 32 attachments, more than 25 MiB of subject, bodies and attachments in
+total, neither `text` nor `html`, and custom `headers` over 16 KB.
+
+**Header injection.** `headers` may not set `From`, `To`, `Cc`, `Bcc`, `Subject`
+or `Reply-To` (in any case): the message's own fields set those. A header name
+that is empty or holds a colon, a space or a control character, and any name or
+value holding a line break (CR or LF), is refused too. Each faults before the
+call, naming the header but never echoing a value, so data that reaches a header
+cannot add another.
+
+**Contents are never logged.** Bynk does not log a message body, a header value
+or an attachment's content, and a fault names the limit and the count, never the
+content.
+
+`bynk deploy` **checks** each `@allowedSenders` domain and never configures one:
+it finds the domain's zone on the account and fails, before anything is pushed
+and naming every offender, when the domain has no Email Sending enabled; see
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#sender-domains-email-sending).
+Without `@allowedSenders`, an unverified `from` surfaces at run time as
+`SenderNotVerified`.
+
+Attachments reach the platform as base64 text, not as an `ArrayBuffer`: the
+local simulator under `bynk dev` cannot serialise a buffer, and accepts the text,
+so an attachment works locally and `--remote` is not needed for one.
+
+A handler that sends mail is a spam relay if anyone can call it: put a
+[`RateLimit`](#rate-limiting-ratelimit) in front of it.
+
+A test needs no stub: the unit double is the binding's own provider over an
+in-memory outbox, so a send is recorded for `expect Mail.send called with …`,
+answers a deterministic id (`"test-message-1"`, then `-2`), and faults on the same
+limits and headers. `stub Mail.send(_) returns Err(SenderNotVerified)` forces an
+error. At `integration` and `system` each Worker binds its own outbox. `Email` is
+experimental: list `"bynk.cloudflare.Email"` under `[unstable] allow`.
 
 ### SQL databases: `D1`
 

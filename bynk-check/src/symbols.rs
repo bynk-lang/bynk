@@ -701,6 +701,9 @@ pub enum OptionValue {
     Int(i64),
     /// A `Duration` literal, in whole seconds (`@period(60.seconds)`).
     Seconds(i64),
+    /// A list of string literals (`@allowedSenders(["orders@shop.example"])`,
+    /// #3302), in source order.
+    List(Vec<String>),
 }
 
 impl DerivedInstance {
@@ -715,6 +718,19 @@ impl DerivedInstance {
             })
     }
 
+    /// The value of list option `name` (a list of string literals), or empty
+    /// when the instance does not carry it.
+    pub fn list(&self, name: &str) -> &[String] {
+        self.options
+            .iter()
+            .find(|(o, _)| o == name)
+            .and_then(|(_, v)| match v {
+                OptionValue::List(items) => Some(items.as_slice()),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
     /// The value of numeric option `name` (an `Int`, or a `Duration` in
     /// seconds), if the instance carries it.
     pub fn number(&self, name: &str) -> Option<i64> {
@@ -723,7 +739,7 @@ impl DerivedInstance {
             .find(|(o, _)| o == name)
             .and_then(|(_, v)| match v {
                 OptionValue::Int(n) | OptionValue::Seconds(n) => Some(*n),
-                OptionValue::Str(_) => None,
+                OptionValue::Str(_) | OptionValue::List(_) => None,
             })
     }
 
@@ -784,6 +800,31 @@ impl DerivedInstance {
         self.is_stored_secret()
             .then(|| self.option(crate::firstparty::STORED_SECRET_SECRET_OPTION))
             .flatten()
+    }
+
+    /// The one recipient an `Email` instance pins every message to (`@to`,
+    /// #3302); `None` for an unpinned one or any other kind.
+    pub fn email_to(&self) -> Option<&str> {
+        self.is_email()
+            .then(|| self.option(crate::firstparty::EMAIL_TO_OPTION))
+            .flatten()
+    }
+
+    /// The recipients an `Email` instance may send to (`@allowedRecipients`);
+    /// empty for an unrestricted one or any other kind.
+    pub fn email_allowed_recipients(&self) -> &[String] {
+        self.list(crate::firstparty::EMAIL_ALLOWED_RECIPIENTS_OPTION)
+    }
+
+    /// The senders an `Email` instance may send as (`@allowedSenders`); empty
+    /// for an unrestricted one or any other kind.
+    pub fn email_allowed_senders(&self) -> &[String] {
+        self.list(crate::firstparty::EMAIL_ALLOWED_SENDERS_OPTION)
+    }
+
+    /// Whether this is an `Email` instance (#3302).
+    pub fn is_email(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"
     }
 
     /// Whether this is a `StoredSecret` instance (#3301).

@@ -130,6 +130,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "account-secrets-storedsecret",
         &["get"],
     ),
+    (
+        "bynk.cloudflare",
+        "Email",
+        "outbound-email-email",
+        &["send"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or
