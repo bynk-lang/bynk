@@ -6369,6 +6369,9 @@ fn emit_agent_load_commit_state(
                         }
                     },
                     bynk_ts::TsExpr::Ident(fields_const.clone()),
+                    // Cache reaping (#3189): the state object the handler's `Cache` ops
+                    // noted their clock against.
+                    bynk_ts::TsExpr::Ident("s".to_string()),
                 ],
             })),
             None,

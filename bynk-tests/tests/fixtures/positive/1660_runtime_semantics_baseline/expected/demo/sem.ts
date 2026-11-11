@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -95,7 +95,7 @@ export class Gauge {
   }
 
   private async commitState(s: GaugeState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeGaugeState(s), __entryFieldsOfGauge);
+    await __commitStored(this, this.state.storage, __encodeGaugeState(s), __entryFieldsOfGauge, s);
   }
 
   async setLevel(n: number, deps: {}): globalThis.Promise<void> {
@@ -155,7 +155,7 @@ export class Lamp {
   }
 
   private async commitState(s: LampState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLampState(s), __entryFieldsOfLamp);
+    await __commitStored(this, this.state.storage, __encodeLampState(s), __entryFieldsOfLamp, s);
   }
 
   async turnGreen(deps: {}): globalThis.Promise<void> {
@@ -215,7 +215,7 @@ export class Meter {
   }
 
   private async commitState(s: MeterState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeMeterState(s), __entryFieldsOfMeter);
+    await __commitStored(this, this.state.storage, __encodeMeterState(s), __entryFieldsOfMeter, s);
   }
 
   async note(n: number, deps: {}): globalThis.Promise<void> {
@@ -286,7 +286,7 @@ export class Panel {
   }
 
   private async commitState(s: PanelState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodePanelState(s), __entryFieldsOfPanel);
+    await __commitStored(this, this.state.storage, __encodePanelState(s), __entryFieldsOfPanel, s);
   }
 
   async setLevel(n: number, deps: {}): globalThis.Promise<void> {
@@ -347,7 +347,7 @@ export class Bag {
   }
 
   private async commitState(s: BagState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBagState(s), __entryFieldsOfBag);
+    await __commitStored(this, this.state.storage, __encodeBagState(s), __entryFieldsOfBag, s);
   }
 
   async add(k: string, deps: {}): globalThis.Promise<void> {

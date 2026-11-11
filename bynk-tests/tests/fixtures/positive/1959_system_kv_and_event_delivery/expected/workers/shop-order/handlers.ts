@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
@@ -63,7 +63,7 @@ export class Tally {
   }
 
   private async commitState(s: TallyState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeTallyState(s), __entryFieldsOfTally);
+    await __commitStored(this, this.state.storage, __encodeTallyState(s), __entryFieldsOfTally, s);
   }
 
   async bump(id: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<number> {

@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 import type { Connection } from "./__bynk_runtime/connection.js";
@@ -75,7 +75,7 @@ export class Room {
   }
 
   private async commitState(s: RoomState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeRoomState(s), __entryFieldsOfRoom);
+    await __commitStored(this, this.state.storage, __encodeRoomState(s), __entryFieldsOfRoom, s);
   }
 
   async fanout(text: string, deps: {}): globalThis.Promise<Result<readonly void[], string>> {

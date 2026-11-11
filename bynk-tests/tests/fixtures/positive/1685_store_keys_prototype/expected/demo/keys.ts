@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -107,7 +107,7 @@ export class Bag {
   }
 
   private async commitState(s: BagState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeBagState(s), __entryFieldsOfBag);
+    await __commitStored(this, this.state.storage, __encodeBagState(s), __entryFieldsOfBag, s);
   }
 
   async put(k: string, v: number, deps: {}): globalThis.Promise<void> {
@@ -211,7 +211,7 @@ export class Points {
   }
 
   private async commitState(s: PointsState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodePointsState(s), __entryFieldsOfPoints);
+    await __commitStored(this, this.state.storage, __encodePointsState(s), __entryFieldsOfPoints, s);
   }
 
   async put(k: string, x: number, deps: {}): globalThis.Promise<void> {
@@ -278,7 +278,7 @@ export class Tags {
   }
 
   private async commitState(s: TagsState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeTagsState(s), __entryFieldsOfTags);
+    await __commitStored(this, this.state.storage, __encodeTagsState(s), __entryFieldsOfTags, s);
   }
 
   async add(k: string, deps: {}): globalThis.Promise<void> {
@@ -355,13 +355,13 @@ export class Memo {
   }
 
   private async commitState(s: MemoState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeMemoState(s), __entryFieldsOfMemo);
+    await __commitStored(this, this.state.storage, __encodeMemoState(s), __entryFieldsOfMemo, s);
   }
 
   async put(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); globalThis.Object.defineProperty(__state.c, k, { value: { v: v, exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); globalThis.Object.defineProperty(__state.c, k, { value: { v: v, exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -370,19 +370,19 @@ export class Memo {
 
   async get(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const r = await (async () => { const __now = await deps.Clock.now(); const __k = k; return (globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now) ? Some(__state.c[__k].v) : None; })();
+    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = k; return (globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now) ? Some(__state.c[__k].v) : None; })();
     return r;
   }
 
   async has(k: string, deps: { Clock: Clock }): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    const r = await (async () => { const __now = await deps.Clock.now(); const __k = k; return globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now; })();
+    const r = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = k; return globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now; })();
     return r;
   }
 
   async count(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = await deps.Clock.now(); return globalThis.Object.values(__state.c).filter((__e) => __e.exp > __now).length; })();
+    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return globalThis.Object.values(__state.c).filter((__e) => __e.exp > __now).length; })();
     return n;
   }
 
@@ -399,7 +399,7 @@ export class Memo {
   async add10(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); const __k = k; if (!(globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } __state.c[__k] = { v: ((n: number) => n + 10)(__state.c[__k].v), exp: __now + 300000 }; return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = k; if (!(globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } __state.c[__k] = { v: ((n: number) => n + 10)(__state.c[__k].v), exp: __now + 300000 }; return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -450,7 +450,7 @@ export class Ledger {
   }
 
   private async commitState(s: LedgerState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger);
+    await __commitStored(this, this.state.storage, __encodeLedgerState(s), __entryFieldsOfLedger, s);
   }
 
   async add(id: string, tag: string, deps: {}): globalThis.Promise<void> {
@@ -534,7 +534,7 @@ export class Sales {
   }
 
   private async commitState(s: SalesState): globalThis.Promise<void> {
-    await __commitStored(this, this.state.storage, __encodeSalesState(s), __entryFieldsOfSales);
+    await __commitStored(this, this.state.storage, __encodeSalesState(s), __entryFieldsOfSales, s);
   }
 
   async order(id: string, customer: string, deps: {}): globalThis.Promise<void> {

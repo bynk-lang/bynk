@@ -553,9 +553,11 @@ function planEntries(
   encoded: Readonly<Record<string, unknown>>,
   fields: readonly EntryField[],
   base: ReadonlyMap<string, unknown>,
+  now: number | undefined,
 ): Planned {
   const record: Record<string, unknown> = { ...encoded };
   const entries: Record<string, unknown> = {};
+  let reapBudget = CACHE_REAP_LIMIT;
   for (const f of fields) {
     const inline = record[f.name];
     delete record[f.name];
@@ -602,7 +604,26 @@ function planEntries(
     }
     const keyOf = f.kind === "set" ? setKey : mapKey;
     let maxSeen = -1;
-    for (const [k, v] of Object.entries(inline as Record<string, unknown>)) {
+    let collection = inline as Record<string, unknown>;
+    // Cache reaping (#3189): an entry the program can no longer see (its `exp` is not after the
+    // clock the program last read) is not written back, so its key and its expiry entry are
+    // deleted by the diff. Bounded per commit, oldest expiry first.
+    if (f.kind === "cache" && now !== undefined && reapBudget > 0) {
+      const expired = Object.entries(collection as Record<string, { exp?: unknown }>)
+        .filter(([, c]) => typeof c.exp === "number" && c.exp <= now)
+        .sort((a, b) => (a[1].exp as number) - (b[1].exp as number))
+        .slice(0, reapBudget);
+      if (expired.length > 0) {
+        reapBudget -= expired.length;
+        const gone = new Set(expired.map(([k]) => k));
+        const kept: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(collection)) {
+          if (!gone.has(k)) Object.defineProperty(kept, k, { value: v, enumerable: true, writable: true, configurable: true });
+        }
+        collection = kept;
+      }
+    }
+    for (const [k, v] of Object.entries(collection)) {
       const old = base.get(keyOf(f.name, k)) as Seq | undefined;
       let i: number;
       if (old === undefined) {
@@ -630,7 +651,7 @@ function planEntries(
         for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
       }
     }
-    const size = Object.keys(inline as object).length;
+    const size = Object.keys(collection).length;
     if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
   }
   record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
@@ -642,9 +663,10 @@ async function writeEntries(
   storage: DurableObjectStorage,
   encoded: Readonly<Record<string, unknown>>,
   fields: readonly EntryField[],
+  now: number | undefined,
 ): Promise<void> {
   const base = bases.get(self)?.entries ?? new Map<string, unknown>();
-  const { record, entries } = planEntries(encoded, fields, base);
+  const { record, entries } = planEntries(encoded, fields, base, now);
   const { puts, deletes } = diffEntries(base, entries);
   const overlay = new EntryOverlay(storage);
   for (const [k, v] of Object.entries(puts)) overlay.put(k, v);
@@ -669,6 +691,25 @@ export async function commitStored(
   storage: DurableObjectStorage,
   encoded: object,
   fields: readonly EntryField[],
+  state?: object,
 ): Promise<void> {
-  await writeEntries(self, storage, encoded as Readonly<Record<string, unknown>>, fields);
+  const now = state === undefined ? undefined : clocks.get(state);
+  await writeEntries(self, storage, encoded as Readonly<Record<string, unknown>>, fields, now);
+}
+
+// Cache reaping (#3189). A `Cache` operation reads the program's injected `Clock`, never the
+// runtime's own: under a fake clock the real time is later than every stamped `exp`, so a
+// runtime-clock reaper would delete entries the program still sees as live. The operation
+// notes what it read against the state object the handler commits; the commit reaps with it.
+// A handler that never touched a `Cache` notes nothing, and its commit reaps nothing.
+const clocks = new WeakMap<object, number>();
+
+/** The most expired entries one commit deletes, across all of an agent's `Cache` fields. */
+export const CACHE_REAP_LIMIT = 64;
+
+/** Note the clock a `Cache` operation read, and return it (so it wraps the read in place). */
+export function noteClock(state: object, now: number): number {
+  const seen = clocks.get(state);
+  if (seen === undefined || now > seen) clocks.set(state, now);
+  return now;
 }
