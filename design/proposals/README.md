@@ -102,8 +102,11 @@ Concretely, the implementing PR must, *where the increment touches them*:
 - **Ship an explanation with each new error code.** A new *error* diagnostic
   code gets a curated `bynk explain` entry (`EXPLANATIONS` in
   `bynk-syntax/src/diagnostics.rs`): why the rule exists and a before-and-after
-  example, ideally compile-checked. Warnings and internal codes may be left to
-  the one-line registry summary. The `explained_codes` probe ratchets coverage
+  example. The example is backed by a compiled pair,
+  `bynk-tests/tests/fixtures/explain/<code>/bad.bynk` and `good.bynk`: the first
+  must fail with that code alone, the second must compile, and each line of the
+  example must appear in one of them (`explain_examples.rs`). Warnings and
+  internal codes may be left to the one-line registry summary. The `explained_codes` probe ratchets coverage
   upwards; the backlog is tracked in #3163.
 - **Keep examples consistent and compiling.** Snippets demonstrating the same
   thing use the same form; prefer `{{#include}}` from a compiled worked example

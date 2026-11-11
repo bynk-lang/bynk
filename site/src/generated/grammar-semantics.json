@@ -696,10 +696,6 @@
   ],
   "field_access": [
     {
-      "code": "bynk.resolve.unknown_field",
-      "summary": "Accessed a field the record does not have."
-    },
-    {
       "code": "bynk.resolve.unknown_static_member",
       "summary": "Referenced an unknown static member (e.g. `T.x`)."
     },
@@ -1388,6 +1384,10 @@
     {
       "code": "bynk.resolve.opaque_record_construction",
       "summary": "An opaque type was constructed with record syntax."
+    },
+    {
+      "code": "bynk.resolve.unknown_field",
+      "summary": "A record construction names a field the record type does not declare."
     },
     {
       "code": "bynk.types.field_value_mismatch",

@@ -73,6 +73,8 @@ mod integration {
     mod eq_bound_migration;
     #[path = "events_schema_registry_behaviour.rs"]
     mod events_schema_registry_behaviour;
+    #[path = "explain_examples.rs"]
+    mod explain_examples;
     #[path = "expr_types_capture.rs"]
     mod expr_types_capture;
     #[path = "expression_depth_limit.rs"]

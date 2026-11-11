@@ -765,7 +765,7 @@ There are **799** codes in total.
 | `bynk.resolve.type_as_function` | A type name was called as if it were a function. | [`call`](/book/reference/grammar/#rule-call) | — |
 | `bynk.resolve.type_in_expr` | A type name was used where a value is expected. |  | — |
 | `bynk.resolve.unconsumed_context` | A context's service was called without a `consumes` declaration. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| [`bynk.resolve.unknown_field`](/book/reference/types/#record-types) | Accessed a field the record does not have. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
+| [`bynk.resolve.unknown_field`](/book/reference/types/#record-types) | A record construction names a field the record type does not declare. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.resolve.unknown_function` | Called a function that does not exist. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.resolve.unknown_name`](/book/guides/program-structure/how-a-program-is-shaped/) | Referenced a name that is not in scope. |  | — |
 | `bynk.resolve.unknown_static_member` | Referenced an unknown static member (e.g. `T.x`). | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
