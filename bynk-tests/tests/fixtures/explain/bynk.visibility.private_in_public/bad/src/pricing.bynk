@@ -1,0 +1,7 @@
+commons pricing
+
+private type Tally = { lines: Int, sum: Int }
+
+fn tally(n: Int) -> Tally {
+	Tally { lines: n, sum: n }
+}

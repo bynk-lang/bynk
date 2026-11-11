@@ -1,0 +1,7 @@
+context b
+
+service quote {
+	on call(rate: Int) -> Effect[Int] {
+		Effect.pure(rate * 2)
+	}
+}

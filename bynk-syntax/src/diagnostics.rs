@@ -149,6 +149,36 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "state-initialisation",
     },
     Explain {
+        code: "bynk.boundary.structural_mismatch",
+        blurb: "A value that crosses a context boundary, as an argument to a consumed context's \
+                service or as its result, is matched by shape, not by name. So where both \
+                contexts declare a `Box`, the two must have the same shape, or the value is not \
+                a `Box` on the other side. Give them the same fields, or rename one so the names \
+                stop meeting. A type both sides need can live in a `commons` that each `uses`.",
+        example: "// shop.bynk\n\
+                  context shop\n\
+                  \n\
+                  type Box = { weight: Int }\n\
+                  \n\
+                  service weigh {\n    on call(b: Box) -> Effect[Int] { … }\n\
+                  }\n\
+                  \n\
+                  // depot.bynk\n\
+                  context depot\n\
+                  \n\
+                  consumes shop\n\
+                  \n\
+                  type Box = { label: String }\n\
+                  \n\
+                  shop.weigh(Box { label: \"a\" })        // ✗ a `depot` `Box` is not shaped like `shop`'s\n\
+                  \n\
+                  type Box = { weight: Int }\n\
+                  \n\
+                  shop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
+        page: "/book/reference/refined-types",
+        anchor: "across-a-context-boundary",
+    },
+    Explain {
         code: "bynk.capability.instance_only",
         blurb: "A few platform capabilities (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, \
                 `D1` and `EdgeCache`) are never used as the bare kind. Each stands for a \
@@ -191,6 +221,43 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.capability.missing_option",
+        blurb: "A derived capability, `capability Name = Kind`, takes its configuration from \
+                options after the kind, and some kinds cannot work without them: a `Service` \
+                needs the Worker it reaches, `@worker(…)`, a `Queue` its `@name(…)`, a \
+                `RateLimit` its `@limit(…)` and `@period(…)`, and a `StoredSecret` its \
+                `@store(…)` and `@secret(…)`. There is no default. Write the options the note \
+                shows. A value the platform would refuse is `bynk.capability.invalid_option`; an \
+                option the kind does not take is `bynk.capability.unknown_option`.",
+        example: "// bynk.toml\n\
+                  [unstable]\n\
+                  allow = [\"bynk.cloudflare.Queue\"]\n\
+                  \n\
+                  // orders.bynk\n\
+                  context orders\n\
+                  \n\
+                  consumes bynk.cloudflare { Queue }\n\
+                  \n\
+                  capability OrderEvents = Queue                        // ✗ a queue must be named\n\
+                  capability OrderEvents = Queue @name(\"order-events\")  // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
+        code: "bynk.capability.unknown_option",
+        blurb: "An option after the kind in `capability Name = Kind @option(…)` must be one that \
+                kind takes: `Service` takes `@worker`, `R2` `@jurisdiction`, `RateLimit` \
+                `@limit` and `@period`, `Queue` `@name`, and `StoredSecret` `@store` and \
+                `@secret`, while `Kv`, `Analytics`, `D1` and `EdgeCache` take none. One the kind \
+                does not take is refused rather than ignored, since it is probably a misspelling \
+                or the wrong kind. Drop it, or use one of the options the note lists. An option \
+                that is known but has a bad value is `bynk.capability.invalid_option`.",
+        example: "capability Sessions = Kv @ttl          // ✗ `Kv` instances take no options\n\
+                  capability Sessions = Kv               // ✓",
+        page: "/book/reference/capabilities",
+        anchor: "derived-capabilities",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -202,6 +269,114 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
+    },
+    Explain {
+        code: "bynk.consumes.name_conflict",
+        blurb: "`consumes payment` brings every type that `payment` exports into scope under its \
+                own name, because the services' signatures use them. If this context already has \
+                something of that name, a type declared here or reached through `uses`, or a \
+                function, asset, service, agent or provider, a mention would mean two things, so \
+                the compiler refuses the clause. Rename the imported type with `as`: it is then \
+                in scope only under the alias, and is still the same type. \
+                `bynk.consumes.type_alias_conflict` is the same clash with an alias.",
+        example: "// payment.bynk\n\
+                  context payment\n\
+                  \n\
+                  exports transparent { Amount }\n\
+                  \n\
+                  // money.bynk\n\
+                  commons money\n\
+                  \n\
+                  type Amount = Int where NonNegative\n\
+                  \n\
+                  // orders.bynk\n\
+                  context orders\n\
+                  \n\
+                  uses money\n\
+                  consumes payment                           // ✗ `Amount` is also in scope from `money`\n\
+                  consumes payment { Amount as PayAmount }   // ✓ `PayAmount` is `payment`'s",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.context.consumes_cycle",
+        blurb: "Contexts may not form a circle of `consumes` clauses, whether directly or \
+                through others. `bynk deploy` takes the order in which to upload the Workers \
+                from the `consumes` clauses, because Cloudflare resolves a Service Binding when \
+                a Worker is uploaded and so the callee must already exist; a cycle has no such \
+                order. The error names the cycle and sits on one of its clauses. Remove one \
+                clause: usually the callee takes what it needs as an argument instead of calling \
+                back. Logic both contexts need can move into a `commons` that each `uses`.",
+        example: "// a.bynk\n\
+                  context a\n\
+                  \n\
+                  consumes b                       // ✗ `a` and `b` consume each other (reported on one clause)\n\
+                  \n\
+                  // b.bynk\n\
+                  context b\n\
+                  \n\
+                  consumes a                       // ✗\n\
+                  \n\
+                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)\n    }\n\
+                  }",
+        page: "/book/guides/projects-build-and-deployment/deploy-to-cloudflare",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.context.external_construction",
+        blurb: "A context that `consumes` another may hold and pass on the other's types, but \
+                may not build one. A refined or opaque type can promise an invariant, a \
+                `Matches` pattern or a smart constructor, and that holds only if every value is \
+                made by the owner; `.of`, `.unsafe` and a variant constructor are refused from \
+                outside, as is the record syntax of an opaque type. Ask the owner for the value \
+                instead: a service that returns it, or takes the plain input and does the check. \
+                `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+        example: "// payment.bynk\n\
+                  context payment\n\
+                  \n\
+                  exports transparent { AuthId }\n\
+                  \n\
+                  type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
+                  \n\
+                  service issue {\n    on call() -> Effect[AuthId] { … }\n\
+                  }\n\
+                  \n\
+                  // orders.bynk\n\
+                  context orders\n\
+                  \n\
+                  consumes payment\n\
+                  \n\
+                  AuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\
+                  \n\
+                  payment.issue()          // ✓ ask `payment` for one",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.context.external_decode",
+        blurb: "Decoding creates a value, and a context may not create one of a type another \
+                context owns and exports opaque. A decoder would check no more than the base \
+                type, because the owner's predicate is the owner's secret. So a handler that \
+                takes such a type as its input (an HTTP, queue, event or WebSocket handler \
+                decodes it from bytes), and a `Json.decode`, `Json.decodeSql` or `Codable` \
+                witness of it, are refused. Take the plain form of the input and let the owner's \
+                service make the value. A reply from the owner's own service is fine: its decode \
+                is generated.",
+        example: "// pay.bynk\n\
+                  context pay\n\
+                  \n\
+                  exports opaque { Token }\n\
+                  \n\
+                  type Token = opaque String where Matches(\"T-[0-9]+\")\n\
+                  \n\
+                  // shop.bynk\n\
+                  context shop\n\
+                  \n\
+                  consumes pay\n\
+                  \n\
+                  service api from http {\n    on POST(\"/t\") (body: Token) -> Effect[HttpResult[String]] by v: Visitor {     // ✗ `Token` cannot be decoded here\n    on POST(\"/t\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {    // ✓ take the plain input",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
     },
     Explain {
         code: "bynk.context.opaque_inspection",
@@ -273,6 +448,24 @@ pub const EXPLANATIONS: &[Explain] = &[
                     Effect.pure(())\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.exports.capability_not_provided",
+        blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
+                built for them, so the exporting context must also say how: a `provides Clock = \
+                … { … }` declaration. Without one, a consumer would hold a capability that \
+                nothing in the project can instantiate. Add the provider. (A derived capability, \
+                `capability Name = Kind`, cannot be exported at all; that is \
+                `bynk.exports.derived_capability`.)",
+        example: "exports capability { Clock }       // ✗ nothing provides `Clock`\n\
+                  \n\
+                  capability Clock {\n    fn now() -> Effect[Int]\n\
+                  }\n\
+                  \n\
+                  provides Clock = Fixed {           // ✓\n    fn now() -> Effect[Int] { … }\n\
+                  }",
+        page: "/book/guides/effects-and-capabilities/share-across-contexts",
+        anchor: "export-the-capability-from-the-providing-context",
     },
     Explain {
         code: "bynk.generics.method_on_generic_type",
@@ -1474,6 +1667,40 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.val.needs_pin",
+        blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
+                most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
+                but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; \
+                the same goes for a record or sum that reaches one. A `for all` over such a type \
+                is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
+                refinement, or give the type an `@example` and use bare `Val`. See the \
+                `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
+        example: "// demo/codes.bynk\n\
+                  type Code = String where Matches(\"[a-z]+\")\n\
+                  \n\
+                  // tests/codes.test.bynk\n\
+                  let c = Val[Code]              // ✗ no value can be made from a pattern\n\
+                  let c = Val[Code](\"abc\")      // ✓ pin one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.visibility.private_in_public",
+        blurb: "A public declaration may not mention a `private` type of its own unit in its \
+                signature: a public function's parameters and return, a public type's fields and \
+                variant payloads, a public constant's type, or a context's `exports` list. A \
+                unit that `uses` the commons could neither name that type nor build a value of \
+                it, so the function would be half-usable. Make the type public, or make the \
+                declaration `private` too. Services, agents and capabilities are not checked \
+                here; a context's `exports` governs them.",
+        example: "private type Tally = { lines: Int, sum: Int }\n\
+                  \n\
+                  fn tally(n: Int) -> Tally { … }            // ✗ public, but returns a private type\n\
+                  private fn tally(n: Int) -> Tally { … }    // ✓ private too",
+        page: "/book/guides/program-structure/design-a-public-surface",
+        anchor: "keep-private-types-out-of-public-signatures",
+    },
+    Explain {
         code: "bynk.visibility.private_item",
         blurb: "A `private` function, type, constant, asset or embed (or a `private` method) is visible only \
                 within its own unit, across all of that unit's files, and to the unit's suites. It is \
@@ -1491,6 +1718,19 @@ pub const EXPLANATIONS: &[Explain] = &[
                   commons shop\n\n\
                   uses pricing\n\n\
                   fn cost(i: Item) -> Int {\n    lineTotal(i)      // ✗ `lineTotal` is a private function of `pricing`\n    total([i])        // ✓ the public function does the same job\n}",
+        page: "/book/guides/program-structure/design-a-public-surface",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.visibility.private_not_allowed",
+        blurb: "`private` hides a `fn`, `type`, `messages`, `asset`, `embed` or `const` from the \
+                units that import its commons or context. It does not apply to a service, agent, \
+                capability, provider, actor or event, or to anything in an adapter: how far \
+                those reach is decided by a context's `exports` and `consumes`, and an adapter's \
+                `exports`. Remove `private`. See `bynk.visibility.private_item` for using \
+                something that is private.",
+        example: "private service total { … }        // ✗ `private` does not apply to a service\n\
+                  service total { … }                // ✓ reach is governed by `exports`",
         page: "/book/guides/program-structure/design-a-public-surface",
         anchor: "",
     },
@@ -2071,7 +2311,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.context.external_decode",
-        "A context decoded a type another context owns and exports opaque, through `Json.decode`, `Json.decodeSql` or a `Codable` witness. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type.",
+        "A context decoded a type another context owns and exports opaque: through `Json.decode`, `Json.decodeSql` or a `Codable` witness, or as the input of an HTTP, queue, event or WebSocket handler. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type.",
     ),
     dg(
         "bynk.context.external_provider",

@@ -1,0 +1,9 @@
+context shop
+
+type Box = { weight: Int }
+
+service weigh {
+	on call(b: Box) -> Effect[Int] {
+		Effect.pure(b.weight)
+	}
+}

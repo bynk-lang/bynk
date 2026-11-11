@@ -1,0 +1,9 @@
+context orders
+
+consumes payment
+
+service checkout {
+	on call() -> Effect[AuthId] {
+		payment.issue()
+	}
+}

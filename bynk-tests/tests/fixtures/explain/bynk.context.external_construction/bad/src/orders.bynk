@@ -1,0 +1,7 @@
+context orders
+
+consumes payment
+
+fn makeAuth(s: String) -> Result[AuthId, ValidationError] {
+	AuthId.of(s)
+}

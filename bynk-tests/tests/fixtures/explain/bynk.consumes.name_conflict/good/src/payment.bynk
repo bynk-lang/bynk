@@ -1,0 +1,5 @@
+context payment
+
+exports transparent { Amount }
+
+type Amount = Int where Positive
