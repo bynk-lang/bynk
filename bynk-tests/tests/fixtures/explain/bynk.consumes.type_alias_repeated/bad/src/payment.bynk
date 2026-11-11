@@ -1,0 +1,7 @@
+context payment
+
+exports transparent { AuthId, Receipt }
+
+type AuthId = String where NonEmpty
+
+type Receipt = { total: Int }

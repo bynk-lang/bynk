@@ -49,8 +49,8 @@ There are **816** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.capability.base_not_instantiable` | A derived capability's base is not a platform resource that can be instantiated. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.capability.derived_outside_context` | A derived capability was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.base_not_instantiable`](/book/reference/capabilities/#derived-capabilities) | A derived capability's base is not a platform resource that can be instantiated. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.derived_outside_context`](/book/reference/capabilities/#derived-capabilities) | A derived capability was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.instance_only`](/book/reference/capabilities/#derived-capabilities) | A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1`, `EdgeCache`) was used bare, in a `given` clause. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | [`bynk.capability.invalid_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`). | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.missing_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability lacks an option its base requires, such as a `Service` instance's `@worker`. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
@@ -58,7 +58,7 @@ There are **816** codes in total.
 | [`bynk.capability.op_arity`](/book/reference/capabilities/#declaring-a-capability) | A capability operation was called with the wrong number of arguments. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.outside_context`](/book/reference/capabilities/#declaring-a-capability) | A `capability` was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.provider_agent_cross_context` | On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
-| `bynk.capability.unknown_base` | A derived capability's base is not a capability the context consumes. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.unknown_base`](/book/reference/capabilities/#derived-capabilities) | A derived capability's base is not a capability the context consumes. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.unknown_operation`](/book/reference/capabilities/#declaring-a-capability) | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.unknown_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability carries an option its base does not take. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 
@@ -77,17 +77,17 @@ There are **816** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.consumes.alias_conflict` | Two `consumes` aliases collide. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.capability_name_clash` | Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.alias_conflict`](/book/guides/program-structure/consume-services/#use-an-alias) | Two `consumes` aliases collide. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.capability_name_clash`](/book/guides/effects-and-capabilities/share-across-contexts/#consume-it-with-a-qualified-given) | Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.name_conflict`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A `consumes` name collides with another name in scope. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.self_reference`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context `consumes` itself. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.service_arity`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A consumed service was called with the wrong number of arguments. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.consumes.signature_type_unconsumed` | A cross-context call reaches a service whose signature names a type the consumed context itself consumes from a third context, which the caller does not consume. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.target_is_commons`](/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module) | `consumes` targets a `commons` instead of a context. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.type_alias_capability` | A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.type_alias_conflict` | A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.type_alias_repeated` | An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.consumes.type_alias_unknown_export` | `consumes U { T as Alias }` names a type `U` does not export. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.type_alias_capability`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.type_alias_conflict`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.type_alias_repeated`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.consumes.type_alias_unknown_export`](/book/guides/program-structure/consume-services/#rename-an-exported-type-that-clashes-with-one-of-yours) | `consumes U { T as Alias }` names a type `U` does not export. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.unknown_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | `consumes` names a context that does not exist. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.consumes.unknown_service`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | Called a service the consumed context does not declare. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 
@@ -171,7 +171,7 @@ There are **816** codes in total.
 |---|---|---|---|
 | [`bynk.exports.capability_not_provided`](/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context) | An exported capability has no provider in its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.conflicting_visibility`](/book/reference/types/#opaque-types) | A type is exported with conflicting visibilities. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.exports.derived_capability` | `exports capability` names a derived capability, whose instance stays with its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.exports.derived_capability`](/book/reference/capabilities/#derived-capabilities) | `exports capability` names a derived capability, whose instance stays with its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.duplicate_export`](/book/reference/types/#opaque-types) | The same name is exported more than once. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.duplicate_in_clause`](/book/reference/types/#opaque-types) | A name appears twice in one `exports` clause. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.undeclared_capability`](/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context) | `exports capability` names a capability that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
@@ -323,13 +323,13 @@ There are **816** codes in total.
 | [`bynk.actor.binder_shadows_param`](/book/reference/actors/#the-by-clause) | A `by` actor binder collides with a handler parameter of the same name. |  | — |
 | [`bynk.actor.by_on_agent`](/book/reference/actors/#the-by-clause) | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
 | [`bynk.actor.duplicate_sum_scheme`](/book/reference/actors/#the-by-clause) | Two peers in a multi-actor sum share an authentication scheme. |  | — |
-| `bynk.actor.foreign_context_name_unkeyable` | A context declaring a `Foreign` actor has a name no call key can be named from. |  | — |
-| `bynk.actor.foreign_duplicate_secret` | A `Foreign` actor's secret is also another actor's secret in the same context. |  | — |
-| `bynk.actor.foreign_identity_unsupported` | A `Foreign` actor declares an `identity`. |  | — |
-| `bynk.actor.foreign_missing_secret` | A `Foreign` actor does not name the secret its calls are signed with. |  | — |
-| `bynk.actor.foreign_name_is_context_name` | A `Foreign` actor's name could be read as a context's name. |  | — |
-| `bynk.actor.foreign_reserved_secret` | A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name. |  | — |
-| `bynk.actor.foreign_secret_not_string` | A `Foreign` actor's secret is not a string. |  | — |
+| [`bynk.actor.foreign_context_name_unkeyable`](/book/reference/actors/#schemes) | A context declaring a `Foreign` actor has a name no call key can be named from. |  | — |
+| [`bynk.actor.foreign_duplicate_secret`](/book/reference/actors/#schemes) | A `Foreign` actor's secret is also another actor's secret in the same context. |  | — |
+| [`bynk.actor.foreign_identity_unsupported`](/book/reference/actors/#schemes) | A `Foreign` actor declares an `identity`. |  | — |
+| [`bynk.actor.foreign_missing_secret`](/book/reference/actors/#schemes) | A `Foreign` actor does not name the secret its calls are signed with. |  | — |
+| [`bynk.actor.foreign_name_is_context_name`](/book/reference/actors/#schemes) | A `Foreign` actor's name could be read as a context's name. |  | — |
+| [`bynk.actor.foreign_reserved_secret`](/book/reference/actors/#schemes) | A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name. |  | — |
+| [`bynk.actor.foreign_secret_not_string`](/book/reference/actors/#schemes) | A `Foreign` actor's secret is not a string. |  | — |
 | [`bynk.actor.identity_not_sealed`](/book/reference/actors/#schemes) | An actor identity type is not a context-ownable (sealed) value type. |  | — |
 | [`bynk.actor.missing_by_on_http`](/book/reference/actors/#the-by-clause) | An HTTP handler lacks the required `by` actor clause. |  | — |
 | [`bynk.actor.oidc_identity_not_string_constructible`](/book/reference/actors/#schemes) | An `Oidc` actor's identity is not a string-constructible type. |  | — |
@@ -337,14 +337,14 @@ There are **816** codes in total.
 | [`bynk.actor.oidc_missing_issuer`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `issuer`. |  | — |
 | [`bynk.actor.oidc_missing_jwks`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `jwks` endpoint. |  | — |
 | [`bynk.actor.oidc_not_in_sum`](/book/reference/actors/#the-by-clause) | An `Oidc` actor appears as a member of a multi-actor sum. |  | — |
-| `bynk.actor.oidc_trust_from_is_secret` | An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`. |  | — |
-| `bynk.actor.oidc_trust_from_not_string` | An `Oidc` actor's `trustFrom` isn't a string naming an environment variable. |  | — |
+| [`bynk.actor.oidc_trust_from_is_secret`](/book/reference/actors/#trust-roots-from-the-environment) | An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`. |  | — |
+| [`bynk.actor.oidc_trust_from_not_string`](/book/reference/actors/#trust-roots-from-the-environment) | An `Oidc` actor's `trustFrom` isn't a string naming an environment variable. |  | — |
 | [`bynk.actor.outside_context`](/book/reference/actors/#declaration) | An `actor` was declared outside a context (e.g. in a commons). |  | — |
 | [`bynk.actor.refinement_base_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
 | [`bynk.actor.refinement_in_sum`](/book/reference/actors/#the-by-clause) | A refinement actor appears as a member of a multi-actor sum. |  | — |
 | [`bynk.actor.refinement_predicate_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
 | [`bynk.actor.scheme_not_admissible`](/book/reference/actors/#schemes) | An actor's scheme is not admissible on this handler's protocol. |  | — |
-| `bynk.actor.signature_identity_unsupported` | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
+| [`bynk.actor.signature_identity_unsupported`](/book/reference/actors/#schemes) | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
 | [`bynk.actor.signature_missing_header`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signature header. |  | — |
 | [`bynk.actor.signature_missing_secret`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signing secret. |  | — |
 | [`bynk.actor.signature_requires_body`](/book/reference/actors/#schemes) | A `Signature` handler does not take a `body` parameter. |  | — |
@@ -353,16 +353,16 @@ There are **816** codes in total.
 | [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
 | [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |
 | [`bynk.actor.unreachable_sum_arm`](/book/reference/actors/#the-by-clause) | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
-| `bynk.adapter.consumes_context` | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.adapter.consumes_requires_selection` | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.adapter.consumes_context`](/book/reference/adapters/#adapter-dependencies) | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.adapter.consumes_requires_selection`](/book/reference/adapters/#adapter-dependencies) | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.adapter.disallowed_item`](/book/reference/adapters/#anatomy) | An `adapter` declared a `service`, `agent`, or other item it may not contain. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
-| `bynk.adapter.duplicate_binding` | An `adapter` declared more than one `binding` clause. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.adapter.include_duplicate` | An adapter `binding … includes [ … ]` list names one file more than once. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.adapter.include_kind` | An adapter `binding … includes [ … ]` entry is not a `.wasm` file; only WebAssembly modules can be included. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.adapter.include_missing` | An adapter `binding … includes [ … ]` entry names a file that could not be read. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.adapter.include_outside` | An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.adapter.duplicate_binding`](/book/reference/adapters/#anatomy) | An `adapter` declared more than one `binding` clause. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.adapter.include_duplicate`](/book/reference/adapters/#anatomy) | An adapter `binding … includes [ … ]` list names one file more than once. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.adapter.include_kind`](/book/reference/adapters/#anatomy) | An adapter `binding … includes [ … ]` entry is not a `.wasm` file; only WebAssembly modules can be included. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.adapter.include_missing`](/book/reference/adapters/#anatomy) | An adapter `binding … includes [ … ]` entry names a file that could not be read. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
+| [`bynk.adapter.include_outside`](/book/reference/adapters/#anatomy) | An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | [`bynk.adapter.no_binding`](/book/reference/adapters/#anatomy) | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
-| `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.adapter.provider_has_body`](/book/reference/adapters/#anatomy) | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | [`bynk.cell.self_reference`](/book/reference/agents/#reading-and-writing-state) | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
 | `bynk.codegen.tsc_failed` | `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068). |  | — |
@@ -414,13 +414,13 @@ There are **816** codes in total.
 | `bynk.fmt.comment_loss` | The formatter would drop a comment, so it leaves the file unchanged. |  | — |
 | `bynk.fmt.mixed_comment_syntax` | A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged. |  | — |
 | `bynk.fmt.roundtrip` | The formatter's output does not re-parse to the same program, so it leaves the file unchanged. |  | — |
-| `bynk.generics.ambiguous_instantiation` | A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.generics.bound_on_capability_op` | A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
-| `bynk.generics.codable_op_return` | A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
+| [`bynk.generics.ambiguous_instantiation`](/book/reference/generics/#ord) | A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.generics.bound_on_capability_op`](/book/reference/generics/#capability-operations-take-key-and-codable) | A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
+| [`bynk.generics.codable_op_return`](/book/reference/generics/#capability-operations-take-key-and-codable) | A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
 | [`bynk.generics.duplicate_type_param`](/book/reference/generics/#type-parameters) | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
 | [`bynk.generics.generic_non_record`](/book/reference/types/#generic-record-types) | A `type` declaration carries type parameters on a refined, opaque or alias body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.generics.generic_record_at_boundary` | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec. |  | — |
-| `bynk.generics.generic_sum_embeds` | A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| [`bynk.generics.generic_record_at_boundary`](/book/reference/testing/#val) | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec. |  | — |
+| [`bynk.generics.generic_sum_embeds`](/book/reference/types/#generic-sums) | A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.generics.method_on_generic_type`](/book/reference/generics/#static-methods-on-generic-types) | A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.generics.missing_codable_bound`](/book/reference/generics/#codable) | A type parameter is encoded or decoded with `Json.encode`/`Json.decode`, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, but is not declared `Codable` (`[T: Codable]`, or `where A: Codable` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Codable`, beside an existing `Eq`, which `Codable` does not imply (constrained-generics slice 3). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.generics.missing_eq_bound`](/book/reference/generics/#bounds) | A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |

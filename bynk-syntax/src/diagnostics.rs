@@ -780,7 +780,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.capability.base_not_instantiable",
-        blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only the resource kinds listed in the Book have instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
+        blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
         example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n  on call() -> Effect[Instant] given Clock {   // ✓ use it bare\n    Clock.now()\n  }\n}",
         page: "/book/reference/capabilities",
         anchor: "derived-capabilities",
@@ -944,6 +944,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "reading-and-writing-state",
     },
     Explain {
+        code: "bynk.consumes.alias_conflict",
+        blurb: "`consumes payment as Pay` gives a context one name to call a unit by, and a name for one unit. Two clauses with the same alias, a unit consumed under two aliases, or an alias that is also a type, function, capability, service or agent of this context, would leave a call such as `Pay.charge(…)` with no single meaning. Give each clause its own alias, or drop it. The same clause in another file of the context is fine.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes payment as Pay\nconsumes shipping as Pay     // ✗ `Pay` already names `payment`\n\nconsumes payment as Pay\nconsumes shipping as Ship    // ✓ one name each",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "use-an-alias",
+    },
+    Explain {
+        code: "bynk.consumes.capability_name_clash",
+        blurb: "`consumes payment { Gateway }` brings `Gateway` in by its bare name, so that `given Gateway` reads it. If the context already declares a capability of that name, or a second consumed unit supplies one, the bare name would mean two things. Reach it qualified instead, `given payment.Gateway`, or rename the local one.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes payment { Gateway }    // ✗ this context declares a `Gateway` too\n\ncapability Gateway {\n  fn notify() -> Effect[()]\n}\n\nconsumes payment                // ✓ reach it as `payment.Gateway`",
+        page: "/book/guides/effects-and-capabilities/share-across-contexts",
+        anchor: "consume-it-with-a-qualified-given",
+    },
+    Explain {
         code: "bynk.consumes.name_conflict",
         blurb: "`consumes payment` brings every type that `payment` exports into scope under its \
                 own name, because the services' signatures use them. If this context already has \
@@ -991,6 +1005,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nconsumes money                   // ✗ `money` is a commons\nuses money                       // ✓ shared declarations come in with `uses`",
         page: "/book/guides/program-structure/how-a-program-is-shaped",
         anchor: "the-two-kinds-of-module",
+    },
+    Explain {
+        code: "bynk.consumes.type_alias_capability",
+        blurb: "`as` renames a type that the consumed context exports, for use in this one. A capability keeps its own name wherever it is used, in `given` and in calls. Select it bare, `consumes payment { Gateway }`, or consume the context without braces and write `given payment.Gateway`.",
+        example: "// payment.bynk\ncontext payment\n\nexports capability { Gateway }\n\n// shop.bynk\ncontext shop\n\nconsumes payment { Gateway as Pay }   // ✗ a capability cannot be aliased\n\nconsumes payment { Gateway }          // ✓ select it bare",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.consumes.type_alias_conflict",
+        blurb: "An alias is a name in this context, so it cannot be one that is already taken: by another alias, by a type or function the context declares or brings in with `uses`, or by a capability. Give each aliased type a name of its own. A consumed type that is not aliased, and clashes with one of these, is `bynk.consumes.name_conflict`.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes payment { AuthId as Id, Receipt as Id }            // ✗ `Id` already names `AuthId`\n\nconsumes payment { AuthId as Id, Receipt as ReceiptId }     // ✓ distinct aliases",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.consumes.type_alias_repeated",
+        blurb: "A type is in scope under one name, so it is selected once in a file: the alias is that name. Selecting it twice, or both bare and aliased, would leave two names for it. Keep one selection. The bare selection of a type is not needed, since `consumes payment` already brings every exported type into scope.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes payment { AuthId as A, AuthId as B }   // ✗ `AuthId` aliased twice\n\nconsumes payment { AuthId as Auth }             // ✓ one alias",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
+    },
+    Explain {
+        code: "bynk.consumes.type_alias_unknown_export",
+        blurb: "`consumes payment { AuthId as Auth }` brings a type that `payment` exports in under another name, so the type has to be one it exports. A misspelt name, or a type that `payment` keeps to itself, is the usual cause. Correct the name, or ask `payment` to export the type.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes payment { AuthIdd as Auth }   // ✗ `payment` exports no `AuthIdd`\n\nconsumes payment { AuthId as Auth }    // ✓ a type it exports",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
         code: "bynk.consumes.unknown_context",
@@ -1474,6 +1516,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "opaque-types",
     },
     Explain {
+        code: "bynk.generics.ambiguous_instantiation",
+        blurb: "A generic function with an `Ord` bound, named as a value, is instantiated where it stands, from the function type expected there. When that type is still open, because the receiving parameter's own type is not fixed yet, there is no `T` to choose, and a guess could order by the wrong type. Wrap the function in a lambda, which is checked after the other arguments, or annotate the expected function type.",
+        example: "fn same[T: Ord](x: T) -> T { x }\n\nfn wrap[A](g: (A) -> A, x: A) -> A { g(x) }\n\nfn pick() -> Int { wrap(same, 1) }              // ✗ `A` is known only from the later argument\n\nfn pick() -> Int { wrap((n) => same(n), 1) }    // ✓ a lambda is checked after it",
+        page: "/book/reference/generics",
+        anchor: "ord",
+    },
+    Explain {
+        code: "bynk.generics.bound_on_capability_op",
+        blurb: "A capability operation is carried out by its provider, written in TypeScript, so it has no Bynk body for a bound to serve; an `Ord` bound would also add a hidden comparator argument. Only `Key` and `Codable` are accepted, and both are handled at the call site. Remove the bound, and compare in the code that calls the operation.",
+        example: "capability Registry {\n  fn lookup[K: Key + Ord](key: K) -> Effect[Option[String]]   // ✗ only `Key` and `Codable`\n}\n\ncapability Registry {\n  fn lookup[K: Key](key: K) -> Effect[Option[String]]         // ✓\n}",
+        page: "/book/reference/generics",
+        anchor: "capability-operations-take-key-and-codable",
+    },
+    Explain {
+        code: "bynk.generics.codable_op_return",
+        blurb: "A `Codable` parameter of a capability operation is encoded at the call site, so the provider receives plain JSON. Decoding the provider's reply back into `T` would have to say what a failed decode of stored data means, and that is not settled, so `T` may not appear in the return type. Return plain data, such as a `String`, and decode it where the call is made.",
+        example: "capability Store {\n  fn load[T: Codable](id: String) -> Effect[Option[T]]   // ✗ `T` in the return type\n}\n\ncapability Store {\n  fn load(id: String) -> Effect[Option[String]]          // ✓ plain data back\n}",
+        page: "/book/reference/generics",
+        anchor: "capability-operations-take-key-and-codable",
+    },
+    Explain {
         code: "bynk.generics.duplicate_type_param",
         blurb: "The type parameters of one declaration are told apart by name, and a repeat would collapse into a single parameter, so `Pair[T, T]` would force both fields to the same type with no sign of it. Give each parameter its own name. A method's own type parameter may not reuse a name from its receiver type either, as that would make the two ambiguous.",
         example: "type Pair[T, T] = { a: T, b: T }    // ✗ `T` declared twice\n\ntype Pair[A, B] = { a: A, b: B }    // ✓ one name for each",
@@ -1486,6 +1549,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Wrapped[T] = Int            // ✗ `T` has nowhere to be used\n\ntype Wrapped[T] = { value: T }   // ✓ a record may be generic",
         page: "/book/reference/types",
         anchor: "generic-record-types",
+    },
+    Explain {
+        code: "bynk.generics.generic_record_at_boundary",
+        blurb: "`Val[T]` fabricates a value for a test from the declaration of `T`, and does not yet do so for a generic type, whether bare, `Val[Box]`, or applied, `Val[Box[Int]]`. Build the value with a record literal instead, giving each field the value the test needs.",
+        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it\n",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.generics.generic_sum_embeds",
+        blurb: "`embeds` folds another sum's variants into this one by name. In a generic sum the embedded variants would also have to be rewritten for each instantiation, and the embedded type could itself be generic, so the combination is not supported. Declare the variants directly, or make the sum non-generic.",
+        example: "type Inner = | A | B\n\ntype Wrap[T] =\n  | Held(value: T)\n  embeds Inner as Inner    // ✗ a generic sum cannot embed\n\ntype Wrap[T] =\n  | Held(value: T)\n  | A                      // ✓ the variants, written out\n  | B",
+        page: "/book/reference/types",
+        anchor: "generic-sums",
     },
     Explain {
         code: "bynk.generics.method_on_generic_type",

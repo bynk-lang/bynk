@@ -1,0 +1,7 @@
+commons demo
+
+type Inner = | A | B
+
+type Wrap[T] =
+  | Held(value: T)
+  embeds Inner as Inner

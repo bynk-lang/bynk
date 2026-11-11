@@ -1,0 +1,6 @@
+suite demo {
+  case "a box" {
+    let b = Val[Box[Int]]
+    expect true
+  }
+}
