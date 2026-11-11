@@ -1254,11 +1254,11 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.lex.bad_escape",
         blurb: "A backslash in a string literal starts an escape, and this one is \
-                not in the set: `\\n`, `\\r`, `\\t`, `\\0`, `\\\"`, `\\\\`, `\\u{…}` (1 to \
-                6 hex digits in braces) and `\\(…)` for interpolation. To write a \
-                backslash itself, double it, as in a Windows path. A `\\u{…}` \
-                naming a surrogate or a value past U+10FFFF is \
-                `bad_unicode_escape`.",
+                not in the set: `\\n`, `\\r`, `\\t`, `\\0`, `\\\"`, `\\\\`, \
+                `\\u{…}` (1 to 6 hex digits in braces) and `\\(…)` for \
+                interpolation. To write a backslash itself, double it, as in a \
+                Windows path. A `\\u{…}` naming a surrogate or a value past \
+                U+10FFFF is `bynk.lex.bad_unicode_escape`.",
         example: "const Dir: String = \"C:\\Users\"      // ✗ `\\U` is not an escape\n\
                   const Dir: String = \"C:\\\\Users\"     // ✓ a doubled backslash",
         page: "/book/spec/lexical-grammar",
@@ -1559,7 +1559,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 operation name. Hard keywords are reserved everywhere, so none can \
                 be a name. Rename it. A keyword is still allowed as a field label \
                 when a `:` follows it (`{ type: String }`); the shorthand without \
-                the `:` is `keyword_field_shorthand`.",
+                the `:` is `bynk.parse.keyword_field_shorthand`.",
         example: "fn describe(type: String) -> String {   // ✗ `type` is a reserved word\n    \
                   type\n\
                   }\n\n\
@@ -1603,9 +1603,10 @@ pub const EXPLANATIONS: &[Explain] = &[
         blurb: "In the fragment form of a `commons` or `context` (the header with \
                 no braces), the `uses` clauses come straight after the header, \
                 before any `type` or `fn`. Move the `uses` line up. `consumes` and \
-                `exports` clauses follow the same rule, as `consumes_after_decls` \
-                and `exports_after_decls`: `consumes` after the `uses` lines, \
-                `exports` after the `consumes` lines.",
+                `exports` clauses follow the same rule, as \
+                `bynk.parse.consumes_after_decls` and \
+                `bynk.parse.exports_after_decls`: `consumes` after the `uses` \
+                lines, `exports` after the `consumes` lines.",
         example: "commons demo\n\
                   type Id = String\n\
                   uses util              // ✗ a declaration comes first\n\n\
@@ -1619,9 +1620,8 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.parse.variant_name_case",
         blurb: "A variant of a sum type or enum is written like a constant: an \
                 uppercase letter, then letters, digits or `_` (`Active`, \
-                `NotFound`). A lowercase variant such as `suspended` is refused, \
-                which also keeps the compiler's parser in step with the editor \
-                grammar. Capitalise the name.",
+                `NotFound`). A lowercase variant such as `suspended` is refused. \
+                Capitalise the name.",
         example: "type Status =\n    \
                   | Active\n    \
                   | suspended   // ✗ a variant starts with a capital\n\n\
