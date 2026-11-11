@@ -4446,16 +4446,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                     r
                 });
                 let rhs_ty = type_of(&l.value, annot_ty, ctx);
-                // #3298: remember a lambda that writes a store, so passing it by
-                // name to `parTraverse` is refused like the closure written there.
-                match par::lambda_store_write(&l.value, ctx) {
-                    Some(write) => {
-                        ctx.store_writing_lambdas.insert(l.name.name.clone(), write);
-                    }
-                    None => {
-                        ctx.store_writing_lambdas.remove(&l.name.name);
-                    }
-                }
+                par::note_let_lambda(l, ctx);
                 check_unbound_effects(&l.value, false, ctx);
                 let final_ty = match (annot_ty, rhs_ty) {
                     (Some(annot), Some(rhs)) => {
@@ -5274,6 +5265,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 expr.span,
                                 ctx,
                             );
+                            par::reject_store_write_in_closure(method, args, ctx);
                             // P6.2 (#1143, R6.12): role is read back from
                             // this call's own resolved type where possible —
                             // `is_query_op` above only decides "lift or

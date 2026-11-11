@@ -404,23 +404,6 @@ pub(crate) fn check_list_kernel_method(
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
-    let ty = check_list_kernel_method_inner(method, op, args, elem, span, ctx);
-    // #3298: the closure runs concurrently with itself; `args[0]` is checked by
-    // now, so `ctx.callees` holds every store call in it.
-    if args.len() == 1 {
-        super::par::reject_store_write_in_closure(method, &args[0], ctx);
-    }
-    ty
-}
-
-fn check_list_kernel_method_inner(
-    method: &Ident,
-    op: Option<ListOp>,
-    args: &[Expr],
-    elem: TyId,
-    span: Span,
-    ctx: &mut Ctx,
-) -> Option<TyId> {
     let tys = ctx.tys;
     let arity = |n: usize, ctx: &mut Ctx| {
         if args.len() != n {
@@ -933,23 +916,6 @@ pub(crate) fn is_query_op(name: &str) -> bool {
 /// storage read folds into the agent's storage capability, ADR 0115 D5). `elem`
 /// is the query's element type. Joins and `groupBy` arrive with slice 4.
 pub(crate) fn check_query_kernel_method(
-    method: &Ident,
-    op: Option<QueryOp>,
-    args: &[Expr],
-    elem: TyId,
-    span: Span,
-    ctx: &mut Ctx,
-) -> Option<TyId> {
-    let ty = check_query_kernel_method_inner(method, op, args, elem, span, ctx);
-    // #3298: the closure runs concurrently with itself; `args[0]` is checked by
-    // now, so `ctx.callees` holds every store call in it.
-    if args.len() == 1 {
-        super::par::reject_store_write_in_closure(method, &args[0], ctx);
-    }
-    ty
-}
-
-fn check_query_kernel_method_inner(
     method: &Ident,
     op: Option<QueryOp>,
     args: &[Expr],

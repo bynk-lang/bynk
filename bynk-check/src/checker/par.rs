@@ -404,13 +404,15 @@ pub(super) fn lambda_store_write(e: &Expr, ctx: &Ctx) -> Option<(String, String)
 /// is atomic, but it is refused too, exactly as `par { }` refuses it, so the
 /// two rules stay equal. Reads, and a store as the combinator's *receiver*, are
 /// untouched. The closure is the written lambda, or a name `let`-bound to one.
-pub(super) fn reject_store_write_in_closure(method: &Ident, arg: &Expr, ctx: &mut Ctx) {
+pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: &mut Ctx) {
     use crate::builtin_names::methods::{PAR_TRAVERSE, PAR_TRAVERSE_ALL, PAR_TRAVERSE_TRY};
     let name = method.name.as_str();
-    if name != PAR_TRAVERSE && name != PAR_TRAVERSE_ALL && name != PAR_TRAVERSE_TRY {
+    if args.len() != 1
+        || (name != PAR_TRAVERSE && name != PAR_TRAVERSE_ALL && name != PAR_TRAVERSE_TRY)
+    {
         return;
     }
-    let mut inner = arg;
+    let mut inner = &args[0];
     while let ExprKind::Paren(i) = &inner.kind {
         inner = i;
     }
@@ -461,5 +463,18 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, arg: &Expr, ctx: &mu
             );
         }
         ctx.errors.push(err);
+    }
+}
+
+/// #3298: after a `let` is typed, remember (or forget) that its name is a lambda
+/// that writes a store, so passing it by name to `parTraverse` is refused too.
+pub(super) fn note_let_lambda(l: &LetStmt, ctx: &mut Ctx) {
+    match lambda_store_write(&l.value, ctx) {
+        Some(write) => {
+            ctx.store_writing_lambdas.insert(l.name.name.clone(), write);
+        }
+        None => {
+            ctx.store_writing_lambdas.remove(&l.name.name);
+        }
     }
 }
