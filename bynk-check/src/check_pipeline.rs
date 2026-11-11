@@ -276,12 +276,21 @@ type MethodDigests<'a> = (&'a String, Vec<(&'a String, u64)>, Vec<(&'a String, u
 /// rendering each of them once per file was most of the digest's cost. Keyed by
 /// address, which is safe for one round: the unit tables hold every `Arc` for
 /// the round's whole duration, so an address is never reused for another
-/// declaration while the cache lives. Never kept across rounds: the parse cache
-/// builds fresh declarations each time.
+/// declaration while the cache lives. Never kept across rounds: the memo drops it
+/// when the round ends (and asserts it is empty when the next begins), because
+/// the parse cache builds fresh declarations each time and a later allocation
+/// could reuse an address.
 #[derive(Default)]
 pub struct DeclDigests {
     types: HashMap<usize, u64>,
     fns: HashMap<usize, u64>,
+}
+
+impl DeclDigests {
+    /// How many distinct declarations have been hashed.
+    pub(crate) fn len(&self) -> usize {
+        self.types.len() + self.fns.len()
+    }
 }
 
 fn debug_digest(value: &dyn std::fmt::Debug) -> u64 {
