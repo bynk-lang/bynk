@@ -109,6 +109,12 @@ pub enum BindingSource {
     /// derived name, its id minted by `bynk deploy`. Never seen by handlers:
     /// they reach it through the instance's `WorkersD1`.
     D1Database { capability: String },
+    /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
+    /// (`Version`'s `[version_metadata]`), declared when the Worker's
+    /// closure reaches the bare capability. Never seen by handlers: they
+    /// reach it through the capability's provider (`WorkersVersion`), which
+    /// takes the Worker's `env` at compose time.
+    Singleton { capability: String },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
     Agent { class_name: String },
@@ -148,6 +154,10 @@ impl BindingSource {
             Self::D1Database { capability } => {
                 format!("the D1 database binding of derived capability `{capability}`")
             }
+            Self::Singleton { capability } => format!(
+                "the `{capability}` binding of `{}`",
+                firstparty::CLOUDFLARE_UNIT
+            ),
             Self::Agent { class_name } => {
                 format!("the Durable Object binding of agent `{class_name}`")
             }
@@ -203,7 +213,12 @@ pub fn phase_duplicate_bindings(
             // else the earlier's, but never the `bynk.cloudflare` clause
             // while the other source has a declaration of its own.
             let mut sources = [later, earlier];
-            sources.sort_by_key(|b| b.source == BindingSource::Kv);
+            sources.sort_by_key(|b| {
+                matches!(
+                    b.source,
+                    BindingSource::Kv | BindingSource::Singleton { .. }
+                )
+            });
             let (file, span) = sources
                 .iter()
                 .find_map(|b| declared_at(parsed, indices, b))
@@ -256,7 +271,9 @@ fn declared_at(
                 (a.name.name == *class_name).then_some(a.name.span)
             }),
             BindingSource::Service { context } => consumed(context),
-            BindingSource::Kv => consumed(firstparty::CLOUDFLARE_UNIT),
+            BindingSource::Kv | BindingSource::Singleton { .. } => {
+                consumed(firstparty::CLOUDFLARE_UNIT)
+            }
             BindingSource::KvInstance { capability }
             | BindingSource::ForeignService { capability, .. }
             | BindingSource::R2Instance { capability, .. }

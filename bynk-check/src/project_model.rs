@@ -736,17 +736,22 @@ pub fn phase_resolve_derived(
                     continue;
                 };
                 let Some(kind) = crate::firstparty::instantiable(&owner, &d.base.name) else {
-                    errors.push_for(
-                        Some(&path),
-                        CompileError::new(
-                            "bynk.capability.base_not_instantiable",
-                            d.base.span,
-                            format!(
-                                "`{owner}.{}` has no named instances: a derived capability's base must be a platform resource kind",
-                                d.base.name
-                            ),
+                    let mut error = CompileError::new(
+                        "bynk.capability.base_not_instantiable",
+                        d.base.span,
+                        format!(
+                            "`{owner}.{}` has no named instances: a derived capability's base must be a platform resource kind",
+                            d.base.name
                         ),
                     );
+                    // #3300: a one-per-Worker capability is used bare.
+                    if crate::firstparty::singleton(&owner, &d.base.name).is_some() {
+                        error = error.with_note(format!(
+                            "a Worker has one `{0}` binding, so `{0}` is used bare: write `given {0}` where it is needed, not a capability over it",
+                            d.base.name
+                        ));
+                    }
+                    errors.push_for(Some(&path), error);
                     continue;
                 };
                 // Interop I5 (#1972): each option's value, once valid.

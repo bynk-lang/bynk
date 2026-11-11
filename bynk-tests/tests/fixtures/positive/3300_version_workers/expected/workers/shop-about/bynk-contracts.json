@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "info": "81b33185c8113faa"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "info": "Svc(\"info\",Ret(B(\"String\")))"
+  }
+}

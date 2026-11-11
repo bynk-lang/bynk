@@ -378,6 +378,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]` · `getStream(key) -> Effect[Option[R2Body]]` · `putStream(key, body: Stream[Bytes], size: Int) -> Effect[R2Object]` · `putStreamWith(key, body, size, options: R2Put) -> Effect[Option[R2Object]]` · `createUpload(key, options: R2UploadOptions) -> Effect[R2Upload]` · `uploadPart(upload, partNumber: Int, body: Bytes) -> Effect[R2Part]` · `completeUpload(upload, parts: List[R2Part]) -> Effect[R2Object]` · `abortUpload(upload) -> Effect[()]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
+| **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -691,6 +692,44 @@ experimental: list `"bynk.cloudflare.Analytics"` under `[unstable] allow`.
 `bynk deploy` has nothing to create, since the platform makes a dataset on its
 first write; see
 [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#analytics-engine-datasets).
+
+### The running version: `Version`
+
+`Version` reports which version of the Worker is running, from Cloudflare's
+Version metadata binding. A Worker has one such binding, so `Version` is used
+bare, with no named instances (`capability Build = Version` is
+`bynk.capability.base_not_instantiable`):
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { Version, WorkerVersion }
+
+type Health = { version: String, tag: Option[String] }
+
+service api from http {
+	on GET("/health") () -> Effect[HttpResult[Health]] by Visitor given Version {
+		let v <- Version.current()
+		Ok(Health { version: v.id, tag: v.tag })
+	}
+}
+```
+
+`current()` gives a `WorkerVersion`: `id`, the version's id; `tag`, its tag, or
+`None` when it was uploaded without one; and `deployed`, the `Instant` the
+version was created. It is the same for every call in a deployment. Report it
+from a health route, or write it beside an `Analytics` point, to tell which
+version served a request.
+
+A Worker whose code reaches `Version`, directly or through a provider's `given`,
+declares `[version_metadata]` bound as `env.CF_VERSION_METADATA`; one that does
+not declares nothing, and consuming `bynk.cloudflare` for `Version` alone
+declares no KV namespace. There is nothing for `bynk deploy` to create.
+
+Under `bynk dev` the id is a local one. In a test, `Version` reports a fixed
+version (id `"test"`, no tag, `deployed` at the epoch), so a result never
+depends on when or where the test runs, and `stub Version.current() returns …`
+gives another. A `system` test's Workers report id `"integration"`. `Version` is
+experimental: list `"bynk.cloudflare.Version"` under `[unstable] allow`.
 
 ### SQL databases: `D1`
 

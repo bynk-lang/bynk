@@ -384,13 +384,22 @@ fn a_subscriber_mutating_the_publisher_during_the_fanout_loses_no_write_on_worke
 
     // Both ports answering is not the Service Binding being connected, and an
     // event emitted before it is not retried. So place events until one is
-    // delivered, which shows as the count growing by two (the placing handler and
-    // the subscriber's callback), then wait for the count to stop moving.
+    // delivered, then wait for the count to stop moving.
+    //
+    // A delivered probe shows as the count growing by two *across that probe*:
+    // the placing handler, and the subscriber's callback. It must not be read
+    // off the count's parity. A probe emitted before the binding connected is
+    // lost (the fan-out logs `delivery failed: 503` and moves on) after its
+    // placing handler has already counted, so the count is one higher for good,
+    // every later pair keeps it odd, and a test for an even count never passes
+    // however many probes arrive. That is how two Windows runs failed (#3308).
     let start = Instant::now();
     loop {
-        let _ = http("GET", pub_port, "/place/probe", None);
-        if poll_count(pub_port, Duration::from_secs(5), |n| n >= 2 && n % 2 == 0).is_ok() {
-            break;
+        if let Ok(base) = poll_count(pub_port, Duration::from_secs(10), |_| true) {
+            let _ = http("GET", pub_port, "/place/probe", None);
+            if poll_count(pub_port, Duration::from_secs(5), |n| n >= base + 2).is_ok() {
+                break;
+            }
         }
         assert!(
             start.elapsed() <= Duration::from_secs(120),

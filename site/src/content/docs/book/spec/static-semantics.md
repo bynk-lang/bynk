@@ -1431,7 +1431,8 @@ and `expect` apply to it unchanged. The rules:
   (`bynk.capability.unknown_base`).
 - `K` MUST be a platform resource kind with instances. `bynk.cloudflare`'s
   `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics` and `EdgeCache` have them
-  (`bynk.capability.base_not_instantiable`).
+  (`bynk.capability.base_not_instantiable`). `Version` is bound once per Worker
+  and has none: it is used bare (#3300).
 - Each `@annotation` MUST be one of `K`'s instance options
   (`bynk.capability.unknown_option`), given at most once, with one positional
   literal of the option's kind (`bynk.capability.invalid_option`): a string for
