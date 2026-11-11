@@ -1,0 +1,10 @@
+commons demo
+
+fn checked(n: Int) -> Result[Int, String] {
+    if n >= 0 { Ok(n) } else { Err("negative") }
+}
+
+fn run(n: Int) -> Int {
+    let v = checked(n)?
+    v + 1
+}

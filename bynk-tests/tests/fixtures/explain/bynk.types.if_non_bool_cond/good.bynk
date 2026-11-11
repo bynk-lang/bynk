@@ -1,0 +1,5 @@
+commons demo
+
+fn describe(count: Int) -> String {
+    if count > 0 { "some" } else { "none" }
+}

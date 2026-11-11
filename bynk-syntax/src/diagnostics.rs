@@ -1657,6 +1657,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.cannot_infer_option_type_param",
+        blurb: "`None` carries no value, so its `Option[T]` takes `T` from where it is used: an annotation, a parameter, or the function's return type. A `let` of a bare `None` has none, and the compiler will not guess, because `T` becomes part of everything the binding touches. Annotate it, as in `let missing: Option[Int] = None`, or use `None` where an `Option` is expected.",
+        example: "fn run() -> Int {\n    let missing = None    // ✗ an `Option` of what?\n    1\n}\n\nfn run() -> Int {\n    let missing: Option[Int] = None    // ✓\n    1\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
+        code: "bynk.types.cannot_infer_result_type_params",
+        blurb: "`Ok(v)` fixes only the success type and `Err(e)` only the error type, so the rest of the `Result` has to come from context: an annotation, a parameter type, or the enclosing function's return type. A bare `let r = Ok(1)` has neither, and the compiler will not guess. Annotate the binding, as in `let r: Result[Int, String] = Ok(1)`.",
+        example: "fn run() -> Int {\n    let r = Ok(1)    // ✗ a `Result` of what error?\n    1\n}\n\nfn run() -> Int {\n    let r: Result[Int, String] = Ok(1)    // ✓\n    1\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
         code: "bynk.types.catastrophic_regex",
         blurb: "A `Matches` pattern, and the pattern of a regex method such as \
                 `matchesRegex` or `replaceRegex`, is analysed when the program compiles. \
@@ -1704,6 +1718,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "built-in-generic-types",
     },
     Explain {
+        code: "bynk.types.constructor_arity",
+        blurb: "`T.of(value)` takes exactly one argument, the base value to check, and so does `T.unsafe(value)` on an opaque type: a refined or opaque type wraps a single value. None gives it nothing to check, and two have no meaning. Pass the one value. Building a sum variant with the wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Age = Int where InRange(0, 150)\n\nfn parse(n: Int) -> Result[Age, ValidationError] {\n    Age.of(n, 1)    // ✗ `of` takes 1 argument\n}\n\nfn parse(n: Int) -> Result[Age, ValidationError] {\n    Age.of(n)    // ✓\n}",
+        page: "/book/reference/refined-types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.duplicate_literal_arm",
+        blurb: "A `match` takes the first arm whose pattern fits, so a literal that an earlier unguarded arm already has can never reach a second arm. Bynk refuses the dead arm rather than let it hide a mistake, usually a mistyped value. Change the literal or delete the arm. An or-pattern is checked alternative by alternative, so `1 | 2` followed by `2` is caught as well. The same for a variant is `bynk.types.duplicate_variant_arm`.",
+        example: "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
         code: "bynk.types.empty_range_pattern",
         blurb: "A range pattern `lo..hi` matches every `Int` from `lo` to `hi`, both \
                 inclusive, so the low bound comes first. With `lo > hi` no value can match, \
@@ -1730,6 +1758,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "predicates",
     },
     Explain {
+        code: "bynk.types.err_value_mismatch",
+        blurb: "`Err(e)` takes its error type from the surrounding `Result[T, E]`, the annotation or the function's return type, so `Err(404)` where `E` is `String` is refused at the value, with no conversion. Pass an `E`, or change the declared error type. The success half is `bynk.types.ok_value_mismatch`; with nothing to fix the `Result`, it is `bynk.types.cannot_infer_result_type_params`.",
+        example: "fn total() -> Result[Int, String] {\n    Err(404)    // ✗ an `Int`, where the error type is `String`\n}\n\nfn total() -> Result[Int, String] {\n    Err(\"not found\")    // ✓\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
                 extensible: a minor release may add a variant. A `match` that names every \
@@ -1746,6 +1781,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "extensible-enums",
     },
     Explain {
+        code: "bynk.types.field_access_on_non_record",
+        blurb: "`.name` reads a field, and only a record has fields. A `String`, an `Int` or a `List` has methods instead, called with parentheses, so `name.length` is not a field read but `name.length()` is a call. A refined type is already its base type, so there is nothing to unwrap. To get at a sum type's payload, use `match`. A field a record lacks is `bynk.types.unknown_field`.",
+        example: "fn size(name: String) -> Int {\n    name.length    // ✗ `String` is not a record; `length` is a method\n}\n\nfn size(name: String) -> Int {\n    name.length()    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.field_value_mismatch",
+        blurb: "A record literal checks each field against the type the declaration gives it, with no implicit conversion, so `y: \"0\"` for an `Int` field is refused where it is written. Give the field a value of its declared type, or convert it first. A field the type lacks is `bynk.resolve.unknown_field`, and one left out is `bynk.resolve.missing_field`.",
+        example: "type Point = { x: Int, y: Int }\n\nfn origin() -> Point {\n    Point { x: 0, y: \"0\" }    // ✗ `y` is an `Int`\n}\n\nfn origin() -> Point {\n    Point { x: 0, y: 0 }    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
         code: "bynk.types.function_at_boundary",
         blurb: "A function type can be written only where a value stays in the running \
                 program: as a `fn` or lambda parameter, a return, or a local. A value that is \
@@ -1759,6 +1808,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Job = {\n  name: String,\n  run: Int -> Int,    // ✗ a record field cannot hold a function\n}\n\n\
                   type Job = {\n  name: String,\n  step: Int,\n}\n\nfn run(j: Job, f: Int -> Int) -> Int {    // ✓ a parameter can\n    f(j.step)\n}",
         page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.guard_not_bool",
+        blurb: "A guard, as in `pattern if condition => …`, decides whether an arm applies, so it must be a `Bool`: a number or an `Option` is not read as true or false. Say what you mean with a comparison, such as `r > 10`. A guarded arm covers nothing for exhaustiveness, because its guard may fail. The condition of an `if` expression is `bynk.types.if_non_bool_cond`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r => \"round\"    // ✗ `r` is an `Int`\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r > 10 => \"round\"    // ✓\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.if_branch_mismatch",
+        blurb: "Both branches of an `if` can be its value, so they must have one type: their common supertype, where a refined type and its base agree at the base. With a `String` in one branch and an `Int` in the other, the caller has no single type to rely on. Make the branches agree, converting where needed. A `match` whose arms disagree is `bynk.types.match_arm_mismatch`.",
+        example: "fn grade(score: Int) -> String {\n    if score >= 50 { \"pass\" } else { 0 }    // ✗ a `String` branch and an `Int` branch\n}\n\nfn grade(score: Int) -> String {\n    if score >= 50 { \"pass\" } else { \"fail\" }    // ✓\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.if_non_bool_cond",
+        blurb: "An `if` chooses a branch on a `Bool`, and Bynk has no truthiness: a number, a string, an `Option` or a list is never read as true or false. Say what you mean with a comparison (`count > 0`), or test an `Option` with `is Some(…)`. A match-arm guard has the same rule, as `bynk.types.guard_not_bool`.",
+        example: "fn describe(count: Int) -> String {\n    if count { \"some\" } else { \"none\" }    // ✗ an `Int`, not a `Bool`\n}\n\nfn describe(count: Int) -> String {\n    if count > 0 { \"some\" } else { \"none\" }    // ✓\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.if_without_else_requires_unit",
+        blurb: "An `if` with no `else` has nothing to produce when its condition is false, so Bynk gives that path the value `()`. The `then` branch must therefore be `()` too, or `Effect[()]` for a branch that only performs effects; a branch that yields a `String` would leave the other path without one. Add an `else` that produces a value of the same type, or make the branch a unit effect.",
+        example: "fn sign(n: Int) -> String {\n    if n > 0 { \"positive\" }    // ✗ no `else`, so the value would be `()`\n}\n\nfn sign(n: Int) -> String {\n    if n > 0 { \"positive\" } else { \"not positive\" }    // ✓\n}",
+        page: "/book/spec/static-semantics",
         anchor: "",
     },
     Explain {
@@ -1875,6 +1952,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.list_element_mismatch",
+        blurb: "A list has one element type, taken from the context if there is one and otherwise from the first element, and every element must have it. `[1, 2, \"3\"]` mixes `Int` and `String`, and the error is on the element that disagrees. Make the elements one type, or wrap them in a sum type if the list really holds more than one kind of value. An empty `[]` with no context is `bynk.types.uninferable_element_type`.",
+        example: "fn scores() -> List[Int] {\n    [1, 2, \"3\"]    // ✗ a `String` in a `List[Int]`\n}\n\nfn scores() -> List[Int] {\n    [1, 2, 3]    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "built-in-generic-types",
+    },
+    Explain {
         code: "bynk.types.list_pattern_on_non_list",
         blurb: "A list pattern such as `[x, ..]` matches a value by its length and its elements, \
                 so the value must be a `List[T]`. A `Set`, a `Map`, an `Int` or a record has no \
@@ -1926,6 +2010,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\n\
                   fn reset(c: Counter) -> Counter {\n    c.zero()          // ✗ `zero` has no `self`: not an instance method\n}\n\n\
                   fn reset(c: Counter) -> Counter {\n    Counter.zero()    // ✓ a static function is called on the type\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.method_on_non_named_type",
+        blurb: "A method call needs a type that has methods. A user-declared type does, and so do the built-ins that document them, such as `String` and `List`, but a function value, a `Bool` or `()` has none, so `f.apply(n)` has nothing to look up. A function is called directly, as `f(n)`. For a type that does have methods, a name it lacks is `bynk.types.method_not_found`.",
+        example: "fn twice(f: (Int) -> Int, n: Int) -> Int {\n    f.apply(f.apply(n))    // ✗ a function value has no methods\n}\n\nfn twice(f: (Int) -> Int, n: Int) -> Int {\n    f(f(n))    // ✓ call it directly\n}",
         page: "/book/reference/types",
         anchor: "",
     },
@@ -2031,6 +2122,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "ordering-your-own-types",
     },
     Explain {
+        code: "bynk.types.ok_value_mismatch",
+        blurb: "`Ok(v)` takes its type from where it is used. A return type or annotation of `Result[T, E]` fixes `T`, so `Ok(\"12\")` where `T` is `Int` is refused at the value, with no conversion; so is a value that does not match an `HttpResult[T]` handler's `T`. Pass a `T`, or change the declared type. The error half is `bynk.types.err_value_mismatch`; with nothing to fix `T`, it is `bynk.types.cannot_infer_result_type_params`.",
+        example: "fn total() -> Result[Int, String] {\n    Ok(\"12\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn total() -> Result[Int, String] {\n    Ok(12)    // ✓\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
+        code: "bynk.types.opaque_raw_outside",
+        blurb: "An opaque type hides its base representation from everything but the unit that declares it, so no other code can take a `Token` apart or forge one. `.raw` reads the base value and is allowed only there. Elsewhere, use what the defining unit offers: a method or accessor on the type. To make a value, use `Token.of(value)`.",
+        example: "// token.bynk\ntype Token = opaque String\n\nfn Token.value(self) -> String {\n    self.raw\n}\n\n// app.bynk\nfn show(t: Token) -> String {\n    t.raw    // ✗ `Token` is opaque outside `token`\n}\n\nfn show(t: Token) -> String {\n    t.value()    // ✓ use the accessor `token` provides\n}",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.types.opaque_unsafe_outside",
+        blurb: "`T.unsafe(v)` wraps a base value as an opaque type without checking it, which is sound only where the type's own unit vouches for the value, so it is allowed only in the unit that declares the type. Elsewhere use `T.of(v)`, which returns a `Result` so the check is explicit. Reading the base value back is `bynk.types.opaque_raw_outside`.",
+        example: "// token.bynk\ntype Token = opaque String\n\n// app.bynk\nfn make(s: String) -> Token {\n    Token.unsafe(s)    // ✗ only `token` may skip the check\n}\n\nfn make(s: String) -> Result[Token, ValidationError] {\n    Token.of(s)    // ✓ the checked constructor\n}",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
         code: "bynk.types.pattern_arity",
         blurb: "A variant pattern takes one binding for each payload field the variant \
                 declares, in order, or none to ignore the payload. A different count, or any \
@@ -2075,6 +2187,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "regular-expressions",
     },
     Explain {
+        code: "bynk.types.question_error_mismatch",
+        blurb: "`?` returns the `Err` from the enclosing function as it is, so its error type must be one the function declares: a `String` error cannot escape a function whose errors are `Int`. The only automatic conversion is a declared embedding, where the function's error is a sum type with an `embeds` clause for the inner one. Otherwise convert the error before the `?` with `.mapErr(…)`, or change the function's error type.",
+        example: "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Result[Int, Int] {\n    let v = checked(n)?    // ✗ propagates a `String` error, but `run` returns `Int` errors\n    Ok(v + 1)\n}\n\nfn run(n: Int) -> Result[Int, Int] {\n    let v = checked(n).mapErr((e) => e.length())?    // ✓ the error is converted first\n    Ok(v + 1)\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.question_on_non_result",
+        blurb: "`?` unwraps an `Ok` and returns early from the function on an `Err`, so it needs a `Result[T, E]`: a plain `Int` has no error to return. The one other operand it takes is an `Option`, in an `HttpResult` handler. Apply `?` to the call that produces the `Result`, not to a value already unwrapped. To turn an `Option` into a `Result` elsewhere, use `.okOr(err)`.",
+        example: "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = n?    // ✗ `n` is an `Int`, not a `Result`\n    Ok(v + 1)\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = checked(n)?    // ✓\n    Ok(v + 1)\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.question_outside_result",
+        blurb: "`?` returns early with the `Err`, so the function around it must be able to return one: its return type has to be a `Result`, or an `Effect` of one. In a function returning `Int` the error has nowhere to go. Change the return type to `Result[T, E]` and wrap the final value in `Ok`, or deal with the `Result` where it arises, with a `match` or `.getOrElse(…)`.",
+        example: "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Int {\n    let v = checked(n)?    // ✗ `run` does not return a `Result`\n    v + 1\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = checked(n)?    // ✓\n    Ok(v + 1)\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.types.return_mismatch",
         blurb: "The value a function or handler body ends with does not have the declared \
                 return type, and the compiler compares the two exactly. Either change the \
@@ -2091,6 +2224,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.some_value_mismatch",
+        blurb: "`Some(v)` takes its type from the surrounding `Option[T]`, the annotation or the function's return type, so `Some(\"a\")` where `T` is `Int` is refused at the value, with no conversion. Pass a `T`, or change the declared type. With nothing to say what the `Option` holds, a bare `None` is `bynk.types.cannot_infer_option_type_param`.",
+        example: "fn first() -> Option[Int] {\n    Some(\"a\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn first() -> Option[Int] {\n    Some(1)    // ✓\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
     },
     Explain {
         code: "bynk.types.stream_at_boundary",
@@ -2145,6 +2285,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.types.unknown_pattern_field",
+        blurb: "When a variant pattern names its bindings, as in `Circle(radius: r)`, each name must be a payload field the variant declares: `Circle` has no `diameter`. Use the declared field name, or bind by position, `Circle(r)`. A count of bindings that does not fit the payload is `bynk.types.pattern_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(diameter: d) => d    // ✗ `Circle` has no field `diameter`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(radius: r) => r    // ✓\n        Dot => 0\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.unknown_variant_in_pattern",
+        blurb: "A pattern on a sum value can only name the variants its type declares, so `Square(side)` against a `Shape` with no `Square` could never match and is refused. This is usually a typo, a variant that was never added, or a value of a different type from the one intended. Fix the name, add the variant to the type, or match on the right value. A pattern of the wrong kind altogether is `bynk.types.pattern_type_mismatch`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r\n        Square(side) => side    // ✗ `Shape` has no `Square`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r\n        Dot => 0    // ✓\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
         code: "bynk.types.unreachable_arm",
         blurb: "A `match` arm can never run, because the arms before it already match every \
                 value it would match. The usual cause is a wildcard `_` placed before more \
@@ -2170,6 +2324,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Shape =\n  | Circle(radius: Int)\n  | Square(side: Int)\n\n\
                   fn make() -> Shape {\n    Circle(1, 2)    // ✗ `Circle` takes 1 argument\n}\n\n\
                   fn make() -> Shape {\n    Circle(1)       // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.types.variant_missing_payload",
+        blurb: "A variant with a payload is built by calling it, with its payload as arguments. Written bare, `Circle` is not a value, since nothing fills `radius`; only a variant with no payload can stand alone. Call it with one argument per field, as `Circle(10)`. The qualified form `Shape.Circle` is refused in the same way. A call with the wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle    // ✗ `Circle` carries a payload\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.types.variant_payload_mismatch",
+        blurb: "A variant's payload fields have declared types and are checked like function parameters: `Circle(\"big\")` for `radius: Int` is refused at the argument, with no conversion. Pass a value of the field's type. For a generic sum the type argument is inferred from the arguments first, and the check applies to the result. The wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
         page: "/book/reference/types",
         anchor: "sum-types",
     },
@@ -5321,7 +5489,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.constructor_arity",
-        "A variant constructor got the wrong number of arguments.",
+        "`T.of` (or `T.unsafe`) on a refined or opaque type got the wrong number of arguments.",
     ),
     d(
         "bynk.types.constructor_base_mismatch",
