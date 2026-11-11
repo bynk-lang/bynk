@@ -1,0 +1,12 @@
+commons demo
+
+type Shape =
+  | Circle(radius: Int)
+  | Dot
+
+fn size(s: Shape) -> Int {
+    match s {
+        Circle(radius: r) => r
+        Dot => 0
+    }
+}

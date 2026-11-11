@@ -1,0 +1,11 @@
+context shop
+
+exports capability { Clock }
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = Fixed {
+  fn now() -> Effect[Int] { Effect.pure(0) }
+}

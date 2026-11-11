@@ -1,0 +1,3 @@
+commons token
+
+type Token = opaque String
