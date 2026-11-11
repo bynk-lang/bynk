@@ -502,7 +502,15 @@ pub(super) fn emit_system_http_support(
                                     runtime_use,
                                 ),
                             );
-                            (format!("${{__queryString({ser})}}"), format!("${{{var}}}"))
+                            // #3343: a renamed field is written under its `@name`.
+                            let table_arg =
+                                bynk_emit::emitter::renamed_specs_source(record, &table.types)
+                                    .map(|t| format!(", {t}"))
+                                    .unwrap_or_default();
+                            (
+                                format!("${{__queryString({ser}{table_arg})}}"),
+                                format!("${{{var}}}"),
+                            )
                         }
                     }
                 }
@@ -512,7 +520,7 @@ pub(super) fn emit_system_http_support(
             // form), and the one the raw drivers send (a `Wire` string).
             let cookies_param = h.params.iter().find(|p| is_cookies(p));
             let (typed_cookie, raw_cookie) =
-                cookie_header_texts(cookies_param, &type_ns, runtime_use);
+                cookie_header_texts(cookies_param, &type_ns, &table.types, runtime_use);
             if let Some(cp) = cookies_param {
                 let key = (
                     sname.clone(),
@@ -759,11 +767,7 @@ pub(super) fn emit_system_http_support(
                     let specs = bynk_emit::emitter::form_body_specs(h, &table.types)
                         .unwrap_or_default()
                         .iter()
-                        .map(|(name, kind, list, option)| {
-                            format!(
-                                "{{ name: {name:?}, kind: {kind:?}, list: {list}, option: {option} }}"
-                            )
-                        })
+                        .map(bynk_emit::emitter::field_spec_source)
                         .collect::<Vec<_>>()
                         .join(", ");
                     let stmt = TsStmt::const_stmt(
@@ -791,7 +795,10 @@ pub(super) fn emit_system_http_support(
                         TsBindingName::Ident("__body".to_string()),
                         None,
                         method_call(
-                            call(ident("__queryString"), vec![ident(ser)]),
+                            call(
+                                ident("__queryString"),
+                                query_string_args(&p.type_ref, &ser, &table.types),
+                            ),
                             "slice",
                             vec![num_lit("1")],
                         ),
@@ -1766,6 +1773,7 @@ pub(super) const HARNESS_CALLER: &str = "integration";
 fn cookie_header_texts(
     param: Option<&bynk_syntax::ast::Param>,
     type_ns: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     runtime_use: &RuntimeUse,
 ) -> (String, String) {
     let Some(p) = param else {
@@ -1788,8 +1796,12 @@ fn cookie_header_texts(
         type_ns,
         runtime_use,
     ));
+    // #3343: a renamed field is written under its `@name`.
+    let table_arg = bynk_emit::emitter::renamed_specs_source(&p.type_ref, types)
+        .map(|t| format!(", {t}"))
+        .unwrap_or_default();
     (
-        format!("\"cookie\": __cookieString({ser}), "),
+        format!("\"cookie\": __cookieString({ser}{table_arg}), "),
         format!("\"cookie\": {var}, "),
     )
 }
@@ -1924,4 +1936,18 @@ mod tests {
         assert!(!names_ident("/* Region */ x()", "Region"));
         assert!(names_ident("/* a */ Region.Here", "Region"));
     }
+}
+
+/// #3343: the arguments of `__queryString` for a typed record's wire form `ser`: the
+/// record's field table too when a field is renamed by `@name`.
+fn query_string_args(
+    type_ref: &bynk_syntax::ast::TypeRef,
+    ser: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<TsExpr> {
+    let mut args = vec![ident(ser)];
+    if let Some(table) = bynk_emit::emitter::renamed_specs_source(type_ref, types) {
+        args.push(ident(table));
+    }
+    args
 }

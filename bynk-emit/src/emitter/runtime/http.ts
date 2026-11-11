@@ -752,7 +752,8 @@ export function requestQuerySearch(view: RequestQuery): string {
  *  makes) as the query string a request for it carries: `?a=1&b=x&b=y`, or `""`
  *  when every field is absent. A list repeats its key, an `Option` is its value
  *  or nothing, and an enum is its variant's name. Test drivers use it. */
-export function queryString(wire: JsonValue): string {
+export function queryString(wire: JsonValue, fields?: readonly QueryField[]): string {
+  wire = renamedWire(wire, fields);
   const params = new URLSearchParams();
   const leaf = (v: JsonValue): string | undefined => {
     if (v === null) return undefined;
@@ -783,6 +784,7 @@ export function queryString(wire: JsonValue): string {
 export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): FormData {
   const form = new FormData();
   if (typeof wire !== "object" || wire === null || Array.isArray(wire)) return form;
+  // #3343: a renamed field's part is named by its `@name`.
   const some = (v: JsonValue): JsonValue | undefined => {
     if (typeof v === "object" && v !== null && !Array.isArray(v)) {
       if (v.kind === "None") return undefined;
@@ -792,6 +794,7 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
   };
   for (const f of fields) {
     const value = wire[f.name];
+    const key = wireName(f);
     if (value === undefined || value === null) continue;
     for (const item of f.list && Array.isArray(value) ? value : [value]) {
       const v = some(item);
@@ -801,20 +804,43 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
         const name = some(file.filename);
         const raw = globalThis.atob(file.bytes);
         const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
-        form.append(f.name, new Blob([bytes], { type: file.contentType }), typeof name === "string" ? name : "");
+        form.append(key, new Blob([bytes], { type: file.contentType }), typeof name === "string" ? name : "");
       } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-        if (typeof v.kind === "string") form.append(f.name, v.kind);
+        if (typeof v.kind === "string") form.append(key, v.kind);
       } else {
-        form.append(f.name, String(v));
+        form.append(key, String(v));
       }
     }
   }
   return form;
 }
 
+/** #3343: the key a field is read from and written to on the wire. */
+function wireName(f: QueryField): string {
+  return f.wire ?? f.name;
+}
+
+/** #3343: `wire` (a record's JSON form, keyed by field name) with each renamed
+ *  field's key replaced by its `@name`, so the writers below emit what the readers
+ *  look for. Fields without a rename, and a `fields` that is absent, pass through. */
+function renamedWire(wire: JsonValue, fields?: readonly QueryField[]): JsonValue {
+  if (fields === undefined || typeof wire !== "object" || wire === null || Array.isArray(wire)) {
+    return wire;
+  }
+  const renames = new Map<string, string>();
+  for (const f of fields) if (f.wire !== undefined) renames.set(f.name, f.wire);
+  if (renames.size === 0) return wire;
+  const out: { [key: string]: JsonValue } = {};
+  for (const [name, value] of Object.entries(wire)) out[renames.get(name) ?? name] = value;
+  return out;
+}
+
 /** #2854: how one field of a handler's typed `query` record reads off the wire. */
 export interface QueryField {
   readonly name: string;
+  /** #3343: the key the field has on the wire, when a `@name("…")` renames it (a
+   *  cookie `__Host-sid`, a query `filter[status]`). Absent, the key is `name`. */
+  readonly wire?: string;
   /** The field's leaf wire form: `Int` and `Bool` are parsed, an `enum` is a
    *  unit variant named by the value, a `Decimal` and everything else is the text
    *  itself (`"decimal"` differs from `"string"` only in that a form's empty value
@@ -1043,8 +1069,8 @@ export function requestCookiesHeader(view: RequestCookies): string {
 /** #3277: a `cookies` record's wire form as the `Cookie` header a request for it
  *  carries (`a=1; b=x; b=y`), `""` when every field is absent. A list repeats its
  *  name, an `Option` is its value or nothing. Test drivers use it. */
-export function cookieString(wire: JsonValue): string {
-  const query = queryString(wire);
+export function cookieString(wire: JsonValue, fields?: readonly QueryField[]): string {
+  const query = queryString(wire, fields);
   if (query === "") return "";
   // `queryString` form-encodes; a cookie value is not decoded, so it is written raw.
   const pairs: string[] = [];
@@ -1115,7 +1141,7 @@ function fieldsObject(
     // A browser sends an unfilled input as `name=`: absent, except for a plain
     // `String`, whose `""` the field's own refinements judge.
     const skipEmpty = form && (f.option || f.kind !== "string");
-    const values = search.getAll(f.name).filter((v) => !(skipEmpty && v === ""));
+    const values = search.getAll(wireName(f)).filter((v) => !(skipEmpty && v === ""));
     if (values.length === 0) continue;
     if (f.list) {
       out[f.name] = values.map((v) => leaf(f.kind, v));
@@ -1219,10 +1245,10 @@ export async function multipartObject(
     error: { kind: "StructuralMismatch", path: `body.${name}`, expected, actual },
   });
   const textFields = fields.filter((f) => f.kind !== "file");
-  const fileNames = new Set(fields.filter((f) => f.kind === "file").map((f) => f.name));
+  const fileNames = new Set(fields.filter((f) => f.kind === "file").map(wireName));
   // A file where a text field is declared (or a text value where a file is).
   for (const name of uploaded.keys()) {
-    if (!fileNames.has(name) && textFields.some((f) => f.name === name)) {
+    if (!fileNames.has(name) && textFields.some((f) => wireName(f) === name)) {
       return mismatch(name, "text", "a file");
     }
   }
@@ -1235,7 +1261,7 @@ export async function multipartObject(
   const files: Record<string, unknown> = {};
   for (const f of fields) {
     if (f.kind !== "file") continue;
-    const got = uploaded.get(f.name) ?? [];
+    const got = uploaded.get(wireName(f)) ?? [];
     if (!f.list && got.length > 1) return mismatch(f.name, "a single file", `${got.length} files`);
     const read = await Promise.all(
       got.map(async (file) => ({
@@ -1281,8 +1307,8 @@ export function formMediaTypeMatches(request: Request): boolean {
  *  key, an `Option` is its value or nothing, and an enum is its variant's name.
  *  `Form.encode` and the test drivers use it; `queryString` is the same text
  *  behind a `?`. */
-export function formString(wire: JsonValue): string {
-  const text = queryString(wire);
+export function formString(wire: JsonValue, fields?: readonly QueryField[]): string {
+  const text = queryString(wire, fields);
   return text === "" ? "" : text.slice(1);
 }
 

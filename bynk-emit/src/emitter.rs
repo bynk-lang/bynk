@@ -82,7 +82,10 @@ pub use events_fanout::emit_events_fanout_do;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers::emit_worker_compose;
-pub use workers_entry::{emit_worker_entry, form_body_specs, table_has_plain_json};
+pub use workers_entry::{
+    emit_worker_entry, field_spec_source, form_body_specs, renamed_specs_source,
+    table_has_plain_json,
+};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod cmp;

@@ -2583,26 +2583,79 @@ struct HttpRoute {
     /// `queryObject` reads them off the query string: `(name, wire kind, list)`.
     /// `None` when the route has no typed `query` (a raw `RequestQuery` is not
     /// decoded).
-    query_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    query_fields: Option<Vec<FieldSpec>>,
     /// #3276: the fields of a `@form` handler's `body` record, as the runtime's
     /// `formObject` reads them off an `application/x-www-form-urlencoded` body:
     /// `(name, wire kind, list, option)`, as `query_fields`. `Some` marks the
     /// route's `body` as a form: the router checks the `Content-Type` (`415`) and
     /// decodes the body through the same record codec a JSON body takes.
-    form_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    form_fields: Option<Vec<FieldSpec>>,
     /// #3277: the fields of the handler's `cookies` record, as the runtime's
     /// `cookieObject` reads them off the `Cookie` header: `(name, wire kind, list,
     /// option)`. `None` when the route takes no `cookies` parameter.
-    cookies_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    cookies_fields: Option<Vec<FieldSpec>>,
     /// #3276: a `@multipart` route's body fields (as `form_fields`, with the `File`
     /// fields kind `"file"`) and its per-file and part-count caps.
     multipart: Option<MultipartSpec>,
 }
 
+/// One field of a record read off a query string, a form, a `Cookie` header or a
+/// multipart body: `(name, leaf kind, list, option, wire name)`. The wire name is
+/// the `@name("…")` rename (#3343), `None` when the field reads under its own name.
+pub(crate) type FieldSpec = (String, &'static str, bool, bool, Option<String>);
+
+/// The `QueryField` object the runtime's readers take for one field.
+fn field_spec_expr((name, kind, list, option, wire): &FieldSpec) -> TsExpr {
+    let mut props = vec![("name".to_string(), str_lit(name.clone()))];
+    if let Some(wire) = wire {
+        props.push(("wire".to_string(), str_lit(wire.clone())));
+    }
+    props.push(("kind".to_string(), str_lit(*kind)));
+    props.push(("list".to_string(), bool_lit(*list)));
+    props.push(("option".to_string(), bool_lit(*option)));
+    TsExpr::object(props)
+}
+
+/// The same object as TypeScript source (`{ name: "sid", wire: "__Host-sid", kind: … }`),
+/// for the system-tier drivers and the `Form` lowering, which write text.
+pub fn field_spec_source((name, kind, list, option, wire): &FieldSpec) -> String {
+    let wire = wire
+        .as_ref()
+        .map(|w| format!(" wire: {w:?},"))
+        .unwrap_or_default();
+    format!("{{ name: {name:?},{wire} kind: {kind:?}, list: {list}, option: {option} }}")
+}
+
+/// #3343: the `QueryField` array a system-tier driver passes the request writers
+/// (`__queryString`, `__cookieString`) for a typed record parameter, when a field of
+/// the record is renamed by `@name`; `None` otherwise (the writers need no table).
+pub fn renamed_specs_source(
+    type_ref: &TypeRef,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<String> {
+    use bynk_syntax::ast::TypeBody;
+    let TypeRef::Named(id) = type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    let specs = record_field_specs(rec, types, false);
+    if specs.iter().all(|s| s.4.is_none()) {
+        return None;
+    }
+    let items: Vec<String> = specs.iter().map(field_spec_source).collect();
+    Some(format!("[{}] as const", items.join(", ")))
+}
+
+fn field_specs_exprs(fields: &[FieldSpec]) -> Vec<TsExpr> {
+    fields.iter().map(field_spec_expr).collect()
+}
+
 /// #3276: what the router needs to read a `@multipart` body.
 #[derive(Debug, Clone)]
 struct MultipartSpec {
-    fields: Vec<(String, &'static str, bool, bool)>,
+    fields: Vec<FieldSpec>,
     /// The per-file byte cap (`@limit(maxFile:)`, else `limits { maxFile }`), if any.
     max_file: Option<i64>,
     /// The part-count cap (`@limit(maxParts:)`, else `limits { maxParts }`, else 64).
@@ -2653,7 +2706,7 @@ fn query_field_specs(
     h: &Handler,
     path: &str,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> Option<Vec<(String, &'static str, bool, bool)>> {
+) -> Option<Vec<FieldSpec>> {
     use bynk_syntax::ast::TypeBody;
     if path.split('/').any(|seg| seg == ":query") {
         return None;
@@ -2673,7 +2726,7 @@ fn query_field_specs(
 fn form_field_specs(
     h: &Handler,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> Option<Vec<(String, &'static str, bool, bool)>> {
+) -> Option<Vec<FieldSpec>> {
     use bynk_syntax::ast::TypeBody;
     if !h.annotations.iter().any(|a| a.name.name == "form") {
         return None;
@@ -2692,24 +2745,14 @@ fn form_field_specs(
 /// header and bind it for the handler call: `400` on a rejection, as a `body`
 /// answers, with the record's own codec checking refinements and filling defaults.
 fn push_cookies_param(
-    fields: &[(String, &'static str, bool, bool)],
+    fields: &[FieldSpec],
     type_ref: &TypeRef,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
     (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
     ru: &RuntimeUse,
 ) {
-    let spec: Vec<TsExpr> = fields
-        .iter()
-        .map(|(name, kind, list, option)| {
-            TsExpr::object(vec![
-                ("name".to_string(), str_lit(name.clone())),
-                ("kind".to_string(), str_lit(*kind)),
-                ("list".to_string(), bool_lit(*list)),
-                ("option".to_string(), bool_lit(*option)),
-            ])
-        })
-        .collect();
+    let spec: Vec<TsExpr> = field_specs_exprs(fields);
     guarded.push(const_(
         "__c",
         call(
@@ -2750,7 +2793,7 @@ fn cookies_field_specs(
     h: &Handler,
     path: &str,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> Option<Vec<(String, &'static str, bool, bool)>> {
+) -> Option<Vec<FieldSpec>> {
     use bynk_syntax::ast::TypeBody;
     if path.split('/').any(|seg| seg == ":cookies") {
         return None;
@@ -2770,7 +2813,7 @@ fn cookies_field_specs(
 pub fn form_body_specs(
     h: &Handler,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> Option<Vec<(String, &'static str, bool, bool)>> {
+) -> Option<Vec<FieldSpec>> {
     form_field_specs(h, types).or_else(|| multipart_spec(None, h, types).map(|m| m.fields))
 }
 
@@ -2792,7 +2835,7 @@ fn multipart_spec(
         return None;
     };
     let fields = record_field_specs(rec, types, true);
-    let has_files = fields.iter().any(|(_, kind, _, _)| *kind == "file");
+    let has_files = fields.iter().any(|(_, kind, _, _, _)| *kind == "file");
     Some(MultipartSpec {
         fields,
         max_file: h
@@ -2812,7 +2855,7 @@ pub(crate) fn record_field_specs(
     rec: &bynk_syntax::ast::RecordBody,
     types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     allow_file: bool,
-) -> Vec<(String, &'static str, bool, bool)> {
+) -> Vec<FieldSpec> {
     rec.fields
         .iter()
         .map(|f| {
@@ -2826,9 +2869,26 @@ pub(crate) fn record_field_specs(
                 query_leaf_kind(inner, types, allow_file),
                 list,
                 option,
+                field_wire_name(f),
             )
         })
         .collect()
+}
+
+/// #3343: the key a field's `@name("…")` gives it on the wire, if it has one. The
+/// checker has already refused a `@name` that is not one string literal.
+pub(crate) fn field_wire_name(f: &bynk_syntax::ast::RecordField) -> Option<String> {
+    use bynk_syntax::ast::ExprKind;
+    f.annotations
+        .iter()
+        .find(|a| a.name.name == "name")
+        .and_then(|a| match a.args.as_slice() {
+            [arg] => match &arg.value.kind {
+                ExprKind::StrLit(s) => Some(s.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
 }
 
 /// #2858: whether any `from http` route in `table` writes plain JSON, so the
@@ -3154,17 +3214,7 @@ fn emit_http_route_dispatch(
             && !query_is_path
             && let Some(fields) = &route.query_fields
         {
-            let spec: Vec<TsExpr> = fields
-                .iter()
-                .map(|(name, kind, list, option)| {
-                    TsExpr::object(vec![
-                        ("name".to_string(), str_lit(name.clone())),
-                        ("kind".to_string(), str_lit(*kind)),
-                        ("list".to_string(), bool_lit(*list)),
-                        ("option".to_string(), bool_lit(*option)),
-                    ])
-                })
-                .collect();
+            let spec: Vec<TsExpr> = field_specs_exprs(fields);
             guarded.push(const_(
                 "__q",
                 call(
@@ -3493,18 +3543,7 @@ fn emit_http_route_dispatch(
             // #3276: a form body is read into the JSON object the record's codec
             // takes, naming `body.<field>` in its rejections.
             let (source, root) = if let Some(mp) = multipart {
-                let spec: Vec<TsExpr> = mp
-                    .fields
-                    .iter()
-                    .map(|(name, kind, list, option)| {
-                        TsExpr::object(vec![
-                            ("name".to_string(), str_lit(name.clone())),
-                            ("kind".to_string(), str_lit(*kind)),
-                            ("list".to_string(), bool_lit(*list)),
-                            ("option".to_string(), bool_lit(*option)),
-                        ])
-                    })
-                    .collect();
+                let spec: Vec<TsExpr> = field_specs_exprs(&mp.fields);
                 let limits = TsExpr::object(vec![
                     (
                         "maxFile".to_string(),
@@ -3558,17 +3597,7 @@ fn emit_http_route_dispatch(
                 ));
                 ("__f.value", "body")
             } else if let Some(fields) = form {
-                let spec: Vec<TsExpr> = fields
-                    .iter()
-                    .map(|(name, kind, list, option)| {
-                        TsExpr::object(vec![
-                            ("name".to_string(), str_lit(name.clone())),
-                            ("kind".to_string(), str_lit(*kind)),
-                            ("list".to_string(), bool_lit(*list)),
-                            ("option".to_string(), bool_lit(*option)),
-                        ])
-                    })
-                    .collect();
+                let spec: Vec<TsExpr> = field_specs_exprs(fields);
                 guarded.push(const_(
                     "__f",
                     call(

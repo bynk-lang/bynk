@@ -1409,3 +1409,38 @@ test("requestCookies: get, all and names read a Cookie header, prefixed names in
   assert.deepEqual(real.get("a"), { tag: "Some", value: "q" });
   assert.deepEqual(requestCookies([]).names(), []);
 });
+
+// #3343: a field renamed by `@name` is read from, and written to, its wire key.
+const R = (name: string, wire: string, kind: "string" | "int" = "string", option = false) =>
+  ({ name, wire, kind, list: false, option }) as const;
+
+test("a renamed field is read from its wire key, and errors still name the field", () => {
+  const fields = [R("sid", "__Host-sid", "string", true), R("pageSize", "page-size", "int")];
+  const ok = formObject("page-size=20&__Host-sid=abc&sid=ignored", fields);
+  assert.deepEqual(ok, { ok: true, value: { sid: { kind: "Some", value: "abc" }, pageSize: 20 } });
+  // The field's own name is not the key once it is renamed.
+  assert.deepEqual(formObject("pageSize=20", fields), { ok: true, value: {} });
+  const twice = formObject("page-size=1&page-size=2", fields);
+  assert.equal(twice.ok, false);
+  assert.equal(twice.ok ? "" : twice.error.kind === "StructuralMismatch" ? twice.error.path : "", "body.pageSize");
+});
+
+test("cookieObject reads a __Host- cookie into its renamed field", () => {
+  const req = new Request("http://x/", { headers: { cookie: "__Host-sid=abc; theme=dark" } });
+  assert.deepEqual(cookieObject(req, [R("sid", "__Host-sid")]), { ok: true, value: { sid: "abc" } });
+});
+
+test("the writers emit a renamed field under its wire key", () => {
+  const fields = [R("sid", "__Host-sid", "string", true), R("pageSize", "page-size", "int"), F("q", "string")];
+  const wire = { sid: { kind: "Some", value: "abc" }, pageSize: 20, q: "x" };
+  assert.equal(queryString(wire, fields), "?__Host-sid=abc&page-size=20&q=x");
+  assert.equal(cookieString(wire, fields), "__Host-sid=abc; page-size=20; q=x");
+  assert.equal(formString(wire, fields), "__Host-sid=abc&page-size=20&q=x");
+  // With no fields (every existing caller) the wire form is written as before.
+  assert.equal(queryString({ a: 1 }), "?a=1");
+});
+
+test("formDecode honours @name and keeps the $-rooted field path", () => {
+  const ok = formDecode("page-size=20", [R("pageSize", "page-size", "int")]);
+  assert.deepEqual(ok, { tag: "Ok", value: { pageSize: 20 } });
+});
