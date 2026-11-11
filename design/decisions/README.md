@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0810](0810-form-codec.md) | **`Form.decode` and `Form.encode` expose the `@form` mapping as a codec** (v0.555) — How form text is read into and written from a record, and where the codec sits beside `Json` | Accepted (v0.555) |
 | [0809](0809-raw-request-cookies.md) | **A handler reads a prefixed cookie through a raw `cookies: RequestCookies` view** (v0.554) — Why the typed cookies record is not enough for `__Host-` names, and what the raw view is | Accepted (v0.554) |
 | [0808](0808-inbound-email-workers-and-first-party-npm.md) | **Inbound email on Workers, and the first-party npm dependency mechanism** (v0.553) — The Worker's email() export, MIME parsing under limits, DMARC verdict selection, fault behaviour, routing, and how a built-in binding brings an exactly-pinned npm package | Accepted (v0.553) |
 | [0807](0807-shared-variant-by-expected-type.md) | **A variant name several sums share resolves by the expected type, never by picking one** (v0.552) — Expected type picks the owner; otherwise `bynk.resolve.ambiguous_variant` | Accepted (v0.552) |
