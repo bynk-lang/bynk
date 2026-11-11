@@ -1934,7 +1934,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "const Mark: String = \"\\u{D800}\"    // ✗ a surrogate is not a character\n\
                   const Mark: String = \"\\u{E9}\"      // ✓ `é`",
         page: "/book/spec/lexical-grammar",
-        anchor: "322-string-literal",
+        anchor: "322-string_literal",
     },
     Explain {
         code: "bynk.lex.float_literal_overflow",
@@ -1946,7 +1946,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "const Big: Float = 1e999    // ✗ past the largest double\n\
                   const Big: Float = 1e308    // ✓",
         page: "/book/spec/lexical-grammar",
-        anchor: "321a-float-literal",
+        anchor: "321a-float_literal",
     },
     Explain {
         code: "bynk.lex.integer_overflow",
@@ -2388,7 +2388,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20\"total: \\(n)\"                  // ✓\n\
                   }",
         page: "/book/spec/lexical-grammar",
-        anchor: "322a-string-interpolation",
+        anchor: "322a-string_interpolation",
     },
     Explain {
         code: "bynk.parse.empty_match",
@@ -2420,7 +2420,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20}\n\
                   }",
         page: "/book/spec/syntactic-grammar",
-        anchor: "441-service-decl",
+        anchor: "441-service_decl",
     },
     Explain {
         code: "bynk.parse.exports_after_decls",
@@ -2537,7 +2537,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "items.map((Item { qty, .. }: Item) => qty)    // ✗ the pattern names the type\n\
                   items.map((Item { qty, .. }) => qty)          // ✓",
         page: "/book/spec/syntactic-grammar",
-        anchor: "469b-lambda-param",
+        anchor: "469b-lambda_param",
     },
     Explain {
         code: "bynk.parse.lambda_pattern_not_record",
@@ -2554,7 +2554,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20None => 0\n\
                   })",
         page: "/book/spec/syntactic-grammar",
-        anchor: "469b-lambda-param",
+        anchor: "469b-lambda_param",
     },
     Explain {
         code: "bynk.parse.lambda_pattern_refutable",
@@ -2571,7 +2571,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20Pending => 0\n\
                   })",
         page: "/book/spec/syntactic-grammar",
-        anchor: "469b-lambda-param",
+        anchor: "469b-lambda_param",
     },
     Explain {
         code: "bynk.parse.let_else_on_binding",
@@ -2591,7 +2591,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20n\n\
                   }",
         page: "/book/spec/syntactic-grammar",
-        anchor: "484a-let-else-stmt-2010",
+        anchor: "484a-let_else_stmt-2010",
     },
     Explain {
         code: "bynk.parse.let_pattern_annotation",
@@ -2610,7 +2610,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20n\n\
                   }",
         page: "/book/spec/syntactic-grammar",
-        anchor: "484a-let-else-stmt-2010",
+        anchor: "484a-let_else_stmt-2010",
     },
     Explain {
         code: "bynk.parse.let_pattern_without_else",
@@ -2657,7 +2657,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "const Half: Float = .5     // ✗ no digit before the point\n\
                   const Half: Float = 0.5    // ✓",
         page: "/book/spec/lexical-grammar",
-        anchor: "321a-float-literal",
+        anchor: "321a-float_literal",
     },
     Explain {
         code: "bynk.parse.match_ends_block",
@@ -2778,7 +2778,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20_ => 0\n\
                   }",
         page: "/book/spec/syntactic-grammar",
-        anchor: "4710-refined-pattern",
+        anchor: "4710-refined_pattern",
     },
     Explain {
         code: "bynk.parse.reserved_keyword",
@@ -2827,7 +2827,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20\x20\x20\x20Effect.pure(n)                   // ✓\n\
                   }",
         page: "/book/spec/syntactic-grammar",
-        anchor: "4619-effect-pure-expr",
+        anchor: "4619-effect_pure_expr",
     },
     Explain {
         code: "bynk.parse.unknown_handler_kind",
