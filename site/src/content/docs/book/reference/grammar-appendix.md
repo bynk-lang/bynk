@@ -37,7 +37,7 @@ type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
 opaque_type ::= "opaque" base_type ("where" refinement)? store_annotation*
 refined_type ::= base_type ("where" refinement)? store_annotation*
 record_type ::= "{" (record_field ("," record_field)*)? ","? "}"
-record_field ::= identifier ":" type_ref ("where" refinement)? store_annotation* ("=" expression)?
+record_field ::= store_annotation* identifier ":" type_ref ("where" refinement)? store_annotation* ("=" expression)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
 asset_decl ::= visibility_modifier? "asset" identifier "=" string_literal ("at" string_literal)?
 embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal

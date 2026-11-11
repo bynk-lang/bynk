@@ -8367,9 +8367,44 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "Field access on a value that is not a record.",
         &["field_access"],
     ),
+    dg(
+        "bynk.types.field_annotation_unknown",
+        "A record field carries an annotation other than `@name(\"…\")`.",
+        &["record_field"],
+    ),
     d(
         "bynk.types.field_default_on_variant",
         "A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given.",
+    ),
+    dg(
+        "bynk.types.field_name_bad_arg",
+        "A field's `@name` does not take exactly one string literal.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_case_conflict",
+        "Two fields of a `cookies` or `query` record have wire names that differ only in case.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_duplicate",
+        "A field has more than one `@name`, or two fields of a request record read the same wire name.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_invalid",
+        "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name).",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_not_request_record",
+        "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler.",
+        &["record_field"],
+    ),
+    dg(
+        "bynk.types.field_name_record_not_boundary",
+        "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument.",
+        &["record_field"],
     ),
     dg(
         "bynk.types.field_refinement_not_base",

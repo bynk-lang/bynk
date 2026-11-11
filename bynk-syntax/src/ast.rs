@@ -2624,6 +2624,9 @@ pub struct RecordBody {
 /// refinement, which is enforced at construction time on the field's value.
 #[derive(Debug, Clone)]
 pub struct RecordField {
+    /// #3343: annotations before the field (`@name("__Host-sid") sid: …`), the
+    /// external name a request record's key has when it is not an identifier.
+    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub type_ref: TypeRef,
     pub refinement: Option<Refinement>,

@@ -183,6 +183,13 @@ pub(super) fn emit_integration_harness<'a>(
                     ident("__makeIntegrationSecretsStoreSecret"),
                     vec![str_lit(&binding.name)],
                 ),
+                // #3318: a test never reaches Postgres, so reading the
+                // connection string faults, naming the binding, until the case
+                // stubs the instance.
+                BindingSource::Postgres { .. } => call(
+                    ident("__makeIntegrationHyperdrive"),
+                    vec![str_lit(&binding.name)],
+                ),
                 // #3302: an in-memory outbox per participant.
                 BindingSource::Email { .. } => call(ident("__makeIntegrationEmail"), vec![]),
                 // #3300: a fixed version, the same for every participant.

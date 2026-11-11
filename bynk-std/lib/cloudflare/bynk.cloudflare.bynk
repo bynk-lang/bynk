@@ -12,6 +12,7 @@ adapter bynk.cloudflare {
 		Version,
 		StoredSecret,
 		Email,
+		Postgres,
 	}
 	exports transparent {
 		KvExpiration,
@@ -46,6 +47,9 @@ adapter bynk.cloudflare {
 		EmailVerdict,
 		DmarcVerdict,
 		SenderIdentity,
+		PgValue,
+		PgError,
+		PgRun,
 	}
 
 	---
@@ -477,6 +481,53 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	A value bound to a `$n` parameter of a `Postgres` statement. `PgInteger`
+	binds a whole number and `PgReal` a float; `PgText` binds text, `PgBytea` bytes
+	and `PgBoolean` a flag. `PgTimestamp` binds an `Instant` as a `timestamptz`.
+	`PgJson` binds JSON text and `PgNumeric` a decimal as text, each as text
+	the server types from the column or cast it meets (`$1::jsonb`,
+	`$2::numeric`), so neither loses a digit to a float. The variants carry the
+	`Pg` prefix because a bare `Null`, `Integer`, `Real`, `Text` or `Boolean`
+	would resolve to `SqlValue`'s, and `Json` and `Timestamp` to a built-in.
+	---
+	type PgValue =
+		| PgNull
+		| PgInteger(value: Int)
+		| PgReal(value: Float)
+		| PgText(value: String)
+		| PgBytea(value: Bytes)
+		| PgBoolean(value: Bool)
+		| PgTimestamp(value: Instant)
+		| PgJson(value: String)
+		| PgNumeric(value: String)
+
+	---
+	What a `Postgres.run` changed: the rows the statement inserted, updated or
+	deleted (or, for a `SELECT`, returned).
+	---
+	type PgRun = {
+		rowCount: Int,
+	}
+
+	---
+	Why a `Postgres` statement failed, with the SQLSTATE where Postgres gave
+	one. `PgConstraint` is an integrity-constraint violation (class `23`: a
+	unique, not-null, check or foreign-key violation), an outcome a handler
+	answers (with a `409`, say). `PgSerialization` is a serialization failure
+	(`40001`), which a retry may clear. `PgConnection` is a connection that could not
+	be made or was lost; its message names the driver's code and never the
+	host or the connection string. `PgFailed` is anything else, with its SQLSTATE
+	(empty when the driver reported none) and the database's message. Postgres has further failure
+	kinds, so a `match` over this type needs a wildcard. The variants carry the
+	`Pg` prefix because `Constraint` and `Failed` are `SqlError`'s.
+	---
+	type PgError =
+		| PgConstraint(sqlstate: String, message: String)
+		| PgSerialization(message: String)
+		| PgConnection(message: String)
+		| PgFailed(sqlstate: String, message: String)
+
+	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with
 	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -755,6 +806,40 @@ adapter bynk.cloudflare {
 		fn send(message: EmailMessage) -> Effect[Result[String, EmailError]]
 	}
 
+	---
+	A Postgres database reached through Cloudflare Hyperdrive, over postgres.js:
+	SQL text and positional parameters (`$1`, `$2`, …) bound from `PgValue`s,
+	never spliced into the text. The SQL is a string literal, so data reaches
+	a statement only as a parameter. Used only through a named instance,
+	`capability Main = Postgres`, which binds as `HYPERDRIVE_MAIN`, a
+	`[[hyperdrive]]` entry; a bare `given Postgres` names no database and is
+	refused. Experimental.
+
+	`bynk deploy` does not create the Hyperdrive configuration yet. The
+	generated `wrangler.toml` carries a placeholder `id`; create the
+	configuration with `wrangler hyperdrive create` and put its id there, and
+	for `bynk dev` set `localConnectionString` (see "Connect an existing
+	Postgres database" in the Book).
+
+	Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+	array of objects keyed by column name, `first` the first row as one object,
+	or `None` when there is none. `int8` (`bigint`) and `numeric` arrive as
+	strings, so nothing past 2^53 is lost; `timestamptz` as ISO-8601 text;
+	`bytea` as base64 (a `Bytes` field decodes it); `json` and `jsonb` nested as
+	JSON. A `boolean` arrives as `true` or `false`, not `0` or `1`.
+
+	`run` executes a write and reports the rows it changed. Every operation
+	gives a `PgError` rather than faulting. Each statement uses its own
+	connection, opened and closed around it, and Cloudflare allows six
+	simultaneous connections per Worker invocation, so a `par` over more than
+	six queries waits for its turn.
+	---
+	capability Postgres {
+		fn all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]
+		fn first(sql: String, params: List[PgValue]) -> Effect[Result[Option[String], PgError]]
+		fn run(sql: String, params: List[PgValue]) -> Effect[Result[PgRun, PgError]]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -776,4 +861,6 @@ adapter bynk.cloudflare {
 	provides StoredSecret = WorkersStoredSecret
 
 	provides Email = WorkersEmail
+
+	provides Postgres = WorkersPostgres
 }

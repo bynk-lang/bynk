@@ -257,6 +257,11 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_record_field(&mut self) -> Result<RecordField, CompileError> {
+        // #3343: annotations before the field name.
+        let mut annotations = Vec::new();
+        while self.peek_kind() == Some(TokenKind::At) {
+            annotations.push(self.parse_annotation()?);
+        }
         let name = self.expect_label("as a record field name")?;
         self.expect(TokenKind::Colon, "after the field name")?;
         let type_ref = self.parse_type_ref("as the field type")?;
@@ -276,12 +281,14 @@ impl<'a> Parser<'a> {
             end_span = e.span;
             init = Some(e);
         }
+        let start = annotations.first().map_or(name.span, |a| a.span);
         Ok(RecordField {
+            annotations,
             name: name.clone(),
             type_ref,
             refinement,
             init,
-            span: name.span.merge(end_span),
+            span: start.merge(end_span),
             // The caller takes a field's doc, as it does its comments.
             documentation: None,
             // The caller harvests a field's comments: the end-of-line one sits
