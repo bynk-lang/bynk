@@ -380,6 +380,17 @@ pub fn emit_wrangler_toml(
                 }
                 TomlBlock::array_table("d1_databases", entries)
             }
+            // #3300: a one-per-Worker capability's plain table, holding only
+            // its fixed binding name (`[version_metadata]`).
+            BindingSource::Singleton { capability } => {
+                let table = bynk_check::firstparty::singleton(
+                    bynk_check::firstparty::CLOUDFLARE_UNIT,
+                    capability,
+                )
+                .expect("a `Singleton` binding names a registered singleton")
+                .wrangler_table;
+                TomlBlock::table(table, vec![TomlEntry::kv("binding", name)])
+            }
             // Interop I5 (#1972): the Worker as the declaration names it,
             // not a project context's `worker_dir_name`.
             BindingSource::ForeignService { worker, .. } => TomlBlock::array_table(
@@ -510,6 +521,9 @@ pub fn worker_bindings(
     // `KvInstance` (S4a, #1966) or `ForeignService` (interop I5, #1972)
     // source, in capability order.
     instances: &[WorkerBinding],
+    // #3300: the one-per-Worker capabilities the closure reaches, each its
+    // `Singleton` binding, in capability order.
+    singletons: &[WorkerBinding],
     uses_emit: bool,
 ) -> Vec<WorkerBinding> {
     let mut bindings = Vec::new();
@@ -568,6 +582,8 @@ pub fn worker_bindings(
             .filter(|b| matches!(b.source, BindingSource::D1Database { .. }))
             .cloned(),
     );
+    // #3300: the one-per-Worker bindings, after the databases.
+    bindings.extend(singletons.iter().cloned());
     // Events track, slice 0 (spine #936, ADR 0284): a context whose handlers
     // emit gets its own fan-out DO among the agents' — Cloudflare only cares
     // that `index.ts` (this Worker's `main`) exports a class with this name,
@@ -622,6 +638,10 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::QueueProducer { .. } => "__QueueProducer",
         BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
         BindingSource::D1Database { .. } => "__D1Database",
+        BindingSource::Singleton { capability } => match capability.as_str() {
+            "Version" => "__WorkerVersionMetadata",
+            other => unreachable!("singleton `{other}` has no `env` type"),
+        },
         BindingSource::Agent { .. } | BindingSource::EventsFanout { .. } => {
             "__DurableObjectNamespace"
         }
@@ -678,6 +698,22 @@ fn kv_binding() -> WorkerBinding {
     WorkerBinding {
         name: bynk_check::firstparty::KV_BINDING_NAME.to_string(),
         source: BindingSource::Kv,
+    }
+}
+
+/// #3300: the binding of `bynk.cloudflare`'s one-per-Worker capability
+/// `capability` (`Version` → `CF_VERSION_METADATA`), by the registry's fixed
+/// name. Its one TypeScript read is the default of its provider's `binding`
+/// parameter in `cloudflare.binding.ts`.
+pub fn singleton_binding(capability: &str) -> WorkerBinding {
+    let singleton =
+        bynk_check::firstparty::singleton(bynk_check::firstparty::CLOUDFLARE_UNIT, capability)
+            .unwrap_or_else(|| panic!("`{capability}` is not a one-per-Worker capability"));
+    WorkerBinding {
+        name: singleton.binding.to_string(),
+        source: BindingSource::Singleton {
+            capability: capability.to_string(),
+        },
     }
 }
 
@@ -1408,11 +1444,18 @@ mod binding_tests {
             &["shop.payment".to_string(), "audit".to_string()],
             true,
             &[],
+            &[singleton_binding("Version")],
             true,
         );
         assert_eq!(
             names(&bindings),
-            ["AUDIT", "SHOP_PAYMENT", "KV", "___EVENTS_FANOUT"]
+            [
+                "AUDIT",
+                "SHOP_PAYMENT",
+                "KV",
+                "CF_VERSION_METADATA",
+                "___EVENTS_FANOUT"
+            ]
         );
         assert!(duplicate_bindings(&bindings).is_empty());
     }
@@ -1427,6 +1470,7 @@ mod binding_tests {
             &["shop.payment".to_string(), "audit".to_string()],
             true,
             &[],
+            &[],
             true,
         );
         let handler = handler_bindings(&["shop.payment".to_string()], &["OrderEntity".to_string()]);
@@ -1440,7 +1484,7 @@ mod binding_tests {
     /// later one is paired with the earlier.
     #[test]
     fn a_shared_name_pairs_the_later_binding_with_the_earlier() {
-        let bindings = worker_bindings(&[], &["kv".to_string()], true, &[], false);
+        let bindings = worker_bindings(&[], &["kv".to_string()], true, &[], &[], false);
         let duplicates = duplicate_bindings(&bindings);
         assert_eq!(duplicates.len(), 1);
         let (earlier, later) = duplicates[0];

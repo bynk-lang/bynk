@@ -473,6 +473,9 @@ pub fn emit_worker_compose(
     if binds(|s| matches!(s, BindingSource::D1Database { .. })) {
         runtime_imports.push("type __D1Database".to_string());
     }
+    if binds(|s| matches!(s, BindingSource::Singleton { .. })) {
+        runtime_imports.push("type __WorkerVersionMetadata".to_string());
+    }
     runtime_imports.push("type __ServiceBinding".to_string());
     if has_bearer || has_sum || has_oidc {
         runtime_imports.push("HttpResult".to_string());

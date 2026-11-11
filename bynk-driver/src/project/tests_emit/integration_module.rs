@@ -121,6 +121,7 @@ pub(super) fn emit_integration_module(
     let has_queue = binds(|s| matches!(s, BindingSource::QueueProducer { .. }));
     let has_analytics = binds(|s| matches!(s, BindingSource::AnalyticsDataset { .. }));
     let has_d1 = binds(|s| matches!(s, BindingSource::D1Database { .. }));
+    let has_version = binds(|s| matches!(s, BindingSource::Singleton { .. }));
     let runtime_import = emitter::runtime_import_for(&module_path, ImportExt::Js);
     let mut runtime_names: Vec<String> = [
         "Ok",
@@ -163,6 +164,9 @@ pub(super) fn emit_integration_module(
     }
     if has_d1 {
         runtime_names.push("__makeIntegrationD1".to_string());
+    }
+    if has_version {
+        runtime_names.push("__makeIntegrationVersionMetadata".to_string());
     }
     if has_objects {
         runtime_names.push("__makeIntegrationDoNamespace".to_string());

@@ -1351,6 +1351,10 @@ pub(super) fn platform_double(
             "  return new bynk_cloudflare__binding.WorkersD1({{ D1: __makeIntegrationD1({}) }}, \"D1\");\n",
             d1_migrations_text(d1_migrations.unwrap_or_default())
         ),
+        // #3300: a fixed version (id `"test"`, no tag, created at the
+        // epoch), so a case's result never depends on the deployment;
+        // `stub Version.current() returns …` gives another.
+        ("bynk.cloudflare", "Version") => "  return {\n    async current() {\n      return { id: \"test\", tag: None, deployed: 0 } as never;\n    },\n  };\n".to_string(),
         // Interop I5 (#1972): like `Fetch`, a test never reaches the foreign
         // Worker, so each instance faults until its `send` is stubbed.
         ("bynk.cloudflare", "Service") => format!("  return {{\n    async send() {{\n      throw new globalThis.Error(\"bynk: `{name}.send` is not stubbed, and a test never reaches the Worker behind it — add `stub {name}.send(_) returns …`\");\n    }},\n  }};\n"),

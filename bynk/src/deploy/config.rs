@@ -957,6 +957,12 @@ pub(crate) fn synthesise_environment_block(
         );
     }
 
+    // #3300: the Version metadata binding, which names no resource, so it is
+    // the same in every environment; bindings are not inherited by `[env.*]`.
+    if let Some(version_metadata) = doc.get("version_metadata") {
+        env_block.insert("version_metadata".to_string(), version_metadata.clone());
+    }
+
     // P3 (#2342): the rate limiters, copied as the top level has them. The
     // push materialises this environment's `namespace_id`s into the top
     // level before this block is synthesised from it, so they are already
