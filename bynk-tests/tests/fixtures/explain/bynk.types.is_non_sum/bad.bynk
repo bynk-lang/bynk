@@ -1,0 +1,7 @@
+commons demo
+
+type Light = | Red | Green
+
+fn ready(n: Int) -> Bool {
+    n is Green
+}

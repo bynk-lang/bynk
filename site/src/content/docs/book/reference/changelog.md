@@ -28,6 +28,10 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.553.4** | The `bynk explain` example gate checks each example's layout as printed, so a block body printed flush left fails it |
+| **v0.553.3** | `bynk explain` covers twenty-two more codes under the actor and event prefixes |
+| **v0.553.2** | `bynk explain` covers 22 more `http` diagnostics, from request shape and cookies to CORS and caching |
+| **v0.553.1** | `bynk explain` covers twenty-two more `types` codes, on patterns, `is`, refinements and comparison |
 | **v0.553.0** | Inbound email on Workers (`from email`, #3328 slice 2): the `email()` export parses the message with `postal-mime`, dispatches by envelope recipient, mints the `Sender` identity from Cloudflare's DMARC verdict, applies the verdict, and routes via wrangler `addresses`; the first-party npm dependency mechanism of ADR 0799 C lands |
 | **v0.552.0** | A bare variant name that two sums in scope declare (two enums a consumed unit exports, say) builds the sum the expected type names, from an annotated `let`, a parameter, a return type or a `stub`'s operation, and is `bynk.resolve.ambiguous_variant` only when nothing picks one; the message names each qualified form, and a `stub` value no longer reports it as `bynk.stub.rhs_type` (#3344) |
 | **v0.551.1** | `bynk explain` covers eighteen more codes under the adapter, asset, capability, embed and messages prefixes |

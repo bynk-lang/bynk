@@ -1,0 +1,10 @@
+commons demo
+
+type Light = | Red | Green
+
+fn go(l: Light) -> Int {
+    match l {
+        Red => 1
+        Green => 2
+    }
+}

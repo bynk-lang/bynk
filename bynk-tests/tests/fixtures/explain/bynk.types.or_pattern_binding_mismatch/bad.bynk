@@ -1,0 +1,9 @@
+commons demo
+
+type Move = | Walk(steps: Int) | Wait
+
+fn cost(m: Move) -> Int {
+    match m {
+        Walk(steps) | Wait => 1
+    }
+}

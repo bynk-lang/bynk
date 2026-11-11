@@ -1,0 +1,12 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "JWT_KEY"), identity = UserId }
+actor Admin = User where hasClaim("admin")
+
+service api from http {
+  on POST("/x") () -> Effect[HttpResult[String]] by who: User | Admin {
+    Ok("x")
+  }
+}

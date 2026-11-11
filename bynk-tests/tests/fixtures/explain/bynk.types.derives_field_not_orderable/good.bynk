@@ -1,0 +1,3 @@
+commons demo
+
+type Task = { title: String, priority: Int } derives Ord

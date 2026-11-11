@@ -1,0 +1,5 @@
+commons demo
+
+fn teen(age: Int) -> Bool {
+    age is 13..19
+}

@@ -1,0 +1,7 @@
+commons demo
+
+type Frame = { text: String }
+
+fn same(a: Connection[Frame], b: Connection[Frame]) -> Bool {
+    a == b
+}
