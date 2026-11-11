@@ -173,13 +173,19 @@ struct Project {
 
 impl Project {
     fn create(shape: Shape, contexts: usize, tag: &str) -> Project {
+        Project::create_with(shape, contexts, 1, tag)
+    }
+
+    /// As [`Project::create`], with `groups` declaration groups per context (the
+    /// bench uses 3: a context's later declarations sit after an edit above them).
+    fn create_with(shape: Shape, contexts: usize, groups: usize, tag: &str) -> Project {
         let root = std::env::temp_dir().join(format!(
             "bynk-analysis-oracle-{}-{}-{tag}",
             std::process::id(),
             NEXT_DIR.fetch_add(1, Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&root);
-        let mut files = generate_project_shaped(shape, contexts, 1);
+        let mut files = generate_project_shaped(shape, contexts, groups);
         // A commons whose function body can gain a `~>`, and contexts that call
         // it from an agent handler: an edit to a body in one unit changes the
         // diagnostic in another (#2719).
@@ -481,4 +487,72 @@ fn the_type_table_stays_bounded_over_a_long_edit_sequence() {
         "the type table grew to {largest} from {first} over 60 edits"
     );
     assert!(memo.stats().resets > 0, "the reset path was never reached");
+}
+
+/// Which files an edit to ctx0 of a linked project re-checks. A consumer's digest
+/// is span-inclusive (a diagnostic of its own can carry a label into the context
+/// it consumes), so an edit that moves a later declaration of ctx0 re-checks its
+/// four direct consumers too; one that moves nothing re-checks only ctx0. Either
+/// way, no other context is touched. Pins both, so a change to what the digest
+/// takes is a visible change here.
+#[test]
+fn an_edit_re_checks_the_edited_file_and_only_its_direct_consumers() {
+    for (groups, body_edit_misses) in [(1, 1), (3, 5)] {
+        let mut project = Project::create_with(Shape::Linked, 12, groups, "reach-linked");
+        let mut memo = AnalysisMemo::new();
+        round(&project, &mut memo, "cold");
+        let edited = project.root.join("src/ctx0.bynk");
+        let text = project.overlay[&edited].clone();
+        project
+            .overlay
+            .insert(edited.clone(), edit_body(&text, false));
+        round(&project, &mut memo, "body edit");
+        assert_eq!(
+            memo.stats().misses,
+            body_edit_misses,
+            "{groups} group(s): a body edit moves {} later declarations",
+            if groups == 1 { "no" } else { "the" }
+        );
+        // A signature edit also changes what consumers read of ctx0.
+        project.overlay.insert(edited, edit_source(&text, false));
+        round(&project, &mut memo, "signature edit");
+        assert_eq!(
+            memo.stats().misses,
+            5,
+            "{groups} group(s): ctx0 and its four consumers"
+        );
+    }
+}
+
+/// A profiling harness, not a test: one cold round and 30 one-file body edits of a
+/// 200-context linked project (the bench's size), timed. Run it under callgrind
+/// (`valgrind --tool=callgrind <test binary> profile_warm_rounds --ignored
+/// --nocapture`) to see where a warm editor round goes.
+#[test]
+#[ignore = "profiling harness: run under callgrind"]
+fn profile_warm_rounds() {
+    let mut project = Project::create_with(Shape::Linked, 200, 3, "profile");
+    let roots = Roots::Single(project.root.clone());
+    let mut memo = AnalysisMemo::new();
+    let _ = analyse_project_memoised(&roots, &project.overlay, &SchemaLock::Off, &mut memo);
+    let edited = project.root.join("src/ctx0.bynk");
+    let clean = project.overlay[&edited].clone();
+    let mut times = Vec::new();
+    for i in 0..30 {
+        let text = if i % 2 == 0 {
+            edit_body(&clean, false)
+        } else {
+            clean.clone()
+        };
+        project.overlay.insert(edited.clone(), text);
+        let t = std::time::Instant::now();
+        let _ = analyse_project_memoised(&roots, &project.overlay, &SchemaLock::Off, &mut memo);
+        times.push(t.elapsed().as_secs_f64() * 1000.0);
+    }
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    eprintln!(
+        "warm round ms: median {:.1} min {:.1} max {:.1}",
+        times[15], times[0], times[29]
+    );
+    eprintln!("last round: {:?}", memo.stats());
 }

@@ -267,6 +267,89 @@ impl DebugHasher {
     }
 }
 
+/// One type's methods as digests: its name, then instance and static `(name, digest)`.
+type MethodDigests<'a> = (&'a String, Vec<(&'a String, u64)>, Vec<(&'a String, u64)>);
+
+/// The digest of each distinct shared declaration, computed once per analysis
+/// round (#3243). Units share their `uses` targets' declarations as `Arc`s, so
+/// the same few types and functions are part of hundreds of files' digests;
+/// rendering each of them once per file was most of the digest's cost. Keyed by
+/// address, which is safe for one round: the unit tables hold every `Arc` for
+/// the round's whole duration, so an address is never reused for another
+/// declaration while the cache lives. Never kept across rounds: the parse cache
+/// builds fresh declarations each time.
+#[derive(Default)]
+pub struct DeclDigests {
+    types: HashMap<usize, u64>,
+    fns: HashMap<usize, u64>,
+}
+
+fn debug_digest(value: &dyn std::fmt::Debug) -> u64 {
+    use std::hash::Hasher;
+    let mut h = DebugHasher(std::collections::hash_map::DefaultHasher::new());
+    h.feed("decl", value);
+    h.0.finish()
+}
+
+impl DeclDigests {
+    fn ty(&mut self, decl: &Arc<TypeDecl>) -> u64 {
+        *self
+            .types
+            .entry(Arc::as_ptr(decl) as usize)
+            .or_insert_with(|| debug_digest(&**decl))
+    }
+
+    fn func(&mut self, decl: &Arc<bynk_syntax::ast::FnDecl>) -> u64 {
+        *self
+            .fns
+            .entry(Arc::as_ptr(decl) as usize)
+            .or_insert_with(|| debug_digest(&**decl))
+    }
+
+    /// A map of type declarations as `(name, digest)` in key order.
+    fn type_map<'a>(
+        &mut self,
+        entries: impl IntoIterator<Item = (&'a String, &'a Arc<TypeDecl>)>,
+    ) -> Vec<(&'a String, u64)> {
+        let mut v: Vec<_> = entries.into_iter().map(|(k, d)| (k, self.ty(d))).collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
+    }
+
+    /// Each type's instance and static methods as `(name, digest)`, in key order.
+    fn methods<'a>(
+        &mut self,
+        methods: &'a HashMap<String, ResolverMethodTable>,
+    ) -> Vec<MethodDigests<'a>> {
+        crate::symbols::sorted_methods(methods)
+            .into_iter()
+            .map(|(name, instance, statics)| {
+                let instance = instance
+                    .into_iter()
+                    .map(|(n, d)| (n, self.func(d)))
+                    .collect();
+                let statics = statics
+                    .into_iter()
+                    .map(|(n, d)| (n, self.func(d)))
+                    .collect();
+                (name, instance, statics)
+            })
+            .collect()
+    }
+
+    fn fn_map<'a>(
+        &mut self,
+        entries: impl IntoIterator<Item = (&'a String, &'a Arc<bynk_syntax::ast::FnDecl>)>,
+    ) -> Vec<(&'a String, u64)> {
+        let mut v: Vec<_> = entries
+            .into_iter()
+            .map(|(k, d)| (k, self.func(d)))
+            .collect();
+        v.sort_by(|a, b| a.0.cmp(b.0));
+        v
+    }
+}
+
 /// #3243 S2.3b: a digest of **everything [`check_file_core`] reads**, so a file's
 /// checked output can be kept from one language-server round to the next and
 /// replayed when this value is unchanged.
@@ -301,6 +384,7 @@ pub fn file_check_digest(
     consumed_types: &HashMap<String, ConsumedType>,
     imported_from: &HashMap<String, String>,
     ctx: &UnitCheckCtx,
+    decls: &mut DeclDigests,
 ) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = DebugHasher(std::collections::hash_map::DefaultHasher::new());
@@ -318,9 +402,10 @@ pub fn file_check_digest(
     h.feed("unit", &(name, kind));
     unit_files_digest.hash(&mut h.0);
     // The composed symbol space.
-    h.feed_map("types", combined_types.iter());
-    h.feed_map("fns", combined_fns.iter());
-    h.feed("methods", &crate::symbols::sorted_methods(combined_methods));
+    h.feed("types", &decls.type_map(combined_types.iter()));
+    h.feed("fns", &decls.fn_map(combined_fns.iter()));
+    let methods = decls.methods(combined_methods);
+    h.feed("methods", &methods);
     h.feed_set("local_names", local_names.iter());
     h.feed_map("local_methods", local_methods_for_type.iter());
     h.feed_map("consumed", consumed_types.iter());
@@ -369,11 +454,20 @@ pub fn file_check_digest(
             unit_tables,
         );
         cci.flattened_caps = unit_info[name].flattened.clone();
+        // The consumed type tables are the bulk of it, and are shared `Arc`s:
+        // digest them once per round and render the rest.
+        let consumed = std::mem::take(&mut cci.consumed_types);
+        let mut by_unit: Vec<_> = consumed
+            .iter()
+            .map(|(unit, types)| (unit, decls.type_map(types.iter())))
+            .collect();
+        by_unit.sort_by(|a, b| a.0.cmp(b.0));
+        h.feed("consumed_types", &by_unit);
         // Maps of maps: its own `Debug` would print hash order.
         h.feed("cross_context", &crate::oracle::cross_context(&cci));
-        h.feed_map(
+        h.feed(
             "subscriber_types",
-            combined_types_for(name, unit_tables, unit_uses).iter(),
+            &decls.type_map(combined_types_for(name, unit_tables, unit_uses).iter()),
         );
     }
     h.feed_set("uses_commons_type_names", uses_commons_type_names.iter());

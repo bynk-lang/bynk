@@ -30,6 +30,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::analysis::{ProjectAnalysis, analyse_project_cached};
+use crate::check_pipeline::DeclDigests;
 use crate::checker::{TypedCommons, Types};
 use crate::expr_types::ExprTypeSink;
 use crate::hints::HintSink;
@@ -87,6 +88,9 @@ pub struct AnalysisMemo {
     /// Paths looked up this round; the rest are dropped when it ends.
     seen: HashSet<PathBuf>,
     baseline: usize,
+    /// Each shared declaration's digest, for the round in progress only (see
+    /// [`crate::check_pipeline::DeclDigests`]); emptied when a round begins.
+    decls: DeclDigests,
     growth_factor: usize,
     min_reset_len: usize,
     stats: MemoStats,
@@ -109,6 +113,7 @@ impl Default for AnalysisMemo {
             entries: HashMap::new(),
             seen: HashSet::new(),
             baseline: 0,
+            decls: DeclDigests::default(),
             growth_factor: GROWTH_FACTOR,
             min_reset_len: MIN_RESET_LEN,
             stats: MemoStats::default(),
@@ -149,6 +154,7 @@ impl AnalysisMemo {
             ..MemoStats::default()
         };
         self.seen.clear();
+        self.decls = DeclDigests::default();
         if self.types.len() > self.min_reset_len
             && self.types.len() > self.growth_factor * self.baseline
         {
@@ -157,6 +163,11 @@ impl AnalysisMemo {
             self.baseline = 0;
             self.stats.resets += 1;
         }
+    }
+
+    /// The round's declaration digests.
+    pub(crate) fn decls_mut(&mut self) -> &mut DeclDigests {
+        &mut self.decls
     }
 
     /// The record for `path` if its digest is unchanged.
