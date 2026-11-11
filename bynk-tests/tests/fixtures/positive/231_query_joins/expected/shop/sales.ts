@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -70,6 +71,8 @@ function __encodeSalesState(s: SalesState): globalThis.Record<string, unknown> {
   return { ...s, orders: __wireMap(s.orders, (__v) => __serialise_Order(__v)), lines: __wireMap(s.lines, (__v) => __serialise_Line(__v)) };
 }
 
+const __lazyFieldsOfSales = [{ name: "orders", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Order((__w as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Order; return __serialise_Order(__v); } }, { name: "lines", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Line((__w as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Line; return __serialise_Line(__v); } }] as const;
+
 export class Sales {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -80,12 +83,12 @@ export class Sales {
     const stored = await this.state.storage.get<SalesState>("state");
     if (stored === undefined) return __zeroOfSalesState();
     __checkStoredLayout("Sales", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfSalesState();
     __reportUnknownStoredKeys("Sales", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateSalesState(__merged, __wholesale);
-    __hydrateSalesState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfSales); } else { __hydrateSalesState(__merged, __wholesale) }
     return __merged;
   }
 

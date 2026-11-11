@@ -6,7 +6,8 @@ import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkByt
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../../__bynk_runtime/entries.js";
+import { __attachLazy } from "../../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -68,6 +69,8 @@ function __encodeProjectionState(s: ProjectionState): globalThis.Record<string, 
   return { ...s, stamps: __wireMap(s.stamps, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
+const __lazyFieldsOfProjection = [{ name: "stamps", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "stamps", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Projection", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+
 export class Projection {
   state: __DurableObjectState;
   private __env: unknown;
@@ -80,12 +83,12 @@ export class Projection {
     const stored = await this.state.storage.get<ProjectionState>("state");
     if (stored === undefined) return __zeroOfProjectionState();
     __checkStoredLayout("Projection", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfProjectionState();
     __reportUnknownStoredKeys("Projection", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateProjectionState(__merged, __wholesale);
-    __hydrateProjectionState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfProjection); } else { __hydrateProjectionState(__merged, __wholesale) }
     return __merged;
   }
 

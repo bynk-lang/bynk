@@ -278,11 +278,13 @@ function assert(cond: boolean, msg: string): void {
 // A fake Durable Object storage that counts the keys each call writes.
 const m = new Map<string, unknown>();
 let written = 0;
+let read = 0;
+let lists = 0;
 const storage = {
-  async get(key: any): Promise<any> { if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
+  async get(key: any): Promise<any> { read += typeof key === "string" ? 1 : (key as string[]).length; if (typeof key === "string") return structuredClone(m.get(key)); const out = new Map<string, unknown>(); for (const k of key as string[]) if (m.has(k)) out.set(k, structuredClone(m.get(k))); return out; },
   async put(a: any, v?: unknown): Promise<void> { if (typeof a === "string") { written++; m.set(a, structuredClone(v)); } else for (const [k, x] of Object.entries(a)) { written++; m.set(k, structuredClone(x)); } },
   async delete(a: any): Promise<any> { if (typeof a === "string") { written++; return m.delete(a); } let n = 0; for (const k of a as string[]) { written++; if (m.delete(k)) n++; } return n; },
-  async list(o: any = {}): Promise<Map<string, unknown>> { const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
+  async list(o: any = {}): Promise<Map<string, unknown>> { lists++; const keys = [...m.keys()].filter((k) => (o.prefix === undefined || k.startsWith(o.prefix)) && (o.start === undefined || k >= o.start) && (o.end === undefined || k < o.end)).sort(); if (o.reverse) keys.reverse(); const out = new Map<string, unknown>(); for (const k of keys.slice(0, o.limit ?? keys.length)) out.set(k, structuredClone(m.get(k))); return out; },
   async transaction(f: (txn: unknown) => Promise<unknown>): Promise<unknown> { const before = new Map(m); try { return await f(this); } catch (e) { m.clear(); for (const [k, x] of before) m.set(k, x); throw e; } },
 };
 const c = new Cart({ storage } as never);
@@ -313,6 +315,19 @@ for (let i = 0; i < 50; i++) await c.add(`k${i}`, i, {});
 written = 0;
 await c.inc("k7", {});
 assert(written <= 3, `one entry updated writes at most the entry, the count and the record: wrote ${written}`);
+
+// A handler reads a bounded number of keys, whatever the size of the map (#3189): no listing,
+// and a few keys, with 1000 entries stored.
+for (let i = 50; i < 1000; i++) await c.add(`k${i}`, i, {});
+read = 0;
+lists = 0;
+const hit = await c.fetch("k777", {});
+assert(hit.tag === "Some" && hit.value === 777, "a read of one entry of a large map");
+assert(lists === 0 && read <= 3, `a keyed read of a 1000-entry map reads at most the record and the entry: read ${read} in ${lists} listings`);
+read = 0;
+lists = 0;
+await c.inc("k777", {});
+assert(lists === 0 && read <= 5, `a keyed update of a 1000-entry map reads a few keys, never a listing: read ${read} in ${lists} listings`);
 
 // A handler that faults after writing leaves the stored entries unchanged.
 const before = snapshot();

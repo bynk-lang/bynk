@@ -5149,7 +5149,114 @@ pub(crate) fn agent_state_runtime_names(
     if !names.is_empty() {
         names.push("__bynkThen");
     }
+    if agent_reads_lazily(a) {
+        names.extend(["__attachLazy", "__readsLazily"]);
+    }
     names
+}
+
+/// Whether an agent's collections can be read lazily (#3189): it has a `Map`, `Set`, `Cache` or
+/// `Log` field and none is a held `Map` (a held map keeps live connections inline in the record).
+/// `loadState` still reads a wholesale record, or one a migration step covers, whole.
+fn agent_reads_lazily(a: &AgentDecl) -> bool {
+    held_map_fields(a).is_empty()
+        && a.store_fields
+            .iter()
+            .any(|f| matches!(f.kind.head.name.as_str(), "Map" | "Set" | "Cache" | "Log"))
+}
+
+/// The `[lo, from]` schema-version ranges the migration steps cover, as the runtime's
+/// `__checkStoredSchemaVersion` and `__readStored` take them.
+fn step_ranges_expr(step_plans: &[bynk_check::schema_registry::MigrationStep]) -> bynk_ts::TsExpr {
+    bynk_ts::TsExpr::Array {
+        items: step_plans
+            .iter()
+            .map(|s| bynk_ts::TsExpr::Array {
+                items: vec![
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(s.lo.to_string())),
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(s.from.to_string())),
+                ],
+                multiline: false,
+            })
+            .collect(),
+        multiline: false,
+    }
+}
+
+/// The per-field decode and encode closures the storage-backed handles of a lazily read agent
+/// are attached with (#3189): a stored value decodes when an entry is first read (so a corrupt
+/// one faults when touched), and a written value encodes as it is staged. Returns the const's
+/// name, or `None` when the agent does not read lazily.
+fn emit_lazy_field_spec(
+    a: &AgentDecl,
+    layout: &AgentStoreLayout,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    stmts: &mut Vec<bynk_ts::TsStmt>,
+) -> Option<String> {
+    if !agent_reads_lazily(a) {
+        return None;
+    }
+    let agent_name = &a.name.name;
+    // `value_ts` is the field's value type: the encoder takes `unknown` and narrows it once.
+    let codec = |ty: &TypeRef, path: &str, value_ts: &str| -> String {
+        if !is_codecable(ty) {
+            return String::new();
+        }
+        let d = bynk_ts::print_expr(&serialisation::deserialise_expr(
+            ty,
+            "(__w as unknown as __JsonValue)",
+            path,
+            &ctx.runtime_use,
+        ));
+        let e = bynk_ts::print_expr(&serialisation::serialise_expr(ty, "__v", &ctx.runtime_use));
+        format!(
+            ", decode: (__w: unknown) => {{ const __r = {d}; if (__r.tag === \"Err\") throw __rehydrationViolation(\"{agent_name}\", __r.error); return __r.value; }}, encode: (__u: unknown) => {{ const __v = __u as {value_ts}; return {e}; }}"
+        )
+    };
+    let field = |name: &str, kind: &str, tail: String| {
+        format!("{{ name: \"{name}\", kind: \"{kind}\"{tail} }}")
+    };
+    let mut spec: Vec<String> = Vec::new();
+    for (name, v) in &layout.store_map_fields {
+        let ts = layout
+            .map_value_ts
+            .get(&name.name)
+            .cloned()
+            .unwrap_or_default();
+        spec.push(field(&name.name, "map", codec(v, &name.name, &ts)));
+    }
+    for name in &layout.set_field_names {
+        spec.push(field(name, "set", String::new()));
+    }
+    for (name, v, _) in &layout.store_cache_fields {
+        let ts = match layout.store_field_ty.get(name.name.as_str()) {
+            Some(StoreKindIr::Cache(_, v_ty, _)) => {
+                bynk_ts::print_type(&ts_ty_to_ts_type(*v_ty, commons.tys()))
+            }
+            _ => ts_type_ref(v),
+        };
+        spec.push(field(&name.name, "cache", codec(v, &name.name, &ts)));
+    }
+    for (name, v, _) in &layout.store_log_fields {
+        let ts = layout
+            .log_value_ts
+            .get(&name.name)
+            .cloned()
+            .unwrap_or_default();
+        spec.push(field(&name.name, "log", codec(v, &name.name, &ts)));
+    }
+    let name = format!("__lazyFieldsOf{agent_name}");
+    stmts.push(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident(name.clone()),
+        None,
+        bynk_ts::TsExpr::VerbatimExpr(
+            format!("[{}] as const", spec.join(", ")),
+            bynk_ts::VerbatimOrigin::Emit,
+        ),
+        None,
+    ));
+    Some(name)
 }
 
 /// v0.104/v0.105 (real-time track slice 3b): an agent has at least one `store
@@ -5887,6 +5994,8 @@ struct AgentLoadFns<'a> {
     has_encode: bool,
     step_plans: &'a [bynk_check::schema_registry::MigrationStep],
     agent_versions: &'a Option<bynk_check::schema_registry::AgentVersions>,
+    /// The decode/encode spec a lazily read agent's storage-backed handles attach with (#3189).
+    lazy_fields: Option<&'a String>,
 }
 
 /// An agent class's two private state methods, `loadState` and `commitState`
@@ -5917,6 +6026,7 @@ fn emit_agent_load_commit_state(
         has_encode,
         step_plans,
         agent_versions,
+        lazy_fields,
     } = *fns;
     // Arc C, slice 21 (#1371): the third of step (9)'s own proposed 5-6
     // sub-slices — the class's own wrapper (header/fields/constructor) stays
@@ -6013,23 +6123,7 @@ fn emit_agent_load_commit_state(
                     .into_iter()
                     // State-migrations S2 (#2224 Decision C): each step's
                     // covered range makes those versions readable too.
-                    .chain((!step_plans.is_empty()).then(|| {
-                        bynk_ts::TsExpr::Array {
-                            items: step_plans
-                                .iter()
-                                .map(|s| bynk_ts::TsExpr::Array {
-                                    items: vec![
-                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(s.lo.to_string())),
-                                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(
-                                            s.from.to_string(),
-                                        )),
-                                    ],
-                                    multiline: false,
-                                })
-                                .collect(),
-                            multiline: false,
-                        }
-                    }))
+                    .chain((!step_plans.is_empty()).then(|| step_ranges_expr(step_plans)))
                     .collect(),
                 },
                 None,
@@ -6045,11 +6139,16 @@ fn emit_agent_load_commit_state(
             None,
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
                 callee: Box::new(bynk_ts::TsExpr::Ident("__readStored".to_string())),
-                args: vec![
+                args: [
                     bynk_ts::TsExpr::Ident("this".to_string()),
                     bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
                     bynk_ts::TsExpr::Ident("stored".to_string()),
-                ],
+                ]
+                .into_iter()
+                // #3189: an agent that reads lazily says which stored versions a migration
+                // step covers, which `readStored` still reads whole.
+                .chain(lazy_fields.map(|_| step_ranges_expr(step_plans)))
+                .collect(),
             })),
             None,
         ));
@@ -6131,16 +6230,7 @@ fn emit_agent_load_commit_state(
         // Per-collection handles (#3254): fill each collection the record carries into
         // its handle, in the order the record notes.
         if has_collections {
-            stmts.push(bynk_ts::TsStmt::expr_stmt(
-                bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident(hydrate_fn.clone())),
-                    args: vec![
-                        bynk_ts::TsExpr::Ident("__merged".to_string()),
-                        bynk_ts::TsExpr::Ident(src.to_string()),
-                    ],
-                },
-                None,
-            ));
+            stmts.push(hydrate_or_attach_stmt(hydrate_fn, src, lazy_fields));
         }
         stmts.push(bynk_ts::TsStmt::return_stmt(
             Some(bynk_ts::TsExpr::Ident("__merged".to_string())),
@@ -6469,6 +6559,32 @@ fn emit_agent_load_commit_state(
     writeln!(out).unwrap();
 }
 
+/// What `loadState` does with the merged state's collections: fill the in-memory handles from the
+/// record, or, for a lazily read record (#3189), attach storage-backed ones in their place.
+fn hydrate_or_attach_stmt(
+    hydrate_fn: &str,
+    src: &str,
+    lazy_fields: Option<&String>,
+) -> bynk_ts::TsStmt {
+    let hydrate = bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Ident(hydrate_fn.to_string())),
+        args: vec![
+            bynk_ts::TsExpr::Ident("__merged".to_string()),
+            bynk_ts::TsExpr::Ident(src.to_string()),
+        ],
+    };
+    let Some(spec) = lazy_fields else {
+        return bynk_ts::TsStmt::expr_stmt(hydrate, None);
+    };
+    bynk_ts::TsStmt::raw(
+        format!(
+            "    if (__readsLazily(this)) {{ __attachLazy(this, this.state.storage, __merged, {spec}); }} else {{ {} }}\n",
+            bynk_ts::print_expr(&hydrate)
+        ),
+        None,
+    )
+}
+
 /// What the rest of an agent's emission refers to by name once its state's
 /// validation and migration functions are declared (#3167).
 struct AgentPersistFns {
@@ -6491,6 +6607,8 @@ struct AgentPersistFns {
     step_plans: Vec<bynk_check::schema_registry::MigrationStep>,
     /// The agent's declared schema versions, if it has any.
     agent_versions: Option<bynk_check::schema_registry::AgentVersions>,
+    /// The lazy-read field spec's name, when the agent reads its collections lazily (#3189).
+    lazy_fields: Option<String>,
 }
 
 /// The functions that guard an agent's stored state across a deploy (#3167): the
@@ -7070,6 +7188,7 @@ fn emit_agent_state_persistence(
             None,
         ));
     }
+    let lazy_fields = emit_lazy_field_spec(a, layout, commons, ctx, stmts);
     AgentPersistFns {
         rehydrate_fn,
         encode_fn,
@@ -7080,6 +7199,7 @@ fn emit_agent_state_persistence(
         has_encode,
         step_plans,
         agent_versions,
+        lazy_fields,
     }
 }
 
@@ -8531,6 +8651,7 @@ pub(crate) fn emit_agent(
         has_encode,
         step_plans,
         agent_versions,
+        lazy_fields,
     } = emit_agent_state_persistence(a, &layout, &zero_fn, commons, ctx, &mut stmts);
     let is_workers = layout.is_workers;
     // 2) Durable Object class.
@@ -8626,6 +8747,7 @@ pub(crate) fn emit_agent(
             has_encode,
             step_plans: &step_plans,
             agent_versions: &agent_versions,
+            lazy_fields: lazy_fields.as_ref(),
         },
         commons,
         ctx,
@@ -8736,6 +8858,8 @@ pub(crate) fn emit_agent(
             has_encode,
             step_plans: &step_plans,
             agent_versions: &agent_versions,
+            // The history driver reads and commits whole.
+            lazy_fields: None,
         },
         &registry,
         commons,

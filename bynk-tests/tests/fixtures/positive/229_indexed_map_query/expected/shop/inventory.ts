@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap, __wirePostings } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -43,6 +44,8 @@ function __encodeInventoryState(s: InventoryState): globalThis.Record<string, un
   return { ...s, reservations: __wireMap(s.reservations, (__v) => __serialise_Reservation(__v)), reservations__idx_id: __wirePostings(s.reservations, "id"), reservations__idx_orderId: __wirePostings(s.reservations, "orderId") };
 }
 
+const __lazyFieldsOfInventory = [{ name: "reservations", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Reservation((__w as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Reservation; return __serialise_Reservation(__v); } }] as const;
+
 export class Inventory {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -53,12 +56,12 @@ export class Inventory {
     const stored = await this.state.storage.get<InventoryState>("state");
     if (stored === undefined) return __zeroOfInventoryState();
     __checkStoredLayout("Inventory", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfInventoryState();
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
-    __hydrateInventoryState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfInventory); } else { __hydrateInventoryState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -79,7 +82,7 @@ export class Inventory {
   async retag(rid: string, oid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(rid); return __bynkThen(__state.reservations.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.reservations.get(__k), (__v) => __bynkThen(__state.reservations.put(__k, ((r: Reservation) => ({ ...r, orderId: oid }))(__v!)), () => undefined)); }); })();
+      const __r0 = await (async () => { await __state.reservations.modify(String(rid), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((r: Reservation) => ({ ...r, orderId: oid }))(__c!); }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

@@ -6,7 +6,8 @@ import { __bynkDistinct, __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkLe
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreLog, __StoreMap, __fillLog, __fillMap, __wireEntries, __wireLog, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -106,6 +107,8 @@ function __encodeLogState(s: LogState): globalThis.Record<string, unknown> {
   return { ...s, visits: __wireMap(s.visits, (__v) => __serialise_Visit(__v)), labels: __wireMap(s.labels, (__v) => __serialise_Label(__v)), regions: __wireMap(s.regions, (__v) => __serialise_Region(__v)), trail: __wireLog(s.trail, (__v) => __serialise_Site(__v)) };
 }
 
+const __lazyFieldsOfLog = [{ name: "visits", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Visit((__w as unknown as __JsonValue), "visits"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Visit; return __serialise_Visit(__v); } }, { name: "labels", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Label((__w as unknown as __JsonValue), "labels"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Label; return __serialise_Label(__v); } }, { name: "regions", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Region((__w as unknown as __JsonValue), "regions"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Region; return __serialise_Region(__v); } }, { name: "trail", kind: "log", decode: (__w: unknown) => { const __r = __deserialise_Site((__w as unknown as __JsonValue), "trail"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Site; return __serialise_Site(__v); } }] as const;
+
 export class Log {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -116,12 +119,12 @@ export class Log {
     const stored = await this.state.storage.get<LogState>("state");
     if (stored === undefined) return __zeroOfLogState();
     __checkStoredLayout("Log", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfLogState();
     __reportUnknownStoredKeys("Log", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLogState(__merged, __wholesale);
-    __hydrateLogState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfLog); } else { __hydrateLogState(__merged, __wholesale) }
     return __merged;
   }
 

@@ -6,7 +6,8 @@ import { __bynkDecimalAdd, __bynkDecimalParseWire, __bynkDecimalToString } from 
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "./__bynk_runtime/entries.js";
+import { __attachLazy } from "./__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -50,6 +51,8 @@ function __encodeAccountState(s: AccountState): globalThis.Record<string, unknow
   return { ...s, balance: __bynkDecimalToString(s.balance) as __JsonValue, last: __serialise_Option_Price(s.last), prices: __wireMap(s.prices, (__v) => __bynkDecimalToString(__v) as __JsonValue) };
 }
 
+const __lazyFieldsOfAccount = [{ name: "prices", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as { readonly coefficient: bigint; readonly scale: number }; return __bynkDecimalToString(__v) as __JsonValue; } }] as const;
+
 export class Account {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -60,12 +63,12 @@ export class Account {
     const stored = await this.state.storage.get<AccountState>("state");
     if (stored === undefined) return __zeroOfAccountState();
     __checkStoredLayout("Account", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfAccountState();
     __reportUnknownStoredKeys("Account", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAccountState(__merged, __wholesale);
-    __hydrateAccountState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfAccount); } else { __hydrateAccountState(__merged, __wholesale) }
     return __merged;
   }
 

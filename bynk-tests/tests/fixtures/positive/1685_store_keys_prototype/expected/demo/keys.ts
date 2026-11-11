@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreCache, __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wirePostings, __wireSet } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -96,6 +97,8 @@ function __encodeBagState(s: BagState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
+const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+
 export class Bag {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -106,12 +109,12 @@ export class Bag {
     const stored = await this.state.storage.get<BagState>("state");
     if (stored === undefined) return __zeroOfBagState();
     __checkStoredLayout("Bag", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfBagState();
     __reportUnknownStoredKeys("Bag", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBagState(__merged, __wholesale);
-    __hydrateBagState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfBag); } else { __hydrateBagState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -160,7 +163,7 @@ export class Bag {
   async bump(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => __bynkThen(__h ? __state.items.get(__k) : (0), (__v) => __bynkThen(__state.items.put(__k, ((n: number) => n + 1)(__v!)), () => undefined))); })();
+      const __r0 = await (async () => { await __state.items.modify(String(k), (__c, __p) => ((n: number) => n + 1)(__p ? __c! : (0))); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -170,7 +173,7 @@ export class Bag {
   async add10(k: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(k); return __bynkThen(__state.items.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.items.get(__k), (__v) => __bynkThen(__state.items.put(__k, ((n: number) => n + 10)(__v!)), () => undefined)); }); })();
+      const __r0 = await (async () => { await __state.items.modify(String(k), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((n: number) => n + 10)(__c!); }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -208,6 +211,8 @@ function __encodePointsState(s: PointsState): globalThis.Record<string, unknown>
   return { ...s, pts: __wireMap(s.pts, (__v) => __serialise_Pt(__v)) };
 }
 
+const __lazyFieldsOfPoints = [{ name: "pts", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Pt((__w as unknown as __JsonValue), "pts"); if (__r.tag === "Err") throw __rehydrationViolation("Points", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Pt; return __serialise_Pt(__v); } }] as const;
+
 export class Points {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -218,12 +223,12 @@ export class Points {
     const stored = await this.state.storage.get<PointsState>("state");
     if (stored === undefined) return __zeroOfPointsState();
     __checkStoredLayout("Points", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfPointsState();
     __reportUnknownStoredKeys("Points", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydratePointsState(__merged, __wholesale);
-    __hydratePointsState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfPoints); } else { __hydratePointsState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -283,6 +288,8 @@ function __encodeTagsState(s: TagsState): globalThis.Record<string, unknown> {
   return { ...s, tags: __wireSet(s.tags) };
 }
 
+const __lazyFieldsOfTags = [{ name: "tags", kind: "set" }] as const;
+
 export class Tags {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -293,12 +300,12 @@ export class Tags {
     const stored = await this.state.storage.get<TagsState>("state");
     if (stored === undefined) return __zeroOfTagsState();
     __checkStoredLayout("Tags", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfTagsState();
     __reportUnknownStoredKeys("Tags", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateTagsState(__merged, __wholesale);
-    __hydrateTagsState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfTags); } else { __hydrateTagsState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -368,6 +375,8 @@ function __encodeMemoState(s: MemoState): globalThis.Record<string, unknown> {
   return { ...s, c: __wireMap(s.c, (__e) => ({ ...__e, v: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__e.v) })) };
 }
 
+const __lazyFieldsOfMemo = [{ name: "c", kind: "cache", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+
 export class Memo {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -378,12 +387,12 @@ export class Memo {
     const stored = await this.state.storage.get<MemoState>("state");
     if (stored === undefined) return __zeroOfMemoState();
     __checkStoredLayout("Memo", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfMemoState();
     __reportUnknownStoredKeys("Memo", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateMemoState(__merged, __wholesale);
-    __hydrateMemoState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfMemo); } else { __hydrateMemoState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -432,7 +441,7 @@ export class Memo {
   async add10(k: string, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = String(k); return __bynkThen(__state.c.get(__k), (__e) => { if (!(__e !== undefined && __e.exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } return __bynkThen(__state.c.put(__k, { v: ((n: number) => n + 10)(__e.v), exp: __now + 300000 }), () => undefined); }); })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = String(k); await __state.c.modify(__k, (__e) => { if (!(__e !== undefined && __e.exp > __now)) { throw new globalThis.Error("Cache.update: key absent"); } return { v: ((n: number) => n + 10)(__e.v), exp: __now + 300000 }; }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -470,6 +479,8 @@ function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown>
   return { ...s, entries: __wireMap(s.entries, (__v) => __serialise_Entry(__v)), entries__idx_tag: __wirePostings(s.entries, "tag") };
 }
 
+const __lazyFieldsOfLedger = [{ name: "entries", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Entry((__w as unknown as __JsonValue), "entries"); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Entry; return __serialise_Entry(__v); } }] as const;
+
 export class Ledger {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -480,12 +491,12 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
-    __hydrateLedgerState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfLedger); } else { __hydrateLedgerState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -516,7 +527,7 @@ export class Ledger {
   async retag(id: string, tag: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __k = String(id); return __bynkThen(__state.entries.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.entries.get(__k), (__v) => __bynkThen(__state.entries.put(__k, ((e: Entry) => ({ ...e, tag: tag }))(__v!)), () => undefined)); }); })();
+      const __r0 = await (async () => { await __state.entries.modify(String(id), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((e: Entry) => ({ ...e, tag: tag }))(__c!); }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -563,6 +574,8 @@ function __encodeSalesState(s: SalesState): globalThis.Record<string, unknown> {
   return { ...s, orders: __wireMap(s.orders, (__v) => __serialise_Order(__v)), lines: __wireMap(s.lines, (__v) => __serialise_Line(__v)) };
 }
 
+const __lazyFieldsOfSales = [{ name: "orders", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Order((__w as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Order; return __serialise_Order(__v); } }, { name: "lines", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Line((__w as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Line; return __serialise_Line(__v); } }] as const;
+
 export class Sales {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -573,12 +586,12 @@ export class Sales {
     const stored = await this.state.storage.get<SalesState>("state");
     if (stored === undefined) return __zeroOfSalesState();
     __checkStoredLayout("Sales", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfSalesState();
     __reportUnknownStoredKeys("Sales", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateSalesState(__merged, __wholesale);
-    __hydrateSalesState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this, this.state.storage, __merged, __lazyFieldsOfSales); } else { __hydrateSalesState(__merged, __wholesale) }
     return __merged;
   }
 
