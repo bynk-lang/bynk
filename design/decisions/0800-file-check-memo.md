@@ -1,10 +1,6 @@
----
-level: patch
-changelog: The language server keeps each file's checked output between analysis rounds and replays it when nothing the check read has changed, cutting edit-to-diagnostics latency on large projects (linked 200 contexts about 17% faster) for about 20% more server memory, linear in the number of files; `bynk check` and builds are unchanged
----
+# 0800 — The language server replays an unchanged file's check instead of re-checking it
 
-## ADR: file-check-memo
-title: The language server replays an unchanged file's check instead of re-checking it
+- **Status:** Accepted (v0.546.7)
 
 **Context.** #1523 asked whether editor latency needs an incremental scheduler (R3.15); #3243's settling review proposed a language-server-only memo table instead, accepted by the maintainer. Attribution showed the per-file check (`check_file_core`) was the largest remaining share of an edit. The memo's correctness bar is the differential oracle (`xtask/tests/analysis_oracle.rs`): a memoised round must answer exactly what a fresh `analyse_project` answers, over the examples and seeded random edit sequences on both bench shapes.
 

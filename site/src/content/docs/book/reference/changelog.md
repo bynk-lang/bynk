@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.546.7** | The language server keeps each file's checked output between analysis rounds and replays it when nothing the check read has changed, cutting edit-to-diagnostics latency on large projects (linked 200 contexts about 17% faster) for about 20% more server memory, linear in the number of files; `bynk check` and builds are unchanged |
 | **v0.546.6** | `bynk explain` gains compiled-example explanations for the generics bound, inference and mismatch codes and the name-resolution codes (unknown function, static member, name conflict, duplicate type) |
 | **v0.546.5** | `bynk explain` gains compiled explanations for the agent state-zero, derived-capability instance and held-borrow errors |
 | **v0.546.4** | `bynk explain` covers eight everyday type errors, among them `bynk.types.type_mismatch`, `bynk.types.method_not_found` and `bynk.types.unreachable_arm` |
