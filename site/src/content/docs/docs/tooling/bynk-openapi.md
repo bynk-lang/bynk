@@ -51,6 +51,7 @@ a client generator, a documentation renderer, or a linter in CI.
 | `on GET("/check/:client")` | `paths["/check/{client}"].get`, the `:segment` becoming `{segment}` |
 | a path param | a `parameters` entry with `in: path`; a refined type's constraints sit on the parameter's own schema |
 | a typed `query` param | one `parameters` entry with `in: query` per field of the record, with the field's schema and refinements; required unless the field is an `Option` or has a default; a `List` field is an `array` whose items repeat the key (the `form` style). A raw `query: RequestQuery` declares none |
+| a typed `cookies` param | one `parameters` entry with `in: cookie` per field of the record, as for `query` (required unless the field is an `Option` or has a default; a `List` field is an `array`) |
 | the `body` param | `requestBody` (`application/json`; a `@form` route takes the record under `application/x-www-form-urlencoded`, and a `@multipart` route under `multipart/form-data`; a `@raw` route takes `format: binary` under its declared media type) |
 | `HttpResult[T]` success, `Created(t)`, `Accepted(t)` | a `2xx` response whose body is `T` |
 | `TooManyRequests(msg)` and the other message variants | the status, with body `{ "error": string }` |

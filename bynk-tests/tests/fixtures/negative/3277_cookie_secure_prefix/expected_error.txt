@@ -1,0 +1,2 @@
+bynk.http.cookie_secure_prefix
+bynk.http.cookie_script_readable

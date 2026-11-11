@@ -1,0 +1,1 @@
+bynk.http.cookie_partitioned_insecure

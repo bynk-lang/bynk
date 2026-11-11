@@ -124,6 +124,10 @@ pub struct RuntimeUse {
     query_string: Cell<bool>,
     /// #3276: a typed `@multipart` body becomes a `FormData` (`__multipartForm`).
     multipart_form: Cell<bool>,
+    /// #3277: a typed `cookies` record becomes a `Cookie` header (`__cookieString`).
+    cookie_string: Cell<bool>,
+    /// #3277: a case reads the cookies of an `HttpResult`, so names the `bynk` `Cookie` type.
+    http_result_cookie: Cell<bool>,
     /// #2854: a system-tier driver sends a test's query (`__requestQuerySearch`).
     request_query_search: Cell<bool>,
     /// #2380 (L5): the module builds a `TokenClaims` (`__tokenClaims`).
@@ -280,6 +284,25 @@ impl RuntimeUse {
     }
 
     /// Record that a typed query becomes a query string (#2854).
+    pub fn note_cookie_string(&self) {
+        self.cookie_string.set(true);
+    }
+
+    /// Record that a result method names the `bynk` `Cookie` type (#3277).
+    pub fn note_http_result_cookie(&self) {
+        self.http_result_cookie.set(true);
+    }
+
+    /// Whether the module must import the `Cookie` type (#3277).
+    pub fn http_result_cookie(&self) -> bool {
+        self.http_result_cookie.get()
+    }
+
+    /// Whether `__cookieString` must be imported (#3277).
+    pub fn cookie_string(&self) -> bool {
+        self.cookie_string.get()
+    }
+
     pub fn note_multipart_form(&self) {
         self.multipart_form.set(true);
     }

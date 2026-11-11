@@ -16,6 +16,16 @@ What it shows:
   boundary before any cache lookup runs. Those constraints live in
   `commons tokens`.
 
+- **A session in a cookie** — `POST /sessions` mints an unguessable token with
+  `Random.bytes(16).toBase64Url()` and returns it with
+  `Created("ok").withCookie(Cookie { name: "sid", value: token, maxAge: Some(30.minutes) })`.
+  The `Cookie` defaults are the safe ones (`Secure`, `HttpOnly`, `SameSite=Lax`,
+  `Path=/`). `GET /me` and `POST /logout` take a typed `cookies: SessionCookies`
+  parameter, so the token is parsed and checked against `Token` at the boundary,
+  and logout ends the session and clears the cookie with `clearCookie`.
+  A `__Host-` prefix would bind the cookie to this origin, but a hyphenated name
+  cannot be a record field yet, so the typed reader cannot name it.
+
 - **Testing expiry without waiting** — under `bynk test` the platform `Clock`
   is a deterministic test double that reads the epoch. A case moves time on with
   `stub Clock.now() returns each [Instant.fromEpochMillis(0), Instant.fromEpochMillis(1860000)]`:
@@ -46,9 +56,13 @@ sessions:
   ✓ a logged-in token resolves to its user
   ✓ logout ends the session
   ✓ a session expires after its 30-minute ttl
+  ✓ logging in sets a session cookie
+  ✓ the cookie the login set identifies its user
+  ✓ no cookie means no session
+  ✓ logging out clears the cookie and ends the session
   ✓ the http surface reports live sessions
 
-4 passed, 0 failed.
+8 passed, 0 failed.
 ```
 
 ## Run it
@@ -61,21 +75,22 @@ bynk dev
 `http://localhost:8787` in local mode — the Durable Object is simulated. Then:
 
 ```sh
-curl -XPOST localhost:8787/sessions -d '{"token":"s_abc123","user":"u_42"}'
-# "ok"  (HTTP 201)
+curl -i -XPOST localhost:8787/sessions -d '{"user":"u_42"}'
+# HTTP 201, with  set-cookie: sid=<token>; Max-Age=1800; Path=/; Secure; HttpOnly; SameSite=Lax
 
-curl localhost:8787/sessions/s_abc123
+curl --cookie 'sid=<token>' localhost:8787/me
 # "u_42"
 
 curl localhost:8787/sessions
 # 1                                  (live session count)
 
-curl -XPOST localhost:8787/sessions/s_abc123/logout
-# (HTTP 204)
+curl -i -XPOST --cookie 'sid=<token>' localhost:8787/logout
+# HTTP 204, clearing the cookie
 ```
 
 A token resolves to its user until its 30-minute TTL lapses, after which
-`GET /sessions/:token` returns a `404`.
+`GET /me` returns a `401`. (`Secure` cookies are not stored over plain `http`
+by browsers other than for `localhost`; `curl --cookie` sends them regardless.)
 
 *Under the hood,* `bynk dev` compiles to `out/workers/sessions/` and runs
 `wrangler dev` there. **Deploy** with `npx wrangler deploy` from that directory.

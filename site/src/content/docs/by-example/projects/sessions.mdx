@@ -31,7 +31,15 @@ Time is honest. Eviction consults the clock, so every cache operation except
 while `logout` (an idempotent `live.remove`) does not. The dependency is visible in
 each signature, and a mocked clock would make expiry deterministic.
 
-The HTTP service exposes `POST /sessions` (login, returns `Created("ok")`),
-`GET /sessions/:token` (whoami — `Some` resolves to the user, `None` is `NotFound`),
-`POST /sessions/:token/logout` (`NoContent`), and `GET /sessions` (the live count).
-Every route delegates to `Sessions("default")`.
+The session travels in a cookie. `POST /sessions` mints an unguessable token with
+`Random.bytes(16).toBase64Url()`, starts the session under it, and answers
+`Created("ok").withCookie(Cookie { name: "sid", value: text, maxAge: Some(30.minutes) })`.
+A `Cookie`'s defaults are the safe ones: `Secure`, `HttpOnly`, `SameSite=Lax` and
+`Path=/`. `GET /me` and `POST /logout` take a typed `cookies: SessionCookies`
+parameter, so the router parses the `Cookie` header and checks `sid` against
+`Token` before the handler runs: a malformed token is a `400`, and a missing one is
+`None`. Whoami answers `Unauthorized` for an unknown or expired token, and logout
+ends the session and clears the cookie with `clearCookie`. `GET /sessions` still
+reports the live count. A `__Host-` name would also bind the cookie to this origin,
+but a hyphenated name cannot be a record field yet, so the typed reader cannot
+name it.

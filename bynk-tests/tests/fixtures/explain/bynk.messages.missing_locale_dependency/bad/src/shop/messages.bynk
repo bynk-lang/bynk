@@ -1,0 +1,5 @@
+commons shop.messages
+
+messages "en" @reference {
+  "cart.empty" => "Your basket is empty."
+}

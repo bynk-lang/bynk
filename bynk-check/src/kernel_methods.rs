@@ -24,9 +24,9 @@ use bynk_syntax::ast::BaseType;
 
 pub use crate::kernel_op::KernelMethod;
 use crate::kernel_op::{
-    BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp, IntOp, ListOp,
-    MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp, SetOp, StringOp,
-    TestConnectionOp, TokenClaimsOp,
+    BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp, InstantOp,
+    IntOp, ListOp, MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp, SetOp,
+    StringOp, TestConnectionOp, TokenClaimsOp,
 };
 
 /// `List[T]` (v0.20b; v0.88 adds the ADR 0116 query/collection vocabulary).
@@ -71,6 +71,8 @@ pub const BYTES_METHODS: &[KernelMethod] = BytesOp::TABLE;
 pub const DECIMAL_METHODS: &[KernelMethod] = DecimalOp::TABLE;
 /// An HTTP handler's `headers` (#2341).
 pub const REQUEST_HEADERS_METHODS: &[KernelMethod] = RequestHeadersOp::TABLE;
+/// `HttpResult[T]` (#3277): `withCookie`, `clearCookie`, `cookies`.
+pub const HTTP_RESULT_METHODS: &[KernelMethod] = HttpResultOp::TABLE;
 /// An HTTP handler's `query` (#2854).
 pub const REQUEST_QUERY_METHODS: &[KernelMethod] = RequestQueryOp::TABLE;
 /// An `Oidc` binder's claims (#2380).
@@ -98,6 +100,7 @@ pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
     ("Effect", EFFECT_METHODS),
     ("Effect[Result[T, E]]", EFFECT_RESULT_METHODS),
     ("RequestHeaders", REQUEST_HEADERS_METHODS),
+    ("HttpResult", HTTP_RESULT_METHODS),
     ("RequestQuery", REQUEST_QUERY_METHODS),
     ("TokenClaims", TOKEN_CLAIMS_METHODS),
     ("TestConnection", TEST_CONNECTION_METHODS),
@@ -116,6 +119,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Decimal) => DECIMAL_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
+        Ty::HttpResult(_) => HTTP_RESULT_METHODS,
         Ty::RequestQuery => REQUEST_QUERY_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
         Ty::TestConnection(_) => TEST_CONNECTION_METHODS,

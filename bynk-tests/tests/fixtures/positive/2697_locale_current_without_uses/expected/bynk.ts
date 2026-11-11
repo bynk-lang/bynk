@@ -207,6 +207,49 @@ export const File = {
 };
 
 /**
+ * The `SameSite` attribute of a `Cookie`: whether a browser sends it on a
+ * cross-site request. `Lax` (the default) sends it on top-level navigations,
+ * `Strict` only on same-site requests, and `Unrestricted` (`SameSite=None` on the
+ * wire) on every request, which a browser accepts only for a `Secure` cookie.
+ */
+export type SameSite =
+    { readonly tag: "Strict" }
+  | { readonly tag: "Lax" }
+  | { readonly tag: "Unrestricted" };
+
+export const SameSite = {
+  Strict: { tag: "Strict" } as SameSite,
+  Lax: { tag: "Lax" } as SameSite,
+  Unrestricted: { tag: "Unrestricted" } as SameSite,
+};
+
+/**
+ * A cookie to set on an HTTP response, attached with `result.withCookie(c)`. The
+ * defaults are the safe ones: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no
+ * `Domain` (the cookie goes to the exact host), and no `maxAge` or `expires` (a
+ * session cookie, gone when the browser closes). `maxAge` and `expires` are both
+ * sent when both are given; browsers prefer `Max-Age`. A cookie name is an RFC
+ * 6265 token and a value is `cookie-octet`s (no whitespace, `"`, `,`, `;` or `\`);
+ * a name starting `__Host-` needs `secure`, `path: "/"` and no `domain`, and
+ * `__Secure-` needs `secure`.
+ */
+export interface Cookie {
+  readonly name: string;
+  readonly value: string;
+  readonly maxAge: Option<number>;
+  readonly expires: Option<number>;
+  readonly domain: Option<string>;
+  readonly path: string;
+  readonly secure: boolean;
+  readonly httpOnly: boolean;
+  readonly sameSite: SameSite;
+  readonly partitioned: boolean;
+}
+
+export const Cookie = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the

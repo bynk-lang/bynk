@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0806](0806-cookie-request-parameter.md) | **A handler reads cookies through a `cookies: T` record parameter and sets them with `withCookie`** (v0.551) — How a route declares the cookies it reads, how the Cookie header parses, and how a result attaches the cookies it sets | Accepted (v0.551) |
 | [0805](0805-inbound-email-protocol.md) | **Inbound email joins the closed protocol set as `from email(…)`, with a typed verdict** (v0.550) — The seventh protocol, its verdict and actor, and the decisions slice 2 follows | Accepted (v0.550) |
 | [0804](0804-outbound-email-instance-kind.md) | **Outbound email is an `Email` instance kind over `send_email`, with typed send errors** (v0.549) — A list-valued instance option, a binding that checks limits before the call, and a deploy-side sender-domain check | Accepted (v0.549) |
 | [0803](0803-file-check-digest-reach.md) | **What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive** (v0.548.4) — What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive | Accepted (v0.548.4) |

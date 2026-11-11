@@ -1,0 +1,14 @@
+context api
+
+type Prefs = { theme: String }
+
+type Session = {
+  prefs: Prefs,
+  sid: Option[String],
+}
+
+service api from http {
+  on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

@@ -23,7 +23,7 @@ use crate::emitter::{
 };
 use bynk_check::symbols::MessageBundleInfo;
 use bynk_check::symbols::UnitTable;
-use bynk_syntax::ast::{ActorDecl, ExprKind, Handler, ServiceProtocol, TypeRef};
+use bynk_syntax::ast::{ActorDecl, ExprKind, Handler, ServiceDecl, ServiceProtocol, TypeRef};
 use bynk_ts::{
     TsArrowBody, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt,
     TsType, TsTypeMember,
@@ -457,14 +457,7 @@ pub fn emit_worker_compose(
     let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
     runtime_imports.extend(platform_binding_type_imports(bindings));
     runtime_imports.push("type __ServiceBinding".to_string());
-    // #3328: an email handler's compose wrapper takes the minted identity.
-    if table
-        .services
-        .values()
-        .any(|s| matches!(s.protocol, ServiceProtocol::Email { .. }))
-    {
-        runtime_imports.push("type __SenderIdentity".to_string());
-    }
+    runtime_imports.extend(email_identity_import(table));
     if has_bearer || has_sum || has_oidc {
         runtime_imports.push("HttpResult".to_string());
     }
@@ -762,24 +755,11 @@ pub fn emit_worker_compose(
                     cron_idx += 1;
                 }
                 bynk_model::IrHandlerKind::Message => {
-                    // v0.106 (slice 3b-iii): a `from websocket` `on message` is an
-                    // *inbound* handler that runs in the connection-hosting Durable
-                    // Object (`webSocketMessage`), not at the edge — no compose
-                    // wrapper. A `from queue` `on message` is the queue consumer.
-                    // Still a raw `ServiceProtocol` match (not `ProtocolIr`,
-                    // P6.30): `emit_worker_compose` has no `TypedCommons` in
-                    // scope to lower it with, unlike `lower_handler_kind_ir`
-                    // above, which needs none.
-                    if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+                    let Some(entry) = message_wrapper(service, sname, queue_idx, h, &table.actors)
+                    else {
                         continue;
-                    }
-                    let email = matches!(service.protocol, ServiceProtocol::Email { .. });
-                    return_entries.push(emit_queue_wrapper(
-                        sname,
-                        queue_idx,
-                        h,
-                        email.then_some(&table.actors),
-                    ));
+                    };
+                    return_entries.push(entry);
                     queue_idx += 1;
                 }
                 bynk_model::IrHandlerKind::Open => {
@@ -913,6 +893,12 @@ pub fn emit_worker_compose(
         append_missing_bindings(
             &mut runtime_imports,
             crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS,
+        );
+    }
+    if runtime_use.cookie_string() {
+        append_missing_bindings(
+            &mut runtime_imports,
+            crate::emitter::COOKIE_STRING_RUNTIME_IMPORTS,
         );
     }
     if runtime_use.eq() {
@@ -1395,6 +1381,49 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
             call_args,
         )))],
     }
+}
+
+/// The compose wrapper of a service's `on message` handler, or `None` for a
+/// `from websocket` one: that is an *inbound* handler that runs in the
+/// connection-hosting Durable Object (`webSocketMessage`), not at the edge
+/// (v0.106, slice 3b-iii), so it has no compose wrapper. A `from queue` one is the
+/// queue consumer and a `from email` one (#3328) the email handler. A raw
+/// `ServiceProtocol` match (not `ProtocolIr`, P6.30): `emit_worker_compose` has no
+/// `TypedCommons` in scope to lower it with.
+fn message_wrapper(
+    service: &ServiceDecl,
+    sname: &str,
+    queue_idx: usize,
+    h: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<TsObjectEntry> {
+    if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+        return None;
+    }
+    Some(emit_queue_wrapper(
+        sname,
+        queue_idx,
+        h,
+        email_actors(service, actors),
+    ))
+}
+
+/// #3328: an email handler's compose wrapper takes the minted identity, so a
+/// Worker with an email service imports its type.
+fn email_identity_import(table: &UnitTable) -> Option<String> {
+    table
+        .services
+        .values()
+        .any(|s| matches!(s.protocol, ServiceProtocol::Email { .. }))
+        .then(|| "type __SenderIdentity".to_string())
+}
+
+/// `Some(actors)` for a `from email` service (see [`emit_queue_wrapper`]).
+fn email_actors<'a>(
+    service: &ServiceDecl,
+    actors: &'a HashMap<String, ActorDecl>,
+) -> Option<&'a HashMap<String, ActorDecl>> {
+    matches!(service.protocol, ServiceProtocol::Email { .. }).then_some(actors)
 }
 
 /// The compose wrapper of a `from queue` or `from email` `on message` handler.
