@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+service operator from http {
+    on POST("/purge/:hex") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {
+        let purged <- Edge.purge(["/dl/\(hex)"])
+        Ok(purged)
+    }
+}
