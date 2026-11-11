@@ -1,0 +1,17 @@
+context web.filters
+
+// #3343: `@name("…")` names the key a request record's field has on the wire,
+// where that is not an identifier. This slice parses and checks it; the readers
+// follow.
+
+type Filter = {
+	@name("page-size") pageSize: Option[Int],
+	@name("filter[status]") status: Option[String],
+	owner: Option[String],
+}
+
+service api from http {
+	on GET("/items") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("items")
+	}
+}

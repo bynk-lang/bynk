@@ -1833,6 +1833,7 @@ mod tests {
 
     fn field(name: &str, ty: TypeRef, has_default: bool) -> bynk_syntax::ast::RecordField {
         bynk_syntax::ast::RecordField {
+            annotations: Vec::new(),
             documentation: None,
             trivia: Default::default(),
             name: ident(name),

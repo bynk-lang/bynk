@@ -34,8 +34,9 @@ use std::sync::{Arc, OnceLock};
 
 use crate::checker::{self, Ty, TyId, Types};
 use crate::context_checks::{
-    CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD, build_capability_op_info, reject_fn_types,
-    ts_type_ref_display, type_ref_is_held, type_ref_to_display, validate_store_field_value_types,
+    CAPABILITY_SIGNATURE, RECORD_FIELD, REQUEST_RECORD_PARAM, SUM_PAYLOAD,
+    build_capability_op_info, reject_fn_types, ts_type_ref_display, type_ref_is_held,
+    type_ref_to_display, validate_store_field_value_types,
 };
 use crate::firstparty::{self, Platform};
 use crate::icu;
@@ -2082,13 +2083,21 @@ pub fn check_function_type_boundary_items(
                         // parts are received.
                         let multipart_body = p.name.name == "body"
                             && h.annotations.iter().any(|a| a.name.name == "multipart");
+                        // #3343: and the record a request reader fills (`cookies`, `query`,
+                        // a `@form` body) is where `@name` fields are allowed.
+                        let request_record = matches!(h.kind, HandlerKind::Http { .. })
+                            && (matches!(p.name.name.as_str(), "cookies" | "query")
+                                || (p.name.name == "body"
+                                    && h.annotations.iter().any(|a| a.name.name == "form")));
                         if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
-                            reject_fn_types(
-                                &p.type_ref,
-                                "a service handler signature",
-                                types,
-                                errors,
-                            );
+                            // Only the `@name` arm is relaxed for a request record;
+                            // every other boundary check still runs on it.
+                            let what = if request_record {
+                                REQUEST_RECORD_PARAM
+                            } else {
+                                "a service handler signature"
+                            };
+                            reject_fn_types(&p.type_ref, what, types, errors);
                         }
                     }
                     reject_fn_types(&h.return_type, "a service handler signature", types, errors);

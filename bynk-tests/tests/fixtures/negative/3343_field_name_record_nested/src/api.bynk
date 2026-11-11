@@ -1,0 +1,19 @@
+context api
+
+type Session = {
+  @name("__Host-sid") sid: Option[String],
+}
+
+type Holder = {
+  session: Session,
+}
+
+service api from http {
+  on GET("/me") (query: Session) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+
+  on POST("/hold") (body: Holder) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

@@ -254,6 +254,32 @@ or proof of the content. A `File` is a field of a `@multipart` body record, alon
 type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
 a handler's parameter or result, an event or a call argument.
 
+### Field annotations: `@name` {#field-name}
+
+A record field may carry `@name("…")` before it, naming the key the field has on an HTTP
+request where that is not an identifier:
+
+```bynk,fragment
+type Filter = {
+  @name("page-size") pageSize: Option[Int],
+  @name("filter[status]") status: Option[String],
+  owner: Option[String],
+}
+```
+
+The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
+only the key a request reader looks for changes. It is legal only on a field of a record used as the
+`cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
+(`bynk.types.field_name_not_request_record`), takes exactly one string literal
+(`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
+a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
+its JSON key is the field name. Two fields may not read the same name
+(`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
+(`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
+refused (`bynk.types.field_name_case_conflict`). This slice parses and checks the annotation; the
+request readers apply it in the next slices of
+[#3343](https://github.com/bynk-lang/bynk/issues/3343).
+
 ### Cookie and SameSite {#cookie}
 
 `Cookie` is the record a handler attaches to a result with

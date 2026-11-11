@@ -1432,6 +1432,34 @@
   ],
   "record_field": [
     {
+      "code": "bynk.types.field_annotation_unknown",
+      "summary": "A record field carries an annotation other than `@name(\"…\")`."
+    },
+    {
+      "code": "bynk.types.field_name_bad_arg",
+      "summary": "A field's `@name` does not take exactly one string literal."
+    },
+    {
+      "code": "bynk.types.field_name_case_conflict",
+      "summary": "Two fields of a `cookies` or `query` record have wire names that differ only in case."
+    },
+    {
+      "code": "bynk.types.field_name_duplicate",
+      "summary": "A field has more than one `@name`, or two fields of a request record read the same wire name."
+    },
+    {
+      "code": "bynk.types.field_name_invalid",
+      "summary": "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name)."
+    },
+    {
+      "code": "bynk.types.field_name_not_request_record",
+      "summary": "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler."
+    },
+    {
+      "code": "bynk.types.field_name_record_not_boundary",
+      "summary": "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument."
+    },
+    {
       "code": "bynk.types.field_refinement_not_base",
       "summary": "An inline field refinement requires a base or refined type."
     }

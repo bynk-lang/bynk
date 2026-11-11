@@ -1,0 +1,9 @@
+context api
+
+type Plain = {
+  @name("x-y") a: String,
+}
+
+fn f(p: Plain) -> String {
+  p.a
+}
