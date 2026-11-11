@@ -2203,7 +2203,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.types.unknown_pattern_field",
         blurb: "When a variant pattern names its bindings, as in `Circle(radius: r)`, each name must be a payload field the variant declares: `Circle` has no `diameter`. Use the declared field name, or bind by position, `Circle(r)`. A count of bindings that does not fit the payload is `bynk.types.pattern_arity`.",
-        example: "fn size(s: Shape) -> Int {\n    match s {\n        Circle(diameter: d) => d    // ✗ `Circle` has no field `diameter`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(radius: r) => r    // ✓\n        Dot => 0\n    }\n}",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(diameter: d) => d    // ✗ `Circle` has no field `diameter`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(radius: r) => r    // ✓\n        Dot => 0\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
     },
