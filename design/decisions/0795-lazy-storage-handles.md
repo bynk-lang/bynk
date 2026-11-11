@@ -1,11 +1,6 @@
----
-level: minor
-changelog: The runtime gains storage-backed handles for an agent's Map, Set, Cache and Log fields that read one entry, one posting list or one key range at a time, inert until wired in (per-entry storage, lazy-read slice, part 1)
----
+# 0795 — Storage-backed collection handles read per entry and stage their writes
 
-## ADR: lazy-storage-handles
-title: Storage-backed collection handles read per entry and stage their writes
-summary: LazyStoreMap, LazyStoreCache, LazyStoreSet and LazyStoreLog implement the in-memory handle interfaces over the layout-2 keys, with insertion-order, indexed and key-range reads, and a Log skew field so windows stay correct
+- **Status:** Accepted (v0.543)
 
 **Context.** The per-entry layout (ADR 0785) already writes only the entries a handler changes, but `loadState` still lists every key and the handles are in-memory (#3254), so a handler's reads and its commit work still grow with the size of the state. Decision F of #3189 says a keyed read fetches one entry, an indexed read fetches the matched postings and entries, and a `Log` window is a key range. The in-memory handles' methods return `Awaitable` precisely so a storage-backed handle can replace them.
 
