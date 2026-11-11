@@ -1,0 +1,11 @@
+commons demo
+
+type Box = { value: Int }
+
+fn Box.adjust(self, delta: Int) -> Box {
+    Box { value: self.value + delta }
+}
+
+fn bump(b: Box) -> Box {
+    b.adjust()
+}

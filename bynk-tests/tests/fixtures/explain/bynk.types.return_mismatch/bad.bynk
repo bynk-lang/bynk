@@ -1,0 +1,7 @@
+commons demo
+
+type Age = Int where InRange(0, 150)
+
+fn count() -> Int { "three" }
+
+fn parse(n: Int) -> Age { n }

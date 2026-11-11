@@ -67,7 +67,10 @@ pub struct Explain {
     /// A longer-form paragraph: what the rule is and, crucially, *why* it
     /// exists. This is the offline-complete answer — useful without network.
     pub blurb: &'static str,
-    /// A minimal example of the violation and its fix.
+    /// A minimal example of the violation and its fix: the offending line is
+    /// marked `✗` and the corrected one `✓` in a trailing comment. Written to be
+    /// read, so it may elide with `…`; `bynk-tests`' `explain_examples.rs` holds
+    /// every line of it to a compiled pair of whole programs (#3163).
     pub example: &'static str,
     /// The target Book page as a site-root-relative path, no extension and no
     /// trailing slash, e.g. `/book/reference/types`. Used verbatim as an
@@ -108,7 +111,8 @@ impl Explain {
 /// The curated explanations, keyed by code (DECISION B: highest-traffic,
 /// newcomer-facing codes first). Kept sorted by code; every `code` must be a
 /// real [`REGISTRY`] entry and every `page` an existing Book page — both
-/// enforced by `tests/diagnostics_registry.rs`.
+/// enforced by `tests/diagnostics_registry.rs`. Every `example` needs its
+/// compiled pair under `bynk-tests/tests/fixtures/explain/<code>/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.cell.self_reference",
@@ -119,7 +123,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 retry) can see it. A `:=` is for a value that does not depend on what \
                 the cell held.",
         example: "count := count + 1                       // ✗ reads `count` while writing it\n\n\
-                  count.update((c) => c + 1)                // ✓ awaited, as an effect; the combiner gets the old value",
+                  let _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
         page: "/book/reference/agents",
         anchor: "reading-and-writing-state",
     },
@@ -162,10 +166,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 reaches for, so a reader (and the compiler) can see a handler's \
                 full reach from its signature alone. Using a capability that is \
                 not in `given` is the missing half of that contract.",
-        example: "on get \"/now\" -> Text {           // ✗ uses Clock without declaring it\n    \
-                    Clock.now()\n}\n\n\
-                  on get \"/now\" given Clock -> Text { // ✓ declared, then used\n    \
-                    Clock.now()\n}",
+        example: "on call() -> Effect[()] {\n    \
+                    Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\n\
+                  on call() -> Effect[()] given Logger {   // ✓ declared, then used\n    \
+                    Logger.log(\"hi\")\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "",
     },
@@ -177,8 +181,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 context) before a handler can ask for it. This usually means a \
                 typo in the capability name, or a missing `uses`/`consumes` that \
                 would bring the capability into scope.",
-        example: "on get \"/\" given Clok -> Text { … }  // ✗ no capability named `Clok`\n\n\
-                  on get \"/\" given Clock -> Text { … }  // ✓ matches the declared capability",
+        example: "provides Greeter = Polite given Loger { … }    // ✗ no capability named `Loger`\n\n\
+                  provides Greeter = Polite given Logger { … }   // ✓ matches the declared capability",
         page: "/book/reference/capabilities",
         anchor: "declaring-a-capability",
     },
@@ -189,7 +193,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 number it answers. It is not a type, so a status can't be stored or \
                 passed to a helper. Name the status where the response is built, and \
                 let a helper build the body.",
-        example: "fn refusal(status: ErrorStatus, msg: String) -> HttpResult[()] { … }   // ✗\n\n\
+        example: "let status = ErrorStatus.Forbidden                          // ✗ a status has no value here\n\n\
                   fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\n\
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
         page: "/book/reference/http",
@@ -203,10 +207,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 stop, so a raw route must have one: a `@limit(maxBody:)` on the \
                 handler, or a `limits { maxBody = … }` on the service.",
         example: "@raw(contentType: \"image/png\")           // ✗ no cap anywhere\n\
-                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }\n\n\
+                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n\
                   @raw(contentType: \"image/png\")           // ✓ capped\n\
                   @limit(maxBody: 5_000_000)\n\
-                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] { … }",
+                  on POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
     },
@@ -219,9 +223,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 between, and their updates are lost. A single call such as `update` is atomic \
                 per key, but it is refused here too, so the two rules stay equal. Run the \
                 loop with `forEach` (or `traverseAll` / `traverseTry`), where each element \
-                finishes before the next starts, so a single-call `update` stays atomic. To keep \
-                 the concurrent part, collect with \
-                `parTraverseAll` and write afterwards.",
+                finishes before the next starts, so a single-call `update` stays atomic. A store \
+                write reads the entry before it stages the write, so the sequential form \
+                reads one entry at a time; per-key atomicity is the reason for the rule. To \
+                keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
         example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
                   xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
         page: "/book/reference/capabilities",
@@ -275,9 +280,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                     key name: String\n    \
                     store hits: Cell[Int]\n    \
                     on call withdraw() -> Effect[()] given Files { … }\n}\n\n\
-                  provides Takedown = Bucket given Clock {         // ✗ `withdraw` needs `Files`\n    \
-                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}\n\n\
-                  provides Takedown = Bucket given Clock, Files {  // ✓\n    \
+                  provides Takedown = Bucket given Clock {\n    \
+                    fn take(name: String) -> Effect[()] { Index(name).withdraw() }   // ✗ `withdraw` needs `Files`\n}\n\n\
+                  provides Takedown = Bucket given Clock, Files {  // ✓ `Files` is listed\n    \
                     fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
         page: "/book/guides/effects-and-capabilities/compose-a-provider",
         anchor: "the-rules",
@@ -335,12 +340,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.resolve.missing_field",
-        blurb: "A record must be constructed with every one of its fields. Bynk \
-                records have no defaults and no partial construction: a value of a \
-                record type is only valid once all its fields are present, so a \
-                downstream reader never has to wonder whether a field was set. \
-                Omitting a field is therefore an error, not a fill-in-later.",
-        example: "type User = { name: Text, age: Int }\n\n\
+        blurb: "A record must be constructed with every field that has no default. \
+                There is no partial construction: a value of a record type is only \
+                valid once all its fields are present, so a downstream reader never \
+                has to wonder whether a field was set. Omitting a required field is \
+                therefore an error, not a fill-in-later. A field may be left out \
+                only when its declaration gives it a default, `field: T = expr`.",
+        example: "type User = { name: String, age: Int }\n\n\
                   User { name: \"Ada\" }            // ✗ missing `age`\n\
                   User { name: \"Ada\", age: 36 }   // ✓ every field present",
         page: "/book/reference/types",
@@ -348,13 +354,14 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.resolve.unknown_field",
-        blurb: "A field access names a field the record type does not have. A \
-                record's fields are fixed by its type declaration; only those \
-                names exist on the value. This is usually a typo in the field \
-                name, or an access meant for a different type.",
-        example: "type User = { name: Text }\n\n\
-                  user.nmae   // ✗ no field `nmae`\n\
-                  user.name   // ✓ the declared field",
+        blurb: "A record construction names a field the record type does not declare. \
+                A record's fields are fixed by its type declaration, and a literal may \
+                set only those. This is usually a typo in the field name, or a field \
+                meant for a different type. Reading a field a value does not have is \
+                the sibling code `bynk.types.unknown_field`.",
+        example: "type User = { name: String, age: Int }\n\n\
+                  User { name: \"Ada\", age: 36, admin: true }   // ✗ no field `admin`\n\
+                  User { name: \"Ada\", age: 36 }                // ✓ only the declared fields",
         page: "/book/reference/types",
         anchor: "record-types",
     },
@@ -378,8 +385,23 @@ pub const EXPLANATIONS: &[Explain] = &[
                 declared (with `type`), be one of Bynk's built-in types, or be \
                 brought into scope from another module before they can be named. \
                 An unknown type is usually a typo or a missing declaration/import.",
-        example: "fn greet(u: Usr) -> Text { … }   // ✗ no type `Usr`\n\
-                  fn greet(u: User) -> Text { … }  // ✓ the declared type",
+        example: "fn greet(u: Usr) -> String { … }   // ✗ no type `Usr`\n\
+                  fn greet(u: User) -> String { … }  // ✓ the declared type",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.argument_mismatch",
+        blurb: "An argument has a different type from the parameter it is passed to. Bynk \
+                compares types exactly and converts nothing implicitly, so a `String` is \
+                never read as an `Int`, and a call that passes the wrong type is refused \
+                at the call, not left to fail later. The same code covers the arguments of \
+                methods, capability operations and constructors. Pass a value of the \
+                parameter's type, or convert it first with an explicit conversion such as \
+                `Int.parse` (which returns an `Option`, because the text may not be a number).",
+        example: "fn double(n: Int) -> Int {\n    n * 2\n}\n\n\
+                  fn run() -> Int {\n    double(\"21\")    // ✗ a `String`, where `Int` is expected\n}\n\n\
+                  fn run() -> Int {\n    double(21)      // ✓ an `Int`\n}",
         page: "/book/reference/types",
         anchor: "",
     },
@@ -393,6 +415,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let repo = w.claims.get(\"repository\")            // ✓ keep the String",
         page: "/book/reference/actors",
         anchor: "reading-claims",
+    },
+    Explain {
+        code: "bynk.types.json_uncodable",
+        blurb: "`Json.encode` and `Json.decode` work on values that have a wire form, and a \
+                function does not: a value that can run has no JSON text to stand for it. \
+                The codec covers the base types, named types and the built-in containers \
+                over them. It does not cover functions, effects, streams or a type that \
+                carries one, `bynk.crypto` keys or the error builtins. Encode the data the \
+                function produces, or the record that describes it, not the function itself.",
+        example: "fn dump(f: Int -> Int) -> String {\n    Json.encode(f)       // ✗ a function has no JSON form\n}\n\n\
+                  fn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
+        page: "/book/reference/types",
+        anchor: "the-json-codec",
+    },
+    Explain {
+        code: "bynk.types.method_arity",
+        blurb: "A method was called with a different number of arguments from the number it \
+                declares. The count excludes `self`, which the receiver supplies, so \
+                `fn Box.adjust(self, delta: Int)` takes one argument. Pass exactly that \
+                many. The same code covers the built-in methods of `String`, `List`, `Map` and the other \
+                kernel types.",
+        example: "type Box = { value: Int }\n\n\
+                  fn Box.adjust(self, delta: Int) -> Box {\n    Box { value: self.value + delta }\n}\n\n\
+                  fn bump(b: Box) -> Box {\n    b.adjust()     // ✗ expects 1 argument\n}\n\n\
+                  fn bump(b: Box) -> Box {\n    b.adjust(1)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.method_not_found",
+        blurb: "A method call names an instance method that the receiver's type does not \
+                have. An instance method is a function declared with `self` as its first \
+                parameter. A function declared on a type without `self` is static, and is \
+                called on the type, as `Counter.zero()`, never on a value. This also fires on \
+                a typo, and on a built-in type that has methods but not this one, since only the \
+                methods the type documents exist.",
+        example: "type Counter = { count: Int }\n\n\
+                  fn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\n\
+                  fn reset(c: Counter) -> Counter {\n    c.zero()          // ✗ `zero` has no `self`: not an instance method\n}\n\n\
+                  fn reset(c: Counter) -> Counter {\n    Counter.zero()    // ✓ a static function is called on the type\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
     Explain {
         code: "bynk.types.no_numeric_coercion",
@@ -417,10 +481,24 @@ pub const EXPLANATIONS: &[Explain] = &[
                 says one is needed, and where a `match` is too complex for it to prove \
                 exhaustive it asks for `_` too.",
         example: "type Status = enum { Pending, Active, Done }\n\n\
-                  match s {\n    Pending => \"p\"\n    Active => \"a\"       // ✗ `Done` is not covered\n}\n\n\
+                  match s {                // ✗ `Done` is not covered\n    Pending => \"p\"\n    Active => \"a\"\n}\n\n\
                   match s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
         page: "/book/reference/types",
         anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
+        code: "bynk.types.not_keyable",
+        blurb: "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` \
+                or join, must be a `Key` type, one whose equal values can always be found \
+                again. `String`, `Int`, `Bool`, `Instant`, `Duration` and `Bytes` are, as are \
+                `Option` and `List` of a key and records, sums and enums made only of keys. \
+                A `Float` never is, at any depth, because `NaN` is not equal to itself, so a \
+                key holding one could never be looked up. Key on a type that is: an `Int` \
+                count of cents, say, or a `String`.",
+        example: "fn distinctPrices(xs: List[Float]) -> Int {\n    let seen: Set[Float] = Set.of(xs)    // ✗ `Float` is not a `Key`\n    seen.length()\n}\n\n\
+                  fn distinctPrices(xs: List[Int]) -> Int {\n    let seen: Set[Int] = Set.of(xs)      // ✓ `Int` is\n    seen.length()\n}",
+        page: "/book/reference/types",
+        anchor: "keys",
     },
     Explain {
         code: "bynk.types.return_mismatch",
@@ -439,6 +517,47 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.type_mismatch",
+        blurb: "An operator or a built-in method was given an operand of a type it does not \
+                accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on \
+                something that is not a `Bool`. Types are compared exactly, with no implicit \
+                conversion, so values of different types are never equal and never silently \
+                coerced. Make the operands the same type, or convert one explicitly. A `Float` \
+                and an `Int` mixed in arithmetic is the separate code \
+                `bynk.types.no_numeric_coercion`.",
+        example: "fn isAdult(age: Int) -> Bool {\n    age == \"18\"    // ✗ `Int` compared with `String`\n}\n\n\
+                  fn isAdult(age: Int) -> Bool {\n    age == 18      // ✓ both `Int`\n}",
+        page: "/book/reference/operators",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.unknown_field",
+        blurb: "A field access names a field the value's type does not declare. A record's \
+                fields are fixed by its type declaration, so `p.z` on a `Point` of `x` and `y` \
+                is refused. This is usually a typo, or a value of a different type from the \
+                one intended. Building a record with a field it lacks is the sibling code \
+                `bynk.resolve.unknown_field`.",
+        example: "type Point = { x: Int, y: Int }\n\n\
+                  fn height(p: Point) -> Int {\n    p.z    // ✗ `Point` has no field `z`\n}\n\n\
+                  fn height(p: Point) -> Int {\n    p.y    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.unreachable_arm",
+        blurb: "A `match` arm can never run, because the arms before it already match every \
+                value it would match. The usual cause is a wildcard `_` placed before more \
+                specific arms: arms are tried in order, so the wildcard takes everything and \
+                the rest are dead code, which Bynk refuses rather than let hide a mistake. \
+                Put the specific arms first and the wildcard last, or delete the arm. A \
+                guarded arm covers nothing, since its guard may fail.",
+        example: "type Status = enum { Pending, Active, Done }\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        _ => \"other\"\n        Pending => \"waiting\"    // ✗ the `_` above already matches it\n    }\n}\n\n\
+                  fn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        _ => \"other\"            // ✓ the catch-all last\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
     },
 ];
 
@@ -2862,8 +2981,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.resolve.unknown_field",
-        "Accessed a field the record does not have.",
-        &["field_access"],
+        "A record construction names a field the record type does not declare.",
+        &["record_construction"],
     ),
     dg(
         "bynk.resolve.unknown_function",
@@ -3900,7 +4019,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.type_mismatch",
-        "Two types that were required to match did not.",
+        "An operator or built-in method got an operand of a type it does not accept, or two operands that had to match did not.",
     ),
     dg(
         "bynk.types.uninferable_element_type",

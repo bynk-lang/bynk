@@ -1,0 +1,2 @@
+bynk.capability.base_not_instantiable
+`bynk.cloudflare.Version` has no named instances

@@ -1,0 +1,12 @@
+context probe
+
+agent Tally {
+    key id: String
+
+    store count: Cell[Int]
+
+    on call bump() -> Effect[Result[Int, String]] {
+        count := count + 1
+        Ok(count)
+    }
+}

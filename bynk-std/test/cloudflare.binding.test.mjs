@@ -6,8 +6,9 @@
 // `WorkersRateLimit` (standard-library P3, #2342) against a rate limiter fake,
 // `WorkersQueue` (standard-library P2, #2578) against a queue producer fake,
 // `WorkersAnalytics` (standard-library P3b, #2582) against a dataset fake,
-// `WorkersD1` (standard-library P4a, #2602) against a database fake, and
-// `WorkersEdgeCache` (L7, #2414) against an execution context fake.
+// `WorkersD1` (standard-library P4a, #2602) against a database fake,
+// `WorkersEdgeCache` (L7, #2414) against an execution context fake, and
+// `WorkersVersion` (#3300) against a Version metadata fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -19,7 +20,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersKv, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1216,4 +1217,24 @@ t("WorkersD1: a missing binding names it", async () => {
     new WorkersD1({}, "D1_ORDERS").all("SELECT 1", []),
     /requires a D1 database binding \(env\.D1_ORDERS\)/,
   );
+});
+
+// #3300: `WorkersVersion`, against a fake of Cloudflare's Version metadata
+// binding: `{ id, tag, timestamp }`, the timestamp an ISO-8601 string and the
+// tag empty when the version has none.
+t("WorkersVersion.current: reads the bare binding, the tag as an option and the timestamp as epoch milliseconds", async () => {
+  const env = { CF_VERSION_METADATA: { id: "a1b2", tag: "v1.4.0", timestamp: "2026-11-11T09:30:00.000Z" } };
+  assert.deepEqual(await new WorkersVersion(env).current(), {
+    id: "a1b2",
+    tag: Some("v1.4.0"),
+    deployed: Date.UTC(2026, 10, 11, 9, 30),
+  });
+  const untagged = { CF_VERSION_METADATA: { id: "c3d4", tag: "", timestamp: "1970-01-01T00:00:00.000Z" } };
+  assert.deepEqual(await new WorkersVersion(untagged).current(), { id: "c3d4", tag: None, deployed: 0 });
+});
+
+t("WorkersVersion.current: a missing binding or an unreadable timestamp faults", async () => {
+  await assert.rejects(new WorkersVersion({}).current(), /\[version_metadata\]/);
+  const bad = { CF_VERSION_METADATA: { id: "x", tag: "", timestamp: "yesterday" } };
+  await assert.rejects(new WorkersVersion(bad).current(), /not a date/);
 });
