@@ -1,0 +1,15 @@
+adapter tokens {
+  binding "./tokens.binding.ts"
+
+  capability Jwt {
+    fn sign(secret: String) -> Effect[String]
+  }
+
+  provides Jwt = JoseJwt
+
+  service login {
+    on call(x: Int) -> Effect[Int] {
+      x
+    }
+  }
+}

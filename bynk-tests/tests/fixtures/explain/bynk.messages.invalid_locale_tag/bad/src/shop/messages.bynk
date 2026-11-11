@@ -1,0 +1,8 @@
+commons shop.messages
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "pt-br" @reference {
+  "cart.empty" => "A sua cesta está vazia."
+}

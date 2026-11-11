@@ -1,0 +1,8 @@
+commons shop.messages
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" {
+  "cart.empty" => "Your basket is empty."
+}

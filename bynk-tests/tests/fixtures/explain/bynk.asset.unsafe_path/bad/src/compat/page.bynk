@@ -1,0 +1,7 @@
+commons compat.page
+
+asset style = "assets/../board.css"
+
+fn sheet() -> String {
+  style.url
+}
