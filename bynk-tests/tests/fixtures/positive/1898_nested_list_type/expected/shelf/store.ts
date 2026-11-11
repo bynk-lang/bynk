@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -25,24 +26,32 @@ export const Pair = {
 };
 
 export interface ShelfState {
-  readonly rows: globalThis.Record<string, readonly number[]>;
-  readonly spare: globalThis.Record<string, readonly number[]>;
+  readonly rows: __StoreMap<readonly number[]>;
+  readonly spare: __StoreMap<readonly number[]>;
 }
 
 const __ShelfRegistry = new __StateRegistry();
-function __zeroOfShelfState(): ShelfState { return { rows: {}, spare: {} }; }
+function __zeroOfShelfState(): ShelfState { return { rows: new __StoreMap<readonly number[]>(), spare: new __StoreMap<readonly number[]>() }; }
 
 const __entryFieldsOfShelf = [{ name: "rows", kind: "map" }, { name: "spare", kind: "map" }] as const;
 
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) for (const __k of globalThis.Object.keys(s.rows)) { const __r = __deserialise_List_Int((s.rows[__k] as unknown as __JsonValue), "rows"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); s.rows[__k] = __r.value as unknown as (typeof s.rows)[string]; }
-  for (const __k of globalThis.Object.keys(s.rows)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "rows", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) for (const __k of globalThis.Object.keys(s.spare)) { const __r = __deserialise_List_Int((s.spare[__k] as unknown as __JsonValue), "spare"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); s.spare[__k] = __r.value as unknown as (typeof s.spare)[string]; }
-  for (const __k of globalThis.Object.keys(s.spare)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "spare", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).rows as object)) { const __r = __deserialise_List_Int((((s as unknown as globalThis.Record<string, unknown>).rows as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "rows"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); ((s as unknown as globalThis.Record<string, unknown>).rows as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "rows")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).rows as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "rows", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).spare as object)) { const __r = __deserialise_List_Int((((s as unknown as globalThis.Record<string, unknown>).spare as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "spare"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); ((s as unknown as globalThis.Record<string, unknown>).spare as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "spare")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).spare as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "spare", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+}
+
+function __hydrateShelfState(s: ShelfState, stored: ShelfState): void {
+  const __z = __zeroOfShelfState();
+  const __w = s as { -readonly [K in keyof ShelfState]: ShelfState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "rows")) { __fillMap(__z.rows, __r["rows"] as never); __w.rows = __z.rows; }
+  if (globalThis.Object.hasOwn(__r, "spare")) { __fillMap(__z.spare, __r["spare"] as never); __w.spare = __z.spare; }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {
-  return { ...s, rows: globalThis.Object.fromEntries(globalThis.Object.entries(s.rows).map(([__k, __v]) => [__k, __serialise_List_Int(__v)])), spare: globalThis.Object.fromEntries(globalThis.Object.entries(s.spare).map(([__k, __v]) => [__k, __serialise_List_Int(__v)])) };
+  return { ...s, rows: __wireMap(s.rows, (__v) => __serialise_List_Int(__v)), spare: __wireMap(s.spare, (__v) => __serialise_List_Int(__v)) };
 }
 
 export class Shelf {
@@ -60,6 +69,7 @@ export class Shelf {
     __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateShelfState(__merged, __wholesale);
+    __hydrateShelfState(__merged, __wholesale);
     return __merged;
   }
 
@@ -69,17 +79,17 @@ export class Shelf {
 
   async bySize(deps: {}): globalThis.Promise<readonly Bucket[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of globalThis.Object.values(__state.rows)) { const __k = String(((r: readonly number[]) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n: number, rs: readonly (readonly number[])[]) => ({ size: n, rows: rs }))(((r: readonly number[]) => (r).length)(__rows[0]), __rows); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.rows.values(), (__q) => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __q) { const __k = String(((r: readonly number[]) => (r).length)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((n: number, rs: readonly (readonly number[])[]) => ({ size: n, rows: rs }))(((r: readonly number[]) => (r).length)(__rows[0]), __rows); }); })))(), (__q) => __q);
   }
 
   async unique(deps: {}): globalThis.Promise<readonly (readonly number[])[]> {
     const __state = await this.loadState();
-    return ((() => (() => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of globalThis.Object.values(__state.rows)) { const __k = ((r: readonly number[]) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })()))();
+    return __bynkThen(((() => __bynkThen(__state.rows.values(), (__q) => (() => { const __seen = new globalThis.Set(); const __out: (readonly number[])[] = []; for (const __x of __q) { const __k = ((r: readonly number[]) => (r).length)(__x); if (!__seen.has(__k)) { __seen.add(__k); __out.push(__x); } } return __out; })())))(), (__q) => __q);
   }
 
   async paired(deps: {}): globalThis.Promise<readonly Pair[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.spare)))()) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.rows).flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l: readonly number[], r: readonly number[]) => ({ left: l, right: r }))(__t, __u)); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.rows.values(), async (__q) => { const __h: globalThis.Record<string, (readonly number[])[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.spare.values()))())) { const __k = String(((r: readonly number[]) => (r).length)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: readonly number[]) => { const __m = __h[String(((l: readonly number[]) => (l).length)(__t))] ?? []; return __m.map((__u: readonly number[]) => ((l: readonly number[], r: readonly number[]) => ({ left: l, right: r }))(__t, __u)); }); })))(), (__q) => __q);
   }
 
 }

@@ -10,6 +10,9 @@
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
+//! - `fn-lengths` (#3167) lists the non-test functions over 300 lines against their
+//!   committed ceilings (the ratchet `xtask/tests/fn_length_ratchet.rs` enforces);
+//!   `--apply` rewrites `xtask/fn-length-ceilings.txt` from the tree.
 //! - `manifest-schema` (#2096) writes `bynk.toml`'s JSON Schema, generated from
 //!   the manifest's Rust types; `--check` fails when the committed one is stale.
 //! - `editor-contract` writes the compiler-owned facts the VS Code extension
@@ -47,6 +50,37 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             greenfield_status(args.iter().any(|a| a == "--apply"))
+        }
+        Some("fn-lengths") => {
+            if let Some(bad) = args[1..].iter().find(|a| *a != "--apply") {
+                eprintln!("xtask fn-lengths: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+            let root = repo_root();
+            let measured = xtask::fn_length::measure(&root);
+            if args.iter().any(|a| a == "--apply") {
+                let path = root.join(xtask::fn_length::CEILINGS_FILE);
+                if let Err(e) = std::fs::write(&path, xtask::fn_length::render_ceilings(&measured))
+                {
+                    eprintln!("xtask fn-lengths: cannot write {}: {e}", path.display());
+                    return ExitCode::FAILURE;
+                }
+                println!("wrote {} ({} functions)", path.display(), measured.len());
+                return ExitCode::SUCCESS;
+            }
+            let ceilings = xtask::fn_length::read_ceilings(&root);
+            for f in &measured {
+                let ceiling = ceilings
+                    .iter()
+                    .find(|(k, _)| *k == f.key())
+                    .map(|(_, c)| *c);
+                match ceiling {
+                    Some(c) => println!("{:>6}  (ceiling {c})  {}", f.lines, f.key()),
+                    None => println!("{:>6}  (no ceiling)  {}", f.lines, f.key()),
+                }
+            }
+            ExitCode::SUCCESS
         }
         Some("stamp") => {
             // Reject unknown flags rather than silently dry-running — on a
@@ -830,7 +864,7 @@ fn release_notes(args: &[String]) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 

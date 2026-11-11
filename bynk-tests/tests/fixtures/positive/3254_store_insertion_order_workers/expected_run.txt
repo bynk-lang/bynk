@@ -1,0 +1,2 @@
+# #3254: store collections enumerate in insertion order, integer-like keys included, after a reload.
+passed=6 failed=0

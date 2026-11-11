@@ -6,7 +6,8 @@ import { __bynkBytesEqual, __bynkBytesToBase64, __bynkBytesFromBase64, __bynkByt
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreCache, __StoreLog, __StoreMap, __fillLog, __fillMap, __wireEntries, __wireLog, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -485,21 +486,28 @@ export function __makeLights(key: string, env?: { LIGHTS?: __DurableObjectNamesp
 }
 
 export interface BoardState {
-  readonly lights: globalThis.Record<string, Light>;
+  readonly lights: __StoreMap<Light>;
 }
 
 const __BoardRegistry = new __StateRegistry();
-function __zeroOfBoardState(): BoardState { return { lights: {} }; }
+function __zeroOfBoardState(): BoardState { return { lights: new __StoreMap<Light>() }; }
 
 const __entryFieldsOfBoard = [{ name: "lights", kind: "map" }] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) for (const __k of globalThis.Object.keys(s.lights)) { const __r = __deserialise_Light((s.lights[__k] as unknown as __JsonValue), "lights"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); s.lights[__k] = __r.value as unknown as (typeof s.lights)[string]; }
-  for (const __k of globalThis.Object.keys(s.lights)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lights", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lights as object)) { const __r = __deserialise_Light((((s as unknown as globalThis.Record<string, unknown>).lights as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "lights"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); ((s as unknown as globalThis.Record<string, unknown>).lights as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lights")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lights as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lights", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+}
+
+function __hydrateBoardState(s: BoardState, stored: BoardState): void {
+  const __z = __zeroOfBoardState();
+  const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "lights")) { __fillMap(__z.lights, __r["lights"] as never); __w.lights = __z.lights; }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
-  return { ...s, lights: globalThis.Object.fromEntries(globalThis.Object.entries(s.lights).map(([__k, __v]) => [__k, __serialise_Light(__v)])) };
+  return { ...s, lights: __wireMap(s.lights, (__v) => __serialise_Light(__v)) };
 }
 
 export class Board {
@@ -517,6 +525,7 @@ export class Board {
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoardState(__merged, __wholesale);
+    __hydrateBoardState(__merged, __wholesale);
     return __merged;
   }
 
@@ -527,7 +536,7 @@ export class Board {
   async set(k: string, l: Light, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      await (globalThis.Object.defineProperty(__state.lights, k, { value: l, writable: true, enumerable: true, configurable: true }), undefined);
+      await (async () => { await __state.lights.put(String(k), l); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -536,7 +545,7 @@ export class Board {
 
   async get(k: string, deps: {}): globalThis.Promise<Option<Light>> {
     const __state = await this.loadState();
-    const l = await (() => { const __k = k; return globalThis.Object.hasOwn(__state.lights, __k) ? Some(__state.lights[__k]) : None; })();
+    const l = await (async () => { const __k = String(k); return __bynkThen(__state.lights.has(__k), (__h) => __h ? __bynkThen(__state.lights.get(__k), (__v) => Some(__v!)) : None); })();
     return l;
   }
 
@@ -547,20 +556,27 @@ export function __makeBoard(key: string, env?: { BOARD?: __DurableObjectNamespac
 }
 
 export interface MemoState {
-  readonly c: globalThis.Record<string, { v: Option<number>; exp: number }>;
+  readonly c: __StoreCache<Option<number>>;
 }
 
 const __MemoRegistry = new __StateRegistry();
-function __zeroOfMemoState(): MemoState { return { c: {} }; }
+function __zeroOfMemoState(): MemoState { return { c: new __StoreCache<Option<number>>() }; }
 
 const __entryFieldsOfMemo = [{ name: "c", kind: "cache" }] as const;
 
 function __rehydrateMemoState(s: MemoState, stored: MemoState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) for (const __e of globalThis.Object.values(s.c)) { const __r = __deserialise_Option_Int((__e.v as unknown as __JsonValue), "c"); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).c as globalThis.Record<string, { v: unknown }>)) { const __r = __deserialise_Option_Int((__e.v as unknown as __JsonValue), "c"); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); __e.v = __r.value; }
+}
+
+function __hydrateMemoState(s: MemoState, stored: MemoState): void {
+  const __z = __zeroOfMemoState();
+  const __w = s as { -readonly [K in keyof MemoState]: MemoState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "c")) { __fillMap(__z.c, __r["c"] as never); __w.c = __z.c; }
 }
 
 function __encodeMemoState(s: MemoState): globalThis.Record<string, unknown> {
-  return { ...s, c: globalThis.Object.fromEntries(globalThis.Object.entries(s.c).map(([__k, __e]) => [__k, { ...__e, v: __serialise_Option_Int(__e.v) }])) };
+  return { ...s, c: __wireMap(s.c, (__e) => ({ ...__e, v: __serialise_Option_Int(__e.v) })) };
 }
 
 export class Memo {
@@ -578,6 +594,7 @@ export class Memo {
     __reportUnknownStoredKeys("Memo", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateMemoState(__merged, __wholesale);
+    __hydrateMemoState(__merged, __wholesale);
     return __merged;
   }
 
@@ -588,7 +605,7 @@ export class Memo {
   async set(k: string, v: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); globalThis.Object.defineProperty(__state.c, k, { value: { v: Some(v), exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.c.put(String(k), { v: Some(v), exp: __now + 300000 }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -597,7 +614,7 @@ export class Memo {
 
   async get(k: string, deps: { Clock: Clock }): globalThis.Promise<Option<Option<number>>> {
     const __state = await this.loadState();
-    const v = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = k; return (globalThis.Object.hasOwn(__state.c, __k) && __state.c[__k].exp > __now) ? Some(__state.c[__k].v) : None; })();
+    const v = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.c.get(String(k)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
     return v;
   }
 
@@ -608,20 +625,27 @@ export function __makeMemo(key: string, env?: { MEMO?: __DurableObjectNamespace 
 }
 
 export interface HistoryState {
-  readonly l: globalThis.Array<{ t: number; v: Shape }>;
+  readonly l: __StoreLog<Shape>;
 }
 
 const __HistoryRegistry = new __StateRegistry();
-function __zeroOfHistoryState(): HistoryState { return { l: [] }; }
+function __zeroOfHistoryState(): HistoryState { return { l: new __StoreLog<Shape>() }; }
 
 const __entryFieldsOfHistory = [{ name: "l", kind: "log" }] as const;
 
 function __rehydrateHistoryState(s: HistoryState, stored: HistoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) for (const __e of s.l) { const __r = __deserialise_Shape((__e.v as unknown as __JsonValue), "l"); if (__r.tag === "Err") throw __rehydrationViolation("History", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "l")) for (const __e of ((s as unknown as globalThis.Record<string, unknown>).l as ReadonlyArray<{ v: unknown }>)) { const __r = __deserialise_Shape((__e.v as unknown as __JsonValue), "l"); if (__r.tag === "Err") throw __rehydrationViolation("History", __r.error); __e.v = __r.value; }
+}
+
+function __hydrateHistoryState(s: HistoryState, stored: HistoryState): void {
+  const __z = __zeroOfHistoryState();
+  const __w = s as { -readonly [K in keyof HistoryState]: HistoryState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "l")) { __fillLog(__z.l, __r["l"] as never); __w.l = __z.l; }
 }
 
 function __encodeHistoryState(s: HistoryState): globalThis.Record<string, unknown> {
-  return { ...s, l: s.l.map((__e) => ({ ...__e, v: __serialise_Shape(__e.v) })) };
+  return { ...s, l: __wireLog(s.l, (__v) => __serialise_Shape(__v)) };
 }
 
 export class History {
@@ -639,6 +663,7 @@ export class History {
     __reportUnknownStoredKeys("History", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateHistoryState(__merged, __wholesale);
+    __hydrateHistoryState(__merged, __wholesale);
     return __merged;
   }
 
@@ -649,7 +674,7 @@ export class History {
   async add(s: Shape, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); __state.l.push({ t: __now, v: s }); for (let __i = __state.l.length - 1; __i >= 0; __i--) { if (__state.l[__i].t < __now - 2592000000) __state.l.splice(__i, 1); } return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.l.append(s, __now); await __state.l.prune(__now - 2592000000); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -658,7 +683,7 @@ export class History {
 
   async count(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __state.l.slice(globalThis.Math.max(0, __state.l.length - globalThis.Math.max(0, 5))).reverse().map((__e) => __e.v)))().length;
+    return __bynkThen(((() => __state.l.recent(5)))(), (__q) => __q.length);
   }
 
 }

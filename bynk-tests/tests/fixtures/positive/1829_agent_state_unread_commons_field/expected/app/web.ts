@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -30,21 +31,28 @@ export function label_json(l: Label): string {
 }
 
 export interface ShelfState {
-  readonly items: globalThis.Record<string, Item>;
+  readonly items: __StoreMap<Item>;
 }
 
 const __ShelfRegistry = new __StateRegistry();
-function __zeroOfShelfState(): ShelfState { return { items: {} }; }
+function __zeroOfShelfState(): ShelfState { return { items: new __StoreMap<Item>() }; }
 
 const __entryFieldsOfShelf = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Item((s.items[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = __deserialise_Item((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+}
+
+function __hydrateShelfState(s: ShelfState, stored: ShelfState): void {
+  const __z = __zeroOfShelfState();
+  const __w = s as { -readonly [K in keyof ShelfState]: ShelfState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, __serialise_Item(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)) };
 }
 
 export class Shelf {
@@ -62,6 +70,7 @@ export class Shelf {
     __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateShelfState(__merged, __wholesale);
+    __hydrateShelfState(__merged, __wholesale);
     return __merged;
   }
 
@@ -72,7 +81,7 @@ export class Shelf {
   async put(item: Item, deps: {}): globalThis.Promise<boolean> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.items, item.name, { value: item, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { await __state.items.put(String(item.name), item); return undefined; })();
       return true;
     })();
     await this.commitState(__state);

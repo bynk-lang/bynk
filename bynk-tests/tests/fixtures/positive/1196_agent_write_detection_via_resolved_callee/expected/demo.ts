@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -19,21 +20,28 @@ export const Box = {
 };
 
 export interface WidgetState {
-  readonly items: globalThis.Record<string, number>;
+  readonly items: __StoreMap<number>;
 }
 
 const __WidgetRegistry = new __StateRegistry();
-function __zeroOfWidgetState(): WidgetState { return { items: {} }; }
+function __zeroOfWidgetState(): WidgetState { return { items: new __StoreMap<number>() }; }
 
 const __entryFieldsOfWidget = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateWidgetState(s: WidgetState, stored: WidgetState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.items[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Widget", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Widget", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Widget", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Widget", __r.error); }
+}
+
+function __hydrateWidgetState(s: WidgetState, stored: WidgetState): void {
+  const __z = __zeroOfWidgetState();
+  const __w = s as { -readonly [K in keyof WidgetState]: WidgetState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
 }
 
 function __encodeWidgetState(s: WidgetState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
 export class Widget {
@@ -51,6 +59,7 @@ export class Widget {
     __reportUnknownStoredKeys("Widget", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateWidgetState(__merged, __wholesale);
+    __hydrateWidgetState(__merged, __wholesale);
     return __merged;
   }
 

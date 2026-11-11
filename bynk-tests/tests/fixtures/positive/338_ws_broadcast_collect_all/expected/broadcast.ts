@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 import type { Connection } from "./__bynk_runtime/connection.js";
@@ -40,20 +41,27 @@ export const ServerFrame = {
 };
 
 export interface RoomState {
-  readonly conns: globalThis.Record<string, Connection<ServerFrame>>;
+  readonly conns: __StoreMap<Connection<ServerFrame>>;
 }
 
 const __RoomRegistry = new __StateRegistry();
-function __zeroOfRoomState(): RoomState { return { conns: {} }; }
+function __zeroOfRoomState(): RoomState { return { conns: new __StoreMap<Connection<ServerFrame>>() }; }
 
 const __entryFieldsOfRoom = [] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
-  for (const __k of globalThis.Object.keys(s.conns)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+}
+
+function __hydrateRoomState(s: RoomState, stored: RoomState): void {
+  const __z = __zeroOfRoomState();
+  const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {
-  return { ...s };
+  return { ...s, conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns) };
 }
 
 export class Room {
@@ -71,6 +79,7 @@ export class Room {
     __reportUnknownStoredKeys("Room", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateRoomState(__merged, __wholesale);
+    __hydrateRoomState(__merged, __wholesale);
     return __merged;
   }
 
@@ -80,20 +89,20 @@ export class Room {
 
   async fanout(text: string, deps: {}): globalThis.Promise<readonly Result<void, string>[]> {
     const __state = await this.loadState();
-    return (async () => { const __out: Result<void, string>[] = []; for (const __x of globalThis.Object.values(__state.conns)) { __out.push(await (async (c: Connection<ServerFrame>) => {
+    return __bynkThen(__state.conns.values(), (__q) => (async () => { const __out: Result<void, string>[] = []; for (const __x of __q) { __out.push(await (async (c: Connection<ServerFrame>) => {
     await (c).send({ text: text });
     const r: Result<void, string> = Ok(undefined);
     return r;
-  })(__x)); } return __out; })();
+  })(__x)); } return __out; })());
   }
 
   async fanoutPar(text: string, deps: {}): globalThis.Promise<readonly Result<void, string>[]> {
     const __state = await this.loadState();
-    return (async () => await __bynkSettleAll(globalThis.Object.values(__state.conns).map((__x) => () => (async (c: Connection<ServerFrame>) => {
+    return __bynkThen(__state.conns.values(), (__q) => (async () => await __bynkSettleAll(__q.map((__x) => () => (async (c: Connection<ServerFrame>) => {
     await (c).send({ text: text });
     const r: Result<void, string> = Ok(undefined);
     return r;
-  })(__x))))();
+  })(__x))))());
   }
 
 }

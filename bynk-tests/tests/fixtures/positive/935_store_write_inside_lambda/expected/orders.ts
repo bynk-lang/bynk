@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -17,21 +18,28 @@ export const Order = {
 };
 
 export interface OrdersState {
-  readonly orders: globalThis.Record<string, Order>;
+  readonly orders: __StoreMap<Order>;
 }
 
 const __OrdersRegistry = new __StateRegistry();
-function __zeroOfOrdersState(): OrdersState { return { orders: {} }; }
+function __zeroOfOrdersState(): OrdersState { return { orders: new __StoreMap<Order>() }; }
 
 const __entryFieldsOfOrders = [{ name: "orders", kind: "map" }] as const;
 
 function __rehydrateOrdersState(s: OrdersState, stored: OrdersState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys(s.orders)) { const __r = __deserialise_Order((s.orders[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); s.orders[__k] = __r.value as unknown as (typeof s.orders)[string]; }
-  for (const __k of globalThis.Object.keys(s.orders)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).orders as object)) { const __r = __deserialise_Order((((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); ((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).orders as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Orders", __r.error); }
+}
+
+function __hydrateOrdersState(s: OrdersState, stored: OrdersState): void {
+  const __z = __zeroOfOrdersState();
+  const __w = s as { -readonly [K in keyof OrdersState]: OrdersState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "orders")) { __fillMap(__z.orders, __r["orders"] as never); __w.orders = __z.orders; }
 }
 
 function __encodeOrdersState(s: OrdersState): globalThis.Record<string, unknown> {
-  return { ...s, orders: globalThis.Object.fromEntries(globalThis.Object.entries(s.orders).map(([__k, __v]) => [__k, __serialise_Order(__v)])) };
+  return { ...s, orders: __wireMap(s.orders, (__v) => __serialise_Order(__v)) };
 }
 
 export class Orders {
@@ -49,6 +57,7 @@ export class Orders {
     __reportUnknownStoredKeys("Orders", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateOrdersState(__merged, __wholesale);
+    __hydrateOrdersState(__merged, __wholesale);
     return __merged;
   }
 
@@ -59,7 +68,7 @@ export class Orders {
   async bulkAdd(items: readonly Order[], deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (async (__xs: readonly Order[]) => { for (const __x of __xs) { await (async (o: Order) => (globalThis.Object.defineProperty(__state.orders, o.id, { value: o, writable: true, enumerable: true, configurable: true }), undefined))(__x); } })(items);
+      return (async (__xs: readonly Order[]) => { for (const __x of __xs) { await (async (o: Order) => (async () => { await __state.orders.put(String(o.id), o); return undefined; })())(__x); } })(items);
     })();
     await this.commitState(__state);
     return __result;

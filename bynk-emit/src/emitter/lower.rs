@@ -2308,630 +2308,24 @@ fn lower_method_call(
     if let Some(s) = lower_type_static_call(e, receiver, method, type_args, args, cx, &mut pre) {
         return pre.finish(s);
     }
-    // v0.7 / v0.182: local service call inside a test case body. `svc.call(args)`
-    // lowers to `svc.call(args, deps)`. An http address `svc.<VERB>("/path", …)`
-    // (#664) lowers to the emitted handler key `svc.http_<VERB>_<path>(<rest>,
-    // <deps>)`, where `<deps>` folds in the call-site identity when present.
-    // Slice B: a `system`-tier http address drives a real `worker.fetch` through
-    // a driver (`__sysdrive_<svc>_<key>(rest, sub)`), not a direct handler call.
-    // #1883, slice 3 ([DECISION F]): `svc.GET(asset)` in a case — the
-    // checker classified it (`Callee::TestAssetFetch`). The platform serves an asset before the Worker runs, so it
-    // reaches no handler in either tier: the module's `__bynkAssetGet` answers
-    // from the files the target's Worker ships (`asset_harness`).
-    if let ExprKind::Ident(_) = &receiver.kind
-        && matches!(
-            cx.commons().callees.get(&e.id),
-            Some(bynk_check::checker::Callee::TestAssetFetch { .. })
-        )
-        && let Some(first) = args.first()
-    {
-        let asset = pre.lower(first, cx);
-        return pre.finish(format!("__bynkAssetGet(({asset}).url)"));
+    // Test-case and system-tier service addresses, then agent invocations (#3167).
+    if let Some(s) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #2136: a `system`-tier cron or queue address drives the participant
-    // Worker's real `scheduled` / `queue` entry through a driver, which builds
-    // the platform-shaped event and settles the execution context itself.
-    if let ExprKind::Ident(id) = &receiver.kind {
-        let driver = match (method.name.as_str(), args.first().map(|a| &a.kind)) {
-            ("schedule", Some(ExprKind::StrLit(expr))) => cx.system_schedule_driver(&id.name, expr),
-            ("message", _) => cx.system_message_driver(&id.name),
-            _ => None,
-        };
-        if let Some(driver) = driver {
-            let skip = usize::from(method.name == "schedule");
-            let rest: Vec<String> = args[skip..].iter().map(|a| pre.lower(a, cx)).collect();
-            return pre.finish(format!("{driver}({})", rest.join(", ")));
-        }
+    if let Some(s) = lower_system_schedule_call(receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx.is_system_http_service(&id.name)
-        && let Some(verb) = IrHttpMethod::from_ident(&method.name)
-        && let Some(first) = args.first()
-        && let ExprKind::StrLit(path) = &first.kind
-    {
-        // #707: a `(method, path)` whose path is a declared route but whose
-        // method has no handler is a **wrong-method** call — drive the generic
-        // `405` driver. The checker has already rejected a path that is not
-        // declared for any method, so an absent route here means wrong method.
-        let route_declared =
-            cx.has_system_http_route(&(id.name.clone(), verb.as_str().to_string(), path.clone()));
-        if !route_declared {
-            return pre.finish(format!(
-                "__sysdrive_wrongmethod_{}({:?}, {:?})",
-                id.name,
-                verb.as_str(),
-                path
-            ));
-        }
-        let key = crate::emitter::http_handler_method_name_ir(verb, path);
-        let sub = cx
-            .call_site_identity
-            .clone()
-            .unwrap_or_else(|| "\"\"".to_string());
-        // #706: `by Nobody` drives the *no-auth* driver — no `Authorization`
-        // header, so the real seam rejects it (`401` → `Rejected(Unauthorized)`);
-        // it takes precedence over the body form (the seam rejects before the
-        // body is read). Otherwise — Slice C: a `Wire(…)` argument drives the
-        // *raw* driver (input sent unvalidated, result decodes to an
-        // `HttpOutcome`); a fully typed call keeps the serialising driver.
-        // #821: the two axes are independent — a `Wire(…)` argument combined
-        // with `by Nobody` drives the raw *and* no-auth driver together, so
-        // the missing-credential rejection and the unvalidated body both
-        // apply, rather than one silently discarding the other.
-        let has_wire = args[1..]
-            .iter()
-            .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
-        let driver = match (cx.call_site_no_credential, has_wire) {
-            (true, true) => "__sysdrive_rawnoauth".to_string(),
-            (true, false) => "__sysdrive_noauth".to_string(),
-            (false, true) => "__sysdrive_raw".to_string(),
-            (false, false) => "__sysdrive".to_string(),
-        };
-        // #2135: `by Forged` / `by Stale` drive the signing driver that sends
-        // a wrong or a stale signature (`__sysdrive_forged`, `…_rawstale`).
-        let driver = match (cx.call_site_bad_signature, has_wire) {
-            (Some(v), true) => format!("__sysdrive_raw{v}"),
-            (Some(v), false) => format!("__sysdrive_{v}"),
-            (None, _) => driver,
-        };
-        let is_raw = driver.starts_with("__sysdrive_raw");
-        // #708/#821: the raw (and raw+no-auth) driver's every slot is a
-        // `string`. `lower_expr_into` already lowers a `Wire(s)` to its raw inner
-        // string, but a *typed* arg mixed into the same raw call must be
-        // converted to that `string` slot: the body param serialises through
-        // the same wire codec the typed driver uses (so a hand-typed body
-        // matches a `Wire`d one byte-for-byte); any other (path) param just
-        // coerces via `String(...)`.
-        let body_info = if is_raw {
-            cx.system_http_route_body(&(id.name.clone(), verb.as_str().to_string(), path.clone()))
-                .cloned()
-        } else {
-            None
-        };
-        let query_info = if is_raw {
-            cx.system_http_route_body(&(
-                id.name.clone(),
-                verb.as_str().to_string(),
-                format!("{path}{}", crate::emitter::QUERY_ROUTE_SUFFIX),
-            ))
-            .cloned()
-        } else {
-            None
-        };
-        // #3276: a `@form` route's typed body is written as a form, not JSON.
-        let form_route = is_raw
-            && cx
-                .system_http_route_body(&(
-                    id.name.clone(),
-                    verb.as_str().to_string(),
-                    format!("{path}{}", crate::emitter::FORM_ROUTE_SUFFIX),
-                ))
-                .is_some();
-        // #3277: the `cookies` record's position, when this call's route takes one.
-        let cookies_info = if is_raw {
-            cx.system_http_route_body(&(
-                id.name.clone(),
-                verb.as_str().to_string(),
-                format!("{path}{}", crate::emitter::COOKIES_ROUTE_SUFFIX),
-            ))
-            .cloned()
-        } else {
-            None
-        };
-        let rest: Vec<String> = args[1..]
-            .iter()
-            .enumerate()
-            .map(|(i, a)| {
-                let lowered = pre.lower(a, cx);
-                if !is_raw || matches!(&a.kind, ExprKind::Wire(_)) {
-                    return lowered;
-                }
-                // A `headers: RequestHeaders` argument is no wire slot: it
-                // reaches the raw driver typed, just as the typed driver takes
-                // it, and becomes the request's headers, so it passes through
-                // unconverted.
-                if matches!(
-                    cx.commons().expr_ty(a.id).as_deref(),
-                    Some(Ty::RequestHeaders | Ty::RequestQuery)
-                ) {
-                    return lowered;
-                }
-                // #3277: a typed `cookies` record becomes the `Cookie` header text
-                // the raw driver sends.
-                if let Some((cookies_idx, ty)) = &cookies_info
-                    && *cookies_idx == i
-                {
-                    cx.note_cookie_string();
-                    return format!(
-                        "__cookieString({})",
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                            ty,
-                            &format!("({lowered} as any)"),
-                            cx.system_http_type_ns(),
-                            cx.runtime_use()
-                        ))
-                    );
-                }
-                // #2854: a typed `query` record becomes the query string the
-                // raw driver appends to the URL.
-                if let Some((query_idx, ty)) = &query_info
-                    && *query_idx == i
-                {
-                    cx.note_query_string();
-                    return format!(
-                        "__queryString({})",
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                            ty,
-                            &format!("({lowered} as any)"),
-                            cx.system_http_type_ns(),
-                            cx.runtime_use()
-                        ))
-                    );
-                }
-                match &body_info {
-                    // A named type's typed literal is unbranded in test-scaffold
-                    // code (the checker already validated it against the
-                    // handler's declared type — Slice A), the same reason
-                    // `driver_param_ty` types a named driver param `any` rather
-                    // than the branded type. Cast through `any` here too, so
-                    // `serialise_<Name>` (which expects the branded shape)
-                    // accepts the plain object literal.
-                    //
-                    // P7.2: deferred, not narrowed. A first attempt used
-                    // `as unknown as {ty}` with a bare `ts_type_ref` and broke a
-                    // real `tsc --strict` fixture (385, "Cannot find name") — the
-                    // same bare-vs-qualified problem found (and fixed via
-                    // `emitter/workers.rs`'s `qualified_type_ref`) for several
-                    // other sites this slice touched, but that helper isn't
-                    // reachable from this module, and this call site's own scope
-                    // (`cx.system_http_type_ns()`) suggests the real
-                    // qualification here may differ from `workers.rs`'s own
-                    // `handlers` namespace besides — needs its own investigation,
-                    // not a copy-paste of a fix built for a different file.
-                    // #1435 (Arc E slice 1): `serialise_expr_via` now returns a
-                    // real `bynk_ts::TsExpr` — this call site is `lower.rs`'s
-                    // own permanent opaque exception (ADR
-                    // `arc-c-lower-rs-permanent-exclusion`), so it prints at
-                    // the boundary (`bynk_ts::print_expr`), the same
-                    // treatment cluster 4's own `lower.rs:2552` call site
-                    // already established.
-                    Some((body_idx, ty)) if *body_idx == i && form_route => {
-                        cx.note_query_string();
-                        format!(
-                            "__queryString({}).slice(1)",
-                            bynk_ts::print_expr(
-                                &crate::emitter::serialisation::serialise_expr_via(
-                                    ty,
-                                    &format!("({lowered} as any)"),
-                                    cx.system_http_type_ns(),
-                                    cx.runtime_use()
-                                )
-                            )
-                        )
-                    }
-                    Some((body_idx, ty)) if *body_idx == i => format!(
-                        "globalThis.JSON.stringify({})",
-                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
-                            ty,
-                            &format!("({lowered} as any)"),
-                            cx.system_http_type_ns(),
-                            cx.runtime_use()
-                        ))
-                    ),
-                    _ => format!("String({lowered})"),
-                }
-            })
-            .collect();
-        let mut all = rest;
-        // #2910: a route that declares no `headers:` takes the case's extra
-        // request headers (the call's trailing `RequestHeaders`, when the
-        // checker accepted one) in a slot ahead of `sub`.
-        if cx.has_system_http_route(&(
-            id.name.clone(),
-            verb.as_str().to_string(),
-            format!("{path}{}", crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
-        )) {
-            let sends_extra = matches!(
-                cx.commons().callees.get(&e.id),
-                Some(Callee::TestService {
-                    extra_headers: true,
-                    ..
-                })
-            );
-            let slot = if sends_extra {
-                all.pop().unwrap_or_else(|| "undefined".to_string())
-            } else {
-                "undefined".to_string()
-            };
-            all.push(slot);
-        }
-        all.push(sub);
-        // #2019: a refinement-guarded route's signing drivers take the claims
-        // the acting actor presents; the no-auth drivers sign nothing.
-        if !cx.call_site_no_credential
-            && cx.call_site_bad_signature.is_none()
-            && let Some(claims) = cx.system_http_claims_arg(&(
-                id.name.clone(),
-                verb.as_str().to_string(),
-                path.clone(),
-            ))
-        {
-            all.push(claims);
-        }
-        // #2155: an actor-sum route's signing drivers take the actor the call
-        // acts as, which picks its credential.
-        if !cx.call_site_no_credential
-            && cx.call_site_bad_signature.is_none()
-            && let Some(actor) = cx.system_http_sum_actor_arg(&(
-                id.name.clone(),
-                verb.as_str().to_string(),
-                path.clone(),
-            ))
-        {
-            all.push(actor);
-        }
-        return pre.finish(format!(
-            "{}_{}_{}({})",
-            driver,
-            id.name,
-            key,
-            all.join(", ")
-        ));
+    if let Some(s) = lower_system_http_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // #2024: a case `let` may shadow a service of the target; the local wins.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && cx.is_test_service(&id.name)
-        && !cx.is_local(&id.name)
-    {
-        // #1994: a target whose handlers send with `~>` settles each addressed
-        // call — awaits the promises the handler handed `deps.__exec.waitUntil`
-        // — so the case's expectations see the sends' effects.
-        let settles = cx.test_settles_sends();
-        // #2683: on virtual time every addressed call is driven (auto-advance)
-        // and then settled, whether or not the handler also sends.
-        let virtual_time = cx.runtime_use().virtual_time();
-        let settle = |call: String| {
-            if virtual_time {
-                format!("__bynkSettleVirtual(deps, {call})")
-            } else if settles {
-                format!("__bynkSettle(deps, {call})")
-            } else {
-                call
-            }
-        };
-        // P7.2: deferred, not narrowed. `identity` is the raw lowered call-site value
-        // (e.g. `"bob"`), with no reachable identity type at this `cx` — resolving
-        // one needs the addressed actor's own identity type threaded through from
-        // `bynk-check`'s actor declarations, not plumbed here today (unlike the
-        // `ty: &TypeRef` available a few lines up for the sibling brand cast). A
-        // guessed type risks a `tsc --strict` mismatch; left as `any`, named here.
-        // I3 (#1971), #2020: a sum handler (`on call` or http) reads the
-        // principal as the resolved actor, `deps.who` (the emitted handler's
-        // deps key for every sum, whatever its binder is named):
-        // `by Caller("shop.front")`, `by User("ada")` or `by Visitor`.
-        let sum_key = match (IrHttpMethod::from_ident(&method.name), args.first()) {
-            (Some(verb), Some(first)) => match &first.kind {
-                ExprKind::StrLit(path) => {
-                    Some(crate::emitter::http_handler_method_name_ir(verb, path))
-                }
-                _ => None,
-            },
-            _ if method.name == "call" => Some("call".to_string()),
-            // #3051: a websocket `open` reads its principal as an `on call` or
-            // http handler does.
-            _ if method.name == "open" => Some("open".to_string()),
-            _ => None,
-        };
-        let is_sum = sum_key
-            .as_deref()
-            .is_some_and(|k| cx.is_sum_handler(&id.name, k));
-        let deps_expr = match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
-            (Some(actor), identity) if is_sum => match identity {
-                Some(identity) => {
-                    format!("{{ ...deps, who: {{ tag: {actor:?}, identity: {identity} }} }}")
-                }
-                None => format!("{{ ...deps, who: {{ tag: {actor:?} }} }}"),
-            },
-            (_, Some(_))
-                if sum_key
-                    .as_deref()
-                    .is_some_and(|k| cx.is_binderless_handler(&id.name, k)) =>
-            {
-                "deps".to_string()
-            }
-            (_, Some(identity)) => {
-                // #2380 (L5): an `Oidc` handler also reads its token's claims
-                // from `deps.claims`: the principal's, or none.
-                let claims = if sum_key
-                    .as_deref()
-                    .is_some_and(|k| cx.is_oidc_handler(&id.name, k))
-                {
-                    cx.note_token_claims();
-                    let claims = cx
-                        .call_site_claims
-                        .clone()
-                        .unwrap_or_else(|| "__tokenClaims([])".to_string());
-                    format!(", claims: {claims}")
-                } else {
-                    String::new()
-                };
-                format!("{{ ...deps, identity: ({identity} as any){claims} }}")
-            }
-            (_, None) => "deps".to_string(),
-        };
-        // http address: the method is an HTTP verb and the first argument is the
-        // route pattern string. The key is a pure function of verb + path; the
-        // remaining args are the handler's positional params.
-        if let Some(verb) = IrHttpMethod::from_ident(&method.name)
-            && let Some(first) = args.first()
-            && let ExprKind::StrLit(path) = &first.kind
-        {
-            let key = crate::emitter::http_handler_method_name_ir(verb, path);
-            let rest: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
-            let mut all = rest;
-            all.push(deps_expr);
-            return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
-        }
-        // cron/queue address: the emitted key is position-indexed among the
-        // service's same-kind handlers, so recover the index from the handler
-        // list. cron drops the leading schedule string; queue passes the
-        // message. P6.37 (design/tracks/the-ir.md §6a): reads `IrHandlerKind`
-        // (P6.24a's own pure, unconditional mirror) rather than the raw AST
-        // `HandlerKind` this map used to store.
-        if let Some(handlers) = cx.test_service_handlers(&id.name) {
-            if method.name == "schedule"
-                && let Some(ExprKind::StrLit(expr)) = args.first().map(|a| &a.kind)
-            {
-                let mut idx = 0usize;
-                for h in handlers {
-                    if let bynk_model::IrHandlerKind::Cron { expr: e } = h {
-                        if e == expr {
-                            break;
-                        }
-                        idx += 1;
-                    }
-                }
-                let key = crate::emitter::cron_handler_method_name(&id.name, idx);
-                let rest: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
-                let mut all = rest;
-                all.push(deps_expr);
-                return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
-            }
-            // #3051: the websocket lifecycle addresses. The `TestConnection`
-            // remembers the route values and `deps` (the principal) from `open`;
-            // `message`/`close` rebuild the handler's argument list from them. The
-            // checker encoded the shape in the callee's address.
-            if let Some(Callee::TestService { address, .. }) = cx.commons().callee(e.id)
-                && let Some(shape) = address.strip_prefix("ws ")
-            {
-                let mut parts = shape.split(' ');
-                let which = parts.next().unwrap_or_default();
-                let nums: Vec<usize> = parts.filter_map(|p| p.parse().ok()).collect();
-                let tc = args
-                    .first()
-                    .map(|a| pre.lower(a, cx))
-                    .unwrap_or_else(|| "undefined".to_string());
-                let svc = &id.name;
-                // Typed from the handler's own signature (`Parameters<typeof …>`), so
-                // `tsc` checks the arity, the frame position and the `deps` shape
-                // against the emitted handler; only the route values, which the
-                // `TestConnection` holds as `unknown`, are cast, as production's
-                // dispatch casts `__att.args[i]`.
-                let sig = |m: &str| format!("Parameters<typeof {svc}.{m}>");
-                let call = match which {
-                    "open" => {
-                        let route: Vec<String> =
-                            args[1..].iter().map(|a| pre.lower(a, cx)).collect();
-                        let mut parts = vec!["__c".to_string()];
-                        parts.extend(route.iter().cloned());
-                        parts.push(deps_expr.clone());
-                        format!(
-                            "(async () => {{ const __c = {tc}; const __a: {} = [{}]; __c.remember([{}], __a[__a.length - 1]); return {svc}.open(...__a); }})()",
-                            sig("open"),
-                            parts.join(", "),
-                            route.join(", ")
-                        )
-                    }
-                    "message" => {
-                        let (frame_idx, n) = (
-                            nums.first().copied().unwrap_or(0),
-                            nums.get(1).copied().unwrap_or(1),
-                        );
-                        let frame = args
-                            .get(1)
-                            .map(|a| pre.lower(a, cx))
-                            .unwrap_or_else(|| "undefined".to_string());
-                        let p = sig("message");
-                        let mut k = 0usize;
-                        let mut parts = vec!["__c".to_string()];
-                        for i in 0..n {
-                            if i == frame_idx {
-                                parts.push(frame.clone());
-                            } else {
-                                parts.push(format!("__o.route[{k}] as {p}[{}]", i + 1));
-                                k += 1;
-                            }
-                        }
-                        parts.push(format!("__o.deps as {p}[{}]", n + 1));
-                        format!(
-                            "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.message(...__a); }})()",
-                            parts.join(", ")
-                        )
-                    }
-                    _ => {
-                        let n = nums.first().copied().unwrap_or(0);
-                        let p = sig("close");
-                        let mut parts = vec!["__c".to_string()];
-                        for i in 0..n {
-                            parts.push(format!("__o.route[{i}] as {p}[{}]", i + 1));
-                        }
-                        parts.push(format!("__o.deps as {p}[{}]", n + 1));
-                        format!(
-                            "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.close(...__a); }})()",
-                            parts.join(", ")
-                        )
-                    }
-                };
-                return pre.finish(settle(call));
-            }
-            if method.name == "message"
-                && handlers
-                    .iter()
-                    .any(|h| matches!(h, bynk_model::IrHandlerKind::Message))
-            {
-                // A `from queue` service binds exactly one queue and declares one
-                // `on message` handler, so the position index is 0.
-                let key = crate::emitter::queue_handler_method_name(&id.name, 0);
-                let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-                let mut all = args_lowered;
-                all.push(deps_expr);
-                return pre.finish(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
-            }
-            // #2052: an event address delivers through the module's
-            // `__bynkEvent_<svc>` helper (`tests_emit::event_delivery_helper`),
-            // which supplies the default envelope and calls the service's
-            // generated `event` method, whose prologue runs the pattern filter
-            // and the `via schema(N)` guard as every real delivery does. An
-            // omitted envelope is passed as `undefined`.
-            if method.name == "event"
-                && handlers
-                    .iter()
-                    .any(|h| matches!(h, bynk_model::IrHandlerKind::Event))
-            {
-                cx.runtime_use().note_test_event_service(&id.name);
-                let payload = args
-                    .first()
-                    .map(|a| pre.lower(a, cx))
-                    .unwrap_or_else(|| "undefined".to_string());
-                let envelope = args
-                    .get(1)
-                    .map(|a| pre.lower(a, cx))
-                    .unwrap_or_else(|| "undefined".to_string());
-                return pre.finish(settle(format!(
-                    "__bynkEvent_{}({payload}, {envelope}, {deps_expr})",
-                    id.name
-                )));
-            }
-        }
-        // `svc.call(args)` and other (non-http) forms: pass args through with deps.
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
-        all.push(deps_expr);
-        return pre.finish(settle(format!(
-            "{}.{}({})",
-            id.name,
-            method.name,
-            all.join(", ")
-        )));
+    if let Some(s) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // v0.9.2: inline agent invocation. Source form is
-    // `Agent(<key>).method(args)`; receiver parses as
-    // `Call(Agent, [<key>])`. Lower to
-    // `__makeAgent(<key>).method(args, deps)`. Works in service and
-    // agent-handler bodies (deps is the handler's deps parameter) and
-    // test bodies (deps is the locally-built __makeTestDeps record).
-    //
-    // P6.21 (partial, continued): reads `Callee::Agent` (P6.0) instead of
-    // `cx.local_agents.contains(&name.name)` — the checker's own
-    // `check_method_call` records this the moment a receiver's *checked
-    // type* resolves to an agent, uniformly for this shape, the let-bound
-    // shape below, and the self-agent WS-transfer case inside this branch —
-    // closing a real instance of R6.5's name-matched-receiver defect class
-    // (a free function or local sharing an agent's own name could misfire
-    // the old check; the checker's own type-driven resolution cannot).
-    if let ExprKind::Call {
-        name,
-        args: ctor_args,
-        ..
-    } = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
-    {
-        // v0.104 (real-time track slice 3b): when lowering a `from websocket`
-        // `on open` body inside its hosting Durable Object, a transfer to the
-        // self-agent is a direct `this.method(args, deps)` self-call — the key
-        // addresses *this* DO, and the held connection never crosses an RPC
-        // boundary (DECISION A). The key expression is **not** emitted: the shape
-        // constraint (`bynk.ws.open_transfer_shape`, D2) restricts it to a
-        // request-derivable param ident — side-effect-free and equal to this
-        // instance's own key — so dropping it is sound. #2959 widened the key to a
-        // context `const` or a literal (`bynk.ws.open_transfer_key`), and #2967
-        // to a used commons' `const`; all are pure and the edge routed the
-        // upgrade by the same value, so it still is.
-        if cx.ws_self_agent() == Some(name.name.as_str()) {
-            cx.record_agent_call(&name.name, &method.name);
-            let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-            let mut all = args_lowered;
-            all.push("deps".to_string());
-            return pre.finish(format!(
-                "this.{method}({args})",
-                method = method.name,
-                args = all.join(", ")
-            ));
-        }
-        cx.record_agent_call(&name.name, &method.name);
-        let key_arg = ctor_args
-            .first()
-            .map(|a| pre.lower(a, cx))
-            .unwrap_or_else(|| "\"default\"".to_string());
-        let instance = cx.agent_construct(&name.name, &key_arg);
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
-        // #2355: `this.deps` in a provider body.
-        all.push(cx.cap_deps_expr().to_string());
-        return pre.finish(format!(
-            "{instance}.{method}({args})",
-            method = method.name,
-            args = all.join(", ")
-        ));
+    if let Some(s) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
-    // Let-bound agent invocation. `let x = Agent(key); x.method(args)`
-    // — the statement emitter recorded `x` as an agent variable when
-    // it lowered the let. Method calls on `x` go straight to the
-    // class instance with `deps` threaded through.
-    //
-    // P6.21 (partial, continued): reads `Callee::Agent` instead of
-    // `cx.local_agent_vars.contains_key(&id.name)` — see the inline
-    // agent-invocation branch above. `cx.local_agent_vars` stays: it still
-    // answers "which agent does this bind name refer to" (needed for
-    // `record_agent_call`'s own bookkeeping and the #908 rename-resolution
-    // below), a different question from "is this receiver really an agent
-    // instance at all," which `Callee` now settles.
-    if let ExprKind::Ident(id) = &receiver.kind
-        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
-    {
-        if let Some(agent) = cx.local_agent_vars.get(&id.name).cloned() {
-            cx.record_agent_call(&agent, &method.name);
-        }
-        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
-        let mut all = args_lowered;
-        all.push(cx.cap_deps_expr().to_string());
-        // #908: `local_agent_vars` is keyed by the bynk source name, which a
-        // re-`let` may have renamed — resolve to the actual JS binding rather
-        // than assuming the source name is still it.
-        let recv = cx
-            .resolved_local_name(&id.name)
-            .unwrap_or_else(|| id.name.clone());
-        return pre.finish(format!("{}.{}({})", recv, method.name, all.join(", ")));
+    if let Some(s) = lower_let_bound_agent_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(s);
     }
     // v0.20b: built-in kernel methods, resolved by the checker (#3164).
     if let Some(s) = lower_kernel_method_call(e, receiver, method, args, cx, &mut pre) {
@@ -3252,6 +2646,707 @@ fn lower_type_static_call(
         } else {
             call
         });
+    }
+    None
+}
+
+/// Lower a test `case` asset fetch (`svc.GET(asset)`), or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_test_asset_fetch_call(
+    e: &Expr,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.7 / v0.182: local service call inside a test case body. `svc.call(args)`
+    // lowers to `svc.call(args, deps)`. An http address `svc.<VERB>("/path", …)`
+    // (#664) lowers to the emitted handler key `svc.http_<VERB>_<path>(<rest>,
+    // <deps>)`, where `<deps>` folds in the call-site identity when present.
+    // Slice B: a `system`-tier http address drives a real `worker.fetch` through
+    // a driver (`__sysdrive_<svc>_<key>(rest, sub)`), not a direct handler call.
+    // #1883, slice 3 ([DECISION F]): `svc.GET(asset)` in a case — the
+    // checker classified it (`Callee::TestAssetFetch`). The platform serves an asset before the Worker runs, so it
+    // reaches no handler in either tier: the module's `__bynkAssetGet` answers
+    // from the files the target's Worker ships (`asset_harness`).
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callees.get(&e.id),
+            Some(bynk_check::checker::Callee::TestAssetFetch { .. })
+        )
+        && let Some(first) = args.first()
+    {
+        let asset = pre.lower(first, cx);
+        return Some(format!("__bynkAssetGet(({asset}).url)"));
+    }
+    None
+}
+
+/// Lower a `system`-tier cron or queue address, driven through the participant Worker, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_system_schedule_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // #2136: a `system`-tier cron or queue address drives the participant
+    // Worker's real `scheduled` / `queue` entry through a driver, which builds
+    // the platform-shaped event and settles the execution context itself.
+    if let ExprKind::Ident(id) = &receiver.kind {
+        let driver = match (method.name.as_str(), args.first().map(|a| &a.kind)) {
+            ("schedule", Some(ExprKind::StrLit(expr))) => cx.system_schedule_driver(&id.name, expr),
+            ("message", _) => cx.system_message_driver(&id.name),
+            _ => None,
+        };
+        if let Some(driver) = driver {
+            let skip = usize::from(method.name == "schedule");
+            let rest: Vec<String> = args[skip..].iter().map(|a| pre.lower(a, cx)).collect();
+            return Some(format!("{driver}({})", rest.join(", ")));
+        }
+    }
+    None
+}
+
+/// Lower a `system`-tier http address, driven through a real `worker.fetch`, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_system_http_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    if let ExprKind::Ident(id) = &receiver.kind
+        && cx.is_system_http_service(&id.name)
+        && let Some(verb) = IrHttpMethod::from_ident(&method.name)
+        && let Some(first) = args.first()
+        && let ExprKind::StrLit(path) = &first.kind
+    {
+        // #707: a `(method, path)` whose path is a declared route but whose
+        // method has no handler is a **wrong-method** call — drive the generic
+        // `405` driver. The checker has already rejected a path that is not
+        // declared for any method, so an absent route here means wrong method.
+        let route_declared =
+            cx.has_system_http_route(&(id.name.clone(), verb.as_str().to_string(), path.clone()));
+        if !route_declared {
+            return Some(format!(
+                "__sysdrive_wrongmethod_{}({:?}, {:?})",
+                id.name,
+                verb.as_str(),
+                path
+            ));
+        }
+        let key = crate::emitter::http_handler_method_name_ir(verb, path);
+        let sub = cx
+            .call_site_identity
+            .clone()
+            .unwrap_or_else(|| "\"\"".to_string());
+        // #706: `by Nobody` drives the *no-auth* driver — no `Authorization`
+        // header, so the real seam rejects it (`401` → `Rejected(Unauthorized)`);
+        // it takes precedence over the body form (the seam rejects before the
+        // body is read). Otherwise — Slice C: a `Wire(…)` argument drives the
+        // *raw* driver (input sent unvalidated, result decodes to an
+        // `HttpOutcome`); a fully typed call keeps the serialising driver.
+        // #821: the two axes are independent — a `Wire(…)` argument combined
+        // with `by Nobody` drives the raw *and* no-auth driver together, so
+        // the missing-credential rejection and the unvalidated body both
+        // apply, rather than one silently discarding the other.
+        let has_wire = args[1..]
+            .iter()
+            .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
+        let driver = match (cx.call_site_no_credential, has_wire) {
+            (true, true) => "__sysdrive_rawnoauth".to_string(),
+            (true, false) => "__sysdrive_noauth".to_string(),
+            (false, true) => "__sysdrive_raw".to_string(),
+            (false, false) => "__sysdrive".to_string(),
+        };
+        // #2135: `by Forged` / `by Stale` drive the signing driver that sends
+        // a wrong or a stale signature (`__sysdrive_forged`, `…_rawstale`).
+        let driver = match (cx.call_site_bad_signature, has_wire) {
+            (Some(v), true) => format!("__sysdrive_raw{v}"),
+            (Some(v), false) => format!("__sysdrive_{v}"),
+            (None, _) => driver,
+        };
+        let is_raw = driver.starts_with("__sysdrive_raw");
+        // #708/#821: the raw (and raw+no-auth) driver's every slot is a
+        // `string`. `lower_expr_into` already lowers a `Wire(s)` to its raw inner
+        // string, but a *typed* arg mixed into the same raw call must be
+        // converted to that `string` slot: the body param serialises through
+        // the same wire codec the typed driver uses (so a hand-typed body
+        // matches a `Wire`d one byte-for-byte); any other (path) param just
+        // coerces via `String(...)`.
+        let body_info = if is_raw {
+            cx.system_http_route_body(&(id.name.clone(), verb.as_str().to_string(), path.clone()))
+                .cloned()
+        } else {
+            None
+        };
+        let query_info = if is_raw {
+            cx.system_http_route_body(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                format!("{path}{}", crate::emitter::QUERY_ROUTE_SUFFIX),
+            ))
+            .cloned()
+        } else {
+            None
+        };
+        // #3276: a `@form` route's typed body is written as a form, not JSON.
+        let form_route = is_raw
+            && cx
+                .system_http_route_body(&(
+                    id.name.clone(),
+                    verb.as_str().to_string(),
+                    format!("{path}{}", crate::emitter::FORM_ROUTE_SUFFIX),
+                ))
+                .is_some();
+        // #3277: the `cookies` record's position, when this call's route takes one.
+        let cookies_info = if is_raw {
+            cx.system_http_route_body(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                format!("{path}{}", crate::emitter::COOKIES_ROUTE_SUFFIX),
+            ))
+            .cloned()
+        } else {
+            None
+        };
+        let rest: Vec<String> = args[1..]
+            .iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let lowered = pre.lower(a, cx);
+                if !is_raw || matches!(&a.kind, ExprKind::Wire(_)) {
+                    return lowered;
+                }
+                // A `headers: RequestHeaders` argument is no wire slot: it
+                // reaches the raw driver typed, just as the typed driver takes
+                // it, and becomes the request's headers, so it passes through
+                // unconverted.
+                if matches!(
+                    cx.commons().expr_ty(a.id).as_deref(),
+                    Some(Ty::RequestHeaders | Ty::RequestQuery)
+                ) {
+                    return lowered;
+                }
+                // #3277: a typed `cookies` record becomes the `Cookie` header text
+                // the raw driver sends.
+                if let Some((cookies_idx, ty)) = &cookies_info
+                    && *cookies_idx == i
+                {
+                    cx.note_cookie_string();
+                    return format!(
+                        "__cookieString({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    );
+                }
+                // #2854: a typed `query` record becomes the query string the
+                // raw driver appends to the URL.
+                if let Some((query_idx, ty)) = &query_info
+                    && *query_idx == i
+                {
+                    cx.note_query_string();
+                    return format!(
+                        "__queryString({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    );
+                }
+                match &body_info {
+                    // A named type's typed literal is unbranded in test-scaffold
+                    // code (the checker already validated it against the
+                    // handler's declared type — Slice A), the same reason
+                    // `driver_param_ty` types a named driver param `any` rather
+                    // than the branded type. Cast through `any` here too, so
+                    // `serialise_<Name>` (which expects the branded shape)
+                    // accepts the plain object literal.
+                    //
+                    // P7.2: deferred, not narrowed. A first attempt used
+                    // `as unknown as {ty}` with a bare `ts_type_ref` and broke a
+                    // real `tsc --strict` fixture (385, "Cannot find name") — the
+                    // same bare-vs-qualified problem found (and fixed via
+                    // `emitter/workers.rs`'s `qualified_type_ref`) for several
+                    // other sites this slice touched, but that helper isn't
+                    // reachable from this module, and this call site's own scope
+                    // (`cx.system_http_type_ns()`) suggests the real
+                    // qualification here may differ from `workers.rs`'s own
+                    // `handlers` namespace besides — needs its own investigation,
+                    // not a copy-paste of a fix built for a different file.
+                    // #1435 (Arc E slice 1): `serialise_expr_via` now returns a
+                    // real `bynk_ts::TsExpr` — this call site is `lower.rs`'s
+                    // own permanent opaque exception (ADR
+                    // `arc-c-lower-rs-permanent-exclusion`), so it prints at
+                    // the boundary (`bynk_ts::print_expr`), the same
+                    // treatment cluster 4's own `lower.rs:2552` call site
+                    // already established.
+                    Some((body_idx, ty)) if *body_idx == i && form_route => {
+                        cx.note_query_string();
+                        format!(
+                            "__queryString({}).slice(1)",
+                            bynk_ts::print_expr(
+                                &crate::emitter::serialisation::serialise_expr_via(
+                                    ty,
+                                    &format!("({lowered} as any)"),
+                                    cx.system_http_type_ns(),
+                                    cx.runtime_use()
+                                )
+                            )
+                        )
+                    }
+                    Some((body_idx, ty)) if *body_idx == i => format!(
+                        "globalThis.JSON.stringify({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    ),
+                    _ => format!("String({lowered})"),
+                }
+            })
+            .collect();
+        let mut all = rest;
+        // #2910: a route that declares no `headers:` takes the case's extra
+        // request headers (the call's trailing `RequestHeaders`, when the
+        // checker accepted one) in a slot ahead of `sub`.
+        if cx.has_system_http_route(&(
+            id.name.clone(),
+            verb.as_str().to_string(),
+            format!("{path}{}", crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
+        )) {
+            let sends_extra = matches!(
+                cx.commons().callees.get(&e.id),
+                Some(Callee::TestService {
+                    extra_headers: true,
+                    ..
+                })
+            );
+            let slot = if sends_extra {
+                all.pop().unwrap_or_else(|| "undefined".to_string())
+            } else {
+                "undefined".to_string()
+            };
+            all.push(slot);
+        }
+        all.push(sub);
+        // #2019: a refinement-guarded route's signing drivers take the claims
+        // the acting actor presents; the no-auth drivers sign nothing.
+        if !cx.call_site_no_credential
+            && cx.call_site_bad_signature.is_none()
+            && let Some(claims) = cx.system_http_claims_arg(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                path.clone(),
+            ))
+        {
+            all.push(claims);
+        }
+        // #2155: an actor-sum route's signing drivers take the actor the call
+        // acts as, which picks its credential.
+        if !cx.call_site_no_credential
+            && cx.call_site_bad_signature.is_none()
+            && let Some(actor) = cx.system_http_sum_actor_arg(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                path.clone(),
+            ))
+        {
+            all.push(actor);
+        }
+        return Some(format!(
+            "{}_{}_{}({})",
+            driver,
+            id.name,
+            key,
+            all.join(", ")
+        ));
+    }
+    None
+}
+
+/// Lower a local service call inside a test `case` body, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_test_service_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // #2024: a case `let` may shadow a service of the target; the local wins.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && cx.is_test_service(&id.name)
+        && !cx.is_local(&id.name)
+    {
+        // #1994: a target whose handlers send with `~>` settles each addressed
+        // call — awaits the promises the handler handed `deps.__exec.waitUntil`
+        // — so the case's expectations see the sends' effects.
+        let settles = cx.test_settles_sends();
+        // #2683: on virtual time every addressed call is driven (auto-advance)
+        // and then settled, whether or not the handler also sends.
+        let virtual_time = cx.runtime_use().virtual_time();
+        let settle = |call: String| {
+            if virtual_time {
+                format!("__bynkSettleVirtual(deps, {call})")
+            } else if settles {
+                format!("__bynkSettle(deps, {call})")
+            } else {
+                call
+            }
+        };
+        // P7.2: deferred, not narrowed. `identity` is the raw lowered call-site value
+        // (e.g. `"bob"`), with no reachable identity type at this `cx` — resolving
+        // one needs the addressed actor's own identity type threaded through from
+        // `bynk-check`'s actor declarations, not plumbed here today (unlike the
+        // `ty: &TypeRef` available a few lines up for the sibling brand cast). A
+        // guessed type risks a `tsc --strict` mismatch; left as `any`, named here.
+        // I3 (#1971), #2020: a sum handler (`on call` or http) reads the
+        // principal as the resolved actor, `deps.who` (the emitted handler's
+        // deps key for every sum, whatever its binder is named):
+        // `by Caller("shop.front")`, `by User("ada")` or `by Visitor`.
+        let sum_key = match (IrHttpMethod::from_ident(&method.name), args.first()) {
+            (Some(verb), Some(first)) => match &first.kind {
+                ExprKind::StrLit(path) => {
+                    Some(crate::emitter::http_handler_method_name_ir(verb, path))
+                }
+                _ => None,
+            },
+            _ if method.name == "call" => Some("call".to_string()),
+            // #3051: a websocket `open` reads its principal as an `on call` or
+            // http handler does.
+            _ if method.name == "open" => Some("open".to_string()),
+            _ => None,
+        };
+        let is_sum = sum_key
+            .as_deref()
+            .is_some_and(|k| cx.is_sum_handler(&id.name, k));
+        let deps_expr = match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
+            (Some(actor), identity) if is_sum => match identity {
+                Some(identity) => {
+                    format!("{{ ...deps, who: {{ tag: {actor:?}, identity: {identity} }} }}")
+                }
+                None => format!("{{ ...deps, who: {{ tag: {actor:?} }} }}"),
+            },
+            (_, Some(_))
+                if sum_key
+                    .as_deref()
+                    .is_some_and(|k| cx.is_binderless_handler(&id.name, k)) =>
+            {
+                "deps".to_string()
+            }
+            (_, Some(identity)) => {
+                // #2380 (L5): an `Oidc` handler also reads its token's claims
+                // from `deps.claims`: the principal's, or none.
+                let claims = if sum_key
+                    .as_deref()
+                    .is_some_and(|k| cx.is_oidc_handler(&id.name, k))
+                {
+                    cx.note_token_claims();
+                    let claims = cx
+                        .call_site_claims
+                        .clone()
+                        .unwrap_or_else(|| "__tokenClaims([])".to_string());
+                    format!(", claims: {claims}")
+                } else {
+                    String::new()
+                };
+                format!("{{ ...deps, identity: ({identity} as any){claims} }}")
+            }
+            (_, None) => "deps".to_string(),
+        };
+        // http address: the method is an HTTP verb and the first argument is the
+        // route pattern string. The key is a pure function of verb + path; the
+        // remaining args are the handler's positional params.
+        if let Some(verb) = IrHttpMethod::from_ident(&method.name)
+            && let Some(first) = args.first()
+            && let ExprKind::StrLit(path) = &first.kind
+        {
+            let key = crate::emitter::http_handler_method_name_ir(verb, path);
+            let rest: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
+            let mut all = rest;
+            all.push(deps_expr);
+            return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+        }
+        // cron/queue address: the emitted key is position-indexed among the
+        // service's same-kind handlers, so recover the index from the handler
+        // list. cron drops the leading schedule string; queue passes the
+        // message. P6.37 (design/tracks/the-ir.md §6a): reads `IrHandlerKind`
+        // (P6.24a's own pure, unconditional mirror) rather than the raw AST
+        // `HandlerKind` this map used to store.
+        if let Some(handlers) = cx.test_service_handlers(&id.name) {
+            if method.name == "schedule"
+                && let Some(ExprKind::StrLit(expr)) = args.first().map(|a| &a.kind)
+            {
+                let mut idx = 0usize;
+                for h in handlers {
+                    if let bynk_model::IrHandlerKind::Cron { expr: e } = h {
+                        if e == expr {
+                            break;
+                        }
+                        idx += 1;
+                    }
+                }
+                let key = crate::emitter::cron_handler_method_name(&id.name, idx);
+                let rest: Vec<String> = args[1..].iter().map(|a| pre.lower(a, cx)).collect();
+                let mut all = rest;
+                all.push(deps_expr);
+                return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+            }
+            // #3051: the websocket lifecycle addresses. The `TestConnection`
+            // remembers the route values and `deps` (the principal) from `open`;
+            // `message`/`close` rebuild the handler's argument list from them. The
+            // checker encoded the shape in the callee's address.
+            if let Some(Callee::TestService { address, .. }) = cx.commons().callee(e.id)
+                && let Some(shape) = address.strip_prefix("ws ")
+            {
+                let mut parts = shape.split(' ');
+                let which = parts.next().unwrap_or_default();
+                let nums: Vec<usize> = parts.filter_map(|p| p.parse().ok()).collect();
+                let tc = args
+                    .first()
+                    .map(|a| pre.lower(a, cx))
+                    .unwrap_or_else(|| "undefined".to_string());
+                let svc = &id.name;
+                // Typed from the handler's own signature (`Parameters<typeof …>`), so
+                // `tsc` checks the arity, the frame position and the `deps` shape
+                // against the emitted handler; only the route values, which the
+                // `TestConnection` holds as `unknown`, are cast, as production's
+                // dispatch casts `__att.args[i]`.
+                let sig = |m: &str| format!("Parameters<typeof {svc}.{m}>");
+                let call = match which {
+                    "open" => {
+                        let route: Vec<String> =
+                            args[1..].iter().map(|a| pre.lower(a, cx)).collect();
+                        let mut parts = vec!["__c".to_string()];
+                        parts.extend(route.iter().cloned());
+                        parts.push(deps_expr.clone());
+                        format!(
+                            "(async () => {{ const __c = {tc}; const __a: {} = [{}]; __c.remember([{}], __a[__a.length - 1]); return {svc}.open(...__a); }})()",
+                            sig("open"),
+                            parts.join(", "),
+                            route.join(", ")
+                        )
+                    }
+                    "message" => {
+                        let (frame_idx, n) = (
+                            nums.first().copied().unwrap_or(0),
+                            nums.get(1).copied().unwrap_or(1),
+                        );
+                        let frame = args
+                            .get(1)
+                            .map(|a| pre.lower(a, cx))
+                            .unwrap_or_else(|| "undefined".to_string());
+                        let p = sig("message");
+                        let mut k = 0usize;
+                        let mut parts = vec!["__c".to_string()];
+                        for i in 0..n {
+                            if i == frame_idx {
+                                parts.push(frame.clone());
+                            } else {
+                                parts.push(format!("__o.route[{k}] as {p}[{}]", i + 1));
+                                k += 1;
+                            }
+                        }
+                        parts.push(format!("__o.deps as {p}[{}]", n + 1));
+                        format!(
+                            "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.message(...__a); }})()",
+                            parts.join(", ")
+                        )
+                    }
+                    _ => {
+                        let n = nums.first().copied().unwrap_or(0);
+                        let p = sig("close");
+                        let mut parts = vec!["__c".to_string()];
+                        for i in 0..n {
+                            parts.push(format!("__o.route[{i}] as {p}[{}]", i + 1));
+                        }
+                        parts.push(format!("__o.deps as {p}[{}]", n + 1));
+                        format!(
+                            "(async () => {{ const __c = {tc}; const __o = __c.opened(); const __a: {p} = [{}]; return {svc}.close(...__a); }})()",
+                            parts.join(", ")
+                        )
+                    }
+                };
+                return Some(settle(call));
+            }
+            if method.name == "message"
+                && handlers
+                    .iter()
+                    .any(|h| matches!(h, bynk_model::IrHandlerKind::Message))
+            {
+                // A `from queue` service binds exactly one queue and declares one
+                // `on message` handler, so the position index is 0.
+                let key = crate::emitter::queue_handler_method_name(&id.name, 0);
+                let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                let mut all = args_lowered;
+                all.push(deps_expr);
+                return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
+            }
+            // #2052: an event address delivers through the module's
+            // `__bynkEvent_<svc>` helper (`tests_emit::event_delivery_helper`),
+            // which supplies the default envelope and calls the service's
+            // generated `event` method, whose prologue runs the pattern filter
+            // and the `via schema(N)` guard as every real delivery does. An
+            // omitted envelope is passed as `undefined`.
+            if method.name == "event"
+                && handlers
+                    .iter()
+                    .any(|h| matches!(h, bynk_model::IrHandlerKind::Event))
+            {
+                cx.runtime_use().note_test_event_service(&id.name);
+                let payload = args
+                    .first()
+                    .map(|a| pre.lower(a, cx))
+                    .unwrap_or_else(|| "undefined".to_string());
+                let envelope = args
+                    .get(1)
+                    .map(|a| pre.lower(a, cx))
+                    .unwrap_or_else(|| "undefined".to_string());
+                return Some(settle(format!(
+                    "__bynkEvent_{}({payload}, {envelope}, {deps_expr})",
+                    id.name
+                )));
+            }
+        }
+        // `svc.call(args)` and other (non-http) forms: pass args through with deps.
+        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let mut all = args_lowered;
+        all.push(deps_expr);
+        return Some(settle(format!(
+            "{}.{}({})",
+            id.name,
+            method.name,
+            all.join(", ")
+        )));
+    }
+    None
+}
+
+/// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_inline_agent_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // v0.9.2: inline agent invocation. Source form is
+    // `Agent(<key>).method(args)`; receiver parses as
+    // `Call(Agent, [<key>])`. Lower to
+    // `__makeAgent(<key>).method(args, deps)`. Works in service and
+    // agent-handler bodies (deps is the handler's deps parameter) and
+    // test bodies (deps is the locally-built __makeTestDeps record).
+    //
+    // P6.21 (partial, continued): reads `Callee::Agent` (P6.0) instead of
+    // `cx.local_agents.contains(&name.name)` — the checker's own
+    // `check_method_call` records this the moment a receiver's *checked
+    // type* resolves to an agent, uniformly for this shape, the let-bound
+    // shape below, and the self-agent WS-transfer case inside this branch —
+    // closing a real instance of R6.5's name-matched-receiver defect class
+    // (a free function or local sharing an agent's own name could misfire
+    // the old check; the checker's own type-driven resolution cannot).
+    if let ExprKind::Call {
+        name,
+        args: ctor_args,
+        ..
+    } = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
+    {
+        // v0.104 (real-time track slice 3b): when lowering a `from websocket`
+        // `on open` body inside its hosting Durable Object, a transfer to the
+        // self-agent is a direct `this.method(args, deps)` self-call — the key
+        // addresses *this* DO, and the held connection never crosses an RPC
+        // boundary (DECISION A). The key expression is **not** emitted: the shape
+        // constraint (`bynk.ws.open_transfer_shape`, D2) restricts it to a
+        // request-derivable param ident — side-effect-free and equal to this
+        // instance's own key — so dropping it is sound. #2959 widened the key to a
+        // context `const` or a literal (`bynk.ws.open_transfer_key`), and #2967
+        // to a used commons' `const`; all are pure and the edge routed the
+        // upgrade by the same value, so it still is.
+        if cx.ws_self_agent() == Some(name.name.as_str()) {
+            cx.record_agent_call(&name.name, &method.name);
+            let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+            let mut all = args_lowered;
+            all.push("deps".to_string());
+            return Some(format!(
+                "this.{method}({args})",
+                method = method.name,
+                args = all.join(", ")
+            ));
+        }
+        cx.record_agent_call(&name.name, &method.name);
+        let key_arg = ctor_args
+            .first()
+            .map(|a| pre.lower(a, cx))
+            .unwrap_or_else(|| "\"default\"".to_string());
+        let instance = cx.agent_construct(&name.name, &key_arg);
+        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let mut all = args_lowered;
+        // #2355: `this.deps` in a provider body.
+        all.push(cx.cap_deps_expr().to_string());
+        return Some(format!(
+            "{instance}.{method}({args})",
+            method = method.name,
+            args = all.join(", ")
+        ));
+    }
+    None
+}
+
+/// Lower a method call on a let-bound agent instance, or `None` when the call is not one. Moved out of
+/// `lower_method_call` (#3167) unchanged.
+fn lower_let_bound_agent_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    // Let-bound agent invocation. `let x = Agent(key); x.method(args)`
+    // — the statement emitter recorded `x` as an agent variable when
+    // it lowered the let. Method calls on `x` go straight to the
+    // class instance with `deps` threaded through.
+    //
+    // P6.21 (partial, continued): reads `Callee::Agent` instead of
+    // `cx.local_agent_vars.contains_key(&id.name)` — see the inline
+    // agent-invocation branch above. `cx.local_agent_vars` stays: it still
+    // answers "which agent does this bind name refer to" (needed for
+    // `record_agent_call`'s own bookkeeping and the #908 rename-resolution
+    // below), a different question from "is this receiver really an agent
+    // instance at all," which `Callee` now settles.
+    if let ExprKind::Ident(id) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Agent { .. }))
+    {
+        if let Some(agent) = cx.local_agent_vars.get(&id.name).cloned() {
+            cx.record_agent_call(&agent, &method.name);
+        }
+        let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+        let mut all = args_lowered;
+        all.push(cx.cap_deps_expr().to_string());
+        // #908: `local_agent_vars` is keyed by the bynk source name, which a
+        // re-`let` may have renamed — resolve to the actual JS binding rather
+        // than assuming the source name is still it.
+        let recv = cx
+            .resolved_local_name(&id.name)
+            .unwrap_or_else(|| id.name.clone());
+        return Some(format!("{}.{}({})", recv, method.name, all.join(", ")));
     }
     None
 }
@@ -3646,19 +3741,17 @@ fn lower_store_held_map_call(
             // be dropped unclosed. Re-putting the same connection under its own
             // key (the same connection id) leaves it open.
             "put" => format!(
-                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} {2}; return undefined; }})()",
-                a[0],
-                a[1],
-                own_set(&m, "__k", "__new")
+                "(async () => {{ const __k = String({0}); const __new = __connIdOf({1}); const __old = await {m}.get(__k); if (__old !== undefined && __old !== __new) {{ const __c = __resolveConnection<{f_ts}>(this.state, __old); if (__c.tag === \"Some\") {{ await __c.value.close(); }} }} await {m}.put(__k, __new); return undefined; }})()",
+                a[0], a[1]
             ),
             "remove" => format!(
-                "(async () => {{ const __k = String({0}); const __cid = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} delete {m}[__k]; }} return undefined; }})()",
+                "(async () => {{ const __k = String({0}); const __cid = await {m}.get(__k); if (__cid !== undefined) {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); if (__c.tag === \"Some\") {{ await __c.value.close(); }} await {m}.remove(__k); }} return undefined; }})()",
                 a[0]
             ),
-            "contains" => format!("globalThis.Object.hasOwn({m}, String({}))", a[0]),
-            "size" => format!("globalThis.Object.keys({m}).length"),
+            "contains" => format!("{m}.has(String({}))", a[0]),
+            "size" => format!("{m}.size()"),
             "get" => format!(
-                "(() => {{ const __k = String({0}); return globalThis.Object.hasOwn({m}, __k) ? __resolveConnection<{f_ts}>(this.state, {m}[__k]) : None; }})()",
+                "(() => {{ const __cid = {m}.get(String({0})); return __cid !== undefined ? __resolveConnection<{f_ts}>(this.state, __cid) : None; }})()",
                 a[0]
             ),
             // Any non-entry op is a lazy query lifting the map into a scan over its
@@ -3672,7 +3765,7 @@ fn lower_store_held_map_call(
                     .unwrap_or_default();
                 lower_query_by_name(
                     format!(
-                        "globalThis.Object.values({m}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
+                        "{m}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }})"
                     ),
                     method,
                     &a,
@@ -3734,54 +3827,46 @@ fn lower_store_map_call(
         // v0.93 (ADR 0118): the value-record fields this map is `@indexed(by:)` on.
         let idx_fields: Vec<String> = cx.agent_store_index_fields(&id.name);
         // Route an equality `filter` on an indexed field to a posting-list lookup
-        // (`<map>__idx_<f>[v]`) instead of a full `Object.values` scan. The lookup
-        // reads the staged map, so it stays read-your-writes (the index is
-        // maintained in the same commit).
+        // (`<map>.byIndex(f, v)`) instead of a full scan. The lookup reads the staged
+        // handle, so it stays read-your-writes (the index is maintained by every put).
         if method.name == "filter"
             && let [arg] = args
             && let ExprKind::Lambda(lam) = &arg.kind
-            && let Some(routed) = pre.absorb_opt(route_indexed_filter(
-                &m,
-                &var,
-                &id.name,
-                &idx_fields,
-                lam,
-                cx,
-            ))
+            && let Some(routed) = pre.absorb_opt(route_indexed_filter(&m, &idx_fields, lam, cx))
         {
             return Some(routed);
         }
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        // A key may be a number or a branded value: the handle is keyed by its string.
+        let k = a
+            .first()
+            .map(|x| format!("String({x})"))
+            .unwrap_or_default();
         return Some(match method.name.as_str() {
-            // v0.93: an indexed map's mutators keep the sibling posting-lists exact
-            // inside the same staged commit (re-index on last-write-wins).
-            "put" if !idx_fields.is_empty() => idx_map_put(&m, &var, &id.name, &idx_fields, &a),
-            "remove" if !idx_fields.is_empty() => {
-                idx_map_remove(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "update" if !idx_fields.is_empty() => {
-                idx_map_update(&m, &var, &id.name, &idx_fields, &a)
-            }
-            "upsert" if !idx_fields.is_empty() => {
-                idx_map_upsert(&m, &var, &id.name, &idx_fields, &a)
-            }
-            // #3261: on the bundle, `put` over a key that already holds a
-            // `Connection` closes the displaced `TestConnection` first, as
-            // `remove` does and as the Workers build does; re-putting the same
-            // connection under its own key leaves it open (compared by identity).
+            // #3254: the map is an insertion-ordered handle, and an `@indexed` map's handle
+            // keeps its own posting lists exact on every `put`/`remove` (re-indexing on
+            // last-write-wins), so the mutators are the plain ones.
+            //
+            // #3261: on the bundle, `put` over a key that already holds a `Connection`
+            // closes the displaced `TestConnection` first, as `remove` does and as the
+            // Workers build does; re-putting the same connection under its own key leaves
+            // it open (compared by identity).
             "put"
                 if cx
                     .agent_store_map_value_ts(&id.name)
                     .is_some_and(|v| v.starts_with("Connection<")) =>
             {
                 format!(
-                    "(async () => {{ const __k = {0}; const __new = {1}; if (globalThis.Object.hasOwn({m}, __k) && {m}[__k] !== __new) {{ await {m}[__k].close(); }} {2}; return undefined; }})()",
-                    a[0],
-                    a[1],
-                    own_set(&m, "__k", "__new")
+                    "(async () => {{ const __k = {0}; const __new = {1}; const __old = await {m}.get(__k); if (__old !== undefined && __old !== __new) {{ await __old.close(); }} await {m}.put(__k, __new); return undefined; }})()",
+                    k, a[1]
                 )
             }
-            "put" => format!("({}, undefined)", own_set(&m, &a[0], &a[1])),
+            // #3189: every handle call is awaited, so a handle backed by storage serves the
+            // same lowering as the in-memory one (which returns its values at once).
+            "put" => format!(
+                "(async () => {{ await {m}.put({}, {}); return undefined; }})()",
+                k, a[1]
+            ),
             // #3224: on the bundle target a held `store Map[K, Connection]` is an
             // ordinary in-memory map of `TestConnection`s (the Workers build
             // persists connection ids instead and takes `lower_store_held_map_call`), so `remove` must still honour the §2.9 contract that it
@@ -3793,32 +3878,27 @@ fn lower_store_map_call(
                     .is_some_and(|v| v.starts_with("Connection<")) =>
             {
                 format!(
-                    "(async () => {{ const __k = {0}; if (globalThis.Object.hasOwn({m}, __k)) {{ await {m}[__k].close(); delete {m}[__k]; }} return undefined; }})()",
-                    a[0]
+                    "(async () => {{ const __k = {0}; const __o = await {m}.get(__k); if (__o !== undefined) {{ await __o.close(); await {m}.remove(__k); }} return undefined; }})()",
+                    k
                 )
             }
-            "remove" => format!("((delete {m}[{}]), undefined)", a[0]),
-            "contains" => format!("globalThis.Object.hasOwn({m}, {})", a[0]),
-            "size" => format!("globalThis.Object.keys({m}).length"),
+            "remove" => format!(
+                "(async () => {{ await {m}.remove({}); return undefined; }})()",
+                k
+            ),
+            "contains" => format!("{m}.has({})", k),
+            "size" => format!("{m}.size()"),
             "get" => format!(
-                "(() => {{ const __k = {0}; return globalThis.Object.hasOwn({m}, __k) ? Some({m}[__k]) : None; }})()",
-                a[0]
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __h ? __bynkThen({m}.get(__k), (__v) => Some(__v!)) : None); }})()",
+                k
             ),
             "update" => format!(
-                "(() => {{ const __k = {0}; if (!globalThis.Object.hasOwn({m}, __k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} {m}[__k] = ({1})({m}[__k]); return undefined; }})()",
-                a[0], a[1]
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => {{ if (!__h) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} return __bynkThen({m}.get(__k), (__v) => __bynkThen({m}.put(__k, ({1})(__v!)), () => undefined)); }}); }})()",
+                k, a[1]
             ),
             "upsert" => format!(
-                "(() => {{ const __k = {0}; {set}; return undefined; }})()",
-                a[0],
-                set = own_set(
-                    &m,
-                    "__k",
-                    &format!(
-                        "({})(globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : ({}))",
-                        a[2], a[1]
-                    )
-                ),
+                "(async () => {{ const __k = {0}; return __bynkThen({m}.has(__k), (__h) => __bynkThen(__h ? {m}.get(__k) : ({1}), (__v) => __bynkThen({m}.put(__k, ({2})(__v!)), () => undefined))); }})()",
+                k, a[1], a[2]
             ),
             // v0.91 (ADR 0119): any non-entry op is a lazy query that lifts the
             // map into a scan over its values (`Object.values`).
@@ -3842,7 +3922,7 @@ fn lower_store_map_call(
                     .map(|_| join_other_elem_ts(args, cx))
                     .unwrap_or_default();
                 lower_query_by_name(
-                    format!("globalThis.Object.values({m})"),
+                    format!("{m}.values()"),
                     method,
                     &a,
                     cx.commons().expr_types.get(&e.id).map(|te| te.ty),
@@ -3886,11 +3966,21 @@ fn lower_store_set_call(
         let var = cx.agent_store_var().to_string();
         let s = format!("{var}.{}", id.name);
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let k = a
+            .first()
+            .map(|x| format!("String({x})"))
+            .unwrap_or_default();
         return Some(match method.name.as_str() {
-            "add" => format!("({}, undefined)", own_set(&s, &a[0], "true")),
-            "remove" => format!("((delete {s}[{}]), undefined)", a[0]),
-            "contains" => format!("globalThis.Object.hasOwn({s}, {})", a[0]),
-            "size" => format!("globalThis.Object.keys({s}).length"),
+            "add" => format!(
+                "(async () => {{ await {s}.add({}); return undefined; }})()",
+                k
+            ),
+            "remove" => format!(
+                "(async () => {{ await {s}.remove({}); return undefined; }})()",
+                k
+            ),
+            "contains" => format!("{s}.has({})", k),
+            "size" => format!("{s}.size()"),
             other => format!("(/* unsupported Set op {other} */ undefined)"),
         });
     }
@@ -3930,36 +4020,39 @@ fn lower_store_cache_call(
             cx.cap_deps_expr()
         );
         let a: Vec<String> = args.iter().map(|x| pre.lower(x, cx)).collect();
+        let k = a
+            .first()
+            .map(|x| format!("String({x})"))
+            .unwrap_or_default();
         return Some(match method.name.as_str() {
-            "remove" => format!("((delete {c}[{}]), undefined)", a[0]),
+            "remove" => format!(
+                "(async () => {{ await {c}.remove({}); return undefined; }})()",
+                k
+            ),
             "put" => format!(
-                "(async () => {{ const __now = {now}; {set}; return undefined; }})()",
-                set = own_set(&c, &a[0], &format!("{{ v: {}, exp: __now + {ttl} }}", a[1])),
+                "(async () => {{ const __now = {now}; await {c}.put({0}, {{ v: {1}, exp: __now + {ttl} }}); return undefined; }})()",
+                k, a[1]
             ),
             "get" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? Some({c}[__k].v) : None; }})()",
-                a[0]
+                "(async () => {{ const __now = {now}; const __e = await {c}.get({0}); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; }})()",
+                k
             ),
             "contains" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; return globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now; }})()",
-                a[0]
+                "(async () => {{ const __now = {now}; const __e = await {c}.get({0}); return __e !== undefined && __e.exp > __now; }})()",
+                k
             ),
-            "size" => format!(
-                "(async () => {{ const __now = {now}; return globalThis.Object.values({c}).filter((__e) => __e.exp > __now).length; }})()"
-            ),
+            "size" => {
+                format!(
+                    "(async () => {{ const __now = {now}; return await {c}.liveSize(__now); }})()"
+                )
+            }
             "update" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; if (!(globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} {c}[__k] = {{ v: ({1})({c}[__k].v), exp: __now + {ttl} }}; return undefined; }})()",
-                a[0], a[1]
+                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ if (!(__e !== undefined && __e.exp > __now)) {{ throw new globalThis.Error(\"Cache.update: key absent\"); }} return __bynkThen({c}.put(__k, {{ v: ({1})(__e.v), exp: __now + {ttl} }}), () => undefined); }}); }})()",
+                k, a[1]
             ),
             "upsert" => format!(
-                "(async () => {{ const __now = {now}; const __k = {0}; const __cur = (globalThis.Object.hasOwn({c}, __k) && {c}[__k].exp > __now) ? {c}[__k].v : ({1}); {set}; return undefined; }})()",
-                a[0],
-                a[1],
-                set = own_set(
-                    &c,
-                    "__k",
-                    &format!("{{ v: ({})(__cur), exp: __now + {ttl} }}", a[2])
-                ),
+                "(async () => {{ const __now = {now}; const __k = {0}; return __bynkThen({c}.get(__k), (__e) => {{ const __cur = (__e !== undefined && __e.exp > __now) ? __e.v : ({1}); return __bynkThen({c}.put(__k, {{ v: ({2})(__cur), exp: __now + {ttl} }}), () => undefined); }}); }})()",
+                k, a[1], a[2]
             ),
             other => format!("(/* unsupported Cache op {other} */ undefined)"),
         });
@@ -4001,38 +4094,24 @@ fn lower_store_log_call(
         if method.name == "append" {
             let now = format!("await {}.Clock.now()", cx.cap_deps_expr());
             let prune = match retain {
-                Some(ms) => format!(
-                    " for (let __i = {g}.length - 1; __i >= 0; __i--) {{ if ({g}[__i].t < __now - {ms}) {g}.splice(__i, 1); }}"
-                ),
+                Some(ms) => format!(" await {g}.prune(__now - {ms});"),
                 None => String::new(),
             };
             return Some(format!(
-                "(async () => {{ const __now = {now}; {g}.push({{ t: __now, v: {0} }});{prune} return undefined; }})()",
+                "(async () => {{ const __now = {now}; await {g}.append({0}, __now);{prune} return undefined; }})()",
                 a[0]
             ));
         }
-        // The values array feeding the general query pipeline.
-        let values = format!("{g}.map((__e) => __e.v)");
+        // The values feeding the general query pipeline.
+        let values = format!("{g}.values()");
         let thunk = |body: String| format!("(() => {body})");
         return Some(match method.name.as_str() {
             // Time-window roots → a `Query` thunk over the windowed values.
-            "since" => thunk(format!(
-                "{g}.filter((__e) => __e.t >= ({0})).map((__e) => __e.v)",
-                a[0]
-            )),
-            "before" => thunk(format!(
-                "{g}.filter((__e) => __e.t < ({0})).map((__e) => __e.v)",
-                a[0]
-            )),
-            "between" => thunk(format!(
-                "{g}.filter((__e) => __e.t >= ({0}) && __e.t <= ({1})).map((__e) => __e.v)",
-                a[0], a[1]
-            )),
-            "recent" => thunk(format!(
-                "{g}.slice(globalThis.Math.max(0, {g}.length - globalThis.Math.max(0, {0}))).reverse().map((__e) => __e.v)",
-                a[0]
-            )),
-            "reversed" => thunk(format!("[...{g}].reverse().map((__e) => __e.v)")),
+            "since" => thunk(format!("{g}.since({0})", a[0])),
+            "before" => thunk(format!("{g}.before({0})", a[0])),
+            "between" => thunk(format!("{g}.between({0}, {1})", a[0], a[1])),
+            "recent" => thunk(format!("{g}.recent({0})", a[0])),
+            "reversed" => thunk(format!("{g}.reversed()")),
             // The general query vocabulary over the entry values.
             //
             // Review of #1460: `elem_ts` is this log's own element type `T`
@@ -5900,13 +5979,22 @@ fn lower_query_method(
     let keyed = *keyed;
     let elem_el = ts_array_elem(elem_ts);
     let other_elem_el = ts_array_elem(other_elem_ts);
-    let thunk = |body: String| format!("(() => {body})");
+    // #3189: the source may be a promise (a handle backed by storage reads asynchronously), so
+    // every operation runs on it through `__bynkThen`, as `__q`. An in-memory handle's values
+    // arrive at once and the callback runs at once.
+    let orig = source;
+    let source = "__q".to_string();
+    let thunk = |body: String| format!("(() => __bynkThen({orig}, (__q) => {body}))");
+    let thunk_async = |body: String| format!("(() => __bynkThen({orig}, async (__q) => {body}))");
+    let terminal = |expr: String| format!("__bynkThen({orig}, (__q) => {expr})");
     Some(match (op, a) {
         // -- builders → a deferred thunk over the narrowed source --
         (QueryOp::Filter, [p]) => thunk(format!("{source}.filter((__x) => ({p})(__x))")),
         (QueryOp::Map, [f]) => thunk(format!("{source}.map((__x) => ({f})(__x))")),
         // storage flatMap: the fn returns a `Query` (a thunk) — invoke each.
-        (QueryOp::FlatMap, [f]) => thunk(format!("{source}.flatMap((__x) => ({f})(__x)())")),
+        (QueryOp::FlatMap, [f]) => thunk_async(format!(
+            "{{ const __parts = await globalThis.Promise.all({source}.map((__x) => ({f})(__x)())); return __parts.flat(); }}"
+        )),
         (QueryOp::SortBy, [key]) if let Some(cmp) = key_cmp => thunk(with_comparator(cmp, |c| {
             format!("[...{source}].sort((__a, __b) => {c}(({key})(__a), ({key})(__b)))")
         })),
@@ -5930,11 +6018,11 @@ fn lower_query_method(
         (QueryOp::GroupBy, [key, into]) if keyed => {
             thunk(format!("__bynkGroupBy({source}, {key}, {into})"))
         }
-        (QueryOp::JoinOn, [other, left, right, into]) if keyed => thunk(format!(
-            "__bynkJoinOn({source}, ({other})(), {left}, {right}, {into})"
+        (QueryOp::JoinOn, [other, left, right, into]) if keyed => thunk_async(format!(
+            "__bynkJoinOn({source}, await ({other})(), {left}, {right}, {into})"
         )),
-        (QueryOp::LeftJoin, [other, left, right, into]) if keyed => thunk(format!(
-            "__bynkLeftJoin({source}, ({other})(), {left}, {right}, {into})"
+        (QueryOp::LeftJoin, [other, left, right, into]) if keyed => thunk_async(format!(
+            "__bynkLeftJoin({source}, await ({other})(), {left}, {right}, {into})"
         )),
         (QueryOp::Distinct, []) => thunk(format!("[...new globalThis.Set({source})]")),
         // Review of #1460: narrowed, not deferred. A first attempt used
@@ -5963,14 +6051,14 @@ fn lower_query_method(
         // already call over `args[0]`'s checked type) — reused, not
         // re-derived, and threaded as a param rather than called here to
         // keep this function's own argument count under clippy's lint.
-        (QueryOp::JoinOn, [other, left, right, into]) => thunk(format!(
-            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of ({other})()) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {other_elem_ts}) => ({into})(__t, __u)); }}); }}"
+        (QueryOp::JoinOn, [other, left, right, into]) => thunk_async(format!(
+            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of (await ({other})())) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.map((__u: {other_elem_ts}) => ({into})(__t, __u)); }}); }}"
         )),
-        (QueryOp::LeftJoin, [other, left, right, into]) => thunk(format!(
-            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of ({other})()) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {other_elem_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }}"
+        (QueryOp::LeftJoin, [other, left, right, into]) => thunk_async(format!(
+            "{{ const __h: globalThis.Record<string, {other_elem_el}[]> = globalThis.Object.create(null); for (const __u of (await ({other})())) {{ const __k = String(({right})(__u)); (__h[__k] = __h[__k] ?? []).push(__u); }} return {source}.flatMap((__t: {elem_ts}) => {{ const __m = __h[String(({left})(__t))] ?? []; return __m.length > 0 ? __m.map((__u: {other_elem_ts}) => ({into})(__t, Some(__u))) : [({into})(__t, None)]; }}); }}"
         )),
-        (QueryOp::Join, [other, on, into]) => thunk(format!(
-            "{{ const __b = ({other})(); return {source}.flatMap((__t) => __b.filter((__u) => ({on})(__t, __u)).map((__u) => ({into})(__t, __u))); }}"
+        (QueryOp::Join, [other, on, into]) => thunk_async(format!(
+            "{{ const __b = await ({other})(); return {source}.flatMap((__t) => __b.filter((__u) => ({on})(__t, __u)).map((__u) => ({into})(__t, __u))); }}"
         )),
         // Review of #1460: `__h`'s buckets hold `{source}`'s own rows
         // (`elem_ts`), the receiver's element type — same as `distinctBy`
@@ -5979,35 +6067,35 @@ fn lower_query_method(
             "{{ const __h: globalThis.Record<string, {elem_el}[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of {source}) {{ const __k = String(({key})(__t)); if (!(__k in __h)) {{ __h[__k] = []; __order.push(__k); }} __h[__k].push(__t); }} return __order.map((__k) => {{ const __rows = __h[__k]; return ({into})(({key})(__rows[0]), __rows); }}); }}"
         )),
         // -- terminals → read the source array (awaited at the `<-`) --
-        (QueryOp::Collect, []) => source,
-        (QueryOp::First, []) => format!(
+        (QueryOp::Collect, []) => terminal(source),
+        (QueryOp::First, []) => terminal(format!(
             "(() => {{ const __a = {source}; return __a.length > 0 ? Some(__a[0]) : None; }})()"
-        ),
-        (QueryOp::FirstOrElse, [default]) => format!(
+        )),
+        (QueryOp::FirstOrElse, [default]) => terminal(format!(
             "(() => {{ const __a = {source}; return __a.length > 0 ? __a[0] : ({default}); }})()"
-        ),
-        (QueryOp::Count, []) => format!("{source}.length"),
-        (QueryOp::Fold, [init, f]) => format!(
+        )),
+        (QueryOp::Count, []) => terminal(format!("{source}.length")),
+        (QueryOp::Fold, [init, f]) => terminal(format!(
             "(() => {{ let __acc = {init}; for (const __x of {source}) __acc = ({f})(__acc, __x); return __acc; }})()"
-        ),
-        (QueryOp::Any, [p]) => format!("{source}.some((__x) => ({p})(__x))"),
-        (QueryOp::All, [p]) => format!("{source}.every((__x) => ({p})(__x))"),
-        (QueryOp::Sum, [key]) => {
-            format!("{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)")
-        }
+        )),
+        (QueryOp::Any, [p]) => terminal(format!("{source}.some((__x) => ({p})(__x))")),
+        (QueryOp::All, [p]) => terminal(format!("{source}.every((__x) => ({p})(__x))")),
+        (QueryOp::Sum, [key]) => terminal(format!(
+            "{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)"
+        )),
         (QueryOp::Min | QueryOp::Max, [key]) if let Some(key_cmp) = key_cmp => {
             let op = if op == QueryOp::Min { "<" } else { ">" };
             with_comparator(key_cmp, |c| {
-                format!(
+                terminal(format!(
                     "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if ({c}(__k, __m) {op} 0) __m = __k; }} return Some(__m); }})()"
-                )
+                ))
             })
         }
         (QueryOp::Min | QueryOp::Max, [key]) => {
             let cmp = if op == QueryOp::Min { "<" } else { ">" };
-            format!(
+            terminal(format!(
                 "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __m = ({key})(__a[0]); for (const __x of __a) {{ const __k = ({key})(__x); if (__k {cmp} __m) __m = __k; }} return Some(__m); }})()"
-            )
+            ))
         }
         (QueryOp::Average, [key]) => {
             // Duration averages round to integer millis (checker result decides).
@@ -6022,21 +6110,19 @@ fn lower_query_method(
             } else {
                 "__s / __a.length"
             };
-            format!(
+            terminal(format!(
                 "(() => {{ const __a = {source}; if (__a.length === 0) return None; let __s = 0; for (const __x of __a) __s += ({key})(__x); return Some({mean}); }})()"
-            )
+            ))
         }
-        (QueryOp::ForEach, [f]) => {
-            format!("(async () => {{ for (const __x of {source}) {{ await ({f})(__x); }} }})()")
-        }
+        (QueryOp::ForEach, [f]) => terminal(format!(
+            "(async () => {{ for (const __x of {source}) {{ await ({f})(__x); }} }})()"
+        )),
         // v0.107 (slice 4): the parallel broadcast form — issue the effectful fn over
         // every element concurrently and await them together, so one slow element
         // does not head-of-line-block the rest.
-        (QueryOp::ParTraverse, [f]) => {
-            format!(
-                "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
-            )
-        }
+        (QueryOp::ParTraverse, [f]) => terminal(format!(
+            "(async () => {{ await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); }})()"
+        )),
         // v0.149 (ADR 0173): the collect-all terminals over a query/broadcast —
         // gather every `Result` outcome (an `Err` is a value, so nothing rejects).
         (QueryOp::TraverseAll, [f]) => {
@@ -6048,141 +6134,45 @@ fn lower_query_method(
                 _ => "any".to_string(),
             };
             let res_el = ts_array_elem(&res_ts);
-            format!(
+            terminal(format!(
                 "(async () => {{ const __out: {res_el}[] = []; for (const __x of {source}) {{ __out.push(await ({f})(__x)); }} return __out; }})()"
-            )
+            ))
         }
-        (QueryOp::ParTraverseAll, [f]) => {
-            format!(
-                "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
-            )
-        }
+        (QueryOp::ParTraverseAll, [f]) => terminal(format!(
+            "(async () => await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))))()"
+        )),
         // v0.150 (ADR 0174): the short-circuit collect terminals — stop at the
         // first `Err`, returning `Result[List[U], E]`.
         (QueryOp::TraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
-            format!(
+            terminal(format!(
                 "(async () => {{ const __out: {u_el}[] = []; for (const __x of {source}) {{ const __r = await ({f})(__x); if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
-            )
+            ))
         }
         (QueryOp::ParTraverseTry, [f]) => {
             let u_ts = list_ok_elem_ts(result_ty, tys);
             let u_el = ts_array_elem(&u_ts);
-            format!(
+            terminal(format!(
                 "(async () => {{ const __rs = await __bynkSettleAll({source}.map((__x) => () => ({f})(__x))); const __out: {u_el}[] = []; for (const __r of __rs) {{ if (__r.tag === \"Err\") {{ return Err(__r.error); }} __out.push(__r.value); }} return Ok(__out); }})()"
-            )
+            ))
         }
         _ => return None,
     })
 }
 
-/// #1685: a store collection is a plain object, and its keys come from user
-/// data. A property *set* of `__proto__` hits `Object.prototype`'s accessor (a
-/// primitive value is dropped, an object value reassigns the prototype), so
-/// every write that may create a key *defines* it instead. Reads of a key that
-/// may be absent go through `Object.hasOwn`, never `in` or a bare index, so an
-/// inherited name (`constructor`, `toString`) is not read as present. A write to
-/// a key already known to be own (after an `Object.hasOwn` check) may stay a set.
-fn own_set(obj: &str, key: &str, value: &str) -> String {
-    format!(
-        "globalThis.Object.defineProperty({obj}, {key}, {{ value: {value}, writable: true, enumerable: true, configurable: true }})"
-    )
-}
-
 // ---- v0.93 (ADR 0118): `@indexed` secondary-index emission ----------------
 //
-// For a `store Map[K, V] @indexed(by: f)` field `m`, a sibling state record
-// `m__idx_f: Record<string, string[]>` maps a (stringified) field value to the
-// primary keys whose value carries it. The mutators maintain it inside the same
-// staged commit; an equality `filter` on `f` reads it instead of scanning.
-
-/// Fragment that *removes* `pk` from the posting-list of every indexed field of
-/// the value bound to `val_local` (used before overwriting/deleting an entry).
-fn idx_unindex(var: &str, map: &str, fields: &[String], val_local: &str, pk: &str) -> String {
-    fields
-        .iter()
-        .map(|f| {
-            let idx = format!("{var}.{map}__idx_{f}");
-            format!(
-                "{{ const __ik = String(({val_local}).{f}); const __ia = globalThis.Object.hasOwn({idx}, __ik) ? {idx}[__ik] : undefined; if (__ia) {{ const __ii = __ia.indexOf({pk}); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete {idx}[__ik]; }} }}"
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// Fragment that *adds* `pk` to the posting-list of every indexed field of the
-/// value bound to `val_local` (used after writing an entry).
-fn idx_reindex(var: &str, map: &str, fields: &[String], val_local: &str, pk: &str) -> String {
-    fields
-        .iter()
-        .map(|f| {
-            let idx = format!("{var}.{map}__idx_{f}");
-            format!(
-                "{{ const __ik = String(({val_local}).{f}); if (!globalThis.Object.hasOwn({idx}, __ik)) {}; {idx}[__ik].push({pk}); }}",
-                own_set(&idx, "__ik", "[]")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// `put` with index maintenance: drop the prior value's postings (if any), write,
-/// then post the new value. Last-write-wins re-indexing.
-fn idx_map_put(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    let re = idx_reindex(var, map, fields, "__v", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); const __v = {v}; const __o = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__o !== undefined) {{ {un} }} {set}; {re} return undefined; }})()",
-        k = a[0],
-        v = a[1],
-        set = own_set(m, "__k", "__v"),
-    )
-}
-
-/// `remove` with index maintenance: drop the value's postings, then delete.
-fn idx_map_remove(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); const __o = globalThis.Object.hasOwn({m}, __k) ? {m}[__k] : undefined; if (__o !== undefined) {{ {un} delete {m}[__k]; }} return undefined; }})()",
-        k = a[0],
-    )
-}
-
-/// `update` with index maintenance: the key must exist (else a fault); re-index
-/// from old value to new.
-fn idx_map_update(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    let re = idx_reindex(var, map, fields, "__v", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); if (!globalThis.Object.hasOwn({m}, __k)) {{ throw new globalThis.Error(\"Map.update: key absent\"); }} const __o = {m}[__k]; {un} const __v = ({f})(__o); {m}[__k] = __v; {re} return undefined; }})()",
-        k = a[0],
-        f = a[1],
-    )
-}
-
-/// `upsert` with index maintenance: re-index from the prior value (if present)
-/// to the computed new value.
-fn idx_map_upsert(m: &str, var: &str, map: &str, fields: &[String], a: &[String]) -> String {
-    let un = idx_unindex(var, map, fields, "__o", "__k");
-    let re = idx_reindex(var, map, fields, "__v", "__k");
-    format!(
-        "(() => {{ const __k = String({k}); const __e = globalThis.Object.hasOwn({m}, __k); const __o = __e ? {m}[__k] : undefined; if (__e) {{ {un} }} const __v = ({f})(__e ? __o : ({d})); {set}; {re} return undefined; }})()",
-        k = a[0],
-        d = a[1],
-        f = a[2],
-        set = own_set(m, "__k", "__v"),
-    )
-}
+// For a `store Map[K, V] @indexed(by: f)` field, the map's handle keeps a posting list
+// per index: a (stringified) field value maps to the primary keys whose value carries
+// it, in insertion order (#3254). Its `put`/`remove` maintain it; an equality `filter`
+// on `f` reads it through `byIndex` instead of scanning.
 
 /// If `lam` is `(p) => p.<field> == <value>` (either order) where `<field>` is
 /// indexed and `<value>` does not mention `p`, lower it to a posting-list lookup
-/// thunk `() => idx[v].map(pk => map[pk])`. Otherwise `None` (fall back to scan).
+/// thunk `() => map.byIndex(f, v)`. Otherwise `None` (fall back to scan).
 fn route_indexed_filter(
     m: &str,
-    var: &str,
-    map: &str,
     fields: &[String],
     lam: &LambdaExpr,
     cx: &mut LowerCtx,
@@ -6207,9 +6197,7 @@ fn route_indexed_filter(
         return None;
     }
     let v = pre.lower(value, cx);
-    let text: Option<String> = Some(format!(
-        "(() => {{ const __s = String({v}); const __ia = {var}.{map}__idx_{field}; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => {m}[__pk]); }})"
-    ));
+    let text: Option<String> = Some(format!("(() => {m}.byIndex(\"{field}\", String({v})))"));
     text.map(|expr| pre.finish(expr))
 }
 
@@ -7417,7 +7405,7 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     {
         let var = cx.agent_store_var();
         return format!(
-            "(() => globalThis.Object.values({var}.{name}).flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }}))",
+            "(() => {var}.{name}.values().flatMap((__cid) => {{ const __c = __resolveConnection<{f_ts}>(this.state, __cid); return __c.tag === \"Some\" ? [__c.value] : []; }}))",
             name = id.name
         );
     }
@@ -7427,13 +7415,13 @@ fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> String {
     // the same deferred thunk a query builder yields: `() => Object.values(map)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_map(&id.name) {
         let var = cx.agent_store_var();
-        return format!("(() => globalThis.Object.values({var}.{}))", id.name);
+        return format!("(() => {var}.{}.values())", id.name);
     }
     // v0.95 (ADR 0121): a bare `store Log` ident used as a value is a lazy
     // `Query` over its entry values — `() => log.map((__e) => __e.v)`.
     if !cx.is_local(&id.name) && cx.is_agent_store_log(&id.name) {
         let var = cx.agent_store_var();
-        return format!("(() => {var}.{}.map((__e) => __e.v))", id.name);
+        return format!("(() => {var}.{}.values())", id.name);
     }
     // v0.9: a nullary HttpResult variant (whose checker type is
     // `HttpResult[_]`) constructs an HttpResult.<Variant>.
@@ -8257,20 +8245,20 @@ fn lower_field_access(e: &Expr, receiver: &Expr, field: &Ident, cx: &mut LowerCt
         let var = cx.agent_store_var().to_string();
         let m = format!("{var}.{}", id.name);
         return pre.finish(match field.name.as_str() {
-            map_query::VALUES => format!("(() => globalThis.Object.values({m}))"),
+            map_query::VALUES => format!("(() => {m}.values())"),
             map_query::KEYS => {
                 let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
                 if decoded == "__k" {
-                    format!("(() => globalThis.Object.keys({m}))")
+                    format!("(() => {m}.keys())")
                 } else {
-                    format!("(() => globalThis.Object.keys({m}).map((__k) => {decoded}))")
+                    format!("(() => {m}.keys().map((__k) => {decoded}))")
                 }
             }
             // entries
             _ => {
                 let decoded = decode_map_key(map_key_ty(e, cx), "__k", tys);
                 format!(
-                    "(() => globalThis.Object.entries({m}).map(([__k, __v]) => ({{ key: {decoded}, value: __v }})))"
+                    "(() => {m}.entries().map(([__k, __v]) => ({{ key: {decoded}, value: __v }})))"
                 )
             }
         });

@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -17,21 +18,28 @@ export const Reservation = {
 };
 
 export interface InventoryState {
-  readonly reservations: globalThis.Record<string, Reservation>;
+  readonly reservations: __StoreMap<Reservation>;
 }
 
 const __InventoryRegistry = new __StateRegistry();
-function __zeroOfInventoryState(): InventoryState { return { reservations: {} }; }
+function __zeroOfInventoryState(): InventoryState { return { reservations: new __StoreMap<Reservation>() }; }
 
 const __entryFieldsOfInventory = [{ name: "reservations", kind: "map" }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys(s.reservations)) { const __r = __deserialise_Reservation((s.reservations[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); s.reservations[__k] = __r.value as unknown as (typeof s.reservations)[string]; }
-  for (const __k of globalThis.Object.keys(s.reservations)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).reservations as object)) { const __r = __deserialise_Reservation((((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); ((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).reservations as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+}
+
+function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
+  const __z = __zeroOfInventoryState();
+  const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "reservations")) { __fillMap(__z.reservations, __r["reservations"] as never); __w.reservations = __z.reservations; }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {
-  return { ...s, reservations: globalThis.Object.fromEntries(globalThis.Object.entries(s.reservations).map(([__k, __v]) => [__k, __serialise_Reservation(__v)])) };
+  return { ...s, reservations: __wireMap(s.reservations, (__v) => __serialise_Reservation(__v)) };
 }
 
 export class Inventory {
@@ -49,6 +57,7 @@ export class Inventory {
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
+    __hydrateInventoryState(__merged, __wholesale);
     return __merged;
   }
 
@@ -58,8 +67,8 @@ export class Inventory {
 
   async pending(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    const q: (() => readonly Reservation[]) = (() => globalThis.Object.values(__state.reservations).filter((__x) => ((r: Reservation) => r.qty > 0)(__x)));
-    return (q)();
+    const q: (() => readonly Reservation[] | globalThis.Promise<readonly Reservation[]>) = (() => __bynkThen(__state.reservations.values(), (__q) => __q.filter((__x) => ((r: Reservation) => r.qty > 0)(__x))));
+    return __bynkThen((q)(), (__q) => __q);
   }
 
 }

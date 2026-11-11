@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkCmpFloat, __bynkCmpSum } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -38,21 +39,28 @@ export const Job = {
 };
 
 export interface BoardState {
-  readonly jobs: globalThis.Record<string, Job>;
+  readonly jobs: __StoreMap<Job>;
 }
 
 const __BoardRegistry = new __StateRegistry();
-function __zeroOfBoardState(): BoardState { return { jobs: {} }; }
+function __zeroOfBoardState(): BoardState { return { jobs: new __StoreMap<Job>() }; }
 
 const __entryFieldsOfBoard = [{ name: "jobs", kind: "map" }] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) for (const __k of globalThis.Object.keys(s.jobs)) { const __r = __deserialise_Job((s.jobs[__k] as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); s.jobs[__k] = __r.value as unknown as (typeof s.jobs)[string]; }
-  for (const __k of globalThis.Object.keys(s.jobs)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).jobs as object)) { const __r = __deserialise_Job((((s as unknown as globalThis.Record<string, unknown>).jobs as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); ((s as unknown as globalThis.Record<string, unknown>).jobs as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "jobs")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).jobs as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); }
+}
+
+function __hydrateBoardState(s: BoardState, stored: BoardState): void {
+  const __z = __zeroOfBoardState();
+  const __w = s as { -readonly [K in keyof BoardState]: BoardState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "jobs")) { __fillMap(__z.jobs, __r["jobs"] as never); __w.jobs = __z.jobs; }
 }
 
 function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
-  return { ...s, jobs: globalThis.Object.fromEntries(globalThis.Object.entries(s.jobs).map(([__k, __v]) => [__k, __serialise_Job(__v)])) };
+  return { ...s, jobs: __wireMap(s.jobs, (__v) => __serialise_Job(__v)) };
 }
 
 export class Board {
@@ -70,6 +78,7 @@ export class Board {
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoardState(__merged, __wholesale);
+    __hydrateBoardState(__merged, __wholesale);
     return __merged;
   }
 
@@ -80,7 +89,7 @@ export class Board {
   async add(name: string, priority: Priority, due: number, score: number, div: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.jobs, name, { value: { name: name, priority: priority, due: due, score: score, div: div }, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { await __state.jobs.put(String(name), { name: name, priority: priority, due: due, score: score, div: div }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -89,27 +98,27 @@ export class Board {
 
   async byPriority(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __c(((j: Job) => j.priority)(__b), ((j: Job) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {}))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((j: Job) => j.priority)(__b), ((j: Job) => j.priority)(__a))))(__bynkCmpSum(["Low", "Medium", "High"], {})))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byDue(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byDueAscending(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; })))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async byScore(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__b), ((j: Job) => j.score / j.div)(__a)))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => __bynkCmpFloat(((j: Job) => j.score / j.div)(__b), ((j: Job) => j.score / j.div)(__a))))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
   async topTwo(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((() => [...globalThis.Object.values(__state.jobs)].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; })))().slice(0, globalThis.Math.max(0, 2))))().map((__x) => ((j: Job) => j.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.jobs.values(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((j: Job) => j.due)(__a), __kb = ((j: Job) => j.due)(__b); return __ka < __kb ? 1 : __ka > __kb ? -1 : 0; }))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 2)))))(), (__q) => __q.map((__x) => ((j: Job) => j.name)(__x)))))(), (__q) => __q);
   }
 
 }

@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import { __bynkDecimalAdd, __bynkDecimalParseWire, __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -23,23 +24,30 @@ export const Price = {
 export interface AccountState {
   readonly balance: { readonly coefficient: bigint; readonly scale: number };
   readonly last: Option<Price>;
-  readonly prices: globalThis.Record<string, { readonly coefficient: bigint; readonly scale: number }>;
+  readonly prices: __StoreMap<{ readonly coefficient: bigint; readonly scale: number }>;
 }
 
 const __AccountRegistry = new __StateRegistry();
-function __zeroOfAccountState(): AccountState { return { balance: { coefficient: 0n, scale: 2 }, last: None, prices: {} }; }
+function __zeroOfAccountState(): AccountState { return { balance: { coefficient: 0n, scale: 2 }, last: None, prices: new __StoreMap<{ readonly coefficient: bigint; readonly scale: number }>() }; }
 
 const __entryFieldsOfAccount = [{ name: "prices", kind: "map" }] as const;
 
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "balance", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.balance as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"]; }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "last")) { const __r = __deserialise_Option_Price((s.last as unknown as __JsonValue), "last"); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"]; }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const __k of globalThis.Object.keys(s.prices)) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((s.prices[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); s.prices[__k] = __r.value as unknown as (typeof s.prices)[string]; }
-  for (const __k of globalThis.Object.keys(s.prices)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "prices", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).prices as object)) { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "prices", expected: "decimal string", actual: typeof __v } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).prices as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); ((s as unknown as globalThis.Record<string, unknown>).prices as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "prices")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).prices as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "prices", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); }
+}
+
+function __hydrateAccountState(s: AccountState, stored: AccountState): void {
+  const __z = __zeroOfAccountState();
+  const __w = s as { -readonly [K in keyof AccountState]: AccountState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "prices")) { __fillMap(__z.prices, __r["prices"] as never); __w.prices = __z.prices; }
 }
 
 function __encodeAccountState(s: AccountState): globalThis.Record<string, unknown> {
-  return { ...s, balance: __bynkDecimalToString(s.balance) as __JsonValue, last: __serialise_Option_Price(s.last), prices: globalThis.Object.fromEntries(globalThis.Object.entries(s.prices).map(([__k, __v]) => [__k, __bynkDecimalToString(__v) as __JsonValue])) };
+  return { ...s, balance: __bynkDecimalToString(s.balance) as __JsonValue, last: __serialise_Option_Price(s.last), prices: __wireMap(s.prices, (__v) => __bynkDecimalToString(__v) as __JsonValue) };
 }
 
 export class Account {
@@ -57,6 +65,7 @@ export class Account {
     __reportUnknownStoredKeys("Account", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAccountState(__merged, __wholesale);
+    __hydrateAccountState(__merged, __wholesale);
     return __merged;
   }
 
@@ -76,7 +85,7 @@ export class Account {
   async quote(sku: string, price: Price, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      return (globalThis.Object.defineProperty(__state.prices, sku, { value: price, writable: true, enumerable: true, configurable: true }), undefined);
+      return (async () => { await __state.prices.put(String(sku), price); return undefined; })();
     })();
     await this.commitState(__state);
     return __result;
@@ -100,7 +109,7 @@ export class Account {
 
   async priceText(sku: string, deps: {}): globalThis.Promise<string> {
     const __state = await this.loadState();
-    const p = await (() => { const __k = sku; return globalThis.Object.hasOwn(__state.prices, __k) ? Some(__state.prices[__k]) : None; })();
+    const p = await (async () => { const __k = String(sku); return __bynkThen(__state.prices.has(__k), (__h) => __h ? __bynkThen(__state.prices.get(__k), (__v) => Some(__v!)) : None); })();
     switch (p.tag) {
       case "Some": {
         const d = p.value;

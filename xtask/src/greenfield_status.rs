@@ -168,7 +168,7 @@ pub fn table_path(root: &Path) -> PathBuf {
 /// Every `.rs` file under `dir`, recursively, as `(path, contents)`. Unreadable files
 /// (permissions, non-UTF-8) are skipped rather than failing the whole walk — this is a
 /// measurement tool, not a build step.
-fn rust_files(dir: &Path) -> Vec<(PathBuf, String)> {
+pub(crate) fn rust_files(dir: &Path) -> Vec<(PathBuf, String)> {
     let mut out = Vec::new();
     walk(dir, &mut out);
     out
@@ -1065,7 +1065,7 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
 ///
 /// Only matches a brace-opening `mod` line — `#[cfg(test)] mod foo;` (an external-file
 /// declaration, not an inline scope) does not open a range.
-fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
+pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut i = 0;
     while i < lines.len() {
@@ -1101,7 +1101,7 @@ fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
     ranges
 }
 
-fn in_test_range(line_idx: usize, ranges: &[(usize, usize)]) -> bool {
+pub(crate) fn in_test_range(line_idx: usize, ranges: &[(usize, usize)]) -> bool {
     ranges
         .iter()
         .any(|(start, end)| line_idx >= *start && line_idx <= *end)
@@ -1111,7 +1111,7 @@ fn in_test_range(line_idx: usize, ranges: &[(usize, usize)]) -> bool {
 /// inside a string literal, a raw string (with its `#`-count), or a block comment
 /// (with nesting depth — Rust block comments nest).
 #[derive(Clone, Copy, PartialEq)]
-enum BraceScanState {
+pub(crate) enum BraceScanState {
     Normal,
     InString,
     InRawString(u8),
@@ -1123,7 +1123,7 @@ enum BraceScanState {
 /// breaks the moment a line contains a fixture string like `"fn f() { \"{\" }"` or a
 /// doc comment mentioning a brace. Returns the depth delta and the state to carry into
 /// the next line (a string or block comment can span line boundaries).
-fn brace_delta(line: &str, mut state: BraceScanState) -> (i32, BraceScanState) {
+pub(crate) fn brace_delta(line: &str, mut state: BraceScanState) -> (i32, BraceScanState) {
     let mut delta = 0i32;
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0;
@@ -1325,7 +1325,7 @@ fn count_repo_wide(root: &Path, needle: &str, exclude_crates: &[&str]) -> usize 
 
 /// Every workspace member crate directory (anything at the repo root with a
 /// `Cargo.toml` and a `src/` dir), excluding `target` and non-crate directories.
-fn top_level_crate_dirs(root: &Path) -> Vec<PathBuf> {
+pub(crate) fn top_level_crate_dirs(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(root) else {
         return out;

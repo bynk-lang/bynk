@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __StoreMap, __StoreSet, __fillHeld, __fillSet, __wireEntries, __wireHeld, __wireHeldOrder, __wireSet } from "../../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse } from "../../__bynk_runtime/connection.js";
@@ -49,22 +50,30 @@ export const ChatGateway = {
 };
 
 export interface RoomState {
-  readonly conns: globalThis.Record<string, string>;
-  readonly members: globalThis.Record<string, boolean>;
+  readonly conns: __StoreMap<string>;
+  readonly members: __StoreSet;
 }
 
 const __RoomRegistry = new __StateRegistry();
-function __zeroOfRoomState(): RoomState { return { conns: {}, members: {} }; }
+function __zeroOfRoomState(): RoomState { return { conns: new __StoreMap<string>(), members: new __StoreSet() }; }
 
 const __entryFieldsOfRoom = [{ name: "members", kind: "set" }] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
-  for (const __k of globalThis.Object.keys(s.conns)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
-  for (const __k of globalThis.Object.keys(s.members)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "conns"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "members")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).members as never)) { const __r = __deserialise_UserId((__k as unknown as __JsonValue), "members"); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+}
+
+function __hydrateRoomState(s: RoomState, stored: RoomState): void {
+  const __z = __zeroOfRoomState();
+  const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "members")) { __fillSet(__z.members, __r["members"] as never); __w.members = __z.members; }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {
-  return { ...s };
+  return { ...s, conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns), members: __wireSet(s.members) };
 }
 
 export class Room {
@@ -84,6 +93,7 @@ export class Room {
     __reportUnknownStoredKeys("Room", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateRoomState(__merged, __wholesale);
+    __hydrateRoomState(__merged, __wholesale);
     return __merged;
   }
 
@@ -94,8 +104,8 @@ export class Room {
   async join(u: UserId, conn: Connection<ServerFrame>, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.members, u, { value: true, writable: true, enumerable: true, configurable: true }), undefined);
-      const __r1 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = globalThis.Object.hasOwn(__state.conns, __k) ? __state.conns[__k] : undefined; if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } globalThis.Object.defineProperty(__state.conns, __k, { value: __new, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (async () => { await __state.members.add(String(u)); return undefined; })();
+      const __r1 = await (async () => { const __k = String(u); const __new = __connIdOf(conn); const __old = await __state.conns.get(__k); if (__old !== undefined && __old !== __new) { const __c = __resolveConnection<ServerFrame>(this.state, __old); if (__c.tag === "Some") { await __c.value.close(); } } await __state.conns.put(__k, __new); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -105,8 +115,8 @@ export class Room {
   async leave(u: UserId, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await ((delete __state.members[u]), undefined);
-      const __r1 = await (async () => { const __k = String(u); const __cid = globalThis.Object.hasOwn(__state.conns, __k) ? __state.conns[__k] : undefined; if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } delete __state.conns[__k]; } return undefined; })();
+      const __r0 = await (async () => { await __state.members.remove(String(u)); return undefined; })();
+      const __r1 = await (async () => { const __k = String(u); const __cid = await __state.conns.get(__k); if (__cid !== undefined) { const __c = __resolveConnection<ServerFrame>(this.state, __cid); if (__c.tag === "Some") { await __c.value.close(); } await __state.conns.remove(__k); } return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);

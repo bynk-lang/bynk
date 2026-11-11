@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -41,24 +42,32 @@ export const Tot = {
 };
 
 export interface SalesState {
-  readonly orders: globalThis.Record<string, Order>;
-  readonly lines: globalThis.Record<string, Line>;
+  readonly orders: __StoreMap<Order>;
+  readonly lines: __StoreMap<Line>;
 }
 
 const __SalesRegistry = new __StateRegistry();
-function __zeroOfSalesState(): SalesState { return { orders: {}, lines: {} }; }
+function __zeroOfSalesState(): SalesState { return { orders: new __StoreMap<Order>(), lines: new __StoreMap<Line>() }; }
 
 const __entryFieldsOfSales = [{ name: "orders", kind: "map" }, { name: "lines", kind: "map" }] as const;
 
 function __rehydrateSalesState(s: SalesState, stored: SalesState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys(s.orders)) { const __r = __deserialise_Order((s.orders[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); s.orders[__k] = __r.value as unknown as (typeof s.orders)[string]; }
-  for (const __k of globalThis.Object.keys(s.orders)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const __k of globalThis.Object.keys(s.lines)) { const __r = __deserialise_Line((s.lines[__k] as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); s.lines[__k] = __r.value as unknown as (typeof s.lines)[string]; }
-  for (const __k of globalThis.Object.keys(s.lines)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).orders as object)) { const __r = __deserialise_Order((((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "orders"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); ((s as unknown as globalThis.Record<string, unknown>).orders as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "orders")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).orders as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "orders", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).lines as object)) { const __r = __deserialise_Line((((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "lines"); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); ((s as unknown as globalThis.Record<string, unknown>).lines as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lines")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).lines as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lines", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sales", __r.error); }
+}
+
+function __hydrateSalesState(s: SalesState, stored: SalesState): void {
+  const __z = __zeroOfSalesState();
+  const __w = s as { -readonly [K in keyof SalesState]: SalesState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "orders")) { __fillMap(__z.orders, __r["orders"] as never); __w.orders = __z.orders; }
+  if (globalThis.Object.hasOwn(__r, "lines")) { __fillMap(__z.lines, __r["lines"] as never); __w.lines = __z.lines; }
 }
 
 function __encodeSalesState(s: SalesState): globalThis.Record<string, unknown> {
-  return { ...s, orders: globalThis.Object.fromEntries(globalThis.Object.entries(s.orders).map(([__k, __v]) => [__k, __serialise_Order(__v)])), lines: globalThis.Object.fromEntries(globalThis.Object.entries(s.lines).map(([__k, __v]) => [__k, __serialise_Line(__v)])) };
+  return { ...s, orders: __wireMap(s.orders, (__v) => __serialise_Order(__v)), lines: __wireMap(s.lines, (__v) => __serialise_Line(__v)) };
 }
 
 export class Sales {
@@ -76,6 +85,7 @@ export class Sales {
     __reportUnknownStoredKeys("Sales", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateSalesState(__merged, __wholesale);
+    __hydrateSalesState(__merged, __wholesale);
     return __merged;
   }
 
@@ -85,17 +95,17 @@ export class Sales {
 
   async report(deps: {}): globalThis.Promise<readonly Joined[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.orders)))()) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.lines).flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l: Line, o: Order) => ({ customer: o.customer, qty: l.qty }))(__t, __u)); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), async (__q) => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.orders.values()))())) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.map((__u: Order) => ((l: Line, o: Order) => ({ customer: o.customer, qty: l.qty }))(__t, __u)); }); })))(), (__q) => __q);
   }
 
   async withMissing(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of ((() => globalThis.Object.values(__state.orders)))()) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return globalThis.Object.values(__state.lines).flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: Order) => ((l: Line, mo: Option<Order>) => l.qty)(__t, Some(__u))) : [((l: Line, mo: Option<Order>) => l.qty)(__t, None)]; }); }))().length;
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), async (__q) => { const __h: globalThis.Record<string, Order[]> = globalThis.Object.create(null); for (const __u of (await ((() => __state.orders.values()))())) { const __k = String(((o: Order) => o.id)(__u)); (__h[__k] = __h[__k] ?? []).push(__u); } return __q.flatMap((__t: Line) => { const __m = __h[String(((l: Line) => l.orderId)(__t))] ?? []; return __m.length > 0 ? __m.map((__u: Order) => ((l: Line, mo: Option<Order>) => l.qty)(__t, Some(__u))) : [((l: Line, mo: Option<Order>) => l.qty)(__t, None)]; }); })))(), (__q) => __q.length);
   }
 
   async totals(deps: {}): globalThis.Promise<readonly Tot[]> {
     const __state = await this.loadState();
-    return ((() => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of globalThis.Object.values(__state.lines)) { const __k = String(((l: Line) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows); }); }))();
+    return __bynkThen(((() => __bynkThen(__state.lines.values(), (__q) => { const __h: globalThis.Record<string, Line[]> = globalThis.Object.create(null); const __order: string[] = []; for (const __t of __q) { const __k = String(((l: Line) => l.orderId)(__t)); if (!(__k in __h)) { __h[__k] = []; __order.push(__k); } __h[__k].push(__t); } return __order.map((__k) => { const __rows = __h[__k]; return ((oid: string, rows: readonly Line[]) => ({ orderId: oid, total: (rows).reduce((__s: number, __x: Line) => __s + ((r: Line) => r.qty)(__x), 0) }))(((l: Line) => l.orderId)(__rows[0]), __rows); }); })))(), (__q) => __q);
   }
 
 }

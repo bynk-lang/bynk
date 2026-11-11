@@ -87,6 +87,36 @@ test("par of two external calls to one instance completes", async () => {
   assert.deepEqual([a, b].sort(), ["1", "2"]);
 });
 
+// #3189: lazy Map handlers await storage reads between the read and the write of a
+// read-modify-write. The queue keeps those awaits from interleaving.
+class MapCounter {
+  state: DurableObjectState;
+  env?: unknown;
+  constructor(state: DurableObjectState, env?: unknown) {
+    this.state = state;
+    this.env = env;
+  }
+  async bump(): Promise<number> {
+    const key = "m/tally/k";
+    const cur = ((await this.state.storage.get<{ i: number; v: number }>(key)) ?? { i: 0, v: 0 }).v;
+    await sleep(5);
+    await this.state.storage.put(key, { i: 1, v: cur + 1 });
+    return cur + 1;
+  }
+  async fetch(): Promise<Response> {
+    return new Response(String(await this.bump()));
+  }
+}
+
+test("map read-modify-write: raw handlers lose an update, serialised ones count both", async () => {
+  const raw = new MapCounter(makeTestState("k"));
+  await Promise.all([raw.bump(), raw.bump()]);
+  assert.equal(((await raw.state.storage.get<{ v: number }>("m/tally/k")) as { v: number }).v, 1);
+  const ns = makeIntegrationDoNamespace(MapCounter as never);
+  const answers = await Promise.all([text(call(ns, "k", "bump")), text(call(ns, "k", "bump"))]);
+  assert.deepEqual(answers.sort(), ["1", "2"]);
+});
+
 // X reaches Y, which reaches X again.
 class AgentX {
   state: DurableObjectState;

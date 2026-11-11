@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../../__bynk_runtime/entries.js";
+import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf } from "../../__bynk_runtime/connection.js";
@@ -22,20 +23,27 @@ export async function dispose(c: Connection<ServerFrame>): globalThis.Promise<vo
 }
 
 export interface RoomState {
-  readonly conns: globalThis.Record<string, string>;
+  readonly conns: __StoreMap<string>;
 }
 
 const __RoomRegistry = new __StateRegistry();
-function __zeroOfRoomState(): RoomState { return { conns: {} }; }
+function __zeroOfRoomState(): RoomState { return { conns: new __StoreMap<string>() }; }
 
 const __entryFieldsOfRoom = [] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
-  for (const __k of globalThis.Object.keys(s.conns)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error); }
+}
+
+function __hydrateRoomState(s: RoomState, stored: RoomState): void {
+  const __z = __zeroOfRoomState();
+  const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {
-  return { ...s };
+  return { ...s, conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns) };
 }
 
 export class Room {
@@ -53,6 +61,7 @@ export class Room {
     __reportUnknownStoredKeys("Room", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateRoomState(__merged, __wholesale);
+    __hydrateRoomState(__merged, __wholesale);
     return __merged;
   }
 

@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap, __wirePostings } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -18,23 +19,28 @@ export const Reservation = {
 };
 
 export interface InventoryState {
-  readonly reservations: globalThis.Record<string, Reservation>;
-  readonly reservations__idx_orderId: globalThis.Record<string, string[]>;
-  readonly reservations__idx_id: globalThis.Record<string, string[]>;
+  readonly reservations: __StoreMap<Reservation>;
 }
 
 const __InventoryRegistry = new __StateRegistry();
-function __zeroOfInventoryState(): InventoryState { return { reservations: {}, reservations__idx_orderId: {}, reservations__idx_id: {} }; }
+function __zeroOfInventoryState(): InventoryState { return { reservations: new __StoreMap<Reservation>([{ index: "id", of: (__v) => String(__v.id) }, { index: "orderId", of: (__v) => String(__v.orderId) }]) }; }
 
 const __entryFieldsOfInventory = [{ name: "reservations", kind: "map", indexes: [{ index: "id", recordField: "reservations__idx_id" }, { index: "orderId", recordField: "reservations__idx_orderId" }] }] as const;
 
 function __rehydrateInventoryState(s: InventoryState, stored: InventoryState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys(s.reservations)) { const __r = __deserialise_Reservation((s.reservations[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); s.reservations[__k] = __r.value as unknown as (typeof s.reservations)[string]; }
-  for (const __k of globalThis.Object.keys(s.reservations)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).reservations as object)) { const __r = __deserialise_Reservation((((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "reservations"); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); ((s as unknown as globalThis.Record<string, unknown>).reservations as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "reservations")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).reservations as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "reservations", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Inventory", __r.error); }
+}
+
+function __hydrateInventoryState(s: InventoryState, stored: InventoryState): void {
+  const __z = __zeroOfInventoryState();
+  const __w = s as { -readonly [K in keyof InventoryState]: InventoryState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "reservations")) { __fillMap(__z.reservations, __r["reservations"] as never); __w.reservations = __z.reservations; }
 }
 
 function __encodeInventoryState(s: InventoryState): globalThis.Record<string, unknown> {
-  return { ...s, reservations: globalThis.Object.fromEntries(globalThis.Object.entries(s.reservations).map(([__k, __v]) => [__k, __serialise_Reservation(__v)])) };
+  return { ...s, reservations: __wireMap(s.reservations, (__v) => __serialise_Reservation(__v)), reservations__idx_id: __wirePostings(s.reservations, "id"), reservations__idx_orderId: __wirePostings(s.reservations, "orderId") };
 }
 
 export class Inventory {
@@ -52,6 +58,7 @@ export class Inventory {
     __reportUnknownStoredKeys("Inventory", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateInventoryState(__merged, __wholesale);
+    __hydrateInventoryState(__merged, __wholesale);
     return __merged;
   }
 
@@ -62,7 +69,7 @@ export class Inventory {
   async reserve(rid: string, r: Reservation, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(rid); const __v = r; const __o = globalThis.Object.hasOwn(__state.reservations, __k) ? __state.reservations[__k] : undefined; if (__o !== undefined) { { const __ik = String((__o).orderId); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik) ? __state.reservations__idx_orderId[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_orderId[__ik]; } } { const __ik = String((__o).id); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_id, __ik) ? __state.reservations__idx_id[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_id[__ik]; } } } globalThis.Object.defineProperty(__state.reservations, __k, { value: __v, writable: true, enumerable: true, configurable: true }); { const __ik = String((__v).orderId); if (!globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_orderId, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_orderId[__ik].push(__k); } { const __ik = String((__v).id); if (!globalThis.Object.hasOwn(__state.reservations__idx_id, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_id, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_id[__ik].push(__k); } return undefined; })();
+      const __r0 = await (async () => { await __state.reservations.put(String(rid), r); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -72,7 +79,7 @@ export class Inventory {
   async retag(rid: string, oid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(rid); if (!globalThis.Object.hasOwn(__state.reservations, __k)) { throw new globalThis.Error("Map.update: key absent"); } const __o = __state.reservations[__k]; { const __ik = String((__o).orderId); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik) ? __state.reservations__idx_orderId[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_orderId[__ik]; } } { const __ik = String((__o).id); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_id, __ik) ? __state.reservations__idx_id[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_id[__ik]; } } const __v = ((r: Reservation) => ({ ...r, orderId: oid }))(__o); __state.reservations[__k] = __v; { const __ik = String((__v).orderId); if (!globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_orderId, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_orderId[__ik].push(__k); } { const __ik = String((__v).id); if (!globalThis.Object.hasOwn(__state.reservations__idx_id, __ik)) globalThis.Object.defineProperty(__state.reservations__idx_id, __ik, { value: [], writable: true, enumerable: true, configurable: true }); __state.reservations__idx_id[__ik].push(__k); } return undefined; })();
+      const __r0 = await (async () => { const __k = String(rid); return __bynkThen(__state.reservations.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.reservations.get(__k), (__v) => __bynkThen(__state.reservations.put(__k, ((r: Reservation) => ({ ...r, orderId: oid }))(__v!)), () => undefined)); }); })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -82,7 +89,7 @@ export class Inventory {
   async drop(rid: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (() => { const __k = String(rid); const __o = globalThis.Object.hasOwn(__state.reservations, __k) ? __state.reservations[__k] : undefined; if (__o !== undefined) { { const __ik = String((__o).orderId); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_orderId, __ik) ? __state.reservations__idx_orderId[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_orderId[__ik]; } } { const __ik = String((__o).id); const __ia = globalThis.Object.hasOwn(__state.reservations__idx_id, __ik) ? __state.reservations__idx_id[__ik] : undefined; if (__ia) { const __ii = __ia.indexOf(__k); if (__ii >= 0) __ia.splice(__ii, 1); if (__ia.length === 0) delete __state.reservations__idx_id[__ik]; } } delete __state.reservations[__k]; } return undefined; })();
+      const __r0 = await (async () => { await __state.reservations.remove(String(rid)); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -91,17 +98,17 @@ export class Inventory {
 
   async countForOrder(oid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __s = String(oid); const __ia = __state.reservations__idx_orderId; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => __state.reservations[__pk]); }))().length;
+    return __bynkThen(((() => __state.reservations.byIndex("orderId", String(oid))))(), (__q) => __q.length);
   }
 
   async qtyForOrder(oid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __s = String(oid); const __ia = __state.reservations__idx_orderId; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => __state.reservations[__pk]); }))().reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0);
+    return __bynkThen(((() => __state.reservations.byIndex("orderId", String(oid))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((r: Reservation) => r.qty)(__x), 0));
   }
 
   async countById(rid: string, deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => { const __s = String(rid); const __ia = __state.reservations__idx_id; return (globalThis.Object.hasOwn(__ia, __s) ? __ia[__s] : []).map((__pk) => __state.reservations[__pk]); }))().length;
+    return __bynkThen(((() => __state.reservations.byIndex("id", String(rid))))(), (__q) => __q.length);
   }
 
 }

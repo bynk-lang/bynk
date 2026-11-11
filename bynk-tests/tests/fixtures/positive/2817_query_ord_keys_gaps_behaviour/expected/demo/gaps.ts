@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpOption } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillHeld, __fillMap, __wireEntries, __wireHeld, __wireHeldOrder, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 import type { Connection } from "../__bynk_runtime/connection.js";
@@ -53,23 +54,31 @@ export function keyed<K>(xs: readonly Item[], key: (a0: Item) => K, __cmp_K: (a:
 }
 
 export interface ShelfState {
-  readonly items: globalThis.Record<string, Item>;
-  readonly conns: globalThis.Record<string, Connection<Frame>>;
+  readonly items: __StoreMap<Item>;
+  readonly conns: __StoreMap<Connection<Frame>>;
 }
 
 const __ShelfRegistry = new __StateRegistry();
-function __zeroOfShelfState(): ShelfState { return { items: {}, conns: {} }; }
+function __zeroOfShelfState(): ShelfState { return { items: new __StoreMap<Item>(), conns: new __StoreMap<Connection<Frame>>() }; }
 
 const __entryFieldsOfShelf = [{ name: "items", kind: "map" }] as const;
 
 function __rehydrateShelfState(s: ShelfState, stored: ShelfState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys(s.items)) { const __r = __deserialise_Item((s.items[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); s.items[__k] = __r.value as unknown as (typeof s.items)[string]; }
-  for (const __k of globalThis.Object.keys(s.items)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
-  for (const __k of globalThis.Object.keys(s.conns)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) { const __r = __deserialise_Item((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).items as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "conns")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).conns as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "conns", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Shelf", __r.error); }
+}
+
+function __hydrateShelfState(s: ShelfState, stored: ShelfState): void {
+  const __z = __zeroOfShelfState();
+  const __w = s as { -readonly [K in keyof ShelfState]: ShelfState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {
-  return { ...s, items: globalThis.Object.fromEntries(globalThis.Object.entries(s.items).map(([__k, __v]) => [__k, __serialise_Item(__v)])) };
+  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)), conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns) };
 }
 
 export class Shelf {
@@ -87,6 +96,7 @@ export class Shelf {
     __reportUnknownStoredKeys("Shelf", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateShelfState(__merged, __wholesale);
+    __hydrateShelfState(__merged, __wholesale);
     return __merged;
   }
 
@@ -97,7 +107,7 @@ export class Shelf {
   async add(name: string, rank: Option<number>, score: number, div: number, tag: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.items, name, { value: { name: name, rank: rank, score: score, div: div, tag: Tag.unsafe(tag) }, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { await __state.items.put(String(name), { name: name, rank: rank, score: score, div: div, tag: Tag.unsafe(tag) }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -106,27 +116,27 @@ export class Shelf {
 
   async byRank(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => ((__c) => [...globalThis.Object.values(__state.items)].sort((__a, __b) => __c(((i: Item) => i.rank)(__a), ((i: Item) => i.rank)(__b))))(__bynkCmpOption(__bynkCmpInt))))().map((__x) => ((i: Item) => i.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((i: Item) => i.rank)(__a), ((i: Item) => i.rank)(__b))))(__bynkCmpOption(__bynkCmpInt)))))(), (__q) => __q.map((__x) => ((i: Item) => i.name)(__x)))))(), (__q) => __q);
   }
 
   async minScore(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = globalThis.Object.values(__state.items); if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) < 0) __m = __k; } return Some(__m); })();
+    return __bynkThen(__state.items.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) < 0) __m = __k; } return Some(__m); })());
   }
 
   async maxScore(deps: {}): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    return (() => { const __a = globalThis.Object.values(__state.items); if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) > 0) __m = __k; } return Some(__m); })();
+    return __bynkThen(__state.items.values(), (__q) => (() => { const __a = __q; if (__a.length === 0) return None; let __m = ((i: Item) => i.score / i.div)(__a[0]); for (const __x of __a) { const __k = ((i: Item) => i.score / i.div)(__x); if (__bynkCmpFloat(__k, __m) > 0) __m = __k; } return Some(__m); })());
   }
 
   async byTag(deps: {}): globalThis.Promise<readonly string[]> {
     const __state = await this.loadState();
-    return ((() => ((() => [...globalThis.Object.values(__state.items)].sort((__a, __b) => __bynkCmpInt(((i: Item) => i.tag)(__a), ((i: Item) => i.tag)(__b)))))().map((__x) => ((i: Item) => i.name)(__x))))();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.values(), (__q) => [...__q].sort((__a, __b) => __bynkCmpInt(((i: Item) => i.tag)(__a), ((i: Item) => i.tag)(__b))))))(), (__q) => __q.map((__x) => ((i: Item) => i.name)(__x)))))(), (__q) => __q);
   }
 
   async openCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => ((__c) => [...globalThis.Object.values(__state.conns)].sort((__a, __b) => __c(((c: Connection<Frame>) => Some(0))(__a), ((c: Connection<Frame>) => Some(0))(__b))))(__bynkCmpOption(__bynkCmpInt))))().length;
+    return __bynkThen(((() => __bynkThen(__state.conns.values(), (__q) => ((__c) => [...__q].sort((__a, __b) => __c(((c: Connection<Frame>) => Some(0))(__a), ((c: Connection<Frame>) => Some(0))(__b))))(__bynkCmpOption(__bynkCmpInt)))))(), (__q) => __q.length);
   }
 
 }

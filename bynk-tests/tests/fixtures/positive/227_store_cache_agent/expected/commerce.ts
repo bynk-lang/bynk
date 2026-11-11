@@ -4,7 +4,8 @@
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
+import { __StoreCache, __fillMap, __wireMap } from "./__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -23,20 +24,27 @@ export class SystemClock implements Clock {
 export const __SystemClockProvider = { token: __ClockToken, factory: () => new SystemClock() };
 
 export interface SessionsState {
-  readonly live: globalThis.Record<string, { v: number; exp: number }>;
+  readonly live: __StoreCache<number>;
 }
 
 const __SessionsRegistry = new __StateRegistry();
-function __zeroOfSessionsState(): SessionsState { return { live: {} }; }
+function __zeroOfSessionsState(): SessionsState { return { live: new __StoreCache<number>() }; }
 
 const __entryFieldsOfSessions = [{ name: "live", kind: "cache" }] as const;
 
 function __rehydrateSessionsState(s: SessionsState, stored: SessionsState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "live")) for (const __e of globalThis.Object.values(s.live)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "live")) for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).live as globalThis.Record<string, { v: unknown }>)) { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); __e.v = __r.value; }
+}
+
+function __hydrateSessionsState(s: SessionsState, stored: SessionsState): void {
+  const __z = __zeroOfSessionsState();
+  const __w = s as { -readonly [K in keyof SessionsState]: SessionsState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "live")) { __fillMap(__z.live, __r["live"] as never); __w.live = __z.live; }
 }
 
 function __encodeSessionsState(s: SessionsState): globalThis.Record<string, unknown> {
-  return { ...s, live: globalThis.Object.fromEntries(globalThis.Object.entries(s.live).map(([__k, __e]) => [__k, { ...__e, v: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__e.v) }])) };
+  return { ...s, live: __wireMap(s.live, (__e) => ({ ...__e, v: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__e.v) })) };
 }
 
 export class Sessions {
@@ -54,6 +62,7 @@ export class Sessions {
     __reportUnknownStoredKeys("Sessions", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateSessionsState(__merged, __wholesale);
+    __hydrateSessionsState(__merged, __wholesale);
     return __merged;
   }
 
@@ -64,7 +73,7 @@ export class Sessions {
   async put(token: string, userId: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); globalThis.Object.defineProperty(__state.live, token, { value: { v: userId, exp: __now + 300000 }, writable: true, enumerable: true, configurable: true }); return undefined; })();
+      const __r0 = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); await __state.live.put(String(token), { v: userId, exp: __now + 300000 }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -73,13 +82,13 @@ export class Sessions {
 
   async lookup(token: string, deps: { Clock: Clock }): globalThis.Promise<Option<number>> {
     const __state = await this.loadState();
-    const found = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __k = token; return (globalThis.Object.hasOwn(__state.live, __k) && __state.live[__k].exp > __now) ? Some(__state.live[__k].v) : None; })();
+    const found = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); const __e = await __state.live.get(String(token)); return (__e !== undefined && __e.exp > __now) ? Some(__e.v) : None; })();
     return found;
   }
 
   async active(deps: { Clock: Clock }): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return globalThis.Object.values(__state.live).filter((__e) => __e.exp > __now).length; })();
+    const n = await (async () => { const __now = __noteClock(__state, await deps.Clock.now()); return await __state.live.liveSize(__now); })();
     return n;
   }
 

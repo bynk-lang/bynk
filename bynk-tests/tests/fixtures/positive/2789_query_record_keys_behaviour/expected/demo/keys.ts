@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkDistinct, __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkLeftJoin } from "../__bynk_runtime/keys.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __noteClock } from "../__bynk_runtime/entries.js";
+import { __StoreLog, __StoreMap, __fillLog, __fillMap, __wireEntries, __wireLog, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -70,29 +71,39 @@ export class FixedClock implements Clock {
 export const __FixedClockProvider = { token: __ClockToken, factory: () => new FixedClock() };
 
 export interface LogState {
-  readonly visits: globalThis.Record<string, Visit>;
-  readonly labels: globalThis.Record<string, Label>;
-  readonly regions: globalThis.Record<string, Region>;
-  readonly trail: globalThis.Array<{ t: number; v: Site }>;
+  readonly visits: __StoreMap<Visit>;
+  readonly labels: __StoreMap<Label>;
+  readonly regions: __StoreMap<Region>;
+  readonly trail: __StoreLog<Site>;
 }
 
 const __LogRegistry = new __StateRegistry();
-function __zeroOfLogState(): LogState { return { visits: {}, labels: {}, regions: {}, trail: [] }; }
+function __zeroOfLogState(): LogState { return { visits: new __StoreMap<Visit>(), labels: new __StoreMap<Label>(), regions: new __StoreMap<Region>(), trail: new __StoreLog<Site>() }; }
 
 const __entryFieldsOfLog = [{ name: "visits", kind: "map" }, { name: "labels", kind: "map" }, { name: "regions", kind: "map" }, { name: "trail", kind: "log" }] as const;
 
 function __rehydrateLogState(s: LogState, stored: LogState): void {
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "visits")) for (const __k of globalThis.Object.keys(s.visits)) { const __r = __deserialise_Visit((s.visits[__k] as unknown as __JsonValue), "visits"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); s.visits[__k] = __r.value as unknown as (typeof s.visits)[string]; }
-  for (const __k of globalThis.Object.keys(s.visits)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "visits", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "labels")) for (const __k of globalThis.Object.keys(s.labels)) { const __r = __deserialise_Label((s.labels[__k] as unknown as __JsonValue), "labels"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); s.labels[__k] = __r.value as unknown as (typeof s.labels)[string]; }
-  for (const __k of globalThis.Object.keys(s.labels)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "regions")) for (const __k of globalThis.Object.keys(s.regions)) { const __r = __deserialise_Region((s.regions[__k] as unknown as __JsonValue), "regions"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); s.regions[__k] = __r.value as unknown as (typeof s.regions)[string]; }
-  for (const __k of globalThis.Object.keys(s.regions)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "regions", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
-  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "trail")) for (const __e of s.trail) { const __r = __deserialise_Site((__e.v as unknown as __JsonValue), "trail"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); __e.v = __r.value as unknown as typeof __e.v; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "visits")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).visits as object)) { const __r = __deserialise_Visit((((s as unknown as globalThis.Record<string, unknown>).visits as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "visits"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); ((s as unknown as globalThis.Record<string, unknown>).visits as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "visits")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).visits as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "visits", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "labels")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).labels as object)) { const __r = __deserialise_Label((((s as unknown as globalThis.Record<string, unknown>).labels as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "labels"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); ((s as unknown as globalThis.Record<string, unknown>).labels as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "labels")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).labels as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "regions")) for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).regions as object)) { const __r = __deserialise_Region((((s as unknown as globalThis.Record<string, unknown>).regions as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue), "regions"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); ((s as unknown as globalThis.Record<string, unknown>).regions as globalThis.Record<string, unknown>)[__k] = __r.value; }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "regions")) for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).regions as never)) { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "regions", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "trail")) for (const __e of ((s as unknown as globalThis.Record<string, unknown>).trail as ReadonlyArray<{ v: unknown }>)) { const __r = __deserialise_Site((__e.v as unknown as __JsonValue), "trail"); if (__r.tag === "Err") throw __rehydrationViolation("Log", __r.error); __e.v = __r.value; }
+}
+
+function __hydrateLogState(s: LogState, stored: LogState): void {
+  const __z = __zeroOfLogState();
+  const __w = s as { -readonly [K in keyof LogState]: LogState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "visits")) { __fillMap(__z.visits, __r["visits"] as never); __w.visits = __z.visits; }
+  if (globalThis.Object.hasOwn(__r, "labels")) { __fillMap(__z.labels, __r["labels"] as never); __w.labels = __z.labels; }
+  if (globalThis.Object.hasOwn(__r, "regions")) { __fillMap(__z.regions, __r["regions"] as never); __w.regions = __z.regions; }
+  if (globalThis.Object.hasOwn(__r, "trail")) { __fillLog(__z.trail, __r["trail"] as never); __w.trail = __z.trail; }
 }
 
 function __encodeLogState(s: LogState): globalThis.Record<string, unknown> {
-  return { ...s, visits: globalThis.Object.fromEntries(globalThis.Object.entries(s.visits).map(([__k, __v]) => [__k, __serialise_Visit(__v)])), labels: globalThis.Object.fromEntries(globalThis.Object.entries(s.labels).map(([__k, __v]) => [__k, __serialise_Label(__v)])), regions: globalThis.Object.fromEntries(globalThis.Object.entries(s.regions).map(([__k, __v]) => [__k, __serialise_Region(__v)])), trail: s.trail.map((__e) => ({ ...__e, v: __serialise_Site(__e.v) })) };
+  return { ...s, visits: __wireMap(s.visits, (__v) => __serialise_Visit(__v)), labels: __wireMap(s.labels, (__v) => __serialise_Label(__v)), regions: __wireMap(s.regions, (__v) => __serialise_Region(__v)), trail: __wireLog(s.trail, (__v) => __serialise_Site(__v)) };
 }
 
 export class Log {
@@ -110,6 +121,7 @@ export class Log {
     __reportUnknownStoredKeys("Log", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLogState(__merged, __wholesale);
+    __hydrateLogState(__merged, __wholesale);
     return __merged;
   }
 
@@ -120,7 +132,7 @@ export class Log {
   async visit(k: string, region: Region, code: number, n: number, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.visits, k, { value: { site: { region: region, code: code }, n: n }, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { await __state.visits.put(String(k), { site: { region: region, code: code }, n: n }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -130,7 +142,7 @@ export class Log {
   async label(k: string, region: Region, code: number, name: string, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.labels, k, { value: { site: { region: region, code: code }, name: name }, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { await __state.labels.put(String(k), { site: { region: region, code: code }, name: name }); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -140,7 +152,7 @@ export class Log {
   async region(k: string, r: Region, deps: {}): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (globalThis.Object.defineProperty(__state.regions, k, { value: r, writable: true, enumerable: true, configurable: true }), undefined);
+      const __r0 = await (async () => { await __state.regions.put(String(k), r); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -149,32 +161,32 @@ export class Log {
 
   async distinctSites(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinct(((() => globalThis.Object.values(__state.visits).map((__x) => ((v: Visit) => v.site)(__x))))())))().length;
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.visits.values(), (__q) => __q.map((__x) => ((v: Visit) => v.site)(__x)))))(), (__q) => __bynkDistinct(__q))))(), (__q) => __q.length);
   }
 
   async distinctRegions(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinct(((() => globalThis.Object.values(__state.regions)))())))().length;
+    return __bynkThen(((() => __bynkThen(((() => __state.regions.values()))(), (__q) => __bynkDistinct(__q))))(), (__q) => __q.length);
   }
 
   async firstSeen(deps: {}): globalThis.Promise<readonly Visit[]> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinctBy(globalThis.Object.values(__state.visits), (v: Visit) => v.site)))();
+    return __bynkThen(((() => __bynkThen(__state.visits.values(), (__q) => __bynkDistinctBy(__q, (v: Visit) => v.site))))(), (__q) => __q);
   }
 
   async totals(deps: {}): globalThis.Promise<readonly Tally[]> {
     const __state = await this.loadState();
-    return ((() => __bynkGroupBy(globalThis.Object.values(__state.visits), (v: Visit) => v.site, (s: Site, rows: readonly Visit[]) => ({ site: s, total: (rows).reduce((__s: number, __x: Visit) => __s + ((r: Visit) => r.n)(__x), 0) }))))();
+    return __bynkThen(((() => __bynkThen(__state.visits.values(), (__q) => __bynkGroupBy(__q, (v: Visit) => v.site, (s: Site, rows: readonly Visit[]) => ({ site: s, total: (rows).reduce((__s: number, __x: Visit) => __s + ((r: Visit) => r.n)(__x), 0) })))))(), (__q) => __q);
   }
 
   async joined(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkJoinOn(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Label) => v.n)))().reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0);
+    return __bynkThen(((() => __bynkThen(__state.visits.values(), async (__q) => __bynkJoinOn(__q, await ((() => __state.labels.values()))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Label) => v.n))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0));
   }
 
   async matchedTotal(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkLeftJoin(globalThis.Object.values(__state.visits), ((() => globalThis.Object.values(__state.labels)))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Option<Label>) => ((__d) => {
+    return __bynkThen(((() => __bynkThen(__state.visits.values(), async (__q) => __bynkLeftJoin(__q, await ((() => __state.labels.values()))(), (v: Visit) => v.site, (l: Label) => l.site, (v: Visit, l: Option<Label>) => ((__d) => {
     switch (__d.tag) {
       case "Some": {
         return v.n;
@@ -184,13 +196,13 @@ export class Log {
       }
     }
     throw new globalThis.Error("non-exhaustive match");
-  })(l))))().reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0);
+  })(l)))))(), (__q) => __q.reduce((__s: number, __x) => __s + ((x: number) => x)(__x), 0));
   }
 
   async logSite(region: Region, code: number, deps: { Clock: Clock }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const __r0 = await (async () => { const __now = await deps.Clock.now(); __state.trail.push({ t: __now, v: { region: region, code: code } }); for (let __i = __state.trail.length - 1; __i >= 0; __i--) { if (__state.trail[__i].t < __now - 2592000000) __state.trail.splice(__i, 1); } return undefined; })();
+      const __r0 = await (async () => { const __now = await deps.Clock.now(); await __state.trail.append({ region: region, code: code }, __now); await __state.trail.prune(__now - 2592000000); return undefined; })();
       return undefined;
     })();
     await this.commitState(__state);
@@ -199,7 +211,7 @@ export class Log {
 
   async distinctLogged(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    return ((() => __bynkDistinctBy(((() => __state.trail.slice(globalThis.Math.max(0, __state.trail.length - globalThis.Math.max(0, 10))).reverse().map((__e) => __e.v)))(), (s: Site) => s)))().length;
+    return __bynkThen(((() => __bynkThen(((() => __state.trail.recent(10)))(), (__q) => __bynkDistinctBy(__q, (s: Site) => s))))(), (__q) => __q.length);
   }
 
 }
