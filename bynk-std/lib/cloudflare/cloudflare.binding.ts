@@ -935,8 +935,11 @@ export class WorkersEmail implements Email {
     let bytes = 0;
     for (const [name, value] of headers) {
       if (/[\r\n]/.test(name)) WorkersEmail.fault("a header name may not contain a line break");
-      if (/[\r\n]/.test(value)) {
+      if (/[\r\n\u0085\u2028\u2029]/.test(value)) {
         WorkersEmail.fault(`the value of header ${JSON.stringify(name)} may not contain a line break`);
+      }
+      if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value)) {
+        WorkersEmail.fault(`the value of header ${JSON.stringify(name)} may not contain a control character`);
       }
       if (name === "" || /[:\s\u0000-\u001f\u007f]/.test(name)) {
         WorkersEmail.fault(`${JSON.stringify(name)} is not a header name`);
@@ -959,6 +962,9 @@ export class WorkersEmail implements Email {
     if (recipients > WorkersEmail.MAX_RECIPIENTS) {
       WorkersEmail.fault(`a message has at most 50 recipients across to, cc and bcc, not ${recipients}`);
     }
+    if (recipients === 0) {
+      WorkersEmail.fault("a message needs at least one recipient in to, cc or bcc");
+    }
     if (m.attachments.length > WorkersEmail.MAX_ATTACHMENTS) {
       WorkersEmail.fault(`a message has at most 32 attachments, not ${m.attachments.length}`);
     }
@@ -968,9 +974,12 @@ export class WorkersEmail implements Email {
     let total = bytes(m.subject);
     if (m.text.tag === "Some") total += bytes(m.text.value);
     if (m.html.tag === "Some") total += bytes(m.html.value);
-    for (const a of m.attachments) total += a.content.byteLength;
+    // Measured as sent: attachments travel as base64 text (4 bytes per 3),
+    // and the custom headers count too.
+    for (const a of m.attachments) total += Math.ceil(a.content.byteLength / 3) * 4;
+    for (const [name, value] of m.headers) total += bytes(name) + bytes(value);
     if (total > WorkersEmail.MAX_TOTAL_BYTES) {
-      WorkersEmail.fault(`a message totals at most 25 MiB with its attachments, not ${total} bytes`);
+      WorkersEmail.fault(`a message totals at most 25 MiB as sent (attachments as base64), not ${total} bytes`);
     }
     WorkersEmail.checkHeaders(m.headers);
   }

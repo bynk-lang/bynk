@@ -720,7 +720,8 @@ export const __StoredSecretToken: symbol = globalThis.Symbol("StoredSecret");
  * outcome a handler acts on. A call that breaks a documented limit is a
  * programming error and faults before it reaches the platform: more than
  * 50 recipients across `to`, `cc` and `bcc`, more than 32 attachments,
- * more than 25 MiB of message and attachments in total, neither `text` nor
+ * more than 25 MiB in total (attachments counted as base64, as sent), no
+ * recipient at all, neither `text` nor
  * `html`, a reserved header (see `EmailMessage`) or a line break in a header's
  * name or value. Attachments go to the platform as base64 text, which both
  * the platform and `wrangler dev` accept; message bodies and attachment

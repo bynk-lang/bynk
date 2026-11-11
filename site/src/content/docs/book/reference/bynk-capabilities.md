@@ -845,13 +845,15 @@ so an `html` body refers to it as `cid:logo.png`.
 **Faults, not errors.** A platform refusal is a value, because a handler can act
 on it. Breaking a documented limit is a programming error, so the call **faults
 before anything is sent**: more than 50 recipients across `to`, `cc` and `bcc`,
-more than 32 attachments, more than 25 MiB of subject, bodies and attachments in
-total, neither `text` nor `html`, and custom `headers` over 16 KB.
+more than 32 attachments, more than 25 MiB in total (subject, bodies, headers and
+attachments, measured as sent: an attachment counts as base64, a third larger
+than its bytes), no recipient at all, neither `text` nor `html`, and custom
+`headers` over 16 KB.
 
 **Header injection.** `headers` may not set `From`, `To`, `Cc`, `Bcc`, `Subject`
 or `Reply-To` (in any case): the message's own fields set those. A header name
 that is empty or holds a colon, a space or a control character, and any name or
-value holding a line break (CR or LF), is refused too. Each faults before the
+value holding a line break (CR, LF, U+0085, U+2028 or U+2029), and a value holding another control character (a tab is fine), is refused too. Each faults before the
 call, naming the header but never echoing a value, so data that reaches a header
 cannot add another.
 

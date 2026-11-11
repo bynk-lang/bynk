@@ -1414,14 +1414,25 @@ t("WorkersEmail.send: 32 attachments pass and 33 fault", async () => {
   await faults(mail({ attachments: Array.from({ length: 33 }, (_, i) => file(i)) }), /at most 32 attachments, not 33/);
 });
 
-t("WorkersEmail.send: 25 MiB in total passes and one byte more faults", async () => {
+t("WorkersEmail.send: 25 MiB in total, measured as sent (attachments as base64), passes and one byte more faults", async () => {
   const limit = 25 * 1024 * 1024;
-  const body = (n) => mail({ subject: "", text: Some(""), attachments: [{ filename: "big", contentType: "application/octet-stream", content: new Uint8Array(n), inline: false }] });
+  const file = (n) => ({ filename: "big", contentType: "application/octet-stream", content: new Uint8Array(n), inline: false });
+  const body = (n, over = {}) => mail({ subject: "", text: Some(""), attachments: [file(n)], ...over });
+  // 3n raw bytes are 4n as base64: 19 MiB raw is 25.33 MiB sent, so it faults.
+  const rawAtLimit = (limit / 4) * 3;
   const ok = emailEnv();
-  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(body(limit))).tag, "Ok");
-  await faults(body(limit + 1), /totals at most 25 MiB with its attachments/);
-  // Text and html count too.
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(body(rawAtLimit))).tag, "Ok");
+  await faults(body(rawAtLimit + 3), /totals at most 25 MiB as sent/);
+  await faults(body(19 * 1024 * 1024 + 512 * 1024), /totals at most 25 MiB as sent/);
+  // Text, html and custom headers count too.
   await faults(mail({ text: Some("x".repeat(limit)), html: Some("y") }), /totals at most 25 MiB/);
+  await faults(body(rawAtLimit, { headers: new Map([["X-A", "v"]]) }), /totals at most 25 MiB/);
+});
+
+t("WorkersEmail.send: a message with no recipient faults", async () => {
+  await faults(mail({ to: [], cc: [], bcc: [] }), /at least one recipient/);
+  const ok = emailEnv();
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(mail({ to: [], cc: [], bcc: ["a@x.example"] }))).tag, "Ok");
 });
 
 t("WorkersEmail.send: neither text nor html faults, and either alone passes", async () => {
@@ -1455,6 +1466,15 @@ t("WorkersEmail.send: a line break in a header name or value faults, and the val
     assert.ok(!message.includes("evil@x.example"), message);
     assert.deepEqual(sent, []);
   }
+});
+
+t("WorkersEmail.send: a control character or Unicode line separator in a header value faults", async () => {
+  for (const bad of ["\u0000", "\u0001", "\u000b", "\u007f", "\u0085", "\u2028", "\u2029"]) {
+    await faults(mail({ headers: new Map([["X-Note", `a${bad}b`]]) }), /may not contain a (line break|control character)/);
+  }
+  // A tab is ordinary header whitespace.
+  const ok = emailEnv();
+  assert.equal((await new WorkersEmail(ok.env, "EMAIL_MAIL").send(mail({ headers: new Map([["X-Note", "a\tb"]]) }))).tag, "Ok");
 });
 
 t("WorkersEmail.send: an empty or malformed header name faults, and 16 KB of headers is the ceiling", async () => {

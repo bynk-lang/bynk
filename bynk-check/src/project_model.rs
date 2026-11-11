@@ -1377,7 +1377,7 @@ pub(crate) fn is_queue_name(name: &str) -> bool {
 }
 
 /// Whether `text` can be an email address (#3302): `local@domain`, one `@`,
-/// both sides non-empty, no whitespace, control or angle-bracket characters.
+/// both sides non-empty, a host name after it, no whitespace, control or angle-bracket characters.
 /// The platform judges the rest; this only keeps a typo, or a header-shaped
 /// string, out of a deploy-time policy that is written into configuration.
 pub(crate) fn is_email_address(text: &str) -> bool {
@@ -1386,7 +1386,10 @@ pub(crate) fn is_email_address(text: &str) -> bool {
     };
     !local.is_empty()
         && !domain.is_empty()
-        && !domain.contains('@')
+        // A host name: the domain is looked up by the deploy.
+        && domain
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
         && !text
             .chars()
             .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '"' | ','))

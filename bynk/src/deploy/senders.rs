@@ -96,7 +96,11 @@ impl SendingDomains for RestSendingDomains {
 /// wildcard `*.base`) is `domain`, or covers it.
 fn covers(entry: &str, domain: &str) -> bool {
     match entry.strip_prefix("*.") {
-        Some(base) => domain.len() > base.len() && domain.ends_with(&format!(".{base}")),
+        Some(base) => {
+            let base = base.to_ascii_lowercase();
+            let domain = domain.to_ascii_lowercase();
+            domain.len() > base.len() && domain.ends_with(&format!(".{base}"))
+        }
         None => entry.eq_ignore_ascii_case(domain),
     }
 }
@@ -106,7 +110,13 @@ fn domain_of(address: &str) -> Option<String> {
     address
         .rsplit_once('@')
         .map(|(_, d)| d.to_ascii_lowercase())
-        .filter(|d| !d.is_empty())
+        .filter(|d| {
+            // Only what a host name holds: the domain goes into a query
+            // string, so a stray `&` or `#` must never reach it.
+            !d.is_empty()
+                && d.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+        })
 }
 
 /// The zones a domain could belong to, nearest first: the domain itself, then
@@ -335,6 +345,9 @@ mod tests {
         assert!(!covers("*.shop.example", "shop.example"));
         assert!(!covers("*.shop.example", "xshop.example"));
         assert!(covers("mail.shop.example", "MAIL.shop.example"));
+        // Case never matters, in an exact name or a wildcard's base.
+        assert!(covers("*.Shop.Example", "mail.shop.example"));
+        assert!(covers("*.shop.example", "Mail.SHOP.example"));
         assert!(!covers("mail.shop.example", "shop.example"));
     }
 
@@ -433,6 +446,29 @@ mod tests {
         let (order, resources) = project(&[("shop", &[])]);
         assert!(!any_email_senders(&order, &resources));
         assert!(check_senders_for_run(&order, &resources));
+    }
+
+    #[test]
+    fn a_domain_with_query_characters_is_refused_not_sent_to_the_api() {
+        assert_eq!(domain_of("a@Shop.Example").as_deref(), Some("shop.example"));
+        for bad in [
+            "a@x.example&account.id=other",
+            "a@x.example#frag",
+            "a@x.example?q=1",
+            "a@x=y.example",
+        ] {
+            assert_eq!(domain_of(bad), None, "{bad}");
+        }
+        let (order, resources) =
+            project(&[("shop", &[("EMAIL_MAIL", &["a@x.example&account.id=other"])])]);
+        let account = Fake::new(Vec::new());
+        let problems = check_sender_domains(&order, &resources, &account).unwrap_err();
+        assert!(
+            problems[0].contains("which has no domain"),
+            "{}",
+            problems[0]
+        );
+        assert!(account.asked.borrow().is_empty());
     }
 
     #[test]
