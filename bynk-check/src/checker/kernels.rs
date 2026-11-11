@@ -3165,6 +3165,49 @@ pub(crate) fn first_recursive_generic(
     }
 }
 
+/// #3276: whether `t` is a record of form fields (the legal body of a `@form`
+/// route), reporting `bynk.types.form_uncodable` when it is not.
+fn form_codec_target(t: TyId, span: Span, verb: &str, ctx: &mut Ctx) -> bool {
+    let tys = ctx.tys;
+    let reason = match &*tys.get(t) {
+        Ty::Named { name: n, .. } => {
+            match ctx.input.types.get(n.as_str()).map(|d| d.body.clone()) {
+                Some(bynk_syntax::ast::TypeBody::Record(rec)) => rec
+                    .fields
+                    .iter()
+                    .find(|f| {
+                        !crate::context_checks::is_query_field_type(&f.type_ref, &ctx.input.types)
+                    })
+                    .map(|f| {
+                        format!(
+                            "field `{}` has type `{}`, which a form cannot carry",
+                            f.name.name,
+                            crate::context_checks::ts_type_ref_display(&f.type_ref)
+                        )
+                    }),
+                _ => Some("it is not a record".to_string()),
+            }
+        }
+        _ => Some("it is not a record".to_string()),
+    };
+    match reason {
+        None => true,
+        Some(why) => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.form_uncodable",
+                    span,
+                    format!("`Form` {verb} a record of form fields, but {why}"),
+                )
+                .with_note(
+                    "a form field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`; form keys are flat, so a nested record is not allowed. The target is a record type named directly (an alias of a record is not accepted)",
+                ),
+            );
+            false
+        }
+    }
+}
+
 /// v0.22b: type the `Json` codec statics (ADR 0045). `encode(v) -> String`
 /// over any codable value (it throws on a non-finite `Float`, per 0040 —
 /// documented, not typed); `decode[T](s) -> Result[T, DecodeError]` with `T`
@@ -3201,6 +3244,25 @@ pub(crate) fn check_json_static(
         true
     };
     match method.name.as_str() {
+        // #3276 (decision G): `Form.encode(v)`, the text a `@form` route reads, for a
+        // record of form fields.
+        "encode" if ns == "Form" => {
+            if !type_args.is_empty() {
+                ctx.errors.push(CompileError::new(
+                    "bynk.generics.type_arg_mismatch",
+                    span,
+                    "`Form.encode` takes no type arguments — its type comes from the value",
+                ));
+            }
+            if !arity1(ctx) {
+                return None;
+            }
+            let t = type_of(&args[0], None, ctx)?;
+            if !form_codec_target(t, args[0].span, "encodes", ctx) {
+                return None;
+            }
+            Some(tys.intern(Ty::Base(BaseType::String)))
+        }
         "encode" | "encodePlain" if ns == "Json" => {
             // #2991: `encodePlain` is `encode` writing `Option` as `v` / `null`.
             let plain = method.name == "encodePlain";
@@ -3382,7 +3444,11 @@ pub(crate) fn check_json_static(
                         format!(
                             "`{}` cannot be decoded from {}",
                             t.display(tys),
-                            if ns == "Yaml" { "YAML" } else { "JSON" }
+                            match ns {
+                                "Yaml" => "YAML",
+                                "Form" => "a form",
+                                _ => "JSON",
+                            }
                         ),
                     )
                     .with_note(
@@ -3393,6 +3459,9 @@ pub(crate) fn check_json_static(
                     err = err.with_note(n);
                 }
                 ctx.errors.push(err);
+                return None;
+            }
+            if ns == "Form" && !form_codec_target(t, span, "decodes into", ctx) {
                 return None;
             }
             if !super::codable::require_codable_rigid(

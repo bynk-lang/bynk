@@ -1,0 +1,12 @@
+context api
+
+type Inner = { a: String }
+
+type Nested = {
+  name: String,
+  inner: Inner,
+}
+
+fn parse(text: String) -> Result[Nested, DecodeError] {
+  Form.decode[Nested](text)
+}

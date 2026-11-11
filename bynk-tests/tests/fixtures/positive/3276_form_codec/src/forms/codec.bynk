@@ -1,0 +1,48 @@
+context forms.codec
+
+type Email = String where Matches("^[^@]+@[^@]+$")
+type Age = Int where InRange(0, 150)
+type Plan = enum { Free, Pro }
+
+type Signup = {
+	email: Email,
+	age: Option[Age],
+	plan: Plan = Free,
+	tags: List[String] = [],
+	remember: Bool = false,
+}
+
+fn describe(s: Signup) -> String {
+	let age = match s.age {
+		Some(a) => "\(a)"
+		None => "-"
+	}
+	"\(s.email) \(age) \(s.tags.length()) \(s.remember)"
+}
+
+service readForm {
+	on call(text: String) -> Effect[String] {
+		match Form.decode[Signup](text) {
+			Ok(s) => Effect.pure(describe(s))
+			Err(e) => Effect.pure("\(e.path)")
+		}
+	}
+}
+
+service writeForm {
+	on call(email: Email, tags: List[String]) -> Effect[String] {
+		Effect.pure(Form.encode(Signup { email: email, age: Some(41), plan: Pro, tags: tags, remember: true }))
+	}
+}
+
+service roundTrip {
+	on call(text: String) -> Effect[Bool] {
+		match Form.decode[Signup](text) {
+			Ok(s) => match Form.decode[Signup](Form.encode(s)) {
+				Ok(again) => Effect.pure(again == s)
+				Err(_) => Effect.pure(false)
+			}
+			Err(_) => Effect.pure(false)
+		}
+	}
+}
