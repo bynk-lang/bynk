@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.542.1** | Internal refactor of the emitter, with no change to emitted TypeScript. The test-case, system-tier and agent-invocation branches of a method call now lower in six functions, so `lower_method_call` is a short dispatcher (#3167). |
 | **v0.542.0** | `@multipart` decodes a `multipart/form-data` request body into a typed record with `File` parts, under `maxBody`, `maxFile` and `maxParts` caps; `BoundaryRejection` gains `MalformedForm` (#3276, slice 2) |
 | **v0.541.4** | Internal refactor of the emitter, with no change to emitted TypeScript. The derived-D1 select, cross-context, `Events.emit`, capability and declared-type static calls of a method call now lower in five functions instead of inline in `lower_method_call` (#3167). |
 | **v0.541.3** | Internal refactor of the emitter, with no change to emitted TypeScript. The intrinsic static calls of a method call (`HttpResult`, `List`/`Map`/`Set` constructors, the numeric parses, `Bytes`, `Decimal`, `Stream` and the rest) now lower in two functions instead of inline in `lower_method_call` (#3167). |

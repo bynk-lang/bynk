@@ -1,0 +1,81 @@
+// #3254: store collections enumerate in insertion order, after a reload as well.
+suite book {
+  case "keys put as 10, 2, a, 5 enumerate in that order after a reload" {
+    let book = Book("order")
+    do book.put("10", 1)
+    do book.put("2", 2)
+    do book.put("a", 3)
+    do book.put("5", 4)
+    let ks <- book.keys()
+    expect ks == ["10", "2", "a", "5"]
+    let vs <- book.values()
+    expect vs == [1, 2, 3, 4]
+  }
+
+  case "keys put in one handler enumerate in that order within the same handler" {
+    let book = Book("same")
+    let ks <- book.seed()
+    expect ks == ["10", "2", "a", "5"]
+    let again <- book.keys()
+    expect again == ["10", "2", "a", "5"]
+  }
+
+  case "overwriting a key keeps its position" {
+    let book = Book("overwrite")
+    do book.put("10", 1)
+    do book.put("2", 2)
+    do book.put("a", 3)
+    do book.put("2", 20)
+    let ks <- book.keys()
+    expect ks == ["10", "2", "a"]
+    let vs <- book.values()
+    expect vs == [1, 20, 3]
+  }
+
+  case "removing a key and putting it again moves it to the end" {
+    let book = Book("remove")
+    do book.put("10", 1)
+    do book.put("2", 2)
+    do book.put("a", 3)
+    do book.put("5", 4)
+    do book.drop("10")
+    do book.put("10", 5)
+    let ks <- book.keys()
+    expect ks == ["2", "a", "5", "10"]
+    let vs <- book.values()
+    expect vs == [2, 3, 4, 5]
+  }
+
+  case "an indexed lookup reads in insertion order" {
+    let book = Book("indexed")
+    do book.addLine("10", "o1", "x")
+    do book.addLine("2", "o2", "y")
+    do book.addLine("a", "o1", "z")
+    do book.addLine("5", "o1", "w")
+    let skus <- book.skusOf("o1")
+    expect skus == ["x", "z", "w"]
+    let none <- book.skusOf("o9")
+    expect none == []
+  }
+
+  case "a set and a cache keep integer-like members across a reload" {
+    let book = Book("setcache")
+    do book.see("10")
+    do book.see("2")
+    do book.see("a")
+    do book.forget("2")
+    do book.see("2")
+    let n <- book.sawCount()
+    expect n == 3
+    let yes <- book.saw("10")
+    expect yes
+    let no <- book.saw("7")
+    expect no == false
+    do book.hit("10", 1)
+    do book.hit("2", 2)
+    let hc <- book.hitCount()
+    expect hc == 2
+    let h <- book.hitOf("2")
+    expect h == Some(2)
+  }
+}
