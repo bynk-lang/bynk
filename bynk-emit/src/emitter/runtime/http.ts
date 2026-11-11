@@ -183,7 +183,12 @@ export function httpResultToResponse<T>(
   // a `Domain`, over 4096 bytes) faults the request, as a bad `RawTagged` etag
   // does, and never reaches the wire as a malformed header.
   const cookies = (result as { readonly cookies?: readonly CookieValue[] }).cookies;
-  if (cookies !== undefined) for (const c of cookies) response.headers.append("set-cookie", serialiseCookie(c));
+  if (cookies !== undefined && cookies.length > 0) {
+    for (const c of cookies) response.headers.append("set-cookie", serialiseCookie(c));
+    // One user's response: a shared cache must not store it, whether or not the
+    // route is `@cache` (which also forces `private`, below).
+    if (!response.headers.has("cache-control")) response.headers.set("cache-control", "private");
+  }
   return response;
 }
 
@@ -874,10 +879,10 @@ export function serialiseCookie(c: CookieValue): string {
   const domain = c.domain.tag === "Some" ? c.domain.value : undefined;
   if (domain !== undefined && !COOKIE_DOMAIN.test(domain)) bad("the Domain is not a host name");
   if (!COOKIE_PATH.test(c.path)) bad("the Path has a control character or `;`");
-  if (c.name.startsWith("__Host-") && !(c.secure && c.path === "/" && domain === undefined)) {
+  if (/^__host-/i.test(c.name) && !(c.secure && c.path === "/" && domain === undefined)) {
     bad("a `__Host-` cookie must be Secure, have Path=/ and no Domain");
   }
-  if (c.name.startsWith("__Secure-") && !c.secure) bad("a `__Secure-` cookie must be Secure");
+  if (/^__secure-/i.test(c.name) && !c.secure) bad("a `__Secure-` cookie must be Secure");
   if (c.sameSite.tag === "Unrestricted" && !c.secure) bad("SameSite=None needs Secure");
   if (c.partitioned && !c.secure) bad("a Partitioned cookie needs Secure");
   const parts = [`${c.name}=${c.value}`];
@@ -886,7 +891,7 @@ export function serialiseCookie(c: CookieValue): string {
     if (Number.isNaN(when.getTime())) bad("Expires is outside the range of dates");
     parts.push(`Expires=${when.toUTCString()}`);
   }
-  if (c.maxAge.tag === "Some") parts.push(`Max-Age=${Math.max(0, Math.trunc(c.maxAge.value / 1000))}`);
+  if (c.maxAge.tag === "Some") parts.push(`Max-Age=${Math.max(0, Math.ceil(c.maxAge.value / 1000))}`);
   if (domain !== undefined) parts.push(`Domain=${domain}`);
   parts.push(`Path=${c.path}`);
   if (c.secure) parts.push("Secure");

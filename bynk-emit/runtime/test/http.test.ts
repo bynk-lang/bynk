@@ -1362,3 +1362,23 @@ test("applyCache: a response that sets a cookie is never marked public", () => {
     "public, max-age=60",
   );
 });
+
+test("serialiseCookie: the prefix rules match case-insensitively, as browsers do", () => {
+  assert.throws(
+    () => serialiseCookie({ ...baseCookie, name: "__host-sid", domain: { tag: "Some", value: "example.com" } }),
+    /__Host-/,
+  );
+  assert.throws(() => serialiseCookie({ ...baseCookie, name: "__SECURE-sid", secure: false }), /__Secure-/);
+});
+
+test("serialiseCookie: a maxAge under a second rounds up, never to a deleting Max-Age=0", () => {
+  assert.match(serialiseCookie({ ...baseCookie, maxAge: { tag: "Some", value: 500 } }), /Max-Age=1;/);
+  assert.match(serialiseCookie({ ...baseCookie, maxAge: { tag: "Some", value: 0 } }), /Max-Age=0;/);
+});
+
+test("a response that sets a cookie is private even with no @cache", () => {
+  const withCookie = { ...HttpResult.Ok(1), cookies: [baseCookie] };
+  const res = httpResultToResponse(withCookie as never, id);
+  assert.equal(res.headers.get("cache-control"), "private");
+  assert.equal(httpResultToResponse(HttpResult.Ok(1), id).headers.get("cache-control"), null);
+});

@@ -1829,7 +1829,7 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
         );
     }
     if let Some(ExprKind::StrLit(name)) = field("name").map(|e| &e.kind) {
-        if name.starts_with("__Host-") {
+        if name.to_ascii_lowercase().starts_with("__host-") {
             let has_domain = matches!(
                 field("domain").map(|e| &e.kind),
                 Some(ExprKind::Some(_) | ExprKind::Call { .. })
@@ -1848,7 +1848,7 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
                     "a `__Host-` name binds the cookie to one origin; browsers drop it otherwise",
                 );
             }
-        } else if name.starts_with("__Secure-") && insecure {
+        } else if name.to_ascii_lowercase().starts_with("__secure-") && insecure {
             refuse(
                 "bynk.http.cookie_secure_prefix",
                 arg.span,

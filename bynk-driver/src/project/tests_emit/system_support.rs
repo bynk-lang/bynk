@@ -510,39 +510,16 @@ pub(super) fn emit_system_http_support(
             };
             // #3277: the `Cookie` header the typed drivers send (a typed record's wire
             // form), and the one the raw drivers send (a `Wire` string).
-            let (typed_cookie, raw_cookie) = match h.params.iter().find(|p| is_cookies(p)) {
-                Some(p) => {
-                    let var = bynk_emit::emitter::ts_ident(&p.name.name);
-                    runtime_use.note_cookie_string();
-                    let ser = bynk_ts::print_expr(
-                        &bynk_emit::emitter::serialisation::serialise_expr_via(
-                            &p.type_ref,
-                            &var,
-                            &type_ns,
-                            runtime_use,
-                        ),
-                    );
-                    (
-                        format!("\"cookie\": __cookieString({ser}), "),
-                        format!("\"cookie\": {var}, "),
-                    )
-                }
-                None => (String::new(), String::new()),
-            };
-            if let Some(cp) = h.params.iter().find(|p| is_cookies(p)) {
-                let idx = h
-                    .params
-                    .iter()
-                    .position(|p| p.name.name == cp.name.name)
-                    .expect("cookies param is drawn from h.params");
-                route_body.insert(
-                    (
-                        sname.clone(),
-                        method.as_str().to_string(),
-                        format!("{path}{}", emitter::COOKIES_ROUTE_SUFFIX),
-                    ),
-                    (idx, cp.type_ref.clone()),
+            let cookies_param = h.params.iter().find(|p| is_cookies(p));
+            let (typed_cookie, raw_cookie) =
+                cookie_header_texts(cookies_param, &type_ns, runtime_use);
+            if let Some(cp) = cookies_param {
+                let key = (
+                    sname.clone(),
+                    method.as_str().to_string(),
+                    format!("{path}{}", emitter::COOKIES_ROUTE_SUFFIX),
                 );
+                register_param_route(&mut route_body, key, h, cp);
             }
             if let Some(qp) = h.params.iter().find(|p| is_query(p))
                 && matches!(qp.type_ref, bynk_syntax::ast::TypeRef::Named(_))
@@ -1867,4 +1844,45 @@ mod tests {
         assert!(!names_ident("/* Region */ x()", "Region"));
         assert!(names_ident("/* a */ Region.Here", "Region"));
     }
+}
+
+/// #3277: the `Cookie` header the typed system drivers send (a typed record's wire
+/// form) and the one the raw drivers send (a `Wire` string), for a handler's
+/// `cookies` parameter; empty when it has none.
+fn cookie_header_texts(
+    param: Option<&bynk_syntax::ast::Param>,
+    type_ns: &str,
+    runtime_use: &RuntimeUse,
+) -> (String, String) {
+    let Some(p) = param else {
+        return (String::new(), String::new());
+    };
+    let var = bynk_emit::emitter::ts_ident(&p.name.name);
+    runtime_use.note_cookie_string();
+    let ser = bynk_ts::print_expr(&bynk_emit::emitter::serialisation::serialise_expr_via(
+        &p.type_ref,
+        &var,
+        type_ns,
+        runtime_use,
+    ));
+    (
+        format!("\"cookie\": __cookieString({ser}), "),
+        format!("\"cookie\": {var}, "),
+    )
+}
+
+/// Record that the handler's parameter `param` is typed, so the system driver and
+/// the call lowering know its position and type.
+fn register_param_route(
+    route_body: &mut RouteBodyMap,
+    key: (String, String, String),
+    h: &bynk_syntax::ast::Handler,
+    param: &bynk_syntax::ast::Param,
+) {
+    let idx = h
+        .params
+        .iter()
+        .position(|p| p.name.name == param.name.name)
+        .expect("the parameter is drawn from the handler's own");
+    route_body.insert(key, (idx, param.type_ref.clone()));
 }

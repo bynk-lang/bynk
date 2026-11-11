@@ -2641,6 +2641,62 @@ fn form_field_specs(
     Some(record_field_specs(rec, types, false))
 }
 
+/// #3277: the statements that decode a route's `cookies` record off the `Cookie`
+/// header and bind it for the handler call: `400` on a rejection, as a `body`
+/// answers, with the record's own codec checking refinements and filling defaults.
+fn push_cookies_param(
+    fields: &[(String, &'static str, bool, bool)],
+    type_ref: &TypeRef,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) {
+    let spec: Vec<TsExpr> = fields
+        .iter()
+        .map(|(name, kind, list, option)| {
+            TsExpr::object(vec![
+                ("name".to_string(), str_lit(name.clone())),
+                ("kind".to_string(), str_lit(*kind)),
+                ("list".to_string(), bool_lit(*list)),
+                ("option".to_string(), bool_lit(*option)),
+            ])
+        })
+        .collect();
+    guarded.push(const_(
+        "__c",
+        call(
+            ident("__cookieObject"),
+            vec![ident("request"), TsExpr::array(spec)],
+        ),
+    ));
+    guarded.push(if_(
+        TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(member(ident("__c"), "ok")),
+        },
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__c"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    let dser = deserialise_call(type_ref, "__c.value", "cookies", ru);
+    guarded.push(const_("__r_cookies", dser));
+    guarded.push(if_(
+        strict_eq(member(ident("__r_cookies"), "tag"), str_lit("Err")),
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__r_cookies"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    guarded.push(const_("cookies", member(ident("__r_cookies"), "value")));
+    call_args.push(ident("cookies"));
+}
+
 /// #3277: the fields of a handler's `cookies` record, or `None` when it has no
 /// `cookies` parameter (or a `:cookies` path segment binds the name).
 fn cookies_field_specs(
@@ -3104,49 +3160,14 @@ fn emit_http_route_dispatch(
             && !cookies_is_path
             && let Some(fields) = &route.cookies_fields
         {
-            let spec: Vec<TsExpr> = fields
-                .iter()
-                .map(|(name, kind, list, option)| {
-                    TsExpr::object(vec![
-                        ("name".to_string(), str_lit(name.clone())),
-                        ("kind".to_string(), str_lit(*kind)),
-                        ("list".to_string(), bool_lit(*list)),
-                        ("option".to_string(), bool_lit(*option)),
-                    ])
-                })
-                .collect();
-            guarded.push(const_(
-                "__c",
-                call(
-                    ident("__cookieObject"),
-                    vec![ident("request"), TsExpr::array(spec)],
-                ),
-            ));
-            guarded.push(if_(
-                TsExpr::Unary {
-                    op: bynk_ts::TsUnaryOp::Not,
-                    expr: Box::new(member(ident("__c"), "ok")),
-                },
-                return_(Some(stamp_rejection(
-                    json_response(member(ident("__c"), "error"), 400),
-                    cors_const,
-                    security_const,
-                    rejected,
-                ))),
-            ));
-            let dser = deserialise_call(&p.type_ref, "__c.value", "cookies", ru);
-            guarded.push(const_("__r_cookies", dser));
-            guarded.push(if_(
-                strict_eq(member(ident("__r_cookies"), "tag"), str_lit("Err")),
-                return_(Some(stamp_rejection(
-                    json_response(member(ident("__r_cookies"), "error"), 400),
-                    cors_const,
-                    security_const,
-                    rejected,
-                ))),
-            ));
-            guarded.push(const_("cookies", member(ident("__r_cookies"), "value")));
-            call_args.push(ident("cookies"));
+            push_cookies_param(
+                fields,
+                &p.type_ref,
+                &mut guarded,
+                &mut call_args,
+                (cors_const, security_const, rejected),
+                ru,
+            );
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The
