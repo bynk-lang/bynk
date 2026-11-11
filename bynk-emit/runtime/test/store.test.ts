@@ -280,3 +280,15 @@ test("held map: a stale order is tolerated, a key it lacks follows and a removed
   fillHeld(h, { a: "1", z: "2", c: "3" }, ["a", "b", "c"]);
   assert.deepEqual(h.keys(), ["a", "c", "z"]);
 });
+
+test("held map: an order that is not an array of strings is ignored, not thrown on", () => {
+  for (const order of [undefined, null, "a,b", { 0: "a" }, 7, [1, 2], ["a", 3, null, "b"]]) {
+    const h = new StoreMap<string>();
+    fillHeld(h, { "10": "c1", "2": "c2", a: "c3", b: "c4" }, order);
+    // Only the strings it lists lead; the rest follow in object order.
+    const listed = Array.isArray(order) ? order.filter((k) => typeof k === "string") : [];
+    const rest = ["2", "10", "a", "b"].filter((k) => !listed.includes(k));
+    assert.deepEqual(h.keys(), [...listed, ...rest]);
+    assert.equal(h.size(), 4);
+  }
+});

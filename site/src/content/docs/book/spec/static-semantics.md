@@ -1149,7 +1149,7 @@ or not the project has the lock, and a marker this build does not know faults,
 `RehydrationViolation` with detail `NewerLayout` (a later build wrote the record). The
 faulting record is never decoded, merged or written back. A held `Map[K, Connection]`
 stays in the `"state"` record, as the object it has always been (key to connection id), with
-its insertion order beside it, in a `<field>__order` array of keys (an object cannot carry the
+its insertion order beside it, in a `<field>:order` array of keys (a key no field name can be) (an object cannot carry the
 order of its integer-like keys). A record with no order beside it, as an earlier build wrote
 it, is read in the order an object enumerates, and a build that predates the order reads the
 object and ignores the array.

@@ -6633,7 +6633,7 @@ fn emit_agent_state_persistence(
         }
         if held {
             encode_entries.push(format!("{n}: __wireHeld(s.{n})"));
-            encode_entries.push(format!("{n}__order: __wireHeldOrder(s.{n})"));
+            encode_entries.push(format!("\"{n}:order\": __wireHeldOrder(s.{n})"));
         } else if is_codecable(v) {
             encode_entries.push(format!(
                 "{n}: __wireMap(s.{n}, (__v) => {e})",
@@ -6667,7 +6667,7 @@ fn emit_agent_state_persistence(
             ));
         }
         encode_entries.push(format!("{n}: __wireHeld(s.{n})"));
-        encode_entries.push(format!("{n}__order: __wireHeldOrder(s.{n})"));
+        encode_entries.push(format!("\"{n}:order\": __wireHeldOrder(s.{n})"));
     }
     // `Set[T]` — the elements are the (textual) Record keys; validate when `T`
     // is textual, else defer (structural string key).
@@ -6776,9 +6776,9 @@ fn emit_agent_state_persistence(
     if has_collections {
         let mut fills = String::new();
         let mut fill = |name: &str, with: &str| {
-            // A held map's insertion order is stored beside its record, as `<field>__order`.
+            // A held map's insertion order is stored beside its record, as `<field>:order`.
             let order = if with == "__fillHeld" {
-                format!(", __r[\"{name}__order\"] as never")
+                format!(", __r[\"{name}:order\"] as never")
             } else {
                 String::new()
             };

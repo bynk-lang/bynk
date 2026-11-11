@@ -74,11 +74,11 @@ function __hydrateShelfState(s: ShelfState, stored: ShelfState): void {
   const __w = s as { -readonly [K in keyof ShelfState]: ShelfState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
   if (globalThis.Object.hasOwn(__r, "items")) { __fillMap(__z.items, __r["items"] as never); __w.items = __z.items; }
-  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns__order"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
 }
 
 function __encodeShelfState(s: ShelfState): globalThis.Record<string, unknown> {
-  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)), conns: __wireHeld(s.conns), conns__order: __wireHeldOrder(s.conns) };
+  return { ...s, items: __wireMap(s.items, (__v) => __serialise_Item(__v)), conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns) };
 }
 
 export class Shelf {

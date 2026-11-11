@@ -82,12 +82,12 @@ function __hydrateRoomState(s: RoomState, stored: RoomState): void {
   const __z = __zeroOfRoomState();
   const __w = s as { -readonly [K in keyof RoomState]: RoomState[K] };
   const __r = stored as unknown as globalThis.Record<string, unknown>;
-  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns__order"] as never); __w.conns = __z.conns; }
+  if (globalThis.Object.hasOwn(__r, "conns")) { __fillHeld(__z.conns, __r["conns"] as never, __r["conns:order"] as never); __w.conns = __z.conns; }
   if (globalThis.Object.hasOwn(__r, "members")) { __fillSet(__z.members, __r["members"] as never); __w.members = __z.members; }
 }
 
 function __encodeRoomState(s: RoomState): globalThis.Record<string, unknown> {
-  return { ...s, conns: __wireHeld(s.conns), conns__order: __wireHeldOrder(s.conns), members: __wireSet(s.members) };
+  return { ...s, conns: __wireHeld(s.conns), "conns:order": __wireHeldOrder(s.conns), members: __wireSet(s.members) };
 }
 
 export class Room {

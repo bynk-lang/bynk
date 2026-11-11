@@ -392,7 +392,7 @@ export function wireHeld<V>(handle: StoreMap<V>): Record<string, V> {
   return Object.fromEntries(handle.entries());
 }
 
-/** A held `Map`'s keys in insertion order: stored beside the record, as `<field>__order`. */
+/** A held `Map`'s keys in insertion order: stored beside the record, as `<field>:order`, a key no field name can be. */
 export function wireHeldOrder<V>(handle: StoreMap<V>): string[] {
   return [...handle.keys()];
 }
@@ -416,8 +416,9 @@ export function fillLog<V>(handle: StoreLog<V>, wire: ReadonlyArray<LogEntry<V>>
  * Fill an empty held `Map` handle from its stored record, in `order` when the record has one
  * (keys it lacks are skipped; keys it does not list follow, as an object enumerates them).
  */
-export function fillHeld<V>(handle: StoreMap<V>, wire: Readonly<Record<string, V>>, order?: readonly string[]): void {
-  const listed = order === undefined ? [] : order.filter((k) => Object.hasOwn(wire, k));
+export function fillHeld<V>(handle: StoreMap<V>, wire: Readonly<Record<string, V>>, order?: unknown): void {
+  // The stored order is not trusted: anything but an array of strings is as good as none.
+  const listed = Array.isArray(order) ? order.filter((k): k is string => typeof k === "string" && Object.hasOwn(wire, k)) : [];
   const seen = new Set(listed);
   for (const k of [...listed, ...Object.keys(wire).filter((k) => !seen.has(k))]) handle.put(k, wire[k] as V);
 }
