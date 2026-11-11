@@ -1,0 +1,14 @@
+context s
+
+consumes bynk { Clock }
+
+agent Sessions {
+  key id: String
+
+  store live: Cache[String, Int] @ttl(5.minutes)
+
+  on call touch() -> Effect[()] {
+    let _ <- live.put("a", 1)
+    Effect.pure(())
+  }
+}

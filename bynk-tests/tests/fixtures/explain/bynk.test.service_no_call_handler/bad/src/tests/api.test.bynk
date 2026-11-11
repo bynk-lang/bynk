@@ -1,0 +1,6 @@
+suite demo.api {
+	case "an item is created" {
+		let r <- api.call("x")
+		expect r is Created(_)
+	}
+}

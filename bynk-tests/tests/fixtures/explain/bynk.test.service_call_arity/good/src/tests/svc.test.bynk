@@ -1,0 +1,6 @@
+suite demo.svc {
+	case "echo adds one" {
+		let r <- echo.call(1)
+		expect r == 2
+	}
+}

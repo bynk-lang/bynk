@@ -8,6 +8,15 @@ type LoginRequest = {
 }
 
 ---
+The cookies a request carries. `sid` is the session token: the router
+decodes and validates it before the handler runs, so a malformed token never
+reaches the cache. A missing cookie is `None`.
+---
+type SessionCookies = {
+	sid: Option[Token],
+}
+
+---
 A shard of live sessions (a Cloudflare Durable Object). State is a `Cache` — a
 `Map` whose entries expire on their own. `@ttl(30.minutes)` sets the lifetime:
 each `put` (re)starts the 30-minute clock, an entry past its TTL reads as `None`,

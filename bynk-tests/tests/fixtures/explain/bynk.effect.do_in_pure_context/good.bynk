@@ -1,0 +1,10 @@
+commons demo
+
+fn ping() -> Effect[()] {
+  Effect.pure(())
+}
+
+fn run() -> Effect[Int] {
+  do ping()
+  Effect.pure(5)
+}

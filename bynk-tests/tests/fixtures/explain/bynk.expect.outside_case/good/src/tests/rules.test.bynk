@@ -1,0 +1,5 @@
+suite demo.rules {
+	case "one is positive" {
+		expect positive(1)
+	}
+}

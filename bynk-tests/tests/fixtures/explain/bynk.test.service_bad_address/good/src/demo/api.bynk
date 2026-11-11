@@ -1,0 +1,7 @@
+context demo.api
+
+service api from http {
+	on POST("/items") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Created(body)
+	}
+}

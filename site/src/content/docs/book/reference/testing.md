@@ -1,7 +1,7 @@
 ---
 title: Testing
 ---
-## `suite` blocks
+## `suite` blocks {#suite-blocks}
 
 A test file is a `suite` block naming its target unit, containing named `case`s:
 
@@ -784,7 +784,7 @@ other boundary refusals it yields an [`HttpOutcome`](#httpoutcome), over `()`
 because no handler's result is involved: a `405` is
 `Rejected(MethodNotAllowed)`.
 
-## `expect`
+## `expect` {#expect}
 
 `expect <bool-predicate>` checks a predicate. It exists in both statement form (a
 line in a `case` body) and expression form (e.g. inside a `match` arm). The

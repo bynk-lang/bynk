@@ -1,0 +1,10 @@
+commons shop
+
+type Light = | Red | Green
+
+type Flag = | Red | Blue
+
+fn run() -> Int {
+  let x = Red
+  1
+}

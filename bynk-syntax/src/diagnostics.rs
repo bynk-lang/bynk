@@ -577,6 +577,41 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
+        code: "bynk.consumes.self_reference",
+        blurb: "`consumes` declares that a context depends on a different one. A context's own declarations are already in scope, so consuming itself adds nothing, and a context that depends on itself is a cycle of length one. Delete the clause, or, if you meant another context, name it. A cycle through several contexts is `bynk.context.consumes_cycle`.",
+        example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nconsumes shop                    // ✗ a context cannot consume itself\nconsumes pay                     // ✓ a different context",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
+    },
+    Explain {
+        code: "bynk.consumes.service_arity",
+        blurb: "A cross-context call has the shape of the `on call` handler it reaches: one argument for each parameter. The consumed context owns that signature, so the caller adapts to it. Pass the arguments the handler declares (the note says where it is declared), or change the handler's parameters if the service needs different input.",
+        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
+    },
+    Explain {
+        code: "bynk.consumes.target_is_commons",
+        blurb: "`consumes` is for depending on a context, or on an adapter: it is how you call a service and use the capabilities the other unit exports. A commons has neither. It is shared types and functions, brought in with `uses`. Replace `consumes` with `uses`.",
+        example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nconsumes money                   // ✗ `money` is a commons\nuses money                       // ✓ shared declarations come in with `uses`",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "the-two-kinds-of-module",
+    },
+    Explain {
+        code: "bynk.consumes.unknown_context",
+        blurb: "A `consumes` clause is how one context states that it depends on another, so it has to name a context in the project, and no unit of that name exists. Check the spelling against the `context` line of the unit you mean.",
+        example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nconsumes paymnet                 // ✗ no context `paymnet`\nconsumes pay                     // ✓ the context's declared name",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
+    },
+    Explain {
+        code: "bynk.consumes.unknown_service",
+        blurb: "A call such as `pay.charge(…)` reaches a service of the consumed context, and `pay` has none by that name. Only a service's `on call` handler can be called across contexts, so check the spelling against the consumed context and that the service has an `on call` handler. A call with the wrong number of arguments is `bynk.consumes.service_arity`.",
+        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
+    },
+    Explain {
         code: "bynk.context.consumes_cycle",
         blurb: "Contexts may not form a circle of `consumes` clauses, whether directly or \
                 through others. `bynk deploy` takes the order in which to upload the Workers \
@@ -680,11 +715,67 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "opaque-types",
     },
     Explain {
+        code: "bynk.cron.invalid_schedule",
+        blurb: "A cron schedule is a standard five-field expression: minute, hour, day of month, month, day of week, separated by whitespace. Bynk checks the field count at compile time so a schedule the platform's cron trigger would reject is caught before deploy, not when it silently never runs. Only the count is checked at compile time. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
+        example: "on schedule(\"every day\") () -> Effect[Result[(), String]] { … }   // ✗ words, not five fields\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 every day",
+        page: "/book/reference/cron",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.cron.return_not_effect_result",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
+        page: "/book/reference/cron",
+        anchor: "handler-form",
+    },
+    Explain {
         code: "bynk.effect.bind_in_pure_context",
         blurb: "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
         example: "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.effect.bind_on_non_effect",
+        blurb: "`let x <- e` waits for `e` and binds its result, so `e` must be an `Effect[T]`. A plain value has nothing to wait for, and `<-` on one usually means the right-hand side is not the call you meant. Write `let x = …` for a pure binding. Where an effect is required and you hold a plain value, wrap it with `Effect.pure(…)`. A `<-` in a body that is not itself effectful is `bynk.effect.bind_in_pure_context`.",
+        example: "fn run() -> Effect[Int] {\n    let x <- 42                  // ✗ `42` is an `Int`, not an `Effect[Int]`\n    Effect.pure(x)\n}\n\nfn run() -> Effect[Int] {\n    let x = 42                   // ✓ a pure binding\n    Effect.pure(x)\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
+    },
+    Explain {
+        code: "bynk.effect.capability_in_pure_context",
+        blurb: "Calling a capability operation is an effect, and effects are only allowed in a body that is itself effectful, one that returns `Effect[T]`, so that a type tells you whether a body reaches outside. A lambda checked against a plain function type such as `(Int) -> Int` is a pure body, so a capability call inside it is refused even when the handler around it is effectful. Make the call in the handler, bind it with `<-`, and pass the result in. A call the `given` clause does not cover is `bynk.given.undeclared_capability`.",
+        example: "let add: (Int) -> Int = (n) => {\n    let t = Clock.now()          // ✗ a capability call in a pure lambda\n    n\n}\n\nlet t <- Clock.now()             // ✓ the handler is effectful, so it makes the call\nlet add: (Int) -> Int = (n) => n + t",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
+    },
+    Explain {
+        code: "bynk.effect.cross_context_in_pure_context",
+        blurb: "A call to a service in a consumed context is an effect, as a capability call is, so it is only allowed in a body that is itself effectful. A handler is effectful, but a lambda inside it is a body of its own, and a service call alone does not make it effectful. Make the call in the handler body, bind it with `<-`, and use the result in the lambda.",
+        example: "on call() -> Effect[Int] {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
+    },
+    Explain {
+        code: "bynk.effect.do_in_pure_context",
+        blurb: "`do e` runs a unit effect as a statement, so like `<-` it belongs in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises to wait for nothing and reach nothing outside, and a `do` inside it would break that promise for every caller. Change the return type to `Effect[T]` and end with `Effect.pure(…)`, or drop the `do`. The same mistake with `<-` is `bynk.effect.bind_in_pure_context`.",
+        example: "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn run() -> Int {\n    do ping()                    // ✗ `do` in a function that returns a plain `Int`\n    5\n}\n\nfn run() -> Effect[Int] {        // ✓ effectful, so `do` is allowed\n    do ping()\n    Effect.pure(5)\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
+    },
+    Explain {
+        code: "bynk.effect.do_on_non_effect",
+        blurb: "`do e` performs an effect, so its operand must be an `Effect[()]`: a call to something effectful that has no result to return. A plain value has nothing to run, which usually means the operand is not the call you meant. Call the effectful function you intended. If you wanted the value, bind it with `let`. A valued effect under `do` is `bynk.effect.do_requires_unit`, and `<-` on a plain value is `bynk.effect.bind_on_non_effect`.",
+        example: "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn clear() -> Effect[()] {\n    do 5                         // ✗ `5` is an `Int`, not an `Effect[()]`\n}\n\nfn clear() -> Effect[()] {\n    do ping()                    // ✓ an effect with a unit result\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
+    },
+    Explain {
+        code: "bynk.effect.do_requires_unit",
+        blurb: "`do e` discards what the effect returns, so it only accepts an `Effect[()]`, where there is nothing to lose. Applied to an `Effect[Int]` it would drop a real value without any sign in the code. If you want to wait for a valued effect and ignore its result, say so with `let _ <- e`. Otherwise bind the result with `let x <- e` and use it.",
+        example: "fn count() -> Effect[Int] {\n    Effect.pure(5)\n}\n\nfn run() -> Effect[()] {\n    do count()                   // ✗ would silently drop an `Int`\n}\n\nfn run() -> Effect[()] {\n    let _ <- count()             // ✓ the discard is written out\n    Effect.pure(())\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "why-effects-are-gated",
     },
     Explain {
         code: "bynk.effect.fn_value_in_pure_context",
@@ -770,6 +861,105 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "status",
     },
     Explain {
+        code: "bynk.event.duplicate_handler",
+        blurb: "A `from Events(E)` service has exactly one `on event` handler. To react to an event in two ways, declare two services, each subscribing to it: every subscriber is delivered to independently. So the second handler is refused here, and the fix is to move it into a service of its own.",
+        example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n    on event(e: Paid) -> Effect[()] { … }   // ✗ a service has one `on event` handler\n}\n\nservice onPaidAudit from Events(Paid) {     // ✓ a second subscriber, delivered to separately\n    on event(e: Paid) -> Effect[()] { … }\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "the-three-pieces",
+    },
+    Explain {
+        code: "bynk.event.emit_not_an_event",
+        blurb: "`Events.emit[E]` takes an `event` type. A plain `type` declared in the same context is refused: nothing could subscribe to it, since a `from Events(…)` header names events, so the emission would silently go nowhere. Declare the type with `event` instead, or name the event you meant. A name that is not declared in this context at all is `bynk.event.emit_outside_owner`.",
+        example: "type Receipt = { id: String }\nevent Paid = { id: String }\n\nEvents.emit[Receipt](Receipt { id: id })   // ✗ `Receipt` is a `type`, not an `event`\nEvents.emit[Paid](Paid { id: id })         // ✓ an `event` of this context",
+        page: "/book/guides/events/understand-events",
+        anchor: "only-the-declaring-context-may-emit",
+    },
+    Explain {
+        code: "bynk.event.emit_outside_owner",
+        blurb: "Only the context that declares an event may emit it. A consumer can see the event through `consumes`, to subscribe to it with `from Events(…)`, but being able to name a type does not make it yours to forge: other contexts then could not trust that an event came from its owner. Emit an event of your own, or call a service of the owning context and let it emit.",
+        example: "// orders.bynk\ncontext orders\n\nexports transparent { Paid }\n\nevent Paid = { id: String }\n\n// mailer.bynk\ncontext mailer\n\nconsumes orders\nconsumes bynk { Events }\n\nevent Sent = { id: String }\n\nEvents.emit[Paid](Paid { id: \"x\" })   // ✗ `Paid` belongs to `orders`\nEvents.emit[Sent](Sent { id: \"x\" })   // ✓ `Sent` is declared here",
+        page: "/book/guides/events/understand-events",
+        anchor: "only-the-declaring-context-may-emit",
+    },
+    Explain {
+        code: "bynk.event.handler_param_type_mismatch",
+        blurb: "An `on event` handler's first parameter is the event itself, so its type must be the one the `from Events(E)` header names. A subscription pattern is checked against that event, and the body reads `e` at that type. Make the parameter `E`, or change the header to the event you mean to handle. The optional second parameter is `EventEnvelope`; other mistakes there are `bynk.event.bad_params`.",
+        example: "event Paid = { id: String }\nevent Refunded = { id: String }\n\nservice onPaid from Events(Paid) {\n    on event(e: Refunded) -> Effect[()] { … }   // ✗ the header says `Paid`\n    on event(e: Paid) -> Effect[()] { … }       // ✓\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "the-three-pieces",
+    },
+    Explain {
+        code: "bynk.event.outside_context",
+        blurb: "An `event` is declared in a context, and only that context may emit it, so an event belongs to its owner. A `commons` is shared code that other units `uses`, with no owner to emit from, so one may not declare an event. Declare the event in the context that raises it. Other contexts subscribe by consuming that context.",
+        example: "commons shop\n\nevent Paid = { id: String }   // ✗ a commons has no owner to emit it\n\ncontext shop\n\nevent Paid = { id: String }   // ✓ declared where it is emitted",
+        page: "/book/guides/events/understand-events",
+        anchor: "the-three-pieces",
+    },
+    Explain {
+        code: "bynk.event.return_not_effect_unit",
+        blurb: "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
+        example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[Int] { … }   // ✗ the result has nowhere to go\n    on event(e: Paid) -> Effect[()] { … }    // ✓\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "emission-is-fire-and-forget-and-release-at-commit",
+    },
+    Explain {
+        code: "bynk.event.unknown_subscription",
+        blurb: "A `from Events(E)` header must name an event declared in this context or in a context it `consumes`. A name that matches neither would be a subscription that never receives anything, and nothing would say so; it is almost always a misspelling, or a `consumes` that is missing. Fix the name, or add `consumes` for the context whose `event` it is.",
+        example: "context mailer\n\nconsumes orders\n\nservice onPaid from Events(Payd) {   // ✗ no event `Payd`\n\nservice onPaid from Events(Paid) {   // ✓ the event `orders` declares",
+        page: "/book/guides/events/understand-events",
+        anchor: "the-three-pieces",
+    },
+    Explain {
+        code: "bynk.expect.faults_not_effect",
+        blurb: "`expect <call> faults` claims that an effectful call throws, for \
+                instance because a `stub … fails`. Only a call can fault, so the \
+                subject must be the call itself, with type `Effect[_]`. A value \
+                already bound, or a pure method on one, has nothing left to throw. \
+                Write the call inside the claim, not a name bound from it. A fault \
+                that is not claimed fails the case.",
+        example: "// tests/vault.test.bynk\n\
+                  let label = \"sealed\"\n\
+                  expect label.length() faults   // ✗ a pure method, not an effectful call\n\
+                  expect box.call() faults       // ✓ the call that faults",
+        page: "/book/reference/testing",
+        anchor: "faults",
+    },
+    Explain {
+        code: "bynk.expect.not_bool",
+        blurb: "`expect` states a claim that is checked when the case runs, so its \
+                predicate must be a `Bool`: true, or the case fails. A count or a \
+                record is not a claim. Compare the value with what you expect \
+                (`==`, `<`, `is`), or use a method that returns `Bool`. It is the \
+                same predicate surface that `invariant` and `ensures` use.",
+        example: "// demo/count.bynk\n\
+                  fn bump(n: Int) -> Int { n + 1 }\n\
+                  \n\
+                  // tests/count.test.bynk\n\
+                  expect bump(1)         // ✗ an Int is not a claim\n\
+                  expect bump(1) == 2    // ✓ compare it",
+        page: "/book/reference/testing",
+        anchor: "expect",
+    },
+    Explain {
+        code: "bynk.expect.outside_case",
+        blurb: "`expect` is a test claim, checked when a `case` runs. Production \
+                code has no test runner to report a failure to, so an `expect` in \
+                a function, a handler or anywhere else outside a `case` body is \
+                refused. To check a condition in running code, return a `Bool` or \
+                a `Result`; to check it in a test, move the `expect` into a case. \
+                A `requires` or `ensures` contract is the always-on form.",
+        example: "// demo/rules.bynk\n\
+                  fn positive(n: Int) -> Bool {\n\
+                  \x20   expect n > 0           // ✗ not in a case\n\
+                  \x20   n > 0\n\
+                  }\n\
+                  \n\
+                  // tests/rules.test.bynk\n\
+                  expect positive(1)       // ✓ in a case",
+        page: "/book/reference/testing",
+        anchor: "expect",
+    },
+    Explain {
         code: "bynk.exports.capability_not_provided",
         blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
                 built for them, so the exporting context must also say how: a `provides Clock = \
@@ -786,6 +976,34 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/guides/effects-and-capabilities/share-across-contexts",
         anchor: "export-the-capability-from-the-providing-context",
+    },
+    Explain {
+        code: "bynk.exports.duplicate_export",
+        blurb: "A type or capability is exported once. Naming it again in a second `exports` clause with the same visibility adds nothing, and usually means a clause was pasted twice, or a name was meant for another one. Delete the repeat. Within a single clause the repeat is `bynk.exports.duplicate_in_clause`, and the same type under both `opaque` and `transparent` is `bynk.exports.conflicting_visibility`.",
+        example: "exports transparent { Order }\nexports transparent { Order }    // ✗ already exported above\n\ntype Order = { total: Int }\n\nexports transparent { Order }    // ✓ exported once",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.exports.undeclared_capability",
+        blurb: "`exports capability { Clock }` offers a capability of this context to the contexts that consume it, so the capability has to be declared in this context, and provided there too (`bynk.exports.capability_not_provided`). A name that is not declared is usually a misspelling. Correct it, or declare the capability here. A name in a type `exports` clause is `bynk.exports.undeclared_type`.",
+        example: "exports capability { Cloc }      // ✗ no capability `Cloc` in this context\n\ncapability Clock {\n    fn now() -> Effect[Int]\n}\n\nexports capability { Clock }     // ✓ the declared name\n\nprovides Clock = Fixed {\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}",
+        page: "/book/guides/effects-and-capabilities/share-across-contexts",
+        anchor: "export-the-capability-from-the-providing-context",
+    },
+    Explain {
+        code: "bynk.exports.undeclared_type",
+        blurb: "An `exports` clause lists types this context declares, to make them visible to the contexts that consume it. A name the context does not declare has nothing to export: it is usually a misspelling, or a type that is declared elsewhere. Correct the name, or declare the type in this context. A name in `exports capability` that is not declared is `bynk.exports.undeclared_capability`.",
+        example: "exports opaque { Ordr }          // ✗ no type `Ordr` in this context\n\ntype Order = { total: Int }\n\nexports opaque { Order }         // ✓ the declared name",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.generics.duplicate_type_param",
+        blurb: "The type parameters of one declaration are told apart by name, and a repeat would collapse into a single parameter, so `Pair[T, T]` would force both fields to the same type with no sign of it. Give each parameter its own name. A method's own type parameter may not reuse a name from its receiver type either, as that would make the two ambiguous.",
+        example: "type Pair[T, T] = { a: T, b: T }    // ✗ `T` declared twice\n\ntype Pair[A, B] = { a: A, b: B }    // ✓ one name for each",
+        page: "/book/reference/generics",
+        anchor: "type-parameters",
     },
     Explain {
         code: "bynk.generics.method_on_generic_type",
@@ -901,6 +1119,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
         page: "/book/guides/type-system/recursive-generic-types",
         anchor: "where-it-cannot-go-yet",
+    },
+    Explain {
+        code: "bynk.generics.type_arg_count",
+        blurb: "A generic type is applied to exactly as many type arguments as it declares parameters: `Box[T]` takes one. Too many, too few, arguments on a type that is not generic, and a generic type named with no arguments at all are all refused, since each argument fills one parameter. A type parameter such as `T` is not itself generic, so `T[Int]` is refused too. Give the arguments the declaration asks for.",
+        example: "type Box[T] = { value: T }\n\nfn open(b: Box[Int, String]) -> Int {   // ✗ `Box` takes one type argument\n    0\n}\n\nfn open(b: Box[Int]) -> Int {           // ✓\n    0\n}",
+        page: "/book/reference/generics",
+        anchor: "type-parameters",
     },
     Explain {
         code: "bynk.generics.type_arg_mismatch",
@@ -1033,6 +1258,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn ignore(c: Connection[ServerFrame]) -> Effect[()] {   // ✗ `c` is never closed, stored or passed on\n  Effect.pure(())\n}\n\nfn finish(c: Connection[ServerFrame]) -> Effect[()] {   // ✓\n  c.close()\n}",
         page: "/book/reference/websocket",
         anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.held.query_accessor_on_held_map",
+        blurb: "A held `Map[K, Connection]` is iterated with the broadcast operations, `forEach` (one at a time) or `parTraverse` (in parallel), not with a key query. `.entries`, `.keys` and `.values` would lift the connections out into a query, which the single-owner rules for held values do not allow. To send to every connection, broadcast over the map; to learn who is connected, keep a separate `Set` of their keys.",
+        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+        page: "/book/reference/websocket",
+        anchor: "sending-and-broadcasting",
+    },
+    Explain {
+        code: "bynk.held.unsupported_map_op",
+        blurb: "`update` and `upsert` rebuild a map entry from its old value with a function. A held connection cannot be rebuilt from another: it is a live handle, stored and found by identity. So a held `Map[K, Connection]` takes `put`, `get`, `remove`, `contains` and `size`, and not these two. To replace an entry, `put` the new connection under the key, and to drop one, `remove` it.",
+        example: "let _ <- conns.update(u, (c: Connection[ServerFrame]) => c)   // ✗ a connection cannot be derived from another\n\nlet _ <- conns.put(u, c)   // ✓ store the connection itself",
+        page: "/book/reference/websocket",
+        anchor: "sending-and-broadcasting",
+    },
+    Explain {
+        code: "bynk.held.unsupported_storage",
+        blurb: "A held value, a `Connection[F]`, is a live handle owned by one place, not data. Only `Cell[Option[Connection]]` and `Map[K, Connection]` can hold one: a `Set` needs value equality, which a connection does not have, and a `Log` or `Cache` could retain or evict one without closing it. Keep connections in a `Map` keyed by something that identifies each, such as a user id, and iterate it with the broadcast operations.",
+        example: "store conns: Set[Connection[ServerFrame]]   // ✗ a `Set` cannot hold a connection\n\nstore conns: Map[UserId, Connection[ServerFrame]]   // ✓ held by key",
+        page: "/book/reference/types",
+        anchor: "connection",
     },
     Explain {
         code: "bynk.held.use_after_consume",
@@ -1203,6 +1449,69 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "plain-json",
     },
     Explain {
+        code: "bynk.lex.bad_escape",
+        blurb: "A backslash in a string literal starts an escape, and this one is \
+                not in the set: `\\n`, `\\r`, `\\t`, `\\0`, `\\\"`, `\\\\`, \
+                `\\u{…}` (1 to 6 hex digits in braces) and `\\(…)` for \
+                interpolation. To write a backslash itself, double it, as in a \
+                Windows path. A `\\u{…}` naming a surrogate or a value past \
+                U+10FFFF is `bynk.lex.bad_unicode_escape`.",
+        example: "const Dir: String = \"C:\\Users\"      // ✗ `\\U` is not an escape\n\
+                  const Dir: String = \"C:\\\\Users\"     // ✓ a doubled backslash",
+        page: "/book/spec/lexical-grammar",
+        anchor: "32-literals",
+    },
+    Explain {
+        code: "bynk.lex.integer_overflow",
+        blurb: "An `Int` is a JavaScript safe integer, from -(2^53 - 1) to 2^53 - \
+                1 (±9007199254740991), the range the runtime holds exactly; a \
+                larger literal would round silently. The sign is a separate \
+                operator, so the size of the digits decides. For a larger value \
+                use a `Float` if rounding is acceptable, or a `String` for the \
+                exact digits.",
+        example: "const Big: Int = 9007199254740993    // ✗ past 2^53 - 1\n\
+                  const Big: Int = 9007199254740991    // ✓ the largest `Int`",
+        page: "/book/spec/lexical-grammar",
+        anchor: "32-literals",
+    },
+    Explain {
+        code: "bynk.lex.legacy_comment",
+        blurb: "A `--` no longer starts a comment; a line comment is `//`. The old \
+                spelling is refused rather than reread, so a file written for it \
+                never changes meaning: `x = 1 -- note` is not quietly taken for `1 \
+                - -note`. The fix is machine-applicable: `bynk check --fix` \
+                applies it and `bynk fmt` rewrites a whole project. For a real `a \
+                - -b`, write the space.",
+        example: "const Limit: Int = 100 -- the cap     // ✗ `--` is the old comment\n\
+                  const Limit: Int = 100        // ✓ a comment is `//`",
+        page: "/book/spec/lexical-grammar",
+        anchor: "333-retired-spellings",
+    },
+    Explain {
+        code: "bynk.lex.unexpected_character",
+        blurb: "The lexer met a character that starts no token in Bynk, such as \
+                `#`, `$` or `'` outside a string literal. A comment is `//` (not \
+                `#`) and a string takes double quotes (not single). The character \
+                is skipped and lexing goes on, so every lexical error in the file \
+                is reported together.",
+        example: "const Limit: Int = 100 # the cap       // ✗ `#` is not a comment\n\
+                  const Limit: Int = 100        // ✓ a comment is `//`",
+        page: "/book/spec/lexical-grammar",
+        anchor: "35-lexical-errors",
+    },
+    Explain {
+        code: "bynk.lex.unterminated_string",
+        blurb: "An ordinary string literal, `\"…\"`, closes on the line it opens on. \
+                This one reaches the end of the line with no closing `\"`, so the \
+                lexer reports it at the opening quote and skips the rest of the \
+                line. Add the closing quote. For a line break in the value write \
+                `\\n`, or use a multi-line string literal.",
+        example: "const Greeting: String = \"hello      // ✗ no closing quote\n\
+                  const Greeting: String = \"hello\"   // ✓",
+        page: "/book/spec/lexical-grammar",
+        anchor: "32-literals",
+    },
+    Explain {
         code: "bynk.par.invalid_statement",
         blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
         example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
@@ -1257,6 +1566,178 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.parse.const_missing_type",
+        blurb: "A `const` always states its type: `const Limit: Int = 100`. A \
+                constant is part of its unit's interface, so a reader, or a unit \
+                that `uses` it, can see its type without inferring it from the \
+                initialiser. Write the type after the name, before the `=`.",
+        example: "const Limit = 100          // ✗ no type annotation\n\
+                  const Limit: Int = 100     // ✓",
+        page: "/book/reference/constants",
+        anchor: "declaring-a-constant",
+    },
+    Explain {
+        code: "bynk.parse.doc_block_contains_code",
+        blurb: "A line of three or more dashes opens or closes a documentation \
+                block, so two dash lines turn the code between them into \
+                documentation, and it is never compiled. Use a line comment for a \
+                divider. To show code in a documentation block, put it in a \
+                Markdown code fence.",
+        example: "--------                             // ✗ opens a doc block, not a divider\n\
+                  fn double(n: Int) -> Int { n * 2 }\n\
+                  --------\n\
+                  fn triple(n: Int) -> Int { n * 3 }\n\n\
+                  ---\n\
+                  Doubles a number.                    // ✓ a doc block holds prose\n\
+                  ---\n\
+                  fn double(n: Int) -> Int { n * 2 }",
+        page: "/book/spec/lexical-grammar",
+        anchor: "332-doc-blocks",
+    },
+    Explain {
+        code: "bynk.parse.empty_match",
+        blurb: "A `match`, or the `else match` of a `let … else`, must have at \
+                least one arm. Each arm gives the match a value, so one with no \
+                arms has none to give. Write an arm for each shape the value can \
+                take; a final `_ =>` arm takes whatever the others leave.",
+        example: "match xs {           // ✗ no arms\n\
+                  }\n\n\
+                  match xs {\n    \
+                  [x, ..] => x      // ✓ one arm for each shape\n    \
+                  [] => 0\n\
+                  }",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
+        code: "bynk.parse.handler_in_agent",
+        blurb: "An `agent` has only `on call` handlers. HTTP routes (`on GET`, `on \
+                POST`, …), schedules and queue messages belong on a `service`, \
+                which receives the request or event and calls the agent. Move the \
+                protocol handler to a service and give the agent an `on call` \
+                operation for it to call.",
+        example: "agent Tally {\n    \
+                  key id: String\n    \
+                  store count: Cell[Int]\n\n    \
+                  on GET(\"/count\") () -> Effect[Result[Int, String]] {   // ✗ a route is a service's\n        \
+                  Ok(count)\n    \
+                  }\n\
+                  }\n\n\
+                  agent Tally {\n    \
+                  key id: String\n    \
+                  store count: Cell[Int]\n\n    \
+                  on call get() -> Effect[Result[Int, String]] {         // ✓ the agent's own operation\n        \
+                  Ok(count)\n    \
+                  }\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.parse.keyword_field_shorthand",
+        blurb: "A record pattern or construction may write a field by name alone \
+                (`{ total }`), which binds a variable of that name. A reserved \
+                word cannot be a variable, so `{ type, .. }` is refused, though \
+                `type` is allowed as a field label before a `:`. In a pattern, \
+                name the binding: `type: type_`; the compiler offers that fix. In \
+                a construction, give the value: `type: \"Org\"`.",
+        example: "match a {\n    \
+                  Account { type, .. } => type             // ✗ shorthand binds a keyword\n    \
+                  Account { type: type_, .. } => type_     // ✓ name the binding\n\
+                  }",
+        page: "/book/reference/types",
+        anchor: "keyword-field-names",
+    },
+    Explain {
+        code: "bynk.parse.let_pattern_without_else",
+        blurb: "A `let` that takes a value apart with a pattern must say what the \
+                block produces when the value does not match, so it needs an \
+                `else`. Only a record pattern that cannot fail (every field a bare \
+                name, `f: name` or `f: _`) may leave it out. Add `else { … }` \
+                after the value, or write a `match`. The note names the first \
+                field that can fail to match.",
+        example: "fn head(xs: List[Int]) -> Int {\n    \
+                  let [x, ..] = xs               // ✗ an empty list does not match\n    \
+                  x\n\
+                  }\n\n\
+                  fn head(xs: List[Int]) -> Int {\n    \
+                  let [x, ..] = xs else { 0 }    // ✓ says what an empty list gives\n    \
+                  x\n\
+                  }",
+        page: "/book/guides/type-system/destructure-a-record-with-let",
+        anchor: "when-a-field-must-match",
+    },
+    Explain {
+        code: "bynk.parse.list_rest_not_last",
+        blurb: "In a list pattern the `..` (or `..rest`) stands for the elements \
+                the pattern does not name, and it must be the last element and \
+                appear once. A pattern that matches the end of a list, such as \
+                `[.., last]`, is not available, so match from the front. When only \
+                `_` patterns follow the `..`, the error offers a \
+                machine-applicable fix that moves it to the end.",
+        example: "match xs {\n    \
+                  [.., a, b] => b    // ✗ `..` must come last\n    \
+                  [_, b, ..] => b    // ✓ match from the front\n    \
+                  _ => 0\n\
+                  }",
+        page: "/book/reference/types",
+        anchor: "list-patterns",
+    },
+    Explain {
+        code: "bynk.parse.match_ends_block",
+        blurb: "A block has no expression statements, so a `match` is its final \
+                value and nothing can follow it; a second `match` straight after \
+                the first is refused. Bind the first with `let _ = match …`. If \
+                the steps are fallible and each depends on the one before, `let … \
+                else` flattens them without nesting.",
+        example: "fn grade(a: Int, b: Int) -> Int {\n    \
+                  match a { … }\n    \
+                  match b { … }              // ✗ a `match` ends its block\n\
+                  }\n\n\
+                  fn grade(a: Int, b: Int) -> Int {\n    \
+                  let _ = match a { … }      // ✓ bound, so the block goes on\n    \
+                  match b { … }\n\
+                  }",
+        page: "/book/guides/type-system/match",
+        anchor: "flatten-a-staircase",
+    },
+    Explain {
+        code: "bynk.parse.no_remainder_operator",
+        blurb: "Bynk has no `%` operator. Remainder is a method with its sign \
+                spelled out: `a.rem(b)` takes the dividend's sign (the C, Java and \
+                JavaScript `%`), `a.mod(b)` takes the divisor's (Python's `%`; use \
+                it for a cyclic index). When both operands are plain names or \
+                integer literals the error offers a `.rem` fix, never applied \
+                automatically: check that the sign is the one you want.",
+        example: "fn parity(n: Int) -> Int {\n    \
+                  n % 2          // ✗ there is no `%`\n\
+                  }\n\n\
+                  fn parity(n: Int) -> Int {\n    \
+                  n.rem(2)       // ✓ the dividend's sign, as `%` in C\n\
+                  }\n\n\
+                  fn slot(n: Int) -> Int {\n    \
+                  n.mod(2)       // ✓ the divisor's sign, as `%` in Python\n\
+                  }",
+        page: "/book/reference/operators",
+        anchor: "remainder",
+    },
+    Explain {
+        code: "bynk.parse.non_associative",
+        blurb: "Comparisons (`<`, `<=`, `>`, `>=`) and equality tests (`==`, `!=`) \
+                do not chain, so `a < b < c` is refused rather than given a \
+                reading you may not have meant. Split a chain of comparisons with \
+                `&&`; to test the result of an equality, parenthesise it: `(a == \
+                b) == c`.",
+        example: "fn ordered(a: Int, b: Int, c: Int) -> Bool {\n    \
+                  a < b < c         // ✗ comparisons do not chain\n\
+                  }\n\n\
+                  fn ordered(a: Int, b: Int, c: Int) -> Bool {\n    \
+                  a < b && b < c    // ✓ one comparison on each side of `&&`\n\
+                  }",
+        page: "/book/reference/operators",
+        anchor: "precedence",
+    },
+    Explain {
         code: "bynk.parse.record_pattern_without_rest",
         blurb: "Every record pattern ends with `..`. Record patterns are always open: they \
                 name the fields they care about and ignore the rest, so adding a field \
@@ -1267,6 +1748,85 @@ pub const EXPLANATIONS: &[Explain] = &[
                   match o {\n    Order { total, .. } => total      // ✓ open: other fields ignored\n}",
         page: "/book/reference/types",
         anchor: "record-patterns",
+    },
+    Explain {
+        code: "bynk.parse.reserved_keyword",
+        blurb: "A hard keyword (`type`, `fn`, `match`, `Int` and so on) was \
+                written where a name is expected: a parameter, a `let` binding, an \
+                operation name. Hard keywords are reserved everywhere, so none can \
+                be a name. Rename it. A keyword is still allowed as a field label \
+                when a `:` follows it (`{ type: String }`); the shorthand without \
+                the `:` is `bynk.parse.keyword_field_shorthand`.",
+        example: "fn describe(type: String) -> String {   // ✗ `type` is a reserved word\n    \
+                  type\n\
+                  }\n\n\
+                  fn describe(kind: String) -> String {   // ✓ any other name\n    \
+                  kind\n\
+                  }",
+        page: "/book/reference/keywords",
+        anchor: "hard-keywords",
+    },
+    Explain {
+        code: "bynk.parse.self_outside_method",
+        blurb: "`self` is the receiver of a method, and only the first parameter \
+                of a method declaration, written `fn Type.method(self, …)`, may be \
+                named `self`. A free function has no receiver. Either name the \
+                type the function belongs to, making it a method, or drop `self` \
+                and take the value as an ordinary parameter.",
+        example: "fn total(self) -> Int {          // ✗ a free function has no `self`\n    \
+                  self.total\n\
+                  }\n\n\
+                  fn Order.total(self) -> Int {    // ✓ a method of `Order`\n    \
+                  self.total\n\
+                  }",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.unknown_predicate",
+        blurb: "A refined type is a base type plus a rule from a fixed set of \
+                built-in predicates: `Matches`, `InRange`, `MinLength`, \
+                `MaxLength`, `Length`, `NonNegative`, `Positive`, `NonEmpty` and \
+                `IsoDate`. There are no user-defined predicates. Use one of these; \
+                for a numeric range that is `InRange(lo, hi)`, inclusive at both \
+                ends.",
+        example: "type Age = Int where Between(0, 150)    // ✗ not a predicate\n\
+                  type Age = Int where InRange(0, 150)    // ✓",
+        page: "/book/spec/type-system",
+        anchor: "63-refinement-predicates",
+    },
+    Explain {
+        code: "bynk.parse.uses_after_decls",
+        blurb: "In the fragment form of a `commons` or `context` (the header with \
+                no braces), the `uses` clauses come straight after the header, \
+                before any `type` or `fn`. Move the `uses` line up. `consumes` and \
+                `exports` clauses follow the same rule, as \
+                `bynk.parse.consumes_after_decls` and \
+                `bynk.parse.exports_after_decls`: `consumes` after the `uses` \
+                lines, `exports` after the `consumes` lines.",
+        example: "commons demo\n\
+                  type Id = String\n\
+                  uses util              // ✗ a declaration comes first\n\n\
+                  commons demo\n\
+                  uses util              // ✓ clauses straight after the header\n\
+                  type Id = String",
+        page: "/book/spec/syntactic-grammar",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.variant_name_case",
+        blurb: "A variant of a sum type or enum is written like a constant: an \
+                uppercase letter, then letters, digits or `_` (`Active`, \
+                `NotFound`). A lowercase variant such as `suspended` is refused. \
+                Capitalise the name.",
+        example: "type Status =\n    \
+                  | Active\n    \
+                  | suspended   // ✗ a variant starts with a capital\n\n\
+                  type Status =\n    \
+                  | Active\n    \
+                  | Suspended   // ✓",
+        page: "/book/reference/types",
+        anchor: "sum-types",
     },
     Explain {
         code: "bynk.provider.agent_call_undeclared_capability",
@@ -1288,6 +1848,76 @@ pub const EXPLANATIONS: &[Explain] = &[
                     fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
         page: "/book/guides/effects-and-capabilities/compose-a-provider",
         anchor: "the-rules",
+    },
+    Explain {
+        code: "bynk.provider.dependency_cycle",
+        blurb: "A provider's `given` lists the capabilities it is built from, and the context builds providers in dependency order. A capability that depends on itself, directly or through other providers, has no order to be built in, so every provider on the cycle is reported. Break the cycle by removing the `given`, or by depending on a different capability. Dependencies on other contexts follow `consumes`, which has its own check, `bynk.context.consumes_cycle`.",
+        example: "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed given Clock {   // ✗ `Clock` is built from itself\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\nprovides Clock = Fixed {               // ✓ built from nothing\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}",
+        page: "/book/guides/effects-and-capabilities/compose-a-provider",
+        anchor: "the-rules",
+    },
+    Explain {
+        code: "bynk.provider.extra_operation",
+        blurb: "A `provides` block offers the capability's operations and no others. Callers reach a provider only through the capability, so an operation it does not declare could never be called, and it usually means a misspelt name or an operation added to the wrong capability. Remove it, or declare it on the capability. A capability operation the provider omits is `bynk.provider.missing_operation`.",
+        example: "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed {\n    fn now() -> Effect[Int] { Effect.pure(0) }\n    fn zone() -> Effect[String] { Effect.pure(\"UTC\") }   // ✗ `Clock` declares no `zone`\n}\n\ncapability Clock {\n    fn now() -> Effect[Int]\n    fn zone() -> Effect[String]  // ✓ declared on the capability\n}",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
+        code: "bynk.provider.missing_operation",
+        blurb: "A `provides` block implements a capability, so it must supply every operation the capability declares: callers are checked against the capability, and an operation the provider lacks would have nothing to run. The error is on the `provides` line and names the missing operation. Add it, with the signature the capability declares. An operation the capability does not declare is `bynk.provider.extra_operation`.",
+        example: "capability Clock {\n    fn now() -> Effect[Int]\n    fn zone() -> Effect[String]\n}\n\nprovides Clock = Fixed {         // ✗ no `zone`\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\nprovides Clock = Fixed {         // ✓ every operation is provided\n    fn now() -> Effect[Int] { Effect.pure(0) }\n    fn zone() -> Effect[String] { Effect.pure(\"UTC\") }\n}",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
+        code: "bynk.provider.signature_mismatch",
+        blurb: "A provider operation must have the signature its capability declares: the same number of parameters, the same parameter types and the same return type. Callers are checked against the capability, so a provider that returns something else would hand them a value of the wrong type. The error points at the parameter or return type that differs, or at the operation when the counts differ. Change the provider to match, or change the capability, and with it every provider of it.",
+        example: "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed {\n    fn now() -> Effect[String] { Effect.pure(\"0\") }   // ✗ the capability returns `Effect[Int]`\n}\n\nprovides Clock = Fixed {\n    fn now() -> Effect[Int] { Effect.pure(0) }        // ✓ same signature\n}",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
+        code: "bynk.provider.unknown_capability",
+        blurb: "A `provides` block implements a capability that the same context declares, and none of that name is declared here, so there is nothing to check the operations against. This is usually a misspelt name, or a capability that lives in another context: a provider cannot implement one from elsewhere. Declare the capability next to its provider, or correct the name.",
+        example: "provides Clock = Fixed {         // ✗ this context declares no `Clock`\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\ncapability Clock {               // ✓ declared alongside its provider\n    fn now() -> Effect[Int]\n}",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
+        code: "bynk.queue.bad_params",
+        blurb: "A queue consumer is invoked once per message, so `on message` takes exactly one parameter: the message, of any type that can be decoded from the queue body. Two parameters leave the second with nothing to supply it, and none leaves the handler without the message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
+        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+        page: "/book/reference/queue",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.queue.return_not_queue_result",
+        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled) and `Retry(reason)` (deliver it again). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
+        example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
+        page: "/book/reference/queue",
+        anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.record_spread.field_type_mismatch",
+        blurb: "An override in a record spread must have the type its field declares. The spread produces a value of the record's type, and a field of another type would break that type, so the mismatch is refused at the override instead of surfacing later. Give the field a value of its declared type, converting explicitly where needed: nothing converts implicitly.",
+        example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: \"no\" }   // ✗ `n` is an `Int`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 1 }   // ✓ an `Int`\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.record_spread.non_record_base",
+        blurb: "The base of a spread supplies the fields that are not overridden, so it has to be a value of a record type. An `Int`, a `List` or a sum value has no fields to copy. Spread a record, or build the record with every field written out. A base of a different record is `bynk.record_spread.type_mismatch`.",
+        example: "type Counter = { n: Int }\n\nfn bump(count: Int, c: Counter) -> Counter {\n    Counter { ...count, n: 1 }   // ✗ `count` is an `Int`, not a record\n}\n\nfn bump(count: Int, c: Counter) -> Counter {\n    Counter { ...c, n: count }   // ✓ spread the record, override the field\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.record_spread.unknown_field",
+        blurb: "A record spread, `T { ...base, field: value }`, copies every field of `base` and replaces the ones you list. Each listed field has to be one the record declares: a misspelt or invented name would otherwise be dropped silently, or build a value that is not a `T`. Check the field name against the type's declaration. To add a field, declare it on the type first.",
+        example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
     },
     Explain {
         code: "bynk.refine.literal_violates",
@@ -1341,6 +1971,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.ambiguous_variant",
+        blurb: "Two sum types in scope declare a variant with the same name, and a bare use of it, as a value or a call, could mean either. Bynk does not guess from context, so it asks for the type: write `Light.Red`. Declaring the same variant name in two types is allowed. Only the unqualified use is refused.",
+        example: "type Light = | Red | Green\n\ntype Flag = | Red | Blue\n\nfn run() -> Int {\n    let x = Red                  // ✗ `Red` is a variant of both `Light` and `Flag`\n    1\n}\n\nfn run() -> Int {\n    let x = Light.Red            // ✓ qualified with its type\n    1\n}",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
         code: "bynk.resolve.arity_mismatch",
         blurb: "A call to a declared `fn` must pass exactly as many arguments as it has parameters. Bynk has no optional or variadic parameters and fills nothing in, so a missing or extra argument is always a mistake, and the compiler cannot tell which one was meant. Add or remove the argument, or change the declaration. The error points at the call and labels the declaration. A call through a function value or a built-in operation is `bynk.types.call_arity`, and a method is `bynk.types.method_arity`.",
         example: "fn double(x: Int) -> Int {\n    x * 2\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a, b)             // ✗ `double` takes one argument\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a) + double(b)    // ✓ one argument each call\n}",
@@ -1369,6 +2006,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-constant",
     },
     Explain {
+        code: "bynk.resolve.duplicate_field",
+        blurb: "A record is built and read by field name, so each name may appear once in its declaration, and the same holds for the payload fields of one sum variant. A repeat usually means two different fields were intended: rename one, or remove it. A field set twice in a literal is `bynk.resolve.duplicate_field_init`.",
+        example: "type Order = { id: Int, id: String }      // ✗ `id` declared twice\n\ntype Order = { id: Int, label: String }  // ✓ distinct names",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
         code: "bynk.resolve.duplicate_type",
         blurb: "A unit declares two types, or a type and an event, with the same name. A unit's top-level \
                 declarations share one scope in the emitted module, so a name can mean only one thing, \
@@ -1378,6 +2022,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Money = Int\ntype Money = String          // ✗ `Money` is already declared\n\n\
                   type Money = Int\ntype Label = String          // ✓ distinct names",
         page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.let_shadows_fn",
+        blurb: "A `let` may not reuse the name of a function declared in the unit. The name would mean the function in one place and the binding in another, and a reader could not tell which `total` is meant. Choose a different name for the binding. Reusing a type's name is `bynk.resolve.let_shadows_type`.",
+        example: "fn total() -> Int { 1 }\n\nfn run() -> Int {\n    let total = 2                // ✗ shadows the function `total`\n    total\n}\n\nfn run() -> Int {\n    let sum = total() + 1        // ✓ a new name\n    sum\n}",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.let_shadows_type",
+        blurb: "A `let` may not take the name of a declared type. The same name would then mean a type in one position and a value in another within one body, which is hard to read and easy to get wrong. Choose a different name for the binding, conventionally in lower case. Reusing a function's name is `bynk.resolve.let_shadows_fn`.",
+        example: "type Reps = Int where InRange(1, 100)\n\nfn run(n: Int) -> Int {\n    let Reps = n                 // ✗ shadows the type `Reps`\n    n\n}\n\nfn run(n: Int) -> Int {\n    let reps = n                 // ✓ a new name\n    reps\n}",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
         anchor: "",
     },
     Explain {
@@ -1409,6 +2067,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.resolve.param_as_function",
+        blurb: "Only a value of function type can be called. `n(5)` applies `n`, but `n` is an `Int`, so there is nothing to run. It is usually a missing operator or a parameter that was meant to be a function. Give the parameter a function type, such as `f: Int -> Int`, or drop the call. The check covers any local value, not only parameters.",
+        example: "fn apply(n: Int) -> Int {\n    n(5)                         // ✗ `n` is an `Int`, not a function\n}\n\nfn apply(f: Int -> Int) -> Int {\n    f(5)                         // ✓ a function-typed parameter\n}",
+        page: "/book/guides/program-structure/how-a-program-is-shaped",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.recursive_record_field",
         blurb: "A record cannot contain itself through record fields alone, whether directly (`next: Node` in `Node`) or round a cycle (`A` has a `B`, which has an `A`). A value of such a type could never be built, since making one needs one already, and the compiler could not synthesise the default value it needs for one. A cycle through an `Option`, `List`, `Map` or a sum type is fine, because that position can hold a value that ends the chain. Wrap one field in the cycle in `Option[…]`.",
         example: "type Node = { value: Int, next: Node }   // ✗ a `Node` would need a `Node`\n\ntype Node = { value: Int, next: Option[Node] }   // ✓ `None` ends the chain",
@@ -1421,6 +2086,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Set = { items: List[Int] }   // ✗ `Set` is the built-in set type\n\ntype IntSet = { items: List[Int] }   // ✓",
         page: "/book/reference/keywords",
         anchor: "built-in-type-names",
+    },
+    Explain {
+        code: "bynk.resolve.type_as_function",
+        blurb: "A type's name is not a function. A refined type is built with `.of(value)`, which checks the value and returns a `Result`, and a record with a literal such as `Order { … }`, so `Amount(5)` has no meaning to fall back on. A sum variant with a payload is the one exception: `Placed(at, total)` constructs it. A name that is not a type at all is `bynk.resolve.unknown_function`.",
+        example: "type Amount = Int where NonNegative\n\nfn price() -> Amount {\n    Amount(5)                    // ✗ a type is not a function\n}\n\nfn price() -> Result[Amount, ValidationError] {\n    Amount.of(5)                 // ✓ checked construction\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
     },
     Explain {
         code: "bynk.resolve.unconsumed_context",
@@ -1504,11 +2176,88 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.send.non_effect",
+        blurb: "`~>` sends an effectful call without waiting for it, so what follows it must be an `Effect`. A plain value such as an `Int` has nothing to run and nothing to send. If the call is meant to be a plain call, drop the `~>`; if it is meant to be sent, make the function return `Effect[()]`. A send of an effect with a reply is `bynk.send.requires_unit`.",
+        example: "fn total() -> Int { 1 }\n\nfn run() -> Effect[()] {\n    ~> total()   // ✗ `total` returns an `Int`, not an `Effect`\n    Effect.pure(())\n}\n\nfn total() -> Effect[()] { Effect.pure(()) }\n\nfn run() -> Effect[()] {\n    ~> total()   // ✓ an `Effect[()]`\n    Effect.pure(())\n}",
+        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
+        anchor: "the-error-gate",
+    },
+    Explain {
+        code: "bynk.send.requires_unit",
+        blurb: "`~>` never waits, so it throws away whatever the call returns. Bynk therefore lets it send only an operation whose reply is `Effect[()]`: an `Effect[Int]`, or one carrying a `Result`, would lose its value or its error with no trace. To use the reply, or to discard it on purpose, await the call with `let r <- …` or `let _ <- …`. For a value that is not an `Effect` at all see `bynk.send.non_effect`.",
+        example: "fn fetch() -> Effect[Int] { Effect.pure(1) }\n\nfn run() -> Effect[()] {\n    ~> fetch()   // ✗ the `Int` reply would vanish\n    Effect.pure(())\n}\n\nfn run() -> Effect[()] {\n    let _ <- fetch()   // ✓ awaited, the reply discarded on purpose\n    Effect.pure(())\n}",
+        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
+        anchor: "the-error-gate",
+    },
+    Explain {
+        code: "bynk.send.store_op",
+        blurb: "In an agent handler, a store write is not a message to send: it is staged and committed atomically with the rest of the handler, so there is nothing for `~>` to leave running. `~>` is refused there for any call, and a store operation gets its own code to point at the fix. Drop the `~>` and write `do field.op(…)`, or `let _ <- field.op(…)`; the write is committed with the handler. For a send that is not a store operation see `bynk.send.in_agent_handler`.",
+        example: "on call bump() -> Effect[()] {\n    ~> count.update((n) => n + 1)   // ✗ a store write is not sent\n}\n\non call bump() -> Effect[()] {\n    do count.update((n) => n + 1)   // ✓ staged, committed with the handler\n}",
+        page: "/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends",
+        anchor: "not-in-an-agent-handler",
+    },
+    Explain {
+        code: "bynk.service.missing_from",
+        blurb: "A service with no `from` clause is a call service, and admits only `on call` handlers; the protocol in the header is what says how a handler is invoked. A handler of another form needs its protocol named: `from http` for a route, `from cron`, `from queue(\"…\")`, `from websocket(…)` or `from Events(E)`. The error suggests the one that fits the handler. If the service really is a mix, split it (see `bynk.service.mixed_protocols`).",
+        example: "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] { … }\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-service_protocol",
+    },
+    Explain {
+        code: "bynk.service.mixed_protocols",
+        blurb: "A service is one protocol adapter: with `from http`, `from cron`, `from queue(…)`, `from websocket(…)` or `from Events(E)` it admits only handlers of that form, and one that does not match is refused. Declare a service per protocol. A handler in a service with no `from` at all is `bynk.service.missing_from`.",
+        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] { … }\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-service_protocol",
+    },
+    Explain {
+        code: "bynk.service.outside_context",
+        blurb: "A `service` is a context's entry point: a call, a route, a schedule, a queue consumer, a socket. A `commons` holds only shared types and pure functions, and has no context to serve from. Move the service into a context. Logic it shares can stay in the commons, which the context then `uses`.",
+        example: "commons shop\n\nservice probe { … }   // ✗ a commons holds no entry points\n\ncontext shop\n\nservice probe { … }   // ✓",
+        page: "/book/reference/grammar",
+        anchor: "rule-service_decl",
+    },
+    Explain {
+        code: "bynk.service.return_not_effect",
+        blurb: "Every service handler returns an `Effect[T]`, whatever its protocol. A handler runs as the context answers a call, route, schedule, message or frame, and its effects and `given` capabilities are the runtime's to run, so a bare `Int` is refused. Wrap the result: `Effect.pure(x)` for a value you already hold. An `on event` handler that returns an `Effect` of anything but `()` is `bynk.event.return_not_effect_unit`.",
+        example: "service probe {\n    on call() -> Int { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] { … }    // ✓\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-service_decl",
+    },
+    Explain {
+        code: "bynk.service.unknown_protocol",
+        blurb: "The protocol after `from` is one of a closed set: `http`, `cron`, `queue`, `websocket` or `Events`. Kafka and MQTT are transports, not protocols: use `from queue(\"…\")` and bind the broker at the platform layer. A service with no `from` takes `on call` handlers.",
+        example: "service worker from kafka {                // ✗ not a protocol\n\nservice worker from queue(\"jobs\") {        // ✓ the queue protocol",
+        page: "/book/reference/grammar",
+        anchor: "rule-service_protocol",
+    },
+    Explain {
+        code: "bynk.store.cache_needs_clock",
+        blurb: "A `Cache` entry expires, and every operation on it but `remove` reads the clock to decide whether an entry is still live. So a handler that uses a `Cache` must declare `given Clock`, the same way one that reads the time itself would; the dependency is explicit even though the body never names the clock. Add `given Clock` to the handler's signature.",
+        example: "consumes bynk { Clock }\n\nstore live: Cache[String, Int] @ttl(5.minutes)\n\non call touch() -> Effect[()] {\n    let _ <- live.put(\"a\", 1)   // ✗ expiry reads the clock, which the handler does not declare\n    Effect.pure(())\n}\n\non call touch() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- live.put(\"a\", 1)\n    Effect.pure(())\n}",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
+    },
+    Explain {
         code: "bynk.store.cache_ttl_required",
         blurb: "A `Cache` is a keyed store whose entries expire, so it needs `@ttl(<duration>)`, how long an entry lives. Without an expiry it would only be a `Map`. The argument must be a `Duration` literal such as `5.minutes`; a bare number (`@ttl(5)`) or a computed value is refused too, because the lifetime has to be known when the program compiles. Add the annotation, or declare a `Map` if entries should be kept until removed.",
         example: "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓",
         page: "/book/reference/agents",
         anchor: "storage-annotations",
+    },
+    Explain {
+        code: "bynk.store.kind_arity",
+        blurb: "Each storage kind takes a fixed number of type arguments: `Cell[T]`, `Set[T]` and `Log[T]` take one, and `Map[K, V]` and `Cache[K, V]` take two. The checker reads the arguments by position, so a wrong count cannot be guessed at and is refused where the field is declared. Give the kind the arguments it takes. To keep a key with a value use `Map`, and to hold a single value use `Cell[T]`.",
+        example: "store total: Cell[String, Int]   // ✗ a `Cell` takes one type argument\n\nstore total: Cell[Int]   // ✓ one",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
+    },
+    Explain {
+        code: "bynk.store.log_needs_clock",
+        blurb: "`Log.append` stamps each entry with the time it was written, so it reads the clock and the handler has to declare `given Clock`. The window reads (`since`, `before`, `between`) take explicit `Instant`s and need no clock. Add `given Clock` to the handler that appends.",
+        example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
     },
     Explain {
         code: "bynk.store.unkeyable_key",
@@ -1518,11 +2267,218 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "storage-kinds-and-their-operations",
     },
     Explain {
+        code: "bynk.store.unknown_kind",
+        blurb: "The type of a `store` field names a storage kind, which says how the state is persisted and which operations it has; it is not an ordinary type. The kinds are `Cell`, `Map`, `Set`, `Log` and `Cache`; `Queue` is reserved but not yet supported (`bynk.store.kind_unsupported`). A `List` or a record is not one, because nothing would say how to read or update it atomically. Pick the kind that matches how you use the data: `Set` for membership, `Map` for lookup by key, `Log` to append, `Cell` for one value.",
+        example: "store tags: List[String]   // ✗ `List` is not a storage kind\n\nstore tags: Set[String]   // ✓ a storage kind",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
+    },
+    Explain {
+        code: "bynk.store.unknown_map_accessor",
+        blurb: "A `store Map` field is read as a lazy query through exactly three accessors: `.entries` (each a `MapEntry` with `.key` and `.value`), `.keys` and `.values`. Any other name after the field is refused. Its effectful operations, such as `put` and `get`, are method calls, not accessors. Use one of the three, or call an operation. A wrong method name on a store is `bynk.store.unknown_op`.",
+        example: "store items: Map[String, Item]\n\nitems.names.collect()   // ✗ a `Map` has no `.names`\n\nitems.keys.collect()   // ✓ the keys, as a query",
+        page: "/book/reference/types",
+        anchor: "map-key-accessors",
+    },
+    Explain {
         code: "bynk.store.unknown_op",
         blurb: "A `store` field's methods are its storage operations, which are effectful (await with `<-`), and each kind has a fixed set. `Map` and `Cache` take `put`, `get`, `update`, `upsert`, `remove`, `contains` and `size` (a `Map` also takes query operations); `Set` takes `add`, `remove`, `contains` and `size`; a `Cell` takes only `update`, being read by name and written with `:=`; a `Log` takes `append` and lazy query reads. Any other name is refused, even one the same type has as a plain value. For a read-modify-write use `update`, or `upsert` when the key may be absent. A wrong key query (`.entries`, `.keys`, `.values`) is `bynk.store.unknown_map_accessor`.",
         example: "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
         page: "/book/reference/agents",
         anchor: "storage-kinds-and-their-operations",
+    },
+    Explain {
+        code: "bynk.stub.bad_sequence",
+        blurb: "`returns each […]` gives one outcome per call, in order, and the \
+                last outcome repeats once the list runs out. An empty list has no \
+                outcome to repeat, so the first call would have nothing to return. \
+                List at least one. To return an empty list as a single value, \
+                write `returns []`, without `each`.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.read() returns each []    // ✗ no outcomes\n\
+                  stub Meter.read() returns each [7]   // ✓ at least one",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.stub.not_a_seam",
+        blurb: "A `stub` substitutes one of the capabilities the unit under test \
+                depends on: one the context declares, or reaches through a \
+                `consumes`. Any other name, including a misspelt one, leaves \
+                nothing to substitute. A commons has no capabilities, so it cannot \
+                be stubbed at all. Name a capability of the target, or add the \
+                `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
+                operation.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Gauge.read() returns 7   // ✗ the context has no `Gauge`\n\
+                  stub Meter.read() returns 7   // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.stub.rhs_type",
+        blurb: "A `stub … returns <value>` stands in for a real provider, so the \
+                value must have the type the operation declares, as the real \
+                result would. `Meter.read` yields an `Int`, so it returns `7`, not \
+                a string; the `Effect` is supplied for you. Change the value, or \
+                stub the operation you meant. To inject a failure, write `fails` \
+                instead of a value.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.read() returns \"seven\"   // ✗ a String, not an Int\n\
+                  stub Meter.read() returns 7         // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.stub.unknown_op",
+        blurb: "`stub Cap.op(…)` overrides one operation of a capability, so `op` \
+                must be declared by that capability. A misspelt or renamed \
+                operation matches nothing, so the stub is refused instead of \
+                leaving the default provider in place unannounced. Use the \
+                operation name the capability declares. See `bynk.stub.not_a_seam` \
+                when the capability itself is the wrong one.",
+        example: "// demo/meter.bynk\n\
+                  capability Meter { … }\n\
+                  \n\
+                  // tests/meter.test.bynk\n\
+                  stub Meter.reed() returns 7   // ✗ Meter has no `reed`\n\
+                  stub Meter.read() returns 7   // ✓",
+        page: "/book/reference/testing",
+        anchor: "stub",
+    },
+    Explain {
+        code: "bynk.suite.duplicate_case_name",
+        blurb: "A case is identified by its description in the runner's output and \
+                in failure reports, so each description must be unique across the \
+                suites that test one unit. Two cases with the same description \
+                cannot be told apart. Rename one; the error is on the repeat, with a label at the first.",
+        example: "// tests/ledger.test.bynk\n\
+                  case \"an entry\" { … }\n\
+                  case \"an entry\" { … }          // ✗ same description\n\
+                  case \"another entry\" { … }     // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.suite.unknown_target",
+        blurb: "A `suite` names the commons or context it tests, by its full \
+                dotted name, and that unit must be declared in the project. A name \
+                that matches none, usually a typo or a unit not written yet, would \
+                leave the suite testing nothing. Correct the name, or declare the \
+                unit.",
+        example: "// demo/ledger.bynk\n\
+                  commons demo.ledger\n\
+                  \n\
+                  // tests/ledger.test.bynk\n\
+                  suite demo.ledgre { … }    // ✗ no such unit\n\
+                  suite demo.ledger { … }    // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.advance_not_clock",
+        blurb: "`advance` moves the harness clock, the single time source a test \
+                owns, so it names `Clock` and nothing else. No other capability \
+                has virtual time to move. To shape what another capability \
+                returns, use a `stub`. The clock only moves forward.",
+        example: "// demo/clock.bynk\n\
+                  consumes bynk { Clock }\n\
+                  \n\
+                  // tests/clock.test.bynk\n\
+                  advance Random by 5.minutes   // ✗ only the Clock moves\n\
+                  advance Clock by 5.minutes    // ✓",
+        page: "/book/reference/testing",
+        anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.advance_not_duration",
+        blurb: "`advance Clock by <amount>` moves the harness clock forward by a \
+                `Duration`. A bare number does not say what unit it counts, so it \
+                is refused. Write a duration literal such as `5.minutes`. See \
+                `bynk.test.advance_not_clock` for naming a capability other than \
+                `Clock`.",
+        example: "// demo/clock.bynk\n\
+                  consumes bynk { Clock }\n\
+                  \n\
+                  // tests/clock.test.bynk\n\
+                  advance Clock by 5           // ✗ a number, not a Duration\n\
+                  advance Clock by 5.minutes   // ✓",
+        page: "/book/reference/testing",
+        anchor: "time-in-tests",
+    },
+    Explain {
+        code: "bynk.test.service_bad_address",
+        blurb: "A test addresses an http route by method and route pattern, as in \
+                `api.POST(\"/items\", body)`. The first argument must be that \
+                pattern as a string literal, so a number or a variable is refused. \
+                The same code covers other addresses used the wrong way, such as \
+                fetching an asset through a service that is not `from http`.",
+        example: "// demo/api.bynk\n\
+                  service api from http { … }\n\
+                  \n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.POST(1, \"x\") by Visitor          // ✗ not a pattern\n\
+                  let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.service_call_arity",
+        blurb: "`svc.call(…)` in a test runs the service's `on call` handler, so \
+                it takes that handler's parameters, and the number of arguments is \
+                checked as for any call. Add or remove arguments to match the \
+                handler. The asset address, `svc.GET(asset)`, takes the asset \
+                alone, and this code covers extra arguments there too.",
+        example: "// demo/svc.bynk\n\
+                  service echo { … }\n\
+                  \n\
+                  // tests/svc.test.bynk\n\
+                  let r <- echo.call(1, 2)   // ✗ the handler takes one\n\
+                  let r <- echo.call(1)      // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.service_no_call_handler",
+        blurb: "A case reaches a service through the address its protocol has. \
+                `svc.call(…)` runs an `on call` handler, so it needs one; a `from \
+                http` service is driven by route (`api.POST(\"/items\", body)`), a \
+                `from cron` service by its schedule, a `from queue` service by \
+                message. Use the address the service has. The Book's table of \
+                addresses lists each.",
+        example: "// demo/api.bynk\n\
+                  service api from http { … }\n\
+                  \n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.call(\"x\")                      // ✗ no `on call` handler\n\
+                  let r <- api.POST(\"/items\", \"x\") by Visitor // ✓ its route",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.service_unknown_route",
+        blurb: "A case addresses an http route by the pattern its handler \
+                declares, `\"/items\"`, not a concrete URL, and a cron or queue \
+                service by its own address. A path that no route in the service \
+                declares, for any method, is refused. To test the `405` for a \
+                wrong method, use a declared path with a method it lacks.",
+        example: "// demo/api.bynk\n\
+                  service api from http { … }\n\
+                  \n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.POST(\"/item\", \"x\") by Visitor    // ✗ no route \"/item\"\n\
+                  let r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
     },
     Explain {
         code: "bynk.types.argument_mismatch",
@@ -1573,6 +2529,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.cannot_infer_option_type_param",
+        blurb: "`None` carries no value, so its `Option[T]` takes `T` from where it is used: an annotation, a parameter, or the function's return type. A `let` of a bare `None` has none, and the compiler will not guess, because `T` becomes part of everything the binding touches. Annotate it, as in `let missing: Option[Int] = None`, or use `None` where an `Option` is expected.",
+        example: "fn run() -> Int {\n    let missing = None    // ✗ an `Option` of what?\n    1\n}\n\nfn run() -> Int {\n    let missing: Option[Int] = None    // ✓\n    1\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
+        code: "bynk.types.cannot_infer_result_type_params",
+        blurb: "`Ok(v)` fixes only the success type and `Err(e)` only the error type, so the rest of the `Result` has to come from context: an annotation, a parameter type, or the enclosing function's return type. A bare `let r = Ok(1)` has neither, and the compiler will not guess. Annotate the binding, as in `let r: Result[Int, String] = Ok(1)`.",
+        example: "fn run() -> Int {\n    let r = Ok(1)    // ✗ a `Result` of what error?\n    1\n}\n\nfn run() -> Int {\n    let r: Result[Int, String] = Ok(1)    // ✓\n    1\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
         code: "bynk.types.catastrophic_regex",
         blurb: "A `Matches` pattern, and the pattern of a regex method such as \
                 `matchesRegex` or `replaceRegex`, is analysed when the program compiles. \
@@ -1620,6 +2590,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "built-in-generic-types",
     },
     Explain {
+        code: "bynk.types.constructor_arity",
+        blurb: "`T.of(value)` takes exactly one argument, the base value to check, and so does `T.unsafe(value)` on an opaque type: a refined or opaque type wraps a single value. None gives it nothing to check, and two have no meaning. Pass the one value. Building a sum variant with the wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Age = Int where InRange(0, 150)\n\nfn parse(n: Int) -> Result[Age, ValidationError] {\n    Age.of(n, 1)    // ✗ `of` takes 1 argument\n}\n\nfn parse(n: Int) -> Result[Age, ValidationError] {\n    Age.of(n)    // ✓\n}",
+        page: "/book/reference/refined-types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.duplicate_literal_arm",
+        blurb: "A `match` takes the first arm whose pattern fits, so a literal that an earlier unguarded arm already has can never reach a second arm. Bynk refuses the dead arm rather than let it hide a mistake, usually a mistyped value. Change the literal or delete the arm. An or-pattern is checked alternative by alternative, so `1 | 2` followed by `2` is caught as well. The same for a variant is `bynk.types.duplicate_variant_arm`.",
+        example: "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "exhaustiveness-and-reachability",
+    },
+    Explain {
         code: "bynk.types.empty_range_pattern",
         blurb: "A range pattern `lo..hi` matches every `Int` from `lo` to `hi`, both \
                 inclusive, so the low bound comes first. With `lo > hi` no value can match, \
@@ -1646,6 +2630,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "predicates",
     },
     Explain {
+        code: "bynk.types.err_value_mismatch",
+        blurb: "`Err(e)` takes its error type from the surrounding `Result[T, E]`, the annotation or the function's return type, so `Err(404)` where `E` is `String` is refused at the value, with no conversion. Pass an `E`, or change the declared error type. The success half is `bynk.types.ok_value_mismatch`; with nothing to fix the `Result`, it is `bynk.types.cannot_infer_result_type_params`.",
+        example: "fn total() -> Result[Int, String] {\n    Err(404)    // ✗ an `Int`, where the error type is `String`\n}\n\nfn total() -> Result[Int, String] {\n    Err(\"not found\")    // ✓\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
                 extensible: a minor release may add a variant. A `match` that names every \
@@ -1662,6 +2653,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "extensible-enums",
     },
     Explain {
+        code: "bynk.types.field_access_on_non_record",
+        blurb: "`.name` reads a field, and only a record has fields. A `String`, an `Int` or a `List` has methods instead, called with parentheses, so `name.length` is not a field read but `name.length()` is a call. A refined type is already its base type, so there is nothing to unwrap. To get at a sum type's payload, use `match`. A field a record lacks is `bynk.types.unknown_field`.",
+        example: "fn size(name: String) -> Int {\n    name.length    // ✗ `String` is not a record; `length` is a method\n}\n\nfn size(name: String) -> Int {\n    name.length()    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.field_value_mismatch",
+        blurb: "A record literal checks each field against the type the declaration gives it, with no implicit conversion, so `y: \"0\"` for an `Int` field is refused where it is written. Give the field a value of its declared type, or convert it first. A field the type lacks is `bynk.resolve.unknown_field`, and one left out is `bynk.resolve.missing_field`.",
+        example: "type Point = { x: Int, y: Int }\n\nfn origin() -> Point {\n    Point { x: 0, y: \"0\" }    // ✗ `y` is an `Int`\n}\n\nfn origin() -> Point {\n    Point { x: 0, y: 0 }    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
         code: "bynk.types.function_at_boundary",
         blurb: "A function type can be written only where a value stays in the running \
                 program: as a `fn` or lambda parameter, a return, or a local. A value that is \
@@ -1675,6 +2680,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Job = {\n  name: String,\n  run: Int -> Int,    // ✗ a record field cannot hold a function\n}\n\n\
                   type Job = {\n  name: String,\n  step: Int,\n}\n\nfn run(j: Job, f: Int -> Int) -> Int {    // ✓ a parameter can\n    f(j.step)\n}",
         page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.guard_not_bool",
+        blurb: "A guard, as in `pattern if condition => …`, decides whether an arm applies, so it must be a `Bool`: a number or an `Option` is not read as true or false. Say what you mean with a comparison, such as `r > 10`. A guarded arm covers nothing for exhaustiveness, because its guard may fail. The condition of an `if` expression is `bynk.types.if_non_bool_cond`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r => \"round\"    // ✗ `r` is an `Int`\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r > 10 => \"round\"    // ✓\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.if_branch_mismatch",
+        blurb: "Both branches of an `if` can be its value, so they must have one type: their common supertype, where a refined type and its base agree at the base. With a `String` in one branch and an `Int` in the other, the caller has no single type to rely on. Make the branches agree, converting where needed. A `match` whose arms disagree is `bynk.types.match_arm_mismatch`.",
+        example: "fn grade(score: Int) -> String {\n    if score >= 50 { \"pass\" } else { 0 }    // ✗ a `String` branch and an `Int` branch\n}\n\nfn grade(score: Int) -> String {\n    if score >= 50 { \"pass\" } else { \"fail\" }    // ✓\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.if_non_bool_cond",
+        blurb: "An `if` chooses a branch on a `Bool`, and Bynk has no truthiness: a number, a string, an `Option` or a list is never read as true or false. Say what you mean with a comparison (`count > 0`), or test an `Option` with `is Some(…)`. A match-arm guard has the same rule, as `bynk.types.guard_not_bool`.",
+        example: "fn describe(count: Int) -> String {\n    if count { \"some\" } else { \"none\" }    // ✗ an `Int`, not a `Bool`\n}\n\nfn describe(count: Int) -> String {\n    if count > 0 { \"some\" } else { \"none\" }    // ✓\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.if_without_else_requires_unit",
+        blurb: "An `if` with no `else` has nothing to produce when its condition is false, so Bynk gives that path the value `()`. The `then` branch must therefore be `()` too, or `Effect[()]` for a branch that only performs effects; a branch that yields a `String` would leave the other path without one. Add an `else` that produces a value of the same type, or make the branch a unit effect.",
+        example: "fn sign(n: Int) -> String {\n    if n > 0 { \"positive\" }    // ✗ no `else`, so the value would be `()`\n}\n\nfn sign(n: Int) -> String {\n    if n > 0 { \"positive\" } else { \"not positive\" }    // ✓\n}",
+        page: "/book/spec/static-semantics",
         anchor: "",
     },
     Explain {
@@ -1791,6 +2824,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.list_element_mismatch",
+        blurb: "A list has one element type, taken from the context if there is one and otherwise from the first element, and every element must have it. `[1, 2, \"3\"]` mixes `Int` and `String`, and the error is on the element that disagrees. Make the elements one type, or wrap them in a sum type if the list really holds more than one kind of value. An empty `[]` with no context is `bynk.types.uninferable_element_type`.",
+        example: "fn scores() -> List[Int] {\n    [1, 2, \"3\"]    // ✗ a `String` in a `List[Int]`\n}\n\nfn scores() -> List[Int] {\n    [1, 2, 3]    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "built-in-generic-types",
+    },
+    Explain {
         code: "bynk.types.list_pattern_on_non_list",
         blurb: "A list pattern such as `[x, ..]` matches a value by its length and its elements, \
                 so the value must be a `List[T]`. A `Set`, a `Map`, an `Int` or a record has no \
@@ -1842,6 +2882,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\n\
                   fn reset(c: Counter) -> Counter {\n    c.zero()          // ✗ `zero` has no `self`: not an instance method\n}\n\n\
                   fn reset(c: Counter) -> Counter {\n    Counter.zero()    // ✓ a static function is called on the type\n}",
+        page: "/book/reference/types",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.method_on_non_named_type",
+        blurb: "A method call needs a type that has methods. A user-declared type does, and so do the built-ins that document them, such as `String` and `List`, but a function value, a `Bool` or `()` has none, so `f.apply(n)` has nothing to look up. A function is called directly, as `f(n)`. For a type that does have methods, a name it lacks is `bynk.types.method_not_found`.",
+        example: "fn twice(f: (Int) -> Int, n: Int) -> Int {\n    f.apply(f.apply(n))    // ✗ a function value has no methods\n}\n\nfn twice(f: (Int) -> Int, n: Int) -> Int {\n    f(f(n))    // ✓ call it directly\n}",
         page: "/book/reference/types",
         anchor: "",
     },
@@ -1947,6 +2994,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "ordering-your-own-types",
     },
     Explain {
+        code: "bynk.types.ok_value_mismatch",
+        blurb: "`Ok(v)` takes its type from where it is used. A return type or annotation of `Result[T, E]` fixes `T`, so `Ok(\"12\")` where `T` is `Int` is refused at the value, with no conversion; so is a value that does not match an `HttpResult[T]` handler's `T`. Pass a `T`, or change the declared type. The error half is `bynk.types.err_value_mismatch`; with nothing to fix `T`, it is `bynk.types.cannot_infer_result_type_params`.",
+        example: "fn total() -> Result[Int, String] {\n    Ok(\"12\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn total() -> Result[Int, String] {\n    Ok(12)    // ✓\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
+    },
+    Explain {
+        code: "bynk.types.opaque_raw_outside",
+        blurb: "An opaque type hides its base representation from everything but the unit that declares it, so no other code can take a `Token` apart or forge one. `.raw` reads the base value and is allowed only there. Elsewhere, use what the defining unit offers: a method or accessor on the type. To make a value, use `Token.of(value)`.",
+        example: "// token.bynk\ntype Token = opaque String\n\nfn Token.value(self) -> String {\n    self.raw\n}\n\n// app.bynk\nfn show(t: Token) -> String {\n    t.raw    // ✗ `Token` is opaque outside `token`\n}\n\nfn show(t: Token) -> String {\n    t.value()    // ✓ use the accessor `token` provides\n}",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.types.opaque_unsafe_outside",
+        blurb: "`T.unsafe(v)` wraps a base value as an opaque type without checking it, which is sound only where the type's own unit vouches for the value, so it is allowed only in the unit that declares the type. Elsewhere use `T.of(v)`, which returns a `Result` so the check is explicit. Reading the base value back is `bynk.types.opaque_raw_outside`.",
+        example: "// token.bynk\ntype Token = opaque String\n\n// app.bynk\nfn make(s: String) -> Token {\n    Token.unsafe(s)    // ✗ only `token` may skip the check\n}\n\nfn make(s: String) -> Result[Token, ValidationError] {\n    Token.of(s)    // ✓ the checked constructor\n}",
+        page: "/book/reference/types",
+        anchor: "opaque-types",
+    },
+    Explain {
         code: "bynk.types.pattern_arity",
         blurb: "A variant pattern takes one binding for each payload field the variant \
                 declares, in order, or none to ignore the payload. A different count, or any \
@@ -1991,6 +3059,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "regular-expressions",
     },
     Explain {
+        code: "bynk.types.question_error_mismatch",
+        blurb: "`?` returns the `Err` from the enclosing function as it is, so its error type must be one the function declares: a `String` error cannot escape a function whose errors are `Int`. The only automatic conversion is a declared embedding, where the function's error is a sum type with an `embeds` clause for the inner one. Otherwise convert the error before the `?` with `.mapErr(…)`, or change the function's error type.",
+        example: "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Result[Int, Int] {\n    let v = checked(n)?    // ✗ propagates a `String` error, but `run` returns `Int` errors\n    Ok(v + 1)\n}\n\nfn run(n: Int) -> Result[Int, Int] {\n    let v = checked(n).mapErr((e) => e.length())?    // ✓ the error is converted first\n    Ok(v + 1)\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.question_on_non_result",
+        blurb: "`?` unwraps an `Ok` and returns early from the function on an `Err`, so it needs a `Result[T, E]`: a plain `Int` has no error to return. The one other operand it takes is an `Option`, in an `HttpResult` handler. Apply `?` to the call that produces the `Result`, not to a value already unwrapped. To turn an `Option` into a `Result` elsewhere, use `.okOr(err)`.",
+        example: "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = n?    // ✗ `n` is an `Int`, not a `Result`\n    Ok(v + 1)\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = checked(n)?    // ✓\n    Ok(v + 1)\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.types.question_outside_result",
+        blurb: "`?` returns early with the `Err`, so the function around it must be able to return one: its return type has to be a `Result`, or an `Effect` of one. In a function returning `Int` the error has nowhere to go. Change the return type to `Result[T, E]` and wrap the final value in `Ok`, or deal with the `Result` where it arises, with a `match` or `.getOrElse(…)`.",
+        example: "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Int {\n    let v = checked(n)?    // ✗ `run` does not return a `Result`\n    v + 1\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = checked(n)?    // ✓\n    Ok(v + 1)\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.types.return_mismatch",
         blurb: "The value a function or handler body ends with does not have the declared \
                 return type, and the compiler compares the two exactly. Either change the \
@@ -2007,6 +3096,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.some_value_mismatch",
+        blurb: "`Some(v)` takes its type from the surrounding `Option[T]`, the annotation or the function's return type, so `Some(\"a\")` where `T` is `Int` is refused at the value, with no conversion. Pass a `T`, or change the declared type. With nothing to say what the `Option` holds, a bare `None` is `bynk.types.cannot_infer_option_type_param`.",
+        example: "fn first() -> Option[Int] {\n    Some(\"a\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn first() -> Option[Int] {\n    Some(1)    // ✓\n}",
+        page: "/book/guides/type-system/result-and-optionals",
+        anchor: "construct-values",
     },
     Explain {
         code: "bynk.types.stream_at_boundary",
@@ -2061,6 +3157,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.types.unknown_pattern_field",
+        blurb: "When a variant pattern names its bindings, as in `Circle(radius: r)`, each name must be a payload field the variant declares: `Circle` has no `diameter`. Use the declared field name, or bind by position, `Circle(r)`. A count of bindings that does not fit the payload is `bynk.types.pattern_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(diameter: d) => d    // ✗ `Circle` has no field `diameter`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(radius: r) => r    // ✓\n        Dot => 0\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.unknown_variant_in_pattern",
+        blurb: "A pattern on a sum value can only name the variants its type declares, so `Square(side)` against a `Shape` with no `Square` could never match and is refused. This is usually a typo, a variant that was never added, or a value of a different type from the one intended. Fix the name, add the variant to the type, or match on the right value. A pattern of the wrong kind altogether is `bynk.types.pattern_type_mismatch`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r\n        Square(side) => side    // ✗ `Shape` has no `Square`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r\n        Dot => 0    // ✓\n    }\n}",
+        page: "/book/reference/types",
+        anchor: "matching",
+    },
+    Explain {
         code: "bynk.types.unreachable_arm",
         blurb: "A `match` arm can never run, because the arms before it already match every \
                 value it would match. The usual cause is a wildcard `_` placed before more \
@@ -2090,6 +3200,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sum-types",
     },
     Explain {
+        code: "bynk.types.variant_missing_payload",
+        blurb: "A variant with a payload is built by calling it, with its payload as arguments. Written bare, `Circle` is not a value, since nothing fills `radius`; only a variant with no payload can stand alone. Call it with one argument per field, as `Circle(10)`. The qualified form `Shape.Circle` is refused in the same way. A call with the wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle    // ✗ `Circle` carries a payload\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
+        code: "bynk.types.variant_payload_mismatch",
+        blurb: "A variant's payload fields have declared types and are checked like function parameters: `Circle(\"big\")` for `radius: Int` is refused at the argument, with no conversion. Pass a value of the field's type. For a generic sum the type argument is inferred from the arguments first, and the check applies to the result. The wrong number of arguments is `bynk.types.variant_arity`.",
+        example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "sum-types",
+    },
+    Explain {
         code: "bynk.uses.name_conflict",
         blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
                 and embeds) in scope under their own names, with no prefix. If two commons it uses \
@@ -2113,6 +3237,38 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.val.arity",
+        blurb: "`Val[T]` takes at most one argument, the pin: `Val[Age]` lets the \
+                compiler choose a value, `Val[Age](20)` fixes it. `Val` makes one \
+                value of one type, so a second argument has no meaning. Pass one \
+                pin or none.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Age](20, 30)   // ✗ two pins\n\
+                  let a = Val[Age](20)       // ✓ one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.literal_violates",
+        blurb: "A pinned `Val[T](…)` is checked against the refinement of `T` at \
+                compile time, and this literal breaks it, so the test would build \
+                a value the type does not allow. Pin a value that satisfies the \
+                refinement, or drop the pin and let `Val[T]` choose one. To test \
+                that an invalid value is refused, call `T.of(…)` and expect an \
+                `Err`.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Age](200)  // ✗ 200 is outside InRange(0, 150)\n\
+                  let a = Val[Age](20)   // ✓ inside it",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
         code: "bynk.val.needs_pin",
         blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
                 most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
@@ -2127,6 +3283,57 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // tests/codes.test.bynk\n\
                   let c = Val[Code]              // ✗ no value can be made from a pattern\n\
                   let c = Val[Code](\"abc\")      // ✓ pin one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.outside_test",
+        blurb: "`Val[T]` fabricates a value that merely satisfies `T`. That is \
+                what a test wants and what running code must not do, so `Val` is \
+                allowed only in test code. In a function or handler, take the \
+                value as a parameter or build it properly, for instance with \
+                `Age.of(20)`. See `bynk.val.needs_pin` for a bare `Val` that a \
+                test cannot generate.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  fn sample() -> Age { Val[Age] }   // ✗ not test code\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Age]                  // ✓ in a case",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.pin_not_literal",
+        blurb: "A pin on `Val[T]` is checked against the refinement of `T` when \
+                the program compiles, so it must be a literal of `T`'s base type. \
+                A name or a call has no value at that point. Write the literal in \
+                place. For a computed value, build it with `Age.of(…)` and `?`, \
+                which fails the case if the value is not valid.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let n = 20\n\
+                  let a = Val[Age](n)    // ✗ a name, not a literal\n\
+                  let a = Val[Age](20)   // ✓ a literal",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.unknown_type",
+        blurb: "`Val[T]` fabricates a value of the type it names, so the name must \
+                resolve to a type the suite can see. A misspelt name stops here, \
+                before anything else about the value can be checked. Fix the \
+                spelling, or declare the type in the target unit or the suite. The \
+                same code covers a `for all` binder whose type does not resolve.",
+        example: "// demo/ages.bynk\n\
+                  type Age = Int where InRange(0, 150)\n\
+                  \n\
+                  // tests/ages.test.bynk\n\
+                  let a = Val[Agee]      // ✗ no such type\n\
+                  let a = Val[Age]       // ✓ the declared type",
         page: "/book/reference/testing",
         anchor: "val",
     },
@@ -2179,6 +3386,27 @@ pub const EXPLANATIONS: &[Explain] = &[
                   service total { … }                // ✓ reach is governed by `exports`",
         page: "/book/guides/program-structure/design-a-public-surface",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.ws.lifecycle_by_mismatch",
+        blurb: "The connection's principal is verified once, by `on open`'s `by`, and carried for the life of the connection; `on message` and `on close` read it and never verify again. So their `by` must name the same actor as `on open`'s, or the same members of an actor sum. The binder names may differ. Change the lifecycle handler's `by` to match `on open`.",
+        example: "actor Member { … }\nactor Admin { … }\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on message (room: RoomId, frame: Frame) -> Effect[()] by admin: Admin { … }   // ✗ `on open` is `by` `Member`\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.ws.message_frame_param",
+        blurb: "A WebSocket `on message` handler is called with a decoded inbound frame, so it needs exactly one parameter of the service's `in:` type. Any other parameters are route values recovered from the connection. Add the frame parameter. A route value whose type differs from `on open`'s is `bynk.ws.route_param_mismatch`.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on message (room: RoomId) -> Effect[()] by user: Member { … }                  // ✗ no `Frame` parameter\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.ws.open_transfer_shape",
+        blurb: "A WebSocket `on open` must hand its `connection` to exactly one agent, unconditionally, as `Room(room).join(user.identity, connection)`. On Workers the upgrade is routed to that agent's Durable Object, which holds the connection, so it needs a single target the compiler can find. Neither none nor several will do, and a transfer inside an `if` or a `match` is not found. A connection left undisposed is `bynk.held.leak`; a transfer whose key the edge cannot compute is `bynk.ws.open_transfer_key`.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {   // ✗ `connection` is never transferred\n        let _ <- connection.close()\n        ()\n    }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {\n        let _ <- Room(room).join(user.identity, connection)   // ✓ handed to one agent\n        ()\n    }\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
     },
 ];
 
@@ -4197,7 +5425,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.parse.self_outside_method",
-        "`self` used outside a method or handler.",
+        "`self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver.",
         &["self_expr"],
     ),
     d(
@@ -4536,7 +5764,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.resolve.duplicate_field",
-        "A record declares a field twice.",
+        "A record, or one variant's payload, declares a field twice.",
         &["record_type"],
     ),
     dg(
@@ -5260,7 +6488,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.constructor_arity",
-        "A variant constructor got the wrong number of arguments.",
+        "`T.of` (or `T.unsafe`) on a refined or opaque type got the wrong number of arguments.",
     ),
     d(
         "bynk.types.constructor_base_mismatch",

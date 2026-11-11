@@ -1,0 +1,5 @@
+commons demo
+
+fn sign(n: Int) -> String {
+    if n > 0 { "positive" }
+}

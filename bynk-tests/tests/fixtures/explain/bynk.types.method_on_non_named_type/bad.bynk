@@ -1,0 +1,5 @@
+commons demo
+
+fn twice(f: (Int) -> Int, n: Int) -> Int {
+    f.apply(f.apply(n))
+}

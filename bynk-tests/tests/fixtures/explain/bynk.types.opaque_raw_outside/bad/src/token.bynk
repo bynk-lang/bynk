@@ -1,0 +1,7 @@
+commons token
+
+type Token = opaque String
+
+fn Token.value(self) -> String {
+    self.raw
+}

@@ -1479,7 +1479,7 @@
   "record_type": [
     {
       "code": "bynk.resolve.duplicate_field",
-      "summary": "A record declares a field twice."
+      "summary": "A record, or one variant's payload, declares a field twice."
     },
     {
       "code": "bynk.resolve.recursive_record_field",
@@ -1577,7 +1577,7 @@
   "self_expr": [
     {
       "code": "bynk.parse.self_outside_method",
-      "summary": "`self` used outside a method or handler."
+      "summary": "`self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver."
     },
     {
       "code": "bynk.resolve.self_outside_method",

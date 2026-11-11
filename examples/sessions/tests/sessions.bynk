@@ -4,6 +4,17 @@ suite sessions
 // `bynk test`'s deterministic one: it reads the epoch unless a case stubs it,
 // which is what makes expiry testable without waiting.
 
+// A cookie's value is text; the typed `cookies` record wants a `Token`.
+fn asToken(v: Option[String]) -> Option[Token] {
+	match v {
+		Some(text) => match Token.of(text) {
+			Ok(token) => Some(token),
+			Err(_) => None,
+		},
+		None => None,
+	}
+}
+
 case "a logged-in token resolves to its user" {
 	do Sessions("s").login("t1", "ann")
 	let who <- Sessions("s").whoami("t1")

@@ -1,0 +1,18 @@
+context demo.vault
+
+capability Vault {
+	fn open() -> Effect[Int]
+}
+
+provides Vault = RealVault {
+	fn open() -> Effect[Int] {
+		1
+	}
+}
+
+service box {
+	on call() -> Effect[Int] given Vault {
+		let a <- Vault.open()
+		a + 1
+	}
+}

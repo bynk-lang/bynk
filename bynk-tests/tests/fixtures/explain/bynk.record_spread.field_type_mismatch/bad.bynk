@@ -1,0 +1,7 @@
+commons demo
+
+type Counter = { n: Int }
+
+fn bump(c: Counter) -> Counter {
+  Counter { ...c, n: "no" }
+}
