@@ -303,14 +303,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "// a.bynk\n\
                   context a\n\
                   \n\
-                  consumes b                       // ✗ `a` and `b` consume each other\n\
+                  consumes b                       // ✗ `a` and `b` consume each other (reported on one clause)\n\
                   \n\
                   // b.bynk\n\
                   context b\n\
                   \n\
                   consumes a                       // ✗\n\
                   \n\
-                  service quote {\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)    // ✓ with no `consumes a`, `quote` takes `rate` as an argument\n    }\n\
+                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)\n    }\n\
                   }",
         page: "/book/guides/projects-build-and-deployment/deploy-to-cloudflare",
         anchor: "",
@@ -359,6 +359,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                   context pay\n\
                   \n\
                   exports opaque { Token }\n\
+                  \n\
+                  type Token = opaque String where Matches(\"T-[0-9]+\")\n\
                   \n\
                   // shop.bynk\n\
                   context shop\n\
