@@ -15,10 +15,10 @@ There are **806** codes in total.
 |---|---|---|---|
 | `bynk.agent.class_conflict` | An agent class has more than one fate: it is renamed twice, both renamed and removed, or renamed onto a class that already has its own recorded history in `bynk.schema.lock`. |  | — |
 | `bynk.agent.class_removed` | An agent class recorded in `bynk.schema.lock` is no longer declared, so a deployment's stored instances of it would be orphaned. If the class was never deployed, delete its `[agents]` entry from the lock; renaming or removing a deployed class gets its own declaration in a later state-migrations slice. |  | — |
-| `bynk.agent.construction_arity` | An agent was constructed with the wrong number of key arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.handler_arity` | An agent handler was called with the wrong number of arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.handler_not_found` | Called a handler the agent does not declare. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.key_mismatch` | An agent key argument has the wrong type. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.construction_arity`](/book/reference/agents/#addressing-and-calling) | An agent was constructed with the wrong number of key arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.handler_arity`](/book/reference/agents/#addressing-and-calling) | An agent handler was called with the wrong number of arguments. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.handler_not_found`](/book/reference/agents/#addressing-and-calling) | Called a handler the agent does not declare. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.key_mismatch`](/book/reference/agents/#addressing-and-calling) | An agent key argument has the wrong type. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.migrate_below_floor` | A `migrate` step reads a schema version below the agent's floor. A complete `bynk migrate sweep` raised the floor past it, so no stored instance can hold that version: the step emits nothing and can be deleted (warning). |  | Warning |
 | `bynk.agent.migrate_duplicate` | Two `migrate` steps in one agent read the same schema version. |  | — |
 | `bynk.agent.migrate_duplicate_assignment` | A `migrate` step assigns the same `store` field more than once; each field takes at most one value per step (record-literal semantics). |  | — |
@@ -27,13 +27,13 @@ There are **806** codes in total.
 | `bynk.agent.migrate_shape_mismatch` | A `migrate` step's declared old shape (or a `drop`) names a field the lock does not record at that version, or records with a different structure. |  | — |
 | `bynk.agent.migrate_unknown_version` | A `migrate` step reads a schema version the lock does not record below the agent's current version. |  | — |
 | `bynk.agent.non_additive_state_change` | An agent's stored state changed in a way deployed data cannot be read through — a `store` field was removed, retyped (including inside a stored record or sum), or changed storage kind. A renamed field is a removed field plus an added one. If the class was never deployed, delete its `[agents]` entry from `bynk.schema.lock`; otherwise widen rather than narrow, or stage the change through a new field. |  | — |
-| `bynk.agent.outside_context` | An `agent` was declared outside a context. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.outside_context`](/book/reference/agents/#declaration) | An `agent` was declared outside a context. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.agent.refinement_changed` | A stored `store` field's refinement changed while its structure did not. A widening is safe; a narrowing faults on load for any stored value that no longer satisfies it (`RehydrationViolation`), so migrate the data first (warning). |  | Warning |
 | `bynk.agent.removed_live` | A `removed agent` declaration names a class that is still declared; removing a class deletes its stored data. |  | — |
 | `bynk.agent.replaces_live` | `agent New replaces Old` names an `Old` that is still declared; a rename moves the old class's data to the new one. |  | — |
 | `bynk.agent.replaces_unknown` | `agent New replaces Old` names an `Old` that `bynk.schema.lock` does not record for this context, so there is no recorded class to rename. |  | — |
-| `bynk.agent.return_not_effect` | An agent handler's return type is not an `Effect`. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.agent.state_name_conflict` | A type is named `<Agent>State` beside agent `<Agent>`; that name is the agent's state record (its `Cell` fields), which its handlers and invariants see in place of the type. |  | — |
+| [`bynk.agent.return_not_effect`](/book/reference/agents/#declaration) | An agent handler's return type is not an `Effect`. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.agent.state_name_conflict`](/book/reference/agents/#reading-and-writing-state) | A type is named `<Agent>State` beside agent `<Agent>`; that name is the agent's state record (its `Cell` fields), which its handlers and invariants see in place of the type. |  | — |
 | `bynk.agent.version_without_path` | A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning). |  | Warning |
 | [`bynk.agents.bad_state_initialiser`](/book/reference/agents/#state-initialisation) | An agent `store` field initialiser is not a static value of the field's type. | [`store_field`](/book/reference/grammar/#rule-store_field) | — |
 | [`bynk.agents.non_zeroable_state_field`](/book/reference/agents/#state-initialisation) | An agent `store` field has no initialiser and no implicit zero value. | [`store_field`](/book/reference/grammar/#rule-store_field) | — |
@@ -309,10 +309,10 @@ There are **806** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.actor.bearer_identity_not_string_constructible` | A `Bearer` actor's identity is not a string-constructible type. |  | — |
-| `bynk.actor.bearer_missing_secret` | A `Bearer` actor does not name its signing secret. |  | — |
-| `bynk.actor.binder_shadows_param` | A `by` actor binder collides with a handler parameter of the same name. |  | — |
-| `bynk.actor.by_on_agent` | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
+| [`bynk.actor.bearer_identity_not_string_constructible`](/book/reference/actors/#schemes) | A `Bearer` actor's identity is not a string-constructible type. |  | — |
+| [`bynk.actor.bearer_missing_secret`](/book/reference/actors/#schemes) | A `Bearer` actor does not name its signing secret. |  | — |
+| [`bynk.actor.binder_shadows_param`](/book/reference/actors/#the-by-clause) | A `by` actor binder collides with a handler parameter of the same name. |  | — |
+| [`bynk.actor.by_on_agent`](/book/reference/actors/#the-by-clause) | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
 | `bynk.actor.duplicate_sum_scheme` | Two peers in a multi-actor sum share an authentication scheme. |  | — |
 | `bynk.actor.foreign_context_name_unkeyable` | A context declaring a `Foreign` actor has a name no call key can be named from. |  | — |
 | `bynk.actor.foreign_duplicate_secret` | A `Foreign` actor's secret is also another actor's secret in the same context. |  | — |
@@ -322,7 +322,7 @@ There are **806** codes in total.
 | `bynk.actor.foreign_reserved_secret` | A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name. |  | — |
 | `bynk.actor.foreign_secret_not_string` | A `Foreign` actor's secret is not a string. |  | — |
 | `bynk.actor.identity_not_sealed` | An actor identity type is not a context-ownable (sealed) value type. |  | — |
-| `bynk.actor.missing_by_on_http` | An HTTP handler lacks the required `by` actor clause. |  | — |
+| [`bynk.actor.missing_by_on_http`](/book/reference/actors/#the-by-clause) | An HTTP handler lacks the required `by` actor clause. |  | — |
 | `bynk.actor.oidc_identity_not_string_constructible` | An `Oidc` actor's identity is not a string-constructible type. |  | — |
 | `bynk.actor.oidc_missing_audience` | An `Oidc` actor does not name its `audience`. |  | — |
 | `bynk.actor.oidc_missing_issuer` | An `Oidc` actor does not name its `issuer`. |  | — |
@@ -334,15 +334,15 @@ There are **806** codes in total.
 | `bynk.actor.refinement_base_unsupported` | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
 | `bynk.actor.refinement_in_sum` | A refinement actor appears as a member of a multi-actor sum. |  | — |
 | `bynk.actor.refinement_predicate_unsupported` | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
-| `bynk.actor.scheme_not_admissible` | An actor's scheme is not admissible on this handler's protocol. |  | — |
+| [`bynk.actor.scheme_not_admissible`](/book/reference/actors/#schemes) | An actor's scheme is not admissible on this handler's protocol. |  | — |
 | `bynk.actor.signature_identity_unsupported` | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
 | `bynk.actor.signature_missing_header` | A `Signature` actor does not name its signature header. |  | — |
 | `bynk.actor.signature_missing_secret` | A `Signature` actor does not name its signing secret. |  | — |
 | `bynk.actor.signature_requires_body` | A `Signature` handler does not take a `body` parameter. |  | — |
 | `bynk.actor.signature_tolerance_without_timestamp` | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
-| `bynk.actor.sum_requires_binder` | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
-| `bynk.actor.unknown_actor` | A handler's `by` clause names an actor that is not declared. |  | — |
-| `bynk.actor.unknown_scheme` | An actor declares an authentication scheme that is not compiler-known. |  | — |
+| [`bynk.actor.sum_requires_binder`](/book/reference/actors/#the-by-clause) | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
+| [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
+| [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |
 | `bynk.actor.unreachable_sum_arm` | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
 | `bynk.adapter.consumes_context` | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.adapter.consumes_requires_selection` | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
