@@ -5658,12 +5658,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
-        "bynk.types.request_query_at_boundary",
-        "`RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
-    ),
-    d(
         "bynk.types.request_cookies_at_boundary",
         "`RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
+    ),
+    d(
+        "bynk.types.request_query_at_boundary",
+        "`RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent.",
     ),
     d(
         "bynk.types.return_mismatch",
