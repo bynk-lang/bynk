@@ -1,0 +1,3 @@
+commons tree
+
+type Node = { value: Int, next: Option[Node] }

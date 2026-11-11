@@ -1,0 +1,11 @@
+context demo
+
+service dash {
+  on call() -> Effect[Int] {
+    par {
+      let a <- Effect.pure(1)
+      let b <- Effect.pure(a + 1)
+    }
+    Effect.pure(b)
+  }
+}

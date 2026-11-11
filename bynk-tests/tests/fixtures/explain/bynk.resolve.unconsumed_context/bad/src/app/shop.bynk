@@ -1,0 +1,7 @@
+context app.shop
+
+service checkout {
+  on call() -> Effect[Int] {
+    platform.pay.charge(1)
+  }
+}

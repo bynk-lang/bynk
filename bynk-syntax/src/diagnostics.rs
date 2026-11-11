@@ -125,6 +125,13 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.agents.bad_state_initialiser",
+        blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
+        example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
+        page: "/book/reference/agents",
+        anchor: "state-initialisation",
+    },
+    Explain {
         code: "bynk.agents.non_zeroable_state_field",
         blurb: "A key that has never been used is initialised automatically the first time it is \
                 touched, so every `store Cell[T]` field needs a starting value. With no \
@@ -218,6 +225,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   exports transparent { Status }   // ✓ the owner shares the shape",
         page: "/book/reference/types",
         anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.effect.bind_in_pure_context",
+        blurb: "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
+        example: "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
+        page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
+        anchor: "",
     },
     Explain {
         code: "bynk.effect.fn_value_in_pure_context",
@@ -423,6 +437,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "bounds",
     },
     Explain {
+        code: "bynk.given.cross_context_unknown_capability",
+        blurb: "A context may only depend on a capability that the context providing it exports. `exports capability { … }` is the provider's decision about what it offers other contexts, and a capability it leaves out stays its own. So `consumes clock { Clock }`, or a qualified `given clock.Clock`, is refused when `clock` does not list `Clock`. Add the name to the provider's `exports capability` clause (it must declare and provide the capability), or correct the spelling here. A context that is not consumed at all is `bynk.resolve.unconsumed_context`.",
+        example: "// shop.bynk\ncontext shop\n\nconsumes clock { Clock }   // ✗ `clock` exports no `Clock`\n\n\
+                  // clock.bynk\ncontext clock\n\nexports capability { Clock }   // ✓ the provider offers it",
+        page: "/book/reference/capabilities",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.given.fn_unsupported",
+        blurb: "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
+        example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "capabilities-in-functions",
+    },
+    Explain {
         code: "bynk.given.missing_for_call",
         blurb: "A free function in a context may declare `given`, and then uses those capabilities as a handler \
                 does. Because a `given` clause is the honest statement of everything a body can reach, a \
@@ -538,6 +567,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.par.invalid_statement",
         blurb: "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `~>`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
         example: "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "par",
+    },
+    Explain {
+        code: "bynk.par.sibling_name",
+        blurb: "The bindings in a `par { … }` block run together, so none can read the result of another: there is no order in which one could be given the other's value. A binding that mentions a name a sibling binds is refused, even where an outer binding of that name exists, so a stale value is never picked up silently. Binding one name twice in a block is refused as well, since later code could not tell which result is meant. Move the dependent binding after the block, where every name is in scope, or rename.",
+        example: "par {\n    let a <- Effect.pure(1)\n    let b <- Effect.pure(a + 1)   // ✗ `a` is bound by a sibling\n}\n\npar {\n    let a <- Effect.pure(1)\n    let c <- Effect.pure(2)\n}\nlet b <- Effect.pure(a + 1)   // ✓ after the block, `a` is in scope",
         page: "/book/reference/capabilities",
         anchor: "par",
     },
@@ -666,6 +702,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "approve-a-dependencys-npm-packages",
     },
     Explain {
+        code: "bynk.resolve.arity_mismatch",
+        blurb: "A call to a declared `fn` must pass exactly as many arguments as it has parameters. Bynk has no optional or variadic parameters and fills nothing in, so a missing or extra argument is always a mistake, and the compiler cannot tell which one was meant. Add or remove the argument, or change the declaration. The error points at the call and labels the declaration. A call through a function value or a built-in operation is `bynk.types.call_arity`, and a method is `bynk.types.method_arity`.",
+        example: "fn double(x: Int) -> Int {\n    x * 2\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a, b)             // ✗ `double` takes one argument\n}\n\nfn run(a: Int, b: Int) -> Int {\n    double(a) + double(b)    // ✓ one argument each call\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.resolve.bad_const_initialiser",
         blurb: "A constant's value is fixed when its module loads, so its initialiser must be static: a literal, a `Duration` literal, a record, list or variant built from static values, `Some`/`None`/`Ok`/`Err`, `T.unsafe(lit)`, an empty `List`/`Map`/`Set`, or another constant. A function call (even a pure one), an operator, an interpolated string, a field access, a lambda, `if` and `match` are not. The code is also reported when a static value is not of the declared type. Write the value out, or make it a `fn` and call it where it is used.",
         example: "fn base() -> Int {\n  10\n}\n\nconst Limit: Int = base()   // ✗ a call is not a static value\n\nconst Limit: Int = 10   // ✓",
@@ -678,6 +721,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "const First: Int = Second   // ✗ `First` → `Second` → `First`\nconst Second: Int = First\n\nconst Second: Int = 10   // ✓ end the chain at a literal",
         page: "/book/reference/constants",
         anchor: "what-an-initialiser-may-be",
+    },
+    Explain {
+        code: "bynk.resolve.const_name_case",
+        blurb: "A constant is named in upper-camel case, a capital letter and then letters, digits or `_`, like a variant, so that a constant reads differently from a binding wherever it is used. The grammar accepts any identifier here and leaves the case to the checker, so a lower-case name is reported with a suggested spelling instead of failing to parse. Rename it, and every use of it: `MaxRetries`, not `maxRetries`.",
+        example: "const maxRetries: Int = 3   // ✗ a constant's name starts with a capital\n\nconst MaxRetries: Int = 3   // ✓",
+        page: "/book/reference/constants",
+        anchor: "declaring-a-constant",
     },
     Explain {
         code: "bynk.resolve.duplicate_type",
@@ -720,11 +770,26 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.resolve.recursive_record_field",
+        blurb: "A record cannot contain itself through record fields alone, whether directly (`next: Node` in `Node`) or round a cycle (`A` has a `B`, which has an `A`). A value of such a type could never be built, since making one needs one already, and the compiler could not synthesise the default value it needs for one. A cycle through an `Option`, `List`, `Map` or a sum type is fine, because that position can hold a value that ends the chain. Wrap one field in the cycle in `Option[…]`.",
+        example: "type Node = { value: Int, next: Node }   // ✗ a `Node` would need a `Node`\n\ntype Node = { value: Int, next: Option[Node] }   // ✓ `None` ends the chain",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
         code: "bynk.resolve.reserved_builtin_type",
         blurb: "The compiler knows a few type names itself, and the type parser reads each one as the built-in wherever it appears in a type. A `type` declaration that reused one would be shadowed at every use, or fail confusingly there, so the declaration is refused. The names are `Asset`, `BoundaryRejection`, `Connection`, `History`, `HttpResult`, `List`, `Map`, `Query`, `QueueResult`, `RequestHeaders`, `RequestQuery`, `Set`, `Stream` and `TokenClaims`. Rename the type. They are reserved in type position only, so a value may still use the word. A constant with such a name is `bynk.resolve.name_conflict` instead, and the base types and words such as `Result` are keywords that the parser refuses earlier.",
         example: "type Set = { items: List[Int] }   // ✗ `Set` is the built-in set type\n\ntype IntSet = { items: List[Int] }   // ✓",
         page: "/book/reference/keywords",
         anchor: "built-in-type-names",
+    },
+    Explain {
+        code: "bynk.resolve.unconsumed_context",
+        blurb: "A call such as `platform.pay.charge(1)` reaches into another context, and a context may only do that to one it has declared with `consumes`. The declaration is what makes a dependency between contexts visible and checked, instead of a name that happens to resolve. The same code is reported for a `given platform.pay.Cap` whose context is not consumed. Add `consumes platform.pay` (with an alias, if you want to call it by another name) at the top of the calling context. A consumed context that does not export a capability is `bynk.given.cross_context_unknown_capability`.",
+        example: "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\n\
+                  context app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "declare-the-dependency-and-call-the-service",
     },
     Explain {
         code: "bynk.resolve.unknown_field",
@@ -790,6 +855,28 @@ pub const EXPLANATIONS: &[Explain] = &[
                   fn greet(u: User) -> String { … }  // ✓ the declared type",
         page: "/book/reference/types",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.send.in_agent_handler",
+        blurb: "`~>` starts an effect and lets the handler carry on, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So the send is refused, and so is one inside a closure there. Await it instead, with `do` for an `Effect[()]` or `let _ <-`, or move the send to the service handler that calls the agent. A `~>` of a store operation is `bynk.send.store_op`.",
+        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")      // ✗ an agent handler cannot send\n    do count.update((n) => n + 1)\n}\n\n\
+                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\")      // ✓ awaited, so it finishes with the handler\n    do count.update((n) => n + 1)\n}",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.store.cache_ttl_required",
+        blurb: "A `Cache` is a keyed store whose entries expire, so it needs `@ttl(<duration>)`, how long an entry lives. Without an expiry it would only be a `Map`. The argument must be a `Duration` literal such as `5.minutes`; a bare number (`@ttl(5)`) or a computed value is refused too, because the lifetime has to be known when the program compiles. Add the annotation, or declare a `Map` if entries should be kept until removed.",
+        example: "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓",
+        page: "/book/reference/agents",
+        anchor: "storage-annotations",
+    },
+    Explain {
+        code: "bynk.store.unkeyable_key",
+        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
+        example: "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+        page: "/book/reference/agents",
+        anchor: "storage-kinds-and-their-operations",
     },
     Explain {
         code: "bynk.store.unknown_op",
@@ -2258,7 +2345,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.given.cross_context_unknown_capability",
-        "`given B.Cap` names a capability the consumed context does not export.",
+        "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export.",
         &["given_clause"],
     ),
     dg(
@@ -3620,7 +3707,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.resolve.unconsumed_context",
-        "A context's service was called without a `consumes` declaration.",
+        "A context's service was called, or its capability named in `given`, without a `consumes` declaration.",
         &["consumes_decl"],
     ),
     dg(

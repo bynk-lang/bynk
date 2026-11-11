@@ -1,0 +1,13 @@
+context demo
+
+type Point = { x: Int, y: Int }
+
+agent Grid {
+  key id: String
+
+  store cells: Map[String, Int]
+
+  on call size() -> Effect[Int] {
+    Effect.pure(1)
+  }
+}
