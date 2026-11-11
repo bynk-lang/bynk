@@ -950,3 +950,28 @@ export interface WorkerVersionMetadata {
 export function makeIntegrationVersionMetadata(): WorkerVersionMetadata {
   return { id: "integration", tag: "", timestamp: "1970-01-01T00:00:00.000Z" };
 }
+
+/**
+ * A Secrets Store secret binding (#3301): Cloudflare's `secrets_store_secrets`
+ * binding, which `WorkersStoredSecret` reads. `get` resolves to the secret's
+ * value, so nothing that holds one may log it.
+ */
+export interface SecretsStoreSecret {
+  get(): Promise<string>;
+}
+
+/**
+ * The Secrets Store binding of a multi-Worker integration test participant,
+ * bound as its `env.<binding>`. A test never reaches the account's store, so
+ * `get` faults, naming the binding and never a value, until the case stubs the
+ * instance's `get`.
+ */
+export function makeIntegrationSecretsStoreSecret(binding: string): SecretsStoreSecret {
+  return {
+    async get(): Promise<string> {
+      throw new globalThis.Error(
+        `bynk: Secrets Store binding \`${binding}\` has no value in a test, which never reads the account's store — add \`stub <Capability>.get() returns …\``,
+      );
+    },
+  };
+}

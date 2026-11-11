@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`stripe live` is not a secret name a `StoredSecret` can read

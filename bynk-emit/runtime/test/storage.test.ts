@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit } from "../src/storage.ts";
+import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret } from "../src/storage.ts";
 
 // Standard-library P3 (#2342): the integration tier's rate limiter.
 test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", async () => {
@@ -18,6 +18,12 @@ test("makeIntegrationRateLimit allows `limit` calls per key per fixed window", a
 test("makeIntegrationRateLimit stands still without a clock", async () => {
   const rl = makeIntegrationRateLimit(1, 10);
   assert.deepEqual([(await rl.limit({ key: "a" })).success, (await rl.limit({ key: "a" })).success], [true, false]);
+});
+
+// #3301: the integration tier never reads the account's Secrets Store.
+test("makeIntegrationSecretsStoreSecret faults naming the binding, and carries no value", async () => {
+  const secret = makeIntegrationSecretsStoreSecret("SECRET_STRIPE_KEY");
+  await assert.rejects(() => secret.get(), /`SECRET_STRIPE_KEY` has no value in a test/);
 });
 
 test("makeIntegrationQueue keeps every body it is sent, in order", async () => {

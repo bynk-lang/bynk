@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreSet, __fillSet, __wireEntries, __wireSet } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "./__bynk_runtime/entries.js";
+import { __attachLazy } from "./__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -33,6 +34,8 @@ function __encodeAudienceState(s: AudienceState): globalThis.Record<string, unkn
   return { ...s, members: __wireSet(s.members) };
 }
 
+const __lazyFieldsOfAudience = [{ name: "members", kind: "set", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "members", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Audience", __r.error); } }] as const;
+
 export class Audience {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -43,12 +46,12 @@ export class Audience {
     const stored = await this.state.storage.get<AudienceState>("state");
     if (stored === undefined) return __zeroOfAudienceState();
     __checkStoredLayout("Audience", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfAudienceState();
     __reportUnknownStoredKeys("Audience", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAudienceState(__merged, __wholesale);
-    __hydrateAudienceState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfAudience); } else { __hydrateAudienceState(__merged, __wholesale) }
     return __merged;
   }
 

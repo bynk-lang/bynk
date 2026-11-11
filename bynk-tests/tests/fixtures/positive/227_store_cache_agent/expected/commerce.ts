@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreCache, __fillMap, __wireMap } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "./__bynk_runtime/entries.js";
+import { __attachLazy } from "./__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -47,6 +48,8 @@ function __encodeSessionsState(s: SessionsState): globalThis.Record<string, unkn
   return { ...s, live: __wireMap(s.live, (__e) => ({ ...__e, v: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__e.v) })) };
 }
 
+const __lazyFieldsOfSessions = [{ name: "live", kind: "cache", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+
 export class Sessions {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -57,12 +60,12 @@ export class Sessions {
     const stored = await this.state.storage.get<SessionsState>("state");
     if (stored === undefined) return __zeroOfSessionsState();
     __checkStoredLayout("Sessions", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfSessionsState();
     __reportUnknownStoredKeys("Sessions", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateSessionsState(__merged, __wholesale);
-    __hydrateSessionsState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfSessions); } else { __hydrateSessionsState(__merged, __wholesale) }
     return __merged;
   }
 

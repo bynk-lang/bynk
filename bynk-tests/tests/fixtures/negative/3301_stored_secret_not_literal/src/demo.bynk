@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { StoredSecret }
+
+capability StripeKey = StoredSecret @store(7) @secret("stripe-live")
+
+service probe {
+  on call() -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

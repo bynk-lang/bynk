@@ -6,7 +6,8 @@ import { __bynkSettleAll } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "./__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "./__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "./__bynk_runtime/entries.js";
+import { __attachLazy } from "./__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
@@ -95,6 +96,8 @@ function __encodeTallyState(s: TallyState): globalThis.Record<string, unknown> {
   return { ...s, counts: __wireMap(s.counts, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
+const __lazyFieldsOfTally = [{ name: "counts", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "counts", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "counts", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Tally", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "counts", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Tally", __r.error); } }] as const;
+
 export class Tally {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -105,12 +108,12 @@ export class Tally {
     const stored = await this.state.storage.get<TallyState>("state");
     if (stored === undefined) return __zeroOfTallyState();
     __checkStoredLayout("Tally", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfTallyState();
     __reportUnknownStoredKeys("Tally", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateTallyState(__merged, __wholesale);
-    __hydrateTallyState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfTally); } else { __hydrateTallyState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -122,7 +125,7 @@ export class Tally {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (async () => { await __state.counts.put(String("k"), 0); return undefined; })();
-      const __r1 = await (async (__xs: readonly number[]) => { for (const __x of __xs) { await (async (i: number) => (async () => { const __k = String("k"); return __bynkThen(__state.counts.has(__k), (__h) => { if (!__h) { throw new globalThis.Error("Map.update: key absent"); } return __bynkThen(__state.counts.get(__k), (__v) => __bynkThen(__state.counts.put(__k, ((v: number) => v + 1)(__v!)), () => undefined)); }); })())(__x); } })([1, 2, 3]);
+      const __r1 = await (async (__xs: readonly number[]) => { for (const __x of __xs) { await (async (i: number) => (async () => { await __state.counts.modify(String("k"), (__c, __p) => { if (!__p) { throw new globalThis.Error("Map.update: key absent"); } return ((v: number) => v + 1)(__c!); }); return undefined; })())(__x); } })([1, 2, 3]);
       return undefined;
     })();
     await this.commitState(__state);

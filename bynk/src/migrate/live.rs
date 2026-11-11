@@ -23,6 +23,16 @@ pub(crate) struct Credentials {
 impl Credentials {
     /// Both variables, or a message naming whichever is missing.
     pub(crate) fn from_env() -> Result<Self, String> {
+        Self::from_env_for(
+            "sweep",
+            "an API token with \"Workers Scripts: Edit\" (the listings need read access, \
+             and `wrangler` uses the same token to set and delete the sweep's key)",
+        )
+    }
+
+    /// [`Credentials::from_env`] for another use: `purpose` finishes "set … to"
+    /// and `needs` describes the token the use needs, in the message.
+    pub(crate) fn from_env_for(purpose: &str, needs: &str) -> Result<Self, String> {
         let get = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
         match (get("CLOUDFLARE_API_TOKEN"), get("CLOUDFLARE_ACCOUNT_ID")) {
             (Some(token), Some(account)) => Ok(Credentials { token, account }),
@@ -35,9 +45,7 @@ impl Credentials {
                 .flatten()
                 .collect();
                 Err(format!(
-                    "set {} to sweep: an API token with \"Workers Scripts: Edit\" (the \
-                     listings need read access, and `wrangler` uses the same token to set and \
-                     delete the sweep's key) and the account it belongs to",
+                    "set {} to {purpose}: {needs} and the account it belongs to",
                     missing.join(" and ")
                 ))
             }
@@ -362,13 +370,13 @@ impl Secrets for WranglerSecrets {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Read};
 
     /// A one-thread HTTP stub: answers each request by its path from
     /// `routes`, recording the paths and the `Authorization` it saw.
-    fn stub(
+    pub(crate) fn stub(
         routes: Vec<(&'static str, String)>,
     ) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -413,7 +421,7 @@ mod tests {
         (base, seen)
     }
 
-    fn rest(base: String) -> Rest {
+    pub(crate) fn rest(base: String) -> Rest {
         Rest {
             agent: ureq::Agent::config_builder()
                 .http_status_as_error(false)

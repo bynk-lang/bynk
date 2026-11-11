@@ -1,0 +1,6 @@
+commons demo
+
+fn sneak(f: Int -> Effect[Int], x: Int) -> Int {
+  let y = f(x)
+  x
+}

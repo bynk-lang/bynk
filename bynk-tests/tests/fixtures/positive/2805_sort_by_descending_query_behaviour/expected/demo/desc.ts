@@ -6,7 +6,8 @@ import { __bynkCmpFloat, __bynkCmpSum } from "../__bynk_runtime/compare.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -63,6 +64,8 @@ function __encodeBoardState(s: BoardState): globalThis.Record<string, unknown> {
   return { ...s, jobs: __wireMap(s.jobs, (__v) => __serialise_Job(__v)) };
 }
 
+const __lazyFieldsOfBoard = [{ name: "jobs", kind: "map", decode: (__w: unknown) => { const __r = __deserialise_Job((__w as unknown as __JsonValue), "jobs"); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as Job; return __serialise_Job(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "jobs", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error); } }] as const;
+
 export class Board {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -73,12 +76,12 @@ export class Board {
     const stored = await this.state.storage.get<BoardState>("state");
     if (stored === undefined) return __zeroOfBoardState();
     __checkStoredLayout("Board", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfBoardState();
     __reportUnknownStoredKeys("Board", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoardState(__merged, __wholesale);
-    __hydrateBoardState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBoard); } else { __hydrateBoardState(__merged, __wholesale) }
     return __merged;
   }
 

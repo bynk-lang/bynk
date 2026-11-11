@@ -109,6 +109,17 @@ pub enum BindingSource {
     /// derived name, its id minted by `bynk deploy`. Never seen by handlers:
     /// they reach it through the instance's `WorkersD1`.
     D1Database { capability: String },
+    /// #3301: the `[[secrets_store_secrets]]` binding of a `StoredSecret`
+    /// instance (`capability StripeKey = StoredSecret @store("payments")
+    /// @secret("stripe-live")`), reading `secret` of the Secrets Store named
+    /// `store`. The store is linked by `bynk deploy`, which resolves its id,
+    /// and never created. Never seen by handlers: they reach it through the
+    /// instance's `WorkersStoredSecret`.
+    StoredSecret {
+        capability: String,
+        store: String,
+        secret: String,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -154,6 +165,11 @@ impl BindingSource {
             Self::D1Database { capability } => {
                 format!("the D1 database binding of derived capability `{capability}`")
             }
+            Self::StoredSecret {
+                capability, store, ..
+            } => format!(
+                "the Secrets Store binding of derived capability `{capability}` (to store `{store}`)"
+            ),
             Self::Singleton { capability } => format!(
                 "the `{capability}` binding of `{}`",
                 firstparty::CLOUDFLARE_UNIT
@@ -280,6 +296,7 @@ fn declared_at(
             | BindingSource::RateLimitInstance { capability, .. }
             | BindingSource::QueueProducer { capability, .. }
             | BindingSource::AnalyticsDataset { capability }
+            | BindingSource::StoredSecret { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;

@@ -5,7 +5,8 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
-import { __readStored, __commitStored, __noteClock, __bynkThen } from "../__bynk_runtime/entries.js";
+import { __readStored, __commitStored, __noteClock, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -54,6 +55,8 @@ function __encodeBoxState(s: BoxState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
+const __lazyFieldsOfBox = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Box", __r.error); } }] as const;
+
 export class Box {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -64,12 +67,12 @@ export class Box {
     const stored = await this.state.storage.get<BoxState>("state");
     if (stored === undefined) return __zeroOfBoxState();
     __checkStoredLayout("Box", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfBoxState();
     __reportUnknownStoredKeys("Box", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateBoxState(__merged, __wholesale);
-    __hydrateBoxState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfBox); } else { __hydrateBoxState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -88,13 +91,13 @@ export class Box {
 
   async total(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q);
+    const all = await __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
     return ((__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: string; readonly value: number }) => n + e.value);
   }
 
   async totalEff(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: __k, value: __v }))))(), (__q) => __q);
+    const all = await __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
     return (async (__xs: readonly { readonly key: string; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: string; readonly value: number }) => globalThis.Promise<number>) => { for (const __x of __xs) __acc = await __f(__acc, __x); return __acc; })(all, 0, async (n: number, e: { readonly key: string; readonly value: number }) => globalThis.Promise.resolve(n + e.value));
   }
 
@@ -129,6 +132,8 @@ function __encodeByKeyState(s: ByKeyState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
+const __lazyFieldsOfByKey = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = __deserialise_Sku((__k as unknown as __JsonValue), "items"); if (__r.tag === "Err") throw __rehydrationViolation("ByKey", __r.error); } }] as const;
+
 export class ByKey {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -139,12 +144,12 @@ export class ByKey {
     const stored = await this.state.storage.get<ByKeyState>("state");
     if (stored === undefined) return __zeroOfByKeyState();
     __checkStoredLayout("ByKey", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfByKeyState();
     __reportUnknownStoredKeys("ByKey", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateByKeyState(__merged, __wholesale);
-    __hydrateByKeyState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfByKey); } else { __hydrateByKeyState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -163,17 +168,17 @@ export class ByKey {
 
   async keys(deps: {}): globalThis.Promise<readonly Sku[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __state.items.keys().map((__k) => (__k as Sku))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(__state.items.keys(), (__ks) => __ks.map((__k) => (__k as Sku)))))(), (__q) => __q);
   }
 
   async stale(deps: {}): globalThis.Promise<readonly Stale[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __state.items.entries().map(([__k, __v]) => ({ key: (__k as Sku), value: __v }))))(), (__q) => __q.filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x)))))(), (__q) => __q.map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x)))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.items.entries(), (__es) => __es.map(([__k, __v]) => ({ key: (__k as Sku), value: __v })))))(), (__q) => __q.filter((__x) => ((e: { readonly key: Sku; readonly value: number }) => e.value > 1)(__x)))))(), (__q) => __q.map((__x) => ((e: { readonly key: Sku; readonly value: number }) => ({ sku: e.key, qty: e.value }))(__x)))))(), (__q) => __q);
   }
 
   async keyCount(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const ks = await __bynkThen(((() => __state.items.keys().map((__k) => (__k as Sku))))(), (__q) => __q);
+    const ks = await __bynkThen(((() => __bynkThen(__state.items.keys(), (__ks) => __ks.map((__k) => (__k as Sku)))))(), (__q) => __q);
     return ((__xs: readonly Sku[], __acc: number, __f: (acc: number, x: Sku) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(ks, 0, (n: number, k: Sku) => n + 1);
   }
 
@@ -217,6 +222,8 @@ function __encodeLedgerState(s: LedgerState): globalThis.Record<string, unknown>
   return { ...s, balances: __wireMap(s.balances, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
+const __lazyFieldsOfLedger = [{ name: "balances", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balances", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+
 export class Ledger {
   state: __DurableObjectState;
   constructor(state: __DurableObjectState) {
@@ -227,12 +234,12 @@ export class Ledger {
     const stored = await this.state.storage.get<LedgerState>("state");
     if (stored === undefined) return __zeroOfLedgerState();
     __checkStoredLayout("Ledger", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfLedgerState();
     __reportUnknownStoredKeys("Ledger", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateLedgerState(__merged, __wholesale);
-    __hydrateLedgerState(__merged, __wholesale);
+    if (__readsLazily(this)) { __attachLazy(this.state.storage, __merged, __lazyFieldsOfLedger); } else { __hydrateLedgerState(__merged, __wholesale) }
     return __merged;
   }
 
@@ -261,12 +268,12 @@ export class Ledger {
 
   async accounts(deps: {}): globalThis.Promise<readonly Acct[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __state.balances.keys().map((__k) => (globalThis.Number(__k) as Acct))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.balances.keys(), (__ks) => __ks.map((__k) => (globalThis.Number(__k) as Acct)))))(), (__q) => [...__q].sort((__a, __b) => { const __ka = ((k: Acct) => k)(__a), __kb = ((k: Acct) => k)(__b); return __ka < __kb ? -1 : __ka > __kb ? 1 : 0; }))))(), (__q) => __q);
   }
 
   async sum(deps: {}): globalThis.Promise<number> {
     const __state = await this.loadState();
-    const all = await __bynkThen(((() => __state.balances.entries().map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v }))))(), (__q) => __q);
+    const all = await __bynkThen(((() => __bynkThen(__state.balances.entries(), (__es) => __es.map(([__k, __v]) => ({ key: (globalThis.Number(__k) as Acct), value: __v })))))(), (__q) => __q);
     return ((__xs: readonly { readonly key: Acct; readonly value: number }[], __acc: number, __f: (acc: number, x: { readonly key: Acct; readonly value: number }) => number) => { for (const __x of __xs) __acc = __f(__acc, __x); return __acc; })(all, 0, (n: number, e: { readonly key: Acct; readonly value: number }) => n + e.key + e.value);
   }
 

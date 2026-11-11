@@ -656,25 +656,8 @@ pub fn run(
         return ExitCode::FAILURE;
     }
 
-    // #1957: N parallel first-run `npx wrangler dev`s race to install into the
-    // same `_npx` cache entry, and the loser dies at boot (ENOTEMPTY). Install
-    // it once, up front, so every spawn below finds it already there. Stdout
-    // is dropped (the version line is noise); stderr stays, because npm's
-    // progress is the only sign a slow first download is not a hang.
-    if needs_wrangler_warmup(&probe.provenance, serving.len()) {
-        eprintln!("bynk dev: installing wrangler via npx once before starting the contexts…");
-        let warmed = wrangler_command(&probe.provenance, "--version").map(|mut cmd| {
-            cmd.stdout(std::process::Stdio::null())
-                .status()
-                .is_ok_and(|s| s.success())
-        });
-        if warmed != Some(true) {
-            // Spawning anyway would re-run the very race this avoids.
-            eprintln!(
-                "bynk: `npx --yes wrangler@4 --version` failed — wrangler could not be installed via npx."
-            );
-            return ExitCode::FAILURE;
-        }
+    if !warm_up_wrangler(&probe.provenance, serving.len()) {
+        return ExitCode::FAILURE;
     }
 
     // P4b (#2608): each served Worker's local D1 databases get their
@@ -689,6 +672,14 @@ pub fn run(
             &serving,
             &opts.wrangler_args,
             &mut applied,
+        );
+        // #3301: and a stored secret the local store does not hold is said
+        // so now, not found as a fault on the first request.
+        warn_missing_local_secrets(
+            &probe.provenance,
+            &workers_dir,
+            &serving,
+            &opts.wrangler_args,
         );
     }
 
@@ -1410,6 +1401,94 @@ fn apply_local_migrations(
                     "bynk dev: warning: could not run wrangler to apply `{}`'s D1 migrations: {e}",
                     s.worker
                 ),
+            }
+        }
+    }
+}
+
+/// #1957: N parallel first-run `npx wrangler dev`s race to install into the
+/// same `_npx` cache entry, and the loser dies at boot (ENOTEMPTY). Install it
+/// once, up front, so every spawn finds it already there. Stdout is dropped
+/// (the version line is noise); stderr stays, because npm's progress is the
+/// only sign a slow first download is not a hang. `false` when it could not be
+/// installed: spawning anyway would re-run the very race this avoids.
+fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
+    if !needs_wrangler_warmup(provenance, serving) {
+        return true;
+    }
+    eprintln!("bynk dev: installing wrangler via npx once before starting the contexts…");
+    let warmed = wrangler_command(provenance, "--version").map(|mut cmd| {
+        cmd.stdout(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    });
+    if warmed != Some(true) {
+        eprintln!(
+            "bynk: `npx --yes wrangler@4 --version` failed — wrangler could not be installed via npx."
+        );
+        return false;
+    }
+    true
+}
+
+/// #3301: whether the table `wrangler secrets-store secret list` printed has
+/// a row for secret `name`: the name is a whole cell of the first column, so
+/// a longer name that merely starts with it does not count. Only names are
+/// ever in that table, never a value.
+fn secret_listed(stdout: &str, name: &str) -> bool {
+    stdout
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix('│'))
+        .filter_map(|row| row.split('│').next())
+        .any(|cell| cell.trim() == name)
+}
+
+/// #3301: what `bynk dev` says of a stored secret the local Secrets Store
+/// does not hold. Under `bynk dev` the binding reads the local store, never
+/// the account's (a production secret cannot be read locally), whose id is the
+/// store's name as written.
+fn missing_local_secret_hint(worker: &str, binding: &str, store: &str, secret: &str) -> String {
+    format!(
+        "bynk dev: warning: `{worker}` reads secret `{secret}` of Secrets Store `{store}` through `{binding}`, from the local store, which does not have it, so reading it will fault; create it with `wrangler secrets-store secret create {store} --name {secret} --scopes workers` (no `--remote`; it asks for the value)"
+    )
+}
+
+/// #3301: warn about each served Worker's stored secret that the local
+/// Secrets Store lacks (`wrangler secrets-store secret list <store>`, local,
+/// from the Worker's directory where `wrangler dev` keeps its state). A list
+/// that cannot be read warns too: the secret may be there, but it was not
+/// confirmed. The session keeps serving.
+fn warn_missing_local_secrets(
+    provenance: &Provenance,
+    workers_dir: &Path,
+    serving: &[Serving],
+    wrangler_args: &[String],
+) {
+    for s in serving {
+        let worker_dir = workers_dir.join(&s.worker);
+        let Ok(config) = std::fs::read_to_string(worker_dir.join("wrangler.toml")) else {
+            continue;
+        };
+        let Ok(entries) = bynk_emit::emitter::wrangler::stored_secret_entries(&config) else {
+            continue;
+        };
+        for (binding, store, secret) in entries {
+            let Some(mut cmd) = wrangler_command(provenance, "secrets-store") else {
+                return;
+            };
+            cmd.args(["secret", "list", &store])
+                .args(persist_to_args(wrangler_args))
+                .current_dir(&worker_dir)
+                .stdin(std::process::Stdio::null());
+            let present = cmd.output().is_ok_and(|out| {
+                out.status.success()
+                    && secret_listed(&String::from_utf8_lossy(&out.stdout), &secret)
+            });
+            if !present {
+                eprintln!(
+                    "{}",
+                    missing_local_secret_hint(&s.worker, &binding, &store, &secret)
+                );
             }
         }
     }
@@ -2265,6 +2344,28 @@ mod tests {
         v.iter()
             .map(|(a, b)| (a.to_string(), b.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn a_secret_is_listed_only_by_a_whole_name() {
+        let table = "🔐 Listing secrets...\n┌─────────────┬────┐\n│ Name        │ ID │\n├─────────────┼────┤\n│ stripe-live │ 1  │\n└─────────────┴────┘\n";
+        assert!(secret_listed(table, "stripe-live"));
+        assert!(!secret_listed(table, "stripe"));
+        assert!(!secret_listed(table, "stripe-live-2"));
+        assert!(!secret_listed("", "stripe-live"));
+    }
+
+    #[test]
+    fn a_missing_local_secret_is_told_how_to_create_it_locally() {
+        let hint =
+            missing_local_secret_hint("shop", "SECRET_STRIPE_KEY", "payments", "stripe-live");
+        assert!(
+            hint.contains(
+                "wrangler secrets-store secret create payments --name stripe-live --scopes workers"
+            ),
+            "{hint}"
+        );
+        assert!(hint.contains("no `--remote`"), "{hint}");
     }
 
     #[test]

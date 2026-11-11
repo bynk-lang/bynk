@@ -177,6 +177,12 @@ pub(super) fn emit_integration_harness<'a>(
                         &binding.name,
                     ))),
                 ),
+                // #3301: the account's store is never reached in a test, so
+                // the binding faults, naming itself, until the case stubs it.
+                BindingSource::StoredSecret { .. } => call(
+                    ident("__makeIntegrationSecretsStoreSecret"),
+                    vec![str_lit(&binding.name)],
+                ),
                 // #3300: a fixed version, the same for every participant.
                 BindingSource::Singleton { .. } => {
                     call(ident("__makeIntegrationVersionMetadata"), vec![])

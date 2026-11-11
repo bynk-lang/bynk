@@ -2522,3 +2522,75 @@ imposed; entries keep the order they were retired in.
 
   This track's doc, `design/tracks/standard-library.md`, is removed. Code comments, ADRs and the
   first-party registry track that cited it now point here.
+
+- **`per-entry-storage.md`** — spine [#3195](https://github.com/bynk-lang/bynk/issues/3195), proposal
+  [#3189](https://github.com/bynk-lang/bynk/issues/3189), originating issue
+  [#3159](https://github.com/bynk-lang/bynk/issues/3159): each `Map`, `Set`, `Cache` and `Log` entry
+  and each `@indexed` posting under its own Durable Object key, a `__layout` marker beside `__v`, a
+  lazy upgrade and a forward-compatibility guard, before 1.0 froze the stored-state encoding
+  ([ADR 0538](../decisions/0538-stored-state-version-marker-and-frozen-encoding.md)). The surface
+  (grammar, AST, checker) did not change. The direction was accepted in #3189, then the track was
+  sliced and shipped; the spine closed with every slice done.
+  - **The problem.** An agent's state was one value under the key `"state"`. A one-entry `put` read
+    and wrote all of it, the commit's CPU grew with every collection, and one stored value (about
+    8 MB on SQLite-backed Durable Objects) bounded the whole state.
+
+  **What shipped:**
+  - **Slice 0, the forward-compatibility guard**
+    ([ADR 0774](../decisions/0774-stored-layout-marker-and-forward-compat-guard.md)). `__layout` is
+    reserved beside `__v`; absent is the wholesale layout; any marker a build does not know faults
+    `NewerLayout` before anything is decoded or written back. It shipped a release ahead of the
+    writer so a rollback after the writer lands cannot misread a per-entry record.
+  - **Slice 1, runtime primitives**
+    ([ADR 0777](../decisions/0777-per-entry-storage-runtime-primitives.md)). The key shapes
+    (`m/ s/ l/ i/ x/ c/`), an `EntryOverlay` that stages writes and flushes them with the `"state"`
+    record in one chunked transaction, the wholesale split, and an in-memory storage that enforces
+    the platform's limits.
+  - **Handlers serialised** ([#3202](https://github.com/bynk-lang/bynk/issues/3202),
+    [ADR 0781](../decisions/0781-serialise-agent-handlers.md)). The spike found a lost update on the
+    single record whenever a handler awaits a non-storage effect between load and commit; an agent
+    instance now runs one handler at a time (`ReentrantAgentCall`, `AgentBusy`).
+  - **Slices 2–4, the writer** ([ADR 0785](../decisions/0785-per-entry-storage-layout.md)). `Map`,
+    `Set`, `Cache` and `Log` entries and `@indexed` postings are written per entry and only what
+    changed; an older record is split by its next commit; the layout is frozen for 1.0. Cache
+    reaping at commit ([ADR 0791](../decisions/0791-cache-reaping-at-commit.md)) deletes up to 64
+    expired entries by the clock the program read.
+  - **Slice 5, the rollout** ([ADR 0778](../decisions/0778-migrate-sweep-reports-layout.md),
+    [ADR 0784](../decisions/0784-revert-refuses-a-layout-rollback.md)). `bynk migrate sweep`
+    reports each instance's layout and how far the upgrade has got; a revert refuses a rollback to a
+    build that writes an older layout when instances hold stored data.
+  - **Lazy and indexed reads**, the track's last slice (decision F of #3189), in four increments:
+    insertion-ordered handles behind an interface every method of which may be asynchronous
+    ([ADR 0794](../decisions/0794-ordered-store-collection-handles.md)); storage-backed handles that
+    read per entry, list posting prefixes and key ranges, and stage their writes, with a `Log`
+    `skew` field whose absence means unknown, never zero
+    ([ADR 0795](../decisions/0795-lazy-storage-handles.md)); the lowering awaiting every handle call
+    and chaining store queries through `__bynkThen`
+    ([ADR 0796](../decisions/0796-async-ready-store-lowering.md)); and `loadState`/`commitState`
+    attaching those handles to a current-version record, with per-key read-modify-write and refined
+    keys checked as they are read back
+    ([ADR 0801](../decisions/0801-lazy-load-and-commit.md)). A handler's storage cost now follows what it
+    touches: a write to a 2000-entry `Map` fell from 29.9 ms to 3.6 ms on workerd while the
+    hand-written twin stayed flat.
+  - **Docs** ([#3323](https://github.com/bynk-lang/bynk/pull/3323)): the agents reference, the two
+    guides and the orders README say what reads one entry and what still scans.
+
+  **Observable changes the track accepted.** A stored value that no longer decodes faults when a
+  handler first touches it, not on every call; a refined textual key faults when a scan reaches it,
+  not at load. Single-call operations on a key are atomic per key; two concurrent branches doing `get` then
+  `put` on one key in separate statements could lose an update, as on the single record before the
+  track, so the checker now refuses a store write inside a `par` block or a `parTraverse`-family
+  closure.
+
+  **Also shipped alongside:** the checker rule refusing store writes inside `parTraverse`-family
+  closures ([#3297](https://github.com/bynk-lang/bynk/issues/3297),
+  [#3298](https://github.com/bynk-lang/bynk/issues/3298),
+  [ADR 0797](../decisions/0797-par-closure-store-write.md)).
+
+  **Named follow-ons.** A plain `bynk deploy` preflight for a
+  layout rollback (the revert preflight covers `bynk deploy revert`). Streaming terminals over a scan, which
+  still reads a collection in pages. Upkeep of the writer's vocabulary list when a collection kind is
+  added.
+
+  This track's doc, `design/tracks/per-entry-storage.md`, is removed. Code comments and ADRs that
+  cited it now point here.

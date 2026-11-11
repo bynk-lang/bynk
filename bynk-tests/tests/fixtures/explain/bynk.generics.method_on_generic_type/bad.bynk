@@ -1,0 +1,7 @@
+commons demo
+
+type Box[T] = { value: T }
+
+fn Box.empty() -> Box[Int] {
+  Box { value: 0 }
+}

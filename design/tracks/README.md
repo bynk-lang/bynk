@@ -82,7 +82,6 @@ each track's spine issue; this table is deliberately just the map.
 |---|---|---|---|
 | [`first-party-registry.md`](first-party-registry.md) | [#2308](https://github.com/bynk-lang/bynk/issues/2308) | Build slices shipped and the service extracted to `bynk-lang/registry`; R6 (go-live) remains | The first-party registry (packaging slice 4b): a hosted Bynk service written in Bynk, in this repo until go-live; its `bynk-std` prerequisites, accounts and organisations, key custody, conformance, and setting `FIRST_PARTY` |
 | [`packaging.md`](packaging.md) | [#843](https://github.com/bynk-lang/bynk/issues/843) | Slices 1–5 shipped (through 4c); 4b is the first-party-registry track; slices 6–7 gated | Packaging & distribution: the package unit, `org/package` identity without renaming units, single-version resolution and `bynk.lock`, and a registry *protocol* run first-party and privately, with only the `bynk` driver touching the network |
-| [`per-entry-storage.md`](per-entry-storage.md) | [#3195](https://github.com/bynk-lang/bynk/issues/3195) | Settling; spike recorded (§5) — slice 0 (forward-compat guard) first | Per-entry agent storage: `Map`/`Set`/`Cache`/`Log` entries and `@indexed` postings under their own Durable Object KV keys, a `__layout` marker, a lazy upgrade and a forward-compatibility guard, before the 1.0 stored-state freeze |
 
 (`documentation.md` (now retired) pre-dates the GitHub-native flow, so its doc was
 committed by an ordinary PR rather than a settling draft PR; the spine issue
