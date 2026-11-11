@@ -1,0 +1,5 @@
+commons demo
+
+fn has(s: String) -> Bool {
+    s.containsRegex("(?i)error")
+}

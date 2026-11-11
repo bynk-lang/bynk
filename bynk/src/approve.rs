@@ -148,7 +148,9 @@ fn pending_rows(lock: &Lock) -> Vec<usize> {
     lock.npm
         .iter()
         .enumerate()
-        .filter(|(_, n)| !n.approved && n.required_by.iter().any(|by| fetched(by)))
+        .filter(|(_, n)| {
+            !n.approved && !n.first_party && n.required_by.iter().any(|by| fetched(by))
+        })
         .map(|(i, _)| i)
         .collect()
 }
@@ -159,7 +161,9 @@ fn list(lock: &Lock, pending: &[usize]) {
         return;
     }
     for (i, row) in lock.npm.iter().enumerate() {
-        let state = if row.approved {
+        let state = if row.first_party {
+            "built-in"
+        } else if row.approved {
             "approved"
         } else if pending.contains(&i) {
             "pending"
@@ -176,8 +180,8 @@ fn list(lock: &Lock, pending: &[usize]) {
 }
 
 /// #2473: the rows as the editor's review reads them. Each row carries its
-/// `state` (`pending`, `approved`, or `own` for a path dependency's, which
-/// needs no approval), who requires it and through what chain, and — for a
+/// `state` (`pending`, `approved`, `built-in` for a first-party package of the
+/// toolchain, or `own` for a path dependency's, which needs no approval), who requires it and through what chain, and — for a
 /// pending row — what changed since the last approval: `new` (no other range
 /// of the package is approved) or `range_changed` (another is, listed in
 /// `approved_ranges`), so a review need not re-read what it already approved.
@@ -190,7 +194,9 @@ fn list_json(lock: &Lock, pending: &[usize]) -> String {
         .iter()
         .enumerate()
         .map(|(i, row)| {
-            let state = if row.approved {
+            let state = if row.first_party {
+                "built-in"
+            } else if row.approved {
                 "approved"
             } else if pending.contains(&i) {
                 "pending"

@@ -1,0 +1,7 @@
+commons demo
+
+type Counter = { n: Int }
+
+fn Counter.read(self) -> Int {
+    self.n
+}

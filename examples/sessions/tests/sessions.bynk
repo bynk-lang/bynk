@@ -4,6 +4,17 @@ suite sessions
 // `bynk test`'s deterministic one: it reads the epoch unless a case stubs it,
 // which is what makes expiry testable without waiting.
 
+// A cookie's value is text; the typed `cookies` record wants a `Token`.
+fn asToken(v: Option[String]) -> Option[Token] {
+	match v {
+		Some(text) => match Token.of(text) {
+			Ok(token) => Some(token),
+			Err(_) => None,
+		},
+		None => None,
+	}
+}
+
 case "a logged-in token resolves to its user" {
 	do Sessions("s").login("t1", "ann")
 	let who <- Sessions("s").whoami("t1")
@@ -24,8 +35,35 @@ case "a session expires after its 30-minute ttl" {
 	expect who is None
 }
 
+case "logging in sets a session cookie" {
+	let r <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
+	expect r is Created("ok")
+	expect r.cookies().map((c) => c.name) == ["__Host-sid"]
+}
+
+case "the cookie the login set identifies its user" {
+	let login <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
+	let sid = login.cookies().first().map((c) => "__Host-sid=\(c.value)").getOrElse("")
+	let me <- api.GET("/me", RequestCookies.of([sid])) by Visitor
+	expect me is Ok("ann")
+}
+
+case "no cookie means no session" {
+	let me <- api.GET("/me", RequestCookies.empty()) by Visitor
+	expect me is Unauthorized
+}
+
+case "logging out clears the cookie and ends the session" {
+	let login <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
+	let sid = login.cookies().first().map((c) => "__Host-sid=\(c.value)").getOrElse("")
+	let out <- api.POST("/logout", RequestCookies.of([sid])) by Visitor
+	expect out.cookies().map((c) => c.value) == [""]
+	let n <- api.GET("/sessions") by Visitor
+	expect n is Ok(0)
+}
+
 case "the http surface reports live sessions" {
-	let _ <- api.POST("/sessions", LoginRequest { token: "t1", user: "ann" }) by Visitor
+	let _ <- api.POST("/sessions", LoginRequest { user: "ann" }) by Visitor
 	let r <- api.GET("/sessions") by Visitor
 	expect r is Ok(1)
 }

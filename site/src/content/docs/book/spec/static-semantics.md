@@ -1808,8 +1808,14 @@ being `bynk.email.duplicate_handler`. The verdict is `Accept`, `Reject(reason)`,
 are exported by `bynk.cloudflare`, not hard-wired as `QueueResult` is. The default
 actor is `Sender`. Inbound email is Cloudflare's: a context declaring a
 `from email` service is platform-native to `cloudflare`, so another `--platform`
-is `bynk.target.vendor_required`, and a deployable `--target workers` build is
-refused until the Worker mapping lands (`bynk.email.workers_unsupported`).
+is `bynk.target.vendor_required`. Two contexts claiming one address is also
+`bynk.email.duplicate_address`: the check is project-wide, because routing is.
+On `--target workers` the Worker exports `email(message, env, ctx)`, which
+dispatches on the envelope recipient, parses the raw message into `InboundEmail`
+under fixed limits, mints the `Sender` identity from the
+topmost `Authentication-Results` header when its authserv-id is `mx.cloudflare.net`, runs
+the handler, and applies its verdict; a fault, a parse failure and a refused
+reply each reject the message with a fixed reason and log nothing of it.
 
 ### §5.7.1 CORS policy (v0.131) {#cors}
 
@@ -1988,6 +1994,41 @@ a `@form` body's fields. A body that is not multipart is a `400` of kind `Malfor
 part count over `maxParts`, or a file over `maxFile`, is a `413` of kind `PayloadTooLarge`;
 a part of the wrong kind for its field, or two files for a single `File`, is a
 `StructuralMismatch` at `body.<field>`.
+
+**`cookies`.** An `on http` handler MAY declare a parameter named `cookies` (unless a `:cookies`
+path segment binds the name), typed as a record (`bynk.http.cookies_wrong_type`) whose fields are
+each a string-constructible leaf (`String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or
+opaque type over one), an `Option` of one, or a `List` of one
+(`bynk.http.cookies_field_not_stringy`). The router parses the `Cookie` header into
+name/value pairs (RFC 6265 §5.4; values are not decoded), reads them into the record's JSON
+form by the rules of a typed `query` (unknown names ignored; a name repeated on a
+non-`List` field is `StructuralMismatch`), and applies the record's codec, so refinements and
+defaults hold; a failure is a `400` whose `path` is rooted at `cookies`.
+
+**Raw `cookies`.** A handler's `cookies` parameter MAY instead be `RequestCookies`, a read-only
+view of the request's cookies with `get(name) -> Option[String]`, `all(name) -> List[String]`
+(header order) and `names() -> List[String]`, read by the parsing above and not decoded or
+validated. It exists for a name a record field cannot spell (`__Host-sid`). `RequestCookies`
+MAY appear only as the `cookies` parameter of an `on http` handler (`bynk.http.cookies_not_http`)
+and MUST NOT be stored, sent or returned (`bynk.types.request_cookies_at_boundary`). A test builds one with
+`RequestCookies.of(pairs)` (`"name=value"` strings, as a browser sends them) or `RequestCookies.empty()`.
+
+**Setting cookies.** `HttpResult[T]` has three methods, available once the `bynk` `Cookie` type
+is in scope: `withCookie(c)` and `clearCookie(c)`, each taking a `Cookie` and answering the same
+`HttpResult[T]` with the cookie attached, and `cookies()`, answering the `List[Cookie]` a result
+carries. The router sends one `Set-Cookie` header for each cookie, in order; `clearCookie` sends
+the cookie empty with `Max-Age=0` and an epoch `Expires`. A `Cookie { … }` literal is refused
+when it has `sameSite: SameSite.Unrestricted` or `partitioned: true` with `secure: false`
+(`bynk.http.cookie_samesite_none_insecure`, `bynk.http.cookie_partitioned_insecure`), a `__Host-`
+name that is not `secure`, has a `domain`, or a `path` other than `/`
+(`bynk.http.cookie_host_prefix`), or a `__Secure-` name that is not `secure`
+(`bynk.http.cookie_secure_prefix`); it draws a warning for `httpOnly: false`
+(`bynk.http.cookie_script_readable`). A `@cache(scope: public)` handler MUST NOT take a `cookies`
+parameter (`bynk.http.cache_public_reads_cookies`). A computed cookie that is not valid at
+emission (a name that is not a token, a value outside the cookie-octet set, an unsafe `Domain` or
+`Path`, an `Expires` outside the date range, a violated prefix rule, or a header over 4096 bytes)
+faults the request. A response carrying a `Set-Cookie` is sent with `Cache-Control: private`
+whatever its `@cache` scope.
 
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only

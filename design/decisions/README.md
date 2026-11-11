@@ -17,6 +17,10 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0809](0809-raw-request-cookies.md) | **A handler reads a prefixed cookie through a raw `cookies: RequestCookies` view** (v0.554) — Why the typed cookies record is not enough for `__Host-` names, and what the raw view is | Accepted (v0.554) |
+| [0808](0808-inbound-email-workers-and-first-party-npm.md) | **Inbound email on Workers, and the first-party npm dependency mechanism** (v0.553) — The Worker's email() export, MIME parsing under limits, DMARC verdict selection, fault behaviour, routing, and how a built-in binding brings an exactly-pinned npm package | Accepted (v0.553) |
+| [0807](0807-shared-variant-by-expected-type.md) | **A variant name several sums share resolves by the expected type, never by picking one** (v0.552) — Expected type picks the owner; otherwise `bynk.resolve.ambiguous_variant` | Accepted (v0.552) |
+| [0806](0806-cookie-request-parameter.md) | **A handler reads cookies through a `cookies: T` record parameter and sets them with `withCookie`** (v0.551) — How a route declares the cookies it reads, how the Cookie header parses, and how a result attaches the cookies it sets | Accepted (v0.551) |
 | [0805](0805-inbound-email-protocol.md) | **Inbound email joins the closed protocol set as `from email(…)`, with a typed verdict** (v0.550) — The seventh protocol, its verdict and actor, and the decisions slice 2 follows | Accepted (v0.550) |
 | [0804](0804-outbound-email-instance-kind.md) | **Outbound email is an `Email` instance kind over `send_email`, with typed send errors** (v0.549) — A list-valued instance option, a binding that checks limits before the call, and a deploy-side sender-domain check | Accepted (v0.549) |
 | [0803](0803-file-check-digest-reach.md) | **What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive** (v0.548.4) — What an edit re-checks under the file-check memo, and why consumers' keys stay span-inclusive | Accepted (v0.548.4) |

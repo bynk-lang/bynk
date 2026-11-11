@@ -2803,6 +2803,17 @@ fn lower_system_http_call(
                     format!("{path}{}", crate::emitter::FORM_ROUTE_SUFFIX),
                 ))
                 .is_some();
+        // #3277: the `cookies` record's position, when this call's route takes one.
+        let cookies_info = if is_raw {
+            cx.system_http_route_body(&(
+                id.name.clone(),
+                verb.as_str().to_string(),
+                format!("{path}{}", crate::emitter::COOKIES_ROUTE_SUFFIX),
+            ))
+            .cloned()
+        } else {
+            None
+        };
         let rest: Vec<String> = args[1..]
             .iter()
             .enumerate()
@@ -2817,9 +2828,25 @@ fn lower_system_http_call(
                 // unconverted.
                 if matches!(
                     cx.commons().expr_ty(a.id).as_deref(),
-                    Some(Ty::RequestHeaders | Ty::RequestQuery)
+                    Some(Ty::RequestHeaders | Ty::RequestQuery | Ty::RequestCookies)
                 ) {
                     return lowered;
+                }
+                // #3277: a typed `cookies` record becomes the `Cookie` header text
+                // the raw driver sends.
+                if let Some((cookies_idx, ty)) = &cookies_info
+                    && *cookies_idx == i
+                {
+                    cx.note_cookie_string();
+                    return format!(
+                        "__cookieString({})",
+                        bynk_ts::print_expr(&crate::emitter::serialisation::serialise_expr_via(
+                            ty,
+                            &format!("({lowered} as any)"),
+                            cx.system_http_type_ns(),
+                            cx.runtime_use()
+                        ))
+                    );
                 }
                 // #2854: a typed `query` record becomes the query string the
                 // raw driver appends to the URL.
@@ -3165,6 +3192,18 @@ fn lower_test_service_call(
                 // `on message` handler, so the position index is 0.
                 let key = crate::emitter::queue_handler_method_name(&id.name, 0);
                 let args_lowered: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                // #3328: a case has no Email Routing to mint the `Sender` identity,
+                // so a handler that binds it reads the envelope sender with no
+                // DMARC verdict (`DmarcNone`) unless the case names a principal.
+                if deps_expr == "deps"
+                    && args.first().is_some_and(|a| is_inbound_email(a, cx))
+                    && let Some(mail) = args_lowered.first()
+                {
+                    return Some(settle(format!(
+                        "((__m: any) => {}.{}(__m, {{ ...deps, identity: {{ address: __m.from, dmarc: {{ tag: \"DmarcNone\" }} }} }}))({mail})",
+                        id.name, key
+                    )));
+                }
                 let mut all = args_lowered;
                 all.push(deps_expr);
                 return Some(settle(format!("{}.{}({})", id.name, key, all.join(", "))));
@@ -3207,6 +3246,14 @@ fn lower_test_service_call(
         )));
     }
     None
+}
+
+/// #3328: whether `e` is a first-party `InboundEmail`, the message an email
+/// service's `on message` takes (a queue's message is the user's own type).
+fn is_inbound_email(e: &Expr, cx: &LowerCtx) -> bool {
+    cx.commons().expr_types.get(&e.id).is_some_and(|te| {
+        matches!(&*cx.commons().tys().get(te.ty), bynk_check::checker::Ty::Named { name, .. } if name == "InboundEmail")
+    })
 }
 
 /// Lower an inline agent invocation, `Agent(<key>).method(args)`, or `None` when the call is not one. Moved out of
@@ -3624,6 +3671,24 @@ fn lower_runtime_value_static_call(
             ("empty", 0) => {
                 cx.note_request_query();
                 return Some("__requestQuery([])".to_string());
+            }
+            _ => {}
+        }
+    }
+    // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
+    // runtime's cookies view from `"name=value"` pairs.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(cx.commons().callee(e.id), Some(Callee::Intrinsic { ns, .. }) if *ns == REQUEST_COOKIES)
+    {
+        match (method.name.as_str(), args.len()) {
+            ("of", 1) => {
+                let xs = pre.lower(&args[0], cx);
+                cx.note_request_cookies();
+                return Some(format!("__requestCookies({xs})"));
+            }
+            ("empty", 0) => {
+                cx.note_request_cookies();
+                return Some("__requestCookies([])".to_string());
             }
             _ => {}
         }
@@ -4306,9 +4371,34 @@ fn lower_kernel_method_call(
                     return Some(s);
                 }
             }
+            // #3277: a cookie rides beside an `HttpResult` as a `cookies` list the
+            // router turns into one `Set-Cookie` each. `clearCookie` is the cookie
+            // sent again, empty and already expired, under the same name, `Domain`
+            // and `Path`, which is what removes it.
+            KernelOp::HttpResult(op) => {
+                cx.note_http_result_cookie();
+                let recv = pre.lower(receiver, cx);
+                let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
+                let arg = args.first().cloned().unwrap_or_default();
+                let expr = match op {
+                    bynk_check::kernel_op::HttpResultOp::WithCookie => format!(
+                        "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), ({arg})] }}))({recv})"
+                    ),
+                    bynk_check::kernel_op::HttpResultOp::ClearCookie => format!(
+                        "((__r: any) => ({{ ...__r, cookies: [...(__r.cookies ?? []), {{ ...({arg}), value: \"\", maxAge: Some(0), expires: Some(0) }}] }}))({recv})"
+                    ),
+                    bynk_check::kernel_op::HttpResultOp::Cookies => {
+                        format!("((({recv}) as any).cookies ?? [])")
+                    }
+                };
+                return Some(expr);
+            }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            KernelOp::RequestHeaders(_) | KernelOp::RequestQuery(_) | KernelOp::TokenClaims(_) => {
+            KernelOp::RequestHeaders(_)
+            | KernelOp::RequestQuery(_)
+            | KernelOp::RequestCookies(_)
+            | KernelOp::TokenClaims(_) => {
                 let recv = pre.lower(receiver, cx);
                 let args: Vec<String> = args.iter().map(|a| pre.lower(a, cx)).collect();
                 return Some(format!("({recv}).{}({})", kop.name(), args.join(", ")));
@@ -8089,6 +8179,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError

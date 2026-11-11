@@ -785,6 +785,7 @@ pub fn emit_worker_entry(
                 bynk_model::lower_handler_kind_ir(&h.kind)
             {
                 let query_fields = query_field_specs(h, &path, visible_types);
+                let cookies_fields = cookies_field_specs(h, &path, visible_types);
                 http_routes.push(HttpRoute {
                     service: (*sname).clone(),
                     method,
@@ -817,6 +818,7 @@ pub fn emit_worker_entry(
                     rejected: rejected_surface(service, sname),
                     query_fields,
                     form_fields: form_field_specs(h, visible_types),
+                    cookies_fields,
                     multipart: multipart_spec(service.limits.as_ref(), h, visible_types),
                 });
             }
@@ -1051,6 +1053,10 @@ pub fn emit_worker_entry(
     if http_routes.iter().any(|r| r.query_fields.is_some()) {
         imports.push("__queryObject".to_string());
     }
+    // #3277: a route taking `cookies` decodes the `Cookie` header.
+    if http_routes.iter().any(|r| r.cookies_fields.is_some()) {
+        imports.push("__cookieObject".to_string());
+    }
     // #3276: a `@multipart` route checks its `Content-Type` and reads its parts.
     if http_routes
         .iter()
@@ -1074,6 +1080,15 @@ pub fn emit_worker_entry(
             .any(|p| p.name.name == "query" && matches!(p.type_ref, TypeRef::RequestQuery(_)))
     }) {
         imports.push("__requestQuery".to_string());
+    }
+    // #3277: a route taking the raw `cookies` view builds it off the request.
+    if http_routes.iter().any(|r| {
+        r.handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "cookies" && matches!(p.type_ref, TypeRef::RequestCookies(_)))
+    }) {
+        imports.push("__requestCookies".to_string());
     }
     // #2341 (decision C): a service with `on rejected` renders its rejections.
     if http_routes.iter().any(|r| r.rejected.is_some()) {
@@ -1847,17 +1862,15 @@ pub fn emit_worker_entry(
         ));
     }
 
-    // v0.10b: queue (consumer) entry point. Dispatches on `batch.queue`,
-    // deserialises each message, invokes the handler, and acks on `Ok` /
-    // retries on `Err` (a deserialisation failure also retries).
-    if !queue_routes.is_empty() {
-        default_entries.push(emit_queue_handler(
-            &queue_routes,
-            &fault_exec_params,
-            &other_compose_args,
-            &runtime_use,
-        ));
-    }
+    // v0.10b: the queue (consumer) entry point; #3328: the email entry point.
+    push_message_entries(
+        table,
+        &queue_routes,
+        &fault_exec_params,
+        &other_compose_args,
+        &runtime_use,
+        (&mut imports, &mut default_entries),
+    );
 
     // v0.176 (#642): a `Bytes` may now cross a workers boundary, so the
     // entry's inbound codec can reference the base64 helpers — fold in
@@ -1904,6 +1917,12 @@ pub fn emit_worker_entry(
             crate::emitter::REQUEST_HEADERS_RUNTIME_IMPORTS,
         );
     }
+    if runtime_use.request_cookies() {
+        append_missing_bindings(
+            &mut imports,
+            crate::emitter::REQUEST_COOKIES_RUNTIME_IMPORTS,
+        );
+    }
     if runtime_use.request_query() {
         append_missing_bindings(&mut imports, crate::emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
     }
@@ -1912,6 +1931,9 @@ pub fn emit_worker_entry(
     }
     if runtime_use.multipart_form() {
         append_missing_bindings(&mut imports, crate::emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
+    }
+    if runtime_use.cookie_string() {
+        append_missing_bindings(&mut imports, crate::emitter::COOKIE_STRING_RUNTIME_IMPORTS);
     }
     if runtime_use.eq() {
         append_missing_bindings(&mut imports, crate::emitter::EQ_RUNTIME_IMPORTS);
@@ -2043,6 +2065,37 @@ fn emit_scheduled_handler(
         doc: None,
         inline: false,
         body,
+    }
+}
+
+/// The queue (v0.10b) and inbound-email (#3328) entry points. `queue` dispatches
+/// on `batch.queue`, deserialises each message, invokes the handler, and acks on
+/// `Ok` / retries on `Err` (a deserialisation failure also retries); `email`
+/// hands the message to the runtime with one route per `from email` service.
+fn push_message_entries(
+    table: &UnitTable,
+    queue_routes: &[QueueRoute],
+    exec_params: &[TsParam],
+    compose_args: &[TsExpr],
+    runtime_use: &RuntimeUse,
+    (imports, entries): (&mut Vec<String>, &mut Vec<TsObjectEntry>),
+) {
+    if !queue_routes.is_empty() {
+        entries.push(emit_queue_handler(
+            queue_routes,
+            exec_params,
+            compose_args,
+            runtime_use,
+        ));
+    }
+    let email_routes = super::workers_email::collect_routes(table);
+    if !email_routes.is_empty() {
+        imports.extend(super::workers_email::RUNTIME_IMPORTS.map(String::from));
+        entries.push(super::workers_email::emit_email_handler(
+            &email_routes,
+            exec_params,
+            compose_args,
+        ));
     }
 }
 
@@ -2534,6 +2587,10 @@ struct HttpRoute {
     /// route's `body` as a form: the router checks the `Content-Type` (`415`) and
     /// decodes the body through the same record codec a JSON body takes.
     form_fields: Option<Vec<(String, &'static str, bool, bool)>>,
+    /// #3277: the fields of the handler's `cookies` record, as the runtime's
+    /// `cookieObject` reads them off the `Cookie` header: `(name, wire kind, list,
+    /// option)`. `None` when the route takes no `cookies` parameter.
+    cookies_fields: Option<Vec<(String, &'static str, bool, bool)>>,
     /// #3276: a `@multipart` route's body fields (as `form_fields`, with the `File`
     /// fields kind `"file"`) and its per-file and part-count caps.
     multipart: Option<MultipartSpec>,
@@ -2619,6 +2676,83 @@ fn form_field_specs(
         return None;
     }
     let p = h.params.iter().find(|p| p.name.name == "body")?;
+    let TypeRef::Named(id) = &p.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    Some(record_field_specs(rec, types, false))
+}
+
+/// #3277: the statements that decode a route's `cookies` record off the `Cookie`
+/// header and bind it for the handler call: `400` on a rejection, as a `body`
+/// answers, with the record's own codec checking refinements and filling defaults.
+fn push_cookies_param(
+    fields: &[(String, &'static str, bool, bool)],
+    type_ref: &TypeRef,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) {
+    let spec: Vec<TsExpr> = fields
+        .iter()
+        .map(|(name, kind, list, option)| {
+            TsExpr::object(vec![
+                ("name".to_string(), str_lit(name.clone())),
+                ("kind".to_string(), str_lit(*kind)),
+                ("list".to_string(), bool_lit(*list)),
+                ("option".to_string(), bool_lit(*option)),
+            ])
+        })
+        .collect();
+    guarded.push(const_(
+        "__c",
+        call(
+            ident("__cookieObject"),
+            vec![ident("request"), TsExpr::array(spec)],
+        ),
+    ));
+    guarded.push(if_(
+        TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(member(ident("__c"), "ok")),
+        },
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__c"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    let dser = deserialise_call(type_ref, "__c.value", "cookies", ru);
+    guarded.push(const_("__r_cookies", dser));
+    guarded.push(if_(
+        strict_eq(member(ident("__r_cookies"), "tag"), str_lit("Err")),
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__r_cookies"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    guarded.push(const_("cookies", member(ident("__r_cookies"), "value")));
+    call_args.push(ident("cookies"));
+}
+
+/// #3277: the fields of a handler's `cookies` record, or `None` when it has no
+/// `cookies` parameter (or a `:cookies` path segment binds the name).
+fn cookies_field_specs(
+    h: &Handler,
+    path: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<Vec<(String, &'static str, bool, bool)>> {
+    use bynk_syntax::ast::TypeBody;
+    if path.split('/').any(|seg| seg == ":cookies") {
+        return None;
+    }
+    let p = h.params.iter().find(|p| p.name.name == "cookies")?;
     let TypeRef::Named(id) = &p.type_ref else {
         return None;
     };
@@ -3060,6 +3194,34 @@ fn emit_http_route_dispatch(
             ));
             guarded.push(const_("query", member(ident("__r_query"), "value")));
             call_args.push(ident("query"));
+            continue;
+        }
+        // #3277 (decision A): `cookies: RequestCookies` is the raw view of the
+        // request's cookies.
+        let cookies_is_path_raw = route.path.split('/').any(|seg| seg == ":cookies");
+        if pname == "cookies"
+            && !cookies_is_path_raw
+            && matches!(p.type_ref, TypeRef::RequestCookies(_))
+        {
+            call_args.push(call(ident("__requestCookies"), vec![ident("request")]));
+            continue;
+        }
+        // #3277: `cookies` is decoded off the `Cookie` header and validated before
+        // the handler runs, answering `400` as a `body` does; the record's own codec
+        // checks refinements and fills defaults.
+        let cookies_is_path = route.path.split('/').any(|seg| seg == ":cookies");
+        if pname == "cookies"
+            && !cookies_is_path
+            && let Some(fields) = &route.cookies_fields
+        {
+            push_cookies_param(
+                fields,
+                &p.type_ref,
+                &mut guarded,
+                &mut call_args,
+                (cors_const, security_const, rejected),
+                ru,
+            );
             continue;
         }
         // It's a path parameter — extract from __m.params and construct. The

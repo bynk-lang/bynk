@@ -23,9 +23,10 @@ use crate::builtin_names::types::*;
 use crate::hints::HintSink;
 use crate::index::{RefSink, SymbolKind};
 use crate::kernel_op::{
-    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, InstantOp,
-    IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestHeadersOp, RequestQueryOp, ResultOp,
-    SetOp, StreamOp, StringOp, TestConnectionOp, TokenClaimsOp,
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
+    InstantOp, IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestCookiesOp,
+    RequestHeadersOp, RequestQueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
+    TokenClaimsOp,
 };
 use crate::locals::LocalsSink;
 use crate::requirements::{
@@ -364,6 +365,9 @@ pub enum Ty {
     /// `RequestQuery` (#2854) — an HTTP handler's read-only view of the
     /// request's query string.
     RequestQuery,
+    /// `RequestCookies` (#3277) — an HTTP handler's read-only view of the
+    /// request's `Cookie` header.
+    RequestCookies,
     /// `TokenClaims` (#2380, L5) — an `Oidc` actor's verified token claims,
     /// read through its binder's `.claims`.
     TokenClaims,
@@ -487,6 +491,7 @@ impl Ty {
             Ty::Asset => "Asset".to_string(),
             Ty::RequestHeaders => "RequestHeaders".to_string(),
             Ty::RequestQuery => "RequestQuery".to_string(),
+            Ty::RequestCookies => "RequestCookies".to_string(),
             Ty::TokenClaims => "TokenClaims".to_string(),
             Ty::List(t) => format!("List[{}]", types.display(*t)),
             Ty::Set(t) => format!("Set[{}]", types.display(*t)),
@@ -3469,6 +3474,7 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -3507,6 +3513,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -3628,6 +3635,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -3727,6 +3735,7 @@ pub(crate) fn unify(
             | Ty::Asset
             | Ty::RequestHeaders
             | Ty::RequestQuery
+            | Ty::RequestCookies
 
             | Ty::TokenClaims
             | Ty::List(_)
@@ -3804,6 +3813,7 @@ pub fn record_type_refs(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3907,6 +3917,7 @@ fn first_unresolved_type_name<'a>(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -3987,6 +3998,7 @@ pub fn resolve_type_ref(
         TypeRef::Asset(_) => Ty::Asset,
         TypeRef::RequestHeaders(_) => Ty::RequestHeaders,
         TypeRef::RequestQuery(_) => Ty::RequestQuery,
+        TypeRef::RequestCookies(_) => Ty::RequestCookies,
         TypeRef::TokenClaims(_) => Ty::TokenClaims,
         TypeRef::BoundaryRejection(_) => Ty::BoundaryRejection,
         // v0.119 (ADR 0155): `History[Agent]` is not a value type — it is a
@@ -4092,6 +4104,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         (Ty::Asset, Ty::Asset) => true,
         (Ty::RequestHeaders, Ty::RequestHeaders) => true,
         (Ty::RequestQuery, Ty::RequestQuery) => true,
+        (Ty::RequestCookies, Ty::RequestCookies) => true,
         (Ty::TokenClaims, Ty::TokenClaims) => true,
         (Ty::ValidationError, Ty::ValidationError) => true,
         (Ty::DecodeError, Ty::DecodeError) => true,
@@ -4130,6 +4143,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::Asset
             | Ty::RequestHeaders
             | Ty::RequestQuery
+            | Ty::RequestCookies
             | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Set(_)
@@ -5713,6 +5727,7 @@ pub(crate) fn rebrand_return_type(
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -5972,6 +5987,7 @@ fn structurally_compatible_inner(
         (Ty::Asset, Ty::Asset) => true,
         (Ty::RequestHeaders, Ty::RequestHeaders) => true,
         (Ty::RequestQuery, Ty::RequestQuery) => true,
+        (Ty::RequestCookies, Ty::RequestCookies) => true,
         (Ty::TokenClaims, Ty::TokenClaims) => true,
         (
             Ty::Named {
@@ -6033,6 +6049,7 @@ fn structurally_compatible_inner(
             | Ty::Asset
             | Ty::RequestHeaders
             | Ty::RequestQuery
+            | Ty::RequestCookies
             | Ty::TokenClaims
             | Ty::List(_)
             | Ty::Set(_)

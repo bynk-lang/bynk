@@ -729,9 +729,17 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
         + text[a.offset..]
             .find(|c: char| !(c.is_alphanumeric() || c == '_'))
             .unwrap_or(text.len() - a.offset);
-    if &text[word_start..word_end] != "query" {
-        return None;
-    }
+    // #3277: `cookies` reads the same way, from the `Cookie` header.
+    let word = &text[word_start..word_end];
+    let heading = match word {
+        "query" => {
+            "**Query string** — decoded and validated before the handler runs; unknown keys are ignored."
+        }
+        "cookies" => {
+            "**Cookies** — parsed from the `Cookie` header, decoded and validated before the handler runs; unknown cookies are ignored."
+        }
+        _ => return None,
+    };
     let (unit, _) = crate::symbols::own_declaration_name(text)?;
     let info = a.boundary_info.get(&unit)?;
     let tokens = bynk_syntax::lexer::tokenize(text).ok()?;
@@ -753,16 +761,15 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
                 && a.offset < h.span.end
         })
     })?;
-    let param = handler.params.iter().find(|p| p.name.name == "query")?;
+    let param = handler.params.iter().find(|p| p.name.name == word)?;
     let TypeRef::Named(id) = &param.type_ref else {
         return None;
     };
     let Some(TypeBody::Record(record)) = info.types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    let mut out = String::from(
-        "**Query string** — decoded and validated before the handler runs; unknown keys are ignored.\n\n| key | type | |\n|---|---|---|\n",
-    );
+    let key = if word == "cookies" { "cookie" } else { "key" };
+    let mut out = format!("{heading}\n\n| {key} | type | |\n|---|---|---|\n");
     for f in &record.fields {
         let note = match (&f.type_ref, &f.init) {
             (_, Some(init)) => format!("default `{}`", bynk_fmt::expr_to_string(init)),

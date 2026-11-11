@@ -320,12 +320,26 @@ kernel_ops! {
         Bearer = "bearer", "bearer() -> Option[String]";
         ClientIp = "clientIp", "clientIp() -> Option[String]";
     }
+/// `HttpResult[T]` (#3277): attach a cookie to a response, clear one, or read the
+/// cookies a result carries (a test's view of what the router will send).
+    HttpResultOp {
+        WithCookie = "withCookie", "withCookie(c: Cookie) -> HttpResult[T]";
+        ClearCookie = "clearCookie", "clearCookie(c: Cookie) -> HttpResult[T]";
+        Cookies = "cookies", "cookies() -> List[Cookie]";
+    }
 /// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
 /// query string.
     RequestQueryOp {
         Get = "get", "get(name: String) -> Option[String]";
         All = "all", "all(name: String) -> List[String]";
         Params = "params", "params() -> Map[String, List[String]]";
+    }
+/// `RequestCookies` (#3277): an HTTP handler's read-only view of the request's
+/// cookies, for a name a record field cannot spell (`__Host-sid`).
+    RequestCookiesOp {
+        Get = "get", "get(name: String) -> Option[String]";
+        All = "all", "all(name: String) -> List[String]";
+        Names = "names", "names() -> List[String]";
     }
 /// `TokenClaims` (#2380, L5): an `Oidc` actor's verified token claims.
     TokenClaimsOp {
@@ -390,7 +404,9 @@ pub enum KernelOp {
     Duration(DurationOp),
     Instant(InstantOp),
     RequestHeaders(RequestHeadersOp),
+    HttpResult(HttpResultOp),
     RequestQuery(RequestQueryOp),
+    RequestCookies(RequestCookiesOp),
     TokenClaims(TokenClaimsOp),
     Bytes(BytesOp),
     Decimal(DecimalOp),
@@ -419,7 +435,9 @@ impl KernelOp {
             KernelOp::Duration(o) => o.name(),
             KernelOp::Instant(o) => o.name(),
             KernelOp::RequestHeaders(o) => o.name(),
+            KernelOp::HttpResult(o) => o.name(),
             KernelOp::RequestQuery(o) => o.name(),
+            KernelOp::RequestCookies(o) => o.name(),
             KernelOp::TokenClaims(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
             KernelOp::Decimal(o) => o.name(),
@@ -480,7 +498,9 @@ mod tests {
             DurationOp,
             InstantOp,
             RequestHeadersOp,
+            HttpResultOp,
             RequestQueryOp,
+            RequestCookiesOp,
             TokenClaimsOp,
             BytesOp,
             DecimalOp,

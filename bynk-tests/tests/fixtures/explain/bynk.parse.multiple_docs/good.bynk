@@ -1,0 +1,7 @@
+commons demo
+
+---
+Doubles a number.
+Used by the pricing code.
+---
+fn double(n: Int) -> Int { n * 2 }

@@ -1,0 +1,12 @@
+commons shop.messages
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" @reference {
+  "cart.count" => "{n, plural, one {# item} other {# items}}"
+}
+
+messages "fr" {
+  "cart.count" => "{n, plural, one {# article} other {# articles}}"
+}

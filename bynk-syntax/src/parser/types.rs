@@ -1106,6 +1106,10 @@ impl<'a> Parser<'a> {
                     if name == "RequestQuery" {
                         return Ok(TypeRef::RequestQuery(t.span));
                     }
+                    // #3277 (decision A): the raw view of a handler's `cookies`.
+                    if name == "RequestCookies" {
+                        return Ok(TypeRef::RequestCookies(t.span));
+                    }
                     // #2380 (L5): an `Oidc` binder's verified claims.
                     if name == "TokenClaims" {
                         return Ok(TypeRef::TokenClaims(t.span));

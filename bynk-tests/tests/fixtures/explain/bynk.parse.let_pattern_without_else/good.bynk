@@ -1,0 +1,6 @@
+commons demo
+
+fn head(xs: List[Int]) -> Int {
+    let [x, ..] = xs else { 0 }
+    x
+}

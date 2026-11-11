@@ -1,0 +1,7 @@
+commons demo
+
+type Timestamp = opaque Int
+
+fn Timestamp.fromMillis(n: Int) -> Timestamp {
+    Timestamp.unsafe(n)
+}

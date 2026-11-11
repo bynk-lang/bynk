@@ -3039,6 +3039,27 @@ fn append_deps_field(
     deps_members.push(bynk_ts::TsTypeMember::prop(name, ty));
 }
 
+/// The type of `deps.identity` for a `Caller` or `Sender` handler. For `Sender`
+/// (#3328) it is the structural type of the minted `SenderIdentity`. Structural, so the handler module needs no import of the
+/// `bynk.cloudflare` declaration the checker typed `s.identity` by, and the
+/// declared interface is assignable to it.
+fn seam_identity_ts_type(seam: &ActorSeamIr) -> bynk_ts::TsType {
+    if !matches!(seam, ActorSeamIr::Sender(_)) {
+        // `Caller`: the calling context's name.
+        return bynk_ts::TsType::named("string");
+    }
+    bynk_ts::TsType::Object(vec![
+        bynk_ts::TsTypeMember::readonly_prop("address", bynk_ts::TsType::named("string")),
+        bynk_ts::TsTypeMember::readonly_prop(
+            "dmarc",
+            bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+                "tag",
+                bynk_ts::TsType::named("string"),
+            )]),
+        ),
+    ])
+}
+
 /// #1481: returns one real [`bynk_ts::TsStmt`] (was `out: &mut String`) — a
 /// `Raw` carrier for the whole `export const {name} = { ... };` object
 /// literal (Decision C, the same posture `emit_provider` (#1480) already
@@ -3210,7 +3231,7 @@ pub(crate) fn emit_service(
         // other three are mutually exclusive by construction.
         let seam = lower_actor_seam_ir(handler, &ctx.actors);
         let deps_identity_binder = match &seam {
-            ActorSeamIr::Caller(binder) => Some(binder.clone()),
+            ActorSeamIr::Caller(binder) | ActorSeamIr::Sender(binder) => Some(binder.clone()),
             ActorSeamIr::Bearer(s) => s.binder.clone(),
             ActorSeamIr::Oidc(s) => s.binder.clone(),
             ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
@@ -3370,12 +3391,10 @@ pub(crate) fn emit_service(
             }
             // v0.54: a Caller-binding call handler's deps carries the
             // caller's context name as its `CallerId` identity (a `string`).
-            ActorSeamIr::Caller(_) => {
-                append_deps_field(
-                    &mut deps_members,
-                    "identity",
-                    bynk_ts::TsType::named("string"),
-                );
+            // #3328: and a `Sender`-binding email handler's carries the minted
+            // `SenderIdentity` (see [`seam_identity_ts_type`]).
+            ActorSeamIr::Caller(_) | ActorSeamIr::Sender(_) => {
+                append_deps_field(&mut deps_members, "identity", seam_identity_ts_type(&seam));
             }
             // v0.52: a sum handler's deps carries the resolved-actor tagged
             // union (`who`), which the body `match`es. A binder-less sum is

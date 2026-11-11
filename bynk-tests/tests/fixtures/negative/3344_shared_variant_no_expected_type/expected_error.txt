@@ -1,0 +1,2 @@
+bynk.resolve.ambiguous_variant
+the variant name `Failed` is declared on multiple sum types (`DbError`, `MailError`) — qualify it as `DbError.Failed(...)` or `MailError.Failed(...)`

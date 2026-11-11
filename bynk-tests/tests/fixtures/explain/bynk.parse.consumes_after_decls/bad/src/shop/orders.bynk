@@ -1,0 +1,4 @@
+context shop.orders
+
+type Id = String
+consumes shop.payment

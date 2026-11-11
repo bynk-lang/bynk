@@ -1,7 +1,7 @@
 ---
 title: Testing
 ---
-## `suite` blocks
+## `suite` blocks {#suite-blocks}
 
 A test file is a `suite` block naming its target unit, containing named `case`s:
 
@@ -327,6 +327,50 @@ A `Wire(…)` body is the multipart text itself, framed with the boundary `bynk-
 a case can send what a browser would, and observe the boundary's rejections:
 `Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(PayloadTooLarge(_))`
 for a file over `maxFile` or too many parts.
+
+### Sending cookies — a typed `cookies` {#sending-cookies}
+
+A handler that declares [`cookies: T`](/book/reference/http/#cookies) takes the record as an
+ordinary argument, in the parameter's position. At the `unit` and `integration` tiers the
+record reaches the handler as it is, without the boundary. At `system` the driver sends it as
+the request's `Cookie` header, so the router parses and validates it. A `Wire(…)` argument is
+the header text itself, so a case can send what a browser would and observe the boundary's
+rejections:
+
+```bynk,fragment
+suite web.api as system {
+	case "a signed-in visitor" {
+		let r <- api.GET("/me", Wire("sid=abc; theme=Dark"))
+		expect r is Handled(Ok(_))
+	}
+
+	case "a refinement violation is refused" {
+		let r <- api.GET("/me", Wire("sid=a-token-that-is-far-too-long"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+}
+```
+
+A raw `cookies: RequestCookies` parameter takes a `RequestCookies.of(["__Host-sid=abc", "theme=dark"])`
+(or `RequestCookies.empty()`) at every tier; at `system` the driver sends it as the `Cookie`
+header. `Wire("a=1; b=2")` sends the header text itself.
+An entry with no `=` (for example `RequestCookies.of(["sid"])`) is dropped, exactly as the
+server drops it from a real `Cookie` header.
+
+### Reading the cookies a result sets — `cookies()` {#result-cookies}
+
+A result that [sets cookies](/book/reference/http/#setting-cookies) carries them, and
+`result.cookies()` reads them as a `List[Cookie]`, at every tier. At `system` they are the
+`Set-Cookie` headers the router sent, parsed back, so a case sees what a browser would:
+
+```bynk,fragment
+suite auth.api as system {
+	case "login sets the session cookie" {
+		let r <- api.POST("/login", Login { user: "ada" })
+		expect r.cookies().map((c) => c.name) == ["sid"]
+	}
+}
+```
 
 ### Sending a query — a typed `query` and `RequestQuery.of` {#request-query}
 
@@ -742,7 +786,7 @@ other boundary refusals it yields an [`HttpOutcome`](#httpoutcome), over `()`
 because no handler's result is involved: a `405` is
 `Rejected(MethodNotAllowed)`.
 
-## `expect`
+## `expect` {#expect}
 
 `expect <bool-predicate>` checks a predicate. It exists in both statement form (a
 line in a `case` body) and expression form (e.g. inside a `match` arm). The

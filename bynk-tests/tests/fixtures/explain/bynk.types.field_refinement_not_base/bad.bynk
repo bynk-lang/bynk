@@ -1,0 +1,4 @@
+commons demo
+
+type Money = { cents: Int }
+type Line = { price: Money where Positive }

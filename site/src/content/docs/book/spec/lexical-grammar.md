@@ -55,7 +55,7 @@ negation operator ([§4.6](/book/spec/syntactic-grammar/)), not part of the toke
 integer literal whose magnitude exceeds 2^53 − 1 (9007199254740991), the largest
 safe integer and so the `Int` range (#1657), is `bynk.lex.integer_overflow`.
 
-### §3.2.1a float_literal
+### §3.2.1a float_literal {#321a-float_literal}
 
 {{#grammar float_literal}}
 
@@ -85,7 +85,7 @@ written, so `1.20d` has scale 2 and `1.2d` scale 1, and the compiler preserves
 the literal's lexeme through formatting. A decimal literal has no `Int` or
 `Float` reading and is never converted implicitly.
 
-### §3.2.2 string_literal
+### §3.2.2 string_literal {#322-string_literal}
 
 {{#grammar string_literal}}
 
@@ -199,7 +199,7 @@ specified in [§5.2 well-typedness](/book/spec/static-semantics/#52-well-typedne
 One escape sequence inside an ordinary or multi-line string literal (#2619); the
 table in §3.2.2 gives each value.
 
-### §3.2.2a string_interpolation
+### §3.2.2a string_interpolation {#322a-string_interpolation}
 
 {{#grammar string_interpolation}}
 

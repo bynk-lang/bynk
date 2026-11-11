@@ -1,0 +1,5 @@
+commons demo
+
+capability Logger {
+  fn log(message: String) -> Effect[()]
+}

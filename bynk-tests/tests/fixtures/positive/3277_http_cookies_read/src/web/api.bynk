@@ -1,0 +1,31 @@
+context web.api
+
+type Token = String where NonEmpty && MaxLength(8)
+type Theme = enum { Light, Dark }
+
+type Session = {
+	sid: Option[Token],
+	theme: Theme = Light,
+	visits: Int = 0,
+	tags: List[String] = [],
+}
+
+service api from http {
+	// Cookies are decoded, defaulted and validated before the handler runs.
+	on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+		let sid = match cookies.sid {
+			Some(s) => "\(s)"
+			None => "-"
+		}
+		let theme = match cookies.theme {
+			Light => "light"
+			Dark => "dark"
+		}
+		Ok("\(sid) \(theme) \(cookies.visits) \(cookies.tags.length())")
+	}
+
+	// A path parameter beside the cookies.
+	on GET("/items/:id") (id: String, cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(id) \(cookies.visits)")
+	}
+}

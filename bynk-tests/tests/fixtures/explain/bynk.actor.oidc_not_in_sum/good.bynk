@@ -1,0 +1,11 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor Member { auth = Oidc(issuer = "https://issuer.example", audience = "my-api", jwks = "https://issuer.example/jwks"), identity = UserId }
+
+service api from http {
+  on POST("/x") () -> Effect[HttpResult[String]] by who: Member {
+    Ok("x")
+  }
+}

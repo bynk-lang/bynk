@@ -1969,6 +1969,7 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
         TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
+        TypeRef::RequestCookies(_) => "RequestCookies".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::List(t, _) => format!("List[{}]", ts_type_ref_display(t)),
@@ -3240,8 +3241,19 @@ fn actor_identity_ty_guarded<'a>(
             tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String))
         }
         // #3328: `Sender`'s `SenderIdentity` is minted by the Workers `email()`
-        // entry (slice 2); until then it reads as the unit value, like the
-        // other platform-tag actors.
+        // entry. It is the first-party record from `bynk.cloudflare`, so it types
+        // as that record when the context imports it (`consumes bynk.cloudflare
+        // { SenderIdentity, … }`) and as the unit value when it does not, as the
+        // other platform-tag actors read.
+        Some(Identity::Declared(name)) => checker::resolve_type_ref(
+            &bynk_syntax::ast::TypeRef::Named(bynk_syntax::ast::Ident {
+                name,
+                span: bynk_syntax::span::Span::default(),
+            }),
+            &resolved.types,
+            tys,
+        )
+        .unwrap_or_else(|| tys.intern(checker::Ty::Unit)),
         _ => tys.intern(checker::Ty::Unit),
     }
 }
@@ -4909,6 +4921,12 @@ fn validate_http_handler(
         if is_query {
             validate_query_param(p, types, errors);
         }
+        // #3277: `cookies` is the request's cookies, a record `T` the router decodes
+        // and validates.
+        let is_cookies = !is_path && p.name.name == "cookies";
+        if is_cookies {
+            validate_cookies_param(p, types, errors);
+        }
         // #3276: the `body` of a `@form` handler is a record of form leaves.
         if is_body
             && let Some(kind) = handler
@@ -4931,18 +4949,18 @@ fn validate_http_handler(
                 );
             }
         }
-        if !is_path && !is_body && !is_headers && !is_query {
+        if !is_path && !is_body && !is_headers && !is_query && !is_cookies {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
                     p.span,
                     format!(
-                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers` or `query`",
+                        "handler parameter `{}` is not a path parameter and is not named `body`, `headers`, `query` or `cookies`",
                         p.name.name
                     ),
                 )
                 .with_note(
-                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers` or `query`",
+                    "HTTP handler parameters must match a `:name` path segment, or be named `body`, `headers`, `query` or `cookies`",
                 ),
             );
         }
@@ -5089,6 +5107,7 @@ pub(crate) fn validate_field_names(
         }
         let surfaces = uses.get(name).cloned().unwrap_or_default();
         let mut wire: Vec<(String, Span)> = Vec::new();
+        let mut reported_not_request = false;
         for f in &rec.fields {
             let mut external: Option<(String, Span)> = None;
             for ann in &f.annotations {
@@ -5130,6 +5149,12 @@ pub(crate) fn validate_field_names(
                     continue;
                 }
                 if surfaces.is_empty() {
+                    // One error per record: the root cause is the record's use, not each `@name`.
+                    if reported_not_request {
+                        external = Some((literal, ann.span));
+                        continue;
+                    }
+                    reported_not_request = true;
                     errors.push(
                         CompileError::new(
                             "bynk.types.field_name_not_request_record",
@@ -5167,6 +5192,10 @@ pub(crate) fn validate_field_names(
             let (key, span) = external.unwrap_or_else(|| (f.name.name.clone(), f.name.span));
             wire.push((key, span));
         }
+        if surfaces.is_empty() {
+            // No request surface: the wire-name checks would only echo the one error above.
+            continue;
+        }
         let case_matters = surfaces
             .iter()
             .any(|s| matches!(s, RequestSurface::Cookies | RequestSurface::Query));
@@ -5189,6 +5218,62 @@ pub(crate) fn validate_field_names(
                     );
                 }
             }
+        }
+    }
+}
+
+/// #3277: an HTTP handler's `cookies` parameter is a record whose fields are each
+/// a leaf a cookie can carry (the typed-`query` set: a `String`, `Int`, `Bool` or
+/// `Decimal`, a refined or opaque type over one, an enum), an `Option` of one, or
+/// a `List` of one (a name sent twice).
+fn validate_cookies_param(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    // #3277: the raw view is the other legal form, for a name a field cannot spell.
+    if matches!(p.type_ref, TypeRef::RequestCookies(_)) {
+        return;
+    }
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.cookies_wrong_type",
+                p.type_ref.span(),
+                format!(
+                    "an HTTP handler's `cookies` parameter must be a record type or `RequestCookies` (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "`cookies: Session` decodes the request's `Cookie` header into the record `Session`, one field per cookie name, and answers `400` when it does not fit; `cookies: RequestCookies` reads them raw, for a name a field cannot spell (`__Host-sid`)",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cookies_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `cookies` record has type `{}`, which a cookie cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a cookie field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a name sent twice)",
+                ),
+            );
         }
     }
 }
@@ -5310,6 +5395,22 @@ fn validate_handler_annotations(
                     continue;
                 }
                 validate_cache_args(ann, errors);
+                // #3277: a response that depends on the request's cookies is one
+                // user's, so it must not be stored by a shared cache.
+                let public = ann.args.iter().any(|a| {
+                    a.label.as_ref().is_some_and(|n| n.name == "scope")
+                        && matches!(&a.value.kind, ExprKind::Ident(id) if id.name == "public")
+                });
+                if public && handler.params.iter().any(|p| p.name.name == "cookies") {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_public_reads_cookies",
+                            ann.span,
+                            "a `@cache(scope: public)` handler reads `cookies`, so a shared cache could replay one user's response to another",
+                        )
+                        .with_note("use `scope: private`, or drop the `cookies` parameter"),
+                    );
+                }
             }
             "limit" => {
                 if seen_limit {
@@ -5543,6 +5644,18 @@ fn is_bool_leaf(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
         ),
         _ => false,
     }
+}
+
+/// #3277: whether `decl` (the type table's entry for `name`) is a type the `bynk`
+/// adapter exports, found by its first-party span.
+pub fn is_std_bynk_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+    decl: &TypeDecl,
+) -> bool {
+    types.get(name).is_some_and(|d| d.span == decl.span)
+        && crate::firstparty::unit(bynk_std::BYNK_UNIT)
+            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
 }
 
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its
@@ -6149,6 +6262,10 @@ pub fn validate_store_field_value_types(
 pub const CAPABILITY_SIGNATURE: &str = "a capability operation signature";
 pub const RECORD_FIELD: &str = "a record field";
 pub const SUM_PAYLOAD: &str = "a sum-variant payload";
+/// #3343: the `cookies`, `query` or `@form` `body` record of an `on http` handler:
+/// the one position where a record with `@name` fields is allowed. Every other
+/// boundary check still applies to it.
+pub const REQUEST_RECORD_PARAM: &str = "a request record parameter";
 
 pub fn reject_fn_types(
     r: &TypeRef,
@@ -6234,6 +6351,22 @@ pub fn reject_fn_types(
                 )
                 .with_note(
                     "read the value you need (`query.get(\"…\")`) and store or send that value instead",
+                ),
+            );
+        }
+        // #3277: `RequestCookies`, the same way — read in the handler's `cookies`
+        // parameter, never stored or sent.
+        TypeRef::RequestCookies(span) => {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.request_cookies_at_boundary",
+                    *span,
+                    format!(
+                        "a `RequestCookies` type cannot appear in {what} — it is the request's cookies, read in the handler that receives it, never persisted or sent"
+                    ),
+                )
+                .with_note(
+                    "read the value you need (`cookies.get(\"…\")`) and store or send that value instead",
                 ),
             );
         }
@@ -6394,7 +6527,9 @@ pub fn reject_fn_types(
         // #3343: a record with `@name` fields is read off an HTTP request by name,
         // so its JSON form is not its wire form: it may not be a body, a result,
         // a store field, an event or a call argument.
-        TypeRef::Named(id) if record_has_field_names(&id.name, types) => {
+        TypeRef::Named(id)
+            if what != REQUEST_RECORD_PARAM && record_has_field_names(&id.name, types) =>
+        {
             errors.push(
                 CompileError::new(
                     "bynk.types.field_name_record_not_boundary",

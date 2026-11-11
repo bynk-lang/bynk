@@ -19,7 +19,16 @@ type Filter = {
   page: Int,
 }
 
+type Prefs = {
+  sid: Option[String],
+  theme: String = \"light\",
+}
+
 service api from http {
+  on GET(\"/prefs\") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(cookies.theme)
+  }
+
   on GET(\"/activity\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
     Ok(\"\\(query.limit)\")
   }
@@ -122,4 +131,22 @@ fn the_raw_view_hovers_as_its_type_alone() {
     let h = hover_at(&result, &root, offset_of("query: RequestQuery", 0) + 1).expect("a hover");
     assert!(h.contains("param query: RequestQuery"), "{h}");
     assert!(!h.contains("**Query string**"), "{h}");
+}
+
+#[test]
+fn typed_cookies_hover_with_their_cookies_types_and_defaults() {
+    let (result, root) = analyse();
+    // #3277: the parameter's own name, and a use of it in the body.
+    for offset in [
+        offset_of("cookies: Prefs", 0),
+        offset_of("cookies.theme", 0),
+    ] {
+        let h = hover_at(&result, &root, offset + 1).expect("a hover");
+        assert!(h.contains("**Cookies**"), "{h}");
+        assert!(h.contains("| `sid` | `Option[String]` | optional |"), "{h}");
+        assert!(
+            h.contains("| `theme` | `String` | default `\"light\"` |"),
+            "{h}"
+        );
+    }
 }

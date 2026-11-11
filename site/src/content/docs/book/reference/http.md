@@ -19,7 +19,7 @@ service <Name> from http {
 - **Route:** must start with `/`; a `:name` segment is a path parameter.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers) or [`query`](#query-strings) parameter. A path parameter's type must be
+  [`headers`](#request-headers), [`query`](#query-strings) or [`cookies`](#cookies) parameter. A path parameter's type must be
   constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
@@ -361,6 +361,130 @@ flagged: `?` keeps its `404` there. When the `?` is the whole value of a plain
 (`bynk check --fix`, or the editor's quick fix) that rewrites it to the
 `let Some(x) = headers.get("X") else { BadRequest("missing X") }` above, keeping
 the binding name and leaving the message for you to edit.
+
+## Cookies
+
+A handler reads the request's cookies through a `cookies: T` parameter, where `T` is a
+record. The router parses the `Cookie` header, decodes it into `T` and validates it before
+the handler runs, as it does a typed [`query`](#typed-query): refinements, defaults,
+`Option` and `List` fields, and a `400` with the same `RefinementViolation` or
+`StructuralMismatch` body a bad `body` gets (the `path` names the cookie,
+`cookies.sid`). The parameter may sit anywhere among the parameters.
+
+```bynk,fragment
+type Token = String where NonEmpty && MaxLength(128)
+type Theme = enum { Light, Dark }
+
+type Session = {
+  sid:   Option[Token],
+  theme: Theme = Light,
+}
+```
+
+```bynk,fragment
+on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+  match cookies.sid {
+    Some(_) => Ok("signed in")
+    None => Unauthorized
+  }
+}
+```
+
+A field of `T` is a value a cookie can carry, the set a typed `query` takes: a `String`,
+`Int`, `Bool` or `Decimal`, a refined or opaque type over one of those, or an enum;
+an `Option` of one, which is `None` when the cookie is absent; or a `List` of one, filled
+by a name sent twice. Anything else is refused (`bynk.http.cookies_field_not_stringy`), and
+so is a `cookies` that is not a record (`bynk.http.cookies_wrong_type`).
+
+- **Parsing.** The header is read as RFC 6265 §5.4 describes: pairs split on `;`, each on its
+  first `=`, names and values trimmed, one pair of double quotes dropped from a value. A pair
+  with no `=`, or an empty name, is ignored. Cookies the record does not name are ignored,
+  so an analytics cookie is not an error.
+- **No decoding.** A cookie value is opaque. It is **not** percent-decoded, so `a%41` is the
+  five characters it is, and the writer emits what it is given. A service that stores
+  structured data in a cookie encodes it itself (`toBase64Url`, `Json.encode`).
+- **A name sent twice.** A browser sends the longer-`Path` cookie first when two share a
+  name. On a field that is not a `List` that is a `400` (`StructuralMismatch`), rather than the
+  first one silently winning, as for a repeated query key.
+- **An empty cookie** (`a=`) is a value, not an absent one.
+
+A cookie is not authentication: it reaches the router from the client, so treat every field
+as input to check. A cookie-backed actor is separate. See
+[#3181](https://github.com/bynk-lang/bynk/issues/3181).
+
+### Reading a prefixed cookie: `RequestCookies` {#request-cookies}
+
+A cookie named `__Host-sid` or `__Secure-id` is not a legal record field, so a typed
+`cookies` record cannot read it. Declare the parameter as `cookies: RequestCookies` instead:
+the raw, read-only view of the request's cookies. It is not decoded or validated at the
+boundary, so the handler builds the values it needs.
+
+```bynk,fragment
+on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[String]] by v: Visitor {
+  match cookies.get("__Host-sid") {
+    Some(raw) => Ok(raw)
+    None => Unauthorized
+  }
+}
+```
+
+| Method | Type | Meaning |
+|---|---|---|
+| `get(name)` | `Option[String]` | the first cookie of that name |
+| `all(name)` | `List[String]` | every cookie of that name, in header order |
+| `names()` | `List[String]` | each name once, in order of first appearance |
+
+Parsing is the typed form's: RFC 6265 §5.4, no decoding. Pass the value through a refined
+type's `.of` (`Token.of(raw)`) to check it. A `RequestCookies` may only be a handler's
+`cookies` parameter (`bynk.http.cookies_not_http`; it cannot be stored or sent,
+`bynk.types.request_cookies_at_boundary`). Reading `__Host-` cookies this way is the
+defence against cookie tossing, since a sibling subdomain cannot set one.
+
+### Setting cookies
+
+`bynk` exports a `Cookie` record and a `SameSite` enum (`Strict`, `Lax`, `Unrestricted`;
+the last is `SameSite=None`). `withCookie` attaches a cookie to any `HttpResult`, and the
+router sends one `Set-Cookie` header for each.
+
+```bynk,fragment
+on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
+  Created("ok").withCookie(Cookie { name: "sid", value: "abc", maxAge: Some(30.minutes) })
+}
+```
+
+The defaults are the safe ones: `path: "/"`, `secure: true`, `httpOnly: true`,
+`sameSite: Lax`, `partitioned: false`, and no `domain`, `maxAge` or `expires`, so the
+cookie ends with the browser session. A literal that sets one of these unsafe is refused
+or warned about:
+
+| Diagnostic | When |
+|---|---|
+| `bynk.http.cookie_samesite_none_insecure` | `sameSite: SameSite.Unrestricted` with `secure: false` |
+| `bynk.http.cookie_partitioned_insecure` | `partitioned: true` with `secure: false` |
+| `bynk.http.cookie_host_prefix` | a `__Host-` name that is not `secure`, has a `domain`, or a `path` other than `/` |
+| `bynk.http.cookie_secure_prefix` | a `__Secure-` name that is not `secure` |
+| `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
+| `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
+
+Only a literal is judged. A computed cookie is checked when it is sent: a name that is not
+a token, a value with whitespace, a quote, `,`, `;`, `\` or a control character, an
+unsafe `Domain` or `Path`, an `Expires` outside the range of dates, or a header over
+4096 bytes faults the request (`500`) rather than sending a malformed or unsafe header.
+
+`clearCookie(c)` removes a cookie: it sends `c` again, empty, with `Max-Age=0` and an
+epoch `Expires`, under the same name, `Domain` and `Path`, which is what a browser matches
+on. It keeps the cookie's own `secure` and `sameSite`, so build it as the cookie was set.
+
+```bynk,fragment
+on POST("/logout") () -> Effect[HttpResult[()]] by v: Visitor {
+  NoContent.clearCookie(Cookie { name: "sid", value: "" })
+}
+```
+
+A response that sets a cookie is one user's, so a `public` cache may not keep it: at
+runtime a response carrying `Set-Cookie` is always sent `Cache-Control: private`, and a
+conditional-`GET` `304` keeps the `Set-Cookie` of the response it replaces. In a test,
+`result.cookies()` reads the `List[Cookie]` a result carries.
 
 ## Method semantics
 

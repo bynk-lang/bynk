@@ -1,0 +1,10 @@
+commons demo
+
+type Status = enum { Open, Paid }
+
+fn code(s: Status) -> Int {
+    match s {
+        Status { .. } => 1
+        _ => 2
+    }
+}

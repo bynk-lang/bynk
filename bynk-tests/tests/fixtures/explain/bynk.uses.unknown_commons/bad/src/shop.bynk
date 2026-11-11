@@ -1,0 +1,9 @@
+context shop
+
+uses mony
+
+service checkout {
+    on call() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}

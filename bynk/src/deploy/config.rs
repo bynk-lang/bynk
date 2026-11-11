@@ -46,6 +46,10 @@ struct WranglerConfig {
     /// #3302: the `[[send_email]]` of the `Email` instances.
     #[serde(default)]
     send_email: Vec<SendEmailBinding>,
+    /// #3328: the top-level `addresses` of the `from email` services, the
+    /// Email Routing rules wrangler reconciles on every deploy.
+    #[serde(default)]
+    addresses: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -309,6 +313,11 @@ pub(crate) struct Resources {
     /// binding order. Only checked (each domain must be enabled for Email
     /// Sending on the account); nothing is created, recorded or deleted.
     pub(crate) email_senders: Vec<EmailSendersDecl>,
+    /// #3328: the addresses of the context's `from email` services, in address
+    /// order: the Email Routing rules `wrangler deploy` reconciles to this list.
+    /// Advisory in the plan, like a Durable Object export: Cloudflare owns the
+    /// rules, and a rule for an address no longer listed is removed by the push.
+    pub(crate) email_addresses: Vec<String>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -377,6 +386,7 @@ impl Default for Resources {
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
             email_senders: Vec::new(),
+            email_addresses: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -633,6 +643,11 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         analytics_datasets,
         stored_secrets,
         email_senders,
+        email_addresses: {
+            let mut addresses = parsed.addresses;
+            addresses.sort();
+            addresses
+        },
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -1296,6 +1311,11 @@ pub(crate) mod tests {
                 .collect();
             self
         }
+        /// #3328: this context's `from email` addresses.
+        pub(crate) fn email_addresses(mut self, addresses: &[&str]) -> Self {
+            self.email_addresses = addresses.iter().map(|a| a.to_string()).collect();
+            self
+        }
         /// This context reads at least one secret the compiler cannot name.
         pub(crate) fn reads_incompletely(mut self) -> Self {
             self.reads_complete = false;
@@ -1357,6 +1377,24 @@ pub(crate) mod tests {
         );
     }
 
+    /// #3328: the top-level `addresses` are read, sorted.
+    #[test]
+    fn email_addresses_are_read_from_the_top_level_addresses() {
+        let resources = parse_config(
+            "email-addresses",
+            "name = \"shop\"\naddresses = [\"support@shop.example\", \"*@shop.example\"]\n",
+        );
+        assert_eq!(
+            resources.email_addresses,
+            ["*@shop.example", "support@shop.example"]
+        );
+        assert!(
+            parse_config("no-addresses", "name = \"shop\"\n")
+                .email_addresses
+                .is_empty()
+        );
+    }
+
     /// A config carrying every v1 binding kind — mirrors what
     /// `emit_wrangler_toml` actually writes (`bynk-emit/src/emitter/
     /// wrangler.rs`), so a gap here is a gap the real emitter output would
@@ -1367,6 +1405,7 @@ name = "api"
 main = "index.ts"
 compatibility_date = "2026-08-04"
 compatibility_flags = ["global_fetch_strictly_public"]
+addresses = ["support@shop.example"]
 
 [[services]]
 binding = "PAYMENT"
@@ -1510,6 +1549,9 @@ max_batch_size = 10
             Some("0b5e1c2a3d4f45678901234567890abc")
         );
         assert_eq!(secrets[0]["secret_name"].as_str(), Some("stripe-live"));
+        // #3328: `addresses` applies to every environment, so it stays top-level
+        // and is never copied into the environment's block.
+        assert!(env.get("addresses").is_none(), "{env:?}");
         // #3302: the email binding is repeated with its restrictions.
         let mail = env["send_email"].as_array().unwrap();
         assert_eq!(mail.len(), 1);

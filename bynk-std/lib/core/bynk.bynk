@@ -10,6 +10,8 @@ adapter bynk {
 		BytesResponse,
 		StreamResponse,
 		File,
+		Cookie,
+		SameSite,
 		FetchOptions,
 		Redirect,
 		TimedOut,
@@ -142,6 +144,37 @@ adapter bynk {
 		filename: Option[String],
 		contentType: String,
 		bytes: Bytes,
+	}
+
+	---
+	The `SameSite` attribute of a `Cookie`: whether a browser sends it on a
+	cross-site request. `Lax` (the default) sends it on top-level navigations,
+	`Strict` only on same-site requests, and `Unrestricted` (`SameSite=None` on the
+	wire) on every request, which a browser accepts only for a `Secure` cookie.
+	---
+	type SameSite = enum { Strict, Lax, Unrestricted }
+
+	---
+	A cookie to set on an HTTP response, attached with `result.withCookie(c)`. The
+	defaults are the safe ones: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no
+	`Domain` (the cookie goes to the exact host), and no `maxAge` or `expires` (a
+	session cookie, gone when the browser closes). `maxAge` and `expires` are both
+	sent when both are given; browsers prefer `Max-Age`. A cookie name is an RFC
+	6265 token and a value is `cookie-octet`s (no whitespace, `"`, `,`, `;` or `\`);
+	a name starting `__Host-` needs `secure`, `path: "/"` and no `domain`, and
+	`__Secure-` needs `secure`.
+	---
+	type Cookie = {
+		name: String,
+		value: String,
+		maxAge: Option[Duration] = None,
+		expires: Option[Instant] = None,
+		domain: Option[String] = None,
+		path: String = "/",
+		secure: Bool = true,
+		httpOnly: Bool = true,
+		sameSite: SameSite = Lax,
+		partitioned: Bool = false,
 	}
 
 	---

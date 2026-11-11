@@ -1016,6 +1016,11 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
         "the request's headers, read-only",
     ),
     (
+        "cookies",
+        "T",
+        "the request's cookies: a record `T` decoded from the `Cookie` header and validated before the handler runs (`400` on a violation), or a raw `RequestCookies` view",
+    ),
+    (
         "body",
         "T",
         "the request body, parsed and validated before the handler runs (not on `GET` or `DELETE`)",
@@ -2045,6 +2050,14 @@ pub const BUILTIN_STATICS: &[(&str, &[(&str, &str)])] = &[
         &[
             ("of", "of(pairs: List[String]) -> RequestQuery"),
             ("empty", "empty() -> RequestQuery"),
+        ],
+    ),
+    // #3277: the test-side constructors of a handler's raw `cookies`.
+    (
+        "RequestCookies",
+        &[
+            ("of", "of(pairs: List[String]) -> RequestCookies"),
+            ("empty", "empty() -> RequestCookies"),
         ],
     ),
     (

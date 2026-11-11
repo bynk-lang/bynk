@@ -1,0 +1,7 @@
+suite demo.clock {
+	case "time moves" {
+		advance Clock by 5.minutes
+		let t <- now.call()
+		expect t == t
+	}
+}

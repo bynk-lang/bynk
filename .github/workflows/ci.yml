@@ -1361,8 +1361,7 @@ jobs:
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
-      - name: Install binaryen (wasm-opt)
-        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - uses: ./.github/actions/binaryen
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
@@ -1415,8 +1414,7 @@ jobs:
       - uses: ./.github/actions/install-tool
         with:
           tool: wasm-bindgen-cli@0.2.127
-      - name: Install binaryen (wasm-opt)
-        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - uses: ./.github/actions/binaryen
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"

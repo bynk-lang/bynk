@@ -1,0 +1,8 @@
+commons demo
+
+fn double(x: Int) -> Int { x * 2 }
+
+fn run() -> Int {
+    let d = double(5)
+    d
+}

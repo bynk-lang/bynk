@@ -1,0 +1,6 @@
+commons demo
+
+---
+Doubles a number.
+---
+fn double(n: Int) -> Int { n * 2 }

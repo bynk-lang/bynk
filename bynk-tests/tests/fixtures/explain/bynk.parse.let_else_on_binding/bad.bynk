@@ -1,0 +1,6 @@
+commons demo
+
+fn count(r: Result[Int, String]) -> Int {
+    let n = r else { 0 }
+    n
+}

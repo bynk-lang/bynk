@@ -1,0 +1,4 @@
+commons limits
+
+const Limit: Int = 1
+const Cap: Int = 2

@@ -540,6 +540,7 @@ pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -730,6 +731,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError
@@ -805,6 +807,7 @@ pub(crate) fn walk_ref(
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
@@ -836,6 +839,7 @@ pub(crate) fn render(t: &TypeRef) -> String {
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
         TypeRef::RequestQuery(_) => "RequestQuery".to_string(),
+        TypeRef::RequestCookies(_) => "RequestCookies".to_string(),
         TypeRef::TokenClaims(_) => "TokenClaims".to_string(),
         TypeRef::BoundaryRejection(_) => "BoundaryRejection".to_string(),
         TypeRef::ValidationError(_) => "ValidationError".to_string(),

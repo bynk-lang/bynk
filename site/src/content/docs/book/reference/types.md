@@ -280,6 +280,30 @@ refused (`bynk.types.field_name_case_conflict`). This slice parses and checks th
 request readers apply it in the next slices of
 [#3343](https://github.com/bynk-lang/bynk/issues/3343).
 
+### Cookie and SameSite {#cookie}
+
+`Cookie` is the record a handler attaches to a result with
+[`withCookie`](/book/reference/http/#setting-cookies). It is exported by `bynk`
+(`consumes bynk { Cookie }`), with `SameSite = enum { Strict, Lax, Unrestricted }`
+(`Unrestricted` is `SameSite=None`):
+
+```text
+Cookie = { name: String, value: String,
+           maxAge: Option[Duration] = None, expires: Option[Instant] = None,
+           domain: Option[String] = None, path: String = "/",
+           secure: Bool = true, httpOnly: Bool = true,
+           sameSite: SameSite = Lax, partitioned: Bool = false }
+```
+
+### RequestCookies {#request-cookies}
+
+`RequestCookies` is the raw, read-only view of an HTTP request's cookies, the type of a
+handler's `cookies` parameter when it needs a name a record field cannot spell. It has
+`get(name) -> Option[String]`, `all(name) -> List[String]` and `names() -> List[String]`,
+and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty()`. It is not
+a boundary type: it cannot be stored, sent or returned. See
+[Reading a prefixed cookie](/book/reference/http/#request-cookies).
+
 ## Built-in generic types
 
 | Type | Variants | Purpose |
@@ -1043,6 +1067,29 @@ is a flat object whose `kind` key names the variant (`{"kind": "Shipped",
 "tracking": "1Z…"}`), so a payload field cannot be named `kind`
 (`bynk.resolve.reserved_payload_field`). A payload field named `tag` is fine:
 it keeps that name on the wire.
+
+### Variant names shared by two sums {#shared-variant-names}
+
+Two sums in scope may declare the same variant name: two of your own, or two
+that a consumed unit exports (`bynk.cloudflare`'s `SqlError` has a `Failed`, and
+so may an enum of yours). A bare use of the name builds the sum the **expected
+type** names: an annotated `let`, a parameter, a return type, or the operation a
+`stub` overrides.
+
+```bynk
+type DbError = | Constraint(message: String) | Failed(message: String)
+type MailError = | RateLimited | Failed(message: String)
+
+fn send() -> Result[Int, MailError] {
+  Err(Failed("down"))          // MailError.Failed: the return type picks it
+}
+```
+
+With no expected type naming one of them (`let e = Failed("down")`), the
+compiler does not pick one: the name is `bynk.resolve.ambiguous_variant`, and
+the message lists the qualified forms (`DbError.Failed(...)` or
+`MailError.Failed(...)`). A `match` arm or `is` pattern never needs
+qualifying, because it reads its scrutinee's sum.
 
 ### Error embeddings (v0.154)
 

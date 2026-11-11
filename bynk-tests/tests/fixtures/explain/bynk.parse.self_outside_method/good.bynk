@@ -1,0 +1,7 @@
+commons demo
+
+type Order = { id: String, total: Int }
+
+fn Order.total(self) -> Int {
+    self.total
+}

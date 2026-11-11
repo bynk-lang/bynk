@@ -627,6 +627,9 @@ impl Route<'_> {
                 if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestQuery(_)) {
                     return "RequestQuery.empty()".to_string();
                 }
+                if matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestCookies(_)) {
+                    return "RequestCookies.empty()".to_string();
+                }
                 if p.name.name == "body"
                     && let Some(body) = body
                 {

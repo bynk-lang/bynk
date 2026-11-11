@@ -1,0 +1,9 @@
+suite demo.ledger {
+	case "an entry" {
+		expect true
+	}
+
+	case "another entry" {
+		expect true
+	}
+}

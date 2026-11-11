@@ -1,0 +1,2 @@
+# #3344: run by bynk-tests/tests/system/behaviour_fixtures.rs.
+passed=2 failed=0

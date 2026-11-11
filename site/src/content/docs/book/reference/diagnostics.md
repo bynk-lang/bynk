@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **813** codes in total.
+There are **815** codes in total.
 
 ## Agents
 
@@ -55,11 +55,11 @@ There are **813** codes in total.
 | [`bynk.capability.invalid_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`). | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.missing_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability lacks an option its base requires, such as a `Service` instance's `@worker`. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.not_provided` | On the Workers target, a capability a context requires has no provider in it. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
-| `bynk.capability.op_arity` | A capability operation was called with the wrong number of arguments. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.capability.outside_context` | A `capability` was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.op_arity`](/book/reference/capabilities/#declaring-a-capability) | A capability operation was called with the wrong number of arguments. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.outside_context`](/book/reference/capabilities/#declaring-a-capability) | A `capability` was declared outside a context. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | `bynk.capability.provider_agent_cross_context` | On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects. | [`given_clause`](/book/reference/grammar/#rule-given_clause) | — |
 | `bynk.capability.unknown_base` | A derived capability's base is not a capability the context consumes. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.capability.unknown_operation` | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.capability.unknown_operation`](/book/reference/capabilities/#declaring-a-capability) | Referenced an operation the capability does not declare. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.capability.unknown_option`](/book/reference/capabilities/#derived-capabilities) | A derived capability carries an option its base does not take. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 
 ## Cloudflare
@@ -119,8 +119,8 @@ There are **813** codes in total.
 |---|---|---|---|
 | `bynk.cron.bad_params` | A cron handler declares more than one parameter, or a non-`Int` one. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 | `bynk.cron.duplicate_schedule` | Two cron handlers declare the same schedule. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
-| `bynk.cron.invalid_schedule` | A cron expression is not five whitespace-separated fields. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
-| `bynk.cron.return_not_effect_result` | A cron handler does not return `Effect[Result[(), E]]`. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+| [`bynk.cron.invalid_schedule`](/book/reference/cron/#handler-form) | A cron expression is not five whitespace-separated fields. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
+| [`bynk.cron.return_not_effect_result`](/book/reference/cron/#handler-form) | A cron handler does not return `Effect[Result[(), E]]`. | [`cron_handler`](/book/reference/grammar/#rule-cron_handler) | — |
 
 ## Doc comments
 
@@ -148,8 +148,8 @@ There are **813** codes in total.
 |---|---|---|---|
 | `bynk.embed.binary_content` | An `embed` names a file with a NUL byte, so it is binary, not text. |  | — |
 | `bynk.embed.duplicate` | An `embed` name is declared more than once in the same unit. |  | — |
-| `bynk.embed.invalid_encoding` | An `embed` names a file that is not valid UTF-8. |  | — |
-| `bynk.embed.missing_file` | An `embed` names a file that is not in the project's `embeds/` folder. |  | — |
+| [`bynk.embed.invalid_encoding`](/book/reference/embeds/#what-the-text-is) | An `embed` names a file that is not valid UTF-8. |  | — |
+| [`bynk.embed.missing_file`](/book/reference/embeds/#declaring-an-embed) | An `embed` names a file that is not in the project's `embeds/` folder. |  | — |
 | `bynk.embed.needs_project` | A single-file build met an `embed` declaration, which needs a project's `embeds/` folder. |  | — |
 | `bynk.embed.outside_context_or_commons` | An `embed` declaration appears outside a context or commons. |  | — |
 | `bynk.embed.outside_embeds_dir` | An `embed` names a file outside the project's `embeds/` folder. |  | — |
@@ -161,19 +161,19 @@ There are **813** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.expect.faults_not_effect` | A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`. | [`faults_expr`](/book/reference/grammar/#rule-faults_expr) | — |
-| `bynk.expect.not_bool` | `expect` was given a non-`Bool` predicate. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
-| `bynk.expect.outside_case` | `expect` was used outside a `case` body. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
+| [`bynk.expect.faults_not_effect`](/book/reference/testing/#faults) | A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`. | [`faults_expr`](/book/reference/grammar/#rule-faults_expr) | — |
+| [`bynk.expect.not_bool`](/book/reference/testing/#expect) | `expect` was given a non-`Bool` predicate. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
+| [`bynk.expect.outside_case`](/book/reference/testing/#expect) | `expect` was used outside a `case` body. | [`expect_expr`](/book/reference/grammar/#rule-expect_expr) | — |
 
 ## Exports
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.exports.capability_not_provided`](/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context) | An exported capability has no provider in its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.exports.conflicting_visibility` | A type is exported with conflicting visibilities. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.exports.conflicting_visibility`](/book/reference/types/#opaque-types) | A type is exported with conflicting visibilities. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | `bynk.exports.derived_capability` | `exports capability` names a derived capability, whose instance stays with its context. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.duplicate_export`](/book/reference/types/#opaque-types) | The same name is exported more than once. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.exports.duplicate_in_clause` | A name appears twice in one `exports` clause. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.exports.duplicate_in_clause`](/book/reference/types/#opaque-types) | A name appears twice in one `exports` clause. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.undeclared_capability`](/book/guides/effects-and-capabilities/share-across-contexts/#export-the-capability-from-the-providing-context) | `exports capability` names a capability that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.exports.undeclared_type`](/book/reference/types/#opaque-types) | `exports` names a type that is not declared. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 
@@ -194,33 +194,42 @@ There are **813** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.http.body_kind_conflict`](/book/reference/http/#raw-request-bodies) | A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`. |  | — |
-| `bynk.http.body_on_get_or_delete` | A GET or DELETE handler declares a `body` parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.body_on_get_or_delete`](/book/reference/http/#handler-form) | A GET or DELETE handler declares a `body` parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cache_bad_immutable` | A `@cache` annotation's `immutable` is not a `Bool` literal. |  | — |
 | [`bynk.http.cache_bad_max_age`](/book/reference/http/#caching) | A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal. |  | — |
-| `bynk.http.cache_bad_scope` | A `@cache` annotation's `scope` is not `public` or `private`. |  | — |
+| [`bynk.http.cache_bad_scope`](/book/reference/http/#caching) | A `@cache` annotation's `scope` is not `public` or `private`. |  | — |
 | `bynk.http.cache_duplicate` | A handler carries more than one `@cache` annotation. |  | — |
-| `bynk.http.cache_max_age_fractional_seconds` | A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds. |  | — |
+| [`bynk.http.cache_max_age_fractional_seconds`](/book/reference/http/#caching) | A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds. |  | — |
 | [`bynk.http.cache_on_non_get`](/book/reference/http/#caching) | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
+| [`bynk.http.cache_public_reads_cookies`](/book/reference/http/#caching) | A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.cache_unknown_arg` | A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`). |  | — |
+| [`bynk.http.cookie_host_prefix`](/book/reference/http/#setting-cookies) | A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookie_partitioned_insecure`](/book/reference/http/#setting-cookies) | A `partitioned` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookie_samesite_none_insecure`](/book/reference/http/#setting-cookies) | A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.cookie_script_readable` | A cookie literal sets `httpOnly: false`, so page scripts can read it (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
+| [`bynk.http.cookie_secure_prefix`](/book/reference/http/#setting-cookies) | A `__Secure-` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookies_field_not_stringy`](/book/reference/http/#cookies) | A field of an HTTP handler's `cookies` record has a type a cookie cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| `bynk.http.cookies_not_http` | A `RequestCookies` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.cookies_wrong_type`](/book/reference/http/#cookies) | An HTTP handler's `cookies` parameter is not a record type. |  | — |
 | `bynk.http.cors_invalid_field` | A `cors` policy field (`headers`/`credentials`/`maxAge`) has the wrong value shape. |  | — |
-| `bynk.http.cors_invalid_origins` | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
-| `bynk.http.cors_not_http` | A `cors { }` policy appears on a service that is not `from http`. |  | — |
+| [`bynk.http.cors_invalid_origins`](/book/reference/http/#cors) | A `cors` policy's `origins` is missing, empty, or not a list of string literals. |  | — |
+| [`bynk.http.cors_not_http`](/book/reference/http/#cors) | A `cors { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.cors_unknown_field` | A `cors { }` policy declares a field outside the closed set. |  | — |
 | [`bynk.http.cors_wildcard_credentials`](/book/reference/http/#cors) | A `cors` policy combines `credentials: true` with the wildcard origin `["*"]`. |  | — |
-| `bynk.http.duplicate_rejected` | A `from http` service declares `on rejected` more than once. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
+| [`bynk.http.duplicate_rejected`](/book/reference/http/#rendering-rejections) | A `from http` service declares `on rejected` more than once. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
 | [`bynk.http.duplicate_route`](/book/reference/http/#handler-form) | Two handlers share the same method and route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.error_status_position`](/book/reference/http/#error-bodies) | An `ErrorStatus` name is used anywhere but as `RawError`'s first argument. |  | — |
 | [`bynk.http.extra_param`](/book/reference/http/#handler-form) | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.form_body_not_record` | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.form_body_not_record`](/book/reference/http/#form-bodies) | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.form_bool_without_default` | A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | `bynk.http.form_duplicate` | A handler carries more than one `@form` annotation. |  | — |
 | [`bynk.http.form_field_not_stringy`](/book/reference/http/#form-bodies) | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.form_on_bodyless` | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
+| [`bynk.http.form_on_bodyless`](/book/reference/http/#form-bodies) | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.form_on_sum_route` | A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself. |  | — |
 | `bynk.http.form_unknown_arg` | A `@form` annotation is given an argument; it takes none. |  | — |
 | `bynk.http.header_question_not_found` | `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`). |  | Warning |
-| `bynk.http.headers_wrong_type` | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.invalid_path` | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.headers_wrong_type`](/book/reference/http/#request-headers) | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.invalid_path`](/book/reference/http/#handler-form) | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.json_duplicate` | A handler carries more than one `@json` annotation. |  | — |
 | `bynk.http.json_invalid_arg` | A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`. |  | — |
 | `bynk.http.json_invalid_field` | A `json { }` policy's `options` is not `tagged` or `plain`. |  | — |
@@ -241,13 +250,13 @@ There are **813** codes in total.
 | `bynk.http.multipart_large_cap` | A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning). |  | Warning |
 | [`bynk.http.path_param_not_stringy`](/book/reference/http/#handler-form) | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.query_field_not_stringy`](/book/reference/http/#typed-query) | A field of an HTTP handler's `query` record has a type a query string cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.query_not_http` | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
+| [`bynk.http.query_not_http`](/book/reference/http/#request-query) | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.query_wrong_type`](/book/reference/http/#typed-query) | An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.raw_bad_content_type` | A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal. |  | — |
-| `bynk.http.raw_body_not_bytes` | The `body` of a `@raw` handler is not typed `Bytes`. |  | — |
+| [`bynk.http.raw_bad_content_type`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal. |  | — |
+| [`bynk.http.raw_body_not_bytes`](/book/reference/http/#raw-request-bodies) | The `body` of a `@raw` handler is not typed `Bytes`. |  | — |
 | [`bynk.http.raw_body_unbounded`](/book/reference/http/#raw-request-bodies) | A `@raw` route has no request-body cap (no `@limit` and no service `limits`). |  | — |
 | `bynk.http.raw_duplicate` | A handler carries more than one `@raw` annotation. |  | — |
-| `bynk.http.raw_error_status` | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
+| [`bynk.http.raw_error_status`](/book/reference/http/#error-bodies) | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
 | [`bynk.http.raw_on_bodyless`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation is placed on a handler that takes no body. |  | — |
 | `bynk.http.raw_unknown_arg` | A `@raw` annotation has an argument outside the closed set (`contentType`). |  | — |
 | [`bynk.http.rejected_signature`](/book/reference/http/#rendering-rejections) | An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`. | [`rejected_handler`](/book/reference/grammar/#rule-rejected_handler) | — |
@@ -257,43 +266,43 @@ There are **813** codes in total.
 | `bynk.http.security_not_http` | A `security { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.security_unknown_field` | A `security { }` policy declares a field outside the closed set. |  | — |
 | [`bynk.http.unbound_path_param`](/book/reference/http/#handler-form) | A `:name` route segment has no matching handler parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.unknown_handler_annotation` | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
+| [`bynk.http.unknown_handler_annotation`](/book/reference/http/#handler-form) | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
 
 ## Lexer
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.lex.bad_escape` | An invalid escape sequence in a string literal. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.bad_unicode_escape` | A `\u{…}` escape names a surrogate or a value above U+10FFFF. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| [`bynk.lex.bad_escape`](/book/spec/lexical-grammar/#32-literals) | An invalid escape sequence in a string literal. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| [`bynk.lex.bad_unicode_escape`](/book/spec/lexical-grammar/#322-string_literal) | A `\u{…}` escape names a surrogate or a value above U+10FFFF. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.decimal_literal_too_large` | A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622). | [`decimal_literal`](/book/reference/grammar/#rule-decimal_literal) | — |
-| `bynk.lex.float_literal_overflow` | A float literal does not fit a finite 64-bit float. | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
-| `bynk.lex.integer_overflow` | An integer literal is outside the `Int` range, the JS safe integers ±(2^53 − 1). | [`number_literal`](/book/reference/grammar/#rule-number_literal) | — |
+| [`bynk.lex.float_literal_overflow`](/book/spec/lexical-grammar/#321a-float_literal) | A float literal does not fit a finite 64-bit float. | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
+| [`bynk.lex.integer_overflow`](/book/spec/lexical-grammar/#32-literals) | An integer literal is outside the `Int` range, the JS safe integers ±(2^53 − 1). | [`number_literal`](/book/reference/grammar/#rule-number_literal) | — |
 | `bynk.lex.interpolation_too_deep` | A string interpolation `\(…)` nests deeper than the lexer's fixed limit. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.legacy_comment` | A `--` line comment, the spelling before #2203; a comment is `//` (auto-fixable; `bynk fmt` rewrites it). |  | — |
-| `bynk.lex.legacy_doc_line` | A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it). |  | — |
+| [`bynk.lex.legacy_comment`](/book/spec/lexical-grammar/#333-retired-spellings) | A `--` line comment, the spelling before #2203; a comment is `//` (auto-fixable; `bynk fmt` rewrites it). |  | — |
+| [`bynk.lex.legacy_doc_line`](/book/spec/lexical-grammar/#333-retired-spellings) | A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it). |  | — |
 | `bynk.lex.multiline_close_not_own_line` | A `"""` inside a multi-line string literal is not on a line of its own. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_in_hole` | A multi-line string literal appears inside an interpolation hole, which must close on its own line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_indent` | A line of a multi-line string literal is indented less than its closing `"""`. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 | `bynk.lex.multiline_open` | The opening `"""` of a multi-line string literal is not followed by a newline, or by a language tag (`"""sql`) and a newline. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.slash_doc` | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
-| `bynk.lex.unclosed_doc_block` | A documentation block is not closed. |  | — |
-| `bynk.lex.unexpected_character` | An unexpected character in the source. |  | — |
+| [`bynk.lex.slash_doc`](/book/spec/lexical-grammar/#333-retired-spellings) | A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable). |  | — |
+| [`bynk.lex.unclosed_doc_block`](/book/spec/lexical-grammar/#332-doc-blocks) | A documentation block is not closed. |  | — |
+| [`bynk.lex.unexpected_character`](/book/spec/lexical-grammar/#35-lexical-errors) | An unexpected character in the source. |  | — |
 | `bynk.lex.unterminated_interpolation` | An interpolation hole `\(…)` is not closed on its line. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
-| `bynk.lex.unterminated_string` | A string literal is not terminated. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
+| [`bynk.lex.unterminated_string`](/book/spec/lexical-grammar/#32-literals) | A string literal is not terminated. | [`string_literal`](/book/reference/grammar/#rule-string_literal) | — |
 
 ## Message bundles
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.messages.format_mismatch` | A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales. |  | — |
-| `bynk.messages.incomplete` | A locale is missing a code the reference locale declares. |  | — |
-| `bynk.messages.invalid_locale_tag` | A `messages` block's locale tag is not a valid `LocaleTag` (e.g. `messages "xx"` where `xx` doesn't match the tag pattern). |  | — |
-| `bynk.messages.malformed_icu_syntax` | A message template's ICU placeholder syntax is invalid — unbalanced arm braces, an unknown format keyword, `#` outside a plural arm, a missing mandatory `other` arm, or an explicitly out-of-scope construct (`selectordinal`, `offset:`/`=N`, a CLDR skeleton). |  | — |
-| `bynk.messages.missing_locale_dependency` | A commons declaring `messages` doesn't `uses bynk.locale` and/or `uses bynk.locale.types`, which its generated `render` and the types its signature names need. |  | — |
-| `bynk.messages.missing_reference` | A message bundle has no `@reference` block. |  | — |
+| [`bynk.messages.format_mismatch`](/book/guides/localisation/format-with-icu/#what-the-compiler-checks) | A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales. |  | — |
+| [`bynk.messages.incomplete`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A locale is missing a code the reference locale declares. |  | — |
+| [`bynk.messages.invalid_locale_tag`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A `messages` block's locale tag is not a valid `LocaleTag` (e.g. `messages "xx"` where `xx` doesn't match the tag pattern). |  | — |
+| [`bynk.messages.malformed_icu_syntax`](/book/guides/localisation/format-with-icu/#what-the-compiler-checks) | A message template's ICU placeholder syntax is invalid — unbalanced arm braces, an unknown format keyword, `#` outside a plural arm, a missing mandatory `other` arm, or an explicitly out-of-scope construct (`selectordinal`, `offset:`/`=N`, a CLDR skeleton). |  | — |
+| [`bynk.messages.missing_locale_dependency`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A commons declaring `messages` doesn't `uses bynk.locale` and/or `uses bynk.locale.types`, which its generated `render` and the types its signature names need. |  | — |
+| [`bynk.messages.missing_reference`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A message bundle has no `@reference` block. |  | — |
 | `bynk.messages.multiple_reference` | A message bundle has more than one `@reference` block. |  | — |
-| `bynk.messages.outside_commons` | A `messages` declaration appears outside a commons. |  | — |
-| `bynk.messages.placeholder_mismatch` | A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's. |  | — |
+| [`bynk.messages.outside_commons`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A `messages` declaration appears outside a commons. |  | — |
+| [`bynk.messages.placeholder_mismatch`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's. |  | — |
 
 ## Observation
 
@@ -313,7 +322,7 @@ There are **813** codes in total.
 | [`bynk.actor.bearer_missing_secret`](/book/reference/actors/#schemes) | A `Bearer` actor does not name its signing secret. |  | — |
 | [`bynk.actor.binder_shadows_param`](/book/reference/actors/#the-by-clause) | A `by` actor binder collides with a handler parameter of the same name. |  | — |
 | [`bynk.actor.by_on_agent`](/book/reference/actors/#the-by-clause) | A `by` actor clause was placed on an agent `on call` handler, which has no actor. |  | — |
-| `bynk.actor.duplicate_sum_scheme` | Two peers in a multi-actor sum share an authentication scheme. |  | — |
+| [`bynk.actor.duplicate_sum_scheme`](/book/reference/actors/#the-by-clause) | Two peers in a multi-actor sum share an authentication scheme. |  | — |
 | `bynk.actor.foreign_context_name_unkeyable` | A context declaring a `Foreign` actor has a name no call key can be named from. |  | — |
 | `bynk.actor.foreign_duplicate_secret` | A `Foreign` actor's secret is also another actor's secret in the same context. |  | — |
 | `bynk.actor.foreign_identity_unsupported` | A `Foreign` actor declares an `identity`. |  | — |
@@ -321,38 +330,38 @@ There are **813** codes in total.
 | `bynk.actor.foreign_name_is_context_name` | A `Foreign` actor's name could be read as a context's name. |  | — |
 | `bynk.actor.foreign_reserved_secret` | A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name. |  | — |
 | `bynk.actor.foreign_secret_not_string` | A `Foreign` actor's secret is not a string. |  | — |
-| `bynk.actor.identity_not_sealed` | An actor identity type is not a context-ownable (sealed) value type. |  | — |
+| [`bynk.actor.identity_not_sealed`](/book/reference/actors/#schemes) | An actor identity type is not a context-ownable (sealed) value type. |  | — |
 | [`bynk.actor.missing_by_on_http`](/book/reference/actors/#the-by-clause) | An HTTP handler lacks the required `by` actor clause. |  | — |
-| `bynk.actor.oidc_identity_not_string_constructible` | An `Oidc` actor's identity is not a string-constructible type. |  | — |
-| `bynk.actor.oidc_missing_audience` | An `Oidc` actor does not name its `audience`. |  | — |
-| `bynk.actor.oidc_missing_issuer` | An `Oidc` actor does not name its `issuer`. |  | — |
-| `bynk.actor.oidc_missing_jwks` | An `Oidc` actor does not name its `jwks` endpoint. |  | — |
-| `bynk.actor.oidc_not_in_sum` | An `Oidc` actor appears as a member of a multi-actor sum. |  | — |
+| [`bynk.actor.oidc_identity_not_string_constructible`](/book/reference/actors/#schemes) | An `Oidc` actor's identity is not a string-constructible type. |  | — |
+| [`bynk.actor.oidc_missing_audience`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `audience`. |  | — |
+| [`bynk.actor.oidc_missing_issuer`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `issuer`. |  | — |
+| [`bynk.actor.oidc_missing_jwks`](/book/reference/actors/#schemes) | An `Oidc` actor does not name its `jwks` endpoint. |  | — |
+| [`bynk.actor.oidc_not_in_sum`](/book/reference/actors/#the-by-clause) | An `Oidc` actor appears as a member of a multi-actor sum. |  | — |
 | `bynk.actor.oidc_trust_from_is_secret` | An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`. |  | — |
 | `bynk.actor.oidc_trust_from_not_string` | An `Oidc` actor's `trustFrom` isn't a string naming an environment variable. |  | — |
-| `bynk.actor.outside_context` | An `actor` was declared outside a context (e.g. in a commons). |  | — |
-| `bynk.actor.refinement_base_unsupported` | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
-| `bynk.actor.refinement_in_sum` | A refinement actor appears as a member of a multi-actor sum. |  | — |
-| `bynk.actor.refinement_predicate_unsupported` | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
+| [`bynk.actor.outside_context`](/book/reference/actors/#declaration) | An `actor` was declared outside a context (e.g. in a commons). |  | — |
+| [`bynk.actor.refinement_base_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
+| [`bynk.actor.refinement_in_sum`](/book/reference/actors/#the-by-clause) | A refinement actor appears as a member of a multi-actor sum. |  | — |
+| [`bynk.actor.refinement_predicate_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
 | [`bynk.actor.scheme_not_admissible`](/book/reference/actors/#schemes) | An actor's scheme is not admissible on this handler's protocol. |  | — |
 | `bynk.actor.signature_identity_unsupported` | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
-| `bynk.actor.signature_missing_header` | A `Signature` actor does not name its signature header. |  | — |
-| `bynk.actor.signature_missing_secret` | A `Signature` actor does not name its signing secret. |  | — |
-| `bynk.actor.signature_requires_body` | A `Signature` handler does not take a `body` parameter. |  | — |
-| `bynk.actor.signature_tolerance_without_timestamp` | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
+| [`bynk.actor.signature_missing_header`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signature header. |  | — |
+| [`bynk.actor.signature_missing_secret`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signing secret. |  | — |
+| [`bynk.actor.signature_requires_body`](/book/reference/actors/#schemes) | A `Signature` handler does not take a `body` parameter. |  | — |
+| [`bynk.actor.signature_tolerance_without_timestamp`](/book/reference/actors/#schemes) | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
 | [`bynk.actor.sum_requires_binder`](/book/reference/actors/#the-by-clause) | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
 | [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
 | [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |
-| `bynk.actor.unreachable_sum_arm` | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
+| [`bynk.actor.unreachable_sum_arm`](/book/reference/actors/#the-by-clause) | A multi-actor sum has an arm unreachable after a catch-all (`None`) peer. |  | — |
 | `bynk.adapter.consumes_context` | An `adapter` consumed a context; adapter dependencies are adapter-to-adapter. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.adapter.consumes_requires_selection` | An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.adapter.disallowed_item` | An `adapter` declared a `service`, `agent`, or other item it may not contain. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
+| [`bynk.adapter.disallowed_item`](/book/reference/adapters/#anatomy) | An `adapter` declared a `service`, `agent`, or other item it may not contain. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | `bynk.adapter.duplicate_binding` | An `adapter` declared more than one `binding` clause. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_duplicate` | An adapter `binding … includes [ … ]` list names one file more than once. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_kind` | An adapter `binding … includes [ … ]` entry is not a `.wasm` file; only WebAssembly modules can be included. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_missing` | An adapter `binding … includes [ … ]` entry names a file that could not be read. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.adapter.include_outside` | An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
-| `bynk.adapter.no_binding` | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
+| [`bynk.adapter.no_binding`](/book/reference/adapters/#anatomy) | An `adapter` declares an external provider but no `binding` module to supply it. | [`adapter_decl`](/book/reference/grammar/#rule-adapter_decl) | — |
 | `bynk.adapter.provider_has_body` | A provider inside an `adapter` has a Bynk body; adapter providers must be external. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.cell.invalid_target` | A `:=` write targets something that is not a `store Cell` field. |  | — |
 | [`bynk.cell.self_reference`](/book/reference/agents/#reading-and-writing-state) | A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`. |  | — |
@@ -373,8 +382,7 @@ There are **813** codes in total.
 | [`bynk.email.duplicate_handler`](/book/reference/inbound-email/#handler-form) | A `from email` service declares more than one `on message` handler; it has exactly one. |  | — |
 | [`bynk.email.invalid_address`](/book/reference/inbound-email/#addresses) | A `from email("…")` binding is not a recipient address a service can claim. |  | — |
 | [`bynk.email.return_not_email_verdict`](/book/reference/inbound-email/#the-verdict) | An email `on message` handler does not return `Effect[EmailVerdict]`. |  | — |
-| [`bynk.email.workers_unsupported`](/book/reference/inbound-email/#status) | A `from email` service is built for the Workers target, whose `email()` entry is not emitted yet. |  | — |
-| `bynk.event.bad_params` | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
+| [`bynk.event.bad_params`](/book/guides/events/understand-events/#the-envelope-and-idempotent-handling) | An `on event` handler declared the wrong number of parameters, or a second parameter whose type is not `EventEnvelope` — it takes the event payload and, optionally, the runtime envelope. |  | — |
 | `bynk.event.bad_schema_dispatch` | A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`. |  | — |
 | `bynk.event.bad_schema_version` | An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event. |  | — |
 | [`bynk.event.duplicate_handler`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events` service declares more than one `on event` handler; it has exactly one. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
@@ -384,13 +392,13 @@ There are **813** codes in total.
 | `bynk.event.non_additive_schema_change` | An event's field shape changed in a way the schema registry cannot evolve additively — a field was removed, retyped, added without a default, or lost a default it previously had. Give the new shape a new event type name, or make the change additive. |  | — |
 | [`bynk.event.outside_context`](/book/guides/events/understand-events/#the-three-pieces) | An `event` was declared outside a context. |  | — |
 | `bynk.event.pattern_duplicate_field` | A `from Events(E { ... })` subscription pattern listed the same field more than once. |  | — |
-| `bynk.event.pattern_type_mismatch` | A `from Events(E { ... })` subscription pattern field's matched value is not compatible with that field's declared type. |  | — |
-| `bynk.event.pattern_unknown_field` | A `from Events(E { ... })` subscription pattern named a field that `E` does not declare. |  | — |
-| `bynk.event.pattern_unknown_variant` | A `from Events(E { ... })` subscription pattern's variant value names a variant that does not exist on the field's declared sum type. |  | — |
-| `bynk.event.pattern_variant_payload` | A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload. |  | — |
+| [`bynk.event.pattern_type_mismatch`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern field's matched value is not compatible with that field's declared type. |  | — |
+| [`bynk.event.pattern_unknown_field`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern named a field that `E` does not declare. |  | — |
+| [`bynk.event.pattern_unknown_variant`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern's variant value names a variant that does not exist on the field's declared sum type. |  | — |
+| [`bynk.event.pattern_variant_payload`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload. |  | — |
 | [`bynk.event.return_not_effect_unit`](/book/guides/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit) | An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`. | [`event_handler`](/book/reference/grammar/#rule-event_handler) | — |
 | `bynk.event.schema_version_mismatch` | An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history. |  | — |
-| `bynk.event.unknown_annotation` | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
+| [`bynk.event.unknown_annotation`](/book/guides/events/understand-events/#asserting-a-schema-version-with-scheman) | An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set. |  | — |
 | [`bynk.event.unknown_subscription`](/book/guides/events/understand-events/#the-three-pieces) | A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context. |  | — |
 | `bynk.exec.unavailable` | A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation. |  | — |
 | `bynk.fault.todo` | A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning). |  | Warning |
@@ -410,7 +418,7 @@ There are **813** codes in total.
 | `bynk.generics.bound_on_capability_op` | A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
 | `bynk.generics.codable_op_return` | A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
 | [`bynk.generics.duplicate_type_param`](/book/reference/generics/#type-parameters) | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
-| `bynk.generics.generic_non_record` | A `type` declaration carries type parameters on a refined or opaque body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| [`bynk.generics.generic_non_record`](/book/reference/types/#generic-record-types) | A `type` declaration carries type parameters on a refined, opaque or alias body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.generics.generic_record_at_boundary` | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec. |  | — |
 | `bynk.generics.generic_sum_embeds` | A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.generics.method_on_generic_type`](/book/reference/generics/#static-methods-on-generic-types) | A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
@@ -425,13 +433,13 @@ There are **813** codes in total.
 | [`bynk.generics.type_arg_mismatch`](/book/reference/generics/#type-parameters) | Inferred or explicit type arguments conflict, have the wrong arity, target a non-generic function, or a type parameter shadows a declared type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.generics.uninferable_type_arg`](/book/reference/generics/#the-expected-type-for-every-generic-call) | A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.generics.unknown_constraint`](/book/reference/generics/#bounds) | A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`. | [`type_param`](/book/reference/grammar/#rule-type_param) | — |
-| `bynk.generics.unknown_where_param` | A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type. | [`where_clause`](/book/reference/grammar/#rule-where_clause) | — |
+| [`bynk.generics.unknown_where_param`](/book/reference/generics/#bounds) | A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type. | [`where_clause`](/book/reference/grammar/#rule-where_clause) | — |
 | `bynk.held.branch_divergence` | Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2). |  | — |
 | [`bynk.held.consume_on_borrow`](/book/reference/websocket/#sending-and-broadcasting) | A consuming operation (`close`/`put`/`take`) is called on a *borrowed* held reference — borrows admit only non-consuming operations like `send` (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.held.leak`](/book/reference/websocket/#service-form) | A held value (`Connection[F]`) is still owned at scope exit — it must be disposed (stored, closed, or transferred) before the handler or function returns (§2.9.1, real-time track slice 2). |  | — |
-| `bynk.held.query_accessor_on_held_map` | A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query. |  | — |
-| `bynk.held.unsupported_map_op` | A held `Map[K, Connection]` is given an `update`/`upsert` — a held resource cannot be transformed by a `(Connection) -> Connection` function; use `put`/`get`/`remove` (real-time track slice 3b-ii). |  | — |
-| `bynk.held.unsupported_storage` | A held value (`Connection[F]`) is stored in a `Set`/`Log`/`Cache` — held values may only live in `Cell[Option[Connection]]` or `Map[K, Connection]` (§2.9.3, real-time track slice 2). |  | — |
+| [`bynk.held.query_accessor_on_held_map`](/book/reference/websocket/#sending-and-broadcasting) | A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query. |  | — |
+| [`bynk.held.unsupported_map_op`](/book/reference/websocket/#sending-and-broadcasting) | A held `Map[K, Connection]` is given an `update`/`upsert` — a held resource cannot be transformed by a `(Connection) -> Connection` function; use `put`/`get`/`remove` (real-time track slice 3b-ii). |  | — |
+| [`bynk.held.unsupported_storage`](/book/reference/types/#connection) | A held value (`Connection[F]`) is stored in a `Set`/`Log`/`Cache` — held values may only live in `Cell[Option[Connection]]` or `Map[K, Connection]` (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.held.use_after_consume`](/book/reference/websocket/#sending-and-broadcasting) | A held value (`Connection[F]`) is used after a consuming operation (`close`/`put`/`take`) ended its lifetime (§2.9.2, real-time track slice 2). |  | — |
 | `bynk.history.not_an_agent` | A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155). |  | — |
 | `bynk.history.not_generable` | A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155). |  | — |
@@ -494,35 +502,35 @@ There are **813** codes in total.
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
 | [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | `bynk.send.in_pure_context` | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.non_effect` | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.requires_unit` | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
-| `bynk.send.store_op` | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.non_effect`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.requires_unit`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send targets an operation whose reply is not `Effect[()]`. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
+| [`bynk.send.store_op`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#not-in-an-agent-handler) | A `~>` send targets an agent store operation, which is part of the handler's atomic commit and cannot be sent without waiting. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | `bynk.store.annotation_kind_mismatch` | A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`). |  | — |
 | `bynk.store.annotation_unsupported` | A known storage annotation (`@ttl`/`@retain`/`@indexed`/`@bounded`) is used before the slice that supports it. |  | — |
-| `bynk.store.cache_needs_clock` | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
+| [`bynk.store.cache_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`. |  | — |
 | [`bynk.store.cache_ttl_required`](/book/reference/agents/#storage-annotations) | A `Cache` field is missing its required `@ttl(<duration>)` annotation (a keyed store with no expiry is a `Map`). |  | — |
-| `bynk.store.kind_arity` | A storage kind was applied to the wrong number of type arguments (e.g. `Cell[A, B]`). |  | — |
+| [`bynk.store.kind_arity`](/book/reference/agents/#storage-kinds-and-their-operations) | A storage kind was applied to the wrong number of type arguments (e.g. `Cell[A, B]`). |  | — |
 | `bynk.store.kind_unsupported` | A known storage kind (`Queue`) is used before the slice that supports it. |  | — |
-| `bynk.store.log_needs_clock` | A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`. |  | — |
+| [`bynk.store.log_needs_clock`](/book/reference/agents/#storage-kinds-and-their-operations) | A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`. |  | — |
 | [`bynk.store.unkeyable_key`](/book/reference/agents/#storage-kinds-and-their-operations) | A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680). |  | — |
 | `bynk.store.unknown_annotation` | A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set. |  | — |
-| `bynk.store.unknown_kind` | A `store` field's type is not a known storage kind. |  | — |
-| `bynk.store.unknown_map_accessor` | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
+| [`bynk.store.unknown_kind`](/book/reference/agents/#storage-kinds-and-their-operations) | A `store` field's type is not a known storage kind. |  | — |
+| [`bynk.store.unknown_map_accessor`](/book/reference/types/#map-key-accessors) | A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`). |  | — |
 | [`bynk.store.unknown_op`](/book/reference/agents/#storage-kinds-and-their-operations) | A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations. |  | — |
 | `bynk.stub.after_type` | A test `stub … returns <value> after <d>` latency is not a `Duration`. |  | — |
 | `bynk.stub.at_system` | A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override. | [`stub_clause`](/book/reference/grammar/#rule-stub_clause) | — |
-| `bynk.stub.bad_sequence` | A `stub … returns each […]` sequence is malformed (e.g. empty). |  | — |
+| [`bynk.stub.bad_sequence`](/book/reference/testing/#stub) | A `stub … returns each […]` sequence is malformed (e.g. empty). |  | — |
 | `bynk.stub.generic_op` | A test `stub` targets a capability operation that declares its own type parameter — not supported at v1. |  | — |
-| `bynk.stub.not_a_seam` | A test `stub` overrides a capability the unit under test does not consume. |  | — |
-| `bynk.stub.rhs_type` | A test `stub … returns <value>` right-hand side does not match the operation's return type. |  | — |
-| `bynk.stub.unknown_op` | A test `stub` names an operation the capability does not declare. |  | — |
+| [`bynk.stub.not_a_seam`](/book/reference/testing/#stub) | A test `stub` overrides a capability the unit under test does not consume. |  | — |
+| [`bynk.stub.rhs_type`](/book/reference/testing/#stub) | A test `stub … returns <value>` right-hand side does not match the operation's return type. |  | — |
+| [`bynk.stub.unknown_op`](/book/reference/testing/#stub) | A test `stub` names an operation the capability does not declare. |  | — |
 | `bynk.target.browser_bundle_only` | The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build. |  | — |
 | `bynk.target.vendor_conflict` | One deployment unit's in-process closure uses platform-native capabilities from two mutually-exclusive platforms. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.target.vendor_required` | A deployment unit uses a platform-native capability but the build selects another `--platform`. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | `bynk.test.actor_identity_required` | A test omits the identity an identity-carrying actor requires: a bare call-site `by <Actor>`, or no `by` at all on a handler that binds its `Caller`. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.actor_no_identity` | A call-site `by <Actor>(x)` supplies an identity to an actor that takes none — a unit-identity actor (e.g. `Visitor`) or `Nobody`. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.advance_not_clock` | An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
-| `bynk.test.advance_not_duration` | An `advance Clock by` statement's amount is not a `Duration`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| [`bynk.test.advance_not_clock`](/book/reference/testing/#time-in-tests) | An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
+| [`bynk.test.advance_not_duration`](/book/reference/testing/#time-in-tests) | An `advance Clock by` statement's amount is not a `Duration`. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | `bynk.test.advance_outside_case` | An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move. | [`advance_stmt`](/book/reference/grammar/#rule-advance_stmt) | — |
 | `bynk.test.asset_address_method` | A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.call_needs_in_process` | A `system`-tier case calls an `on call` service with `svc.call(…)`; an `on call` service is internal to a deployment and has no public route for a `system` case to drive, so the case drives an `http` route that reaches it, or calls it at `unit` or `integration`. | [`case`](/book/reference/grammar/#rule-case) | — |
@@ -549,10 +557,10 @@ There are **813** codes in total.
 | `bynk.test.remote_unsupported_env` | A `system` case's `env` disagrees with the named target it would run against (`bynk test --against`): it sets a secret, sets a name the target doesn't declare under `vars` or declares with another value, or leaves unset a name the target declares. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_queue` | A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.remote_unsupported_schedule` | A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_bad_address` | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_call_arity` | A test body's `svc.call(...)` passes the wrong number of arguments for the service's `on call` handler. | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_no_call_handler` | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |
-| `bynk.test.service_unknown_route` | A test body addresses an http route / cron schedule / queue message the service does not declare. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_bad_address`](/book/reference/testing/#suite-blocks) | A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string). | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_call_arity`](/book/reference/testing/#suite-blocks) | A test body's `svc.call(...)` passes the wrong number of arguments for the service's `on call` handler. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_no_call_handler`](/book/reference/testing/#suite-blocks) | A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service). | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.test.service_unknown_route`](/book/reference/testing/#suite-blocks) | A test body addresses an http route / cron schedule / queue message the service does not declare. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.test.smoke_undeclared_status` | A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning). | [`case`](/book/reference/grammar/#rule-case) | Warning |
 | `bynk.test.snapshot_duplicate_name` | A case takes two snapshots (`expect v matches snapshot "name"`) under one name; a snapshot is keyed by its case and name. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
 | `bynk.test.snapshot_in_property` | A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value. | [`snapshot_expr`](/book/reference/grammar/#rule-snapshot_expr) | — |
@@ -595,20 +603,20 @@ There are **813** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.parse.bare_expression_statement`](/book/spec/syntactic-grammar/) | An expression stands alone as a statement, followed by more of the block; a block has no expression statements, so its value would be discarded. Bind it with `let _ <-` (an effect) or `let _ =`. | [`block`](/book/reference/grammar/#rule-block) | — |
-| `bynk.parse.clause_after_statement` | A `stub` or `env` clause came after a statement in a test case; they lead the case body. |  | — |
-| `bynk.parse.const_missing_type` | A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.parse.consumes_after_decls` | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
-| `bynk.parse.dangling_handler_annotation` | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
-| `bynk.parse.doc_block_contains_code` | A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation. |  | — |
+| [`bynk.parse.clause_after_statement`](/book/reference/testing/) | A `stub` or `env` clause came after a statement in a test case; they lead the case body. |  | — |
+| [`bynk.parse.const_missing_type`](/book/reference/constants/#declaring-a-constant) | A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| [`bynk.parse.consumes_after_decls`](/book/spec/syntactic-grammar/) | `consumes` appears after other declarations. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
+| [`bynk.parse.dangling_handler_annotation`](/book/spec/static-semantics/#cache) | A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler. |  | — |
+| [`bynk.parse.doc_block_contains_code`](/book/spec/lexical-grammar/#332-doc-blocks) | A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation. |  | — |
 | `bynk.parse.duplicate_cors` | A service declares more than one `cors { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_json` | A service declares more than one `json { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_limits` | A service declares more than one `limits { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.duplicate_security` | A service declares more than one `security { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.empty_agent` | An `agent` body is empty. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.parse.empty_capability` | A `capability` body is empty. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.parse.empty_interpolation` | An interpolation hole `\(…)` contains no expression. |  | — |
-| `bynk.parse.empty_match` | A `match` has no arms. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
-| `bynk.parse.empty_service` | A `service` body is empty. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.parse.empty_agent`](/book/reference/agents/#declaration) | An `agent` body is empty. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.parse.empty_capability`](/book/reference/capabilities/#declaring-a-capability) | A `capability` body is empty. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.parse.empty_interpolation`](/book/spec/lexical-grammar/#322a-string_interpolation) | An interpolation hole `\(…)` contains no expression. |  | — |
+| [`bynk.parse.empty_match`](/book/reference/types/#matching) | A `match` has no arms. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
+| [`bynk.parse.empty_service`](/book/spec/syntactic-grammar/#441-service_decl) | A `service` body is empty. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | `bynk.parse.event_pattern_empty` | A `from Events(E { ... })` subscription pattern listed no fields — use `from Events(E)` (no braces) for an unfiltered subscription. |  | — |
 | `bynk.parse.expected_agent_key` | Expected a `key` declaration in an agent. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.parse.expected_agent_storage` | An agent declares no storage — it has no `store` fields. |  | — |
@@ -623,47 +631,47 @@ There are **813** codes in total.
 | `bynk.parse.expected_type` | Expected a type. |  | — |
 | `bynk.parse.expected_unit_header` | Expected a `commons` or `context` header. |  | — |
 | `bynk.parse.expected_visibility` | Expected a visibility keyword. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.parse.exports_after_decls` | `exports` appears after other declarations. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
+| [`bynk.parse.exports_after_decls`](/book/spec/syntactic-grammar/) | `exports` appears after other declarations. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | `bynk.parse.extra_tokens` | Unexpected tokens after an otherwise complete construct. |  | — |
-| `bynk.parse.generic_arg_count` | Wrong number of generic type arguments. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
-| `bynk.parse.handler_in_agent` | A protocol handler (`on GET`/`schedule`/`message`) was declared in an agent. | [`handler`](/book/reference/grammar/#rule-handler) | — |
-| `bynk.parse.invariant_after_handler` | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
-| `bynk.parse.keyword_field_shorthand` | A reserved keyword was used as a field shorthand, which would bind a variable of that name. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
-| `bynk.parse.lambda_pattern_annotation` | A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
-| `bynk.parse.lambda_pattern_not_record` | A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
-| `bynk.parse.lambda_pattern_refutable` | A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
-| `bynk.parse.let_else_on_binding` | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
+| [`bynk.parse.generic_arg_count`](/book/reference/types/#built-in-generic-types) | Wrong number of generic type arguments. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
+| [`bynk.parse.handler_in_agent`](/book/reference/agents/#declaration) | A protocol handler (`on GET`/`schedule`/`message`) was declared in an agent. | [`handler`](/book/reference/grammar/#rule-handler) | — |
+| [`bynk.parse.invariant_after_handler`](/book/reference/agent-invariants/#declaration) | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
+| [`bynk.parse.keyword_field_shorthand`](/book/reference/types/#keyword-field-names) | A reserved keyword was used as a field shorthand, which would bind a variable of that name. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
+| [`bynk.parse.lambda_pattern_annotation`](/book/spec/syntactic-grammar/#469b-lambda_param) | A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| [`bynk.parse.lambda_pattern_not_record`](/book/spec/syntactic-grammar/#469b-lambda_param) | A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| [`bynk.parse.lambda_pattern_refutable`](/book/spec/syntactic-grammar/#469b-lambda_param) | A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on. | [`lambda_param`](/book/reference/grammar/#rule-lambda_param) | — |
+| [`bynk.parse.let_else_on_binding`](/book/spec/syntactic-grammar/#484a-let_else_stmt-2010) | An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt), [`effect_let_stmt`](/book/reference/grammar/#rule-effect_let_stmt) | — |
 | `bynk.parse.let_else_staircase` | Nested `match`es on `Option`/`Result` that each carry on in one arm and give up in the other, which `let … else` writes flat. A hint with a machine-applicable rewrite; never fails a build and is hidden from the terminal (hint). |  | Hint |
-| `bynk.parse.let_pattern_annotation` | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
-| `bynk.parse.let_pattern_without_else` | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
-| `bynk.parse.list_rest_not_last` | A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
-| `bynk.parse.malformed_float_literal` | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
-| `bynk.parse.match_ends_block` | A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow. | [`block`](/book/reference/grammar/#rule-block) | — |
+| [`bynk.parse.let_pattern_annotation`](/book/spec/syntactic-grammar/#484a-let_else_stmt-2010) | A `let` with a pattern carries a type annotation; the pattern's names take their types from the value. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
+| [`bynk.parse.let_pattern_without_else`](/book/guides/type-system/destructure-a-record-with-let/#when-a-field-must-match) | A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it. | [`let_else_stmt`](/book/reference/grammar/#rule-let_else_stmt) | — |
+| [`bynk.parse.list_rest_not_last`](/book/reference/types/#list-patterns) | A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
+| [`bynk.parse.malformed_float_literal`](/book/spec/lexical-grammar/#321a-float_literal) | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
+| [`bynk.parse.match_ends_block`](/book/guides/type-system/match/#flatten-a-staircase) | A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow. | [`block`](/book/reference/grammar/#rule-block) | — |
 | `bynk.parse.migrate_after_handler` | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
 | `bynk.parse.migrate_item` | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
-| `bynk.parse.multiple_docs` | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
+| [`bynk.parse.multiple_docs`](/book/spec/static-semantics/#one-doc-per-target) | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
 | `bynk.parse.nesting_too_deep` | An expression or type nests deeper than the parser's fixed limit. |  | — |
-| `bynk.parse.no_remainder_operator` | `%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's). |  | — |
-| `bynk.parse.non_associative` | A non-associative operator was chained (e.g. `a == b == c`). | [`binary_expr`](/book/reference/grammar/#rule-binary_expr) | — |
+| [`bynk.parse.no_remainder_operator`](/book/reference/operators/#remainder) | `%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's). |  | — |
+| [`bynk.parse.non_associative`](/book/reference/operators/#precedence) | A non-associative operator was chained (e.g. `a == b == c`). | [`binary_expr`](/book/reference/grammar/#rule-binary_expr) | — |
 | `bynk.parse.orphan_doc_block` | A documentation block is not attached to a declaration (warning). |  | Warning |
 | `bynk.parse.policy_order` | A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.record_pattern_in_is_unparenthesised` | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
+| [`bynk.parse.record_pattern_in_is_unparenthesised`](/book/spec/syntactic-grammar/#4711-record_pattern) | A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.parse.record_pattern_without_rest`](/book/reference/types/#record-patterns) | A record pattern does not end with `..`; every record pattern is open. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
-| `bynk.parse.refined_pattern_inner` | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
-| `bynk.parse.reserved_keyword` | A reserved keyword was used as an identifier. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
-| `bynk.parse.self_outside_method` | `self` used outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
+| [`bynk.parse.refined_pattern_inner`](/book/spec/syntactic-grammar/#4710-refined_pattern) | A refined pattern's inner form is something other than `_`. | [`refined_pattern`](/book/reference/grammar/#rule-refined_pattern) | — |
+| [`bynk.parse.reserved_keyword`](/book/reference/keywords/#hard-keywords) | A reserved keyword was used as an identifier. | [`identifier`](/book/reference/grammar/#rule-identifier) | — |
+| [`bynk.parse.self_outside_method`](/book/spec/syntactic-grammar/) | `self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
 | `bynk.parse.storage_after_phase` | Agent storage (`state` / `store`) is declared after the invariants or handlers. |  | — |
 | `bynk.parse.transition_after_handler` | A `transition` is declared after an agent handler; step invariants precede the handlers. |  | — |
 | `bynk.parse.unexpected_adapter` | An `adapter` appeared where it is not allowed. |  | — |
 | `bynk.parse.unexpected_context` | A `context` appeared where it is not allowed. | [`context_decl`](/book/reference/grammar/#rule-context_decl) | — |
 | `bynk.parse.unexpected_eof` | Unexpected end of input. |  | — |
 | `bynk.parse.unexpected_suite` | A `suite` appeared where it is not allowed. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
-| `bynk.parse.unknown_effect_method` | An unknown method on `Effect`. |  | — |
-| `bynk.parse.unknown_handler_kind` | An unknown handler form (expected `call`, an HTTP method, `schedule`, or `message`). | [`handler`](/book/reference/grammar/#rule-handler) | — |
-| `bynk.parse.unknown_predicate` | An unknown refinement predicate. | [`predicate_name`](/book/reference/grammar/#rule-predicate_name) | — |
+| [`bynk.parse.unknown_effect_method`](/book/spec/syntactic-grammar/#4619-effect_pure_expr) | An unknown method on `Effect`. |  | — |
+| [`bynk.parse.unknown_handler_kind`](/book/spec/syntactic-grammar/#442a-handler) | An unknown handler form (expected `call`, an HTTP method, `schedule`, or `message`). | [`handler`](/book/reference/grammar/#rule-handler) | — |
+| [`bynk.parse.unknown_predicate`](/book/spec/type-system/#63-refinement-predicates) | An unknown refinement predicate. | [`predicate_name`](/book/reference/grammar/#rule-predicate_name) | — |
 | `bynk.parse.unknown_tier` | A `case`/`suite` `as <tier>` clause names something other than `unit`, `integration`, or `system`. |  | — |
-| `bynk.parse.uses_after_decls` | `uses` appears after other declarations. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
-| `bynk.parse.variant_name_case` | A sum-type or enum variant name is not capitalised. | [`sum_variant`](/book/reference/grammar/#rule-sum_variant), [`enum_type`](/book/reference/grammar/#rule-enum_type) | — |
+| [`bynk.parse.uses_after_decls`](/book/spec/syntactic-grammar/) | `uses` appears after other declarations. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
+| [`bynk.parse.variant_name_case`](/book/reference/types/#sum-types) | A sum-type or enum variant name is not capitalised. | [`sum_variant`](/book/reference/grammar/#rule-sum_variant), [`enum_type`](/book/reference/grammar/#rule-enum_type) | — |
 
 ## Project
 
@@ -710,19 +718,19 @@ There are **813** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.queue.bad_params` | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
+| [`bynk.queue.bad_params`](/book/reference/queue/#handler-form) | An `on message` handler does not take exactly one `message` parameter. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | `bynk.queue.duplicate_consumer` | Two `on message` handlers consume the same queue. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
 | `bynk.queue.invalid_name` | A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses. | [`queue_handler`](/book/reference/grammar/#rule-queue_handler) | — |
-| `bynk.queue.return_not_queue_result` | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
+| [`bynk.queue.return_not_queue_result`](/book/reference/queue/#handler-form) | An `on message` handler does not return `Effect[QueueResult]`. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 
 ## Record spread
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| `bynk.record_spread.field_type_mismatch` | A record-spread override has the wrong type for the field. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
-| `bynk.record_spread.non_record_base` | The base of a record spread is not a record. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.field_type_mismatch`](/book/reference/types/#record-types) | A record-spread override has the wrong type for the field. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.non_record_base`](/book/reference/types/#record-types) | The base of a record spread is not a record. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | `bynk.record_spread.type_mismatch` | A record spread's base is a different record type. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
-| `bynk.record_spread.unknown_field` | A record spread overrides a field the record does not have. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
+| [`bynk.record_spread.unknown_field`](/book/reference/types/#record-types) | A record spread overrides a field the record does not have. | [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 
 ## Refinement
 
@@ -734,7 +742,7 @@ There are **813** codes in total.
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
-| [`bynk.resolve.ambiguous_variant`](/book/reference/types/#sum-types) | A variant name is ambiguous across several sum types. |  | — |
+| [`bynk.resolve.ambiguous_variant`](/book/reference/types/#shared-variant-names) | A bare variant name is declared by several sum types in scope, and no expected type picks one. |  | — |
 | [`bynk.resolve.arity_mismatch`](/book/spec/static-semantics/) | A function was called with the wrong number of arguments. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.resolve.bad_const_initialiser`](/book/reference/constants/#what-an-initialiser-may-be) | A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_cycle`](/book/reference/constants/#what-an-initialiser-may-be) | Constants refer to each other in a cycle, so none of them has a value. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
@@ -743,34 +751,34 @@ There are **813** codes in total.
 | `bynk.resolve.duplicate_actor` | Two actors share a name. |  | — |
 | `bynk.resolve.duplicate_agent` | Two agents share a name. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | `bynk.resolve.duplicate_capability` | Two capabilities share a name. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
-| `bynk.resolve.duplicate_const` | Two constants share a name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
+| [`bynk.resolve.duplicate_const`](/book/reference/constants/#declaring-a-constant) | Two constants share a name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.duplicate_field`](/book/reference/types/#record-types) | A record, or one variant's payload, declares a field twice. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
-| `bynk.resolve.duplicate_field_init` | A record construction initialises a field twice. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
+| [`bynk.resolve.duplicate_field_init`](/book/reference/types/#record-types) | A record construction initialises a field twice. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.resolve.duplicate_fn` | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.resolve.duplicate_message_code` | A message bundle declares the same code twice in one block. |  | — |
 | `bynk.resolve.duplicate_message_locale` | Two `messages` blocks in one bundle declare the same locale tag. |  | — |
-| `bynk.resolve.duplicate_method` | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.resolve.duplicate_param` | A parameter name is repeated. | [`param`](/book/reference/grammar/#rule-param) | — |
+| [`bynk.resolve.duplicate_method`](/book/spec/static-semantics/) | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
+| [`bynk.resolve.duplicate_param`](/book/spec/static-semantics/) | A parameter name is repeated. | [`param`](/book/reference/grammar/#rule-param) | — |
 | `bynk.resolve.duplicate_provider` | A capability is provided more than once. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | `bynk.resolve.duplicate_service` | Two services share a name. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.resolve.duplicate_type`](/book/spec/static-semantics/) | Two types share a name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.resolve.duplicate_variant` | A sum type declares a variant twice. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
-| `bynk.resolve.fn_without_call` | A function was referenced without being called. |  | — |
+| [`bynk.resolve.duplicate_variant`](/book/reference/types/#sum-types) | A sum type declares a variant twice. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
+| [`bynk.resolve.fn_without_call`](/book/spec/static-semantics/) | A function was referenced without being called. |  | — |
 | [`bynk.resolve.let_shadows_fn`](/book/guides/program-structure/how-a-program-is-shaped/) | A `let` binding shadows a function. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
 | [`bynk.resolve.let_shadows_type`](/book/guides/program-structure/how-a-program-is-shaped/) | A `let` binding shadows a type. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
-| `bynk.resolve.method_unknown_type` | A method is defined on an unknown type. |  | — |
+| [`bynk.resolve.method_unknown_type`](/book/spec/static-semantics/) | A method is defined on an unknown type. |  | — |
 | [`bynk.resolve.missing_field`](/book/reference/types/#record-types) | A record construction omits a required field. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | [`bynk.resolve.name_conflict`](/book/spec/static-semantics/) | Two declarations share a name. |  | — |
-| `bynk.resolve.not_a_record_type` | Record syntax was used on a non-record type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
-| `bynk.resolve.opaque_record_construction` | An opaque type was constructed with record syntax. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
+| [`bynk.resolve.not_a_record_type`](/book/reference/types/#sum-types) | Record syntax was used on a non-record type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
+| [`bynk.resolve.opaque_record_construction`](/book/reference/types/#opaque-types) | An opaque type was constructed with record syntax. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | [`bynk.resolve.param_as_function`](/book/guides/program-structure/how-a-program-is-shaped/) | A value (such as a parameter) was called as a function. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.resolve.recursive_record_field`](/book/reference/types/#record-types) | A record directly contains a field of its own type. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
 | [`bynk.resolve.reserved_builtin_type`](/book/reference/keywords/#built-in-type-names) | A type declaration reuses a compiler-known built-in type name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.resolve.reserved_host_name` | A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals. | [`type_decl`](/book/reference/grammar/#rule-type_decl), [`fn_decl`](/book/reference/grammar/#rule-fn_decl), [`agent_decl`](/book/reference/grammar/#rule-agent_decl), [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
-| `bynk.resolve.reserved_payload_field` | A sum variant declares a payload field named `kind`, the variant's wire discriminant. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
-| `bynk.resolve.self_outside_method` | `self` referenced outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
+| [`bynk.resolve.reserved_host_name`](/book/spec/emission/) | A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals. | [`type_decl`](/book/reference/grammar/#rule-type_decl), [`fn_decl`](/book/reference/grammar/#rule-fn_decl), [`agent_decl`](/book/reference/grammar/#rule-agent_decl), [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.resolve.reserved_payload_field`](/book/reference/types/#sum-types) | A sum variant declares a payload field named `kind`, the variant's wire discriminant. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
+| [`bynk.resolve.self_outside_method`](/book/spec/static-semantics/) | `self` referenced outside a method or handler. | [`self_expr`](/book/reference/grammar/#rule-self_expr) | — |
 | [`bynk.resolve.type_as_function`](/book/reference/types/#record-types) | A type name was called as if it were a function. | [`call`](/book/reference/grammar/#rule-call) | — |
-| `bynk.resolve.type_in_expr` | A type name was used where a value is expected. |  | — |
+| [`bynk.resolve.type_in_expr`](/book/spec/static-semantics/) | A type name was used where a value is expected. |  | — |
 | [`bynk.resolve.unconsumed_context`](/book/guides/program-structure/consume-services/#declare-the-dependency-and-call-the-service) | A context's service was called, or its capability named in `given`, without a `consumes` declaration. | [`consumes_decl`](/book/reference/grammar/#rule-consumes_decl) | — |
 | [`bynk.resolve.unknown_field`](/book/reference/types/#record-types) | A record construction names a field the record type does not declare. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | [`bynk.resolve.unknown_function`](/book/guides/program-structure/how-a-program-is-shaped/) | Called a function that does not exist. | [`call`](/book/reference/grammar/#rule-call) | — |
@@ -806,22 +814,22 @@ There are **813** codes in total.
 | `bynk.asset.duplicate` | An `asset` name is declared more than once in the same unit. |  | — |
 | `bynk.asset.invalid_at_path` | An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`. |  | — |
 | `bynk.asset.may_shadow_route` | A parameterised HTTP route matches a fixed asset path, so it never sees requests for that path (a warning). |  | Warning |
-| `bynk.asset.missing_file` | An `asset` names a file that is not in the project's `assets/` folder. |  | — |
+| [`bynk.asset.missing_file`](/book/reference/assets/#declaring-an-asset) | An `asset` names a file that is not in the project's `assets/` folder. |  | — |
 | `bynk.asset.needs_project` | A single-file build met an `asset` declaration; assets need a project build. |  | — |
 | `bynk.asset.not_served` | A deployable Bundle build met an `asset`; a Bundle ships no files, so its `.url` would not be served (a warning). |  | Warning |
-| `bynk.asset.outside_assets_dir` | An `asset` path does not name a file in the project's `assets/` folder. |  | — |
+| [`bynk.asset.outside_assets_dir`](/book/reference/assets/#declaring-an-asset) | An `asset` path does not name a file in the project's `assets/` folder. |  | — |
 | `bynk.asset.outside_context_or_commons` | An `asset` declaration appears outside a context or commons. |  | — |
 | `bynk.asset.path_conflict` | Two different asset files would be served at one fixed path by the same Worker. |  | — |
 | `bynk.asset.shadows_route` | A fixed asset path equals a literal HTTP route, which the platform-served asset makes unreachable. |  | — |
 | `bynk.asset.unreadable_file` | An `asset` names a file in the project's `assets/` folder that could not be read. |  | — |
-| `bynk.asset.unsafe_path` | An `asset` path is empty, absolute, or contains a `..` segment. |  | — |
+| [`bynk.asset.unsafe_path`](/book/reference/assets/#declaring-an-asset) | An `asset` path is empty, absolute, or contains a `..` segment. |  | — |
 
 ## Suites and cases
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | `bynk.suite.const_name_clash` | A suite `const` has the name of a declaration or sum variant already in scope in the suite's cases. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.suite.duplicate_case_name` | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
+| [`bynk.suite.duplicate_case_name`](/book/reference/testing/#suite-blocks) | Two `case`s share a description. | [`case`](/book/reference/grammar/#rule-case) | — |
 | `bynk.suite.duplicate_const` | A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | `bynk.suite.duplicate_env` | An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own. | [`env_clause`](/book/reference/grammar/#rule-env_clause) | — |
 | `bynk.suite.duplicate_fn` | A suite declares two helper `fn`s of the same name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
@@ -833,7 +841,7 @@ There are **813** codes in total.
 | `bynk.suite.fn_name_clash` | A suite helper `fn` has the name of a declaration already in scope in the suite's cases. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | `bynk.suite.type_generic` | A suite declares a generic `type`; a suite type is a plain, non-generic shape. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.suite.type_name_clash` | A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.suite.unknown_target` | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
+| [`bynk.suite.unknown_target`](/book/reference/testing/#suite-blocks) | A `suite` targets a unit that does not exist. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 
 ## Transitions (step invariants)
 
@@ -860,16 +868,16 @@ There are **813** codes in total.
 | [`bynk.types.claims_at_boundary`](/book/reference/actors/#reading-claims) | `TokenClaims` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | [`bynk.types.combinator_return_mismatch`](/book/reference/types/#built-in-generic-types) | A callback passed to a combinator (`map`/`andThen`/`flatMap`/`traverseAll`/…) returns the wrong type. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.types.constructor_arity`](/book/reference/refined-types/) | `T.of` (or `T.unsafe`) on a refined or opaque type got the wrong number of arguments. |  | — |
-| `bynk.types.constructor_base_mismatch` | A `.of` constructor was given an argument of the wrong base type. |  | — |
+| [`bynk.types.constructor_base_mismatch`](/book/guides/type-system/define-and-validate/#validate-with-of) | A `.of` constructor was given an argument of the wrong base type. |  | — |
 | `bynk.types.decimal_division_unscaled` | `/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622). |  | — |
 | `bynk.types.decimal_negation_too_large` | A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622). |  | — |
 | `bynk.types.deprecated_json_error` | `JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable). |  | Warning |
 | `bynk.types.derives_automatic` | A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| `bynk.types.derives_field_not_orderable` | A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
+| [`bynk.types.derives_field_not_orderable`](/book/reference/types/#ordering-your-own-types) | A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | `bynk.types.duplicate_example` | A refinement carries more than one `@example`. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.duplicate_literal_arm`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` has two arms for the same literal value. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
-| `bynk.types.duplicate_pattern_field` | A record pattern lists the same field twice. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
-| `bynk.types.duplicate_variant_arm` | A `match` has two arms for the same variant. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
+| [`bynk.types.duplicate_pattern_field`](/book/reference/types/#record-patterns) | A record pattern lists the same field twice. | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
+| [`bynk.types.duplicate_variant_arm`](/book/reference/types/#exhaustiveness-and-reachability) | A `match` has two arms for the same variant. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.embeds_ambiguous` | A type is embedded by more than one variant of a sum, so `?`'s conversion would be ambiguous. |  | — |
 | `bynk.types.embeds_unknown_variant` | An `embeds … as V` clause names a variant the sum does not declare. |  | — |
 | `bynk.types.embeds_variant_shape` | An `embeds E as V` target variant must have exactly one payload field, of type `E`. |  | — |
@@ -884,20 +892,14 @@ There are **813** codes in total.
 | [`bynk.types.field_access_on_non_record`](/book/reference/types/#record-types) | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | `bynk.types.field_annotation_unknown` | A record field carries an annotation other than `@name("…")`. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | `bynk.types.field_default_on_variant` | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
-| `bynk.types.field_name_bad_arg` | A field's `@name` does not take exactly one string literal. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_name_case_conflict` | Two fields of a `cookies` or `query` record have wire names that differ only in case. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_name_duplicate` | A field has more than one `@name`, or two fields of a request record read the same wire name. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_name_invalid` | A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name). | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_name_not_request_record` | `@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_name_record_not_boundary` | A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
-| `bynk.types.field_refinement_not_base` | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| [`bynk.types.field_refinement_not_base`](/book/reference/types/#record-types) | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_value_mismatch`](/book/reference/types/#record-types) | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.types.file_at_boundary` | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |
 | [`bynk.types.function_at_boundary`](/book/reference/types/) | A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary. | [`function_type_ref`](/book/reference/grammar/#rule-function_type_ref) | — |
 | [`bynk.types.guard_not_bool`](/book/reference/types/#matching) | A match-arm `if` guard is not a `Bool` expression. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
 | `bynk.types.headers_at_boundary` | `RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.held_at_boundary` | A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2). |  | — |
-| `bynk.types.held_not_comparable` | A held value (`Connection[F]`) is compared with `==`/`!=` — held values have identity, not value-equality (§2.9.3, real-time track slice 2). |  | — |
+| [`bynk.types.held_not_comparable`](/book/reference/types/#connection) | A held value (`Connection[F]`) is compared with `==`/`!=` — held values have identity, not value-equality (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.types.if_branch_mismatch`](/book/spec/static-semantics/) | The branches of an `if` have different types. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
 | [`bynk.types.if_non_bool_cond`](/book/spec/static-semantics/) | An `if` condition is not a `Bool`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
 | [`bynk.types.if_without_else_requires_unit`](/book/spec/static-semantics/) | An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
@@ -905,11 +907,11 @@ There are **813** codes in total.
 | [`bynk.types.invalid_regex`](/book/reference/types/#regular-expressions) | A `Matches` predicate, or a regex method's pattern (`containsRegex`, …), contains an invalid regular expression or malformed inline flags. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.inverted_range`](/book/reference/refined-types/#predicates) | An `InRange` predicate has its bounds inverted. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.is_base_mismatch` | An `is` refinement check is applied to a value of the wrong base type. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
-| `bynk.types.is_literal_pattern` | A literal was used on the right of `is`; `is` tests type/refinement, not value equality (use `==`). | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
-| `bynk.types.is_non_sum` | `is` was applied to a value that is not a sum type. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
-| `bynk.types.is_range_pattern` | A range pattern was used directly on the right of `is`; `is` tests type/refinement, not value ranges (use `match`, a guard or `InRange`). | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| [`bynk.types.is_literal_pattern`](/book/guides/type-system/narrow-with-is/) | A literal was used on the right of `is`; `is` tests type/refinement, not value equality (use `==`). | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| [`bynk.types.is_non_sum`](/book/guides/type-system/narrow-with-is/#test-a-variant) | `is` was applied to a value that is not a sum type. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| [`bynk.types.is_range_pattern`](/book/guides/type-system/narrow-with-is/) | A range pattern was used directly on the right of `is`; `is` tests type/refinement, not value ranges (use `match`, a guard or `InRange`). | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | `bynk.types.is_refined_pattern` | A refined (`where`) pattern was used on the right of `is`; refined patterns are `match`-only. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
-| `bynk.types.is_unknown_variant` | `is` names a variant the type does not have. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| [`bynk.types.is_unknown_variant`](/book/guides/type-system/narrow-with-is/#test-a-variant) | `is` names a variant the type does not have. | [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | [`bynk.types.json_uncodable`](/book/reference/types/#the-json-codec) | A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, `bynk.crypto` keys, error builtins). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.types.key_at_boundary`](/book/reference/bynk-capabilities/) | A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4). |  | — |
 | [`bynk.types.key_not_orderable`](/book/reference/types/#ordering-your-own-types) | A `sortBy`/`sortByDescending`/`min`/`max` key function does not return an orderable type. The key must be an `Ord` type, on a `List` and on a storage `Query` alike. |  | — |
@@ -918,11 +920,11 @@ There are **813** codes in total.
 | [`bynk.types.list_element_mismatch`](/book/reference/types/#built-in-generic-types) | A list-literal element has a different type from the list's element type. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
 | [`bynk.types.list_pattern_on_non_list`](/book/reference/types/#list-patterns) | A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`). | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | [`bynk.types.match_arm_mismatch`](/book/reference/types/#matching) | A `match` arm has a different type from the others. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
-| `bynk.types.match_non_sum_discriminant` | `match` was applied to a value that is not a sum type. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
+| [`bynk.types.match_non_sum_discriminant`](/book/reference/types/#matching) | `match` was applied to a value that is not a sum type. | [`match_expr`](/book/reference/grammar/#rule-match_expr) | — |
 | [`bynk.types.method_arity`](/book/reference/types/) | A method was called with the wrong number of arguments. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.types.method_not_found`](/book/reference/types/) | Called a method the type does not have. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.types.method_on_non_named_type`](/book/reference/types/) | A method was called on a built-in type that has no methods. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.types.mixed_pattern_bindings` | A pattern mixes named and positional bindings. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
+| [`bynk.types.mixed_pattern_bindings`](/book/reference/types/#matching) | A pattern mixes named and positional bindings. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.negative_length` | A length predicate was given a negative value. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.never_inferred`](/book/reference/types/#faults) | An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed. | [`let_stmt`](/book/reference/grammar/#rule-let_stmt) | — |
 | [`bynk.types.no_numeric_coercion`](/book/reference/operators/) | `Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds. | [`binary_expr`](/book/reference/grammar/#rule-binary_expr), [`refinement`](/book/reference/grammar/#rule-refinement) | — |
@@ -934,36 +936,37 @@ There are **813** codes in total.
 | [`bynk.types.ok_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | An `Ok` payload has the wrong type. | [`ok_expr`](/book/reference/grammar/#rule-ok_expr) | — |
 | [`bynk.types.opaque_raw_outside`](/book/reference/types/#opaque-types) | `.raw` on an opaque type was used outside its defining commons. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | [`bynk.types.opaque_unsafe_outside`](/book/reference/types/#opaque-types) | `.unsafe` on an opaque type was used outside its defining context. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
-| `bynk.types.or_pattern_binding_mismatch` | An or-pattern's alternatives don't all bind the same set of names. | [`match_arm`](/book/reference/grammar/#rule-match_arm), [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
-| `bynk.types.or_pattern_type_mismatch` | An or-pattern's alternatives give a shared binding different types (or refinements). | [`match_arm`](/book/reference/grammar/#rule-match_arm), [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| [`bynk.types.or_pattern_binding_mismatch`](/book/guides/type-system/match/) | An or-pattern's alternatives don't all bind the same set of names. | [`match_arm`](/book/reference/grammar/#rule-match_arm), [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
+| [`bynk.types.or_pattern_type_mismatch`](/book/guides/type-system/match/) | An or-pattern's alternatives give a shared binding different types (or refinements). | [`match_arm`](/book/reference/grammar/#rule-match_arm), [`is_expr`](/book/reference/grammar/#rule-is_expr) | — |
 | [`bynk.types.pattern_arity`](/book/reference/types/#matching) | A pattern binds the wrong number of payload fields. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | [`bynk.types.pattern_type_mismatch`](/book/reference/types/#matching) | A pattern's type does not match the matched value. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | [`bynk.types.polynomial_regex`](/book/reference/types/#regular-expressions) | A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree; a regex method's pattern has no bound to excuse it. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.polynomial_regex_capped` | A `Matches` pattern's matching time grows polynomially with input length, but a `MaxLength` or `Length` predicate bounds the input small enough for its degree (warning). | [`refinement`](/book/reference/grammar/#rule-refinement) | Warning |
-| `bynk.types.predicate_base_mismatch` | A predicate does not apply to the type's base (e.g. a string predicate on an `Int`). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.predicate_base_mismatch`](/book/reference/refined-types/#predicates) | A predicate does not apply to the type's base (e.g. a string predicate on an `Int`). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.query_at_boundary` | A `Query` type appears in a storable or boundary-crossing position — a query is built and executed in place, never persisted or sent (ADR 0115). |  | — |
 | [`bynk.types.question_error_mismatch`](/book/guides/type-system/result-and-optionals/) | `?` propagates an error type incompatible with the function's. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | [`bynk.types.question_on_non_result`](/book/guides/type-system/result-and-optionals/) | `?` was applied to a non-`Result` value. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
-| `bynk.types.question_option_outside_http` | `?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
+| [`bynk.types.question_option_outside_http`](/book/guides/type-system/result-and-optionals/#methods) | `?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | [`bynk.types.question_outside_result`](/book/guides/type-system/result-and-optionals/) | `?` used in a function that does not return a `Result`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
-| `bynk.types.range_pattern_on_non_int` | A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
-| `bynk.types.record_pattern_on_non_record` | A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in). | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
-| `bynk.types.regex_not_literal` | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.types.range_pattern_on_non_int`](/book/reference/types/#range-patterns) | A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
+| [`bynk.types.record_pattern_on_non_record`](/book/reference/types/#record-patterns) | A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in). | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
+| [`bynk.types.regex_not_literal`](/book/reference/types/#regular-expressions) | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
+| `bynk.types.request_cookies_at_boundary` | `RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | `bynk.types.request_query_at_boundary` | `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | [`bynk.types.return_mismatch`](/book/reference/types/) | A returned value does not match the declared return type. |  | — |
 | `bynk.types.rounding_mode_position` | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |
 | `bynk.types.select_tail_has_select` | A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.types.sequence_needs_result` | `sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
+| [`bynk.types.sequence_needs_result`](/book/reference/types/#list-methods) | `sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | [`bynk.types.some_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
 | `bynk.types.sql_not_literal` | A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call), [`record_construction`](/book/reference/grammar/#rule-record_construction), [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | `bynk.types.sql_row_shape` | `Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
 | `bynk.types.sql_statement_at_boundary` | A `bynk.cloudflare` `SqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c). |  | — |
 | [`bynk.types.stream_at_boundary`](/book/reference/types/#stream) | A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields). |  | — |
-| `bynk.types.stream_not_comparable` | A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0). |  | — |
+| [`bynk.types.stream_not_comparable`](/book/reference/types/#stream) | A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0). |  | — |
 | [`bynk.types.type_mismatch`](/book/reference/operators/) | An operator or built-in method got an operand of a type it does not accept, or two operands that had to match did not. |  | — |
 | [`bynk.types.uninferable_element_type`](/book/reference/types/#built-in-generic-types) | An empty `[]` (or `List.empty()` / `Map.empty()`) has no expected type to infer its element type from. | [`list_literal`](/book/reference/grammar/#rule-list_literal) | — |
-| `bynk.types.unknown_annotation` | An annotation after a refinement is not `@example`. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.types.unknown_annotation`](/book/reference/refined-types/#predicates) | An annotation after a refinement is not `@example`. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | [`bynk.types.unknown_field`](/book/reference/types/#record-types) | Referenced a field the record type does not declare. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | [`bynk.types.unknown_pattern_field`](/book/reference/types/#matching) | A pattern names a field the variant does not have. | [`variant_pattern`](/book/reference/grammar/#rule-variant_pattern) | — |
 | `bynk.types.unknown_rounding_mode` | A `Decimal` `round` or `div` was not given a rounding mode written `RoundingMode.<mode>`; the modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` and `HalfEven` (#2622). |  | — |
@@ -979,20 +982,20 @@ There are **813** codes in total.
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | [`bynk.uses.name_conflict`](/book/guides/program-structure/how-a-program-is-shaped/) | Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
-| `bynk.uses.self_reference` | A commons `uses` itself. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
-| `bynk.uses.target_is_context` | `uses` targets a context instead of a commons. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
-| `bynk.uses.unknown_commons` | `uses` names a commons that does not exist. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
+| [`bynk.uses.self_reference`](/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module) | A commons `uses` itself. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
+| [`bynk.uses.target_is_context`](/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module) | `uses` targets a context instead of a commons. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
+| [`bynk.uses.unknown_commons`](/book/guides/program-structure/how-a-program-is-shaped/#the-two-kinds-of-module) | `uses` names a commons that does not exist. | [`uses_decl`](/book/reference/grammar/#rule-uses_decl) | — |
 
 ## Value fabrication
 
 | Code | Summary | Construct | Severity |
 |---|---|---|---|
 | `bynk.val.agent_not_generable` | A `for all`/`Val` cannot generate an agent — fabricated agent states need not be reachable. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
-| `bynk.val.arity` | `Val[T]` was given the wrong number of pin arguments. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.literal_violates` | A pinned `Val[T]` value violates the type's refinement. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.arity`](/book/reference/testing/#val) | `Val[T]` was given the wrong number of pin arguments. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.literal_violates`](/book/reference/testing/#val) | A pinned `Val[T]` value violates the type's refinement. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.needs_pin`](/book/reference/testing/#val) | A bare `Val[T]` cannot generate a value (e.g. a `Matches` string); pin one. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.outside_test` | `Val[T]` was used outside a test case body. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.pin_not_literal` | A `Val[T]` pin argument is not a compile-time literal. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.outside_test`](/book/reference/testing/#val) | `Val[T]` was used outside a test case body. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.pin_not_literal`](/book/reference/testing/#val) | A `Val[T]` pin argument is not a compile-time literal. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | `bynk.val.pin_unsupported` | A pin was given for a type kind that does not support pinning. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
-| `bynk.val.unknown_type` | `Val[T]` names a type that does not resolve. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.unknown_type`](/book/reference/testing/#val) | `Val[T]` names a type that does not resolve. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | `bynk.val.unsupported_kind` | `Val[T]` cannot fabricate a value for this kind of type. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |

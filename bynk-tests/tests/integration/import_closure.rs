@@ -222,19 +222,6 @@ const HOST_SUPPLIED: &[&str] = &[
     "88_service_with_result_propagation",
 ];
 
-/// The `from email` fixtures (#3328 slice 1): inbound email is not yet emitted
-/// for Workers, so a Workers build refuses them with
-/// `bynk.email.workers_unsupported` and they are checked on bundle only. Slice 2
-/// emits the `email()` export and empties this list.
-const EMAIL_UNEMITTED: &[&str] = &[
-    "3328_email_accept",
-    "3328_email_catch_all_sender",
-    "3328_email_forward",
-    "3328_email_reject",
-    "3328_email_reply",
-    "3328_email_variant_names",
-];
-
 /// Compiles a project fixture for `target`. `None` for a [`HOST_SUPPLIED`]
 /// fixture's Workers build, refused only because a capability is left to the
 /// host.
@@ -259,14 +246,6 @@ fn compile_project_fixture(
                 && errors
                     .iter()
                     .all(|e| e.category == "bynk.capability.not_provided")
-            {
-                return None;
-            }
-            if target == BuildTarget::Workers
-                && EMAIL_UNEMITTED.contains(&name.as_ref())
-                && errors
-                    .iter()
-                    .all(|e| e.category == "bynk.email.workers_unsupported")
             {
                 return None;
             }

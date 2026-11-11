@@ -78,6 +78,7 @@ pub(crate) fn json_codable(
         | Ty::Asset
         | Ty::RequestHeaders
         | Ty::RequestQuery
+        | Ty::RequestCookies
         | Ty::TokenClaims
         | Ty::ValidationError
         | Ty::DecodeError

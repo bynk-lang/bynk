@@ -1,0 +1,7 @@
+context shop
+
+service orders {
+    on call() -> Effect[Int] {
+        Effect.pure(0)
+    }
+}

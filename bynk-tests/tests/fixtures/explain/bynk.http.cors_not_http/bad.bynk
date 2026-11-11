@@ -1,0 +1,8 @@
+context jobs
+
+service jobs from cron {
+    cors { origins: ["https://app.example.com"] }
+    on schedule("0 0 * * *") () -> Effect[Result[(), String]] {
+        Effect.pure(Ok(()))
+    }
+}

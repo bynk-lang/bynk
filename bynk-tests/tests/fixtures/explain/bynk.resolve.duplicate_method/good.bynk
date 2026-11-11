@@ -1,0 +1,7 @@
+commons demo
+
+type Point = { x: Int }
+
+fn Point.norm(self) -> Int { self.x }
+
+fn Point.isOrigin(self) -> Bool { self.x == 0 }

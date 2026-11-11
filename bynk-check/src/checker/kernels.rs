@@ -1778,6 +1778,209 @@ pub(crate) fn check_bytes_kernel_method(
     Some(tys.intern(ret))
 }
 
+/// #3277: refuse, at compile time, the unsafe `Cookie { … }` literals the runtime
+/// would otherwise fault on, and warn about a script-readable cookie. Only a
+/// literal is judged: a computed field is left to the runtime backstop.
+fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
+    use bynk_syntax::ast::ExprKind;
+    let ExprKind::RecordConstruction {
+        type_name, fields, ..
+    } = &arg.kind
+    else {
+        return;
+    };
+    if type_name.name != "Cookie" {
+        return;
+    }
+    let field = |name: &str| {
+        fields
+            .iter()
+            .find(|f| f.name.name == name)
+            .and_then(|f| f.value.as_ref())
+    };
+    let bool_of = |name: &str| match field(name).map(|e| &e.kind) {
+        Some(ExprKind::BoolLit(b)) => Some(*b),
+        _ => None,
+    };
+    let insecure = bool_of("secure") == Some(false);
+    let mut refuse = |code: &'static str, span: Span, msg: String, note: &str| {
+        ctx.errors
+            .push(CompileError::new(code, span, msg).with_note(note));
+    };
+    if insecure
+        && matches!(
+            field("sameSite").map(|e| &e.kind),
+            Some(ExprKind::FieldAccess { field, .. }) if field.name == "Unrestricted"
+        )
+    {
+        refuse(
+            "bynk.http.cookie_samesite_none_insecure",
+            arg.span,
+            "a cookie with `sameSite: SameSite.Unrestricted` must be `secure`".to_string(),
+            "browsers reject `SameSite=None` without `Secure`; remove `secure: false`",
+        );
+    }
+    if insecure && bool_of("partitioned") == Some(true) {
+        refuse(
+            "bynk.http.cookie_partitioned_insecure",
+            arg.span,
+            "a `partitioned` cookie must be `secure`".to_string(),
+            "`Partitioned` requires `Secure`; remove `secure: false`",
+        );
+    }
+    if let Some(ExprKind::StrLit(name)) = field("name").map(|e| &e.kind) {
+        if name.to_ascii_lowercase().starts_with("__host-") {
+            let has_domain = matches!(
+                field("domain").map(|e| &e.kind),
+                Some(ExprKind::Some(_) | ExprKind::Call { .. })
+            );
+            let bad_path = matches!(
+                field("path").map(|e| &e.kind),
+                Some(ExprKind::StrLit(p)) if p != "/"
+            );
+            if insecure || has_domain || bad_path {
+                refuse(
+                    "bynk.http.cookie_host_prefix",
+                    arg.span,
+                    format!(
+                        "the `__Host-` cookie `{name}` must be `secure`, have no `domain`, and use `path: \"/\"`"
+                    ),
+                    "a `__Host-` name binds the cookie to one origin; browsers drop it otherwise",
+                );
+            }
+        } else if name.to_ascii_lowercase().starts_with("__secure-") && insecure {
+            refuse(
+                "bynk.http.cookie_secure_prefix",
+                arg.span,
+                format!("the `__Secure-` cookie `{name}` must be `secure`"),
+                "browsers drop a `__Secure-` cookie that is not `Secure`; remove `secure: false`",
+            );
+        }
+    }
+    if bool_of("httpOnly") == Some(false) {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.http.cookie_script_readable",
+                arg.span,
+                "this cookie is readable by page scripts (`httpOnly: false`)".to_string(),
+            )
+            .with_note("keep `httpOnly` on unless a script genuinely needs to read the cookie"),
+        );
+    }
+}
+
+/// #3277: the `Cookie` record of the `bynk` adapter, parsed once from the
+/// embedded source. A system suite sees only the types of the context it
+/// tests, so this is how `HttpResult.cookies()` still names `Cookie` there.
+fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
+    use bynk_syntax::ast::{CommonsItem, SourceUnit};
+    static COOKIE: std::sync::OnceLock<Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>>> =
+        std::sync::OnceLock::new();
+    COOKIE
+        .get_or_init(|| {
+            let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+            let file = crate::project_model::firstparty_file_id(unit);
+            let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
+            let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
+                + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
+            let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
+                &tokens,
+                unit.source,
+                &mut next_id,
+            )
+            .ok()?;
+            let SourceUnit::Adapter(a) = &parsed else {
+                return None;
+            };
+            a.items.iter().find_map(|i| match i {
+                CommonsItem::Type(t) if t.name.name == "Cookie" => {
+                    Some(std::sync::Arc::new(t.clone()))
+                }
+                _ => None,
+            })
+        })
+        .clone()
+}
+
+/// #3277: type a method on an `HttpResult[T]`. `withCookie(c)` and `clearCookie(c)`
+/// take a `bynk` `Cookie` and answer the same `HttpResult[T]` with the cookie
+/// attached (the router sends one `Set-Cookie` per cookie); `cookies()` is the
+/// `List[Cookie]` a result carries, which is how a test reads what a handler sets.
+pub(crate) fn check_http_result_method(
+    method: &Ident,
+    op: Option<HttpResultOp>,
+    recv_ty: TyId,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let Some(op) = op else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "`HttpResult` has no method `{}` — it has `withCookie(c)`, `clearCookie(c)` and `cookies()`",
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    // The `Cookie` the `bynk` adapter exports: the caller's own, or, in a system
+    // suite that sees only the context it tests, one that context consumes.
+    let found = ctx
+        .input
+        .types
+        .get("Cookie")
+        .filter(|d| crate::context_checks::is_std_bynk_type("Cookie", &ctx.input.types, d))
+        .cloned()
+        .or_else(std_cookie_decl);
+    // The embedded declaration always parses, so `found` is `Some`; a miss
+    // would be a toolchain fault, answered by typing nothing.
+    let Some(decl) = found else {
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let cookie = crate::checker::named_ty(&decl, tys);
+    let expected_args = usize::from(!matches!(op, HttpResultOp::Cookies));
+    if args.len() != expected_args {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`HttpResult.{}` takes {} argument{}, got {}",
+                method.name,
+                expected_args,
+                if expected_args == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if let Some(a) = args.first() {
+        check_arg(
+            a,
+            cookie,
+            &format!("the `HttpResult.{}` cookie", method.name),
+            ctx,
+        );
+
+        lint_cookie_literal(a, ctx);
+    }
+    Some(match op {
+        HttpResultOp::WithCookie | HttpResultOp::ClearCookie => recv_ty,
+        HttpResultOp::Cookies => tys.intern(Ty::List(cookie)),
+    })
+}
+
 /// #2341 (decision A): type a method on an HTTP handler's `headers`
 /// (`RequestHeaders`). `get(name)` reads a header case-insensitively, joining
 /// repeated ones with `", "`; `bearer()` is the token of an
@@ -1892,6 +2095,66 @@ pub(crate) fn check_request_query_method(
             a,
             *p,
             &format!("the `RequestQuery.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(ret)
+}
+
+/// #3277: type a method on an HTTP handler's raw `cookies` (`RequestCookies`).
+/// `get(name)` is the first cookie of that name, `all(name)` every one in header
+/// order, `names()` every distinct name.
+pub(crate) fn check_request_cookies_method(
+    method: &Ident,
+    op: Option<RequestCookiesOp>,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let strings = tys.intern(Ty::List(string));
+    let (params, ret): (Vec<TyId>, TyId) = match op {
+        Some(RequestCookiesOp::Get) => (vec![string], tys.intern(Ty::Option(string))),
+        Some(RequestCookiesOp::All) => (vec![string], strings),
+        Some(RequestCookiesOp::Names) => (vec![], strings),
+        None => {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_not_found",
+                method.span,
+                format!(
+                    "`RequestCookies` has no method `{}` — it has `get(name)`, `all(name)` and `names()`",
+                    method.name
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestCookies.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(&params) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestCookies.{}` argument", method.name),
             ctx,
         );
     }
@@ -3459,6 +3722,54 @@ pub(crate) fn check_request_query_static(
         );
     }
     Some(tys.intern(Ty::RequestQuery))
+}
+
+/// #3277: the `RequestCookies` static constructors, the test-side way to build
+/// the cookies a raw-view handler reads. `of(pairs)` takes `"name=value"` pairs
+/// as a browser sends them; `empty()` has none.
+pub(crate) fn check_request_cookies_static(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let params: Vec<TyId> = match method.name.as_str() {
+        "of" => vec![tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::String))))],
+        "empty" => vec![],
+        _ => {
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+    };
+    if args.len() != params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`RequestCookies.{}` takes {} argument{}, got {}",
+                method.name,
+                params.len(),
+                if params.len() == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    for (a, p) in args.iter().zip(params.iter()) {
+        check_arg(
+            a,
+            *p,
+            &format!("the `RequestCookies.{}` argument", method.name),
+            ctx,
+        );
+    }
+    Some(tys.intern(Ty::RequestCookies))
 }
 
 /// #2380 (L5): `TokenClaims.of(lines)`, the test-side way to build the claims

@@ -1,0 +1,7 @@
+context svc
+
+service sweeper from cron {
+  on schedule("0 3 * * *") () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

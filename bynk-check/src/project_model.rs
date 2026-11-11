@@ -34,8 +34,9 @@ use std::sync::{Arc, OnceLock};
 
 use crate::checker::{self, Ty, TyId, Types};
 use crate::context_checks::{
-    CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD, build_capability_op_info, reject_fn_types,
-    ts_type_ref_display, type_ref_is_held, type_ref_to_display, validate_store_field_value_types,
+    CAPABILITY_SIGNATURE, RECORD_FIELD, REQUEST_RECORD_PARAM, SUM_PAYLOAD,
+    build_capability_op_info, reject_fn_types, ts_type_ref_display, type_ref_is_held,
+    type_ref_to_display, validate_store_field_value_types,
 };
 use crate::firstparty::{self, Platform};
 use crate::icu;
@@ -1789,6 +1790,9 @@ pub fn phase_group(
             }
             let adapter = a.name.joined();
             let identity = pf.identity_path();
+            if conflicts_with_first_party_pin(dep, &adapter, &identity, errors) {
+                continue;
+            }
             if let Some(range) = npm_deps.get(&dep.package) {
                 if *range != dep.range {
                     let (first_adapter, first_path, first_span) = &first_dep[&dep.package];
@@ -1836,6 +1840,38 @@ pub fn phase_group(
         adapter_bindings,
         npm_deps,
     )
+}
+
+/// ADR 0799 C: the toolchain pins its own npm packages exactly, and a project
+/// installs one version of each package, so an adapter may name such a package
+/// only at that version. Reports `bynk.requires.conflicting_range` and says so.
+fn conflicts_with_first_party_pin(
+    dep: &bynk_syntax::ast::RequiresDep,
+    adapter: &str,
+    identity: &Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    let Some(pin) = crate::firstparty::FIRST_PARTY_NPM
+        .iter()
+        .find(|p| p.package == dep.package && p.version != dep.range)
+    else {
+        return false;
+    };
+    errors.push_for(
+        Some(identity),
+        CompileError::new(
+            "bynk.requires.conflicting_range",
+            dep.span,
+            format!(
+                "adapter `{adapter}` requires `{}` at `{}`, but the toolchain pins it at `{}`",
+                dep.package, dep.range, pin.version
+            ),
+        )
+        .with_note(
+            "the toolchain's own binding uses this package at an exact version; an adapter that needs it must require that version",
+        ),
+    );
+    true
 }
 
 /// v0.20a: apply the function-type boundary confinement to every serialisable
@@ -1999,7 +2035,10 @@ pub fn check_function_type_boundary_items(
                                 && matches!(p.type_ref, TypeRef::RequestHeaders(_)))
                                 // #2854: and `query` is the one place `RequestQuery` may.
                                 || (p.name.name == "query"
-                                    && matches!(p.type_ref, TypeRef::RequestQuery(_))));
+                                    && matches!(p.type_ref, TypeRef::RequestQuery(_)))
+                                // #3277: and `cookies` the one place `RequestCookies` may.
+                                || (p.name.name == "cookies"
+                                    && matches!(p.type_ref, TypeRef::RequestCookies(_))));
                         // #2341 (decision C): and `on rejected`'s parameter is
                         // the one place `BoundaryRejection` may appear.
                         let http_headers = http_headers
@@ -2024,6 +2063,21 @@ pub fn check_function_type_boundary_items(
                             );
                             continue;
                         }
+                        // #3277: `RequestCookies` off an HTTP route has no request
+                        // whose cookies it could be.
+                        if matches!(p.type_ref, TypeRef::RequestCookies(_))
+                            && !matches!(h.kind, HandlerKind::Http { .. })
+                        {
+                            errors.push(
+                                CompileError::new(
+                                    "bynk.http.cookies_not_http",
+                                    p.type_ref.span(),
+                                    "`RequestCookies` is the cookies of an HTTP request, so only an `on http` handler's `cookies` parameter can have it",
+                                )
+                                .with_note("a handler that is not an HTTP route has no cookies to read"),
+                            );
+                            continue;
+                        }
                         // #3276: a `@multipart` handler's `body` is where its `File`
                         // parts are received.
                         let multipart_body = p.name.name == "body"
@@ -2034,17 +2088,15 @@ pub fn check_function_type_boundary_items(
                             && (matches!(p.name.name.as_str(), "cookies" | "query")
                                 || (p.name.name == "body"
                                     && h.annotations.iter().any(|a| a.name.name == "form")));
-                        if !type_ref_is_held(&p.type_ref)
-                            && !http_headers
-                            && !multipart_body
-                            && !request_record
-                        {
-                            reject_fn_types(
-                                &p.type_ref,
-                                "a service handler signature",
-                                types,
-                                errors,
-                            );
+                        if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
+                            // Only the `@name` arm is relaxed for a request record;
+                            // every other boundary check still runs on it.
+                            let what = if request_record {
+                                REQUEST_RECORD_PARAM
+                            } else {
+                                "a service handler signature"
+                            };
+                            reject_fn_types(&p.type_ref, what, types, errors);
                         }
                     }
                     reject_fn_types(&h.return_type, "a service handler signature", types, errors);
@@ -4743,6 +4795,24 @@ pub fn phase_secrets_computed_name(
     }
 }
 
+/// The project-wide topology checks, in the order their diagnostics appear:
+/// #1822 (on Workers, a required local capability needs a provider), #3328 (one
+/// service per email address across the whole project, on every target) and
+/// #2306 (on Workers, a WebSocket `on open` and the agent it transfers to share a
+/// file). One call for the build and the editor path, which both run them.
+pub fn phase_topology(
+    target: BuildTarget,
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    phase_workers_unprovided_capabilities(target, parsed, groups, kinds, unit_tables, errors);
+    crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
+    phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
+}
+
 /// #1822: on the Workers target, a capability a context declares and requires
 /// (`given`, on a service or agent handler or a provider) needs a provider in
 /// that context. A Worker's composition root builds every capability its
@@ -4761,7 +4831,6 @@ pub fn phase_workers_unprovided_capabilities(
     unit_tables: &HashMap<String, UnitTable>,
     errors: &mut ErrorSink,
 ) {
-    crate::email::phase_workers_email_unsupported(target, parsed, groups, kinds, errors);
     if target != BuildTarget::Workers {
         return;
     }
@@ -6037,6 +6106,7 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         | TypeRef::Asset(_)
         | TypeRef::RequestHeaders(_)
         | TypeRef::RequestQuery(_)
+        | TypeRef::RequestCookies(_)
         | TypeRef::TokenClaims(_)
         | TypeRef::BoundaryRejection(_)
         | TypeRef::ValidationError(_)
