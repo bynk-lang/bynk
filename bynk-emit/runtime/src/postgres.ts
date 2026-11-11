@@ -126,7 +126,12 @@ export function redactSecret(text: string, connectionString: string): string {
   const secrets = [connectionString];
   try {
     const url = new URL(connectionString);
-    secrets.push(url.password, decodeURIComponent(url.password));
+    secrets.push(url.password);
+    try {
+      secrets.push(decodeURIComponent(url.password));
+    } catch {
+      // A malformed escape: the raw form above is still removed.
+    }
   } catch {
     // Not a URL: the whole string is all there is to remove.
   }

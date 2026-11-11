@@ -211,6 +211,12 @@ test("the connection string and its password never reach a failure message", asy
   assert.equal(redactSecret("no secret here", "not a url"), "no secret here");
 });
 
+test("a password with a malformed percent-escape is still removed", () => {
+  const url = "postgres://app:p%E0ss@db.internal.example/shop";
+  const text = redactSecret("failed for p%E0ss and p%E0ss again", url);
+  assert.ok(!text.includes("p%E0ss"), text);
+});
+
 test("the real default executor is postgres.js's, and reports an unreachable host as a connection failure", async () => {
   // Port 1 on loopback refuses at once. The point is the wiring: the real
   // package is imported and its connection error is classified, with the
