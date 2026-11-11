@@ -1,0 +1,9 @@
+context mailer
+
+consumes orders
+
+service onPaid from Events(Payd) {
+  on event(e: Payd) -> Effect[()] {
+    Effect.pure(())
+  }
+}

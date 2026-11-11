@@ -1,0 +1,11 @@
+context shop
+
+consumes bynk { Events }
+
+event Paid = { id: String }
+
+service pay {
+  on call(id: String) -> Effect[()] given Events {
+    Events.emit[Paid](Paid { id: id })
+  }
+}

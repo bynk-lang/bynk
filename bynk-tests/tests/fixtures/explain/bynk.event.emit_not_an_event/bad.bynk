@@ -1,0 +1,11 @@
+context shop
+
+consumes bynk { Events }
+
+type Receipt = { id: String }
+
+service pay {
+  on call(id: String) -> Effect[()] given Events {
+    Events.emit[Receipt](Receipt { id: id })
+  }
+}
