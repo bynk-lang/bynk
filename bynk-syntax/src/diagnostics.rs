@@ -1340,8 +1340,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "--------                             // ✗ opens a doc block, not a divider\n\
                   fn double(n: Int) -> Int { n * 2 }\n\
                   --------\n\
-                  fn triple(n: Int) -> Int { n * 3 }\n\
-                  \
+                  fn triple(n: Int) -> Int { n * 3 }\n\n\
                   ---\n\
                   Doubles a number.                    // ✓ a doc block holds prose\n\
                   ---\n\
@@ -1356,8 +1355,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 arms has none to give. Write an arm for each shape the value can \
                 take; a final `_ =>` arm takes whatever the others leave.",
         example: "match xs {           // ✗ no arms\n\
-                  }\n\
-                  \
+                  }\n\n\
                   match xs {\n    \
                   [x, ..] => x      // ✓ one arm for each shape\n    \
                   [] => 0\n\
@@ -1374,15 +1372,17 @@ pub const EXPLANATIONS: &[Explain] = &[
                 operation for it to call.",
         example: "agent Tally {\n    \
                   key id: String\n    \
-                  store count: Cell[Int]\n\
-                      \
+                  store count: Cell[Int]\n\n    \
                   on GET(\"/count\") () -> Effect[Result[Int, String]] {   // ✗ a route is a service's\n        \
                   Ok(count)\n    \
                   }\n\
-                  }\n\
-                      \
+                  }\n\n\
+                  agent Tally {\n    \
+                  key id: String\n    \
+                  store count: Cell[Int]\n\n    \
                   on call get() -> Effect[Result[Int, String]] {         // ✓ the agent's own operation\n        \
                   Ok(count)\n    \
+                  }\n\
                   }",
         page: "/book/reference/agents",
         anchor: "declaration",
@@ -1413,8 +1413,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn head(xs: List[Int]) -> Int {\n    \
                   let [x, ..] = xs               // ✗ an empty list does not match\n    \
                   x\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn head(xs: List[Int]) -> Int {\n    \
                   let [x, ..] = xs else { 0 }    // ✓ says what an empty list gives\n    \
                   x\n\
@@ -1448,8 +1447,7 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn grade(a: Int, b: Int) -> Int {\n    \
                   match a { … }\n    \
                   match b { … }              // ✗ a `match` ends its block\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn grade(a: Int, b: Int) -> Int {\n    \
                   let _ = match a { … }      // ✓ bound, so the block goes on\n    \
                   match b { … }\n\
@@ -1467,12 +1465,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 automatically: check that the sign is the one you want.",
         example: "fn parity(n: Int) -> Int {\n    \
                   n % 2          // ✗ there is no `%`\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn parity(n: Int) -> Int {\n    \
                   n.rem(2)       // ✓ the dividend's sign, as `%` in C\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn slot(n: Int) -> Int {\n    \
                   n.mod(2)       // ✓ the divisor's sign, as `%` in Python\n\
                   }",
@@ -1488,8 +1484,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 b) == c`.",
         example: "fn ordered(a: Int, b: Int, c: Int) -> Bool {\n    \
                   a < b < c         // ✗ comparisons do not chain\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn ordered(a: Int, b: Int, c: Int) -> Bool {\n    \
                   a < b && b < c    // ✓ one comparison on each side of `&&`\n\
                   }",
@@ -1518,8 +1513,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 the `:` is `keyword_field_shorthand`.",
         example: "fn describe(type: String) -> String {   // ✗ `type` is a reserved word\n    \
                   type\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn describe(kind: String) -> String {   // ✓ any other name\n    \
                   kind\n\
                   }",
@@ -1535,8 +1529,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 and take the value as an ordinary parameter.",
         example: "fn total(self) -> Int {          // ✗ a free function has no `self`\n    \
                   self.total\n\
-                  }\n\
-                  \
+                  }\n\n\
                   fn Order.total(self) -> Int {    // ✓ a method of `Order`\n    \
                   self.total\n\
                   }",
@@ -1566,8 +1559,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `exports` after the `consumes` lines.",
         example: "commons demo\n\
                   type Id = String\n\
-                  uses util              // ✗ a declaration comes first\n\
-                  \
+                  uses util              // ✗ a declaration comes first\n\n\
                   commons demo\n\
                   uses util              // ✓ clauses straight after the header\n\
                   type Id = String",
@@ -1583,8 +1575,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 grammar. Capitalise the name.",
         example: "type Status =\n    \
                   | Active\n    \
-                  | suspended   // ✗ a variant starts with a capital\n\
-                  \
+                  | suspended   // ✗ a variant starts with a capital\n\n\
                   type Status =\n    \
                   | Active\n    \
                   | Suspended   // ✓",
