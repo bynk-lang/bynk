@@ -2106,6 +2106,9 @@ impl<'a> Formatter<'a> {
             ServiceProtocol::Queue { name } => {
                 format!(" from queue(\"{}\")", escape_string(name))
             }
+            ServiceProtocol::Email { address } => {
+                format!(" from email(\"{}\")", escape_string(address))
+            }
             ServiceProtocol::WebSocket { in_type, out_type } => {
                 format!(
                     " from websocket(in: {}, out: {})",

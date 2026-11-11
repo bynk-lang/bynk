@@ -1,0 +1,5 @@
+context shop
+
+type Age = Int where NonNegative
+
+actor User { auth = Bearer(secret = "JWT_KEY"), identity = Age }

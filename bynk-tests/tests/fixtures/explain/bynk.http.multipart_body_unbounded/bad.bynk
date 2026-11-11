@@ -1,0 +1,10 @@
+context api
+
+type Upload = { title: String }
+
+service api from http {
+    @multipart
+    on POST("/upload") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

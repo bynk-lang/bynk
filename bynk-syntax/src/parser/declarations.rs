@@ -3210,6 +3210,25 @@ impl<'a> Parser<'a> {
                     schema_dispatch,
                 })
             }
+            // #3328: `from email("support@shop.example")` — inbound email.
+            // `email` is a contextual identifier, like `websocket`: no lexer
+            // reservation, so `email` stays an ordinary identifier elsewhere.
+            Some(TokenKind::Ident)
+                if self.peek().is_some_and(|t| self.slice(t.span) == "email") =>
+            {
+                self.bump();
+                self.expect(
+                    TokenKind::LParen,
+                    "expected a recipient address `(\"support@shop.example\")` after `from email`",
+                )?;
+                let addr_tok = self.expect(
+                    TokenKind::StrLit,
+                    "expected the recipient address as a string literal",
+                )?;
+                let address = parse_string_literal(self.slice(addr_tok.span), addr_tok.span)?;
+                self.expect(TokenKind::RParen, "to close the email address binding")?;
+                Ok(ServiceProtocol::Email { address })
+            }
             _ => {
                 let (span, found) = match self.peek() {
                     Some(t) => (t.span, t.kind.describe()),
@@ -3219,7 +3238,7 @@ impl<'a> Parser<'a> {
                     "bynk.service.unknown_protocol",
                     span,
                     format!(
-                        "unknown protocol after `from` — found {found}, expected `http`, `cron`, `queue`, `websocket`, or `Events`"
+                        "unknown protocol after `from` — found {found}, expected `http`, `cron`, `queue`, `websocket`, `email`, or `Events`"
                     ),
                 )
                 .with_note(

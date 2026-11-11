@@ -1,0 +1,6 @@
+[project]
+name = "3328-email-sender-outside-email"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
