@@ -8,7 +8,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = { __session: { User: { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined } } };
   return {
   };
 }

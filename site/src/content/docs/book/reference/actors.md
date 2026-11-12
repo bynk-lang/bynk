@@ -96,11 +96,42 @@ context owns, as for `Bearer`. A `SignedCookie` secret may not be any other acto
 4. **Minting the identity** from the verified `sub`; a `sub` that violates the identity type's
    refinement is `401`.
 
+## Issuing and deleting the cookie
+
+Inside the context that declares it, a `SignedCookie` actor has two members, so no other context can
+mint its identity:
+
+```bynk,fragment
+on POST("/login") (body: LoginRequest) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+  let Ok(id) = UserId.of(body.user) else { BadRequest("bad user") }
+  let c <- User.issue(id)               // Effect[Cookie]
+  Created("welcome").withCookie(c)
+}
+
+on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
+  NoContent.withCookie(User.expire())   // Cookie
+}
+```
+
+`User.issue(identity)` takes the actor's identity type and answers an `Effect[Cookie]`: the signed
+cookie, valid for the actor's `ttl`. It reads the time from the [`Clock`](/book/reference/bynk-capabilities/),
+so the handler lists `Clock` in `given` (`bynk.actor.signed_cookie_issue_needs_clock`), and a test can stub
+it. It can only be called in a service handler, where the signing key arrives, not in a provider or an agent
+(`bynk.actor.signed_cookie_issue_outside_handler`). The `Cookie` it returns is built by the scheme, not by you: the configured name,
+`HttpOnly`, `Secure`, `Path=/`, no `Domain`, the actor's `SameSite` and a `Max-Age` equal to `ttl`.
+There are no attributes to get wrong, so you attach it with `withCookie` and nothing else.
+`User.expire()` is the matching deletion (same name and path, empty, `Max-Age=0`), so a logout cannot
+miss the cookie it set.
+
+A stateless cookie **cannot be revoked** before it expires: a copy a user already took keeps working
+until then. `expire` removes it from this browser; it does not invalidate the cookie. Keep the `ttl` short,
+or keep the session on the server (see `examples/sessions`) if you need to log out everywhere.
+
 The handler never sees the credential: the router leaves the session cookie out of the handler's
 `cookies` record and raw `RequestCookies` view, and a record that names it is refused
 (`bynk.actor.signed_cookie_read_directly`). `bynk deploy` requires the `secret` variable to be set.
-Issuing and deleting the cookie from a handler, key minting at deploy, and the test driver follow in
-later versions of the same increment ([#3386](https://github.com/bynk-lang/bynk/issues/3386)).
+Key minting at deploy and the system-tier test driver follow in later versions of the same increment
+([#3386](https://github.com/bynk-lang/bynk/issues/3386)).
 
 A `SignedCookie` actor stands alone on its route, like `Oidc`
 (`bynk.actor.signed_cookie_not_in_sum`), cannot be the base of a refinement actor, and cannot guard

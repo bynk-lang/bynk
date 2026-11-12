@@ -375,6 +375,46 @@ test("a key that is not a string, or empty, is a fault that names the key", asyn
   }
 });
 
+// -- issue and expire ----------------------------------------------------------------------------
+import { expireSessionCookie, issueSessionCookie, sessionKeysOf } from "../src/session.ts";
+import { serialiseCookie } from "../src/http.ts";
+
+test("an issued cookie carries the scheme's safe attributes and verifies", async () => {
+  const c = await issueSessionCookie(KEYS, "User", "__Host-session", "Lax", "ada", TTL, NOW);
+  assert.equal(c.name, "__Host-session");
+  assert.deepEqual(c.maxAge, { tag: "Some", value: TTL * 1000 });
+  assert.deepEqual(c.domain, { tag: "None" });
+  assert.deepEqual(c.expires, { tag: "None" });
+  assert.equal(c.path, "/");
+  assert.equal(c.secure && c.httpOnly && !c.partitioned, true);
+  const line = serialiseCookie(c as never);
+  assert.match(line, /^__Host-session=[A-Za-z0-9_.-]+; Max-Age=3600; Path=\/; Secure; HttpOnly; SameSite=Lax$/);
+  const r = await verify(c.value);
+  assert.equal(r.tag === "Ok" && r.value.sub, "ada");
+});
+
+test("an issued cookie honours the actor's SameSite", async () => {
+  for (const [same, wire] of [["Strict", "Strict"], ["Unrestricted", "None"]] as const) {
+    const c = await issueSessionCookie(KEYS, "User", "__Host-session", same, "ada", TTL, NOW);
+    assert.match(serialiseCookie(c as never), new RegExp(`SameSite=${wire}$`));
+  }
+});
+
+test("an expiry cookie deletes the session cookie under the same name and path", () => {
+  const c = expireSessionCookie("__Host-session", "Lax");
+  assert.equal(
+    serialiseCookie(c as never),
+    "__Host-session=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax",
+  );
+});
+
+test("keys are read from deps by actor, and absent keys are a fault", () => {
+  assert.deepEqual(sessionKeysOf({ __session: { User: KEYS } }, "User"), KEYS);
+  for (const deps of [{}, undefined, null, { __session: {} }, { __session: { Admin: KEYS } }]) {
+    assert.throws(() => sessionKeysOf(deps, "User"), SessionKeyFault);
+  }
+});
+
 test("requestHeaders hides the session cookie from the Cookie header and keeps the others", () => {
   const request = new Request("https://x/", { headers: { cookie: "__Host-session=abc.def.ghi; theme=dark" } });
   const view = requestHeaders(request, "__Host-session");

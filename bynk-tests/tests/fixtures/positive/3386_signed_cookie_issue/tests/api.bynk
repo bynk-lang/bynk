@@ -1,0 +1,40 @@
+suite shop.api {
+	case "login sets the session cookie with the safe attributes" {
+		let r <- api.POST("/login", Login { user: "ada" })
+		expect r is Created("welcome")
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.name == "__Host-session"
+				expect c.httpOnly
+				expect c.secure
+				expect c.path == "/"
+				expect c.maxAge == Some(12.hours)
+				expect c.domain == None
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "a bad identity is refused, not signed" {
+		let r <- api.POST("/login", Login { user: "" })
+		expect r is BadRequest(_)
+		expect r.cookies().length() == 0
+	}
+
+	case "logout deletes the cookie under the same name" {
+		let r <- api.POST("/logout") by User("ada")
+		expect r is NoContent
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.name == "__Host-session"
+				expect c.value == ""
+				expect c.maxAge == Some(0.seconds)
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+}

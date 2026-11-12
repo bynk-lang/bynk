@@ -626,6 +626,10 @@ pub enum Callee {
     /// operation on it (#3164), so a consumer matches on the enum rather than
     /// on the method's spelling.
     Kernel { recv: TyId, op: KernelOp },
+    /// #3386: `Actor.issue(identity)` / `Actor.expire()` on a local `SignedCookie`
+    /// actor: the session cookie the actor mints, or its matching deletion.
+    /// `issue` reads the `Clock` and is an `Effect`; `expire` is pure.
+    SignedCookie { actor: String, issue: bool },
     /// A built-in static constructor with no declaring type — `List.empty`,
     /// `Map.empty`, `Int.parse`/`Float.parse`, `Duration.millis`,
     /// `Instant.fromEpochMillis`, `Bytes.fromUtf8`/`fromBase64`/`empty`,
