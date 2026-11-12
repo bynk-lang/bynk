@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __requestBodyStream, __isBodyTooLarge, __mediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __requestBodyStream, __untilBodyTooLarge, __mediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -71,15 +71,11 @@ export default {
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const body = __requestBodyStream(request, 1000000);
-          let result: Awaited<ReturnType<(typeof surface)["http_PUT_blobs_Param_name"]>>;
-          try {
-            result = await surface["http_PUT_blobs_Param_name"](name, body);
-          } catch (e) {
-            if (__isBodyTooLarge(e)) {
-              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
-            }
-            throw e;
+          const __handled = await __untilBodyTooLarge(surface.http_PUT_blobs_Param_name(name, body));
+          if (__handled.tooLarge) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
           }
+          const result = __handled.value;
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_blobs);
         }
       }

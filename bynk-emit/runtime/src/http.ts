@@ -170,6 +170,20 @@ export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
   return typeof error === "object" && error !== null && (error as { bynkBodyTooLarge?: unknown }).bynkBodyTooLarge === true;
 }
 
+// #3380: awaits a streamed route's handler, telling a body that crossed its cap
+// while the handler was reading it (`tooLarge`) from the handler's own result.
+// Anything else the handler throws is rethrown, for the Worker's fault path.
+export async function untilBodyTooLarge<T>(
+  handled: Promise<T>,
+): Promise<{ readonly tooLarge: true } | { readonly tooLarge: false; readonly value: T }> {
+  try {
+    return { tooLarge: false, value: await handled };
+  } catch (e) {
+    if (isBodyTooLarge(e)) return { tooLarge: true };
+    throw e;
+  }
+}
+
 // #3380: the request body of a streamed `@raw` route, as the `Stream[Bytes]`
 // the handler receives (an `AsyncIterable<Uint8Array>`, ADR 0128 D6).
 //

@@ -1034,12 +1034,7 @@ pub fn emit_worker_entry(
     {
         imports.push("__readBodyCapped".to_string());
     }
-    // #3380: a streamed `@raw` body is counted as the handler pulls it, and an
-    // overrun answers the route's `413`.
-    if http_routes.iter().any(|r| body_has(r) && streamed_body(r)) {
-        imports.push("__requestBodyStream".to_string());
-        imports.push("__isBodyTooLarge".to_string());
-    }
+    push_streamed_body_imports(&http_routes, &mut imports);
     if http_routes
         .iter()
         .any(|r| body_has(r) && r.raw.as_deref().is_some_and(|ct| ct != "*/*"))
@@ -3315,8 +3310,7 @@ fn emit_http_route_dispatch(
         // A capped body is read through the counting reader, so a chunked body, or
         // one whose `Content-Length` understates it, is cut off at the cap with the
         // same `413` as the fast-reject above. A raw route is always capped.
-        let streamed = streamed_body(route);
-        // A streamed body is not read here: the handler pulls it, counted as it goes.
+        let streamed = streamed_body(route); // pulled by the handler, so not read here
         let counted = route.max_body.filter(|_| !streamed);
         let raw = route.raw.is_some();
         let form = route.form_fields.as_ref();
@@ -3528,18 +3522,7 @@ fn emit_http_route_dispatch(
             ));
         }
         if streamed {
-            // #3380: the octets as they arrive, counted against the cap as the
-            // handler pulls them. The checker requires a cap on every `@raw` route.
-            let cap = route
-                .max_body
-                .expect("a streamed `@raw` route has a cap (bynk.http.raw_body_unbounded)");
-            guarded.push(const_(
-                "body",
-                call(
-                    ident("__requestBodyStream"),
-                    vec![ident("request"), num_lit(cap.to_string())],
-                ),
-            ));
+            guarded.push(streamed_body_binding(route));
         } else if raw {
             // The octets, untouched: no JSON, no base64.
             guarded.push(const_("body", ident("__bytes")));
@@ -3671,40 +3654,7 @@ fn emit_http_route_dispatch(
     } else {
         call_args
     };
-    if streamed_body(route) && let Some(cap) = route.max_body {
-        // #3380: a body that crosses its cap while the handler is reading it faults
-        // that read with `BodyTooLarge`. No response has been built yet, so the router
-        // answers the route's `413`, stamped as the fast-reject is, and not a `500`.
-        guarded.push(let_typed(
-            "result",
-            TsType::named(format!(
-                "Awaited<ReturnType<(typeof surface)[{method_key:?}]>>"
-            )),
-        ));
-        guarded.push(try_catch_stmt(
-            vec![TsStmt::assign(
-                ident("result"),
-                await_expr(call(
-                    index_expr(ident("surface"), str_lit(method_key.clone())),
-                    surface_args,
-                )),
-                None,
-            )],
-            Some("e"),
-            vec![
-                if_(
-                    call(ident("__isBodyTooLarge"), vec![ident("e")]),
-                    block(vec![return_(Some(too_large(cap)))]),
-                ),
-                TsStmt::throw_stmt(ident("e"), None),
-            ],
-        ));
-    } else {
-        guarded.push(const_(
-            "result",
-            await_expr(call(member(ident("surface"), method_key), surface_args)),
-        ));
-    }
+    push_handler_invocation(route, method_key, surface_args, too_large, &mut guarded);
     let inner_ty = http_result_inner(&h.return_type);
     let ser_fn = crate::emitter::serialisation::serialise_ref_via(&inner_ty, "handlers.", ru);
     // #2858: a plain-JSON route's body serialiser runs with the `Option` encoders
@@ -3807,6 +3757,60 @@ fn emit_http_route_dispatch(
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #3380: the runtime imports a context's streamed `@raw` bodies need: the
+/// counted body stream, and the wrapper that turns a mid-read overrun into the
+/// route's `413`.
+fn push_streamed_body_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
+    let has_body = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
+    if http_routes.iter().any(|r| has_body(r) && streamed_body(r)) {
+        imports.push("__requestBodyStream".to_string());
+        imports.push("__untilBodyTooLarge".to_string());
+    }
+}
+
+/// #3380: `const body = requestBodyStream(request, cap)`: the octets as they
+/// arrive, counted against the cap as the handler pulls them. The checker
+/// requires a cap on every `@raw` route.
+fn streamed_body_binding(route: &HttpRoute) -> TsStmt {
+    let cap = route
+        .max_body
+        .expect("a streamed `@raw` route has a cap (bynk.http.raw_body_unbounded)");
+    const_(
+        "body",
+        call(
+            ident("__requestBodyStream"),
+            vec![ident("request"), num_lit(cap.to_string())],
+        ),
+    )
+}
+
+/// The statements that invoke a route's handler and bind its `result`. A streamed
+/// body that crosses its cap while the handler reads it faults that read with
+/// `BodyTooLarge` (#3380); no response has been built yet, so the router answers the
+/// route's `413`, stamped as the `Content-Length` fast-reject is, and not a `500`.
+fn push_handler_invocation(
+    route: &HttpRoute,
+    method_key: String,
+    surface_args: Vec<TsExpr>,
+    too_large: impl Fn(i64) -> TsExpr,
+    guarded: &mut Vec<TsStmt>,
+) {
+    let invoke = call(member(ident("surface"), method_key), surface_args);
+    let Some(cap) = route.max_body.filter(|_| streamed_body(route)) else {
+        guarded.push(const_("result", await_expr(invoke)));
+        return;
+    };
+    guarded.push(const_(
+        "__handled",
+        await_expr(call(ident("__untilBodyTooLarge"), vec![invoke])),
+    ));
+    guarded.push(if_(
+        member(ident("__handled"), "tooLarge"),
+        block(vec![return_(Some(too_large(cap)))]),
+    ));
+    guarded.push(const_("result", member(ident("__handled"), "value")));
 }
 
 /// #3380: whether `route`'s `body` is a streamed one: a `@raw` route whose `body`
