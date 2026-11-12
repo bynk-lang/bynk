@@ -1292,6 +1292,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "contracts",
     },
     Explain {
+        code: "bynk.contract.restated_by_test",
+        blurb: "A function's `ensures` is checked at every call, in production and in every test that reaches it. A test that calls the function and `expect`s the same predicate adds nothing and has to be kept in step with the contract. The compiler flags the repeat. Delete the test, or keep a case only for a specific value a reader should see, such as `expect discount(100, 10) == 90`.",
+        example: "// demo/c.bynk\nfn discount(p: Int, pct: Int) -> Int\n    ensures never_above: result <= p\n    { … }\n\n// tests/c.test.bynk\nlet r = discount(100, 10)\nexpect r <= 100    // ✗ repeats `never_above`\nexpect r == 90     // ✓ a specific witnessed value",
+        page: "/book/reference/testing",
+        anchor: "contracts",
+    },
+    Explain {
         code: "bynk.contract.result_in_requires",
         blurb: "A `requires` clause is checked on entry, before the function \
                 has returned anything, so `result` is not bound there. Only an \
@@ -2120,6 +2127,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sending-and-broadcasting",
     },
     Explain {
+        code: "bynk.history.not_an_agent",
+        blurb: "`for all run: History[T]` generates a run of calls to an agent's handlers and drives them against a fresh instance. Only an agent has handlers to sequence, so `T` must be one declared in scope. For a value, a plain `for all x: T` generates the value. Name the agent.",
+        example: "// tests/t.test.bynk\nfor all run: History[Amount] { … }   // ✗ `Amount` is a value type\nfor all run: History[Wallet] { … }   // ✓ an agent",
+        page: "/book/reference/testing",
+        anchor: "history-properties",
+    },
+    Explain {
+        code: "bynk.history.not_generable",
+        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
+        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
+        page: "/book/reference/testing",
+        anchor: "history-properties",
+    },
+    Explain {
+        code: "bynk.history.outside_property",
+        blurb: "`History[Agent]` is a generator, not a value type: it stands for a run the test runner makes for a `for all` binding. So it may appear only as the type of that binding inside a `property`, never in a function signature, a field or a `let`. Move the check into a `property` and assert over `run`.",
+        example: "// demo/wallet.bynk\nfn peek(w: History[Wallet]) -> Int { 0 }   // ✗ not a value type\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }         // ✓ in a `property`",
+        page: "/book/reference/testing",
+        anchor: "history-properties",
+    },
+    Explain {
+        code: "bynk.history.restates_invariant",
+        blurb: "Every state a driven run reaches has already passed the agent's `invariant` and `transition` checks, so a history property that only asserts the same thing over `run` cannot fail. The compiler flags it, and the check is deliberately narrow, so a near-copy may pass. Assert something the per-state rules do not say, such as a protocol across steps: a spend is accepted only after a top-up.",
+        example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
+        page: "/book/reference/testing",
+        anchor: "history-properties",
+    },
+    Explain {
         code: "bynk.http.body_kind_conflict",
         blurb: "`@raw`, `@form` and `@multipart` each say how a route's one `body` is read off the wire: untouched octets, a urlencoded form or a multipart upload. A body has one wire format, so a handler carries at most one of them, and the second one written is reported. Keep the annotation that matches what the client sends; a JSON body needs none of them.",
         example: "@form\n@raw(contentType: \"image/png\")   // ✗ the body is already a form\n@limit(maxBody: 1_000_000)\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form                           // ✓ one wire format\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -2927,6 +2962,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.observe.impure_with",
+        blurb: "The `with` predicate of `expect Cap.op called with …` is tested against every recorded call, so it must be a pure expression of the operation's arguments. `trace(…)`, a capability call or anything else effectful or test-only could give a different answer each time. Compare the arguments, or bind `trace(Cap.op)` first and assert on the list.",
+        example: "// tests/t.test.bynk\nexpect Logger.log called with trace(Logger.log).length() > 0   // ✗ not a pure predicate\nexpect Logger.log called with msg == \"x\"                      // ✓",
+        page: "/book/reference/testing",
+        anchor: "observation",
+    },
+    Explain {
+        code: "bynk.observe.not_a_seam",
+        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type or a function, has no recorded calls. Name a consumed capability. An operation it does not declare is `bynk.observe.unknown_op`.",
+        example: "// tests/t.test.bynk\nexpect AuthId.unsafe called   // ✗ `AuthId` is a type, not a capability\nexpect Logger.log called      // ✓",
+        page: "/book/reference/testing",
+        anchor: "observation",
+    },
+    Explain {
+        code: "bynk.observe.trace_outside_test",
+        blurb: "`trace(Cap.op)` reads the calls a test has recorded through a capability. Only a test records them, so it is allowed only in a `case` body, never in a service, an agent or a function. Remove it from the code under test and read the trace in the test, or observe the call with `expect Cap.op called`.",
+        example: "// demo/pay.bynk\nlet calls = trace(Logger.log)               // ✗ in the service\n\n// tests/t.test.bynk\nexpect trace(Logger.log).length() == 1      // ✓ in a case",
+        page: "/book/reference/testing",
+        anchor: "observation",
+    },
+    Explain {
         code: "bynk.observe.unknown_op",
         blurb: "`expect Cap.op called` checks the calls recorded for one \
                 operation of a capability, so `op` must be declared by that \
@@ -2939,6 +2995,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // tests/pay.test.bynk\n\
                   expect Logger.nope called    // ✗ Logger has no `nope`\n\
                   expect Logger.log called     // ✓",
+        page: "/book/reference/testing",
+        anchor: "observation",
+    },
+    Explain {
+        code: "bynk.observe.with_not_bool",
+        blurb: "The `with` clause of `expect Cap.op called with …` filters the recorded calls, keeping those for which it is true, so it must be a `Bool`. A bare argument name is a value, not a condition. Compare it with something: `with msg == \"x\"`.",
+        example: "// tests/t.test.bynk\nexpect Logger.log called with msg           // ✗ a `String`, not a `Bool`\nexpect Logger.log called with msg == \"x\"   // ✓",
         page: "/book/reference/testing",
         anchor: "observation",
     },
@@ -3759,6 +3822,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "83-source-layout-and-test-ness",
     },
     Explain {
+        code: "bynk.property.restates_refinement",
+        blurb: "Every value a `for all` draws for a refined type already satisfies the refinement, so a property whose only check is that refinement can never fail. The compiler flags it, and only the plain form; other restatements may pass. Assert something about behaviour over the valid inputs, such as how a function treats them.",
+        example: "// demo/d.bynk\ntype Pos = Int where Positive\n\n// tests/d.test.bynk\nfor all q: Pos { expect q > 0 }            // ✗ `Pos` already guarantees it\nfor all q: Pos { expect double(q) > q }    // ✓ a claim about behaviour",
+        page: "/book/reference/testing",
+        anchor: "properties",
+    },
+    Explain {
         code: "bynk.property.where_not_bool",
         blurb: "A `where` clause on `for all` discards each generated input \
                 that fails it, so it must be a `Bool`. A filter of another \
@@ -4338,6 +4408,41 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "service worker from kafka {                // ✗ not a protocol\n\nservice worker from queue(\"jobs\") {        // ✓ the queue protocol",
         page: "/book/reference/grammar",
         anchor: "rule-service_protocol",
+    },
+    Explain {
+        code: "bynk.service.unknown_via_clause",
+        blurb: "A `via` clause narrows which events an `Events` subscriber receives, and the only form is `via schema(N)`, which selects by the event's schema version. The set of `via` clauses is closed, so any other word after `via` is refused. Use `via schema(N)` or drop the clause. A malformed argument to `schema` itself is `bynk.event.bad_schema_dispatch`.",
+        example: "service OnPaid from Events(Paid) via nope(1) {   // ✗ only `schema` follows `via`\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice OnPaid from Events(Paid) via schema(1) {   // ✓ dispatch on the schema version\n    on event(e: Paid) -> Effect[()] { … }\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "dispatching-by-version-with-via-scheman",
+    },
+    Explain {
+        code: "bynk.service.websocket_header",
+        blurb: "A WebSocket service names its two frame types in the header, `from websocket(in: ClientFrame, out: ServerFrame)`: `in` is what the server decodes from the client and `out` is what it sends back. The labels are fixed and in that order, so the compiler can tell the two apart without guessing from the handlers. Spell them `in:` then `out:`.",
+        example: "service gateway from websocket(input: Frame, out: Frame) {   // ✗ the first label must be `in`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {   // ✓\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.service.websocket_multiple",
+        blurb: "A WebSocket upgrade reaches the context by its `Upgrade: websocket` header alone, with no path to tell two endpoints apart, so a context can host only one `from websocket` service. The compiler reports each one after the first. Keep one, or move the other into a context of its own.",
+        example: "service lobby from websocket(in: Frame, out: Frame) { … }\nservice rooms from websocket(in: Frame, out: Frame) { … }   // ✗ a second WebSocket service in this context\n\nservice lobby from websocket(in: Frame, out: Frame) { … }   // ✓ one per context",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.service.websocket_open_arity",
+        blurb: "A WebSocket service has exactly one `on open`, the handler that accepts the upgrade and receives the connection, and at most one `on message` and one `on close`. A service with no `on open` could never accept a client, and a second of any handler would leave it unclear which one runs. Add the missing `on open`, or remove the duplicate.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {   // ✗ no `on open`\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✓\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.service.websocket_param_not_stringy",
+        blurb: "An `on open` parameter is read from the upgrade request's query string, so it arrives as text, and the compiler builds it with the type's constructor from a `String`. A type that cannot be built from a string, such as `Int`, has no safe way in: a stray `?room=05` would name a different value from `5`. Declare the parameter as a `String`, a refined `String` or an opaque type over `String`, and parse any number in the body. HTTP path parameters follow the same rule, as `bynk.http.path_param_not_stringy`.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId, limit: Int) -> Effect[()] by user: Member { … }   // ✗ a query value is a string\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId, limit: String) -> Effect[()] by user: Member { … }   // ✓ parse the number in the body\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
     },
     Explain {
         code: "bynk.store.annotation_kind_mismatch",
@@ -6139,6 +6244,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-two-kinds-of-module",
     },
     Explain {
+        code: "bynk.val.agent_not_generable",
+        blurb: "A `for all` over a declared type draws values from it, but an agent is not a value: a state that satisfies every invariant need not be one the agent can reach. So an agent cannot be a `for all` binding. To test an agent over generated input, bind a `History` of it, which drives real handler calls and so reaches only real states.",
+        example: "// tests/t.test.bynk\nfor all w: Wallet { … }              // ✗ an agent is not generated\nfor all run: History[Wallet] { … }   // ✓ a run of its handlers",
+        page: "/book/reference/testing",
+        anchor: "properties",
+    },
+    Explain {
         code: "bynk.val.arity",
         blurb: "`Val[T]` takes at most one argument, the pin: `Val[Age]` lets the \
                 compiler choose a value, `Val[Age](20)` fixes it. `Val` makes one \
@@ -6237,6 +6349,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "val",
     },
     Explain {
+        code: "bynk.val.pin_unsupported",
+        blurb: "A pinned `Val[T](lit)` is accepted only for a refined type, where the literal is checked against the refinement. A sum, record or opaque type takes no pin, so one is refused. Use bare `Val[T]`, which builds the first variant, or every field, itself, or construct the value directly with a variant or a record literal. A pin that is not a literal at all is `bynk.val.pin_not_literal`.",
+        example: "// tests/demo.test.bynk\nlet s = Val[Status](1)   // ✗ `Status` is a sum\nlet s = Val[Status]      // ✓ bare `Val` picks the first variant",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
         code: "bynk.val.unknown_type",
         blurb: "`Val[T]` fabricates a value of the type it names, so the name must \
                 resolve to a type the suite can see. A misspelt name stops here, \
@@ -6249,6 +6368,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // tests/ages.test.bynk\n\
                   let a = Val[Agee]      // ✗ no such type\n\
                   let a = Val[Age]       // ✓ the declared type",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.unsupported_kind",
+        blurb: "`Val[T]` fabricates a value from a type declaration: a refinement, a sum, a record or an opaque type. A built-in type such as `Int` or `String`, a `List` or a function type has no declaration to draw from, so `Val` refuses it. Write the value, `20`, or declare a type for it, which `Val` can then fabricate.",
+        example: "type Age = Int where InRange(0, 150)\n\nlet n = Val[Int]   // ✗ a built-in type\nlet a = Val[Age]   // ✓ a declared type",
         page: "/book/reference/testing",
         anchor: "val",
     },
@@ -6338,9 +6464,23 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "service-form",
     },
     Explain {
+        code: "bynk.ws.open_given_unsupported",
+        blurb: "A WebSocket `on open` cannot declare `given` capabilities. It only accepts the upgrade and hands the connection to an agent; on Workers it runs inside the Durable Object that holds the connection, where there is no composition root to supply capabilities. Put the work that needs a capability in the agent handler the connection is transferred to, which carries its own `given`.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member given Clock { … }   // ✗ no capabilities on `on open`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✓ the agent's handler takes the `given`\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
         code: "bynk.ws.open_transfer_shape",
         blurb: "A WebSocket `on open` must hand its `connection` to exactly one agent, unconditionally, as `Room(room).join(user.identity, connection)`. On Workers the upgrade is routed to that agent's Durable Object, which holds the connection, so it needs a single target the compiler can find. Neither none nor several will do, and a transfer inside an `if` or a `match` is not found. A connection left undisposed is `bynk.held.leak`; a transfer whose key the edge cannot compute is `bynk.ws.open_transfer_key`.",
         example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {   // ✗ `connection` is never transferred\n        let _ <- connection.close()\n        ()\n    }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member {\n        let _ <- Room(room).join(user.identity, connection)   // ✓ handed to one agent\n        ()\n    }\n}",
+        page: "/book/reference/websocket",
+        anchor: "service-form",
+    },
+    Explain {
+        code: "bynk.ws.route_param_mismatch",
+        blurb: "`on message` and `on close` are not given a fresh URL: their route values are recovered, in order, from what `on open` accepted. So the leading parameters of each must have the same types as `on open`'s, in the same order. A different type at some position would reinterpret one route value as another. Match the types of `on open`'s parameters; the names may differ. A missing frame parameter is `bynk.ws.message_frame_param`.",
+        example: "on open (room: RoomId) -> Effect[()] by user: Member { … }\non close (who: UserId) -> Effect[()] by user: Member { … }   // ✗ the first route value is a `RoomId`\n\non open (room: RoomId) -> Effect[()] by user: Member { … }\non close (room: RoomId) -> Effect[()] by user: Member { … }  // ✓ same leading types",
         page: "/book/reference/websocket",
         anchor: "service-form",
     },

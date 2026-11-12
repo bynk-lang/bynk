@@ -1,0 +1,5 @@
+suite demo.d {
+  property "p" {
+    for all q: Pos { expect double(q) > q }
+  }
+}

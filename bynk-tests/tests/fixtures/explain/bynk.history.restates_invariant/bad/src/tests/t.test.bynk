@@ -1,0 +1,5 @@
+suite demo.wallet {
+  property "run" {
+    for all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }
+  }
+}
