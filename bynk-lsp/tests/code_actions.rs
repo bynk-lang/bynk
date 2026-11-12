@@ -953,3 +953,142 @@ fn big(b: Big) -> Int {{
         big.last().unwrap().error.notes
     );
 }
+
+// -- #3431: `SignedCookie` quick-fixes --
+
+fn cookie_actor(cookie_and_ttl: &str) -> String {
+    format!(
+        "context shop\n\ntype UserId = String where NonEmpty\n\nactor User {{ auth = SignedCookie(secret = \"SESSION_KEY\"{cookie_and_ttl}), identity = UserId }}\n"
+    )
+}
+
+/// The quick fixes offered on `code`'s diagnostic in the project `files`, with
+/// the text of `shop.bynk` after applying each.
+fn cookie_fixes(test: &str, files: &[(&str, &str)], code: &str) -> (Vec<String>, Vec<String>) {
+    let root = setup_project(test, files);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let result = bynk_ide::diagnose_project(&root, &sources);
+    let file = result
+        .files
+        .iter()
+        .find(|f| f.source_path == Path::new("shop.bynk"))
+        .expect("shop analysed");
+    let diag = file
+        .diagnostics
+        .iter()
+        .find(|d| d.error.category == code)
+        .unwrap_or_else(|| panic!("{code} raised"));
+    let uri = Url::from_file_path(root.join("shop.bynk")).unwrap();
+    let actions = code_actions::quick_fixes(
+        &file.text,
+        &file.diagnostics,
+        diag.error.span,
+        &uri,
+        Some(1),
+    );
+    let mut titles = Vec::new();
+    let mut fixed = Vec::new();
+    for a in &actions {
+        let CodeActionOrCommand::CodeAction(action) = a else {
+            panic!("expected a CodeAction");
+        };
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &action.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        titles.push(action.title.clone());
+        fixed.push(apply_text_edits(&file.text, &doc_edits[0].edits));
+    }
+    (titles, fixed)
+}
+
+#[test]
+fn signed_cookie_missing_ttl_offers_an_inserted_ttl() {
+    let src = cookie_actor("");
+    let (titles, fixed) = cookie_fixes(
+        "ttl-missing",
+        &[("shop.bynk", &src)],
+        "bynk.actor.signed_cookie_missing_ttl",
+    );
+    assert_eq!(titles.len(), 1, "{titles:?}");
+    assert!(titles[0].contains("ttl = 12.hours"), "{titles:?}");
+    assert_eq!(fixed[0], cookie_actor(", ttl = 12.hours"));
+}
+
+#[test]
+fn signed_cookie_missing_ttl_fix_follows_the_last_entry() {
+    let src = cookie_actor(", cookie = \"__Host-sid\"");
+    let (_, fixed) = cookie_fixes(
+        "ttl-after-cookie",
+        &[("shop.bynk", &src)],
+        "bynk.actor.signed_cookie_missing_ttl",
+    );
+    assert_eq!(
+        fixed[0],
+        cookie_actor(", cookie = \"__Host-sid\", ttl = 12.hours")
+    );
+}
+
+#[test]
+fn signed_cookie_unprefixed_offers_a_rename_when_nothing_reads_it() {
+    let src = cookie_actor(", ttl = 12.hours, cookie = \"sid\"");
+    let (titles, fixed) = cookie_fixes(
+        "rename",
+        &[("shop.bynk", &src)],
+        "bynk.actor.signed_cookie_unprefixed",
+    );
+    assert_eq!(titles.len(), 1, "{titles:?}");
+    assert!(titles[0].contains("logged out"), "says it logs users out");
+    assert_eq!(
+        fixed[0],
+        cookie_actor(", ttl = 12.hours, cookie = \"__Host-sid\"")
+    );
+}
+
+#[test]
+fn signed_cookie_unprefixed_stays_note_only_with_a_read_site() {
+    // A typed `cookies` field naming it, in the same file.
+    let src = format!(
+        "{}\nservice web from http {{\n  on get \"/me\"(@name(\"sid\") sid: Option[String]) -> Effect[Int] by User {{\n    1\n  }}\n}}\n",
+        cookie_actor(", ttl = 12.hours, cookie = \"sid\"")
+    );
+    let (titles, _) = cookie_fixes(
+        "rename-read-same-file",
+        &[("shop.bynk", &src)],
+        "bynk.actor.signed_cookie_unprefixed",
+    );
+    assert!(
+        titles.is_empty(),
+        "a read site keeps it note-only: {titles:?}"
+    );
+
+    // A read in another file of the project (a `RequestCookies.get`).
+    let actor = cookie_actor(", ttl = 12.hours, cookie = \"sid\"");
+    let other =
+        "context shop\n\nfn f(c: RequestCookies) -> Option[String] {\n  c.get(\"sid\")\n}\n";
+    let (titles, _) = cookie_fixes(
+        "rename-read-other-file",
+        &[("shop.bynk", &actor), ("shop_more.bynk", other)],
+        "bynk.actor.signed_cookie_unprefixed",
+    );
+    assert!(
+        titles.is_empty(),
+        "a read elsewhere keeps it note-only: {titles:?}"
+    );
+}
+
+#[test]
+fn signed_cookie_fixes_are_never_taken_by_fix_all() {
+    let src = cookie_actor(", cookie = \"sid\"");
+    let diagnostics = bynk_ide::diagnose(&src);
+    assert!(
+        diagnostics
+            .iter()
+            .filter(|d| d.error.category.starts_with("bynk.actor.signed_cookie"))
+            .flat_map(|d| &d.error.suggestions)
+            .all(|s| s.applicability != bynk_syntax::error::Applicability::MachineApplicable),
+        "a lifetime and a rename are the author's call"
+    );
+}

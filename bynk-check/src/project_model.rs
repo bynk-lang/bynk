@@ -91,6 +91,10 @@ pub struct ErrorSink {
     /// spans carry ([`Self::register_file`]). Read when the sink is drained,
     /// to say which file each secondary label lies in (`label_files`).
     files: HashMap<FileId, PathBuf>,
+    /// #3431: every project source, kept only when some file declares a
+    /// `SignedCookie` actor, so `signed_cookie_unprefixed` can tell whether its
+    /// cookie name is read anywhere else before offering a rename.
+    cookie_sources: Vec<(FileId, Arc<str>)>,
 }
 
 impl Default for ErrorSink {
@@ -105,6 +109,7 @@ impl ErrorSink {
             entries: Vec::new(),
             warnings: Vec::new(),
             files: HashMap::new(),
+            cookie_sources: Vec::new(),
         }
     }
     /// Record that spans carrying `file` lie in the project file `identity`.
@@ -118,6 +123,16 @@ impl ErrorSink {
     /// disagree. `phase_parse` registers every file it parses; a
     /// toolchain-injected unit, with no absolute path, is never registered.
     pub fn register_parsed(&mut self, parsed: &[ParsedFile]) {
+        self.cookie_sources.clear();
+        if parsed.iter().any(|pf| pf.source().contains("SignedCookie")) {
+            self.cookie_sources = parsed
+                .iter()
+                .filter_map(|pf| {
+                    let id = bynk_project::parse_cache::file_id_for(&pf.abs_path()?);
+                    Some((id, Arc::from(pf.source())))
+                })
+                .collect();
+        }
         for pf in parsed {
             if let Some(abs) = pf.abs_path() {
                 self.register_file(
@@ -192,6 +207,7 @@ impl ErrorSink {
     /// Consume the sink, yielding the non-failing **warnings** (ADR 0117).
     pub fn into_warnings(self) -> Vec<AttributedError> {
         let mut warnings = self.warnings;
+        attach_cookie_rename_fix(&self.cookie_sources, &mut warnings);
         attribute_labels(&self.files, &mut warnings);
         warnings
     }
@@ -200,12 +216,53 @@ impl ErrorSink {
     pub fn into_all(self) -> Vec<AttributedError> {
         let mut all = self.entries;
         all.extend(self.warnings);
+        attach_cookie_rename_fix(&self.cookie_sources, &mut all);
         attribute_labels(&self.files, &mut all);
         all
     }
     /// The count of **error-severity** diagnostics.
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+}
+
+/// #3431: offer `signed_cookie_unprefixed`'s rename to `__Host-…` only when no
+/// other site in the project mentions the cookie name. A read site (a typed
+/// `cookies` field or `@name("x")`, `RequestCookies.get("x")`, a test) names it
+/// as a string literal, so the test is deliberately textual and conservative:
+/// any other occurrence of the quoted name anywhere in the project's sources,
+/// comments included, keeps the diagnostic note-only. The rename logs existing
+/// users out, so it is `MaybeIncorrect`: a quick fix, never fix-all's.
+fn attach_cookie_rename_fix(sources: &[(FileId, Arc<str>)], errors: &mut [AttributedError]) {
+    for ae in errors {
+        let e = &mut ae.error;
+        if e.category != "bynk.actor.signed_cookie_unprefixed" || !e.suggestions.is_empty() {
+            continue;
+        }
+        let Some((_, text)) = sources.iter().find(|(id, _)| *id == e.span.file) else {
+            continue;
+        };
+        let Some(literal) = text.get(e.span.range()) else {
+            continue;
+        };
+        let name = match literal.strip_prefix('"').and_then(|l| l.strip_suffix('"')) {
+            Some(n) if !n.is_empty() && !n.contains(['\\', '"']) => n,
+            _ => continue,
+        };
+        let mentions: usize = sources
+            .iter()
+            .map(|(_, t)| t.matches(literal).count())
+            .sum();
+        if mentions != 1 {
+            continue;
+        }
+        e.suggestions.push(bynk_syntax::error::Suggestion {
+            message: format!(
+                "rename the cookie to `__Host-{name}` (no other site in the project names `{name}`; existing users are logged out when the name changes)"
+            ),
+            edits: vec![(e.span, format!("\"__Host-{name}\""))],
+            applicability: bynk_syntax::error::Applicability::MaybeIncorrect,
+        });
     }
 }
 
