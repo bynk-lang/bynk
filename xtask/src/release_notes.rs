@@ -115,6 +115,51 @@ pub fn release_section(page: &str, prev: Option<Version>, tag: Version) -> Strin
     out
 }
 
+/// Consistency problems on the upgrading page (empty means consistent).
+///
+/// The stamp writes the page, so these only fire on a hand edit or a stamp bug:
+/// the marker is missing, a `## v…` heading does not parse, versions are not
+/// strictly newest-first, an entry has no note, or a version has no row in the
+/// changelog (`changelog`, the changelog page's text) — an entry for an
+/// increment that never shipped.
+pub fn check_page(page: &str, changelog: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    let Some(at) = page.find(ENTRIES_MARKER) else {
+        return vec![format!("{UPGRADING_PAGE}: missing `{ENTRIES_MARKER}`")];
+    };
+    let headings = page[at..]
+        .lines()
+        .filter(|l| l.starts_with("## "))
+        .collect::<Vec<_>>();
+    let entries = parse_entries(page);
+    if headings.len() != entries.len() {
+        problems.push(format!(
+            "{UPGRADING_PAGE}: {} heading(s) but {} parse as `## vX.Y.Z`",
+            headings.len(),
+            entries.len()
+        ));
+    }
+    for pair in entries.windows(2) {
+        if ordering_key(pair[0].0) <= ordering_key(pair[1].0) {
+            problems.push(format!(
+                "{UPGRADING_PAGE}: v{} must come before v{} (newest first, no duplicates)",
+                pair[1].0, pair[0].0
+            ));
+        }
+    }
+    for (version, note) in &entries {
+        if note.is_empty() {
+            problems.push(format!("{UPGRADING_PAGE}: v{version} has no note"));
+        }
+        if !changelog.contains(&format!("**v{version}**")) {
+            problems.push(format!(
+                "{UPGRADING_PAGE}: v{version} has no row in the changelog"
+            ));
+        }
+    }
+    problems
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +233,38 @@ mod tests {
         assert!(s.contains("No breaking changes."));
         let s = release_section("# no entries\n", None, v("0.3.0"));
         assert!(s.starts_with("## Upgrading\n"));
+    }
+
+    const LOG: &str = "| **v0.3.0** | x |\n| **v0.2.1** | x |\n| **v0.1.0** | x |\n";
+
+    #[test]
+    fn the_sample_page_is_consistent() {
+        assert_eq!(check_page(PAGE, LOG), Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_gate_flags_each_kind_of_drift() {
+        assert!(check_page("# none\n", LOG)[0].contains("missing"));
+        let swapped = PAGE.replace("## v0.3.0", "## v0.0.9");
+        assert!(
+            check_page(&swapped, LOG)
+                .iter()
+                .any(|p| p.contains("newest first"))
+        );
+        let dup = PAGE.replace("## v0.2.1", "## v0.3.0");
+        assert!(
+            check_page(&dup, LOG)
+                .iter()
+                .any(|p| p.contains("newest first"))
+        );
+        let junk = PAGE.replace("## v0.2.1", "## v0.2");
+        assert!(check_page(&junk, LOG).iter().any(|p| p.contains("parse")));
+        let empty = format!("{PAGE}## v0.0.1\n");
+        assert!(
+            check_page(&empty, LOG)
+                .iter()
+                .any(|p| p.contains("no note"))
+        );
+        assert!(check_page(PAGE, "").iter().any(|p| p.contains("no row")));
     }
 }
