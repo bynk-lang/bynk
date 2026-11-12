@@ -1570,6 +1570,30 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "what-the-checks-catch",
     },
     Explain {
+        code: "bynk.detach.in_agent_handler",
+        blurb: "`detach` stops waiting for an effect and hands it to the execution context, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So `detach` is refused there, and in a closure there. Await the effect instead, with `do` or `let _ <-`, or move the `detach` to the service handler that calls the agent. A `detach` of a store operation is `bynk.detach.store_op`.",
+        example: "on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✗ an agent handler cannot detach\n    do count.update((n) => n + 1)\n}\n\n\
+                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\")             // ✓ awaited, so it finishes with the handler\n    do count.update((n) => n + 1)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "detach",
+    },
+    Explain {
+        code: "bynk.detach.in_pure_context",
+        blurb: "`detach` hands a running effect to the execution context, and only an effectful body has effects to run: a pure function never runs one. Change the enclosing function's return type to `Effect[…]`. The same rule holds for `bynk.within.in_pure_context`, `bynk.race.in_pure_context` and `bynk.send.in_pure_context`.",
+        example: "fn twice(ping: Effect[()], n: Int) -> Int {\n    let _ = ping.detach()   // ✗ the body is pure\n    n * 2\n}\n\n\
+                  fn twice(ping: Effect[()], n: Int) -> Effect[Int] {   // ✓ an effectful body\n    do ping.detach()\n    Effect.pure(n * 2)\n}",
+        page: "/book/reference/capabilities",
+        anchor: "detach",
+    },
+    Explain {
+        code: "bynk.detach.store_op",
+        blurb: "In an agent handler, a store write is not work to detach: it is staged and committed atomically with the rest of the handler, so there is nothing to leave running. `detach` is refused there for any effect, and a store operation gets its own code to point at the fix. Drop the `.detach()` and write `do field.op(…)`; the write is committed with the handler. For a `detach` that is not of a store operation see `bynk.detach.in_agent_handler`.",
+        example: "on call bump() -> Effect[()] {\n    do count.update((n) => n + 1).detach()   // ✗ a store write is not detached\n}\n\n\
+                  on call bump() -> Effect[()] {\n    do count.update((n) => n + 1)            // ✓ staged, committed with the handler\n}",
+        page: "/book/reference/capabilities",
+        anchor: "detach",
+    },
+    Explain {
         code: "bynk.duration.literal_overflow",
         blurb: "`5.minutes` is a `Duration`, which the compiler stores as a whole number of milliseconds, so it multiplies the count by the unit when it reads the literal. A count whose total does not fit in a 64-bit integer is refused rather than wrapped into a wrong or negative span. No real timeout or interval is that large: write a smaller count, or a smaller unit.",
         example: "fn forever() -> Duration { 9007199254740991.days }   // ✗ overflows the millisecond range\n\nfn forever() -> Duration { 365.days }                // ✓",
@@ -1888,7 +1912,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.exec.unavailable",
-        blurb: "A function that uses `~>`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
+        blurb: "A function that uses `~>`, `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
         example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
         page: "/book/reference/capabilities",
         anchor: "within",
@@ -8241,6 +8265,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.foreign_contract_skew",
         "A build breaks the contract a declared foreign caller's client was generated at, as pinned in `bynk.foreign.toml`, so `bynk deploy` refuses to ship it.",
     ),
+    dg(
+        "bynk.detach.in_agent_handler",
+        "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.detach.in_pure_context",
+        "A `detach` was used in a pure (non-effectful) context.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.detach.store_op",
+        "A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached.",
+        &["method_call"],
+    ),
     // LSP-only (#2459): published by `bynk-lsp` as a hint (or warning, per the
     // `bynk.docLinks.reportUnresolved` setting); the compiler never emits it.
     warn(d(
@@ -8271,7 +8310,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.effect.do_discards_result",
-        "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, or write `let _ <- e` to discard it deliberately.",
+        "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, write `let _ <- e` to discard it deliberately, or `do e.detach()` to stop waiting and have a failure reported.",
         &["do_stmt"],
     ),
     dg(
@@ -8429,7 +8468,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.exec.unavailable",
-        "A call to, or reference to, a function that hands work to the execution context (`~>`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
+        "A call to, or reference to, a function that hands work to the execution context (`~>`, `detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
     ),
     dg(
         "bynk.expect.faults_not_effect",

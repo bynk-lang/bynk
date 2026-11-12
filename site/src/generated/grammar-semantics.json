@@ -557,7 +557,7 @@
   "do_stmt": [
     {
       "code": "bynk.effect.do_discards_result",
-      "summary": "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, or write `let _ <- e` to discard it deliberately."
+      "summary": "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, write `let _ <- e` to discard it deliberately, or `do e.detach()` to stop waiting and have a failure reported."
     },
     {
       "code": "bynk.effect.do_in_pure_context",
@@ -1207,6 +1207,18 @@
     }
   ],
   "method_call": [
+    {
+      "code": "bynk.detach.in_agent_handler",
+      "summary": "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive."
+    },
+    {
+      "code": "bynk.detach.in_pure_context",
+      "summary": "A `detach` was used in a pure (non-effectful) context."
+    },
+    {
+      "code": "bynk.detach.store_op",
+      "summary": "A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached."
+    },
     {
       "code": "bynk.race.in_agent_handler",
       "summary": "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to."

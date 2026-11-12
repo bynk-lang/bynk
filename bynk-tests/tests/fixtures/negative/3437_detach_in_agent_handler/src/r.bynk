@@ -1,0 +1,28 @@
+context r
+
+consumes bynk { Logger, Random }
+
+agent Other {
+	key id: String
+	store hits: Cell[Int] = 0
+
+	on call ping() -> Effect[()] {
+		do hits.update((n) => n + 1)
+	}
+}
+
+agent Counter {
+	key id: String
+	store count: Cell[Int] = 0
+
+	// #3437: as `~>` (#2017), `detach` has no execution context to use in an
+	// agent handler: a capability call, another agent's handler and a detach
+	// inside a closure are all refused, whatever the effect's type.
+	on call bump(names: List[String]) -> Effect[()] given Logger, Random {
+		do Logger.info("bump").detach()
+		do Random.int(1, 6).detach()
+		do Other("x").ping().detach()
+		let _ <- names.forEach((name) => Logger.info(name).detach())
+		do count.update((n) => n + 1)
+	}
+}

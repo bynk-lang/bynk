@@ -424,6 +424,10 @@ pub(crate) struct RunnableTest {
     /// `property` or attacks a contract), so its failed cases report `kind`,
     /// `seed` and `counterexample`.
     pub(super) generative: bool,
+    /// #3437: the module carries the execution-context double (`send.ts`), whose
+    /// `report` records a detached effect's failures; the runner drains them
+    /// after each case.
+    pub(super) detach_reports: bool,
     /// v0.67: the suite's cases, in declaration (emission) order, retained for
     /// `--no-run` discovery.
     pub(super) cases: Vec<DiscoveredCase>,

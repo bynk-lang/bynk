@@ -2619,6 +2619,23 @@ fn check_exec_context(name: &str, codes: [&'static str; 3], span: Span, ctx: &mu
     }
 }
 
+/// The methods every `Effect[T]` has: `within` (#2683), `race` (#2711) and
+/// `detach` (#3437), each checked by its own function.
+pub(crate) fn check_effect_method(
+    method: &Ident,
+    receiver: &Expr,
+    args: &[Expr],
+    inner: TyId,
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    match method.name.as_str() {
+        "within" => check_effect_within_method(method, args, inner, span, ctx),
+        "race" => check_effect_race_method(args, inner, span, ctx),
+        _ => check_effect_detach_method(receiver, args, span, ctx),
+    }
+}
+
 /// #2683: `e.within(d)` on any `Effect[T]` — `within(d: Duration) ->
 /// Effect[Result[T, TimedOut]]`. It races `e` against a deadline and hands the
 /// abandoned effect to the execution context's `waitUntil` (it is never
@@ -2675,6 +2692,75 @@ pub(crate) fn check_effect_within_method(
     };
     let result = tys.intern(Ty::Result(inner, timed_out));
     Some(tys.intern(Ty::Effect(result)))
+}
+
+/// #3437: `e.detach()` on any `Effect[T]` — `detach() -> Effect[()]`. It stops
+/// waiting: the effect is already running (effects are eager promises), so the
+/// call registers it with the execution context's `waitUntil` and completes at
+/// once. A failure (a fault, or an `Err` for a `Result` payload) is reported by
+/// the runtime, never lost. Legal wherever `~>` is: it is refused in an agent
+/// handler (no execution context; ADR 0487), in a store operation (a store write
+/// is part of the handler's atomic commit) and outside an effectful body. A
+/// function using it joins the needs-context set beside `within` and `race`.
+pub(crate) fn check_effect_detach_method(
+    receiver: &Expr,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    if ctx.in_agent_handler {
+        if let Some(Callee::Store { field, op }) = ctx.callees.get(&receiver.id) {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.detach.store_op",
+                    span,
+                    format!(
+                        "`{field}.{op}(…).detach()` detaches a store operation, but a store write is part of the agent handler's atomic commit — there is nothing to detach without waiting for"
+                    ),
+                )
+                .with_note(format!(
+                    "drop the `.detach()` and perform the write as a plain statement, `do {field}.{op}(…)`; it is staged and committed with the rest of the handler"
+                )),
+            );
+        } else {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.detach.in_agent_handler",
+                    span,
+                    "`detach` cannot be used in an agent handler: an agent handler has no execution context to keep a detached effect alive",
+                )
+                .with_note(
+                    "await the effect instead with `let _ <- ...` (or `do ...`), or move the `detach` to the service handler that calls the agent",
+                ),
+            );
+        }
+    } else if !ctx.effectful {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.detach.in_pure_context",
+                span,
+                "`detach` can only be used inside an effectful body (one returning `Effect[T]`)",
+            )
+            .with_label(
+                ctx.return_ty_span,
+                format!("enclosing return type is `{}`", ctx.return_ty.display(tys)),
+            )
+            .with_note("change the enclosing function/handler's return type to `Effect[...]`"),
+        );
+    }
+    if !args.is_empty() {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`Effect.detach` takes 0 arguments, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    Some(tys.intern(Ty::Effect(tys.intern(Ty::Unit))))
 }
 
 /// #2711: `a.race(b)` on `a: Effect[T]` — `race(other: Effect[T]) -> Effect[T]`.

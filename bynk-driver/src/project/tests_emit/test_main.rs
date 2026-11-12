@@ -402,6 +402,65 @@ pub(super) fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
     TsStmt::if_stmt(cond, then_branch, None)
 }
 
+/// #3437: a build whose modules carry the execution-context double drains the
+/// failures a detached effect reported (`globalThis.__bynkDetachedReports`)
+/// after each case, and reports them beside the case: as `detached_failures`
+/// and `detached` on its event, and as a line under it in the human output.
+/// A report does not fail the case, as on Workers (ADR 0478). Gated, so a build
+/// with no execution context keeps its runner unchanged.
+struct DetachReports {
+    enabled: bool,
+}
+
+impl DetachReports {
+    fn drain(&self) -> Option<TsStmt> {
+        self.enabled.then(|| {
+            TsStmt::raw(
+                "const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];".to_string(),
+                None,
+            )
+        })
+    }
+
+    fn entries(&self) -> Vec<TsObjectEntry> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        vec![
+            TsObjectEntry::Prop(
+                "detached_failures".to_string(),
+                ident("(detached.length > 0 ? detached.length : undefined)"),
+            ),
+            TsObjectEntry::Prop(
+                "detached".to_string(),
+                ident("(detached.length > 0 ? detached : undefined)"),
+            ),
+        ]
+    }
+
+    /// The statements of an NDJSON `report`, after the drain.
+    fn wrap_ndjson(&self, stmts: Vec<TsStmt>) -> Vec<TsStmt> {
+        self.drain().into_iter().chain(stmts).collect()
+    }
+
+    /// The statements of the human `report`: drain, the case's line, then the reports.
+    fn wrap_human(&self, stmts: Vec<TsStmt>) -> Vec<TsStmt> {
+        self.wrap_ndjson(stmts)
+            .into_iter()
+            .chain(self.print())
+            .collect()
+    }
+
+    fn print(&self) -> Option<TsStmt> {
+        self.enabled.then(|| {
+            TsStmt::raw(
+                "for (const d of detached) console.log(`    ! a detached effect ${d.kind === \"err\" ? `returned Err (${d.type}${d.variant === null ? \"\" : `.${d.variant}`})` : \"faulted\"} at ${d.site}`);".to_string(),
+                None,
+            )
+        })
+    }
+}
+
 pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -> TsProgram {
     let ext = import_ext.as_str();
     let mut program = TsProgram::new();
@@ -552,6 +611,10 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
     // `retries` is on a remote one, so every other runner is unchanged;
     // `JSON.stringify` drops one a case leaves undefined.
     let generative = tests.iter().any(|t| t.generative);
+    // #3437: failures a detached effect reported, drained after each case.
+    let detach = DetachReports {
+        enabled: tests.iter().any(|t| t.detach_reports),
+    };
     let generative_entries = || -> Vec<TsObjectEntry> {
         if !generative {
             return Vec::new();
@@ -665,7 +728,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             optional: false,
                         }],
                         return_type: None,
-                        body: vec![TsStmt::if_else_same_line_stmt(
+                        body: detach.wrap_ndjson(vec![TsStmt::if_else_same_line_stmt(
                             member(ident("r"), "pass"),
                             block(vec![
                                 TsStmt::increment(ident("passed"), None),
@@ -681,6 +744,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
+                                    .chain(detach.entries())
                                     .chain(std::iter::once(duration_entry()))
                                     .collect(),
                                 ),
@@ -730,13 +794,14 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
+                                    .chain(detach.entries())
                                     .chain(generative_entries())
                                     .chain(std::iter::once(duration_entry()))
                                     .collect(),
                                 ),
                             ]),
                             None,
-                        )],
+                        )]),
                         is_async: false,
                         inline: false,
                     },
@@ -794,7 +859,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             optional: false,
                         }],
                         return_type: None,
-                        body: vec![TsStmt::if_else_same_line_stmt(
+                        body: detach.wrap_human(vec![TsStmt::if_else_same_line_stmt(
                             member(ident("r"), "pass"),
                             TsStmt::inline_block(
                                 vec![
@@ -824,7 +889,7 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                                 None,
                             ),
                             None,
-                        )],
+                        )]),
                         is_async: false,
                         inline: false,
                     },
@@ -1081,6 +1146,7 @@ mod tests {
             envs: Vec::new(),
             remote: false,
             generative: false,
+            detach_reports: false,
         }];
         let program = emit_test_main(&tests, ImportExt::Js, false);
         let out = bynk_ts::print(&program, "", "", "").text;
@@ -1137,6 +1203,7 @@ mod tests {
             envs: Vec::new(),
             remote: false,
             generative: false,
+            detach_reports: false,
         }];
         let program = emit_test_main(&tests, ImportExt::Js, false);
         let printed = bynk_ts::print(&program, "", "", "");

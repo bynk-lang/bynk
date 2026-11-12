@@ -43,13 +43,14 @@ pub const QUERY_METHODS: &[KernelMethod] = QueryOp::TABLE;
 pub const OPTION_METHODS: &[KernelMethod] = OptionOp::TABLE;
 /// `Result[T, E]` combinators (v0.22a).
 pub const RESULT_METHODS: &[KernelMethod] = ResultOp::TABLE;
-/// The methods of every `Effect[T]` (#2683, #2711): `within` and `race`.
+/// The methods of every `Effect[T]` (#2683, #2711): `within`, `race` and `detach`.
 pub const EFFECT_METHODS: &[KernelMethod] = EffectOp::TABLE;
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176): `within` and
 /// `race` (on every `Effect`) alongside the compiler-synthesised combinators.
 pub const EFFECT_RESULT_METHODS: &[KernelMethod] = &[
     EffectOp::TABLE[0],
     EffectOp::TABLE[1],
+    EffectOp::TABLE[2],
     EffectResultOp::TABLE[0],
     EffectResultOp::TABLE[1],
     EffectResultOp::TABLE[2],

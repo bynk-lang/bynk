@@ -179,3 +179,79 @@ export function __bynkRace<T>(
     });
   });
 }
+
+// #3437: `e.detach()`, the compiler-inserted failure route for a detached effect.
+//
+// `detach` never starts anything: the effect is already running (effects are
+// eager promises), so this hands the running promise to the execution context's
+// `waitUntil` and returns at once. A detached effect has no caller to receive a
+// failure, so the failure is reported here, by the runtime and not by `Logger`:
+//
+// - A fault (the promise rejects) is passed on UNCHANGED as a rejected promise
+//   into `waitUntil`, the mechanism `__bynkReportFault` uses (#2192): the
+//   platform records an exception and applies an uploaded source map. The
+//   rejection is handled first, so a host that never awaits `waitUntil` sees no
+//   unhandled rejection. The detach site is attached to an object reason as
+//   `detachedAt`, never by wrapping it, so the stack stays the original one.
+// - An `Err` (only when `errType` names the error type, i.e. the effect's `T` is
+//   a `Result`) is one structured `console.error` record in the shape
+//   `Logger.log` writes, carrying the site, the error's type name and, for a sum
+//   error, its variant tag. Never the payload: it can hold a credential (#3437,
+//   Decision D). The test harness's exec double supplies `report` to record it.
+// - `Ok`, and every `T` that is not a `Result`, report nothing.
+//
+// Not part of ADR 0310's published ABI: it is codegen.
+export interface __BynkDetachExec {
+  waitUntil(promise: Promise<unknown>): void;
+  readonly report?: (record: __BynkDetachReport) => void;
+}
+export interface __BynkDetachReport {
+  readonly kind: "fault" | "err";
+  readonly site: string;
+  readonly type: string | null;
+  readonly variant: string | null;
+}
+export function __bynkDetach(
+  promise: Promise<unknown>,
+  exec: __BynkDetachExec,
+  site: string,
+  errType?: string,
+): Promise<void> {
+  const watched = Promise.resolve(promise).then(
+    (value) => {
+      if (errType === undefined) return;
+      const r = value as { readonly tag?: string; readonly error?: unknown } | null;
+      if (r === null || typeof r !== "object" || r.tag !== "Err") return;
+      const e = r.error as { readonly tag?: unknown } | null;
+      const variant = typeof e === "object" && e !== null && typeof e.tag === "string" ? e.tag : null;
+      const report: __BynkDetachReport = { kind: "err", site, type: errType, variant };
+      if (exec.report !== undefined) {
+        exec.report(report);
+        return;
+      }
+      console.error({
+        message: "a detached effect returned Err",
+        level: "error",
+        fields: { site, type: errType, variant: variant ?? "" },
+      });
+    },
+    (reason: unknown) => {
+      if (typeof reason === "object" && reason !== null) {
+        try {
+          Object.defineProperty(reason, "detachedAt", {
+            value: site,
+            configurable: true,
+            writable: true,
+          });
+        } catch {
+          // A frozen reason is passed on without the label.
+        }
+      }
+      exec.report?.({ kind: "fault", site, type: null, variant: null });
+      throw reason;
+    },
+  );
+  watched.catch(() => {});
+  exec.waitUntil(watched);
+  return Promise.resolve();
+}

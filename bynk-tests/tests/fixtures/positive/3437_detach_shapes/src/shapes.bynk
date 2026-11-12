@@ -1,0 +1,63 @@
+context shapes
+
+consumes bynk
+
+// #3437: `e.detach()` stops waiting for an effect that is already running.
+// It is an `Effect[()]` for any `T`, so it fits a statement, a `forEach` step
+// and a helper alike. A failure (a fault, or an `Err`) is reported by the
+// runtime and never lost.
+
+type MailError = | Refused | Bounced(reason: String)
+
+type Note = { id: Int }
+
+capability Mail {
+	fn send(n: Int) -> Effect[Result[(), MailError]]
+}
+
+capability Audit {
+	fn note(n: Int) -> Effect[()]
+}
+
+capability Count {
+	fn next(n: Int) -> Effect[Int]
+}
+
+provides Mail = RefusingMail {
+	fn send(n: Int) -> Effect[Result[(), MailError]] {
+		if n == 0 { Ok(()) } else if n == 1 { Err(Refused) } else { Err(Bounced("full")) }
+	}
+}
+
+provides Audit = NoAudit {
+	fn note(n: Int) -> Effect[()] { () }
+}
+
+provides Count = FixedCount {
+	fn next(n: Int) -> Effect[Int] { n + 1 }
+}
+
+// A helper: no wrapper `fn`, no hand-written match on the reply.
+fn notify(n: Int) -> Effect[()] given Mail {
+	Mail.send(n).detach()
+}
+
+// A loop: `detach` is an `Effect[()]`, so it is a `forEach` step.
+fn notifyAll(ns: List[Int]) -> Effect[()] given Mail {
+	ns.forEach((n) => Mail.send(n).detach())
+}
+
+service run {
+	on call(n: Int) -> Effect[Int] given Mail, Audit, Count {
+		// a payload that is not a `Result`
+		do Count.next(n).detach()
+		// a unit effect, and a `Result` payload
+		do Audit.note(n).detach()
+		do Mail.send(n).detach()
+		let _ <- notifyAll([0, 1, 2])
+		let _ <- notify(n)
+		// `let _ <-` is as legal as `do`
+		let _ <- Audit.note(n).detach()
+		Effect.pure(n)
+	}
+}

@@ -1,0 +1,4 @@
+bynk.detach.in_agent_handler `detach` cannot be used in an agent handler
+bynk.detach.in_agent_handler `detach` cannot be used in an agent handler
+bynk.detach.in_agent_handler `detach` cannot be used in an agent handler
+bynk.detach.in_agent_handler `detach` cannot be used in an agent handler

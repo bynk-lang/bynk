@@ -199,6 +199,45 @@ It is legal exactly where [`within`](#within) is, and refused in the same places
 
 See [ask two sources and take the first answer](/book/guides/effects-and-capabilities/ask-two-sources-and-take-the-first-answer/).
 
+## Detaching an effect — `detach` {#detach}
+
+`e.detach()` on any `Effect[T]` stops waiting for `e`. It returns an `Effect[()]` that completes at
+once: **the effect is already running** (an effect is an eager promise, started where the expression
+is evaluated), and `detach` hands that running promise to the platform's `waitUntil` so it can finish
+after the handler has answered. It never starts anything and never delays one.
+
+```bynk,ignore
+fn notify(req: Request) -> Effect[()] {
+  Fetch.send(req).detach()        // an `Err` reply is reported, never lost
+}
+
+fn notifyAll(reqs: List[Request]) -> Effect[()] {
+  reqs.forEach((r) => Fetch.send(r).detach())
+}
+```
+
+A detached reply is never silently lost. A failure is reported by the runtime, not by `Logger`:
+
+- **A fault** (the effect's promise rejects) is passed to the platform's exception path unchanged, so
+  the platform records an exception, labelled with the detach site.
+- **An `Err`** (when `T` is a `Result`) is one structured `console.error` record naming the site, the
+  error's type and, for a sum, its variant tag. The payload is not reported, because it can hold a
+  credential.
+- `Ok`, and any `T` that is not a `Result`, report nothing.
+
+Detaching is immediate and best-effort: it is not retried. On Workers, `waitUntil` work can run for up to
+30 seconds after the response is sent or the client disconnects, shared across the request; promises still
+unsettled then are cancelled (local `workerd` does not enforce this). In a test, the harness records each report and does not fail the case, as on
+Workers.
+
+It is legal exactly where [`within`](#within) is, and an agent handler or a pure body is refused:
+
+| Where | Code | Why |
+|---|---|---|
+| an agent handler, a lambda in one included | `bynk.detach.in_agent_handler` | no execution context to keep the effect alive |
+| a store operation in an agent handler | `bynk.detach.store_op` | a store write is part of the handler's atomic commit |
+| a pure body | `bynk.detach.in_pure_context` | it needs an effectful body |
+
 ## Generic operations
 
 A capability operation may declare its own type parameter (v0.235, ADR 0281) —
