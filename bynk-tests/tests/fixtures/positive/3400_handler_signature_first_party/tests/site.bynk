@@ -1,0 +1,8 @@
+// #3400: a first-party type a handler names alone, with no record around it, is
+// in the `system` harness view too, so a static inside its literal resolves.
+suite newsletter.site as system {
+	case "a handler-signature-only first-party type" {
+		let c = Cookie { name: "k", value: "v", maxAge: Some(Duration.millis(5000)) }
+		expect c.name == "k"
+	}
+}

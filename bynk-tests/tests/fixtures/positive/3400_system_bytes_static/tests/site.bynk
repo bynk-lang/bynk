@@ -1,0 +1,25 @@
+// #3400: a `Bytes` static in a `system` case resolves as it does in a `unit` one.
+suite newsletter.site as system {
+	case "a typed upload is sent as multipart and decoded" {
+		let photo = File {
+			filename: Some("cat.jpg"),
+			contentType: "image/jpeg",
+			bytes: Bytes.fromUtf8("meow"),
+		}
+		let r <- site.POST("/photos", PhotoForm { caption: Some("Tom"), photo: photo })
+		expect r is Ok("4")
+	}
+
+	case "a first-party record's other statics resolve too" {
+		let remembered = Remembered {
+			label: "x",
+			cookie: Cookie {
+				name: "k",
+				value: "v",
+				maxAge: Some(Duration.millis(5000)),
+				expires: Some(Instant.fromEpochMillis(9000)),
+			},
+		}
+		expect remembered.label == "x"
+	}
+}

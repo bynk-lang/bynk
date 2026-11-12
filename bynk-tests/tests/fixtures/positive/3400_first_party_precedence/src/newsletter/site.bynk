@@ -1,0 +1,14 @@
+context newsletter.site
+
+// The context's own `Cookie` is not `bynk`'s: its declaration wins in the
+// `system` harness view.
+type Cookie = {
+	name: String,
+	ttl: Duration,
+}
+
+service site from http {
+	on POST("/c") (body: Cookie) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(body.name)
+	}
+}
