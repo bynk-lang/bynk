@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+    json { options: compact }
+
+    on GET("/items") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

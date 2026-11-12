@@ -1,0 +1,9 @@
+suite demo.desk as system {
+  stub Meter.read() returns 7
+
+  case "the desk checks" {
+    let n <- demo.desk.check(5)
+    expect n == 5
+  }
+
+}

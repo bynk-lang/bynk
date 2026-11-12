@@ -1,0 +1,7 @@
+commons demo
+
+type Natural = Int where Positive
+
+fn valid(n: Int) -> Bool {
+    n is Natural
+}

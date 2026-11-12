@@ -1,0 +1,5 @@
+suite shop {
+    case "doubles" as unit {
+        expect double(2) == 4
+    }
+}

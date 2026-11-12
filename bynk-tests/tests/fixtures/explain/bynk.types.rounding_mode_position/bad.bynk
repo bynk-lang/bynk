@@ -1,0 +1,6 @@
+commons demo
+
+fn cents(price: Decimal) -> Decimal {
+    let mode = RoundingMode.HalfUp
+    price
+}

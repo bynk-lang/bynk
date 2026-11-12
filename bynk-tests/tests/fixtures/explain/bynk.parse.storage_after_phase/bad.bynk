@@ -1,0 +1,12 @@
+context shop
+
+agent Counter {
+    key id: String
+    store count: Cell[Int]
+
+    on call bump() -> Effect[()] {
+        ()
+    }
+
+    store extra: Cell[Int] = 0
+}

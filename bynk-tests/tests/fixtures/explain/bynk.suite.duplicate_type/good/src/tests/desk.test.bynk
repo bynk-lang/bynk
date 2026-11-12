@@ -1,0 +1,7 @@
+suite demo.desk {
+  type Counted = { n: Int }
+  type Totalled = { total: Int }
+  case "c" {
+    expect twice(2) == 4
+  }
+}

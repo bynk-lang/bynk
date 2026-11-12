@@ -1,0 +1,6 @@
+suite demo.desk {
+  case "a local one" {
+    let n <- local.call(1)
+    expect n == 2
+  }
+}

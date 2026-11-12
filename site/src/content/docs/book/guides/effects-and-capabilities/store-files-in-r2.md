@@ -114,9 +114,12 @@ match found {
 
 ## Upload in parts
 
-A request body is read whole, so a client sends an object too large for one
-request as a multipart upload, a part a request. `createUpload` returns an
-`R2Upload`, plain data the client keeps and sends back with each part:
+A `body: Bytes` is read whole, but a `@raw` handler can take its request body as a
+`Stream[Bytes]` and pass it to `putStream` as it arrives, as long as the client sends a
+`Content-Length` (see [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/)).
+A client that cannot, or an object too large for one request, goes up as a multipart
+upload, a part a request. `createUpload` returns an `R2Upload`, plain data the client
+keeps and sends back with each part:
 
 ```bynk,fragment
 let u <- Archives.createUpload(key, R2UploadOptions { contentType: Some("video/mp4"), metadata: Map.empty() })
