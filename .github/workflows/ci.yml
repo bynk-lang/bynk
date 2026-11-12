@@ -13,7 +13,7 @@ name: CI
 #   ready          A ready PR (including the push that makes it ready, and a
 #                  draft that `promote` marks ready in this same run): the
 #                  draft set plus the ready set (`ready-gate`): the Windows +
-#                  macOS legs (`test-os`), the Linux system tier, TS7, the
+#                  macOS legs (`test-os`), the Linux system tier, the
 #                  Node floor and MSRV (on a global change). Off Linux the
 #                  legs run `ci-os`: the whole suite minus the corpus-wide
 #                  tsc/node passes, which are OS-independent and run on Linux
@@ -492,7 +492,7 @@ jobs:
           # make every push run everything after an eviction). rust-cache keys start
           # `v0-rust-<job>-<os.type()>-`. xtask/tests/ci_queue_skip.rs keeps
           # this list in step with the jobs that use rust-cache.
-          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-ts7-Linux test-Windows_NT test-Darwin msrv-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
+          RUST_CACHES: "clippy-Linux api-docs-Linux test-Linux test-system-Linux test-Windows_NT test-Darwin msrv-Linux wasm-Linux registry-core-wasm-Linux web-assets-Linux node-floor-Linux"
         run: |
           passed='[]'
           if [ "$EVENT" = "push" ] && [ "$CACHE_KEYS" != "true" ]; then
@@ -853,7 +853,7 @@ jobs:
       # nextest runs one process pool across every test binary at once (the
       # fixture corpus is dozens of separate binaries `cargo test` would run
       # serially), cutting this leg's wall-clock. Prebuilt binary — no compile.
-      # Pinned to the 0.9 line (like typescript@5): this now
+      # Pinned to the 0.9 line (like typescript@7): this now
       # gates every test run, so a future 0.10 with changed behaviour must not
       # turn CI red with no repo change.
       - uses: ./.github/actions/install-tool
@@ -865,11 +865,11 @@ jobs:
         with:
           node-version: "24"
       # `tsc` is needed by the tsc-verify stage and the `bynk test` fixtures.
-      # Pinned to the verified floor, v5 (TYPESCRIPT_MAJOR_FLOOR): an unpinned
+      # Pinned to the verified major, v7 (TYPESCRIPT_MAJOR_TESTED): an unpinned
       # `typescript` could turn CI red on a new TS major with no repo change.
-      # The verified current major, v7, runs as a second pass below (#1672).
+      # Bynk verifies against TypeScript 7 only (#3420).
       - name: Install TypeScript
-        run: npm install -g typescript@5
+        run: npm install -g typescript@7
       # Provision wrangler ONCE, serially, before the suite. The three workerd
       # smokes each shell out to `npx -y wrangler@4 dev`, and they do it
       # concurrently — under nextest every test is its own process in one pool,
@@ -910,7 +910,7 @@ jobs:
       # C4c (#2940): on Linux this job runs only the unit and integration tiers
       # (`ci-lower`); the system tier (everything that spawns `tsc`, `node`,
       # `workerd`, `wrangler` or the `bynk` binary) runs in the parallel
-      # `test-system` job, and the TS7 re-run in `test-ts7`. A broken unit test
+      # `test-system` job. A broken unit test
       # now turns this job red in the unit tier's own time, without queueing
       # behind the long system tests, and `test-system` stops itself
       # (scripts/ci/run-unless-sibling-fails.sh). Windows and macOS keep the
@@ -925,7 +925,7 @@ jobs:
       # the corpus-wide tsc/node passes (tsc_verify, behaviour_fixtures,
       # examples, example_tests_behaviour). Those check emitted code with the
       # same Node and tsc on every OS, they already ran on Linux in this same
-      # stage (`test-system`, `test-ts7`), and they were ~900 of the ~2100
+      # stage (`test-system`), and they were ~900 of the ~2100
       # test-seconds on the 3-core macOS runner. Byte-for-byte emit checks
       # (the integration tier) and the OS-touching system tests (CLI, paths,
       # workerd) still run here. The nightly runs the full `ci` profile.
@@ -1060,7 +1060,7 @@ jobs:
         with:
           node-version: "24"
       - name: Install TypeScript
-        run: npm install -g typescript@5
+        run: npm install -g typescript@7
       # See the `test` job's note on why wrangler is provisioned once, serially,
       # before the suite. Mandatory on Linux (BYNK_REQUIRE_WORKERD).
       - name: Pre-warm the npx cache for wrangler
@@ -1083,67 +1083,6 @@ jobs:
           path: target/nextest/*/junit.xml
           if-no-files-found: ignore
           retention-days: 30
-
-  test-ts7:
-    # #1672: the emitted output is verified under both TypeScript majors it
-    # supports: the floor (v5, the `test` and `test-system` jobs) and the current
-    # one users get from `npm install -g typescript` (v7, here). C4c (#2940)
-    # moved this out of the serial tail of `test` into a job of its own, in
-    # parallel (it was ~19% of the Linux critical path). Linux only: the
-    # type-check is OS-independent.
-    #
-    # Scope: the two whole-corpus type-check suites, plus the behaviour fixtures
-    # (#2146): tsc_verify type-checks with `--noEmit`, so it never sees an error
-    # tsc reports only while emitting (a top-level name the module transform
-    # reserves), and `bynk test` emits. The other behaviour suites, which also
-    # type-check before running, stay on v5.
-    name: Type-check under TypeScript 7
-    needs: [changes, ready-gate]
-    # Only the Linux leg is split (see the `test` job's note), so this job is
-    # gated on the change filters and the ready set: `test_os` names the legs
-    # of `test` and `test-os`.
-    # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
-    if: >-
-      !cancelled()
-      && needs.ready-gate.result == 'success'
-      && needs.ready-gate.outputs.run == 'true'
-      && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
-      && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Type-check under TypeScript 7')
-    # Always GitHub-hosted, even while `test`'s Linux leg is on the self-hosted
-    # pilot: a pool of one runner would run these jobs back to back (measured on
-    # #2989: `Test suite (ubuntu-latest)` started the second `System tests (Linux)`
-    # finished), which is slower than the single job they replace.
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
-      - uses: ./.github/actions/install-tool
-        with:
-          tool: nextest@0.9
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: "24"
-      # The version check keeps a failed install from silently running under v5.
-      - name: Install TypeScript 7 (the tested major)
-        run: |
-          npm install -g typescript@7
-          v="$(tsc --version 2>/dev/null || true)"
-          case "$v" in
-            "Version 7."*) echo "$v" ;;
-            *) echo "::error::expected TypeScript 7, got: ${v:-no tsc on PATH}"; exit 1 ;;
-          esac
-      - name: Type-check emitted output under TypeScript 7
-        # bynk-tests's integration tests are one binary (`it`, see bynk-tests/tests/it.rs);
-        # each file's tests are prefixed with its tier and stem.
-        run: cargo nextest run --locked --profile ci -p bynk-tests --test it -E 'test(/^system::(tsc_verify|examples|behaviour_fixtures)::/)'
-        env:
-          BYNK_REQUIRE_TSC: "1"
 
   node-floor:
     # The `test` job runs the current LTS; this one runs the oldest Node the
@@ -1187,7 +1126,7 @@ jobs:
         with:
           node-version: ${{ steps.floor.outputs.value }}
       - name: Install TypeScript
-        run: npm install -g typescript@5
+        run: npm install -g typescript@7
       # BYNK_REQUIRE_TSC turns a skipped strip-types check into a failure, so a
       # floor too old for them cannot pass by skipping. `cargo test` rather than
       # nextest: a handful of tests, so the install step would cost more than it
@@ -2014,7 +1953,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Whether this run runs the ready set (see the stage table at the top): the
-  # Windows and macOS legs (`test-os`), the Linux system tier, TS7, the Node
+  # Windows and macOS legs (`test-os`), the Linux system tier, the Node
   # floor and MSRV. Each of those jobs needs this one and checks `run`.
   #
   #   draft    only if `promote` marked the PR ready in this run;
@@ -2073,7 +2012,6 @@ jobs:
       - test-os
       - ready-gate
       - test-system
-      - test-ts7
       - node-floor
       - msrv
       - wasm
@@ -2151,7 +2089,7 @@ jobs:
           READY_SET: ${{ needs.ready-gate.outputs.run }}
         run: |
           if [ "$STAGE" = draft ] && [ "$READY_SET" != true ]; then
-            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS, the Linux system tier, TS7, the Node floor); 'CI green' passes once it has."
+            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS, the Linux system tier, the Node floor); 'CI green' passes once it has."
             exit 1
           fi
           echo "Stage $STAGE: the checks this stage requires have run."

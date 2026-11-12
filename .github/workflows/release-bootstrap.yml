@@ -73,7 +73,7 @@ jobs:
       # mechanism for `npm install -g`). Range-pinned to major 5. Accepted, #828.
       - name: Install TypeScript
         if: ${{ inputs.run_tests }}
-        run: npm install -g typescript@5
+        run: npm install -g typescript@7
       - name: Check version match across manifests
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
