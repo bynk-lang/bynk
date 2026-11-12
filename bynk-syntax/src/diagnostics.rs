@@ -6641,7 +6641,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.ws.route_param_mismatch",
         blurb: "`on message` and `on close` are not given a fresh URL: their route values are recovered, in order, from what `on open` accepted. So the leading parameters of each must have the same types as `on open`'s, in the same order. A different type at some position would reinterpret one route value as another. Match the types of `on open`'s parameters; the names may differ. A missing frame parameter is `bynk.ws.message_frame_param`.",
-        example: "on open (room: RoomId) -> Effect[()] by user: Member { … }\non close (who: UserId) -> Effect[()] by user: Member { … }   // ✗ the first route value is a `RoomId`\n\non open (room: RoomId) -> Effect[()] by user: Member { … }\non close (room: RoomId) -> Effect[()] by user: Member { … }  // ✓ same leading types",
+        example: "on open (room: RoomId) -> Effect[()] by user: Member { … }\non close (who: UserId) -> Effect[()] by user: Member { … }   // ✗ the first route value is a `RoomId`\n\non open (room: RoomId) -> Effect[()] by user: Member { … }\non close (room: RoomId) -> Effect[()] by user: Member { … }   // ✓ same leading types",
         page: "/book/reference/websocket",
         anchor: "service-form",
     },
@@ -9257,7 +9257,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.store.annotation_unsupported",
-        "A known storage annotation (`@ttl`/`@retain`/`@indexed`/`@bounded`) is used before the slice that supports it.",
+        "A known storage annotation that nothing acts on yet (`@bounded`) is used; the others (`@ttl`, `@retain`, `@indexed`) are functional.",
     ),
     d(
         "bynk.store.cache_needs_clock",
@@ -9673,7 +9673,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.tier.system_needs_wire",
-        "An `as system` test stands up fewer than two contexts; the system tier wires across contexts.",
+        "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
     ),
     d(
         "bynk.transition.cross_agent_reference",
