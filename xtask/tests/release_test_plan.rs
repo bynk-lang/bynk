@@ -78,6 +78,22 @@ jq -r "$q" "$f"
         );
     }
 
+    /// The latest nightly (`schedule`) run on main, with the given jobs.
+    fn nightly(&self, jobs: &[(&str, &str)]) {
+        self.put(
+            "repos/o/r/actions/workflows/ci.yml/runs?event=schedule&branch=main&per_page=1",
+            r#"{"workflow_runs":[{"id":99}]}"#,
+        );
+        let list: Vec<String> = jobs
+            .iter()
+            .map(|(n, c)| format!(r#"{{"name":"{n}","conclusion":"{c}"}}"#))
+            .collect();
+        self.put(
+            "repos/o/r/actions/runs/99/jobs?per_page=100",
+            &format!(r#"{{"jobs":[{}]}}"#, list.join(",")),
+        );
+    }
+
     fn commit(&self, sha: &str, subject: &str, author: &str, parent: &str) {
         self.put(
             &format!("repos/o/r/commits/{sha}"),
@@ -122,6 +138,7 @@ const ALL: &str = r#"["ubuntu-latest","macos-latest","windows-latest"]"#;
 #[test]
 fn a_fully_green_push_run_leaves_nothing_to_run() {
     let f = Fixture::new("green");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
     f.commit("aaa", "feat: x", "someone", "p");
     f.run(
         "aaa",
@@ -142,6 +159,7 @@ fn a_fully_green_push_run_leaves_nothing_to_run() {
 #[test]
 fn only_the_legs_without_a_green_result_run() {
     let f = Fixture::new("partial");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
     f.commit("aaa", "feat: x", "someone", "p");
     f.run(
         "aaa",
@@ -187,6 +205,7 @@ fn no_run_and_lookup_errors_run_every_leg() {
 #[test]
 fn a_manual_dispatch_always_runs_every_leg() {
     let f = Fixture::new("dispatch");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
     f.commit("aaa", "feat: x", "someone", "p");
     f.run(
         "aaa",
@@ -207,6 +226,7 @@ fn a_manual_dispatch_always_runs_every_leg() {
 #[test]
 fn the_queue_run_answers_for_jobs_the_push_run_skipped() {
     let f = Fixture::new("queue");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
     f.commit("aaa", "feat: x", "someone", "p");
     // The push run has the OS legs; the queue passed the Linux pair instead.
     f.run("aaa", "push", 1, &[(MAC, "success"), (WIN, "success")]);
@@ -224,6 +244,7 @@ fn the_queue_run_answers_for_jobs_the_push_run_skipped() {
 #[test]
 fn a_failed_push_leg_is_not_overridden_by_the_queue() {
     let f = Fixture::new("override");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
     f.commit("aaa", "feat: x", "someone", "p");
     f.run(
         "aaa",
@@ -250,6 +271,7 @@ fn a_failed_push_leg_is_not_overridden_by_the_queue() {
 #[test]
 fn a_stamp_commit_falls_back_to_its_parent_for_jobs_its_run_skipped() {
     let f = Fixture::new("stamp");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
     f.commit(
         "sss",
         "chore(stamp): assign version",
@@ -325,6 +347,7 @@ fn a_failed_job_on_a_stamp_commit_is_not_overridden_by_its_parent() {
 fn an_in_progress_or_cancelled_job_is_not_a_pass() {
     for (tag, conclusion) in [("inprogress", "null"), ("cancelled", "\"cancelled\"")] {
         let f = Fixture::new(tag);
+        f.nightly(&[(MAC, "success"), (WIN, "success")]);
         f.commit("aaa", "feat: x", "someone", "p");
         f.put(
             "repos/o/r/actions/workflows/ci.yml/runs?head_sha=aaa&event=push&branch=main&per_page=1",
@@ -338,6 +361,54 @@ fn an_in_progress_or_cancelled_job_is_not_a_pass() {
         );
         if let Some(m) = f.plan("push", "aaa") {
             assert_eq!(m, r#"["windows-latest"]"#, "{tag}");
+        }
+    }
+}
+
+#[test]
+fn a_non_linux_leg_also_needs_a_green_nightly_on_that_os() {
+    // ci.yml is green on the commit for every leg, but the full `ci` profile
+    // (the tsc/node passes) has not been seen green on Windows by the nightly.
+    for (tag, nightly) in [
+        ("nonightly", None),
+        ("nightlyfail", Some([(MAC, "success"), (WIN, "failure")])),
+        ("nightlyrunning", Some([(MAC, "success"), (WIN, "null")])),
+    ] {
+        let f = Fixture::new(tag);
+        f.commit("aaa", "feat: x", "someone", "p");
+        f.run(
+            "aaa",
+            "push",
+            1,
+            &[
+                (LINUX, "success"),
+                (SYSTEM, "success"),
+                (MAC, "success"),
+                (WIN, "success"),
+            ],
+        );
+        let expected = match nightly {
+            None => r#"["macos-latest","windows-latest"]"#,
+            Some(jobs) => {
+                if tag == "nightlyrunning" {
+                    f.put(
+                        "repos/o/r/actions/workflows/ci.yml/runs?event=schedule&branch=main&per_page=1",
+                        r#"{"workflow_runs":[{"id":99}]}"#,
+                    );
+                    f.put(
+                        "repos/o/r/actions/runs/99/jobs?per_page=100",
+                        &format!(
+                            r#"{{"jobs":[{{"name":"{MAC}","conclusion":"success"}},{{"name":"{WIN}","conclusion":null}}]}}"#
+                        ),
+                    );
+                } else {
+                    f.nightly(&jobs);
+                }
+                r#"["windows-latest"]"#
+            }
+        };
+        if let Some(m) = f.plan("push", "aaa") {
+            assert_eq!(m, expected, "{tag}");
         }
     }
 }
