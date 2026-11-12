@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.562.4** | `bynk deploy` warns when an inbound email `Forward` destination is not a verified address |
 | **v0.562.3** | The runtime gains `requestBodyStream`, a lazy, cap-counted `Stream[Bytes]` over a request body, and `BodyTooLarge`, the first step of streaming a `@raw` request body (#3380, #3180 slice 3) |
 | **v0.562.2** | A test keeps the Book's upgrading page ordered, non-empty and matched to the changelog (#3178) |
 | **v0.562.1** | Three diagnostic notes no longer give stale advice — `bynk.parse.doc_block_contains_code` suggests a `//` divider, `bynk.generics.generic_non_record` names alias bodies, and `bynk.generics.generic_sum_embeds` says to wrap with `.mapErr(…)` |
