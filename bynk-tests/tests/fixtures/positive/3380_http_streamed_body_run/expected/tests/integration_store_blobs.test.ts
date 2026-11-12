@@ -97,6 +97,24 @@ async function __sysdrive_wrongmethod_blobs(method: string, path: string) {
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
+async function __sysdrive_rendered_http_PUT_rendered_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+const __it = body[globalThis.Symbol.asyncIterator](); const __body = new globalThis.ReadableStream<Uint8Array>({ async pull(c) { const r = await __it.next(); if (r.done) c.close(); else c.enqueue(r.value); } }, { highWaterMark: 0 });  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/rendered/${name}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream", }, body: __body, ...({ duplex: "half" } as object), });
+  const __res = await __h.env.STORE_BLOBS.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_rendered_http_PUT_rendered_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/rendered/${name}`, { method: "PUT", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8", }, body: new globalThis.ReadableStream<Uint8Array>({ start(c) { c.enqueue(new globalThis.TextEncoder().encode(body)); c.close(); } }), ...({ duplex: "half" } as object), });
+  const __res = await __h.env.STORE_BLOBS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_wrongmethod_rendered(method: string, path: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test${path}`, { method });
+  const __res = await __h.env.STORE_BLOBS.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
+}
 
 async function test_a_streamed_body_round_trips_through_the_router() {
   try {
@@ -162,6 +180,22 @@ async function test_a_streamed_route_refuses_another_content_type() {
   }
 }
 
+async function test_a_streamed_overrun_is_rendered_by_on_rejected__like_any_other_413() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_raw_rendered_http_PUT_rendered_Param_name(String("big.bin"), "this body is a good deal longer than sixty-four bytes, which is the service cap", undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "PayloadTooLarge" && r.value.message === "too_large"))) { throw __bynkExpectFailure("tests/blobs.bynk:36:10", 1666, 1708, "expect r is Handled(PayloadTooLarge(\"too_large\"))"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 type CaseResult = {
   name: string;
   pass: boolean;
@@ -176,7 +210,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a streamed body round-trips through the router", "a body of exactly the cap is delivered whole", "a body past the cap is refused on the bytes read, with no content-length to go by", "a streamed route refuses another content type"];
+export const __bynkCases: readonly string[] = ["a streamed body round-trips through the router", "a body of exactly the cap is delivered whole", "a body past the cap is refused on the bytes read, with no content-length to go by", "a streamed route refuses another content type", "a streamed overrun is rendered by on rejected, like any other 413"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results = [];
@@ -202,6 +236,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a streamed route refuses another content type")) {
     const started = __bynkCaseNow();
     const r = { name: "a streamed route refuses another content type", ...(await test_a_streamed_route_refuses_another_content_type()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a streamed overrun is rendered by on rejected, like any other 413")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a streamed overrun is rendered by on rejected, like any other 413", ...(await test_a_streamed_overrun_is_rendered_by_on_rejected__like_any_other_413()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

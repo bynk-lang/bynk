@@ -2895,9 +2895,7 @@ fn check_service_decls(
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
     for service in table.services.values() {
-        if let Some(policy) = &service.cors {
-            validate_cors_policy(service, policy, errors);
-        }
+        validate_service_cors(service, errors);
     }
 
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
@@ -4370,6 +4368,94 @@ fn check_agent_decls(
     }
 }
 
+/// A service's CORS checks: its `cors { }` policy (ADR 0159) and, #3329, the
+/// cross-site cookie warning that depends on it.
+fn validate_service_cors(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+    if let Some(policy) = &service.cors {
+        validate_cors_policy(service, policy, errors);
+    }
+    warn_cross_site_cookie_without_credentials(service, errors);
+}
+
+/// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
+/// `from http` service whose handlers attach a `Cookie { … sameSite:
+/// SameSite.Unrestricted … }` (`withCookie`/`clearCookie`) but whose `cors`
+/// policy lacks `credentials: true` (or that has none). The browser withholds
+/// the cookie from credential-less cross-site requests, so it can never return.
+fn warn_cross_site_cookie_without_credentials(
+    service: &ServiceDecl,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        return;
+    }
+    if service.cors.as_ref().is_some_and(|c| c.credentials()) {
+        return;
+    }
+    let mut hit: Option<Span> = None;
+    for handler in &service.handlers {
+        let mut exprs: Vec<&Expr> = Vec::new();
+        for s in &handler.body.statements {
+            bynk_syntax::ast::statement_exprs(s, &mut exprs);
+        }
+        exprs.push(&handler.body.tail);
+        let mut visit = |e: &Expr| {
+            if hit.is_some() {
+                return;
+            }
+            let ExprKind::MethodCall { method, args, .. } = &e.kind else {
+                return;
+            };
+            if method.name != "withCookie" && method.name != "clearCookie" {
+                return;
+            }
+            let Some(arg) = args.first() else { return };
+            let ExprKind::RecordConstruction {
+                type_name, fields, ..
+            } = &arg.kind
+            else {
+                return;
+            };
+            let unrestricted = type_name.name == "Cookie" && fields.iter().any(|f| {
+                f.name.name == "sameSite"
+                    && matches!(
+                        f.value.as_ref().map(|v| &v.kind),
+                        Some(ExprKind::FieldAccess { field, .. }) if field.name == "Unrestricted"
+                    )
+            });
+            if unrestricted {
+                hit = Some(arg.span);
+            }
+        };
+        fn walk(e: &Expr, f: &mut dyn FnMut(&Expr)) {
+            f(e);
+            for c in bynk_syntax::ast::expr_children(e) {
+                walk(c, f);
+            }
+        }
+        for e in exprs {
+            walk(e, &mut visit);
+        }
+        if hit.is_some() {
+            break;
+        }
+    }
+    let Some(span) = hit else { return };
+    errors.push(
+        CompileError::new(
+            "bynk.http.cookie_cross_site_without_credentials",
+            span,
+            format!(
+                "service `{}` sets a `SameSite.Unrestricted` cookie but does not declare `cors {{ credentials: true }}`, so a cross-origin `fetch` can never send it back",
+                service.name.name
+            ),
+        )
+        .with_note(
+            "add `cors { origins: [...], credentials: true }` if a page on another origin must send it back; a cookie used only in cross-site navigations, embeds or SSO callbacks needs no `cors`, and `SameSite.Lax` suits one that need not cross sites",
+        ),
+    );
+}
+
 /// Validate a service's `cors { }` policy (v0.131, ADR 0159). The grammar is
 /// lenient — any `name: value` field parses — so the checker is where the closed
 /// field set, the value shapes, and the spec-mandated wildcard/credentials
@@ -5032,7 +5118,7 @@ fn validate_http_handler(
                         method.as_str()
                     ),
                 )
-                .with_note("GET and DELETE requests conventionally carry no body in Bynk v0.9"),
+                .with_note("GET and DELETE requests conventionally carry no body"),
             );
         }
     }

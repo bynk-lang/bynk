@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __requestBodyStream, __untilBodyTooLarge, __mediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __requestBodyStream, __untilBodyTooLarge, __mediaTypeMatches, __renderRejection } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -21,6 +21,7 @@ export default {
     const method = request.method;
     const surface = compose(env);
     const __security_blobs: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+    const __security_rendered: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -56,6 +57,25 @@ export default {
         }
       }
       {
+        const __m = __matchPath("/rendered/:name", path);
+        if (method === "PUT" && __m) {
+          __route = "PUT /rendered/:name";
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_rendered(why)), __security_rendered);
+          }
+          const __raw_name = __m.params["name"];
+          const name = __raw_name;
+          const body = __requestBodyStream(request, 64);
+          const __handled = await __untilBodyTooLarge(surface.http_PUT_rendered_Param_name(name, body));
+          if (__handled.tooLarge) {
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_rendered(why)), __security_rendered);
+          }
+          const result = __handled.value;
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_rendered);
+        }
+      }
+      {
         const __m = __matchPath("/zips/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /zips/:name";
@@ -81,6 +101,11 @@ export default {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_blobs);
+      }
+      if (__matchPath("/rendered/:name", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } }), (why) => surface.rejected_rendered(why));
+        return __applySecurityHeaders(__res, __security_rendered);
       }
       if (__matchPath("/zips/:name", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;

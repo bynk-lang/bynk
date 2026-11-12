@@ -483,6 +483,8 @@ or warned about:
 | `bynk.http.cookie_host_prefix` | a `__Host-` name that is not `secure`, has a `domain`, or a `path` other than `/` |
 | `bynk.http.cookie_secure_prefix` | a `__Secure-` name that is not `secure` |
 | `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
+| `bynk.http.cookie_domain_widens` | a `domain` on a cookie whose name is not `__Host-` (a warning): every subdomain receives it |
+| `bynk.http.cookie_cross_site_without_credentials` | a service attaches a `SameSite.Unrestricted` cookie but has no `cors { credentials: true }` (a warning): a cross-origin `fetch` can never send it back |
 | `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
 
 Only a literal is judged. A computed cookie is checked when it is sent: a name that is not
@@ -916,8 +918,8 @@ service archives from http {
   `headers.get("content-length")`; a stream with more or fewer bytes than `size` faults the
   write and stores nothing. A chunked upload has no `Content-Length`, so it cannot go to
   `putStream`: pass it to [`Fetch.sendStream`](/book/reference/bynk-capabilities/#streamed-bodies),
-  which needs no length, or answer `411`. A proxy can also re-serve what it receives
-  through [`RawStreamed`](#streamed-raw-responses).
+  which needs no length, or answer `411`. A proxy reads the body first, then answers: it
+  does not re-serve the request stream as its response (see below).
 - **Not with a signature or a sum of actors.** A `Signature` actor verifies an HMAC over
   the whole body before the handler runs (`bynk.http.stream_body_signature`), and a sum
   of actors reads the body itself (`bynk.http.stream_body_on_sum_route`). Use a

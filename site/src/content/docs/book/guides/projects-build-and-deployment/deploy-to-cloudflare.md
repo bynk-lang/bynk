@@ -816,9 +816,43 @@ it; `--yes` alone does not). A first deploy has nothing recorded and asks
 nothing, and neither does an added address. Dropping every `from email` service
 removes every recorded address the same way.
 
-Email Routing must be turned on for the domain, and a `Forward(to)` destination
-must be a verified destination address in the account; deploy does not check
-either. A forward the platform refuses is rejected `forward refused` and logged.
+Email Routing must be turned on for the domain; deploy does not check that.
+
+#### Forward destinations
+
+A `Forward(to)` destination must be a **verified destination address** in the
+account, or Cloudflare refuses the forward: the handler is answered
+`Reject("forward refused")`, the sender's mail bounces, and the cause shows only in
+the Worker's logs. So deploy resolves each *literal* destination, a string written
+in the handler (`Forward("finance@shop.example")`), against the account's Email
+Routing destination addresses and **warns** when one is missing or not yet
+verified. It is a warning, not a failure: verifying is a human step, and a failing
+deploy would block unrelated changes until someone had clicked a link.
+
+```text
+bynk: warning: `billing` (context `shop.support`) forwards to `finance@shop.example`, which is not verified yet. Cloudflare refuses a forward to an address that is not verified, so the sender's mail bounces ("forward refused"). The owner of `finance@shop.example` verifies it by clicking the link Cloudflare emailed to that address; its status is under Email Routing → Destination addresses.
+```
+
+To verify an address, open **Email Routing → Destination addresses** in the
+dashboard and add it if it is not listed; Cloudflare emails a link to that address,
+and its owner clicks the link. Deploy finds the literals from the checked program,
+so a comment or an unrelated string that spells an address counts for nothing. A `Forward` in a helper `fn` of the context is attributed to the context's email handlers. A
+destination computed at run time (`Forward(lookup(mail))`) cannot be known at
+deploy, so the plan says so once per handler that does it and leaves the check to
+you. Addresses are matched with the domain case-insensitive and the local part
+exactly as Cloudflare stored it; a destination that differs only in the local part's
+letter case is reported as missing, naming the stored spelling.
+
+The lookup calls Cloudflare's API (`GET /accounts/{account_id}/email/routing/addresses`,
+every page), so it needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the
+token with the account-level **Email Routing Addresses: Read** permission (Write
+also works). It is needed only for a project with an inbound email Worker that
+forwards to a literal address. Without the permission, or without the credentials,
+deploy prints one warning saying the check was skipped and carries on. `--dry-run`
+shows the same warnings.
+
+#### Dependencies
+
 The Worker needs `postal-mime` installed beside it: the build's `package.json`
 lists it, exactly pinned, so run `npm install` in `.bynk/deploy` before
 deploying. `bynk deploy` (and `bynk dev`) stop before wrangler and name any

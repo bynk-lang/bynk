@@ -6,6 +6,10 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
+export function problem(code: string, message: string): globalThis.Uint8Array {
+  return new globalThis.TextEncoder().encode(`{"error":"${String(code)}","message":"${String(message)}"}`);
+}
+
 export const blobs = {
   async http_PUT_blobs_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, deps: {}): globalThis.Promise<HttpResult<string>> {
     const chunks = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(body);
@@ -15,5 +19,23 @@ export const blobs = {
   async http_PUT_zips_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, deps: {}): globalThis.Promise<HttpResult<string>> {
     const chunks = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(body);
     return HttpResult.Ok(`${String(name)} ${String((chunks).length)}`);
+  },
+};
+
+export const rendered = {
+  async http_PUT_rendered_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, deps: {}): globalThis.Promise<HttpResult<string>> {
+    const chunks = await (async (__s) => { const __m = __s as unknown as { [k: symbol]: boolean }; const __k = globalThis.Symbol.for("bynk.stream.read"); if (__m[__k]) { throw new globalThis.Error("bynk: a stream can be read only once"); } __m[__k] = true; const __r = []; for await (const __e of __s) { __r.push(__e); } return __r; })(body);
+    return HttpResult.Ok(`${String(name)} ${String((chunks).length)}`);
+  },
+  async rejected(why: { readonly tag: string; readonly detail: string }, deps: {}): globalThis.Promise<HttpResult<void>> {
+    switch (why.tag) {
+      case "PayloadTooLarge": {
+        return HttpResult.RawError(413, problem("too_large", "the body is too large"), "application/json");
+      }
+      default: {
+        return HttpResult.RawError(400, problem("bad_request", "the request is malformed"), "application/json");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
   },
 };

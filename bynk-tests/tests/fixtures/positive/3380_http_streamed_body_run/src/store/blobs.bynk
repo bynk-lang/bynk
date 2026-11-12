@@ -21,3 +21,26 @@ service blobs from http {
 		Ok("\(name) \(chunks.length())")
 	}
 }
+
+// A service that renders the router's rejections itself: a streamed body that crosses
+// its cap mid-read goes through `on rejected` like any other `413`.
+service rendered from http {
+	limits { maxBody: 64 }
+
+	@raw(contentType: "*/*")
+	on PUT("/rendered/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		Ok("\(name) \(chunks.length())")
+	}
+
+	on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+		match why {
+			PayloadTooLarge(_) => RawError(PayloadTooLarge, problem("too_large", "the body is too large"), "application/json")
+			_ => RawError(BadRequest, problem("bad_request", "the request is malformed"), "application/json")
+		}
+	}
+}
+
+fn problem(code: String, message: String) -> Bytes {
+	Bytes.fromUtf8("{\"error\":\"\(code)\",\"message\":\"\(message)\"}")
+}

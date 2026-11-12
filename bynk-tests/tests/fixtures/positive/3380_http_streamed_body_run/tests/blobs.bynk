@@ -30,4 +30,9 @@ suite store.blobs as system {
 		let r <- blobs.PUT("/zips/:name", "a.zip", Wire("not a zip"))
 		expect r is Rejected(UnsupportedMediaType(_))
 	}
+
+	case "a streamed overrun is rendered by on rejected, like any other 413" {
+		let r <- rendered.PUT("/rendered/:name", "big.bin", Wire("this body is a good deal longer than sixty-four bytes, which is the service cap")) by Visitor
+		expect r is Handled(PayloadTooLarge("too_large"))
+	}
 }

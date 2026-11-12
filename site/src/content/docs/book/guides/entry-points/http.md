@@ -260,6 +260,30 @@ the browser blocks it — the same fail-closed posture as authentication.
 See [HTTP → CORS](/book/reference/http/#cors) for the full field table and matching
 rules.
 
+### Cross-site cookies need `credentials: true`
+
+A cookie set with `sameSite: SameSite.Unrestricted` is meant to travel on cross-site
+requests, but a browser sends cookies on a cross-origin `fetch` only when the request is
+credentialed *and* the service answers with `credentials: true`. A service that attaches
+such a cookie without that policy gets a warning
+(`bynk.http.cookie_cross_site_without_credentials`), because the cookie could never come
+back:
+
+```bynk,fragment
+service api from http {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on POST("/login") () -> Effect[HttpResult[String]] by v: Visitor {
+    Created("ok").withCookie(Cookie { name: "sid", value: "a", sameSite: SameSite.Unrestricted })
+  }
+}
+```
+
+Likewise, a `domain` on a cookie makes every subdomain receive it, so it warns
+(`bynk.http.cookie_domain_widens`) unless the name starts `__Host-`, where a `domain` is an
+error. Drop `domain` to keep a cookie to the host that set it. See
+[HTTP → Setting cookies](/book/reference/http/#setting-cookies).
+
 ## Secure by default (security headers)
 
 You don't have to do anything to get the one security header that matters for a

@@ -2049,7 +2049,10 @@ when it has `sameSite: SameSite.Unrestricted` or `partitioned: true` with `secur
 name that is not `secure`, has a `domain`, or a `path` other than `/`
 (`bynk.http.cookie_host_prefix`), or a `__Secure-` name that is not `secure`
 (`bynk.http.cookie_secure_prefix`); it draws a warning for `httpOnly: false`
-(`bynk.http.cookie_script_readable`). A `@cache(scope: public)` handler MUST NOT take a `cookies`
+(`bynk.http.cookie_script_readable`) and for a `domain` on a name that is not `__Host-`
+(`bynk.http.cookie_domain_widens`). A `from http` service whose handlers attach a literal
+`Cookie` with `sameSite: SameSite.Unrestricted` and that does not declare `cors { credentials: true }`
+draws a warning (`bynk.http.cookie_cross_site_without_credentials`). A `@cache(scope: public)` handler MUST NOT take a `cookies`
 parameter (`bynk.http.cache_public_reads_cookies`). A computed cookie that is not valid at
 emission (a name that is not a token, a value outside the cookie-octet set, an unsafe `Domain` or
 `Path`, an `Expires` outside the date range, a violated prefix rule, or a header over 4096 bytes)
