@@ -1,0 +1,11 @@
+context api
+
+type Refusal = {
+    detail: String,
+}
+
+service api from http {
+    on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
+        RawError(BadRequest, Bytes.fromUtf8("bad request"), "text/plain")
+    }
+}

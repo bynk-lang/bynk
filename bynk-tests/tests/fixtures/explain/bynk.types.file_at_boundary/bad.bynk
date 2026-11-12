@@ -1,0 +1,13 @@
+context gallery
+
+consumes bynk { File }
+
+agent Gallery {
+    key id: String
+
+    store photo: Cell[Option[File]]
+
+    on call count() -> Effect[Int] {
+        Effect.pure(0)
+    }
+}

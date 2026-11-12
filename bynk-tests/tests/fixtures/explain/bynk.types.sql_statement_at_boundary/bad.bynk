@@ -1,0 +1,16 @@
+context orders
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+type Job = {
+    statement: SqlStatement,
+}
+
+service exec {
+    on call(id: String) -> Effect[Int] given Orders {
+        let runs <- Orders.batch([])
+        Effect.pure(1)
+    }
+}

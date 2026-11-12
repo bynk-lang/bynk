@@ -1,0 +1,10 @@
+context api
+
+type Signup = { email: String }
+
+service api from http {
+    @form(contentType: "application/x-www-form-urlencoded")
+    on POST("/signup") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor {
+        SeeOther("/welcome")
+    }
+}
