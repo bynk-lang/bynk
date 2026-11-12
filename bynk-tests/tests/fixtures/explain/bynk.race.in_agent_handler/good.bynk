@@ -1,0 +1,16 @@
+context demo
+
+agent Slow {
+    key id: String
+    store n: Cell[Int] = 0
+
+    on call get() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}
+
+service quotes {
+    on call() -> Effect[Int] {
+        Slow("a").get().race(Slow("b").get())
+    }
+}

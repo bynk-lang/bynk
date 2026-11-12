@@ -1,0 +1,5 @@
+CREATE TABLE orders (
+  id TEXT PRIMARY KEY,
+  total INTEGER NOT NULL
+);
+

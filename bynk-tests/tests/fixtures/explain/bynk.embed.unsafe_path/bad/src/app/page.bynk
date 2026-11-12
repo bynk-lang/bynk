@@ -1,0 +1,3 @@
+commons app.page
+
+embed shell = "embeds/../page.html"
