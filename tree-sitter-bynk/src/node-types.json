@@ -10296,7 +10296,15 @@
         "required": true,
         "types": [
           {
+            "type": "identifier",
+            "named": true
+          },
+          {
             "type": "number_literal",
+            "named": true
+          },
+          {
+            "type": "scheme_duration",
             "named": true
           },
           {
@@ -10317,6 +10325,25 @@
       "types": [
         {
           "type": "scheme_arg",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "scheme_duration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "number_literal",
           "named": true
         }
       ]
@@ -13830,6 +13857,10 @@
   },
   {
     "type": "Signature",
+    "named": false
+  },
+  {
+    "type": "SignedCookie",
     "named": false
   },
   {

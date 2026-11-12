@@ -354,6 +354,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.actor.scheme_arg_kind",
+        blurb: "A scheme's config values are strings and integers, except that a `SignedCookie` also takes a duration (`ttl = 12.hours`) and a bare name (`sameSite = Lax`). Every other scheme reads a string or an integer, so a duration or a bare name would be dropped without a word: a `Signature` `tolerance = 5.minutes` would read as no tolerance at all, and the replay window would be off. Write a `Signature` tolerance in whole seconds, and quote a string.",
+        example: "actor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 5.minutes) }   // ✗ a duration\n\nactor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }   // ✓ seconds",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
         code: "bynk.actor.scheme_not_admissible",
         blurb: "Each protocol admits only the schemes that can be verified on it. HTTP takes \
                 `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` \
@@ -412,6 +419,97 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "schemes",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_bad_arg",
+        blurb: "Each `SignedCookie` key takes one kind of value: `secret`, `previous` and `cookie` are strings, `ttl` is a duration, and `sameSite` is `Lax`, `Strict` or `Unrestricted`. Fix the value or remove the key.",
+        example: "actor User { auth = SignedCookie(secret = 5, ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_bad_name",
+        blurb: "A cookie name is an RFC 6265 token: letters, digits and a few punctuation characters, with no space, `=`, `;`, `,` or quote. A browser would drop or misread anything else. The default, `__Host-session`, is always legal.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, cookie = \"my session\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_bad_ttl",
+        blurb: "`ttl` must be a `Duration` literal that is positive and a whole number of seconds, because it becomes both a `Max-Age` and a signed expiry in seconds. Write `12.hours` or `30.minutes`.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1500.milliseconds), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_duplicate_key",
+        blurb: "A `SignedCookie` config names each key once. A repeated `secret` or `ttl` would have the first value win and the second ignored without a word, in the scheme that guards a session. Keep the one you mean.",
+        example: "actor User { auth = SignedCookie(secret = \"A\", secret = \"B\", ttl = 12.hours), identity = UserId }   // ✗ two secrets\n\nactor User { auth = SignedCookie(secret = \"A\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_identity_not_string_constructible",
+        blurb: "The identity is minted from the cookie's `sub` claim, which is a string, so it must be a refined or opaque `String` type that this context owns. Declare `identity = T`.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours) }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_missing_secret",
+        blurb: "A `SignedCookie` actor signs the session cookies it issues and verifies the ones it receives, so it needs a key. `secret` names the environment variable holding it, never the key itself. `bynk deploy` mints a random 32-byte key for it when the variable is unset, so you never choose one.",
+        example: "actor User { auth = SignedCookie(ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_missing_ttl",
+        blurb: "A session cookie that never expires is the failure a language should not allow by omission, so `ttl` is required. It is how long an issued cookie is valid: the browser's `Max-Age` and the signed expiry both come from it. A stateless cookie cannot be revoked before it expires, so keep it short.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_not_in_sum",
+        blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
+        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ declared; guard a route with a single `by who: User` once routes are accepted",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_public_cache",
+        blurb: "A route guarded by a session cookie answers one user, so a shared cache must not store its response, or it would serve one user's answer to another. Use `scope: private`, which lets only the browser keep it, or drop `@cache`.",
+        example: "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\non GET(\"/me\") () -> Effect[HttpResult[String]] by who: User { … }\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ declared; use `scope: private` (or no `@cache`) on the routes it guards",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_secret_shared",
+        blurb: "A session key signs one actor's cookies and nothing else. If two actors shared a variable, a cookie issued for one would verify for the other, and a Bearer token could be replayed as a cookie. Give each actor its own variable; `previous` is the key being rotated out, so it differs from `secret` too.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_ttl_long",
+        blurb: "A stateless signed cookie cannot be revoked before it expires: a copy a user already took keeps working for the whole `ttl`. Beyond 30 days that is a long exposure, so it warns. Shorten the `ttl`, or keep the session on the server (see `examples/sessions`) if you need to log out everywhere.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 31.days), identity = UserId }   // ⚠ long-lived\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_unknown_key",
+        blurb: "A `SignedCookie` takes `secret`, `ttl`, `cookie`, `previous` and `sameSite`, and nothing else. The set is closed so a misspelt option is refused rather than ignored. The cookie's `Domain` and `Path` are not configurable on purpose: the issued cookie is always host-only and `Path=/`, which keeps a `__Host-` name valid.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, domain = \"example.com\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_unprefixed",
+        blurb: "A `__Host-` cookie name tells the browser to keep the cookie only if it is `Secure`, host-only and `Path=/`, so a sibling subdomain cannot set or overwrite it. An unprefixed session cookie is open to cookie tossing from any subdomain, which is rarely intended. The default is `__Host-session`; drop `cookie` or give it a `__Host-` name.",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, cookie = \"session\"), identity = UserId }   // ⚠ not `__Host-`\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ `__Host-session` by default",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
         code: "bynk.actor.sum_requires_binder",
         blurb: "`by A | B` tries the actors in order and the first that verifies the caller wins. \
                 Which one that was is only known when a request arrives, so the handler learns it \
@@ -439,13 +537,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.unknown_scheme",
         blurb: "An actor's `auth` names how its callers are verified, and the compiler writes \
                 that check itself, so the scheme must be one it knows: `None`, `Internal`, \
-                `Bearer`, `Signature`, `Oidc` or `Foreign`. There are no user-defined schemes, \
+                `Bearer`, `Signature`, `Oidc`, `Foreign` or `SignedCookie`. There are no user-defined schemes, \
                 and a name outside the set is usually a typo or a scheme borrowed from another \
                 framework. Choose the one that matches how callers prove who they are, such as \
                 `Bearer` for a JWT signed with a shared key; the actors page lists what each \
                 one needs.",
         example: "actor Robot { auth = Bogus }   // ✗ not a scheme the compiler knows\n\n\
-                  actor Robot { auth = None }    // ✓ one of the six",
+                  actor Robot { auth = None }    // ✓ one of the seven",
         page: "/book/reference/actors",
         anchor: "schemes",
     },
@@ -7115,6 +7213,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A refinement actor's `where` predicate is outside the closed claim-predicate set.",
     ),
     d(
+        "bynk.actor.scheme_arg_kind",
+        "A scheme config value other than `SignedCookie`'s is a duration or a bare name, which only `SignedCookie` takes.",
+    ),
+    d(
         "bynk.actor.scheme_not_admissible",
         "An actor's scheme is not admissible on this handler's protocol.",
     ),
@@ -7138,6 +7240,62 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.actor.signature_tolerance_without_timestamp",
         "A `Signature` actor set `tolerance` without a `timestamp` header.",
     ),
+    d(
+        "bynk.actor.signed_cookie_bad_arg",
+        "A `SignedCookie` config value has the wrong kind.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_bad_name",
+        "A `SignedCookie` `cookie` is not a legal cookie name.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_bad_ttl",
+        "A `SignedCookie` `ttl` is not a positive whole number of seconds.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_duplicate_key",
+        "A `SignedCookie` config repeats a key.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_identity_not_string_constructible",
+        "A `SignedCookie` actor's identity is missing or not a string-constructible type.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_missing_secret",
+        "A `SignedCookie` actor does not name its signing secret.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_missing_ttl",
+        "A `SignedCookie` actor does not declare a `ttl`.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_not_in_sum",
+        "A `SignedCookie` actor appears as a member of a multi-actor sum.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_not_yet_emitted",
+        "A route is guarded by a `SignedCookie` actor, whose verifier is not emitted yet.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_public_cache",
+        "A `@cache(scope: public)` route is guarded by a `SignedCookie` actor.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_secret_shared",
+        "A `SignedCookie` actor's `secret` or `previous` is also used by another actor, or by itself.",
+    ),
+    warn(d(
+        "bynk.actor.signed_cookie_ttl_long",
+        "A `SignedCookie` `ttl` is longer than 30 days (warning).",
+    )),
+    d(
+        "bynk.actor.signed_cookie_unknown_key",
+        "A `SignedCookie` config has a key outside the closed set.",
+    ),
+    warn(d(
+        "bynk.actor.signed_cookie_unprefixed",
+        "A `SignedCookie` `cookie` does not start with `__Host-` (warning).",
+    )),
     d(
         "bynk.actor.sum_requires_binder",
         "A multi-actor sum `by` clause has no binder to match the resolved actor.",

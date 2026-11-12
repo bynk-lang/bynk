@@ -23,6 +23,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
 | `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity; `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
+| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. **Declaration only in this version**: see [Signed cookies](#signed-cookies) |
 | `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/book/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
@@ -46,6 +47,45 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
   not be any other actor's secret in the context. `bynk deploy` mints the
   secret, sets it on the context, and prints the `wrangler secret put` for the
   foreign Worker's operator, naming the Worker when `worker` is given.
+
+## Signed cookies
+
+A `SignedCookie` actor authenticates a browser from a session cookie that Bynk itself issues
+and verifies, so there is no token to mint elsewhere:
+
+```bynk,ignore
+actor User {
+  auth = SignedCookie(
+    cookie = "__Host-session",       // optional; this is the default
+    secret = "SESSION_KEY",          // env var holding the signing key
+    previous = "SESSION_KEY_PREV",   // optional; accepted for verification only
+    ttl = 12.hours                   // required
+  ),
+  identity = UserId
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `secret` | the environment variable holding the signing key (never the key). Required |
+| `ttl` | how long an issued cookie is valid, a positive whole number of seconds. Required; over 30 days warns |
+| `cookie` | the cookie's name; defaults to `__Host-session`; a name without the `__Host-` prefix warns |
+| `previous` | the key being rotated out, accepted for verification only |
+| `sameSite` | `Lax` (the default), `Strict` or `Unrestricted` |
+
+The cookie's `Domain` and `Path` are not configurable: it is always host-only with `Path=/`.
+The identity is minted from the cookie's `sub` and must be a string-constructible type the
+context owns, as for `Bearer`. A `SignedCookie` secret may not be any other actor's secret.
+
+**What this version does.** It checks the declaration and its diagnostics, and refuses a route
+guarded by one (`bynk.actor.signed_cookie_not_yet_emitted`): accepting it before the verifier
+is emitted would compile a route with no authentication. Issuing, verifying, expiry, key
+rotation and CSRF protection follow in later versions of the same increment
+([#3386](https://github.com/bynk-lang/bynk/issues/3386)).
+
+A `SignedCookie` actor stands alone on its route, like `Oidc`
+(`bynk.actor.signed_cookie_not_in_sum`), cannot be the base of a refinement actor, and cannot guard
+a `@cache(scope: public)` route (`bynk.actor.signed_cookie_public_cache`).
 
 ## Reading claims
 
@@ -148,7 +188,7 @@ them `missing_by_on_http`, `scheme_not_admissible`, `signature_requires_body`,
 `oidc_identity_not_string_constructible`, `oidc_not_in_sum`,
 `foreign_missing_secret`, `foreign_reserved_secret`,
 `foreign_name_is_context_name`, `foreign_identity_unsupported`,
-`foreign_secret_not_string`, and `foreign_duplicate_secret`.
+`foreign_secret_not_string`, `foreign_duplicate_secret`, and the `signed_cookie_*` family.
 
 ## Who, not whose
 

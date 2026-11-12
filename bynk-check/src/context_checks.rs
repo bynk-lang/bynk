@@ -2213,6 +2213,25 @@ fn check_by_clause_contracts(
                 ),
             );
         }
+        // #3386: `SignedCookie` is single-actor only in its first slice, as
+        // `Oidc` was: the per-arm CSRF rule is the part that gets harder in a
+        // sum, so a route guarded by one takes a single `by u: <Actor>`.
+        if by.is_sum() && contract.scheme == actors::Scheme::SignedCookie {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_not_in_sum",
+                    actor_ref.span,
+                    format!(
+                        "the `SignedCookie` actor `{}` cannot be a peer in a multi-actor sum",
+                        actor_ref.name
+                    ),
+                )
+                .with_note(
+                    "a signed cookie is single-actor in this slice — give the route a single \
+                     `by user: <SignedCookieActor>` clause",
+                ),
+            );
+        }
         members.push((actor_ref, contract));
     }
     // v0.51: a Signature member verifies an HMAC over the body, so the handler
@@ -2306,6 +2325,413 @@ fn check_by_clause_contracts(
     }
 }
 
+/// #3386: the config value kinds a scheme admits. The config grammar also reads a duration
+/// (`12.hours`) and a bare identifier (`Lax`), but only `SignedCookie` takes either; for every other
+/// scheme they are refused here, because their seams read a string or an integer and would otherwise
+/// drop the value quietly (a `Signature` `tolerance = 5.minutes` reads as no tolerance at all, which
+/// would turn the replay window off). A repeated `SignedCookie` key is refused too, since the first
+/// would win quietly in a scheme that guards a session.
+fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
+    use crate::actors::Scheme;
+    let signed_cookie =
+        actor.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) == Some(Scheme::SignedCookie);
+    let mut seen: HashSet<&str> = HashSet::new();
+    for arg in &actor.auth_config {
+        if signed_cookie && !seen.insert(arg.key.name.as_str()) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_duplicate_key",
+                    arg.key.span,
+                    format!(
+                        "the scheme config key `{}` is given more than once",
+                        arg.key.name
+                    ),
+                )
+                .with_note(
+                    "only the first value would be read, so the second is refused: keep one",
+                ),
+            );
+        }
+        if !signed_cookie
+            && matches!(
+                arg.value,
+                bynk_syntax::ast::SchemeArgValue::Duration { .. }
+                    | bynk_syntax::ast::SchemeArgValue::Ident(_)
+            )
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.scheme_arg_kind",
+                    arg.span,
+                    format!(
+                        "the scheme config value for `{}` must be a string or an integer",
+                        arg.key.name
+                    ),
+                )
+                .with_note(
+                    "a duration or a bare name is accepted only by `SignedCookie`; give a whole number (a `Signature` `tolerance` is in seconds: `tolerance = 300`) or a quoted string",
+                ),
+            );
+        }
+    }
+}
+
+/// The keys a `SignedCookie` actor's config admits (#3386).
+const SIGNED_COOKIE_KEYS: &[&str] = &["cookie", "secret", "previous", "ttl", "sameSite"];
+
+/// A `ttl` above this many seconds draws `signed_cookie_ttl_long` (30 days).
+const SIGNED_COOKIE_LONG_TTL_SECS: i64 = 30 * 24 * 60 * 60;
+
+/// Whether `name` is an RFC 6265 `token` (a legal cookie name).
+fn is_cookie_token(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+}
+
+/// #3386: validate one `SignedCookie` actor declaration: the closed key set, a
+/// `secret` and a `ttl`, a legal and preferably `__Host-` cookie name, a
+/// distinct secret, and a string-constructible identity minted from `sub`.
+fn check_signed_cookie_actor(
+    actor: &ActorDecl,
+    auth: &Ident,
+    table: &UnitTable,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    let bad_arg = |span: Span, key: &str, want: &str, errors: &mut Vec<CompileError>| {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_bad_arg",
+                span,
+                format!("a `SignedCookie` actor's `{key}` must be {want}"),
+            )
+            .with_note(
+                "write `auth = SignedCookie(secret = \"<ENV_NAME>\", ttl = 12.hours)`; the optional keys are `cookie`, `previous` and `sameSite`",
+            ),
+        );
+    };
+    for arg in &actor.auth_config {
+        if !SIGNED_COOKIE_KEYS.contains(&arg.key.name.as_str()) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_unknown_key",
+                    arg.key.span,
+                    format!("unknown `SignedCookie` config key `{}`", arg.key.name),
+                )
+                .with_note("the keys are `secret`, `ttl`, `cookie`, `previous` and `sameSite`"),
+            );
+        }
+    }
+    // The signing key: named, a string, and not another actor's secret.
+    match actor.scheme_arg("secret") {
+        None => errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_missing_secret",
+                auth.span,
+                "a `SignedCookie` actor must name its signing secret",
+            )
+            .with_note(
+                "write `auth = SignedCookie(secret = \"<ENV_NAME>\", ttl = 12.hours)` — the env var holding the signing key (`bynk deploy` mints it when unset)",
+            ),
+        ),
+        Some(arg) if arg.value.as_str().is_none() => {
+            bad_arg(arg.span, "secret", "an env binding name, as a string", errors);
+        }
+        Some(_) => {}
+    }
+    let previous = actor.scheme_arg("previous");
+    if let Some(arg) = previous
+        && arg.value.as_str().is_none()
+    {
+        bad_arg(
+            arg.span,
+            "previous",
+            "an env binding name, as a string",
+            errors,
+        );
+    }
+    // Distinct keys: this actor's `secret` and `previous` may not be another
+    // actor's secret (or previous), nor each other, or one scheme's credential
+    // could be replayed against another.
+    let mine: Vec<(&str, &str, Span)> = ["secret", "previous"]
+        .iter()
+        .filter_map(|k| {
+            let a = actor.scheme_arg(k)?;
+            Some((*k, a.value.as_str()?, a.span))
+        })
+        .collect();
+    if let [(_, a, _), (_, b, span)] = mine.as_slice()
+        && a == b
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_secret_shared",
+                *span,
+                "a `SignedCookie` actor's `previous` key is the same variable as its `secret`",
+            )
+            .with_note("`previous` is the key being rotated out — give it its own variable"),
+        );
+    }
+    for other in table.actors.values() {
+        if other.name.name == actor.name.name {
+            continue;
+        }
+        let other_names: Vec<&str> = ["secret", "previous"]
+            .iter()
+            .filter_map(|k| other.scheme_arg(k)?.value.as_str())
+            .collect();
+        for (key, value, span) in &mine {
+            if other_names.contains(value) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.actor.signed_cookie_secret_shared",
+                        *span,
+                        format!(
+                            "the `{key}` `{value}` of `SignedCookie` actor `{}` is also used by actor `{}`",
+                            actor.name.name, other.name.name
+                        ),
+                    )
+                    .with_note(
+                        "a session key signs one actor's cookies only — sharing it would let a credential for one actor be replayed against another; give each its own variable",
+                    ),
+                );
+            }
+        }
+    }
+    // Expiry: required, a positive whole number of seconds, bounded by a warning.
+    match actor.scheme_arg("ttl") {
+        None => errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_missing_ttl",
+                auth.span,
+                "a `SignedCookie` actor must declare a `ttl`",
+            )
+            .with_note(
+                "an immortal session cookie is the failure to avoid — write `ttl = 12.hours`; a stateless cookie cannot be revoked before it expires, so keep it short",
+            ),
+        ),
+        Some(arg) => match arg.value.as_duration_millis() {
+            Some(ms) if ms > 0 && ms % 1000 == 0 => {
+                if ms / 1000 > SIGNED_COOKIE_LONG_TTL_SECS {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.actor.signed_cookie_ttl_long",
+                            arg.span,
+                            "this `SignedCookie` `ttl` is longer than 30 days",
+                        )
+                        .with_note(
+                            "a stateless signed cookie cannot be revoked before it expires: a copy a user already took keeps working for the whole `ttl`. Shorten it, or use a server-side session (see `examples/sessions`) if you need to log out everywhere",
+                        ),
+                    );
+                }
+            }
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_bad_ttl",
+                    arg.span,
+                    "a `SignedCookie` `ttl` must be a positive whole number of seconds",
+                )
+                .with_note("write a `Duration` literal such as `ttl = 12.hours` or `ttl = 30.minutes`"),
+            ),
+        },
+    }
+    // The cookie's name: a token, and `__Host-` unless the author chose otherwise.
+    if let Some(arg) = actor.scheme_arg("cookie") {
+        match arg.value.as_str() {
+            None => bad_arg(arg.span, "cookie", "a cookie name, as a string", errors),
+            Some(name) if !is_cookie_token(name) => errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_bad_name",
+                    arg.span,
+                    format!("`{name}` is not a legal cookie name"),
+                )
+                .with_note(
+                    "a cookie name is an RFC 6265 token: letters, digits and ``!#$%&'*+-.^_`|~``, no spaces, `=`, `;`, `,` or quotes",
+                ),
+            ),
+            Some(name) if !name.to_ascii_lowercase().starts_with("__host-") => errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_unprefixed",
+                    arg.span,
+                    format!("the session cookie `{name}` is not a `__Host-` cookie"),
+                )
+                .with_note(
+                    "a `__Host-` name stops a sibling subdomain setting or overwriting the cookie; the default is `__Host-session`",
+                ),
+            ),
+            Some(_) => {}
+        }
+    }
+    if let Some(arg) = actor.scheme_arg("sameSite")
+        && !matches!(
+            arg.value.as_ident(),
+            Some("Lax" | "Strict" | "Unrestricted")
+        )
+    {
+        bad_arg(
+            arg.span,
+            "sameSite",
+            "`Lax`, `Strict` or `Unrestricted`",
+            errors,
+        );
+    }
+    match &actor.identity {
+        None => errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_identity_not_string_constructible",
+                auth.span,
+                "a `SignedCookie` actor must declare a string-constructible `identity`",
+            )
+            .with_note(
+                "the verified identity is minted from the cookie's `sub` claim — declare `identity = T` where `T` is a refined or opaque `String`",
+            ),
+        ),
+        Some(id) if !is_string_constructible(id, types) => errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_identity_not_string_constructible",
+                id.span(),
+                "a `SignedCookie` actor's identity must be string-constructible",
+            )
+            .with_note(
+                "the identity is minted from the cookie's `sub` claim (a string) — use a refined or opaque `String` type",
+            ),
+        ),
+        Some(_) => {}
+    }
+}
+
+/// #3386: route-level refusals for a handler guarded by a `SignedCookie`
+/// actor. Until the verifier is emitted, a route guarded by one is refused
+/// outright: accepting it would compile a route with no authentication.
+fn check_signed_cookie_route(
+    handler: &Handler,
+    by: &ByClause,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    use crate::actors::Scheme;
+    let Some(actor) = by.actors.iter().find(|a| {
+        table.actors.get(&a.name).is_some_and(|d| {
+            d.auth.as_ref().and_then(|x| Scheme::from_name(&x.name)) == Some(Scheme::SignedCookie)
+        })
+    }) else {
+        return;
+    };
+    // A shared cache would serve one user's answer to another.
+    let before = errors.len();
+    for ann in handler
+        .annotations
+        .iter()
+        .filter(|a| a.name.name == "cache")
+    {
+        let public = ann.args.iter().any(|a| {
+            a.label.as_ref().is_some_and(|n| n.name == "scope")
+                && matches!(&a.value.kind, ExprKind::Ident(id) if id.name == "public")
+        });
+        if public {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_public_cache",
+                    ann.span,
+                    "a `@cache(scope: public)` route is guarded by a `SignedCookie` actor, so a shared cache could replay one user's response to another",
+                )
+                .with_note("use `scope: private`, or drop `@cache`"),
+            );
+        }
+    }
+    // A sum is refused on its own (`signed_cookie_not_in_sum`); report the
+    // missing verifier only for a route with no other refusal.
+    if errors.len() == before && !by.is_sum() {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_not_yet_emitted",
+                actor.span,
+                format!(
+                    "the `SignedCookie` actor `{}` cannot guard a route yet: its verifier is not emitted in this version",
+                    actor.name
+                ),
+            )
+            .with_note(
+                "the scheme is accepted so its declaration can be checked; refusing the route keeps a cookie-guarded route from compiling with no authentication",
+            ),
+        );
+    }
+}
+
+/// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
+/// default actor; the internal protocols inherit one.
+fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut Vec<CompileError>) {
+    if crate::actors::default_actor(protocol).is_some() {
+        return;
+    }
+    // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
+    // connection is accepted — `on open` must name its actor, no anonymous upgrade.
+    let (msg, note) = match protocol {
+        ServiceProtocol::WebSocket { .. } => (
+            "a WebSocket `on open` handler must declare its actor with a `by` clause",
+            "the upgrade authenticates at the edge before accepting the connection — name the actor (`by user: Participant`), there is no anonymous upgrade",
+        ),
+        _ => (
+            "an HTTP handler must declare its actor with a `by` clause",
+            "HTTP has no safe default actor — a public route writes `by v: Visitor`; an authenticated route names its actor",
+        ),
+    };
+    errors.push(
+        CompileError::new("bynk.actor.missing_by_on_http", handler.span, msg).with_note(note),
+    );
+}
+
+/// Once per context, after every actor declaration is read: the checks on foreign callers' secrets.
+fn check_foreign_secret_dupes(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    use crate::actors::Scheme;
+    // I3 (#1971): a foreign caller's secret is the context's only use of that
+    // name. The Worker's table of foreign callers maps every one of them to
+    // its secret, and a caller is checked under the secret its claimed name
+    // selects, so two foreign actors on one secret could each pass for the
+    // other wherever either is admitted; and `bynk deploy` mints a foreign
+    // secret, which would overwrite another actor's. In declaration order, so
+    // the later one is reported.
+    let mut by_position: Vec<&ActorDecl> = table.actors.values().collect();
+    by_position.sort_by_key(|a| a.name.span.start);
+    let mut secret_owner: HashMap<&str, (&str, bool)> = HashMap::new();
+    for actor in by_position {
+        let Some(arg) = actor.scheme_arg("secret") else {
+            continue;
+        };
+        let Some(secret) = arg.value.as_str() else {
+            continue;
+        };
+        let foreign = actor
+            .auth
+            .as_ref()
+            .is_some_and(|au| Scheme::from_name(&au.name) == Some(Scheme::Foreign));
+        match secret_owner.get(secret) {
+            Some((other, other_foreign)) if foreign || *other_foreign => {
+                errors.push(
+                    CompileError::new(
+                        "bynk.actor.foreign_duplicate_secret",
+                        arg.span,
+                        format!(
+                            "actor `{}` uses the secret `{secret}` already named by actor `{other}`, and one of them is a foreign caller",
+                            actor.name.name
+                        ),
+                    )
+                    .with_note(
+                        "a foreign caller is told apart by the secret its calls verify under, and \
+                         `bynk deploy` mints it — give it a name no other actor uses",
+                    ),
+                );
+            }
+            Some(_) => {}
+            None => {
+                secret_owner.insert(secret, (&actor.name.name, foreign));
+            }
+        }
+    }
+}
+
 fn check_actor_contracts(
     table: &UnitTable,
     resolved: &ResolvedCommons,
@@ -2364,6 +2790,7 @@ fn check_actor_contracts(
         let Some(auth) = &actor.auth else {
             continue;
         };
+        check_scheme_arg_kinds(actor, errors);
         match Scheme::from_name(&auth.name) {
             None => errors.push(
                 CompileError::new(
@@ -2372,7 +2799,7 @@ fn check_actor_contracts(
                     format!("unknown authentication scheme `{}`", auth.name),
                 )
                 .with_note(
-                    "the authentication schemes are `None`, `Internal`, `Bearer`, `Signature`, `Oidc`, and `Foreign`",
+                    "the authentication schemes are `None`, `Internal`, `Bearer`, `Signature`, `Oidc`, `Foreign`, and `SignedCookie`",
                 ),
             ),
             // I3 (#1971): a foreign caller names the secret its calls verify
@@ -2673,6 +3100,10 @@ fn check_actor_contracts(
                     Some(_) => {}
                 }
             }
+            // #3386: a signed session cookie.
+            Some(Scheme::SignedCookie) => {
+                check_signed_cookie_actor(actor, auth, table, &resolved.types, errors);
+            }
             Some(_) => {}
         }
         // A declared identity must be a context-ownable (sealed) type — either
@@ -2712,50 +3143,7 @@ fn check_actor_contracts(
         }
     }
 
-    // I3 (#1971): a foreign caller's secret is the context's only use of that
-    // name. The Worker's table of foreign callers maps every one of them to
-    // its secret, and a caller is checked under the secret its claimed name
-    // selects, so two foreign actors on one secret could each pass for the
-    // other wherever either is admitted; and `bynk deploy` mints a foreign
-    // secret, which would overwrite another actor's. In declaration order, so
-    // the later one is reported.
-    let mut by_position: Vec<&ActorDecl> = table.actors.values().collect();
-    by_position.sort_by_key(|a| a.name.span.start);
-    let mut secret_owner: HashMap<&str, (&str, bool)> = HashMap::new();
-    for actor in by_position {
-        let Some(arg) = actor.scheme_arg("secret") else {
-            continue;
-        };
-        let Some(secret) = arg.value.as_str() else {
-            continue;
-        };
-        let foreign = actor
-            .auth
-            .as_ref()
-            .is_some_and(|au| Scheme::from_name(&au.name) == Some(Scheme::Foreign));
-        match secret_owner.get(secret) {
-            Some((other, other_foreign)) if foreign || *other_foreign => {
-                errors.push(
-                    CompileError::new(
-                        "bynk.actor.foreign_duplicate_secret",
-                        arg.span,
-                        format!(
-                            "actor `{}` uses the secret `{secret}` already named by actor `{other}`, and one of them is a foreign caller",
-                            actor.name.name
-                        ),
-                    )
-                    .with_note(
-                        "a foreign caller is told apart by the secret its calls verify under, and \
-                         `bynk deploy` mints it — give it a name no other actor uses",
-                    ),
-                );
-            }
-            Some(_) => {}
-            None => {
-                secret_owner.insert(secret, (&actor.name.name, foreign));
-            }
-        }
-    }
+    check_foreign_secret_dupes(table, errors);
 
     // Pass 2 — handler `by`-clause contracts.
     for service in table.services.values() {
@@ -2771,33 +3159,12 @@ fn check_actor_contracts(
                         refs,
                         errors,
                     );
+                    check_signed_cookie_route(handler, by, table, errors);
                 }
                 // #2341 (decision C): `on rejected` has no actor; its own
                 // checks (`check_rejected_handlers`) refuse a `by`.
                 _ if handler.kind == HandlerKind::Rejected => {}
-                None => {
-                    // No `by`: edge protocols (HTTP, WebSocket) have no safe
-                    // default actor; the internal protocols inherit one.
-                    if actors::default_actor(&service.protocol).is_none() {
-                        // v0.103 (D-A): a WebSocket upgrade authenticates at the
-                        // edge before the connection is accepted — `on open` must
-                        // name its actor, no anonymous upgrade.
-                        let (msg, note) = match &service.protocol {
-                            ServiceProtocol::WebSocket { .. } => (
-                                "a WebSocket `on open` handler must declare its actor with a `by` clause",
-                                "the upgrade authenticates at the edge before accepting the connection — name the actor (`by user: Participant`), there is no anonymous upgrade",
-                            ),
-                            _ => (
-                                "an HTTP handler must declare its actor with a `by` clause",
-                                "HTTP has no safe default actor — a public route writes `by v: Visitor`; an authenticated route names its actor",
-                            ),
-                        };
-                        errors.push(
-                            CompileError::new("bynk.actor.missing_by_on_http", handler.span, msg)
-                                .with_note(note),
-                        );
-                    }
-                }
+                None => check_missing_by(handler, &service.protocol, errors),
             }
         }
         // v0.155: a service-level `by` default is validated *indirectly* — the

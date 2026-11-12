@@ -109,9 +109,10 @@ ws_open_handler ::= "on" "open" "(" (param ("," param)*)? ","? ")" "->" type_ref
 ws_close_handler ::= "on" "close" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 given_clause ::= "given" qualified_name ("," qualified_name)*
 actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "identity" "=" type_ref)? "}" | "=" identifier "where" expression)
-scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign"
+scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
-scheme_arg ::= identifier "=" (string_literal | number_literal)
+scheme_duration ::= number_literal "." identifier
+scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier)
 by_clause ::= "by" (identifier ":")? identifier ("|" identifier)*
 stub_clause ::= "stub" identifier "." identifier "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never")
 env_clause ::= "env" "{" (env_entry ","?)* "}"

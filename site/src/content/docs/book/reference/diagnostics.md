@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **832** codes in total.
+There are **847** codes in total.
 
 ## Agents
 
@@ -348,12 +348,27 @@ There are **832** codes in total.
 | [`bynk.actor.refinement_base_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's base is not a `Bearer` actor (no claims to authorise against). |  | — |
 | [`bynk.actor.refinement_in_sum`](/book/reference/actors/#the-by-clause) | A refinement actor appears as a member of a multi-actor sum. |  | — |
 | [`bynk.actor.refinement_predicate_unsupported`](/book/reference/actors/#the-by-clause) | A refinement actor's `where` predicate is outside the closed claim-predicate set. |  | — |
+| [`bynk.actor.scheme_arg_kind`](/book/reference/actors/#schemes) | A scheme config value other than `SignedCookie`'s is a duration or a bare name, which only `SignedCookie` takes. |  | — |
 | [`bynk.actor.scheme_not_admissible`](/book/reference/actors/#schemes) | An actor's scheme is not admissible on this handler's protocol. |  | — |
 | [`bynk.actor.signature_identity_unsupported`](/book/reference/actors/#schemes) | A `Signature` actor declared an `identity`, which is not yet supported. |  | — |
 | [`bynk.actor.signature_missing_header`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signature header. |  | — |
 | [`bynk.actor.signature_missing_secret`](/book/reference/actors/#schemes) | A `Signature` actor does not name its signing secret. |  | — |
 | [`bynk.actor.signature_requires_body`](/book/reference/actors/#schemes) | A `Signature` handler does not take a `body` parameter. |  | — |
 | [`bynk.actor.signature_tolerance_without_timestamp`](/book/reference/actors/#schemes) | A `Signature` actor set `tolerance` without a `timestamp` header. |  | — |
+| [`bynk.actor.signed_cookie_bad_arg`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config value has the wrong kind. |  | — |
+| [`bynk.actor.signed_cookie_bad_name`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `cookie` is not a legal cookie name. |  | — |
+| [`bynk.actor.signed_cookie_bad_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is not a positive whole number of seconds. |  | — |
+| [`bynk.actor.signed_cookie_duplicate_key`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config repeats a key. |  | — |
+| [`bynk.actor.signed_cookie_identity_not_string_constructible`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor's identity is missing or not a string-constructible type. |  | — |
+| [`bynk.actor.signed_cookie_missing_secret`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not name its signing secret. |  | — |
+| [`bynk.actor.signed_cookie_missing_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not declare a `ttl`. |  | — |
+| [`bynk.actor.signed_cookie_not_in_sum`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor appears as a member of a multi-actor sum. |  | — |
+| `bynk.actor.signed_cookie_not_yet_emitted` | A route is guarded by a `SignedCookie` actor, whose verifier is not emitted yet. |  | — |
+| [`bynk.actor.signed_cookie_public_cache`](/book/reference/actors/#signed-cookies) | A `@cache(scope: public)` route is guarded by a `SignedCookie` actor. |  | — |
+| [`bynk.actor.signed_cookie_secret_shared`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor's `secret` or `previous` is also used by another actor, or by itself. |  | — |
+| [`bynk.actor.signed_cookie_ttl_long`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is longer than 30 days (warning). |  | Warning |
+| [`bynk.actor.signed_cookie_unknown_key`](/book/reference/actors/#signed-cookies) | A `SignedCookie` config has a key outside the closed set. |  | — |
+| [`bynk.actor.signed_cookie_unprefixed`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `cookie` does not start with `__Host-` (warning). |  | Warning |
 | [`bynk.actor.sum_requires_binder`](/book/reference/actors/#the-by-clause) | A multi-actor sum `by` clause has no binder to match the resolved actor. |  | — |
 | [`bynk.actor.unknown_actor`](/book/reference/actors/#prelude-actors) | A handler's `by` clause names an actor that is not declared. |  | — |
 | [`bynk.actor.unknown_scheme`](/book/reference/actors/#schemes) | An actor declares an authentication scheme that is not compiler-known. |  | — |

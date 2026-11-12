@@ -56,6 +56,10 @@ pub enum Scheme {
     /// itself by the actor's name, under the declared secret. Admitted on
     /// `call` only, and resolves to its own actor, never to `Caller`.
     Foreign,
+    /// #3386: a signed, expiring session cookie that Bynk both issues and
+    /// verifies (HMAC-SHA-256 over a compact JWS). A browser credential, so
+    /// HTTP only; single-actor only in the first slice (like `Oidc`).
+    SignedCookie,
 }
 
 impl Scheme {
@@ -69,6 +73,7 @@ impl Scheme {
             "Signature" => Scheme::Signature,
             "Oidc" => Scheme::Oidc,
             "Foreign" => Scheme::Foreign,
+            "SignedCookie" => Scheme::SignedCookie,
             _ => return None,
         })
     }
@@ -86,6 +91,7 @@ impl Scheme {
                 | Scheme::Signature
                 | Scheme::Oidc
                 | Scheme::Foreign
+                | Scheme::SignedCookie
         )
     }
 
@@ -97,6 +103,7 @@ impl Scheme {
             Scheme::Signature => "Signature",
             Scheme::Oidc => "Oidc",
             Scheme::Foreign => "Foreign",
+            Scheme::SignedCookie => "SignedCookie",
         }
     }
 }
@@ -703,6 +710,10 @@ pub fn sum_members_for(
                 Scheme::Oidc => return None,
                 // I3: a `Foreign` sum is a `call` sum (`call_admission_for`).
                 Scheme::Internal | Scheme::Foreign => return None,
+                // #3386: `SignedCookie` is single-actor only in its first slice
+                // (`bynk.actor.signed_cookie_not_in_sum`), so a well-formed
+                // program never reaches here with one; fail closed.
+                Scheme::SignedCookie => return None,
             }
         } else {
             // A prelude actor: only `Visitor` (scheme `None`) is an HTTP peer.
@@ -728,7 +739,11 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         ServiceProtocol::Http => {
             matches!(
                 scheme,
-                Scheme::None | Scheme::Bearer | Scheme::Signature | Scheme::Oidc
+                Scheme::None
+                    | Scheme::Bearer
+                    | Scheme::Signature
+                    | Scheme::Oidc
+                    | Scheme::SignedCookie
             )
         }
         // v0.103 (D-B): a WebSocket upgrade authenticates via `None` (anonymous)

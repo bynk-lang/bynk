@@ -1,0 +1,11 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  on POST("/x") () -> Effect[HttpResult[String]] by who: User | Visitor {
+    Ok("x")
+  }
+}

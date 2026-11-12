@@ -2567,6 +2567,11 @@ impl<'a> Parser<'a> {
                             t.span,
                         )
                     }
+                    // #3386: a bare identifier names a variant (`sameSite = Lax`).
+                    Some(TokenKind::Ident) => {
+                        let id = self.expect_ident("as a scheme config value")?;
+                        (SchemeArgValue::Ident(id.name), id.span)
+                    }
                     Some(TokenKind::IntLit) => {
                         let t = self.expect(TokenKind::IntLit, "as a scheme config value")?;
                         // v0.142 (ADR 0166): parse from the separator-free form.
@@ -2579,14 +2584,43 @@ impl<'a> Parser<'a> {
                                     "invalid integer in scheme config".to_string(),
                                 )
                             })?;
-                        (SchemeArgValue::Int(n), t.span)
+                        // #3386: `<int>.<unit>` is a duration literal (`ttl = 12.hours`).
+                        if self.peek_kind() == Some(TokenKind::Dot)
+                            && self.nth_kind(1) == Some(TokenKind::Ident)
+                            && let Some(unit) = self.nth(1).and_then(|u| {
+                                crate::ast::DurationUnit::from_name(self.slice(u.span))
+                            })
+                        {
+                            self.bump();
+                            let u = self.expect_ident("as a duration unit")?;
+                            let millis = n.checked_mul(unit.millis()).ok_or_else(|| {
+                                CompileError::new(
+                                    "bynk.duration.literal_overflow",
+                                    t.span.merge(u.span),
+                                    format!(
+                                        "the duration `{n}.{}` overflows the millisecond range",
+                                        unit.name()
+                                    ),
+                                )
+                            })?;
+                            (
+                                SchemeArgValue::Duration {
+                                    value: n,
+                                    unit,
+                                    millis,
+                                },
+                                t.span.merge(u.span),
+                            )
+                        } else {
+                            (SchemeArgValue::Int(n), t.span)
+                        }
                     }
                     _ => {
                         let t = self.peek();
                         return Err(CompileError::new(
                             "bynk.parse.expected_token",
                             t.map(|t| t.span).unwrap_or_else(|| self.eof_span()),
-                            "expected a string or integer scheme config value".to_string(),
+                            "expected a string, integer, duration or identifier scheme config value".to_string(),
                         ));
                     }
                 };

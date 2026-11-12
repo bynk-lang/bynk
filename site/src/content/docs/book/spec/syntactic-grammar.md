@@ -833,8 +833,15 @@ scheme carries.
 
 {{#grammar scheme_arg}}
 
-One `key = value` argument; the value is a string or integer literal. Which keys
-each scheme admits is well-formedness: §5.
+One `key = value` argument; the value is a string or integer literal, a duration,
+or a bare identifier naming a variant. Which keys each scheme admits is
+well-formedness: §5.
+
+### §4.4.10c scheme_duration
+
+{{#grammar scheme_duration}}
+
+A duration in a scheme config, `<int>.<unit>` (`ttl = 12.hours`).
 
 ## §4.5 Agents
 
