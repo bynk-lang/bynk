@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0825](0825-detach-effect-method.md) | **`e.detach()`, a compiler-inserted failure route for detached effects** (v0.573) — A kernel method on `Effect[T]` that hands a running effect to `waitUntil`, with a runtime-reported failure route | Accepted (v0.573) |
 | [0824](0824-detach-effect-method.md) | **`e.detach()`, a compiler-inserted failure route for detached effects** (v0.572) — A kernel method on `Effect[T]` that hands a running effect to `waitUntil`, with a runtime-reported failure route | Accepted (v0.572) |
 | [0823](0823-do-accepts-any-effect-except-result.md) | **`do` accepts any `Effect[T]` except `Result`** (v0.571) — Amends ADR 0170 decision B: the `do` gate protects an `Err`, not a valued reply | Accepted (v0.571) |
 | [0822](0822-package-manager-tool-runners.md) | **The toolchain's tool fallbacks and install hints follow the detected package manager** (v0.570.5) — tsc, tsx and wrangler run through the detected tool's runner, and hints give its install commands | Accepted (v0.570.5) |

@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.572**.
+written against **v0.574**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.574.0** | `~>` is deprecated for `do e.detach()`: a warning with a `bynk check --fix` rewrite, and `~>` now lowers through the same failure-reporting helper |
+| **v0.573.0** | `e.detach()` on any `Effect[T]` stops waiting for a running effect and reports a fault or an `Err` through the runtime instead of losing it |
 | **v0.572.0** | `e.detach()` on any `Effect[T]` stops waiting for a running effect and reports a fault or an `Err` through the runtime instead of losing it |
 | **v0.571.0** | `do e` accepts any `Effect[T]` except a `Result`; `bynk.effect.do_discards_result` replaces `bynk.effect.do_requires_unit` |
 | **v0.570.5** | The toolchain's `tsc`, `tsx` and `wrangler` fallbacks and install hints follow the detected package manager (`pnpm dlx`, `bunx`, `pnpm add -g`, and so on), not `npx` and `npm install -g`; `bynk doctor` names the runner it used |
