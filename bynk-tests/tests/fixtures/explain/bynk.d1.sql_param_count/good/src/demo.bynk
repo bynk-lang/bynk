@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+capability Orders = D1
+
+service probe {
+  on call(id: String) -> Effect[Bool] given Orders {
+    let _ <- Orders.all("SELECT id FROM orders WHERE id = ?1 AND total > ?2", [Text(id), Integer(100)])
+    true
+  }
+}

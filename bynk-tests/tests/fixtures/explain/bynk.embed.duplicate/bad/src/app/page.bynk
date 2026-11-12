@@ -1,0 +1,4 @@
+commons app.page
+
+embed shell = "embeds/page.html"
+embed shell = "embeds/other.html"

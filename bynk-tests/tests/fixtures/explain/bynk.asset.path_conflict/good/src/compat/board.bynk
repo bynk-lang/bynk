@@ -1,0 +1,4 @@
+context compat.board
+
+asset terms = "assets/a.txt" at "/terms.txt"
+asset privacy = "assets/b.txt" at "/privacy.txt"

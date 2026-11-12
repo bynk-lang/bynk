@@ -1,0 +1,9 @@
+context compat.board
+
+asset favicon = "assets/favicon.ico" at "/favicon.ico"
+
+service web from http {
+  on GET("/health") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("ok")
+  }
+}
