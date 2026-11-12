@@ -182,8 +182,9 @@ export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
 //   `readCapped` does. The pull that crosses `cap` cancels the reader and
 //   throws `BodyTooLarge`.
 // - Released. `return()` (an early stop, a faulted sink) cancels the reader once
-//   reading has begun. A stream that is never read is never started: the router
-//   cancels the body itself when the handler returns.
+//   reading has begun. A stream that is never read is never started, and an
+//   unread body is released by the platform when the request ends (checked on
+//   workerd for #3380).
 // - Single-pass is not enforced here: the consumer claims it (`claimStream`),
 //   as the R2 and Fetch bindings' streams are (ADR 0665 C).
 export async function* requestBodyStream(request: Request, cap: number): AsyncGenerator<Uint8Array, void, undefined> {

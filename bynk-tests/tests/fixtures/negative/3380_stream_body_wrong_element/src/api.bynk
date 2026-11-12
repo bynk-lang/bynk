@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+  @raw(contentType: "text/plain")
+  @limit(maxBody: 100)
+  on PUT("/lines") (body: Stream[String]) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

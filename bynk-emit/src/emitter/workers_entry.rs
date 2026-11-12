@@ -1030,9 +1030,15 @@ pub fn emit_worker_entry(
     let body_has = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
     if http_routes
         .iter()
-        .any(|r| !r.sum && body_has(r) && r.max_body.is_some())
+        .any(|r| !r.sum && body_has(r) && r.max_body.is_some() && !streamed_body(r))
     {
         imports.push("__readBodyCapped".to_string());
+    }
+    // #3380: a streamed `@raw` body is counted as the handler pulls it, and an
+    // overrun answers the route's `413`.
+    if http_routes.iter().any(|r| body_has(r) && streamed_body(r)) {
+        imports.push("__requestBodyStream".to_string());
+        imports.push("__isBodyTooLarge".to_string());
     }
     if http_routes
         .iter()
@@ -3309,7 +3315,9 @@ fn emit_http_route_dispatch(
         // A capped body is read through the counting reader, so a chunked body, or
         // one whose `Content-Length` understates it, is cut off at the cap with the
         // same `413` as the fast-reject above. A raw route is always capped.
-        let counted = route.max_body;
+        let streamed = streamed_body(route);
+        // A streamed body is not read here: the handler pulls it, counted as it goes.
+        let counted = route.max_body.filter(|_| !streamed);
         let raw = route.raw.is_some();
         let form = route.form_fields.as_ref();
         let multipart = route.multipart.as_ref();
@@ -3519,7 +3527,20 @@ fn emit_http_route_dispatch(
                 vec![return_(Some(malformed_400()))],
             ));
         }
-        if raw {
+        if streamed {
+            // #3380: the octets as they arrive, counted against the cap as the
+            // handler pulls them. The checker requires a cap on every `@raw` route.
+            let cap = route
+                .max_body
+                .expect("a streamed `@raw` route has a cap (bynk.http.raw_body_unbounded)");
+            guarded.push(const_(
+                "body",
+                call(
+                    ident("__requestBodyStream"),
+                    vec![ident("request"), num_lit(cap.to_string())],
+                ),
+            ));
+        } else if raw {
             // The octets, untouched: no JSON, no base64.
             guarded.push(const_("body", ident("__bytes")));
         } else {
@@ -3650,10 +3671,40 @@ fn emit_http_route_dispatch(
     } else {
         call_args
     };
-    guarded.push(const_(
-        "result",
-        await_expr(call(member(ident("surface"), method_key), surface_args)),
-    ));
+    if streamed_body(route) && let Some(cap) = route.max_body {
+        // #3380: a body that crosses its cap while the handler is reading it faults
+        // that read with `BodyTooLarge`. No response has been built yet, so the router
+        // answers the route's `413`, stamped as the fast-reject is, and not a `500`.
+        guarded.push(let_typed(
+            "result",
+            TsType::named(format!(
+                "Awaited<ReturnType<(typeof surface)[{method_key:?}]>>"
+            )),
+        ));
+        guarded.push(try_catch_stmt(
+            vec![TsStmt::assign(
+                ident("result"),
+                await_expr(call(
+                    index_expr(ident("surface"), str_lit(method_key.clone())),
+                    surface_args,
+                )),
+                None,
+            )],
+            Some("e"),
+            vec![
+                if_(
+                    call(ident("__isBodyTooLarge"), vec![ident("e")]),
+                    block(vec![return_(Some(too_large(cap)))]),
+                ),
+                TsStmt::throw_stmt(ident("e"), None),
+            ],
+        ));
+    } else {
+        guarded.push(const_(
+            "result",
+            await_expr(call(member(ident("surface"), method_key), surface_args)),
+        ));
+    }
     let inner_ty = http_result_inner(&h.return_type);
     let ser_fn = crate::emitter::serialisation::serialise_ref_via(&inner_ty, "handlers.", ru);
     // #2858: a plain-JSON route's body serialiser runs with the `Option` encoders
@@ -3756,6 +3807,18 @@ fn emit_http_route_dispatch(
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #3380: whether `route`'s `body` is a streamed one: a `@raw` route whose `body`
+/// is a `Stream[Bytes]`, handed to the handler as the request body arrives rather
+/// than read whole first.
+fn streamed_body(route: &HttpRoute) -> bool {
+    route.raw.is_some()
+        && route
+            .handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "body" && matches!(p.type_ref, TypeRef::Stream(..)))
 }
 
 /// #2648: the TypeScript binder for a user parameter in a Worker wrapper or

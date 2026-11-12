@@ -2061,12 +2061,16 @@ whatever its `@cache` scope.
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
 most once (`bynk.http.raw_duplicate`), with the one argument `contentType`
 (`bynk.http.raw_unknown_arg`) a media type (`bynk.http.raw_bad_content_type`). The
-`body` MUST be `Bytes` (`bynk.http.raw_body_not_bytes`) and the route MUST have an
-effective cap (`bynk.http.raw_body_unbounded`). The router answers a missing or
+`body` MUST be `Bytes` or `Stream[Bytes]` (`bynk.http.raw_body_not_bytes`) and the
+route MUST have an effective cap (`bynk.http.raw_body_unbounded`). A `Stream[Bytes]`
+body is the request body as it arrives, read once and counted against the cap as it is
+read; it is refused with a `Signature` actor (`bynk.http.stream_body_signature`) or a sum
+of actors (`bynk.http.stream_body_on_sum_route`), and without `@raw`
+(`bynk.http.stream_body_not_raw`). The router answers a missing or
 different `Content-Type` (parameters stripped, compared case-insensitively) with a
 synthesised **`415 UnsupportedMediaType`** (`{ kind: "UnsupportedMediaType",
 details: … }`) ahead of the auth seam and the body read, reads the body under the
-cap, and passes the octets to the handler undecoded. A `Signature` actor verifies
+cap (a `Bytes` body is read whole first), and passes the octets to the handler undecoded. A `Signature` actor verifies
 over those octets. A `Bytes` body without `@raw` keeps its base64-in-JSON form. See
 [§7.4.3](/book/spec/runtime-library/#743-httpresult) for the runtime lowering and
 its position in the dispatch order.
