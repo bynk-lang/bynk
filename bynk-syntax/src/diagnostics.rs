@@ -354,6 +354,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-by-clause",
     },
     Explain {
+        code: "bynk.actor.scheme_arg_kind",
+        blurb: "A scheme's config values are strings and integers, except that a `SignedCookie` also takes a duration (`ttl = 12.hours`) and a bare name (`sameSite = Lax`). Every other scheme reads a string or an integer, so a duration or a bare name would be dropped without a word: a `Signature` `tolerance = 5.minutes` would read as no tolerance at all, and the replay window would be off. Write a `Signature` tolerance in whole seconds, and quote a string.",
+        example: "actor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 5.minutes) }   // ✗ a duration\n\nactor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }   // ✓ seconds",
+        page: "/book/reference/actors",
+        anchor: "schemes",
+    },
+    Explain {
         code: "bynk.actor.scheme_not_admissible",
         blurb: "Each protocol admits only the schemes that can be verified on it. HTTP takes \
                 `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` \
@@ -429,6 +436,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.signed_cookie_bad_ttl",
         blurb: "`ttl` must be a `Duration` literal that is positive and a whole number of seconds, because it becomes both a `Max-Age` and a signed expiry in seconds. Write `12.hours` or `30.minutes`.",
         example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1500.milliseconds), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_duplicate_key",
+        blurb: "A `SignedCookie` config names each key once. A repeated `secret` or `ttl` would have the first value win and the second ignored without a word, in the scheme that guards a session. Keep the one you mean.",
+        example: "actor User { auth = SignedCookie(secret = \"A\", secret = \"B\", ttl = 12.hours), identity = UserId }   // ✗ two secrets\n\nactor User { auth = SignedCookie(secret = \"A\", ttl = 12.hours), identity = UserId }   // ✓",
         page: "/book/reference/actors",
         anchor: "signed-cookies",
     },
@@ -6561,6 +6575,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A refinement actor's `where` predicate is outside the closed claim-predicate set.",
     ),
     d(
+        "bynk.actor.scheme_arg_kind",
+        "A scheme config value other than `SignedCookie`'s is a duration or a bare name, which only `SignedCookie` takes.",
+    ),
+    d(
         "bynk.actor.scheme_not_admissible",
         "An actor's scheme is not admissible on this handler's protocol.",
     ),
@@ -6595,6 +6613,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.signed_cookie_bad_ttl",
         "A `SignedCookie` `ttl` is not a positive whole number of seconds.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_duplicate_key",
+        "A `SignedCookie` config repeats a key.",
     ),
     d(
         "bynk.actor.signed_cookie_identity_not_string_constructible",
