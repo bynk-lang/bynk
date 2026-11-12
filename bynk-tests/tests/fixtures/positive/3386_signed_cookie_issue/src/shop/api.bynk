@@ -1,0 +1,25 @@
+context shop.api
+
+consumes bynk { Cookie, Clock }
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+type Login = { user: String }
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+	// Issue: the actor mints the cookie; the handler attaches it.
+	on POST("/login") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+		let Ok(id) = UserId.of(body.user) else {
+			BadRequest("bad user")
+		}
+		let c <- User.issue(id)
+		Created("welcome").withCookie(c)
+	}
+
+	// Logout: the actor knows the cookie's name, path and attributes.
+	on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
+		NoContent.withCookie(User.expire())
+	}
+}

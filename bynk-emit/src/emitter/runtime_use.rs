@@ -125,6 +125,8 @@ pub struct RuntimeUse {
     request_query: Cell<bool>,
     /// #3277: the module builds a `RequestCookies` (`__requestCookies`).
     request_cookies: Cell<bool>,
+    /// #3386: the module issues or deletes a `SignedCookie` session cookie.
+    session_cookie: Cell<bool>,
     /// #2854: a typed query becomes a query string (`__queryString`).
     query_string: Cell<bool>,
     /// #3276: a typed `@multipart` body becomes a `FormData` (`__multipartForm`).
@@ -283,6 +285,16 @@ impl RuntimeUse {
     /// Whether `__requestHeaderPairs` must be imported (#2341).
     pub fn request_header_pairs(&self) -> bool {
         self.request_header_pairs.get()
+    }
+
+    /// Record that the module issues or deletes a session cookie (#3386).
+    pub fn note_session_cookie(&self) {
+        self.session_cookie.set(true);
+    }
+
+    /// Whether the session-cookie helpers must be imported (#3386).
+    pub fn session_cookie(&self) -> bool {
+        self.session_cookie.get()
     }
 
     /// Record that the module builds a `RequestCookies` value (#3277).

@@ -621,11 +621,11 @@ pub fn emit_worker_compose(
         caps.sort();
         caps.into_iter().map(TsObjectEntry::Shorthand).collect()
     };
-    // env passes through so handlers' cross-context calls (Service Bindings)
-    // and agent instantiations (Durable Object namespaces) can reach it.
+    // env passes through for cross-context calls (Service Bindings) and agent instantiations (DOs).
     if !sorted_consumes.is_empty() || !table.agents.is_empty() {
         deps_entries.push(TsObjectEntry::Shorthand("env".to_string()));
     }
+    deps_entries.extend(session_deps_entry(table));
     // v0.79: the execution context rides in `deps.__exec` for `~>` sends.
     if ctx_uses_send {
         deps_entries.push(TsObjectEntry::Prop("__exec".to_string(), ident("exec")));
@@ -2355,6 +2355,38 @@ fn emit_http_oidc_wrapper(
         inline: false,
         body: stmts,
     }
+}
+
+/// #3386: `deps.__session`, the signing keys of this context's `SignedCookie` actors by name,
+/// read from the environment, for a handler's `Actor.issue(identity)`. `None` when it has none.
+fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
+    let mut actors: Vec<_> = table
+        .actors
+        .values()
+        .filter_map(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+        .collect();
+    if actors.is_empty() {
+        return None;
+    }
+    actors.sort_by(|a, b| a.actor.cmp(&b.actor));
+    let probe = |var: &str| secret_probe_expr(&crate::emitter::escape_ts_string(var));
+    let keys = actors
+        .iter()
+        .map(|s| {
+            let previous = s.previous.as_deref().map_or(ident("undefined"), probe);
+            (
+                crate::emitter::escape_ts_string(&s.actor),
+                TsExpr::object(vec![
+                    ("secret".to_string(), probe(&s.secret)),
+                    ("previous".to_string(), previous),
+                ]),
+            )
+        })
+        .collect();
+    Some(TsObjectEntry::Prop(
+        "__session".to_string(),
+        TsExpr::object(keys),
+    ))
 }
 
 /// #3386: the runtime names the compose wrappers of a context's single-actor `SignedCookie`

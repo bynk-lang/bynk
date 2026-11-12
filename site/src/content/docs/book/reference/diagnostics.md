@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **840** codes in total.
+There are **841** codes in total.
 
 ## Agents
 
@@ -353,6 +353,7 @@ There are **840** codes in total.
 | [`bynk.actor.signed_cookie_bad_name`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `cookie` is not a legal cookie name. |  | — |
 | [`bynk.actor.signed_cookie_bad_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` `ttl` is not a positive whole number of seconds. |  | — |
 | [`bynk.actor.signed_cookie_identity_not_string_constructible`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor's identity is missing or not a string-constructible type. |  | — |
+| [`bynk.actor.signed_cookie_issue_needs_clock`](/book/reference/actors/#signed-cookies) | `Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`. |  | — |
 | [`bynk.actor.signed_cookie_missing_secret`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not name its signing secret. |  | — |
 | [`bynk.actor.signed_cookie_missing_ttl`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor does not declare a `ttl`. |  | — |
 | [`bynk.actor.signed_cookie_not_in_sum`](/book/reference/actors/#signed-cookies) | A `SignedCookie` actor appears as a member of a multi-actor sum. |  | — |

@@ -264,9 +264,8 @@ pub(super) fn emit_test_deps(
     if !surface_entries.is_empty() {
         entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
     }
-    // #1994: the execution context a `~>`-sending handler hands its promise to.
-    // #2683: on a virtual-time module the context also supplies the harness's
-    // timers, which `within` reads in place of `setTimeout`.
+    // #1994/#2683: the execution context a `~>`-sending handler hands its promise to,
+    // plus, on a virtual-time module, the harness's timers (`within` reads them).
     let virtual_time = module_is_virtual_time(target_name, target_kind, stubs, unit_tables);
     if target_uses_send(target_name, target_kind, unit_tables) {
         let exec = call(ident("__bynkExec"), Vec::new());
@@ -285,6 +284,7 @@ pub(super) fn emit_test_deps(
             },
         ));
     }
+    entries.extend(session_keys_entry(target_name, target_kind, unit_tables));
     let mut entries: Vec<TsObjectEntry> = entries
         .into_iter()
         .map(|(k, v)| TsObjectEntry::Prop(k, v))
@@ -927,6 +927,43 @@ pub(super) fn base64(bytes: &[u8]) -> String {
         }
     }
     out
+}
+
+/// The signing key a `unit` or `integration` case uses for every `SignedCookie` actor of the target: a
+/// fixed test key (base64url of 32 bytes), so a cookie a handler issues is the same on every run.
+/// The `system` tier signs with the key it sets on the deployed Worker instead.
+pub(super) const TEST_SESSION_KEY: &str = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
+
+/// (`deps.__session`, for a handler's `Actor.issue(identity)`.)
+fn session_keys_entry(
+    target_name: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> Option<(String, TsExpr)> {
+    if target_kind != UnitKind::Context {
+        return None;
+    }
+    let mut actors: Vec<String> = unit_tables
+        .get(target_name)?
+        .actors
+        .values()
+        .filter_map(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+        .map(|s| s.actor)
+        .collect();
+    if actors.is_empty() {
+        return None;
+    }
+    actors.sort();
+    let keys = actors
+        .into_iter()
+        .map(|a| {
+            (
+                a,
+                TsExpr::object(vec![("secret".to_string(), str_lit(TEST_SESSION_KEY))]),
+            )
+        })
+        .collect();
+    Some(("__session".to_string(), TsExpr::object(keys)))
 }
 
 #[cfg(test)]

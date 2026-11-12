@@ -5,7 +5,7 @@
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
 import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, makeIntegrationDoNamespace, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
-import { newSessionKey, signSessionCookie, verifySignedCookie } from "./session.ts";
+import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
@@ -130,7 +130,10 @@ export {
   serialiseAgentClass as __serialiseAgentClass,
   sweepAgentInstances as __sweepAgentInstances,
   varyAcceptLanguage as __varyAcceptLanguage,
+  expireSessionCookie as __expireSessionCookie,
+  issueSessionCookie as __issueSessionCookie,
   newSessionKey as __newSessionKey,
+  sessionKeysOf as __sessionKeysOf,
   signSessionCookie as __signSessionCookie,
   verifySignedCookie as __verifySignedCookie,
   verifyBearerJwtHs256 as __verifyBearerJwtHs256,

@@ -2181,7 +2181,11 @@ A `ttl` over 30 days (`bynk.actor.signed_cookie_ttl_long`) and a `cookie` withou
 `__Host-` prefix (`bynk.actor.signed_cookie_unprefixed`) are warnings. It is `http`
 only, MUST NOT be a sum member (`bynk.actor.signed_cookie_not_in_sum`) or a refinement
 base, and MUST NOT guard a `@cache(scope: public)` route
-(`bynk.actor.signed_cookie_public_cache`). A route it guards verifies the session
+(`bynk.actor.signed_cookie_public_cache`). Inside the declaring context, `Actor.issue(identity)`
+(an `Effect[Cookie]`; `identity` is the actor's identity type) and `Actor.expire()` (a `Cookie`) are the
+only members an actor name has as a value; `issue` reads the `Clock`, which the handler MUST list in
+`given` (`bynk.actor.signed_cookie_issue_needs_clock`), and the cookie it returns has the attributes the
+scheme fixes (§7.3.4a). A route it guards verifies the session
 cookie before the body runs (§7.3.4a): a cross-site state-changing request is `403`, a missing,
 repeated, forged, tampered, expired or over-long-lived cookie is `401`, a bad signing key
 faults the request, and the credential is hidden from the handler's `cookies` view

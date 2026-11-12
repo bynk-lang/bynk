@@ -307,6 +307,8 @@ pub struct SignedCookieSeam {
     pub ttl_secs: i64,
     /// The context-owned, string-constructible identity type minted from `sub`.
     pub identity_type: String,
+    /// The cookie's `SameSite`: `Lax` (the default), `Strict` or `Unrestricted`.
+    pub same_site: String,
 }
 
 /// Resolve a handler's `SignedCookie` seam, if its `by` clause names a single
@@ -352,6 +354,11 @@ pub fn signed_cookie_seam_of(
             .map(str::to_string),
         ttl_secs: ttl_ms / 1000,
         identity_type: id.name.clone(),
+        same_site: actor
+            .scheme_arg("sameSite")
+            .and_then(|a| a.value.as_ident())
+            .unwrap_or("Lax")
+            .to_string(),
     })
 }
 

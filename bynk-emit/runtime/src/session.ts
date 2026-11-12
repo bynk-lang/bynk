@@ -214,3 +214,73 @@ export async function verifySignedCookie(
   if (exp <= now) return Err("cookie expired");
   return Ok({ sub });
 }
+
+// -- issuing and deleting the cookie (`Actor.issue(identity)`, `Actor.expire()`) ------------------
+
+/** A `bynk` `Cookie` as the router sends it (the shape `serialiseCookie` reads). */
+export interface IssuedCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly maxAge: { readonly tag: "Some"; readonly value: number } | { readonly tag: "None" };
+  readonly expires: { readonly tag: "Some"; readonly value: number } | { readonly tag: "None" };
+  readonly domain: { readonly tag: "None" };
+  readonly path: string;
+  readonly secure: boolean;
+  readonly httpOnly: boolean;
+  readonly sameSite: { readonly tag: "Lax" | "Strict" | "Unrestricted" };
+  readonly partitioned: boolean;
+}
+
+/** The keys a handler's `deps` carries for the `SignedCookie` actor `actor`. The router's compose
+ *  supplies them from the environment; a target with no environment (the browser bundle) does not,
+ *  and issuing there is a configuration fault rather than a cookie signed with nothing. */
+export function sessionKeysOf(deps: unknown, actor: string): SessionKeys {
+  const all = (deps as { __session?: Record<string, SessionKeys> } | null | undefined)?.__session;
+  const keys = all?.[actor];
+  if (keys === undefined) keyFault(`the session keys for \`${actor}\` are not available on this target`);
+  return keys;
+}
+
+/** `Actor.issue(identity)`: the session cookie for `sub`, signed now, with the safe attributes the scheme
+ *  fixes: `HttpOnly`, `Secure`, `Path=/`, host-only (no `Domain`), `Max-Age = ttl`, and the actor's
+ *  `SameSite`. The author attaches it with `withCookie`; no attribute is theirs to get wrong. */
+export async function issueSessionCookie(
+  keys: SessionKeys,
+  actor: string,
+  cookie: string,
+  sameSite: "Lax" | "Strict" | "Unrestricted",
+  sub: string,
+  ttlSecs: number,
+  nowMs: number,
+): Promise<IssuedCookie> {
+  const value = await signSessionCookie(keys, actor, sub, ttlSecs, nowMs);
+  return {
+    name: cookie,
+    value,
+    maxAge: { tag: "Some", value: ttlSecs * 1000 },
+    expires: { tag: "None" },
+    domain: { tag: "None" },
+    path: "/",
+    secure: true,
+    httpOnly: true,
+    sameSite: { tag: sameSite },
+    partitioned: false,
+  };
+}
+
+/** `Actor.expire()`: the deletion of the session cookie: the same name, `Path=/` and no `Domain`, empty,
+ *  `Max-Age=0` and an epoch `Expires`, which is what a browser matches on to drop it. */
+export function expireSessionCookie(cookie: string, sameSite: "Lax" | "Strict" | "Unrestricted"): IssuedCookie {
+  return {
+    name: cookie,
+    value: "",
+    maxAge: { tag: "Some", value: 0 },
+    expires: { tag: "Some", value: 0 },
+    domain: { tag: "None" },
+    path: "/",
+    secure: true,
+    httpOnly: true,
+    sameSite: { tag: sameSite },
+    partitioned: false,
+  };
+}

@@ -440,6 +440,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "signed-cookies",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_issue_needs_clock",
+        blurb: "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
+        example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
         code: "bynk.actor.signed_cookie_missing_secret",
         blurb: "A `SignedCookie` actor signs the session cookies it issues and verifies the ones it receives, so it needs a key. `secret` names the environment variable holding it, never the key itself. `bynk deploy` mints a random 32-byte key for it when the variable is unset, so you never choose one.",
         example: "actor User { auth = SignedCookie(ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -6606,6 +6613,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.signed_cookie_identity_not_string_constructible",
         "A `SignedCookie` actor's identity is missing or not a string-constructible type.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_issue_needs_clock",
+        "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
     ),
     d(
         "bynk.actor.signed_cookie_missing_secret",
