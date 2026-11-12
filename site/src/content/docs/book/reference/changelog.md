@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.569**.
+written against **v0.570**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.570.0** | `bynk openapi` documents a `SignedCookie` route's cookie scheme, hover, completion and signature help know `User.issue` and `User.expire`, and the scheme has a guide, reference, an example cross-reference and an ADR (#3386); closes #3181 |
+| **v0.569.2** | `bynk test`, `bynk dev` and `bynk deploy` install the build's npm packages with your own package manager (`--no-install` opts out) |
 | **v0.569.1** | The `bynk explain` entry for `bynk.query.sum_needs_numeric` says `sum` takes a `Decimal` key on a `List` and a `Query`, and how to average a `Decimal` |
 | **v0.569.0** | A `system` suite signs in to a `SignedCookie` route as `by User("ada")`, and `by Nobody`, `by Forged` and `by Expired` probe its seam; a case's `Sec-Fetch-Site` and `Origin` headers probe the CSRF check (#3386) |
 | **v0.568.1** | `Query.sum` takes a `Decimal` key and sums it exactly, as `List.sum` does, and `average` over a `Decimal` key says why it is refused and points at `sum` then `div` |

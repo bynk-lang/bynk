@@ -1024,7 +1024,10 @@ body a bad JSON `body` gets, its `path` naming the field (`body.email`).
 - **CSRF.** A form post is a *simple request* in CORS terms, so a
   [`cors { }`](#cors) policy does not stop a page on another origin submitting to the
   route. Nothing here authenticates the submitter; use an
-  [actor](/book/reference/actors/), and do not rely on a cookie alone.
+  [actor](/book/reference/actors/), and do not rely on a cookie alone. A route guarded by a
+  [`SignedCookie`](/book/reference/actors/#signed-cookies) actor is checked against
+  cross-site posts at the seam (fetch metadata and an exact `Origin` match against the service's
+  credentialed `cors` origins).
 
 In a `system` test a typed `body` is sent as the form its record encodes to, and a
 `Wire(…)` body is sent as a form too, so a case can probe the decoding rules with

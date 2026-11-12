@@ -30,6 +30,47 @@ log sees the same output as before. `bynk dev` reports its first build only: a
 rebuild while watching stays quiet. `bynk check` and `bynk compile` print no
 progress.
 
+## Installing npm packages
+
+A generated build can depend on npm packages: `postal-mime` for inbound email,
+`postgres` or `mysql2` for a database, an approved adapter's own. `bynk test`,
+`bynk dev` and `bynk deploy` install them into the directory they generate
+(`out`, `.bynk/dev`, `.bynk/deploy`), before wrangler runs, and only when a listed
+package is missing. A warm re-run installs nothing and needs no network. Lifecycle
+scripts are always off.
+
+The package manager is the one you already use. The first match wins:
+
+1. `BYNK_PACKAGE_MANAGER`, then [`[build] package_manager`](/docs/manifest/#build)
+   in `bynk.toml` (`npm`, `pnpm`, `bun` or `yarn`).
+2. The `packageManager` field of the project root's `package.json`.
+3. A lockfile at the project root: `pnpm-lock.yaml`, `bun.lock` or `bun.lockb`,
+   `yarn.lock`, `package-lock.json`.
+4. `npm_config_user_agent`, set when bynk runs under `pnpm exec`, `npx`, `bunx` or
+   `yarn`.
+5. The first of `npm`, `pnpm` and `bun` on `PATH`.
+
+| Tool | Command |
+| --- | --- |
+| npm | `npm install --no-audit --no-fund --ignore-scripts` |
+| pnpm | `pnpm install --ignore-scripts --ignore-workspace` |
+| bun | `bun install --ignore-scripts` |
+| Yarn | `yarn install --ignore-scripts --non-interactive` (Yarn classic only; Yarn Berry is refused, because its Plug'n'Play layout leaves no `node_modules`) |
+
+The generated directory has no lockfile to respect: whichever tool installs writes
+its own there, in a directory bynk regenerates. [`bynk.lock`](/book/guides/projects-build-and-deployment/layout/)
+stays the source of truth, and an adapter's npm packages must still be approved
+with `bynk approve` before anything installs them. [`bynk doctor`](#bynk-doctor)
+reports which package manager it detected and which rule chose it.
+
+`bynk test`, `bynk dev` and `bynk deploy` take `--no-install` (or `BYNK_NO_INSTALL=1`, for CI),
+for projects that provision `node_modules` themselves. A missing package then
+stops the build before wrangler, naming the detected command, for example
+`pnpm install --ignore-scripts --ignore-workspace`, and the directory to run it
+in. `--dry-run` never installs: it reports what it would install, and with which
+tool. A failed install stops with the tool's error, the command and the
+directory, so it can be run by hand.
+
 ## Exit codes and diagnostics
 
 A diagnostic's **severity** decides whether it fails a build. An **`Error`**
@@ -141,7 +182,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--rewrite-frames] [--ready-json FILE] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
 ```
 
 `bynk dev` serves one project, so it refuses to run at a
@@ -155,6 +196,7 @@ run it inside a member.
 | `--base-port N` | `8787` | First port of the per-context allocation: context *i* is served on `N + i`, in the order listed. |
 | `--inspect` | off | Serve with the V8 inspector enabled (`wrangler dev --inspector-port`) so a JavaScript debugger can attach. Breakpoints set in `.bynk` sources resolve through the emitted source maps, composed into the worker bundle. Prints an inspector URL per context on start. |
 | `--inspect-port N` | `9229` under `--inspect` or with several contexts; a free port otherwise | First inspector port, allocated per context exactly as `--base-port` is, and always honoured, for a single context too. wrangler always starts an inspector, so left on its default every session would race for 9229. Several contexts, or `--inspect`, start from 9229 unless you pass a port; a single context without `--inspect` is given a free port, so sessions started together do not collide. A port something already holds is reported by `bynk dev` before wrangler starts. A range that overlaps the `--base-port` range is an error. |
+| `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
 | `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
@@ -335,7 +377,7 @@ Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 for the workflow.
 
 ```text
-bynk deploy [PATH] [--context NAME] [--dry-run] [--format short|json] [--yes]
+bynk deploy [PATH] [--context NAME] [--dry-run] [--no-install] [--format short|json] [--yes]
             [--secrets-file PATH] [--secret NAME]... [--force] [-- <wrangler args>]
 ```
 
@@ -348,6 +390,7 @@ run it inside a member. Each member keeps its own deploy state.
 | `PATH` | `.` | A directory inside the project. The root is found by walking up for `bynk.toml`. |
 | `--context NAME` | every context | Deploy this context alone, assuming the contexts it consumes are already live. A dependency that has never been deployed is named and refused rather than pushed into — as is one that is live but no longer provides the contract this context was compiled against, and a build of this context that no longer provides what a live caller was compiled against (`bynk.deploy.contract_skew`; see [Contract skew](/book/guides/projects-build-and-deployment/contract-skew/)). Accepts the dotted name (`a.b`) or its worker-directory form (`a-b`). |
 | `--dry-run`, `--plan` | off | Print the per-context plan and resolved order, then exit without changing Cloudflare or `bynk.deploy.lock`. Works offline — it never authenticates. |
+| `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--format FORMAT` | `short` | Plan output: line-oriented `short` or machine-readable `json`. |
 | `--yes` | off | Skip the confirmation required before a resource is created or a Worker is published. Required for non-interactive calls. |
 | `--secrets-file PATH` | — | Read secret **names and values** from a dotenv-style `NAME=value` file. Never committed, never persisted: values move to `wrangler secret put` and are dropped. |
@@ -593,8 +636,8 @@ Each setting is the flag, else the `[build]` key, else the default. On success
 
 `build` infers from the project; [`compile`](#bynk-compile) is told. `compile`
 never reads `[build]`, which keeps the editor's *Show Compiled Output* view from
-changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` don't read
-it. `bynk test` reads `[profile.dev]` and `bynk deploy` checks `[profile.release]`
+changing with the manifest. `bynk dev`, `bynk deploy` and `bynk test` read only
+`package_manager` from it. `bynk test` reads `[profile.dev]` and `bynk deploy` checks `[profile.release]`
 (see [`[profile.<name>]`](/docs/manifest/#profilename)). See [build progress](#build-progress) for the
 per-context lines `build` prints on a terminal.
 
@@ -785,7 +828,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
+bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--no-install] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
 ```
 
 | Argument | Default | Meaning |
@@ -806,6 +849,7 @@ bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format ri
 | `--settle DURATION` | `5s` | With `--against`, how long a failing `expect` is retried before it fails, replaying the reads before it (see [Waiting for a real system](#waiting-for-a-real-system)). `500ms`, `5s`, `2m`, or `0` for no retry. |
 | `--smoke` | off | Run a smoke test of every `from http` route instead of the project's own suites. See [Smoke-testing every route](#smoke-testing-every-route). Combine with `--against` to smoke a running system. |
 | `--print` | off | With `--smoke`, print the synthesised suites as `.bynk` source and run nothing. |
+| `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command and `out`, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/book/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
 | `--mutate` | off | Check that the suites would notice a small change to the code: apply one typed mutation at a time to `src/`, run the suites that exercise the mutated unit, and report the mutants no suite failed on. See [Mutation testing](#mutation-testing). Incompatible with `--inspect`, `--no-run`, `--coverage`, `--against`, `--smoke`, `--update-snapshots`, `--case` and `--format ndjson`. |

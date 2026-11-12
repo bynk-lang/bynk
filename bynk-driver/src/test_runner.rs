@@ -184,6 +184,12 @@ pub struct TestArgs {
     /// deployment. In process and against `dev` every route is called.
     #[arg(long, requires = "smoke")]
     pub smoke_unsafe: bool,
+    /// Do not install the generated project's npm packages: stop, naming the
+    /// install command and its directory, when one is missing. For projects that
+    /// provision `node_modules` themselves, and CI. Also set by
+    /// `BYNK_NO_INSTALL=1`.
+    #[arg(long)]
+    pub no_install: bool,
     /// Record snapshots instead of comparing against them: write a snapshot that
     /// is not stored yet, refresh one whose value changed, and delete the
     /// obsolete ones (those no `expect … matches snapshot` names any more).
@@ -284,6 +290,7 @@ impl TestArgs {
             smoke: false,
             print: false,
             smoke_unsafe: false,
+            no_install: false,
             update_snapshots: false,
             declared_statuses: None,
             dev_command: None,
@@ -367,6 +374,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         smoke,
         print,
         smoke_unsafe,
+        no_install,
         update_snapshots,
         declared_statuses,
         dev_command,
@@ -943,15 +951,13 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // NodeNext` follows, #2148), but `out-js` sits in no such `package.json`
     // scope, so mark it ESM for Node to run the result as such. The `out/`
     // tree is left as the compiler wrote it.
-    if let Err(e) = write_esm_marker(&out_js_root) {
-        let msg = format!(
-            "could not write {}: {e}",
-            out_js_root.join("package.json").display()
-        );
-        return fail_run(program, json, stream, msg);
-    }
-
-    if let Err(msg) = provision_npm_dependencies(&output_root, &out_js_root) {
+    let prepared = write_esm_marker(&out_js_root).map_err(|e| {
+        let marker = out_js_root.join("package.json");
+        format!("could not write {}: {e}", marker.display())
+    });
+    if let Err(msg) =
+        prepared.and_then(|()| provision_npm(&input, &output_root, &out_js_root, no_install))
+    {
         return fail_run(program, json, stream, msg);
     }
 
@@ -1952,39 +1958,30 @@ mod output_within_tests {
 /// (`postal-mime`, for inbound email), which `tsc` and Node resolve from
 /// `out/node_modules`. Install the npm packages the emitted `package.json` lists (the
 /// toolchain's own first-party ones, ADR 0799 C, and an adapter's), into
-/// `out/node_modules`, and make them resolvable from the compiled `out-js`.
-/// A tree that lists none needs nothing; one whose `node_modules` exists is left
-/// alone (the install is offline-safe on a re-run).
-fn provision_npm_dependencies(output_root: &Path, out_js_root: &Path) -> Result<(), String> {
+/// `out/node_modules`, with the project's own package manager (#3350), and make
+/// them resolvable from the compiled `out-js`. A tree that lists none, or whose
+/// `node_modules` already holds them, runs nothing (offline-safe on a re-run).
+/// `--no-install` (or `BYNK_NO_INSTALL`) stops instead of installing.
+fn provision_npm(
+    project_root: &Path,
+    output_root: &Path,
+    out_js_root: &Path,
+    no_install: bool,
+) -> Result<(), String> {
     let manifest = std::fs::read_to_string(output_root.join("package.json")).unwrap_or_default();
     if !manifest.contains("\"dependencies\"") {
         return Ok(());
     }
     let modules = output_root.join("node_modules");
-    if !modules.exists() {
-        let npm = resolve_tool("npm").ok_or_else(|| {
-            "the generated project depends on npm packages, and `npm` is not on PATH to install them"
-                .to_string()
-        })?;
-        let out = ProcCommand::new(npm)
-            .args([
-                "install",
-                "--no-audit",
-                "--no-fund",
-                "--ignore-scripts",
-                "--silent",
-            ])
-            .current_dir(output_root)
-            .output()
-            .map_err(|e| format!("could not run `npm install`: {e}"))?;
-        if !out.status.success() {
-            return Err(format!(
-                "`npm install` failed in {}:\n{}",
-                output_root.display(),
-                String::from_utf8_lossy(&out.stderr)
-            ));
-        }
-    }
+    crate::npm_install::install_for_project(
+        project_root,
+        output_root,
+        crate::npm_install::configured_manager(project_root).as_deref(),
+        crate::npm_install::Mode::of(
+            false,
+            no_install || crate::npm_install::no_install_from_env(),
+        ),
+    )?;
     let link = out_js_root.join("node_modules");
     // A link left by an earlier run may dangle (`exists` follows it), so replace it.
     if link.symlink_metadata().is_ok() {

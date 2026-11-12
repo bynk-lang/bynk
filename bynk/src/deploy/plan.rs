@@ -4,6 +4,13 @@ use super::*;
 /// the registry test sees it, and `bynk explain` knows it.
 const CONTRACT_SKEW: &str = "bynk.deploy.contract_skew";
 
+/// The rebuild after recording older contracts: the same build as the first,
+/// so `--no-install` and `--dry-run` apply to it as well (#3350).
+fn rebuild(project_root: &Path, build_dir: &Path, opts: &DeployOptions) -> bool {
+    let build = workers::Build::new(true, opts.dry_run).no_install(opts.no_install);
+    workers::compile_once_reporting(project_root, build_dir, build, None)
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DeployFormat {
     #[default]
@@ -14,6 +21,9 @@ pub enum DeployFormat {
 #[derive(Debug, Clone, Default)]
 pub struct DeployOptions {
     pub dry_run: bool,
+    /// `--no-install` (or `BYNK_NO_INSTALL`): stop on a missing npm package
+    /// instead of installing it (#3350).
+    pub no_install: bool,
     pub format: DeployFormat,
     pub yes: bool,
     /// `--context NAME` — deploy this context alone, assuming the contexts it
@@ -721,7 +731,7 @@ pub fn run(
     if !workers::compile_once_reporting(
         project_root,
         &build_dir,
-        workers::Build::new(true, opts.dry_run),
+        workers::Build::new(true, opts.dry_run).no_install(opts.no_install),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;
@@ -863,7 +873,7 @@ pub fn run(
                 }
                 // The build reads the lock, so the callee carries what was just
                 // recorded.
-                if !workers::compile_once(project_root, &build_dir, true) {
+                if !rebuild(project_root, &build_dir, opts) {
                     eprintln!(
                         "bynk: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
                         bynk_driver::contracts_lock::lock_path(project_root).display()

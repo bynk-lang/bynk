@@ -161,6 +161,15 @@ struct BuildTable {
     /// stripped). Default: `"ts"`.
     #[schemars(extend("enum" = ["ts", "js"], "default" = "ts"))]
     emit: Option<String>,
+    /// The package manager that installs the npm packages of the build
+    /// directory `bynk test`, `bynk dev` and `bynk deploy` generate:
+    /// `"npm"`, `"pnpm"`, `"bun"` or `"yarn"` (Yarn classic). Unset, bynk
+    /// detects the one you use, from the `packageManager` field of the project
+    /// root's `package.json`, then a lockfile there, then how bynk was
+    /// started, then the first of npm, pnpm and bun on PATH. The environment
+    /// variable `BYNK_PACKAGE_MANAGER` overrides this.
+    #[schemars(extend("enum" = ["npm", "pnpm", "bun", "yarn"]))]
+    package_manager: Option<String>,
 }
 
 /// Switches for checks that read more than the source.

@@ -296,6 +296,16 @@ fn resolve_qualified_from(
                 CommonsItem::Capability(c) if c.name.name == recv && c.derived.is_some() => {
                     derived_base = c.derived.as_ref().map(|d| d.base.name.clone());
                 }
+                // #3386: `User.issue(identity)` / `User.expire()` on a `SignedCookie` actor.
+                CommonsItem::Actor(a)
+                    if a.name.name == recv && crate::completion::is_signed_cookie_actor(a) =>
+                {
+                    out = crate::completion::signed_cookie_members(a)
+                        .into_iter()
+                        .find(|(label, _)| *label == member)
+                        .map(|(_, sig)| sig);
+                    return;
+                }
                 // `Cap.op` — a capability operation.
                 CommonsItem::Capability(c) if c.name.name == recv => {
                     if let Some(op) = c.ops.iter().find(|o| o.name.name == member) {
@@ -652,6 +662,22 @@ mod tests {
             Some("decode[T](s: String) -> Result[T, DecodeError]")
         );
         assert_eq!(resolve_label("Yaml.encode", "context a.b\n", None), None);
+    }
+
+    #[test]
+    fn a_signed_cookie_actor_has_issue_and_expire_signatures() {
+        let doc = "context a\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        assert_eq!(
+            resolve_label("User.issue", doc, None).as_deref(),
+            Some("issue(identity: UserId) -> Effect[Cookie]")
+        );
+        assert_eq!(
+            resolve_label("User.expire", doc, None).as_deref(),
+            Some("expire() -> Cookie")
+        );
+        let other =
+            "context a\n\nactor Admin { auth = Bearer(secret = \"K\"), identity = String }\n";
+        assert_eq!(resolve_label("Admin.issue", other, None), None);
     }
 
     #[test]

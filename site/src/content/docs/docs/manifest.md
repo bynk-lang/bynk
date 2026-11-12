@@ -49,6 +49,7 @@ out = "out"                 # where `bynk build` writes, relative to the project
 target = "bundle"           # "bundle" or "workers"
 platform = "cloudflare"     # "cloudflare", "node" or "browser"
 emit = "ts"                 # "ts" or "js"
+package_manager = "pnpm"    # installs the generated build's npm packages; detected when unset
 
 [profile.dev]
 contracts = true            # the function-contract call-site guard; `dev` default
@@ -501,10 +502,11 @@ overrides its key, and a key you leave out takes the default below.
 | `target` | `"bundle"` or `"workers"` | `"bundle"` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
 | `platform` | `"cloudflare"`, `"node"` or `"browser"` | `"cloudflare"` | The surface binding (`browser` is `bundle` only). |
 | `emit` | `"ts"` or `"js"` | `"ts"` | `js` writes the same modules with types stripped. |
+| `package_manager` | `"npm"`, `"pnpm"`, `"bun"` or `"yarn"` | detected | The package manager `bynk test`, `bynk dev` and `bynk deploy` install a build's npm packages with. Unset, bynk detects yours; see [Installing npm packages](/docs/bynk-cli/#installing-npm-packages). `BYNK_PACKAGE_MANAGER` overrides it. |
 
-Only `bynk build` reads this table. `bynk compile` takes every setting from its
+Apart from `package_manager`, only `bynk build` reads this table. `bynk compile` takes every setting from its
 flags, and `bynk dev`, `bynk deploy` and `bynk test` fix their own topology and
-output directory, so editing `[build]` never changes what is deployed or what
+output directory (and read `package_manager` alone), so editing `[build]` never changes what is deployed or what
 the editor's *Show Compiled Output* view shows. The table describes the
 artefact; how contexts map to deployment units belongs to `[deploy]`, which is
 reserved.

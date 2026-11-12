@@ -138,6 +138,7 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
                 types,
                 services,
                 agents,
+                ..
             } = info;
             format!(
                 "{name:?} => types[{}] services[{}] agents[{}]",

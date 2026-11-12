@@ -164,6 +164,8 @@ pub struct ContextBoundaryInfo {
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub services: HashMap<String, ServiceDecl>,
     pub agents: HashMap<String, Arc<AgentDecl>>,
+    /// #3386: the unit's actors, so a document can describe the credential a route needs.
+    pub actors: HashMap<String, bynk_syntax::ast::ActorDecl>,
 }
 
 /// v0.24: the analyse-mode result — every discovered file's analysed text
@@ -1086,8 +1088,7 @@ fn analyse_project_inner(
             &unit_tables,
         );
         cross_context.flattened_caps = unit_flattened.get(name).cloned().unwrap_or_default();
-        // Both infos share the table's `Arc`'d agents: they used to deep-clone every
-        // agent twice per context, the bulk of this loop's cost (#3243).
+        // Both infos share the table's `Arc`'d agents (#3243: no deep clone per info).
         let agents: HashMap<String, Arc<AgentDecl>> = table.agents.clone();
         sequence_info.insert(
             name.clone(),
@@ -1115,6 +1116,7 @@ fn analyse_project_inner(
                 types: contract_types,
                 services: table.services.clone(),
                 agents,
+                actors: table.actors.clone(),
             },
         );
     }
