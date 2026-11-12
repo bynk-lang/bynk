@@ -127,3 +127,17 @@ test("a schema that fails faults the case, naming schema.sql, never a statement'
   // And the next case, with a good schema, is unaffected.
   assert.equal((await fresh("CREATE TABLE ok (x int);")("", "select count(*)::int c from ok", [])).ok, true);
 });
+
+test("a schema.sql that makes another schema is reset too: no leak, no `already exists`", async () => {
+  const schema = "CREATE SCHEMA app; CREATE TABLE app.t (x int); CREATE TYPE app.kind AS ENUM ('a');";
+  let pg = fresh(schema);
+  await pg("", "insert into app.t values (1)", []);
+  pg = fresh(schema);
+  assert.deepEqual(await pg("", "select count(*)::int c from app.t", []), { ok: true, rows: [{ c: 0 }], rowCount: 1 });
+});
+
+test("a user's error that starts with `bynk: ` is a statement's Err, not a fault", async () => {
+  const pg = fresh("CREATE FUNCTION boom() RETURNS int LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'bynk: mine'; END $$;");
+  const out = await pg("", "select boom()", []);
+  assert.equal(out.ok, false);
+});

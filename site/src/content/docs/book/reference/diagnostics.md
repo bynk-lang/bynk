@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **823** codes in total.
+There are **825** codes in total.
 
 ## Agents
 
@@ -481,6 +481,8 @@ There are **823** codes in total.
 | [`bynk.par.sibling_name`](/book/reference/capabilities/#par) | A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding. | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | — |
 | `bynk.par.single_binding` | A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning). | [`par_stmt`](/book/reference/grammar/#rule-par_stmt) | Warning |
 | [`bynk.par.store_write_in_closure`](/book/reference/capabilities/#par) | A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block. |  | — |
+| [`bynk.postgres.sql_invalid`](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax) | A literal `Postgres` statement does not parse with the Postgres dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not Postgres' own, so it may refuse valid SQL). |  | Warning |
+| [`bynk.postgres.sql_param_count`](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax) | A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`. |  | — |
 | [`bynk.query.join_key_mismatch`](/book/reference/types/#joins-and-grouping) | A `joinOn`/`leftJoin` left and right key function return different types. |  | — |
 | `bynk.query.sum_needs_numeric` | A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`). |  | — |
 | [`bynk.race.in_agent_handler`](/book/reference/capabilities/#race) | `a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |

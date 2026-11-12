@@ -117,6 +117,9 @@ function database(key: string, factory: PgliteFactory): Promise<PgliteDb> {
   return db;
 }
 
+/** A `schema.sql` that did not apply: a fault of the case, never a statement's `Err`. */
+class PgliteSchemaError extends Error {}
+
 /**
  * Closes every database this process started. PGlite (Postgres' own interval
  * timer, in WebAssembly) leaves a ten-second timer running after its last
@@ -143,12 +146,23 @@ export async function closePgliteDatabases(): Promise<void> {
  * D1 migration does, rather than letting every statement of the case echo it.
  */
 async function reset(db: PgliteDb, schemaSql: string): Promise<void> {
-  await db.exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+  // Every schema a case's `schema.sql` may have made, not just `public`: a
+  // table in `app` would otherwise survive into the next case, or make its
+  // `CREATE SCHEMA app` fail. System schemas (`pg_*`, `information_schema`) stay.
+  const found = await db.query(
+    "SELECT nspname FROM pg_namespace WHERE nspname <> 'public' AND nspname !~ '^pg_' AND nspname <> 'information_schema'",
+    [],
+    PGLITE_OPTIONS,
+  );
+  const drops = found.rows.map((r) => `DROP SCHEMA "${String(r.nspname).replace(/"/g, '""')}" CASCADE;`).join(" ");
+  await db.exec(`${drops} DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
   if (schemaSql.trim() === "") return;
   try {
     await db.exec(schemaSql);
   } catch (e) {
-    throw new Error(`bynk: the Postgres test double's \`schema.sql\` failed: ${e instanceof Error ? e.message : String(e)}`);
+    throw new PgliteSchemaError(
+      `bynk: the Postgres test double's \`schema.sql\` failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
@@ -160,7 +174,7 @@ export function makePgliteExecute(ready: Promise<PgliteDb>): PgExecute {
       const result = await db.query(sql, params.map(driverParam), PGLITE_OPTIONS);
       return { ok: true, rows: result.rows.map(jsonRow), rowCount: countOf(result) };
     } catch (e) {
-      if (e instanceof Error && e.message.startsWith("bynk: ")) throw e;
+      if (e instanceof PgliteSchemaError) throw e;
       return { ok: false, failure: classifyPgError(e) };
     }
   };
@@ -179,7 +193,7 @@ export function makePgliteExecute(ready: Promise<PgliteDb>): PgExecute {
       });
       return { ok: true, rowCounts };
     } catch (e) {
-      if (e instanceof Error && e.message.startsWith("bynk: ")) throw e;
+      if (e instanceof PgliteSchemaError) throw e;
       return { ok: false, failure: classifyPgError(e) };
     }
   };

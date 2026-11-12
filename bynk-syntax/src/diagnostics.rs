@@ -3678,7 +3678,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.postgres.sql_param_count",
-        blurb: "When the project has a `schema.sql`, Bynk counts the parameters of each literal `Postgres` statement, by Postgres' rule: the highest `$n`, so `$2` alone still takes two values. It checks a list written out in place, or a name `let`-bound to one. A `$n` inside a string, a quoted name, a comment or a dollar-quoted body is text, not a parameter. Pass one `PgValue` for each, or change the SQL.",
+        blurb: "When the project has a `schema.sql`, Bynk counts the parameters of each literal `Postgres` statement, by Postgres' rule: the highest `$n`, so `$2` alone still takes two values. It checks a list written out in place, or a name `let`-bound to one. A `$n` inside a string, a quoted name, a comment or a dollar-quoted body is text, not a parameter. Pass one `PgValue` for each, or change the SQL. A gap (`$2` with no `$1`) is counted as two parameters; Postgres refuses it at run time (it cannot type `$1`), which this check does not look for.",
         example: "let _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id)])                 // ✗ two parameters, one value\n\nlet _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id), PgInteger(5)])    // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "postgres-sql-checked-for-syntax",

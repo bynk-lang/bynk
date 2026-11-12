@@ -90,6 +90,8 @@ pub fn placeholder_count(sql: &str) -> usize {
                     .map_or(b.len(), |n| i + n);
             }
             b'/' if b.get(i + 1) == Some(&b'*') => i = skip_block_comment(b, i),
+            // A `$` after an identifier byte is part of the name (`price$1`), not a parameter.
+            b'$' if i > 0 && is_ident_byte(b[i - 1]) => i += 1,
             b'$' => {
                 let digits = b[i + 1..].iter().take_while(|c| c.is_ascii_digit()).count();
                 if digits > 0 {
@@ -109,6 +111,12 @@ pub fn placeholder_count(sql: &str) -> usize {
         }
     }
     highest
+}
+
+/// Whether `c` can be part of an identifier after its first character: Postgres
+/// allows letters, digits, `_`, `$` and any non-ASCII byte.
+fn is_ident_byte(c: u8) -> bool {
+    c.is_ascii_alphanumeric() || c == b'_' || c == b'$' || c >= 0x80
 }
 
 /// Whether the `'` at `i` opens an escape string (`E'…'`), where a backslash
@@ -208,6 +216,9 @@ mod tests {
         ("select 'it''s $9', $2, $1", 2),
         ("select \"$9\" from t where a = $1", 1),
         ("select 1 -- $9\n, $1", 1),
+        ("select price$1 from t where a = $2", 2),
+        ("select a$tag$ from t where b = $1", 1),
+        ("select a$1, $2 from t", 2),
         ("select /* $9 /* nested $8 */ $7 */ $1", 1),
         ("select $$ $9 $$, $1", 1),
         ("select $tag$ $9 $tag$, $1, $2", 2),
