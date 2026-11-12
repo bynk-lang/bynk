@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "batch": "7d8f2ef7972af7cb",
+    "probe": "2d051dfd62c7f581"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "batch": "Svc(\"batch\",P(\"name\",B(\"String\")),Ret(R(L(N(\"MySqlRun\")),N(\"MySqlError\"))))",
+    "probe": "Svc(\"probe\",P(\"name\",B(\"String\")),Ret(R(B(\"String\"),N(\"MySqlError\"))))"
+  }
+}

@@ -135,6 +135,14 @@ pub enum BindingSource {
     /// the Hyperdrive configuration exists (created by hand until H2). Never
     /// seen by handlers: they reach it through the instance's `WorkersPostgres`.
     Postgres { capability: String },
+    /// Hyperdrive H5 (#3322): the `[[hyperdrive]]` binding of a `MySql`
+    /// instance (`capability Legacy = MySql`), the same stanza as `Postgres`'s.
+    /// `tls` is its `@tls("…")` when it carries one. Never seen by handlers:
+    /// they reach it through the instance's `WorkersMySql`.
+    MySql {
+        capability: String,
+        tls: Option<String>,
+    },
     /// #3300: the binding of a one-per-Worker capability of `bynk.cloudflare`
     /// (`Version`'s `[version_metadata]`), declared when the Worker's
     /// closure reaches the bare capability. Never seen by handlers: they
@@ -188,7 +196,7 @@ impl BindingSource {
             Self::Email { capability, .. } => {
                 format!("the `[[send_email]]` binding of derived capability `{capability}`")
             }
-            Self::Postgres { capability } => {
+            Self::Postgres { capability } | Self::MySql { capability, .. } => {
                 format!("the `[[hyperdrive]]` binding of derived capability `{capability}`")
             }
             Self::Singleton { capability } => format!(
@@ -320,6 +328,7 @@ fn declared_at(
             | BindingSource::StoredSecret { capability, .. }
             | BindingSource::Email { capability, .. }
             | BindingSource::Postgres { capability }
+            | BindingSource::MySql { capability, .. }
             | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;

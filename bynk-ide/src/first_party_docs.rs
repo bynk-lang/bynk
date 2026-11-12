@@ -142,6 +142,12 @@ pub const FIRST_PARTY_DOCS: &[Entry] = &[
         "postgres-databases-postgres",
         &["all", "first", "run", "transaction"],
     ),
+    (
+        "bynk.cloudflare",
+        "MySql",
+        "mysql-databases-mysql",
+        &["all", "first", "run", "transaction"],
+    ),
 ];
 
 /// The Book URL for the first-party capability a doc-link `name` (`Clock` or

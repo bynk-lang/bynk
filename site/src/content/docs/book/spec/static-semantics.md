@@ -1478,12 +1478,17 @@ and `expect` apply to it unchanged. The rules:
   of either) (`bynk.types.sql_row_shape`), and the call has type
   `Effect[Result[List[T], PgReadError]]` (`firstAs`: `Option[T]`). The compiler
   writes the column list from `T`'s field names as Postgres quoted identifiers.
+  A derived `MySql` instance (Hyperdrive H5, #3322) is the same with `?`
+  placeholders, `MySqlValue`, `MySqlStatement` and `MySqlReadError`, MySQL's
+  backtick-quoted identifiers, and no `Instant` row field (a MySQL date or time
+  arrives as text without a zone). Its optional `@tls` MUST be `"required"`,
+  `"verify-ca"` or `"verify-identity"` (`bynk.capability.invalid_option`).
   The rows decode through the boundary codec, with an `Int` field read from the
   text of an `int8` and an `Instant` field from the ISO-8601 text of a
   `timestamptz` (normalised to UTC) before it runs; `Json.decode` reads neither.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
-  `Queue`, `Analytics`, `EdgeCache`, `Email` and `Postgres` are such kinds.
+  `Queue`, `Analytics`, `EdgeCache`, `Email`, `Postgres` and `MySql` are such kinds.
 - A context MUST declare at most one `EdgeCache` instance
   (`bynk.cloudflare.edge_cache_duplicate`). The instance has no binding: it
   makes the Worker's `wrangler.toml` carry `[cache] enabled = true`. An agent

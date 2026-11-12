@@ -230,6 +230,10 @@ pub(super) fn context_bindings(
                     secret: d.stored_secret().unwrap_or_default().to_string(),
                 },
                 (firstparty::CLOUDFLARE_UNIT, "Postgres") => BindingSource::Postgres { capability },
+                (firstparty::CLOUDFLARE_UNIT, "MySql") => BindingSource::MySql {
+                    capability,
+                    tls: d.tls().map(str::to_string),
+                },
                 (firstparty::CLOUDFLARE_UNIT, "Email") => BindingSource::Email {
                     capability,
                     to: d.email_to().map(str::to_string),

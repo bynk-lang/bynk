@@ -7695,10 +7695,15 @@ mod runtime_tests {
                 let from = line.rsplit('"').nth(1).expect("import specifier");
                 // ADR 0799 C: a module may import the first-party npm package
                 // `bynk-std` declares for it, and nothing else outside the table.
-                if bynk_check::firstparty::FIRST_PARTY_NPM
-                    .iter()
-                    .any(|d| d.runtime_module == *name && d.package == from)
-                {
+                if bynk_check::firstparty::FIRST_PARTY_NPM.iter().any(|d| {
+                    // Hyperdrive H5 (#3322): or a subpath of it
+                    // (`mysql2/promise`, mysql2's promise API).
+                    d.runtime_module == *name
+                        && (d.package == from
+                            || from
+                                .strip_prefix(d.package)
+                                .is_some_and(|r| r.starts_with('/')))
+                }) {
                     continue;
                 }
                 let target = from.strip_prefix("./").and_then(|f| f.strip_suffix(".ts"));
@@ -7731,7 +7736,8 @@ mod runtime_tests {
                 .find(|(n, _)| *n == d.runtime_module)
                 .expect("the runtime module exists");
             assert!(
-                src.contains(&format!("from \"{}\"", d.package)),
+                src.contains(&format!("from \"{}\"", d.package))
+                    || src.contains(&format!("from \"{}/", d.package)),
                 "runtime module `{}` does not import `{}`",
                 d.runtime_module,
                 d.package

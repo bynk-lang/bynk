@@ -429,6 +429,7 @@ mod tests {
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
+                "bynk.cloudflare.MySql",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -450,6 +451,9 @@ mod tests {
         // are stable.
         assert!(p.blocks("bynk.cloudflare.Postgres.all"));
         assert!(!p.blocks("bynk.cloudflare.PgValue"));
+        // Hyperdrive H5 (#3322): `MySql` the same.
+        assert!(p.blocks("bynk.cloudflare.MySql.all"));
+        assert!(!p.blocks("bynk.cloudflare.MySqlValue"));
         // K5a (#2586): new operations of stable capabilities, alone.
         assert!(p.blocks("bynk.Fetch.sendWith"));
         assert!(!p.blocks("bynk.Fetch.send"));

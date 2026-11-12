@@ -708,6 +708,22 @@ The connection string goes to Cloudflare over TLS and nowhere else. It is not in
 the ledger, the plan or its JSON, `wrangler.toml`, `out/`, a log or an error
 message: what Cloudflare answers is scrubbed of it before it is shown.
 
+#### MySQL databases
+
+A [`MySql` instance](/book/reference/bynk-capabilities/#mysql-databases-mysql)
+(`capability Legacy = MySql`) deploys exactly as above, with a `mysql://` URL
+(`mysql://user:password@db.example.com:3306/shop`, the port defaulting to 3306)
+under `[deploy.hyperdrive.Legacy]`. The build writes `bynk-hyperdrive.json` beside
+the Worker's `wrangler.toml`, which is how deploy knows the config is MySQL's and
+what `@tls` the instance asked for. A connection string for the other database
+(`postgres://` for a `MySql`) is refused, naming the scheme it wants.
+
+`@tls("required")`, the default, is sent as the config's `sslmode` (`REQUIRED`).
+`@tls("verify-ca")` and `@tls("verify-identity")` need a CA certificate your
+account holds, which deploy does not upload, so they cannot be made from a
+connection string: deploy stops, and names the commands that upload the CA and make
+the config by hand, which you then adopt with `config_id`.
+
 ### Account secrets: Secrets Store
 
 A `StoredSecret` instance

@@ -2358,6 +2358,7 @@ fn lower_d1_select_call(
         sql,
         first,
         pg,
+        mysql,
     }) = cx.commons().callees.get(&e.id).cloned()
         && let Some(params) = args.get(1)
     {
@@ -2370,13 +2371,18 @@ fn lower_d1_select_call(
         // Hyperdrive H3 (#3320): a `Postgres` read decodes Postgres' text
         // forms and fails as a `PgReadError`, whose variants are `PgSql` and
         // `PgDecode` (`Sql` and `Decode` are `SqlReadError`'s).
-        let source = if pg {
+        // Hyperdrive H5 (#3322): a `MySql` read decodes the same text forms for
+        // `Int` (a `BIGINT` arrives as text) and fails as a `MySqlReadError`
+        // (`MySqlSql`, `MySqlDecode`).
+        let source = if pg || mysql {
             DecodeSource::Pg
         } else {
             DecodeSource::Sql
         };
         let (sql_tag, decode_tag) = if pg {
             ("PgSql", "PgDecode")
+        } else if mysql {
+            ("MySqlSql", "MySqlDecode")
         } else {
             ("Sql", "Decode")
         };

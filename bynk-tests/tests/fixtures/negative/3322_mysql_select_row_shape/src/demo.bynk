@@ -1,0 +1,15 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { MySql }
+
+capability Legacy = MySql
+
+type Placed = { id: Int, at: Instant }
+
+service probe {
+  on call() -> Effect[Bool] given Legacy {
+    let d <- Legacy.firstAs[Placed]("FROM orders", [])
+    d is Ok(_)
+  }
+}

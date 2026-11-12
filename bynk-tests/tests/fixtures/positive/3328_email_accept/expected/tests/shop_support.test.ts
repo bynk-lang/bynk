@@ -43,7 +43,7 @@ async function test_a_message_is_accepted() {
   try {
     const deps = __makeTestDeps();
     const { support } = __ns_shop_support;
-    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
+    const { DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, InboundAttachment, InboundEmail, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, PgError, PgReadError, PgRun, PgStatement, PgValue, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, WorkerVersion } = __ns_bynk_cloudflare;
     type DataPoint = __ns_bynk_cloudflare.DataPoint;
     type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
     type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
@@ -60,6 +60,11 @@ async function test_a_message_is_accepted() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type MySqlError = __ns_bynk_cloudflare.MySqlError;
+    type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
+    type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
+    type MySqlStatement = __ns_bynk_cloudflare.MySqlStatement;
+    type MySqlValue = __ns_bynk_cloudflare.MySqlValue;
     type PgError = __ns_bynk_cloudflare.PgError;
     type PgReadError = __ns_bynk_cloudflare.PgReadError;
     type PgRun = __ns_bynk_cloudflare.PgRun;

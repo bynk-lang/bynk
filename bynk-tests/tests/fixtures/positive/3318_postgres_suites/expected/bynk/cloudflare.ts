@@ -598,6 +598,126 @@ export const PgReadError = {
 };
 
 /**
+ * A value bound to a `?` parameter of a `MySql` statement. `MySqlInteger`
+ * binds a signed whole number and `MySqlReal` a float; `MySqlText` binds text
+ * and `MySqlBytes` bytes. `MySqlBoolean` binds a flag as `1` or `0`, which is
+ * what a `TINYINT(1)` column holds.
+ *
+ * `MySqlUnsigned` binds an unsigned integer as its decimal digits, since an
+ * `Int` is signed and a `BIGINT UNSIGNED` reaches past it; a value that is not
+ * digits only is refused by the server. `MySqlDecimal` binds a `DECIMAL` as
+ * text and `MySqlJson` binds JSON text for a `JSON` column, so neither loses a
+ * digit to a float.
+ *
+ * MySQL has two date and time types that Postgres does not, and Bynk does not
+ * pretend they are one. `MySqlDateTime` binds the wall-clock text of a
+ * `DATETIME` (`2026-11-12 09:30:00`), which has no time zone and is not an
+ * instant. `MySqlTimestamp` binds an `Instant` as UTC text
+ * (`2026-11-12 09:30:00.000`): right for a `DATETIME` column that holds UTC by
+ * convention, and for a `TIMESTAMP` column only when the session's time zone is
+ * UTC, since MySQL converts a `TIMESTAMP` through the session's zone.
+ *
+ * The variants carry the `MySql` prefix so nothing collides with `PgValue`'s or
+ * `SqlValue`'s.
+ */
+export type MySqlValue =
+    { readonly tag: "MySqlNull" }
+  | { readonly tag: "MySqlInteger"; readonly value: number }
+  | { readonly tag: "MySqlUnsigned"; readonly value: string }
+  | { readonly tag: "MySqlReal"; readonly value: number }
+  | { readonly tag: "MySqlText"; readonly value: string }
+  | { readonly tag: "MySqlBytes"; readonly value: globalThis.Uint8Array }
+  | { readonly tag: "MySqlBoolean"; readonly value: boolean }
+  | { readonly tag: "MySqlTimestamp"; readonly value: number }
+  | { readonly tag: "MySqlDateTime"; readonly value: string }
+  | { readonly tag: "MySqlJson"; readonly value: string }
+  | { readonly tag: "MySqlDecimal"; readonly value: string };
+
+export const MySqlValue = {
+  MySqlNull: { tag: "MySqlNull" } as MySqlValue,
+  MySqlInteger: (value: number): MySqlValue => ({ tag: "MySqlInteger", value }),
+  MySqlUnsigned: (value: string): MySqlValue => ({ tag: "MySqlUnsigned", value }),
+  MySqlReal: (value: number): MySqlValue => ({ tag: "MySqlReal", value }),
+  MySqlText: (value: string): MySqlValue => ({ tag: "MySqlText", value }),
+  MySqlBytes: (value: globalThis.Uint8Array): MySqlValue => ({ tag: "MySqlBytes", value }),
+  MySqlBoolean: (value: boolean): MySqlValue => ({ tag: "MySqlBoolean", value }),
+  MySqlTimestamp: (value: number): MySqlValue => ({ tag: "MySqlTimestamp", value }),
+  MySqlDateTime: (value: string): MySqlValue => ({ tag: "MySqlDateTime", value }),
+  MySqlJson: (value: string): MySqlValue => ({ tag: "MySqlJson", value }),
+  MySqlDecimal: (value: string): MySqlValue => ({ tag: "MySqlDecimal", value }),
+};
+
+/**
+ * What a `MySql.run` changed: `rowCount` is the rows the statement affected
+ * (for a `SELECT`, returned), and `insertId` the `AUTO_INCREMENT` id of the
+ * row it inserted, `0` when it inserted none. MySQL has no `RETURNING`, so
+ * `insertId` is how a handler learns the key of the row it just wrote. An id
+ * past 2^53 reads as `0`.
+ */
+export interface MySqlRun {
+  readonly rowCount: number;
+  readonly insertId: number;
+}
+
+export const MySqlRun = {
+};
+
+/**
+ * Why a `MySql` statement failed, keyed on MySQL's error number. `MySqlConstraint`
+ * is an integrity-constraint violation (`1062` duplicate key, `1048` a column
+ * that cannot be null, `1452` and `1451` a foreign key, `3819` a check), an
+ * outcome a handler answers (with a `409`, say). `MySqlSerialization` is a
+ * deadlock (`1213`) or a lock wait timeout (`1205`), which a retry may clear.
+ * `MySqlConnection` is a connection that could not be made or was lost; its
+ * message names the driver's code and never the host, the user or the
+ * password. `MySqlFailed` is anything else, with its error number (`0` when the
+ * driver reported none) and the database's message. MySQL has further failure
+ * kinds, so a `match` over this type needs a wildcard. The variants carry the
+ * `MySql` prefix because `Constraint` and `Failed` are `SqlError`'s.
+ */
+export type MySqlError =
+    { readonly tag: "MySqlConstraint"; readonly code: number; readonly message: string }
+  | { readonly tag: "MySqlSerialization"; readonly code: number; readonly message: string }
+  | { readonly tag: "MySqlConnection"; readonly message: string }
+  | { readonly tag: "MySqlFailed"; readonly code: number; readonly message: string };
+
+export const MySqlError = {
+  MySqlConstraint: (code: number, message: string): MySqlError => ({ tag: "MySqlConstraint", code, message }),
+  MySqlSerialization: (code: number, message: string): MySqlError => ({ tag: "MySqlSerialization", code, message }),
+  MySqlConnection: (message: string): MySqlError => ({ tag: "MySqlConnection", message }),
+  MySqlFailed: (code: number, message: string): MySqlError => ({ tag: "MySqlFailed", code, message }),
+};
+
+/**
+ * One statement of a `MySql.transaction`: its SQL, a string literal, and its
+ * positional parameters (`?`). It stays where it is built: it is never stored,
+ * sent or decoded, since one from outside would carry SQL that was never a
+ * literal.
+ */
+export interface MySqlStatement {
+  readonly sql: string;
+  readonly params: readonly MySqlValue[];
+}
+
+export const MySqlStatement = {
+};
+
+/**
+ * Why a typed `MySql` read (`select[T]`, `firstAs[T]`) failed: `MySqlSql` is
+ * the statement's own failure, `MySqlDecode` a row that did not fit `T` (a
+ * column whose value disagrees with its field's type). The variants carry the
+ * `MySql` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+ */
+export type MySqlReadError =
+    { readonly tag: "MySqlSql"; readonly error: MySqlError }
+  | { readonly tag: "MySqlDecode"; readonly error: DecodeError };
+
+export const MySqlReadError = {
+  MySqlSql: (error: MySqlError): MySqlReadError => ({ tag: "MySqlSql", error }),
+  MySqlDecode: (error: DecodeError): MySqlReadError => ({ tag: "MySqlDecode", error }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -1012,6 +1132,65 @@ export interface Postgres {
 }
 
 export const __PostgresToken: symbol = globalThis.Symbol("Postgres");
+
+/**
+ * A MySQL (or MariaDB) database reached through Cloudflare Hyperdrive, over
+ * mysql2: SQL text and positional parameters (`?`) bound from `MySqlValue`s.
+ * The SQL is a string literal, so data reaches a statement only as a
+ * parameter. Used only through a named instance, `capability Legacy = MySql`,
+ * which binds as `HYPERDRIVE_LEGACY`, a `[[hyperdrive]]` entry; a bare
+ * `given MySql` names no database and is refused. Experimental.
+ *
+ * `@tls("…")` sets how Hyperdrive secures its connection to the database:
+ * `"required"` (the default), `"verify-ca"` or `"verify-identity"`. Anything
+ * else is refused. The Worker's own connection to Hyperdrive is not part of
+ * it. `bynk deploy` sends the mode with the config it makes; the two `verify`
+ * modes need a CA certificate the account holds, which `bynk deploy` does not
+ * upload, so such an instance takes a config that exists (`config_id` in
+ * `[deploy.hyperdrive.Legacy]`).
+ *
+ * Deploy and `bynk dev` work as for `Postgres`: the connection string is
+ * named by `[deploy.hyperdrive.Legacy] connection_env` in `bynk.toml` and is a
+ * secret, a `mysql://user:password@host:3306/database` URL. A statement's
+ * parameters are substituted by the driver as escaped literals (mysql2's
+ * `query`) and not sent as a prepared statement, so `LIMIT ?, ?` works and a
+ * statement survives Hyperdrive's transaction pooling. `??` (mysql2's
+ * identifier placeholder) is not supported.
+ *
+ * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+ * array of objects keyed by column name, `first` the first row as one object,
+ * or `None` when there is none. A `BIGINT` (signed or unsigned) and a `DECIMAL`
+ * arrive as strings, so nothing past 2^53 is lost; a `TINYINT(1)` arrives as
+ * `true` or `false` (any other `TINYINT` as a number); a `BLOB` as base64; a
+ * `JSON` column nested. `DATETIME`, `TIMESTAMP` and `DATE` arrive as the
+ * server's text, `2026-11-12 09:30:00`, with no zone on it: a `String` field
+ * reads it and an `Instant` field refuses it.
+ *
+ * `select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+ * argument is the statement from `FROM` on, a string literal that must not
+ * itself begin with `SELECT`, and the compiler writes the column list from
+ * `T`'s field names (each quoted with backticks, an embedded backtick
+ * doubled), runs the statement and decodes the rows. `select` gives
+ * `Result[List[T], MySqlReadError]`, `firstAs` `Result[Option[T],
+ * MySqlReadError]`.
+ *
+ * `transaction` runs its statements in order on one connection, in one
+ * transaction: all apply, or none do and the result is the failing
+ * statement's error. It runs a fixed list; a read that decides a later write
+ * needs an interactive transaction, which this does not offer. `run`
+ * executes a write and reports the rows it changed and the id it inserted.
+ * Every operation gives a `MySqlError` rather than faulting. Each statement
+ * uses its own connection, and Cloudflare allows six simultaneous connections
+ * per Worker invocation.
+ */
+export interface MySql {
+  all(sql: string, params: readonly MySqlValue[]): globalThis.Promise<Result<string, MySqlError>>;
+  first(sql: string, params: readonly MySqlValue[]): globalThis.Promise<Result<Option<string>, MySqlError>>;
+  run(sql: string, params: readonly MySqlValue[]): globalThis.Promise<Result<MySqlRun, MySqlError>>;
+  transaction(statements: readonly MySqlStatement[]): globalThis.Promise<Result<readonly MySqlRun[], MySqlError>>;
+}
+
+export const __MySqlToken: symbol = globalThis.Symbol("MySql");
 
 export function __serialise_DataPoint(value: DataPoint): __JsonValue {
   return {
@@ -1570,6 +1749,302 @@ export function __deserialise_KvPut(json: __JsonValue, path: string = "$"): Resu
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ expiration: __expiration, metadata: __metadata } as KvPut);
+}
+
+export function __serialise_MySqlError(value: MySqlError): __JsonValue {
+  switch (value.tag) {
+    case "MySqlConstraint": {
+      return { kind: "MySqlConstraint", code: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.code), message: value.message as __JsonValue };
+    }
+    case "MySqlSerialization": {
+      return { kind: "MySqlSerialization", code: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.code), message: value.message as __JsonValue };
+    }
+    case "MySqlConnection": {
+      return { kind: "MySqlConnection", message: value.message as __JsonValue };
+    }
+    case "MySqlFailed": {
+      return { kind: "MySqlFailed", code: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.code), message: value.message as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_MySqlError(json: __JsonValue, path: string = "$"): Result<MySqlError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "MySqlConstraint": {
+  if (typeof obj["code"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["code"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+  }
+  const __code = obj["code"];
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "MySqlConstraint", code: __code, message: __message } as MySqlError);
+    }
+    case "MySqlSerialization": {
+  if (typeof obj["code"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["code"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+  }
+  const __code = obj["code"];
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "MySqlSerialization", code: __code, message: __message } as MySqlError);
+    }
+    case "MySqlConnection": {
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "MySqlConnection", message: __message } as MySqlError);
+    }
+    case "MySqlFailed": {
+  if (typeof obj["code"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["code"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+  }
+  const __code = obj["code"];
+  if (typeof obj["message"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.message`, expected: "string", actual: typeof obj["message"] });
+  }
+  const __message = obj["message"];
+      return Ok({ tag: "MySqlFailed", code: __code, message: __message } as MySqlError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_MySqlReadError(value: MySqlReadError): __JsonValue {
+  switch (value.tag) {
+    case "MySqlSql": {
+      return { kind: "MySqlSql", error: __serialise_MySqlError(value.error) };
+    }
+    case "MySqlDecode": {
+      return { kind: "MySqlDecode", error: value.error as unknown as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_MySqlReadError(json: __JsonValue, path: string = "$"): Result<MySqlReadError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "MySqlSql": {
+  const __r_error = __deserialise_MySqlError(obj["error"], `${path}.error`);
+  if (__r_error.tag === "Err") return __r_error;
+  const __error = __r_error.value;
+      return Ok({ tag: "MySqlSql", error: __error } as MySqlReadError);
+    }
+    case "MySqlDecode": {
+  const __error = obj["error"] as unknown as DecodeError;
+      return Ok({ tag: "MySqlDecode", error: __error } as MySqlReadError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_MySqlRun(value: MySqlRun): __JsonValue {
+  return {
+    rowCount: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rowCount),
+    insertId: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.insertId),
+  };
+}
+
+export function __deserialise_MySqlRun(json: __JsonValue, path: string = "$"): Result<MySqlRun, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["rowCount"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "number", actual: typeof obj["rowCount"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["rowCount"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "safe integer", actual: String(obj["rowCount"]) });
+  }
+  const __rowCount = obj["rowCount"];
+  if (typeof obj["insertId"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.insertId`, expected: "number", actual: typeof obj["insertId"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["insertId"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.insertId`, expected: "safe integer", actual: String(obj["insertId"]) });
+  }
+  const __insertId = obj["insertId"];
+  return Ok({ rowCount: __rowCount, insertId: __insertId } as MySqlRun);
+}
+
+export function __serialise_MySqlStatement(value: MySqlStatement): __JsonValue {
+  return {
+    sql: value.sql as __JsonValue,
+    params: __serialise_List_MySqlValue(value.params),
+  };
+}
+
+export function __deserialise_MySqlStatement(json: __JsonValue, path: string = "$"): Result<MySqlStatement, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["sql"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sql`, expected: "string", actual: typeof obj["sql"] });
+  }
+  const __sql = obj["sql"];
+  const __r_params = __deserialise_List_MySqlValue(obj["params"], `${path}.params`);
+  if (__r_params.tag === "Err") return __r_params;
+  const __params = __r_params.value;
+  return Ok({ sql: __sql, params: __params } as MySqlStatement);
+}
+
+export function __serialise_MySqlValue(value: MySqlValue): __JsonValue {
+  switch (value.tag) {
+    case "MySqlNull":
+      return { kind: "MySqlNull" };
+    case "MySqlInteger": {
+      return { kind: "MySqlInteger", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "MySqlUnsigned": {
+      return { kind: "MySqlUnsigned", value: value.value as __JsonValue };
+    }
+    case "MySqlReal": {
+      return { kind: "MySqlReal", value: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "MySqlText": {
+      return { kind: "MySqlText", value: value.value as __JsonValue };
+    }
+    case "MySqlBytes": {
+      return { kind: "MySqlBytes", value: __bynkBytesToBase64(value.value) as __JsonValue };
+    }
+    case "MySqlBoolean": {
+      return { kind: "MySqlBoolean", value: value.value as __JsonValue };
+    }
+    case "MySqlTimestamp": {
+      return { kind: "MySqlTimestamp", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+    }
+    case "MySqlDateTime": {
+      return { kind: "MySqlDateTime", value: value.value as __JsonValue };
+    }
+    case "MySqlJson": {
+      return { kind: "MySqlJson", value: value.value as __JsonValue };
+    }
+    case "MySqlDecimal": {
+      return { kind: "MySqlDecimal", value: value.value as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"): Result<MySqlValue, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "MySqlNull":
+      return Ok({ tag: "MySqlNull" } as MySqlValue);
+    case "MySqlInteger": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlInteger", value: __value } as MySqlValue);
+    }
+    case "MySqlUnsigned": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlUnsigned", value: __value } as MySqlValue);
+    }
+    case "MySqlReal": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isFinite(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlReal", value: __value } as MySqlValue);
+    }
+    case "MySqlText": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlText", value: __value } as MySqlValue);
+    }
+    case "MySqlBytes": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "base64 string", actual: typeof obj["value"] });
+  }
+  const __b_value = __bynkBytesFromBase64(obj["value"]);
+  if (__b_value.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "base64 string", actual: "invalid base64" });
+  }
+  const __value = __b_value.value;
+      return Ok({ tag: "MySqlBytes", value: __value } as MySqlValue);
+    }
+    case "MySqlBoolean": {
+  if (typeof obj["value"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "boolean", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlBoolean", value: __value } as MySqlValue);
+    }
+    case "MySqlTimestamp": {
+  if (typeof obj["value"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["value"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlTimestamp", value: __value } as MySqlValue);
+    }
+    case "MySqlDateTime": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlDateTime", value: __value } as MySqlValue);
+    }
+    case "MySqlJson": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlJson", value: __value } as MySqlValue);
+    }
+    case "MySqlDecimal": {
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+      return Ok({ tag: "MySqlDecimal", value: __value } as MySqlValue);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_PgError(value: PgError): __JsonValue {
@@ -2606,6 +3081,25 @@ export function __deserialise_List_KvKey(json: __JsonValue, path: string = "$"):
   if (__r_el.tag === "Err") return __r_el;
   const __el = __r_el.value;
   out.push(__el as KvKey);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_MySqlValue(value: readonly MySqlValue[]): __JsonValue {
+  return value.map((v) => __serialise_MySqlValue(v));
+}
+
+export function __deserialise_List_MySqlValue(json: __JsonValue, path: string = "$"): Result<readonly MySqlValue[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: MySqlValue[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_MySqlValue(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as MySqlValue);
   }
   return Ok(out);
 }

@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { MySql }
+
+service probe {
+  on call() -> Effect[Int] given MySql {
+    Effect.pure(0)
+  }
+}

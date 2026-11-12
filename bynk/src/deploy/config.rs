@@ -225,6 +225,76 @@ struct HyperdriveStanza {
 pub(crate) struct HyperdriveDecl {
     /// `HYPERDRIVE_<SNAKE>`, the key the ledger records the config under.
     pub(crate) binding: String,
+    /// Which database the binding's instance reaches. `wrangler.toml` does not
+    /// say: `bynk-hyperdrive.json` does for a `MySql` instance, and a binding it
+    /// does not list is a `Postgres` one (#3322).
+    pub(crate) kind: HyperdriveKind,
+    /// A `MySql` instance's `@tls` mode as the source wrote it (`required`,
+    /// `verify-ca`, `verify-identity`); `None` for `Postgres`.
+    pub(crate) tls: Option<String>,
+}
+
+/// The database a Hyperdrive config fronts (#3322, ADR 0799 D).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum HyperdriveKind {
+    #[default]
+    Postgres,
+    MySql,
+}
+
+impl HyperdriveKind {
+    /// The capability's name, for a message.
+    pub(crate) fn capability(self) -> &'static str {
+        match self {
+            Self::Postgres => "Postgres",
+            Self::MySql => "MySql",
+        }
+    }
+}
+
+/// The emitted `bynk-hyperdrive.json` (#3322): the bindings that are not
+/// `Postgres`, each with its kind and `@tls` mode. Names and modes only.
+#[derive(Debug, Deserialize)]
+struct HyperdriveManifest {
+    version: u32,
+    #[serde(default)]
+    hyperdrive: Vec<HyperdriveManifestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HyperdriveManifestEntry {
+    binding: String,
+    kind: String,
+    #[serde(default)]
+    tls: Option<String>,
+}
+
+/// Read the Hyperdrive manifest beside `worker_dir`'s config, if there is one.
+/// A version or kind this deploy does not know is refused rather than guessed:
+/// making a Postgres config for a MySQL binding would be the wrong database.
+fn read_hyperdrive_manifest(worker_dir: &Path) -> Result<Vec<HyperdriveManifestEntry>, String> {
+    let path = worker_dir.join(bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let manifest: HyperdriveManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    if manifest.version != bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST_VERSION {
+        return Err(format!(
+            "unsupported {} version {}",
+            bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST,
+            manifest.version
+        ));
+    }
+    if let Some(other) = manifest.hyperdrive.iter().find(|e| e.kind != "mysql") {
+        return Err(format!(
+            "{} names kind `{}` for `{}`, which this bynk does not know",
+            bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST,
+            other.kind,
+            other.binding
+        ));
+    }
+    Ok(manifest.hyperdrive)
 }
 
 impl HyperdriveDecl {
@@ -658,10 +728,22 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect::<Result<_, String>>()?;
     d1_databases.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let kinds = read_hyperdrive_manifest(worker_dir)?;
     let mut hyperdrive: Vec<HyperdriveDecl> = parsed
         .hyperdrive
         .into_iter()
-        .map(|h| HyperdriveDecl { binding: h.binding })
+        .map(|h| {
+            let mysql = kinds.iter().find(|k| k.binding == h.binding);
+            HyperdriveDecl {
+                kind: if mysql.is_some() {
+                    HyperdriveKind::MySql
+                } else {
+                    HyperdriveKind::Postgres
+                },
+                tls: mysql.and_then(|k| k.tls.clone()),
+                binding: h.binding,
+            }
+        })
         .collect();
     hyperdrive.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
@@ -1350,6 +1432,8 @@ pub(crate) mod tests {
                 .iter()
                 .map(|binding| HyperdriveDecl {
                     binding: binding.to_string(),
+                    kind: HyperdriveKind::Postgres,
+                    tls: None,
                 })
                 .collect();
             self
@@ -2239,6 +2323,69 @@ state = "deleted"
             err.contains("`exports.Cart`") && err.contains("`storage`"),
             "{err}"
         );
+    }
+
+    /// Hyperdrive H5 (#3322): a binding the Hyperdrive manifest lists is MySQL's,
+    /// with its `@tls` mode; one it does not is Postgres'; a version or kind this
+    /// deploy does not know is refused, not guessed.
+    #[test]
+    fn the_hyperdrive_manifest_names_the_mysql_bindings_and_refuses_what_it_does_not_know() {
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-hyperdrive-manifest-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let config = dir.join("wrangler.toml");
+        std::fs::write(
+            &config,
+            "name = \"shop\"\n\n[[hyperdrive]]\nbinding = \"HYPERDRIVE_MAIN\"\nid = \"<A>\"\n\n[[hyperdrive]]\nbinding = \"HYPERDRIVE_LEGACY\"\nid = \"<B>\"\n",
+        )
+        .unwrap();
+        let manifest = dir.join(bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST);
+
+        // No manifest: both are Postgres', as a Postgres-only project's are.
+        let none = read_resources(&config, &[]).unwrap();
+        assert!(
+            none.hyperdrive
+                .iter()
+                .all(|h| h.kind == HyperdriveKind::Postgres)
+        );
+
+        std::fs::write(
+            &manifest,
+            "{ \"version\": 1, \"hyperdrive\": [{ \"binding\": \"HYPERDRIVE_LEGACY\", \"kind\": \"mysql\", \"tls\": \"verify-ca\" }] }",
+        )
+        .unwrap();
+        let read = read_resources(&config, &[]).unwrap();
+        let kinds: Vec<_> = read
+            .hyperdrive
+            .iter()
+            .map(|h| (h.binding.as_str(), h.kind, h.tls.as_deref()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                (
+                    "HYPERDRIVE_LEGACY",
+                    HyperdriveKind::MySql,
+                    Some("verify-ca")
+                ),
+                ("HYPERDRIVE_MAIN", HyperdriveKind::Postgres, None),
+            ]
+        );
+
+        for bad in [
+            "{ \"version\": 9, \"hyperdrive\": [] }",
+            "{ \"version\": 1, \"hyperdrive\": [{ \"binding\": \"HYPERDRIVE_LEGACY\", \"kind\": \"oracle\" }] }",
+        ] {
+            std::fs::write(&manifest, bad).unwrap();
+            assert!(read_resources(&config, &[]).is_err(), "{bad}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

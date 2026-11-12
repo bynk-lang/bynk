@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "add": "8bb22fea28eaeb12",
+    "find": "024337254efec2d3",
+    "list": "c019ba352a5745c9"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "add": "Svc(\"add\",P(\"name\",B(\"String\")),Ret(R(N(\"MySqlRun\"),N(\"MySqlError\"))))",
+    "find": "Svc(\"find\",P(\"id\",B(\"Int\")),Ret(R(O(B(\"String\")),N(\"MySqlError\"))))",
+    "list": "Svc(\"list\",Ret(R(B(\"String\"),N(\"MySqlError\"))))"
+  }
+}

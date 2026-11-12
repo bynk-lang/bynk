@@ -1,0 +1,2 @@
+# exact
+bynk.types.sql_row_shape `Legacy.firstAs` reads SQL rows, but field `at` of `Placed` is not a column type

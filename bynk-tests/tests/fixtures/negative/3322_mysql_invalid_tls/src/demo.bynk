@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk.cloudflare { MySql }
+
+capability Legacy = MySql @tls("disabled")
+
+service probe {
+  on call() -> Effect[Int] given Legacy {
+    Effect.pure(0)
+  }
+}

@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **825** codes in total.
+There are **827** codes in total.
 
 ## Agents
 
@@ -459,6 +459,8 @@ There are **825** codes in total.
 | [`bynk.lambda.unannotated_param`](/book/spec/static-semantics/) | A lambda parameter has no type annotation in a position where no function type is expected to infer it from. | [`lambda_expr`](/book/reference/grammar/#rule-lambda_expr) | — |
 | `bynk.list.deprecated_function` | A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable). |  | Warning |
 | `bynk.locale.multiple_message_bundles` | A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against. |  | — |
+| [`bynk.mysql.sql_invalid`](/book/reference/bynk-capabilities/#mysql-sql-checked-for-syntax) | A literal `MySql` statement does not parse with the MySQL dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not MySQL's own, so it may refuse valid SQL). |  | Warning |
+| [`bynk.mysql.sql_param_count`](/book/reference/bynk-capabilities/#mysql-sql-checked-for-syntax) | A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`. |  | — |
 | [`bynk.namespace.reserved`](/book/spec/static-semantics/) | A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain. |  | — |
 | [`bynk.package.alias_shadows_unit`](/book/guides/projects-build-and-deployment/share-code-between-projects/#what-the-checks-catch) | A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous. |  | — |
 | `bynk.package.checksum_mismatch` | A git dependency's store entry, or a freshly fetched commit, doesn't hash to the checksum `bynk.lock` records; `bynk` refuses to build it. |  | — |

@@ -1,0 +1,54 @@
+context shop.orders
+
+// Hyperdrive H5 (#3322): typed reads and a transaction on a `MySql` instance.
+// `select[T]` and `firstAs[T]` write the column list from `T`'s fields, quoted
+// with backticks, and decode the rows: a `BIGINT` arrives as text at an `Int`
+// field and a `TINYINT(1)` as a flag at a `Bool`. A MySQL date or time arrives
+// as text without a zone, so it is read as a `String`. `transaction` runs a
+// fixed list of statements in order, all or none. A failure is a
+// `MySqlReadError` (`MySqlSql`, `MySqlDecode`) or a `MySqlError`.
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue }
+
+capability Legacy = MySql @tls("required")
+
+type Order = {
+	id: Int,
+	name: String,
+	placed: String,
+	note: Option[String],
+	paid: Bool,
+}
+
+service api from http {
+	on GET("/orders") () -> Effect[HttpResult[Int]] by Visitor given Legacy {
+		let rows <- Legacy.select[Order]("FROM orders WHERE id > ? ORDER BY id LIMIT ?, ?", [MySqlInteger(0), MySqlInteger(0), MySqlInteger(20)])
+		match rows {
+			Ok(list) => Ok(list.length())
+			Err(MySqlSql(_)) => Ok(-1)
+			Err(MySqlDecode(_)) => Ok(-2)
+		}
+	}
+
+	on GET("/orders/latest") () -> Effect[HttpResult[String]] by Visitor given Legacy {
+		let one <- Legacy.firstAs[Order]("FROM orders ORDER BY placed DESC LIMIT 1", [])
+		match one {
+			Ok(Some(o)) => Ok(o.name)
+			Ok(None) => Ok("none")
+			Err(_) => Ok("failed")
+		}
+	}
+
+	on POST("/orders/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Legacy {
+		let done <- Legacy.transaction([
+			MySqlStatement { sql: "insert into orders (name, qty) values (?, ?)", params: [MySqlText(name), MySqlUnsigned("1")] },
+			MySqlStatement { sql: "update stock set qty = qty - 1 where name = ?", params: [MySqlText(name)] },
+		])
+		match done {
+			Ok(runs) => Ok("applied")
+			Err(MySqlConstraint(_, _)) => Ok("conflict")
+			Err(_) => Ok("failed")
+		}
+	}
+}

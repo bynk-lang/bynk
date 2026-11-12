@@ -49,6 +49,10 @@ pub(crate) struct Origin {
     pub(crate) database: String,
     pub(crate) user: String,
     pub(crate) password: Secret,
+    /// The TLS mode of the connection from Hyperdrive to the database, as
+    /// Cloudflare's API spells it (`REQUIRED`), for a `MySql` config (#3322).
+    /// `None` leaves it to Cloudflare, as a `Postgres` config always does.
+    pub(crate) sslmode: Option<&'static str>,
 }
 
 impl std::fmt::Debug for Origin {
@@ -71,8 +75,9 @@ pub(crate) enum ParseProblem {
 }
 
 impl ParseProblem {
-    fn describe(self) -> &'static str {
+    fn describe(self, kind: HyperdriveKind) -> &'static str {
         match self {
+            Self::Scheme if kind == HyperdriveKind::MySql => "it must start with `mysql://`",
             Self::Scheme => "it must start with `postgres://` or `postgresql://`",
             Self::Credentials => "it has no user name before the `@`",
             Self::Password => "it has no password after the user name",
@@ -103,10 +108,25 @@ fn percent_decode(text: &str) -> Option<String> {
 /// Read `postgres://user:password@host:port/database`. A query string
 /// (`?sslmode=…`) is ignored: Hyperdrive makes its own TLS choices. The port
 /// defaults to 5432; the user, password and database are percent-decoded.
+#[cfg(test)]
 pub(crate) fn parse_connection_string(raw: &str) -> Result<Origin, ParseProblem> {
+    parse_connection_string_for(HyperdriveKind::Postgres, raw)
+}
+
+/// [`parse_connection_string`] for a kind of database (#3322): a `MySql`
+/// instance's is `mysql://user:password@host:3306/database`, the port defaulting
+/// to 3306. Nothing else differs, so there is one parser.
+pub(crate) fn parse_connection_string_for(
+    kind: HyperdriveKind,
+    raw: &str,
+) -> Result<Origin, ParseProblem> {
     let raw = raw.trim();
     let (scheme, rest) = raw.split_once("://").ok_or(ParseProblem::Scheme)?;
-    if scheme != "postgres" && scheme != "postgresql" {
+    let scheme_ok = match kind {
+        HyperdriveKind::Postgres => scheme == "postgres" || scheme == "postgresql",
+        HyperdriveKind::MySql => scheme == "mysql",
+    };
+    if !scheme_ok {
         return Err(ParseProblem::Scheme);
     }
     // The last `@` separates the credentials, so a password may hold a raw `@`,
@@ -137,7 +157,10 @@ pub(crate) fn parse_connection_string(raw: &str) -> Result<Origin, ParseProblem>
         return Err(ParseProblem::Host);
     }
     let port = match port {
-        None | Some("") => 5432,
+        None | Some("") => match kind {
+            HyperdriveKind::Postgres => 5432,
+            HyperdriveKind::MySql => 3306,
+        },
         Some(p) => p
             .parse::<u16>()
             .ok()
@@ -149,7 +172,12 @@ pub(crate) fn parse_connection_string(raw: &str) -> Result<Origin, ParseProblem>
         return Err(ParseProblem::Database);
     }
     Ok(Origin {
-        scheme: "postgres".to_string(),
+        scheme: match kind {
+            HyperdriveKind::Postgres => "postgres",
+            HyperdriveKind::MySql => "mysql",
+        }
+        .to_string(),
+        sslmode: None,
         host: host.to_string(),
         port,
         database,
@@ -222,7 +250,8 @@ pub(crate) fn resolve_wants(
                 .find(|(capability, _)| decl.matches_capability(capability))
                 .map(|(_, entry)| entry);
             let what = format!(
-                "the `Postgres` capability behind `{}` of `{worker}`",
+                "the `{}` capability behind `{}` of `{worker}`",
+                decl.kind.capability(),
                 decl.binding
             );
             let Some(entry) = entry else {
@@ -239,6 +268,17 @@ pub(crate) fn resolve_wants(
                 );
                 continue;
             }
+            // Hyperdrive H5 (#3322, DECISION B): the `verify` modes check the
+            // server's certificate against a CA certificate the account holds,
+            // which this deploy cannot upload, so such a config is made by hand
+            // and adopted. Said before the string is read: it needs none.
+            if let Some(mode) = decl.tls.as_deref().filter(|m| *m != "required") {
+                problems.push(format!(
+                    "{what} has `@tls(\"{mode}\")`, which needs a CA certificate the deploy does not upload: upload it (`wrangler cert upload certificate-authority`), make the config with `wrangler hyperdrive create … --ca-certificate-id <id> --sslmode {}`, and adopt it with `config_id` for environment `{environment}` in `[deploy.hyperdrive]`",
+                    if mode == "verify-ca" { "VERIFY_CA" } else { "VERIFY_IDENTITY" },
+                ));
+                continue;
+            }
             let Some(variable) = &entry.connection_env else {
                 problems.push(format!(
                     "{what} has no `connection_env` and no `config_id` for environment `{environment}` in bynk.toml's `[deploy.hyperdrive]`"
@@ -251,8 +291,11 @@ pub(crate) fn resolve_wants(
                 ));
                 continue;
             };
-            match parse_connection_string(&raw) {
-                Ok(origin) => {
+            match parse_connection_string_for(decl.kind, &raw) {
+                Ok(mut origin) => {
+                    if decl.kind == HyperdriveKind::MySql {
+                        origin.sslmode = Some("REQUIRED");
+                    }
                     wants.insert(
                         (worker.clone(), decl.binding.clone()),
                         Want::Connection {
@@ -263,8 +306,11 @@ pub(crate) fn resolve_wants(
                     );
                 }
                 Err(problem) => problems.push(format!(
-                    "the connection string in `{variable}`, for {what}, is not a Postgres connection URL (`postgres://user:password@host:5432/database`): {}",
-                    problem.describe()
+                    "the connection string in `{variable}`, for {what}, is not a {} connection URL (`{}://user:password@host:{}/database`): {}",
+                    decl.kind.capability().replace("MySql", "MySQL"),
+                    if decl.kind == HyperdriveKind::MySql { "mysql" } else { "postgres" },
+                    if decl.kind == HyperdriveKind::MySql { "3306" } else { "5432" },
+                    problem.describe(decl.kind)
                 )),
             }
         }
@@ -380,7 +426,7 @@ impl RestHyperdrive {
 }
 
 fn origin_json(name: &str, origin: &Origin) -> serde_json::Value {
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "name": name,
         "origin": {
             "scheme": origin.scheme,
@@ -390,7 +436,12 @@ fn origin_json(name: &str, origin: &Origin) -> serde_json::Value {
             "user": origin.user,
             "password": origin.password.expose(),
         },
-    })
+    });
+    // #3322: a `MySql` config's TLS mode (`@tls("required")`, the default).
+    if let Some(sslmode) = origin.sslmode {
+        body["mtls"] = serde_json::json!({ "sslmode": sslmode });
+    }
+    body
 }
 
 impl HyperdriveApi for RestHyperdrive {

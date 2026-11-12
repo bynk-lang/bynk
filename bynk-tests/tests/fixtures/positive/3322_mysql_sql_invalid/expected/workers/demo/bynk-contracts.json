@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "probe": "dffb7fab86d8f779"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "probe": "Svc(\"probe\",Ret(R(B(\"String\"),N(\"MySqlError\"))))"
+  }
+}

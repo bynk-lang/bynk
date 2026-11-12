@@ -900,7 +900,12 @@ fn platform_binding_factories(
             "__makeIntegrationEmail",
         ),
         (
-            |s| matches!(s, BindingSource::Postgres { .. }),
+            |s| {
+                matches!(
+                    s,
+                    BindingSource::Postgres { .. } | BindingSource::MySql { .. }
+                )
+            },
             "__makeIntegrationHyperdrive",
         ),
         (

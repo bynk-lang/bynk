@@ -60,4 +60,28 @@ mod tests {
         assert_eq!(pg.runtime_module, "postgres");
         assert!(is_exact_version(pg.version));
     }
+
+    /// Hyperdrive H5 (#3322): a `MySql` instance reaches `mysql2`, decided on
+    /// the declaration, and `Postgres` does not.
+    #[test]
+    fn a_mysql_instance_reaches_mysql2_and_a_postgres_one_does_not() {
+        let reach = Reach::CapabilityInstance("MySql");
+        let declared = parse(
+            "context shop.orders\nconsumes bynk.cloudflare { MySql }\ncapability Legacy = MySql @tls(\"required\")\n",
+        );
+        assert!(unit_reaches(&declared, &reach));
+        let other = parse(
+            "context shop.orders\nconsumes bynk.cloudflare { Postgres }\ncapability Main = Postgres\n",
+        );
+        assert!(!unit_reaches(&other, &reach));
+        let my = FIRST_PARTY_NPM
+            .iter()
+            .find(|d| d.package == "mysql2")
+            .expect("mysql2 is a first-party dependency");
+        assert_eq!(my.runtime_module, "mysql");
+        assert!(is_exact_version(my.version));
+        // Cloudflare's mysql2 guide needs 3.13.0 or later.
+        let parts: Vec<u32> = my.version.split('.').map(|p| p.parse().unwrap()).collect();
+        assert!(parts >= vec![3, 13, 0], "{}", my.version);
+    }
 }

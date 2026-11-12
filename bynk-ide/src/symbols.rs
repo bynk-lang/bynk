@@ -2946,6 +2946,10 @@ pub(crate) fn describe_derived_capability(
     if d.base.name == "Postgres" {
         out.push_str("\nEmits `[[hyperdrive]]` with a placeholder `id`: a distinct instance of `Postgres`, reading the database behind the Hyperdrive configuration at `env.<binding>.connectionString`. `bynk deploy` makes the configuration from the connection string in the environment variable `[deploy.hyperdrive.<Capability>] connection_env` names in `bynk.toml` (or adopts one named by `config_id`) and fills in the `id`; `bynk dev` reads the local string from `[dev.hyperdrive.<Capability>] connection_env`. Each statement opens and closes its own connection.\n");
     }
+    // Hyperdrive H5 (#3322): a MySQL database through Hyperdrive.
+    if d.base.name == "MySql" {
+        out.push_str("\nEmits `[[hyperdrive]]` with a placeholder `id` (as `Postgres` does), reading the MySQL database behind the Hyperdrive configuration through mysql2. `@tls(\"required\" | \"verify-ca\" | \"verify-identity\")` is how Hyperdrive secures its connection to the database (default `required`); `bynk deploy` sends it with the config it makes. Statements take `?` placeholders bound from `MySqlValue`s. Each statement opens and closes its own connection.\n");
+    }
     if d.base.name == "EdgeCache" {
         out.push_str("\nEmits `[cache] enabled = true`: a `@cache` route's `2xx` is cached at Cloudflare's edge, and every other `GET` or `HEAD` answer is `no-store`.\n");
     }

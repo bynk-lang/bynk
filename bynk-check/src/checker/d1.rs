@@ -21,11 +21,15 @@ const SQL_TEXT_OPS: &[&str] = &["all", "first", "run"];
 /// statement is. It is held to the same rules as [`SQL_STATEMENT`].
 pub(crate) const PG_STATEMENT: &str = "PgStatement";
 
+/// Hyperdrive H5 (#3322): the first-party record a `MySql.transaction`
+/// statement is, held to the same rules.
+pub(crate) const MYSQL_STATEMENT: &str = "MySqlStatement";
+
 /// Whether `name`, in the project's type table, is `bynk.cloudflare`'s own
 /// `SqlStatement` or `PgStatement`, found by its declaration's file as the
 /// crypto key types are.
 pub(crate) fn is_sql_statement_type(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
-    (name == SQL_STATEMENT || name == PG_STATEMENT)
+    (name == SQL_STATEMENT || name == PG_STATEMENT || name == MYSQL_STATEMENT)
         && types.get(name).is_some_and(|decl| {
             crate::firstparty::unit(crate::firstparty::CLOUDFLARE_UNIT).is_some_and(|unit| {
                 decl.span.file == crate::project_model::firstparty_file_id(unit)
@@ -312,6 +316,25 @@ pub(crate) fn check_sql_argument(
         check_pg_transaction(args.first(), ctx);
         return;
     }
+    // Hyperdrive H5 (#3322): a `MySql` statement is held to the same rules, with
+    // `?` placeholders and MySQL's parser for the `schema.sql` check.
+    if base == "MySql" && SQL_TEXT_OPS.contains(&method) {
+        if let Some(sql) = args.first() {
+            match sql_literal_text(sql, ctx) {
+                None => ctx.errors.push(sql_not_literal_with(
+                    sql.span,
+                    &format!("the SQL of `{cap}.{method}`"),
+                    "`?`",
+                )),
+                Some(text) => check_mysql_text(&text, sql.span, args.get(1), ctx),
+            }
+        }
+        return;
+    }
+    if base == "MySql" && method == "transaction" {
+        check_mysql_transaction(args.first(), ctx);
+        return;
+    }
     if base != "D1" {
         return;
     }
@@ -447,6 +470,77 @@ fn check_pg_transaction(list: Option<&Expr>, ctx: &mut Ctx) {
     }
 }
 
+/// Hyperdrive H5 (#3322): [`check_pg_text`] for a `MySql` statement.
+fn check_mysql_text(text: &str, span: Span, params: Option<&Expr>, ctx: &mut Ctx) {
+    if !ctx.input.stability.policy.pg_sql {
+        return;
+    }
+    let passed = literal_list_len(params, ctx);
+    for problem in crate::mysql_sql::check_statement(text, passed) {
+        ctx.errors.push(mysql_problem(problem, span));
+    }
+}
+
+/// [`check_pg_transaction`] for `MySql.transaction([MySqlStatement { … }, …])`.
+fn check_mysql_transaction(list: Option<&Expr>, ctx: &mut Ctx) {
+    let Some(Expr {
+        kind: ExprKind::ListLit(items, ..),
+        ..
+    }) = list
+    else {
+        return;
+    };
+    for item in items {
+        let ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } = &item.kind
+        else {
+            continue;
+        };
+        if type_name.name != MYSQL_STATEMENT {
+            continue;
+        }
+        let field = |name: &str| {
+            fields
+                .iter()
+                .find(|f| f.name.name == name)
+                .and_then(|f| f.value.as_ref())
+        };
+        let Some(sql) = field("sql") else { continue };
+        let Some(text) = sql_literal_text(sql, ctx) else {
+            continue;
+        };
+        check_mysql_text(&text, sql.span, field("params"), ctx);
+    }
+}
+
+/// The diagnostic for a problem with a `MySql` statement at its `span`.
+fn mysql_problem(problem: crate::pg_sql::PgSqlProblem, span: Span) -> CompileError {
+    use crate::pg_sql::PgSqlProblem;
+    match problem {
+        PgSqlProblem::Invalid(message) => CompileError::new(
+            "bynk.mysql.sql_invalid",
+            span,
+            format!("this may not be a MySQL statement: {message}"),
+        )
+        .with_note(
+            "a warning, not an error: the parser is a pure-Rust one, not MySQL's own, and can refuse valid SQL. It runs because the project has a `schema.sql`; delete that file to turn the check off",
+        ),
+        PgSqlProblem::ParamCount { expected, passed } => CompileError::new(
+            "bynk.mysql.sql_param_count",
+            span,
+            format!(
+                "the statement uses {expected} parameter{}, but {passed} {} passed",
+                if expected == 1 { "" } else { "s" },
+                if passed == 1 { "is" } else { "are" },
+            ),
+        )
+        .with_note(
+            "each `?` placeholder takes the next element of `params`, so the list needs as many elements as the statement has `?` outside string literals, quoted identifiers and comments",
+        ),
+    }
+}
+
 /// The diagnostic for a [`PgSqlProblem`](crate::pg_sql::PgSqlProblem) at the
 /// statement's `span`.
 fn pg_problem(problem: crate::pg_sql::PgSqlProblem, span: Span) -> CompileError {
@@ -498,6 +592,8 @@ pub(crate) fn check_statement_fields(ty: TyId, fields: &[FieldInit], ctx: &mut C
             let what = format!("a `{statement}`'s `sql`");
             ctx.errors.push(if statement == PG_STATEMENT {
                 sql_not_literal_with(span, &what, "`$1`, `$2`")
+            } else if statement == MYSQL_STATEMENT {
+                sql_not_literal_with(span, &what, "`?`")
             } else {
                 sql_not_literal(span, &what)
             });
@@ -545,7 +641,7 @@ pub(crate) fn carried_statement(
 /// The typed reads of a derived `D1` instance, which the compiler lowers over
 /// `all`/`first` (#2865); they are not declared operations of the capability.
 pub(crate) fn is_typed_read(derived_from: Option<&(String, String)>, method: &str) -> bool {
-    matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && matches!(base.as_str(), "D1" | "Postgres"))
+    matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && matches!(base.as_str(), "D1" | "Postgres" | "MySql"))
         && matches!(method, "select" | "firstAs")
 }
 
@@ -555,14 +651,34 @@ pub(crate) fn is_postgres(derived_from: Option<&(String, String)>) -> bool {
     matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && base == "Postgres")
 }
 
+/// Hyperdrive H5 (#3322): whether the derived instance is a `MySql` one, so its
+/// typed reads use `MySqlValue`, `MySqlReadError` and MySQL's column rules, and
+/// quote a column with backticks.
+pub(crate) fn is_mysql(derived_from: Option<&(String, String)>) -> bool {
+    matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && base == "MySql")
+}
+
 /// The column list the compiler writes for a row record: each field's name as
 /// a quoted identifier (an embedded `"` doubled), in declaration order.
 pub fn select_columns(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> String {
+    select_columns_quoted(row, types, '"')
+}
+
+/// [`select_columns`] for a dialect's identifier quote: `"` (SQLite, Postgres)
+/// or a backtick (MySQL), doubled where it occurs in a name.
+pub fn select_columns_quoted(
+    row: &str,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    quote: char,
+) -> String {
     match types.get(row).map(|d| &d.body) {
         Some(TypeBody::Record(record)) => record
             .fields
             .iter()
-            .map(|f| format!("\"{}\"", f.name.name.replace('"', "\"\"")))
+            .map(|f| {
+                let doubled = format!("{quote}{quote}");
+                format!("{quote}{}{quote}", f.name.name.replace(quote, &doubled))
+            })
             .collect::<Vec<_>>()
             .join(", "),
         _ => String::new(),
@@ -614,6 +730,7 @@ pub(crate) fn check_typed_read(
         );
     }
     let pg = is_postgres(derived_from);
+    let mysql = is_mysql(derived_from);
     let name = format!("{cap}.{}", method.name);
     let bail = |ctx: &mut Ctx| {
         for a in args {
@@ -659,6 +776,8 @@ pub(crate) fn check_typed_read(
     };
     let (value_name, read_name) = if pg {
         ("PgValue", "PgReadError")
+    } else if mysql {
+        ("MySqlValue", "MySqlReadError")
     } else {
         ("SqlValue", "SqlReadError")
     };
@@ -697,6 +816,11 @@ pub(crate) fn check_typed_read(
                 "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
                  `Bytes`, `Decimal` or `Instant` (or a refined or opaque type over one, or an \
                  `Option` of either)"
+            } else if mysql {
+                "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
+                 `Bytes` or `Decimal` (or a refined or opaque type over one, or an `Option` \
+                 of either); a MySQL date or time arrives as text without a zone, so read it \
+                 as a `String`"
             } else {
                 "the row is a record whose fields are `Int`, `Float`, `String`, `Bool` or \
                  `Bytes` (or a refined or opaque type over one, or an `Option` of either)"
@@ -742,7 +866,8 @@ pub(crate) fn check_typed_read(
                 );
                 ok = false;
             } else if ok && let Ty::Named { name: row, .. } = &*tys.get(t) {
-                let cols = select_columns(row, &ctx.input.types);
+                let cols =
+                    select_columns_quoted(row, &ctx.input.types, if mysql { '`' } else { '"' });
                 sql = Some(format!("SELECT {cols} {}", tail.trim_start()));
             }
         }
@@ -750,7 +875,13 @@ pub(crate) fn check_typed_read(
             ctx.errors.push(sql_not_literal_with(
                 args[0].span,
                 &format!("the SQL of `{cap}.{}`", method.name),
-                if pg { "`$1`, `$2`" } else { "`?1`, `?2`" },
+                if pg {
+                    "`$1`, `$2`"
+                } else if mysql {
+                    "`?`"
+                } else {
+                    "`?1`, `?2`"
+                },
             ));
             // The tail is not an ordinary argument here; still type it for hover.
             let _ = type_of(&args[0], None, ctx);
@@ -786,6 +917,7 @@ pub(crate) fn check_typed_read(
     // prepared against is a D1 migration's SQLite, which says nothing of
     // Postgres (as for `all`, `first` and `run`).
     if !pg
+        && !mysql
         && let Ty::Named { name: row, .. } = &*tys.get(t)
         && let Some(TypeBody::Record(record)) = ctx.input.types.get(row).map(|d| &d.body)
     {
@@ -814,6 +946,7 @@ pub(crate) fn check_typed_read(
             sql,
             first,
             pg,
+            mysql,
         },
     );
     let rows = if first {

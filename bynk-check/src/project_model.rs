@@ -1101,6 +1101,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
         "StoredSecret" => "StripeKey",
         "Email" => "Mail",
         "Postgres" => "Main",
+        "MySql" => "Legacy",
         _ => "Archives",
     };
     let mut out = format!("capability {name} = {}", kind.capability);
@@ -1305,6 +1306,30 @@ fn instance_option_value(
                     .map(|j| format!("`\"{j}\"`"))
                     .collect::<Vec<_>>()
                     .join(" and ")
+            )),
+        );
+        return None;
+    }
+    // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
+    if option == crate::firstparty::MYSQL_TLS_OPTION
+        && !crate::firstparty::MYSQL_TLS_MODES
+            .iter()
+            .any(|(mode, _)| mode == text)
+    {
+        errors.push_for(
+            Some(path),
+            CompileError::new(
+                "bynk.capability.invalid_option",
+                ann.span,
+                format!("`{text}` is not a TLS mode a `{base}` can use"),
+            )
+            .with_note(format!(
+                "the modes are {}; `\"required\"` is the default",
+                crate::firstparty::MYSQL_TLS_MODES
+                    .iter()
+                    .map(|(m, _)| format!("`\"{m}\"`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )),
         );
         return None;

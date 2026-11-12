@@ -186,6 +186,12 @@ pub(super) fn emit_integration_harness<'a>(
                 // #3318: a test never reaches Postgres, so reading the
                 // connection string faults, naming the binding, until the case
                 // stubs the instance.
+                // Hyperdrive H5 (#3322): a `MySql` participant the same, with
+                // no double to opt in to.
+                BindingSource::MySql { .. } => call(
+                    ident("__makeIntegrationHyperdrive"),
+                    vec![str_lit(&binding.name)],
+                ),
                 BindingSource::Postgres { .. } => {
                     match d1_migrations.get(bynk_check::d1_migrations::PG_TEST_KEY) {
                         // #3321: `[test] postgres = "pglite"`: a database of its own
