@@ -344,7 +344,9 @@ pub enum Outcome {
     /// The packages were installed.
     Installed(Detection),
     /// A dry run: these would be installed, with this tool.
-    WouldInstall(Vec<String>, Detection),
+    /// A dry run: these would be installed, with this tool (or, when none can
+    /// be chosen, why not). Detection failing never fails a dry run.
+    WouldInstall(Vec<String>, Result<Detection, DetectError>),
 }
 
 /// Why the packages are not installed.
@@ -354,7 +356,8 @@ pub enum InstallError {
     /// `--no-install`: today's preflight stop.
     Declined {
         missing: Vec<String>,
-        command: String,
+        /// The detected install command, if a package manager could be chosen.
+        command: Option<String>,
         dir: PathBuf,
     },
     /// The chosen tool is not on PATH.
@@ -381,12 +384,18 @@ impl std::fmt::Display for InstallError {
                 missing,
                 command,
                 dir,
-            } => write!(
-                f,
-                "the build needs npm packages that are not installed: {}. Run `{command}` in `{}`, then try again",
-                missing.join(", "),
-                dir.display()
-            ),
+            } => {
+                let run = command.as_ref().map_or_else(
+                    || "Install them with your package manager".to_string(),
+                    |c| format!("Run `{c}`"),
+                );
+                write!(
+                    f,
+                    "the build needs npm packages that are not installed: {}. {run} in `{}`, then try again",
+                    missing.join(", "),
+                    dir.display()
+                )
+            }
             InstallError::ToolMissing { detection } => write!(
                 f,
                 "`{}` is not on PATH to install the generated project's npm packages ({}); install it, or choose another with `[build] package_manager` or `{PACKAGE_MANAGER_ENV}`",
@@ -459,16 +468,18 @@ pub fn ensure_installed(
     if missing.is_empty() {
         return Ok(Outcome::Present);
     }
-    let detection =
-        detect(install.project, install.setting, install.toolbox).map_err(InstallError::Detect)?;
-    match mode {
-        Mode::DryRun => Ok(Outcome::WouldInstall(missing, detection)),
-        Mode::NoInstall => Err(InstallError::Declined {
-            command: detection.manager.command_line(),
+    let detection = detect(install.project, install.setting, install.toolbox);
+    match (mode, detection) {
+        // Neither a dry run nor `--no-install` installs, so neither fails for
+        // want of a package manager: both still name the missing packages.
+        (Mode::DryRun, detection) => Ok(Outcome::WouldInstall(missing, detection)),
+        (Mode::NoInstall, detection) => Err(InstallError::Declined {
+            command: detection.ok().map(|d| d.manager.command_line()),
             missing,
             dir: build_dir.to_path_buf(),
         }),
-        Mode::Install => run_install(install, build_dir, detection),
+        (Mode::Install, Err(e)) => Err(InstallError::Detect(e)),
+        (Mode::Install, Ok(detection)) => run_install(install, build_dir, detection),
     }
 }
 
@@ -527,13 +538,23 @@ pub fn announce(detection: &Detection, build_dir: &Path) -> String {
 }
 
 /// The dry-run line: what would be installed, and with which tool.
-pub fn dry_run_message(missing: &[String], detection: &Detection, build_dir: &Path) -> String {
+pub fn dry_run_message(
+    missing: &[String],
+    detection: &Result<Detection, DetectError>,
+    build_dir: &Path,
+) -> String {
+    let how = match detection {
+        Ok(found) => format!(
+            "A real run would install them with `{}` in `{}` ({})",
+            found.manager.command_line(),
+            build_dir.display(),
+            found.rule.describe()
+        ),
+        Err(e) => format!("A real run could not install them: {e}"),
+    };
     format!(
-        "bynk: the build needs npm packages that are not installed: {}. A real run would install them with `{}` in `{}` ({})",
-        missing.join(", "),
-        detection.manager.command_line(),
-        build_dir.display(),
-        detection.rule.describe()
+        "bynk: the build needs npm packages that are not installed: {}. {how}",
+        missing.join(", ")
     )
 }
 
@@ -912,7 +933,7 @@ mod tests {
             panic!("{got:?}")
         };
         assert_eq!(missing, ["postal-mime"]);
-        assert_eq!(det.manager, PackageManager::Pnpm);
+        assert_eq!(det.as_ref().unwrap().manager, PackageManager::Pnpm);
         let msg = dry_run_message(&missing, &det, &d);
         assert!(
             msg.contains("pnpm install") && msg.contains("pnpm-lock.yaml"),
@@ -923,6 +944,45 @@ mod tests {
         assert_eq!(Mode::of(true, true), Mode::DryRun);
         assert_eq!(Mode::of(false, true), Mode::NoInstall);
         assert_eq!(Mode::of(false, false), Mode::Install);
+    }
+
+    #[test]
+    fn a_dry_run_and_no_install_still_name_the_packages_when_no_tool_is_found() {
+        let d = build_dir("no-tool", &["postal-mime"], &[]);
+        let spy = Spy::default();
+        // No manager on PATH and nothing pointing at one.
+        let got = run_mode(&Fake::default(), &spy, &d, Mode::DryRun).unwrap();
+        let Outcome::WouldInstall(missing, det) = got else {
+            panic!("{got:?}")
+        };
+        assert_eq!(det, Err(DetectError::NoneAvailable));
+        let msg = dry_run_message(&missing, &det, &d);
+        assert!(
+            msg.contains("postal-mime") && msg.contains("could not install"),
+            "{msg}"
+        );
+        let text = run_mode(&Fake::default(), &spy, &d, Mode::NoInstall)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            text.contains("postal-mime")
+                && text.contains("Install them with your package manager")
+                && text.contains(&d.display().to_string()),
+            "{text}"
+        );
+        // An unknown explicit setting does not fail either, and a real run does.
+        let install = Install {
+            project: &Fake::default(),
+            setting: Some("deno"),
+            toolbox: &Fake::default(),
+            runner: &spy,
+        };
+        assert!(ensure_installed(&install, &d, Mode::DryRun).is_ok());
+        assert!(matches!(
+            ensure_installed(&install, &d, Mode::Install),
+            Err(InstallError::Detect(_))
+        ));
+        assert!(spy.calls.borrow().is_empty());
     }
 
     #[test]

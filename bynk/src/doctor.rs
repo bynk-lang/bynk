@@ -460,6 +460,14 @@ fn detect_package_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> R
             detail: format!("{} ({})", found.manager.name(), found.rule.describe()),
             remedy: None,
         },
+        // A package manager that cannot be chosen is a hard error for a run that
+        // needs to install, so an unknown explicit setting warns.
+        Err(e @ npm_install::DetectError::UnknownManager { .. }) => Row {
+            label: "package manager".into(),
+            level: Level::Warn,
+            detail: "unknown".into(),
+            remedy: Some(e.to_string()),
+        },
         // Informational: only a project with npm dependencies needs one, so
         // its absence is not a fault (it would turn `--strict` red for others).
         Err(e) => Row {

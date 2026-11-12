@@ -811,7 +811,8 @@ pub fn run(
             fingerprint = now;
             eprintln!("bynk dev: change detected — rebuilding…");
             emit(opts.format, &DevEvent::Rebuilding);
-            if compile_once(project_root, &build_dir, true) {
+            let rebuild = crate::workers::Build::new(true, false).no_install(opts.no_install);
+            if crate::workers::compile_once_reporting(project_root, &build_dir, rebuild, None) {
                 // Interop I5 (#1972): refresh the served copy from the
                 // rebuilt config. A binding added since start has no
                 // stand-in until `bynk dev` restarts.

@@ -28,10 +28,13 @@ use crate::probe::Provenance;
 /// `bynk-tests/tests/e2e.rs`'s in-place fixtures have — an unconditional write
 /// would leave a real `bynk.schema.lock` in the tree on every test run.
 pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool) -> bool {
+    // Never installs (#3350): the callers are `bynk tail` and fixtures compiled in
+    // place, neither of which should run a package manager. A missing npm
+    // package stops the build, naming the command, as it did before installing.
     compile_once_reporting(
         project_root,
         build_dir,
-        Build::new(schema_registry, false),
+        Build::new(schema_registry, false).no_install(true),
         None,
     )
 }

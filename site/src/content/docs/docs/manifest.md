@@ -49,7 +49,7 @@ out = "out"                 # where `bynk build` writes, relative to the project
 target = "bundle"           # "bundle" or "workers"
 platform = "cloudflare"     # "cloudflare", "node" or "browser"
 emit = "ts"                 # "ts" or "js"
-# package_manager = "pnpm"  # installs the generated build's npm packages; detected when unset
+package_manager = "pnpm"    # installs the generated build's npm packages; detected when unset
 
 [profile.dev]
 contracts = true            # the function-contract call-site guard; `dev` default
