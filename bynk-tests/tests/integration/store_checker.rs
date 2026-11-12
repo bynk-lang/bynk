@@ -27,6 +27,21 @@ fn codes(tag: &str, bynk: &str) -> Vec<String> {
     out
 }
 
+/// The full diagnostics (category, message, notes) of compiling `bynk` as a
+/// one-file `context shop` project.
+fn diagnostics(tag: &str, bynk: &str) -> Vec<bynk_syntax::error::CompileError> {
+    let root = std::env::temp_dir().join(format!("bynk_store_{}_{tag}", std::process::id()));
+    let src = root.join("src");
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("shop.bynk"), bynk).unwrap();
+    let out = match compile_project(&bynk_testkit::compile_options_single(src.clone())) {
+        Ok(_) => Vec::new(),
+        Err(f) => ProjectFailure::flatten(f),
+    };
+    let _ = fs::remove_dir_all(&root);
+    out
+}
+
 /// A minimal agent in `context shop` whose handler body is `body`, around the
 /// store `field`. Used by the misuse tests.
 fn agent_with(field: &str, body: &str) -> String {
@@ -273,6 +288,60 @@ fn annotation_indexed_well_formed_is_accepted() {
     assert!(
         !cs.iter().any(|c| c.starts_with("bynk.index.")),
         "a well-formed `@indexed` must not error: {cs:?}"
+    );
+}
+
+#[test]
+fn bounded_is_refused_in_the_users_words() {
+    // #3419: `@bounded` is recognised and does nothing yet. The message says so
+    // plainly and the note carries the alternative, with none of the
+    // implementer's "slice" wording.
+    let ds = diagnostics(
+        "annbounded",
+        &agent_with("store trail: Log[Int] @bounded(100)", ""),
+    );
+    let d = ds
+        .iter()
+        .find(|d| d.category == "bynk.store.annotation_unsupported")
+        .unwrap_or_else(|| panic!("no annotation_unsupported in {ds:?}"));
+    assert_eq!(d.message, "`@bounded` is recognised but has no effect yet");
+    let note = d.notes.join(" ");
+    assert!(
+        note.contains("`@retain`"),
+        "the note names the alternative: {note}"
+    );
+    assert!(
+        !format!("{} {note}", d.message).contains("slice"),
+        "no implementer wording: {} {note}",
+        d.message
+    );
+}
+
+#[test]
+fn bounded_on_a_queue_gets_no_log_advice() {
+    // #3419 review: `@bounded` also attaches to `Queue`, where `@retain` (a `Log`
+    // annotation) is no alternative, so the note names it only for a `Log`.
+    let ds = diagnostics(
+        "annboundedq",
+        &agent_with("store q: Queue[Int] @bounded(5)", ""),
+    );
+    let d = ds
+        .iter()
+        .find(|d| d.category == "bynk.store.annotation_unsupported")
+        .unwrap_or_else(|| panic!("no annotation_unsupported in {ds:?}"));
+    let note = d.notes.join(" ");
+    assert!(
+        !note.contains("@retain"),
+        "no `@retain` advice for a Queue: {note}"
+    );
+    let k = ds
+        .iter()
+        .find(|d| d.category == "bynk.store.kind_unsupported")
+        .unwrap_or_else(|| panic!("no kind_unsupported in {ds:?}"));
+    assert!(
+        !k.message.contains("slice"),
+        "no implementer wording: {}",
+        k.message
     );
 }
 
