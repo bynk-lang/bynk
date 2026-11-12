@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.564**.
+written against **v0.565**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.565.0** | A `SignedCookie` actor scheme (#3386), declaration and diagnostics only; a route it guards is refused until the verifier lands |
 | **v0.564.8** | Runtime `session` module for the `SignedCookie` actor (#3386), HMAC-SHA-256 sign and verify with key rotation; not yet reachable from emitted code |
 | **v0.564.7** | A workerd smoke test checks a streamed `@raw` request body on a real runtime: counted against its cap, left unread, and handed to `R2.putStream` (#3380, #3180 slice 3) |
 | **v0.564.6** | A guide, Stream a large upload, for a `@raw` handler that takes its request body as a `Stream[Bytes]` and passes it to R2, with the cross-links, and a check that OpenAPI describes a streamed `@raw` body like a buffered one (#3380, closes #3180) |
