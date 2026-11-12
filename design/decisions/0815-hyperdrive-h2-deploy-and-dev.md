@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk deploy` makes, syncs or adopts the Hyperdrive config of a `Postgres` instance from a connection string in an environment variable `bynk.toml` names, and `bynk dev` wires the local one
----
+# 0815 — Hyperdrive H2 provisions a Postgres instance's config from an environment variable, and wires `bynk dev`
 
-## ADR: hyperdrive-h2-deploy-and-dev
-title: Hyperdrive H2 provisions a Postgres instance's config from an environment variable, and wires `bynk dev`
-summary: Where the connection string comes from, how a deploy makes, syncs, adopts and prunes the config, and what keeps the string out of every file and message
+- **Status:** Accepted (v0.560)
 
 **Context.** After H1 a `Postgres` instance bound `HYPERDRIVE_<NAME>` with a placeholder `id` and no way to make the Hyperdrive config except by hand (`wrangler hyperdrive create`, then pasting the id). ADR 0799 H settled that the connection string comes from an environment variable `bynk.toml` names and is never written to disk. Proposal #3319 (part of #3184), decisions A to C, accepted as recommended.
 
