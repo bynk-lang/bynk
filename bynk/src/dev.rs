@@ -843,10 +843,6 @@ pub fn run(
     ExitCode::from(code)
 }
 
-/// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
-/// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
-/// or when either of our streams is not a terminal, where wrangler has no
-/// colour or hotkeys to lose.
 /// Fill each served Worker's generated config from the deploy ledger, for
 /// `-- --remote`. A never-deployed project gets an actionable error instead of
 /// sending a generated placeholder to Cloudflare; `false` after printing it.
@@ -896,6 +892,10 @@ fn hyperdrive_local_env(
     }
 }
 
+/// Whether `bynk dev` reads wrangler's output (#2474) rather than leaving it
+/// attached to the terminal: when asked (`--rewrite-frames`, `--log-events`),
+/// or when either of our streams is not a terminal, where wrangler has no
+/// colour or hotkeys to lose.
 fn pipes_output(opts: &DevOptions) -> bool {
     use std::io::IsTerminal;
     opts.rewrite_frames

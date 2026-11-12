@@ -731,7 +731,9 @@ impl DeployLock {
         let mut record = record;
         if let Some(old) = instances.remove(binding) {
             record.superseded = old.superseded;
-            if old.id != record.id {
+            // A config the project adopted was never its own to delete, so
+            // moving off it leaves nothing to report.
+            if old.id != record.id && !old.adopted {
                 record.superseded.push(HyperdrivePast {
                     name: old.name,
                     id: old.id,

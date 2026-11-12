@@ -109,9 +109,11 @@ pub(crate) fn parse_connection_string(raw: &str) -> Result<Origin, ParseProblem>
     if scheme != "postgres" && scheme != "postgresql" {
         return Err(ParseProblem::Scheme);
     }
-    let rest = rest.split(['?', '#']).next().unwrap_or_default();
-    // The last `@` separates the credentials: a password may hold a raw one.
+    // The last `@` separates the credentials, so a password may hold a raw `@`,
+    // `#` or `?`; the query or fragment is then cut from the location alone.
+    // (Percent-encoding the password is still the safe way to write one.)
     let (credentials, location) = rest.rsplit_once('@').ok_or(ParseProblem::Credentials)?;
+    let location = location.split(['?', '#']).next().unwrap_or_default();
     let (user, password) = credentials.split_once(':').ok_or(ParseProblem::Password)?;
     if user.is_empty() {
         return Err(ParseProblem::Credentials);
@@ -156,8 +158,9 @@ pub(crate) fn parse_connection_string(raw: &str) -> Result<Origin, ParseProblem>
     })
 }
 
-/// `message` with every form of `secrets` removed: the whole string, and the
-/// password in the raw and percent-encoded forms a server could echo.
+/// `message` with each of `secrets` removed. Callers pass the whole raw string
+/// and the decoded password; a secret of fewer than three characters is left,
+/// since removing it would mangle the message and it cannot identify anything.
 pub(crate) fn scrub(message: &str, secrets: &[&str]) -> String {
     let mut out = message.to_string();
     for secret in secrets.iter().filter(|s| s.len() >= 3) {

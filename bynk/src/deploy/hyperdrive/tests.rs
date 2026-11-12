@@ -167,6 +167,29 @@ fn the_port_defaults_and_ipv6_hosts_and_raw_at_signs_in_a_password_read() {
 }
 
 #[test]
+fn a_raw_hash_or_question_mark_in_a_password_is_part_of_the_password() {
+    let hash = parse_connection_string("postgres://app:pa#ss@db.example.com/app").unwrap();
+    assert_eq!(
+        (
+            hash.user.as_str(),
+            hash.password.expose(),
+            hash.host.as_str()
+        ),
+        ("app", "pa#ss", "db.example.com")
+    );
+    let question =
+        parse_connection_string("postgres://app:p?ss@db.example.com:5433/app?x=1#f").unwrap();
+    assert_eq!(
+        (
+            question.password.expose(),
+            question.port,
+            question.database.as_str()
+        ),
+        ("p?ss", 5433, "app")
+    );
+}
+
+#[test]
 fn a_malformed_string_names_the_part_that_is_wrong() {
     for (raw, problem) in [
         ("mysql://u:p@h/d", ParseProblem::Scheme),
@@ -907,4 +930,72 @@ fn scrub_removes_the_string_and_the_password() {
     let clean = scrub(&said, &[STRING, PASSWORD]);
     assert_eq!(clean, "bad origin <redacted> (password <redacted>)");
     assert_eq!(scrub("fine", &[STRING]), "fine");
+}
+
+#[test]
+fn moving_between_adopted_configs_leaves_no_orphan() {
+    let (_root, lock_path, config) = scratch("adopt-adopt");
+    let resources = shop();
+    let api = Fake::default();
+    api.existing
+        .borrow_mut()
+        .insert("abc123".into(), "a".into());
+    api.existing
+        .borrow_mut()
+        .insert("def456".into(), "b".into());
+    let mut lock = DeployLock::default();
+    for id in ["abc123", "def456"] {
+        let wants = resolve_wants(
+            &names(&["shop"]),
+            &resources,
+            &settings(&[("Main", None, &[("default", id)])]),
+            "default",
+            &lookup(None),
+        )
+        .unwrap();
+        provision(
+            &run_with(&wants, &api),
+            "shop",
+            &resources["shop"],
+            &mut lock,
+            &lock_path,
+            &config,
+            "default",
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default")
+            .unwrap()
+            .id,
+        "def456"
+    );
+    assert!(
+        find_orphans(&lock, "default", &resources)
+            .hyperdrive
+            .is_empty()
+    );
+
+    // And from an adopted config to one the deploy makes: the adopted one was
+    // never the project's, so it is not an orphan either.
+    provision(
+        &run_with(&wants_of(STRING, "default"), &api),
+        "shop",
+        &resources["shop"],
+        &mut lock,
+        &lock_path,
+        &config,
+        "default",
+    )
+    .unwrap();
+    assert!(
+        find_orphans(&lock, "default", &resources)
+            .hyperdrive
+            .is_empty()
+    );
+    assert!(
+        !recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default")
+            .unwrap()
+            .adopted
+    );
 }

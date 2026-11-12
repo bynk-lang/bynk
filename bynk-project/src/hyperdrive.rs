@@ -67,6 +67,13 @@ pub fn is_env_var_name(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// Whether `id` is shaped like a Hyperdrive config id: 32 hexadecimal
+/// characters. It goes into an authenticated API path, so nothing else (a `/`,
+/// `?` or `..`) may reach it.
+pub fn is_config_id(id: &str) -> bool {
+    id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// `connection_env`'s value, checked. The refusal never repeats the value: a
 /// connection string pasted here would otherwise be printed by the error.
 fn connection_env(
@@ -168,11 +175,13 @@ pub fn deploy_hyperdrive_from(
                 )
             })?;
             for (environment, id) in ids {
-                let id = id.as_str().filter(|s| !s.is_empty()).ok_or_else(|| {
+                let id = id.as_str().filter(|s| is_config_id(s)).ok_or_else(|| {
                     bad(
                         "deploy.hyperdrive",
                         capability,
-                        format!("`config_id.{environment}` must be a non-empty string"),
+                        format!(
+                            "`config_id.{environment}` must be a Hyperdrive config id: 32 hexadecimal characters, as `wrangler hyperdrive list` shows"
+                        ),
                     )
                 })?;
                 deploy.config_id.insert(environment.clone(), id.to_string());
@@ -292,12 +301,15 @@ mod tests {
     fn a_deploy_entry_names_a_variable_and_per_environment_ids() {
         let config = deploy(
             "[deploy.hyperdrive.Main]\nconnection_env = \"MAIN_DATABASE_URL\"\n\
-             config_id = { production = \"abc\" }\n",
+             config_id = { production = \"0123456789abcdef0123456789abcdef\" }\n",
         )
         .unwrap();
         let main = &config["Main"];
         assert_eq!(main.connection_env.as_deref(), Some("MAIN_DATABASE_URL"));
-        assert_eq!(main.config_id["production"], "abc");
+        assert_eq!(
+            main.config_id["production"],
+            "0123456789abcdef0123456789abcdef"
+        );
     }
 
     #[test]
@@ -350,8 +362,18 @@ mod tests {
         assert!(
             deploy("[deploy.hyperdrive.Main]\nconfig_id = { staging = \"\" }\n")
                 .unwrap_err()
-                .contains("`config_id.staging` must be a non-empty string")
+                .contains("`config_id.staging` must be a Hyperdrive config id")
         );
+        for bad in [
+            "../../workers/scripts/x",
+            "x?foo=",
+            "abc",
+            "0123456789abcdef0123456789abcdeg",
+            "0123456789abcdef0123456789abcdef/",
+        ] {
+            let text = format!("[deploy.hyperdrive.Main]\nconfig_id = {{ staging = \"{bad}\" }}\n");
+            assert!(deploy(&text).is_err(), "{bad} is not a config id");
+        }
     }
 
     #[test]

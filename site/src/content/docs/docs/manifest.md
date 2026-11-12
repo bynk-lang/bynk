@@ -66,6 +66,12 @@ d1_sql = true               # false stops literal D1 SQL being checked: prepared
 [unstable]
 allow = []                  # experimental standard-library items to use
 
+[deploy.hyperdrive.Main]    # no default: a `Postgres` instance's Hyperdrive config
+connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the connection string from
+
+[dev.hyperdrive.Main]       # no default: its local database under `bynk dev`
+connection_env = "MAIN_LOCAL_DATABASE_URL"
+
 [test.targets.preview]      # no default: a deployment `bynk test --against` may use
 url.shop-orders = "https://shop-orders-preview.example.workers.dev"
 
