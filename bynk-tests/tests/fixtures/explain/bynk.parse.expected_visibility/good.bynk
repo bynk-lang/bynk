@@ -1,0 +1,5 @@
+context shop
+
+exports transparent { P }
+
+type P = { a: Int }

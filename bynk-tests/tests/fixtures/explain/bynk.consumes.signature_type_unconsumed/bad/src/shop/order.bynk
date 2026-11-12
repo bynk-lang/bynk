@@ -1,0 +1,11 @@
+context shop.order
+
+exports transparent { Order }
+
+type Order = { id: String }
+
+service place {
+    on call(id: String) -> Effect[Order] {
+        Effect.pure(Order { id: id })
+    }
+}
