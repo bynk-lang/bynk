@@ -1844,5 +1844,7 @@ mod hyperdrive_manifest_tests {
             "{text}"
         );
         assert!(!text.contains("HYPERDRIVE_MAIN"), "{text}");
+        // Names and modes only: never a connection string or a URL.
+        assert!(!text.contains("://") && !text.contains('@'), "{text}");
     }
 }

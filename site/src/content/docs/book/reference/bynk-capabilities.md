@@ -1150,9 +1150,11 @@ support `DISABLED` or `PREFERRED`.
 
 **The statement.** The SQL is a string literal (or a `String` constant bound to
 one), so data reaches a statement only as a parameter. Placeholders are `?`, and
-`params` binds them in order. mysql2's `query` substitutes each `?` that is outside
-a string literal, a quoted name and a comment with an escaped value before the
-statement is sent: Bynk uses `query`, not a prepared statement, because a prepared
+`params` binds them in order. mysql2's `query` substitutes each `?` that is not inside a
+single-quoted string, a backtick name or a `-- ` or `/* */` comment with an escaped value
+before the statement is sent. **A `?` inside a `"…"` string, or after a `#`, is
+substituted too, so it counts as a parameter:** write string literals with single
+quotes, and comments with `--`. Bynk uses `query`, not a prepared statement, because a prepared
 statement does not survive Hyperdrive's transaction pooling and cannot bind
 `LIMIT ?, ?`. `??` (mysql2's identifier placeholder) is not supported.
 
