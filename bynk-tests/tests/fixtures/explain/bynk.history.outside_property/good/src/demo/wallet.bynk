@@ -1,0 +1,9 @@
+context demo.wallet
+
+type Amount = Int where Positive
+
+agent Wallet {
+  key id: String
+  store balance: Cell[Int] = 0
+  on call topUp(amount: Amount) -> Effect[()] { balance.update((b) => b + amount) }
+}

@@ -1,0 +1,5 @@
+suite demo.wallet {
+  property "run" {
+    for all run: History[Amount] { expect run.length() >= 0 }
+  }
+}

@@ -1,0 +1,5 @@
+commons geo.shapes
+
+type Shape = | Circle(radius: Float) | Square(side: Float)
+
+fn unitCircle() -> Shape { Circle(1.0) }

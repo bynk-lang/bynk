@@ -1,0 +1,9 @@
+context shop
+
+event Paid = { orderId: String }
+
+service OnPaid from Events(Paid) {
+    on event(e: Paid) -> Effect[()] {
+        ()
+    }
+}

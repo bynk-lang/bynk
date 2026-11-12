@@ -1,0 +1,9 @@
+suite demo.desk {
+  fixture note = "fixtures/a.txt"
+  fixture other = "fixtures/b.txt"
+
+  case "uses it" {
+    expect note.length() > 0
+    expect other.length() > 0
+  }
+}

@@ -1,0 +1,24 @@
+context demo.desk
+
+consumes demo.vault as Vault
+
+capability Meter {
+  fn read() -> Effect[Int]
+}
+
+provides Meter = Fixed {
+  fn read() -> Effect[Int] { Effect.pure(1) }
+}
+
+service check {
+  on call(n: Int) -> Effect[Int] {
+    Vault.open(n)
+  }
+}
+
+service local {
+  on call(n: Int) -> Effect[Int] given Meter {
+    let m <- Meter.read()
+    Effect.pure(n + m)
+  }
+}

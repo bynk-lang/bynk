@@ -1,0 +1,17 @@
+context chat
+
+type RoomId = opaque String
+type UserId = opaque String
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Frame]]
+  on call join(u: UserId, conn: Connection[Frame]) -> Effect[()] { let _ <- conns.put(u, conn) () }
+}
+
+service gateway from websocket(in: Frame, out: Frame) {
+  on open (room: RoomId) -> Effect[()] by user: Member { let _ <- Room(room).join(user.identity, connection) () }
+}

@@ -1,0 +1,3 @@
+commons geo.shapes
+
+type Shape = | Circle(radius: Float) | Square(side: Float)

@@ -1,0 +1,6 @@
+suite demo.q {
+  case "quote" {
+    let r <- Slow("a").get().race(Slow("b").get())
+    expect true
+  }
+}

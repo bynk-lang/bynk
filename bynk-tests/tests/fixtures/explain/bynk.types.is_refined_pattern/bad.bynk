@@ -1,0 +1,5 @@
+commons demo
+
+fn valid(n: Int) -> Bool {
+    n is _ where Positive
+}

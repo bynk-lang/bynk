@@ -1,0 +1,5 @@
+context demo.vault
+
+service open {
+  on call(n: Int) -> Effect[Int] { n }
+}

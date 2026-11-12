@@ -1,0 +1,8 @@
+suite demo.orders {
+  stub Idempotency.dedup(_) returns None
+
+  case "reserve returns the cached value" {
+    let result <- reserve.call()
+    expect result is None
+  }
+}

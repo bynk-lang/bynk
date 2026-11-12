@@ -1,0 +1,10 @@
+context shop
+
+service api from http {
+    cors { origins: ["https://a.example"] }
+    cors { origins: ["https://b.example"] }
+
+    on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+        Ok(1)
+    }
+}

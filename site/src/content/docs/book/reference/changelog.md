@@ -28,6 +28,13 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.564.7** | A workerd smoke test checks a streamed `@raw` request body on a real runtime: counted against its cap, left unread, and handed to `R2.putStream` (#3380, #3180 slice 3) |
+| **v0.564.6** | A guide, Stream a large upload, for a `@raw` handler that takes its request body as a `Stream[Bytes]` and passes it to R2, with the cross-links, and a check that OpenAPI describes a streamed `@raw` body like a buffered one (#3380, closes #3180) |
+| **v0.564.5** | `bynk explain` gains twenty entries under the parse, context, boundary, consumes, embed, asset, package, project and dependency codes (#3163) |
+| **v0.564.4** | `bynk explain` now covers 42 more codes under the service, ws, history, observe, val, tier, stub, store, queue, race, within, held, provider, suite, fixture and contract prefixes. |
+| **v0.564.3** | `bynk explain` gains twenty-three entries under the types and http codes (#3163) |
+| **v0.564.2** | A typed `Postgres` read (`firstAs[T]`, `select[T]`) called directly in a test case imports its row helper into the test module |
+| **v0.564.1** | A `Sender` identity's `dmarc` is typed as the `DmarcVerdict` union in generated TypeScript, so `s.identity.dmarc` passes to a `DmarcVerdict` parameter |
 | **v0.564.0** | A `@raw` handler's `body` may be a `Stream[Bytes]`, the request body as it arrives, counted against the cap as it is read; a body that crosses the cap answers the route's `413`, and a test case passes it a `Stream[Bytes]` at every tier (#3380, #3180 slice 3) |
 | **v0.563.1** | The diagnostic for `Val[…]` of a generic type is renamed from `bynk.generics.generic_record_at_boundary` to `bynk.val.generic_type` — it never concerned a boundary, and it covers generic sums as well as records; five diagnostic messages no longer quote the version they were written in |
 | **v0.563.0** | Two cookie warnings from the typed-cookies proposal, `bynk.http.cookie_domain_widens` and `bynk.http.cookie_cross_site_without_credentials` |

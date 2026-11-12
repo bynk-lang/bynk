@@ -134,17 +134,6 @@ pub(super) fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(to_add);
 }
 
-/// The runtime names a test module's cookie helpers need: the `RequestCookies` view (#3277) and,
-/// for a `system` driver that signs in to a `SignedCookie` route, the session signer (#3386).
-pub(super) fn append_cookie_bindings(names: &mut Vec<String>, runtime_use: &RuntimeUse) {
-    if runtime_use.request_cookies() {
-        append_missing_bindings(names, emitter::REQUEST_COOKIES_RUNTIME_IMPORTS);
-    }
-    if runtime_use.session_signing() {
-        append_missing_bindings(names, emitter::SESSION_SIGNING_RUNTIME_IMPORTS);
-    }
-}
-
 /// testing-the-boundary Slice B: for a `system` suite whose target exposes an
 /// `http` service, emit a **test-only** HS256 signer and one **driver** per
 /// route. A driver builds a real `Request` (concrete path, JSON body, a signed
@@ -2104,6 +2093,103 @@ fn push_session_refusal_drivers(
             ));
         }
     }
+}
+
+/// Fold every conditional runtime helper a test module's lowered bodies reached
+/// for (as recorded on `ru`) into its runtime import's `names`.
+///
+/// The one list behind both the unit-suite and the integration-suite modules
+/// (#3398): each used to carry its own copy, and a helper added to one flag
+/// chain only (`__bynkPgRow`, for the typed `Postgres` reads) left the other
+/// without it. A new `RuntimeUse` flag that a test body can set is added here.
+pub(super) fn append_runtime_use_imports(names: &mut Vec<String>, ru: &RuntimeUse) {
+    if ru.boundary_codec() {
+        append_missing_bindings(names, emitter::BOUNDARY_CODEC_RUNTIME_IMPORTS);
+    }
+    if ru.json_codec() {
+        append_missing_bindings(names, emitter::JSON_CODEC_RUNTIME_IMPORTS);
+    }
+    if ru.bytes() {
+        append_missing_bindings(names, emitter::BYTES_RUNTIME_IMPORTS);
+    }
+    if ru.bytes_ops() {
+        append_missing_bindings(names, emitter::BYTES_OPS_RUNTIME_IMPORTS);
+    }
+    if ru.time_ops() || ru.pg_rows() {
+        append_missing_bindings(names, &emitter::time_runtime_imports(ru));
+    }
+    if ru.iso_date() {
+        append_missing_bindings(names, emitter::ISO_DATE_RUNTIME_IMPORTS);
+    }
+    if ru.yaml() {
+        append_missing_bindings(names, emitter::YAML_RUNTIME_IMPORTS);
+    }
+    if ru.settle_all() {
+        append_missing_bindings(names, emitter::SETTLE_ALL_RUNTIME_IMPORTS);
+    }
+    if ru.within() {
+        append_missing_bindings(names, emitter::WITHIN_RUNTIME_IMPORTS);
+    }
+    if ru.race() {
+        append_missing_bindings(names, emitter::RACE_RUNTIME_IMPORTS);
+    }
+    if ru.fault() {
+        append_missing_bindings(names, emitter::FAULT_RUNTIME_IMPORTS);
+    }
+    if ru.url_ops() {
+        append_missing_bindings(names, emitter::URL_OPS_RUNTIME_IMPORTS);
+    }
+    if ru.request_headers() {
+        append_missing_bindings(names, emitter::REQUEST_HEADERS_RUNTIME_IMPORTS);
+    }
+    if ru.request_cookies() {
+        append_missing_bindings(names, emitter::REQUEST_COOKIES_RUNTIME_IMPORTS);
+    }
+    if ru.session_signing() {
+        append_missing_bindings(names, emitter::SESSION_SIGNING_RUNTIME_IMPORTS);
+    }
+    if ru.request_query() {
+        append_missing_bindings(names, emitter::REQUEST_QUERY_RUNTIME_IMPORTS);
+    }
+    if ru.query_string() {
+        append_missing_bindings(names, emitter::QUERY_STRING_RUNTIME_IMPORTS);
+    }
+    if ru.form_codec() {
+        append_missing_bindings(names, emitter::FORM_CODEC_RUNTIME_IMPORTS);
+    }
+    if ru.multipart_form() {
+        append_missing_bindings(names, emitter::MULTIPART_FORM_RUNTIME_IMPORTS);
+    }
+    if ru.cookie_string() {
+        append_missing_bindings(names, emitter::COOKIE_STRING_RUNTIME_IMPORTS);
+    }
+    if ru.request_header_pairs() {
+        append_missing_bindings(names, ", __requestHeaderPairs");
+    }
+    if ru.request_query_search() {
+        append_missing_bindings(names, ", __requestQuerySearch");
+    }
+    if ru.token_claims() {
+        append_missing_bindings(names, ", __tokenClaims");
+    }
+    if ru.test_connection() {
+        append_missing_bindings(names, ", TestConnection");
+    }
+    if ru.eq() {
+        append_missing_bindings(names, emitter::EQ_RUNTIME_IMPORTS);
+    }
+    // #1934: a case that compares a typed http outcome with `Ok(…)`.
+    if ru.http_result() {
+        append_missing_bindings(names, "HttpResult");
+    }
+    // #2839: a case that compares a queue verdict with a bare variant.
+    if ru.queue_result() {
+        append_missing_bindings(names, "QueueResult");
+    }
+    if ru.int() {
+        append_missing_bindings(names, emitter::INT_RUNTIME_IMPORTS);
+    }
+    append_missing_bindings(names, &ru.cmp_imports());
 }
 
 #[cfg(test)]

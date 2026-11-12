@@ -1,0 +1,9 @@
+context shop.other
+
+type Amount = { dollars: Int }
+
+service price {
+    on call() -> Effect[Amount] {
+        Effect.pure(Amount { dollars: 1 })
+    }
+}
