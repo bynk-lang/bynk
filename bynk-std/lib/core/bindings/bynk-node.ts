@@ -408,6 +408,9 @@ export class LocaleProvider implements Locale {
 
 // Whether a handler's result is a failure for its claims (#2840): a returned
 // `Err`, or an `HttpResult` that is a 5xx. A 4xx is a completed outcome.
+// How long a claim made in a handler holds before the handler settles it (#2840): 30 s,
+// matching the `waitUntil` limit.
+const CLAIM_LEASE_MS = 30_000;
 const SERVER_ERROR_TAGS = new Set(["ServerError", "NotImplemented", "BadGateway", "ServiceUnavailable", "GatewayTimeout"]);
 function claimFailed(result: unknown): boolean {
   const r = result as { tag?: unknown; status?: unknown } | null | undefined;
@@ -450,15 +453,20 @@ export class IdempotencyProvider implements Idempotency {
     return Claim.Claimed;
   }
   // Hidden from the capability (#2840): a handler that claims takes a scope, which
-  // releases its claims if the handler fails and confirms them, for their full
-  // window, if it doesn't. A claim is taken for a short lease only, so one whose
-  // handler never settles (its instance died) lapses and a retry can claim again.
+  // takes each claim for a short lease, then releases it if the handler fails and
+  // confirms it, for its full window, if it doesn't. A claim whose handler never
+  // settles (its instance died) lapses with the lease, and a retry can claim again.
+  // Settling touches a claim only while it is still this handler's own (its
+  // expiry is what `claim` wrote): a retry that took the key after the lease
+  // lapsed is left alone.
   __track() {
-    const held: Array<{ key: string; expiresAfter: number }> = [];
+    const held: Array<{ key: string; expiresAfter: number; until: number }> = [];
     return {
+      lease: (expiresAfter: number): number => Math.min(expiresAfter, CLAIM_LEASE_MS),
       note: <C>(key: string, claim: C, expiresAfter: number): C => {
-        if ((claim as unknown as { tag?: string }).tag === "Claimed") {
-          held.push({ key, expiresAfter });
+        const until = this.claims.get(key);
+        if ((claim as unknown as { tag?: string }).tag === "Claimed" && until !== undefined) {
+          held.push({ key, expiresAfter, until });
         }
         return claim;
       },
@@ -466,6 +474,7 @@ export class IdempotencyProvider implements Idempotency {
         const failed = threw || claimFailed(result);
         const now = await this.deps.Clock.now();
         for (const h of held) {
+          if (this.claims.get(h.key) !== h.until) continue;
           if (failed) {
             this.claims.delete(h.key);
           } else {

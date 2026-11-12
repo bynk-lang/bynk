@@ -61,4 +61,18 @@ suite shop.hooks {
     let after <- replay.POST("/replay/:id", "r1") by Visitor
     expect after is Ok("fresh")
   }
+
+  case "a claim is released when a handler returns Err" {
+    let first <- ledger.call("bad")
+    expect first is Err("rejected")
+    let retry <- ledger.call("bad")
+    expect retry is Err("rejected")
+  }
+
+  case "a handler that returns Ok keeps its claim" {
+    let first <- ledger.call("good")
+    expect first is Ok("done")
+    let again <- ledger.call("good")
+    expect again is Ok("duplicate")
+  }
 }
