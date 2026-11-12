@@ -3004,6 +3004,20 @@ fn check_request_cookies_static_call(
     check_request_cookies_static(method, args, span, ctx)
 }
 
+/// Whether `receiver` names a capability: a bare local or declared one, or a cross-context one
+/// (flattened `Cap` or qualified `B.Cap`).
+fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
+    matches!(&receiver.kind, ExprKind::Ident(id)
+            if ctx.caps.capabilities.contains_key(&id.name)
+                || ctx.caps.declared_capabilities.contains_key(&id.name))
+        || flatten_ident_chain(receiver).is_some_and(|chain| {
+            ctx.input
+                .cross_context
+                .resolve_cross_capability(&chain)
+                .is_some()
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
     receiver: &Expr,
@@ -3032,15 +3046,7 @@ pub(crate) fn check_method_call(
     // `Cap.op[T](…)` or qualified `B.Cap.op[T](…)`); arity/substitution
     // happens downstream in `check_static_call` /
     // `check_cross_context_capability_call`.
-    let receiver_is_capability = matches!(&receiver.kind, ExprKind::Ident(id)
-            if ctx.caps.capabilities.contains_key(&id.name)
-                || ctx.caps.declared_capabilities.contains_key(&id.name))
-        || flatten_ident_chain(receiver).is_some_and(|chain| {
-            ctx.input
-                .cross_context
-                .resolve_cross_capability(&chain)
-                .is_some()
-        });
+    let receiver_is_capability = receiver_names_capability(receiver, ctx);
     // #2795: a receiver that is a value may be a generic user instance method's
     // receiver, so the verdict waits for its type (below); any other shape is
     // refused here as before.
@@ -3055,6 +3061,11 @@ pub(crate) fn check_method_call(
     if type_args_pending && !value_receiver {
         reject_method_type_args(method, args, span, ctx);
         return None;
+    }
+    if let Some(r) =
+        super::kernels::check_signed_cookie_call(receiver, method, args, span, expr_id, ctx)
+    {
+        return r;
     }
     // v0.25 / v0.178: a test body invokes the target's service as
     // `svc.call(args)`. The emitter wires the call from the same service set;

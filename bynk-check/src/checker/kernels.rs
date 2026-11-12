@@ -1923,6 +1923,158 @@ fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
         .clone()
 }
 
+/// #3386: the `SignedCookie` actor `name` declared in this context, if it is one.
+fn signed_cookie_actor<'a>(name: &str, ctx: &Ctx<'a>) -> Option<&'a bynk_syntax::ast::ActorDecl> {
+    use bynk_syntax::ast::CommonsItem;
+    ctx.input.commons.items.iter().find_map(|i| match i {
+        CommonsItem::Actor(a)
+            if a.name.name == name
+                && a.auth
+                    .as_ref()
+                    .and_then(|x| crate::actors::Scheme::from_name(&x.name))
+                    == Some(crate::actors::Scheme::SignedCookie) =>
+        {
+            Some(a)
+        }
+        _ => None,
+    })
+}
+
+/// The `bynk` `Cookie` type: the caller's own, or, in a system suite that sees only the
+/// context it tests, the embedded one.
+fn bynk_cookie_ty(ctx: &Ctx) -> Option<TyId> {
+    let found = ctx
+        .input
+        .types
+        .get("Cookie")
+        .filter(|d| crate::context_checks::is_std_bynk_type("Cookie", &ctx.input.types, d))
+        .cloned()
+        .or_else(std_cookie_decl)?;
+    Some(crate::checker::named_ty(&found, ctx.tys))
+}
+
+/// #3386: type `Actor.issue(identity)` and `Actor.expire()` on a local `SignedCookie` actor.
+/// `issue` takes the actor's identity type and answers `Effect[Cookie]` (it reads the `Clock`,
+/// which the handler must list in `given`); `expire` answers the matching deletion `Cookie`.
+/// Returns `None` when `receiver` is not such an actor, leaving the call to the other rules.
+/// The actor is sealed by scope: another context cannot name it, so it cannot mint its identity.
+pub(crate) fn check_signed_cookie_call(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    let ExprKind::Ident(actor) = &receiver.kind else {
+        return None;
+    };
+    if ctx.lookup(actor.name.as_str()).is_some() {
+        return None;
+    }
+    let decl = signed_cookie_actor(&actor.name, ctx)?;
+    let tys = ctx.tys;
+    ctx.refs.record(actor.span, SymbolKind::Actor, &actor.name);
+    let issue = method.name == "issue";
+    if !issue && method.name != "expire" {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "a `SignedCookie` actor has no member `{}`: it has `issue(identity)` and `expire()`",
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return Some(None);
+    }
+    let want = usize::from(issue);
+    if args.len() != want {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`{}.{}` takes {want} argument{}, got {}",
+                actor.name,
+                method.name,
+                if want == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return Some(None);
+    }
+    let cookie = bynk_cookie_ty(ctx)?;
+    ctx.callees.insert(
+        expr_id,
+        Callee::SignedCookie {
+            actor: actor.name.clone(),
+            issue,
+        },
+    );
+    if !issue {
+        return Some(Some(cookie));
+    }
+    // The identity the cookie will carry is the actor's own type, so a handler can only issue a
+    // session for a value that is already a valid, sealed identity.
+    if let Some(bynk_syntax::ast::TypeRef::Named(id)) = &decl.identity
+        && let Some(t) = ctx.input.types.get(&id.name).cloned()
+    {
+        let identity = crate::checker::named_ty(&t, tys);
+        check_arg(
+            &args[0],
+            identity,
+            &format!("the `{}.issue` identity", actor.name),
+            ctx,
+        );
+    } else {
+        let _ = type_of(&args[0], None, ctx);
+    }
+    if !ctx.effectful {
+        ctx.errors.push(CompileError::new(
+            "bynk.effect.capability_in_pure_context",
+            span,
+            format!(
+                "`{}.issue` reads the clock, so it can only be called inside an effectful body (one returning `Effect[T]`)",
+                actor.name
+            ),
+        ));
+    }
+    // The signing keys travel in a handler's deps; a provider's or an agent's carry only its
+    // `given` capabilities, so there the call would fault on every request.
+    if !ctx.in_service_handler && !ctx.in_test_body {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_issue_outside_handler",
+                span,
+                format!("`{}.issue` can only be called in a service handler", actor.name),
+            )
+            .with_note(
+                "the signing key reaches a handler, not a provider or an agent: issue the cookie in the handler and pass what a provider needs",
+            ),
+        );
+    }
+    if ctx.caps.capabilities.contains_key("Clock") {
+        ctx.caps.given_used.insert("Clock".to_string());
+    } else {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.actor.signed_cookie_issue_needs_clock",
+                span,
+                format!("`{}.issue` reads the clock, but the handler does not list `Clock` in `given`", actor.name),
+            )
+            .with_note(
+                "add `consumes bynk { Clock }` to the context and `given Clock` to the handler, so the dependency is visible and a test can stub it",
+            ),
+        );
+    }
+    Some(Some(tys.intern(Ty::Effect(cookie))))
+}
+
 /// #3277: type a method on an `HttpResult[T]`. `withCookie(c)` and `clearCookie(c)`
 /// take a `bynk` `Cookie` and answer the same `HttpResult[T]` with the cookie
 /// attached (the router sends one `Set-Cookie` per cookie); `cookies()` is the

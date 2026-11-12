@@ -454,6 +454,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "signed-cookies",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_issue_needs_clock",
+        blurb: "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
+        example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_issue_outside_handler",
+        blurb: "The signing key reaches a service handler, which is where a request arrives and a `Set-Cookie` is sent. A provider or an agent holds only the capabilities in its `given`, so `User.issue(identity)` there would find no key and fault on every request. Issue the cookie in the handler.",
+        example: "User.issue(id)   // ✗ in a provider or an agent\n\nlet c <- User.issue(body)   // ✓ in a service handler",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
         code: "bynk.actor.signed_cookie_missing_secret",
         blurb: "A `SignedCookie` actor signs the session cookies it issues and verifies the ones it receives, so it needs a key. `secret` names the environment variable holding it, never the key itself. `bynk deploy` mints a random 32-byte key for it when the variable is unset, so you never choose one.",
         example: "actor User { auth = SignedCookie(ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
@@ -4818,7 +4832,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.store.annotation_unsupported",
         blurb: "A storage annotation has a fixed set of kinds it applies to and a meaning that arrives in stages. `@bounded` is recognised on `Queue` and `Log`, but nothing acts on it yet, so it is refused rather than accepted and ignored. Leave it off. To limit a `Log`, use `@retain`, which drops entries older than a period. A known annotation on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
-        example: "store trail: Log[Event] @bounded(100)     // ✗ `@bounded` is not yet supported\n\nstore trail: Log[Event] @retain(30.days)   // ✓ keep 30 days of entries",
+        example: "store trail: Log[Event] @bounded(100)     // ✗ `@bounded` is recognised but has no effect yet\n\nstore trail: Log[Event] @retain(30.days)   // ✓ keep 30 days of entries",
         page: "/book/reference/agents",
         anchor: "storage-annotations",
     },
@@ -7266,6 +7280,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.signed_cookie_identity_not_string_constructible",
         "A `SignedCookie` actor's identity is missing or not a string-constructible type.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_issue_needs_clock",
+        "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_issue_outside_handler",
+        "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent).",
     ),
     d(
         "bynk.actor.signed_cookie_missing_secret",

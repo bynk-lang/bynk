@@ -3854,6 +3854,19 @@ fn relative_to(from: &Path, target: &Path) -> PathBuf {
 /// #1478: real-node-internally already — returns its own real statements
 /// (the two-comment banner, plus a conditional runtime-import declaration)
 /// instead of writing into `out: &mut String`.
+/// The runtime names a module's cookie helpers import: the `RequestCookies` view (#3277)
+/// and the `SignedCookie` session-cookie issuer and deleter (#3386).
+fn cookie_runtime_imports(ru: &RuntimeUse, parts: &mut Vec<&str>) {
+    for (used, imports) in [
+        (ru.request_cookies(), REQUEST_COOKIES_RUNTIME_IMPORTS),
+        (ru.session_cookie(), SESSION_COOKIE_RUNTIME_IMPORTS),
+    ] {
+        if used {
+            parts.extend(imports.trim_start_matches(", ").split(", "));
+        }
+    }
+}
+
 fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
     // Arc C, slice 30 (#1392): the 2-line banner converts to two real
     // `TsStmt::Comment` statements, the same `events_fanout.rs`-established
@@ -4231,13 +4244,7 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
-        if ctx.runtime_use.request_cookies() {
-            parts.extend(
-                REQUEST_COOKIES_RUNTIME_IMPORTS
-                    .trim_start_matches(", ")
-                    .split(", "),
-            );
-        }
+        cookie_runtime_imports(&ctx.runtime_use, &mut parts);
         if ctx.runtime_use.request_query() {
             parts.extend(
                 REQUEST_QUERY_RUNTIME_IMPORTS
@@ -4411,6 +4418,12 @@ fn write_header_single(
         } else {
             ""
         };
+        // #3386: the session-cookie issuer and deleter, likewise.
+        let session_cookie_imports = if runtime_use.session_cookie() {
+            SESSION_COOKIE_RUNTIME_IMPORTS
+        } else {
+            ""
+        };
         // #2854: the `RequestQuery` constructor, likewise.
         let request_query_imports = if runtime_use.request_query() {
             REQUEST_QUERY_RUNTIME_IMPORTS
@@ -4467,7 +4480,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{form_codec_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{session_cookie_imports}{form_codec_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4490,6 +4503,9 @@ pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
 /// #3277: the `RequestCookies` constructor a test builds a raw cookies view with,
 /// and the header text a system-tier driver sends for one.
 pub const REQUEST_COOKIES_RUNTIME_IMPORTS: &str = ", __requestCookies, __requestCookiesHeader";
+/// #3386: what `Actor.issue(identity)` and `Actor.expire()` lower to.
+pub const SESSION_COOKIE_RUNTIME_IMPORTS: &str =
+    ", __issueSessionCookie, __expireSessionCookie, __sessionKeysOf";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
 /// query driver turn a record's wire form into a query string with.
 pub const QUERY_STRING_RUNTIME_IMPORTS: &str = ", __queryString";
@@ -6092,6 +6108,11 @@ impl<'a> LowerCtx<'a> {
     /// the module imports `__requestHeaders`.
     fn note_request_headers(&self) {
         self.runtime_use().note_request_headers();
+    }
+
+    /// Record that this lowering issued or deleted a session cookie (#3386).
+    fn note_session_cookie(&self) {
+        self.runtime_use().note_session_cookie();
     }
 
     /// Record that this lowering built a `RequestCookies` value (#3277).

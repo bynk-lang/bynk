@@ -1,0 +1,6 @@
+suite newsletter.site as system {
+	case "a participant's own type of a first-party name wins" {
+		let c = Cookie { name: "k", ttl: Duration.millis(5000) }
+		expect c.name == "k"
+	}
+}
