@@ -4994,7 +4994,7 @@ fn validate_http_handler(
                         method.as_str()
                     ),
                 )
-                .with_note("GET and DELETE requests conventionally carry no body in Bynk v0.9"),
+                .with_note("GET and DELETE requests conventionally carry no body"),
             );
         }
     }

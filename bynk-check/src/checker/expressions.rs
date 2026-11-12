@@ -264,7 +264,7 @@ pub(crate) fn check_ident(
                         "bynk.generics.uninferable_type_arg",
                         id.span,
                         format!(
-                            "generic function `{}` cannot be passed as a value in v0.20a — its type parameters cannot be instantiated here",
+                            "generic function `{}` cannot be passed as a value — its type parameters cannot be instantiated here",
                             id.name
                         ),
                     )
@@ -295,7 +295,7 @@ pub(crate) fn check_ident(
                 ),
             )
             .with_note(
-                "a bare function reference is only a value in a function-typed position (v0.20a)",
+                "a bare function reference is only a value in a function-typed position",
             ),
         );
         return None;
