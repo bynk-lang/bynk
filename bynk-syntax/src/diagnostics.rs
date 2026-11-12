@@ -673,6 +673,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "anatomy",
     },
     Explain {
+        code: "bynk.agent.class_conflict",
+        blurb: "An agent class that bynk.schema.lock records can't just disappear from source: it \
+                must be given one fate, either `agent New replaces Old` (its data moves) or \
+                `removed agent Old` (its data is deleted). Giving a name two fates is a conflict: \
+                renamed twice, renamed and removed, or removed twice. A rename onto a class that \
+                already has recorded history of its own is also refused, since it would merge two \
+                histories and Cloudflare refuses a rename onto an existing namespace. Decide what \
+                becomes of the old class, and declare that once.",
+        example: "agent Basket replaces Cart {\n\
+                  \x20\x20key id: String\n\
+                  }\n\
+                  \n\
+                  agent Trolley replaces Cart {   // ✗ `Cart` is already renamed to `Basket`\n\
+                  \n\
+                  agent Trolley {                 // ✓ a class of its own",
+        page: "/book/reference/agents",
+        anchor: "renaming-and-removing-an-agent",
+    },
+    Explain {
         code: "bynk.agent.construction_arity",
         blurb: "An agent is addressed by its key, so constructing one takes exactly one \
                 argument: the value of its single `key` field. `Counter(\"a\")` names the \
@@ -776,6 +795,96 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "migrations",
     },
     Explain {
+        code: "bynk.agent.migrate_incomplete",
+        blurb: "A `migrate from N` step must account for every change between version `N` and the \
+                agent's current shape. A field that is gone has to be read through `old` or \
+                discarded on purpose with `drop`, and a field that changed type has to be \
+                assigned. Otherwise stored data would be carried over silently incomplete. A \
+                `Set`, `Log` or `Cache` field that changed can only be dropped, which starts it \
+                afresh. The message lists what the step leaves out. Read each removed field, \
+                `drop` the ones you mean to lose, and assign the retyped ones.",
+        example: "migrate from 1 (old: CartV1) {      // ✗ the removed `total` is neither read nor dropped\n\
+                  \x20\x20ownerName := old.owner\n\
+                  }\n\
+                  \n\
+                  migrate from 1 (old: CartV1) {\n\
+                  \x20\x20ownerName := old.owner\n\
+                  \x20\x20drop total                         // ✓ discarded on purpose\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.migrate_shape_mismatch",
+        blurb: "A `migrate from N (old: T)` step reads a stored record through `T`, so `T` must \
+                describe the shape version `N` recorded in bynk.schema.lock, which is not \
+                necessarily the shape the code has now. The compiler checks each field of `T` \
+                against that record: its storage kind and its type must match what was stored, and \
+                a field the class never had is refused too. A `drop` of a field that exists \
+                neither then nor now is refused as well. Declare the old type exactly as version \
+                `N` stored it, and give a nested type that has changed since its own copy. Keep \
+                such types for the step alone.",
+        example: "type CartV1 = { owner: Int }      // ✗ version 1 recorded `owner` as a `String`\n\
+                  \n\
+                  type CartV1 = { owner: String }   // ✓ as version 1 stored it",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.migrate_unknown_version",
+        blurb: "A migrate step reads an older recorded version of the agent's state and carries it \
+                to the current shape. bynk.schema.lock records the versions an agent class has \
+                had, so `from N` must name one of them below the current version, which needs no \
+                step. A step from the current version, or from one the lock never recorded, has \
+                nothing to read. The message gives the range the lock holds. A class with no \
+                history yet, and an unchanged shape, need no step at all. Change the shape first, \
+                build to record the new version, then write the step `from` the version it \
+                replaces.",
+        example: "agent Cart {\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store owner: Cell[String]\n\
+                  \n\
+                  \x20\x20migrate from 1 (old: CartV1) {     // ✗ the lock records only version 1, the current one\n\
+                  \x20\x20\x20\x20owner := old.owner\n\
+                  \x20\x20}\n\
+                  }\n\
+                  \n\
+                  agent Cart {\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store owner: Cell[String]          // ✓ unchanged since version 1, so no step is needed\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
+        code: "bynk.agent.non_additive_state_change",
+        blurb: "bynk.schema.lock records the stored shape of every agent class, version by \
+                version, and a build compares the new shape against it. A deployed instance holds \
+                data in the recorded shape, so a change that data can still be read through, such \
+                as a new field, is additive and just bumps the version. A change it cannot be read \
+                through, such as a field removed, retyped or renamed, would orphan or misread what \
+                is stored, so the build refuses it. A rename looks like a removal plus an \
+                addition, and the message names the pairing it infers. Keep the old field and add \
+                the new one, or carry the data across with a `migrate from N` step, which records \
+                the change as a non-additive version.",
+        example: "agent Cart {                        // ✗ `owner` is gone: its stored value would be orphaned\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store ownerName: Cell[String]\n\
+                  }\n\
+                  \n\
+                  agent Cart {\n\
+                  \x20\x20key id: String\n\
+                  \n\
+                  \x20\x20store owner: Cell[String]\n\
+                  \x20\x20store note: Cell[String]        // ✓ a new field is additive\n\
+                  }",
+        page: "/book/reference/agents",
+        anchor: "migrations",
+    },
+    Explain {
         code: "bynk.agent.outside_context",
         blurb: "An agent holds state, and a context is the unit that owns it. A `commons` is \
                 code shared between contexts, which each `uses` it, so it is not given an agent, \
@@ -803,6 +912,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.agent.replaces_live",
         blurb: "`agent New replaces Old` renames a class: `Old`'s stored data moves to `New`. While `Old` is still declared, both would claim that data, so it is refused. To rename, delete the `Old` declaration. If the two are separate classes, drop `replaces`. Each old name has one fate, as `bynk.agent.class_conflict` says.",
         example: "agent Cart { … }\nagent Basket replaces Cart { … }    // ✗ `Cart` is still declared\nagent Basket { … }                  // ✓ a separate class; delete `Cart` to rename it",
+        page: "/book/reference/agents",
+        anchor: "renaming-and-removing-an-agent",
+    },
+    Explain {
+        code: "bynk.agent.replaces_unknown",
+        blurb: "`agent New replaces Old` renames a class: `Old`'s stored data and its recorded \
+                history move to `New`. That only works for a class bynk.schema.lock records for \
+                this context, so a misspelt old name, or a class that was never built with this \
+                context, is refused rather than quietly starting `New` from nothing. Check the old \
+                name against the `[agents.\"…\"]` entries in the lock. The old class must also be \
+                gone from source, as `bynk.agent.replaces_live` requires.",
+        example: "agent Basket replaces Trolley {   // ✗ the lock records no class `shop.Trolley`\n\
+                  \n\
+                  agent Basket replaces Cart {      // ✓ a recorded class, and no longer declared",
         page: "/book/reference/agents",
         anchor: "renaming-and-removing-an-agent",
     },

@@ -55,40 +55,16 @@ const EXCEPTIONS: &[(&str, &str)] = &[
         "the example gate compiles for the bundle target only; this code needs the Workers target or a platform flag (#3163, gate work: a per-fixture target)",
     ),
     (
-        "bynk.agent.class_conflict",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
-    ),
-    (
         "bynk.agent.class_removed",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
-    ),
-    (
-        "bynk.agent.migrate_incomplete",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
-    ),
-    (
-        "bynk.agent.migrate_shape_mismatch",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
-    ),
-    (
-        "bynk.agent.migrate_unknown_version",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
-    ),
-    (
-        "bynk.agent.non_additive_state_change",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
-    ),
-    (
-        "bynk.agent.replaces_unknown",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
+        "reported with no source position (the class is gone from source, so there is no line), so the example gate cannot tell which line it is on",
     ),
     (
         "bynk.event.non_additive_schema_change",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
+        "reported with no source file (the registry check is not attributed to the file that declares the event), so the example gate cannot tell which line it is on",
     ),
     (
         "bynk.event.schema_version_mismatch",
-        "the example gate never reads `bynk.schema.lock`; this code needs a recorded schema history (#3163, gate work: a fixture-supplied lock)",
+        "reported with no source file (the registry check is not attributed to the file that declares the event), so the example gate cannot tell which line it is on",
     ),
     (
         "bynk.project.export_unknown",
