@@ -255,6 +255,13 @@ test("signing refuses a bad ttl, an empty identity and an oversized value", asyn
   await assert.rejects(signSessionCookie(KEYS, "User", "x".repeat(4000), TTL, NOW), RangeError);
 });
 
+test("the verifier refuses a ttl that is not a positive whole number, as the signer does", async () => {
+  const c = await signSessionCookie(KEYS, "User", "ada", TTL, NOW);
+  for (const ttl of [0, -1, 1.5, NaN, Infinity, undefined as unknown as number]) {
+    await assert.rejects(verifySignedCookie(c, KEYS, "User", ttl, NOW), RangeError, String(ttl));
+  }
+});
+
 test("the default clock is Date.now", async () => {
   const c = await signSessionCookie(KEYS, "User", "ada", 60);
   assert.equal((await verifySignedCookie(c, KEYS, "User", 60)).tag, "Ok");
@@ -291,33 +298,63 @@ test("the credential is hidden from the handler's raw cookie view and typed reco
 });
 
 const CORS = ["https://app.example.com"];
-test("csrf: a same-origin or user-initiated request passes", () => {
-  assert.equal(csrfAllowed(req({ "sec-fetch-site": "same-origin" }), []), true);
-  assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), []), true);
-  // `Origin` is irrelevant once the browser says same-origin.
-  assert.equal(csrfAllowed(req({ "sec-fetch-site": "same-origin", origin: "https://evil.example" }), []), true);
+const SITES = ["same-origin", "same-site", "cross-site", "none", "bogus"] as const;
+const ORIGINS: [string | null, "listed" | "unlisted" | "null" | "absent"][] = [
+  ["https://app.example.com", "listed"],
+  ["https://evil.example", "unlisted"],
+  ["null", "null"],
+  [null, "absent"],
+];
+
+test("csrf matrix: Sec-Fetch-Site x Origin (listed, unlisted, null, absent) for a state-changing request", () => {
+  for (const site of [...SITES, null]) {
+    for (const [origin, kind] of ORIGINS) {
+      const headers: Record<string, string> = {};
+      if (site !== null) headers["sec-fetch-site"] = site;
+      if (origin !== null) headers["origin"] = origin;
+      // Only same-origin passes alone; otherwise the Origin must be a listed credentialed origin.
+      const want = site === "same-origin" || kind === "listed";
+      assert.equal(csrfAllowed(req(headers, "https://api.example.com/x", "POST"), CORS), want, `${site} / ${kind}`);
+    }
+  }
 });
 
-test("csrf: a cross-site or same-site request is refused unless its Origin is a credentialed cors origin", () => {
-  for (const site of ["cross-site", "same-site", "bogus"]) {
-    assert.equal(csrfAllowed(req({ "sec-fetch-site": site }), CORS), false, site);
-    assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: "https://evil.example" }), CORS), false, site);
-    assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: "https://app.example.com" }), CORS), true, site);
-    assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: "https://app.example.com" }), []), false, site);
-  }
-  // The origin must match exactly: no prefix, scheme or port games.
-  for (const o of ["https://app.example.com.evil.example", "http://app.example.com", "https://app.example.com:8443", "https://APP.example.com/"]) {
-    assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin: o }), CORS), false, o);
-  }
-  // Same-origin by `Origin` alone does not rescue a request the browser called cross-site.
-  assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin: "https://api.example.com" }), []), false);
+test("csrf: `none` (a user-initiated navigation) is refused on its own", () => {
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), CORS), false);
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "none" }), []), false);
 });
 
-test("csrf: with no Sec-Fetch-Site the Origin must be this origin or an allowed one", () => {
+test("csrf: the match is exact (scheme, host, port); a sibling subdomain needs its own listing", () => {
+  for (const o of [
+    "https://app.example.com.evil.example",
+    "http://app.example.com",
+    "https://app.example.com:8443",
+    "https://APP.example.com",
+    "https://app.example.com/",
+    "https://sub.app.example.com",
+    "https://example.com",
+  ]) {
+    for (const site of ["cross-site", "same-site"]) {
+      assert.equal(csrfAllowed(req({ "sec-fetch-site": site, origin: o }), CORS), false, `${site} ${o}`);
+    }
+  }
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "same-site", origin: "https://sub.example.com" }), ["https://sub.example.com"]), true);
+});
+
+test("csrf: no credentialed origins, a wildcard or `null` in the list never accepts a cross-site request", () => {
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin: "https://app.example.com" }), []), false);
+  for (const list of [["*"], ["null"]]) {
+    for (const origin of ["https://app.example.com", "*", "null"]) {
+      assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin }), list), false, `${list} ${origin}`);
+    }
+  }
+});
+
+test("csrf: with no Sec-Fetch-Site, this request's own origin passes, and a foreign one does not", () => {
   assert.equal(csrfAllowed(req({ origin: "https://api.example.com" }), []), true);
-  assert.equal(csrfAllowed(req({ origin: "https://app.example.com" }), CORS), true);
   assert.equal(csrfAllowed(req({ origin: "https://evil.example" }), CORS), false);
-  assert.equal(csrfAllowed(req({ origin: "null" }), CORS), false);
+  // The browser said cross-site: its own-origin claim does not rescue it.
+  assert.equal(csrfAllowed(req({ "sec-fetch-site": "cross-site", origin: "https://api.example.com" }), []), false);
 });
 
 test("csrf: a request revealing neither header is refused", () => {

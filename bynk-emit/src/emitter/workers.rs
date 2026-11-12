@@ -2400,7 +2400,7 @@ fn signed_cookie_entry(
     let origins = service
         .cors
         .as_ref()
-        .filter(|c| c.credentials())
+        .filter(|c| c.credentials() && !c.is_wildcard())
         .map(|c| c.origins())
         .unwrap_or_default();
     emit_http_signed_cookie_wrapper(sname, h, method, path, seam, &origins)
