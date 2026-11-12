@@ -1,0 +1,14 @@
+context api
+
+consumes bynk { Clock }
+
+const Life: Int = 300
+
+agent Memo {
+  key id: String
+  store c: Cache[String, Int] @ttl(Life)
+  on call set(k: String, v: Int) -> Effect[()] given Clock {
+    let _ <- c.put(k, v)
+    ()
+  }
+}

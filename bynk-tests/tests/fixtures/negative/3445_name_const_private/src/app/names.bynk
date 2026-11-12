@@ -1,0 +1,3 @@
+commons app.names
+
+private const HiddenCookie: String = "__Host-hidden"

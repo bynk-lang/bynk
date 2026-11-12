@@ -557,7 +557,6 @@ fn analyse_project_inner(
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --
     normalize_service_defaults(&mut parsed);
-    let parsed = parsed;
     // #3243: `parsed` is final here. Register its files once, so the per-unit
     // attribution below does not re-register every file for every unit.
     errors.register_parsed(&parsed);
@@ -582,16 +581,15 @@ fn analyse_project_inner(
     }
 
     // -- 4. Per-unit combined symbol tables. --
-    let unit_tables = project_model::phase_symbol_tables(&groups, &kinds, &parsed, &mut errors);
-
-    // -- 5. `uses` resolution. --
-    let unit_uses = project_model::phase_resolve_uses(
+    // -- 4-5. Symbol tables, `uses` resolution, and (#3445) the constants named by
+    //         literal-only annotation arguments, resolved ahead of every reader. --
+    let (unit_tables, unit_uses) = project_model::phase_tables_uses_consts(
         &groups,
         &kinds,
-        &parsed,
-        &unit_tables,
+        &mut parsed,
         &policy,
         &mut errors,
+        &mut refs,
     );
 
     // -- 5b. `consumes` resolution. --

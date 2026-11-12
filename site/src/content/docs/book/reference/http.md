@@ -1290,7 +1290,7 @@ once per handler:
 
 | Field | Meaning | Default |
 |---|---|---|
-| `maxBody` | The byte ceiling for this route, as a positive `Int` byte count. Overrides `limits { maxBody }`. | — |
+| `maxBody` | The byte ceiling for this route, as a positive `Int` byte count, or an `Int` [constant](/book/reference/constants/) bound to one. Overrides `limits { maxBody }`. | — |
 | `maxFile`, `maxParts` | A `@multipart` route's own file and part-count caps; override `limits { maxFile }` and `limits { maxParts }`. | — |
 
 ### Precedence and the opt-in posture

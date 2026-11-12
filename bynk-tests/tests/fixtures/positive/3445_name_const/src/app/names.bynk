@@ -1,0 +1,10 @@
+commons app.names
+
+// #3445: a constant in a literal-only annotation argument. A used commons'
+// public constant counts; a private one does not leave its unit.
+const SidCookie: String = "__Host-sid"
+
+// An imported alias: its next hop is read in this commons' scope, where the
+// private constant is visible, not in the using unit's.
+const AliasCookie: String = HiddenBase
+private const HiddenBase: String = "__Host-alias"

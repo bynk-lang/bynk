@@ -1,0 +1,8 @@
+commons demo.names
+
+// #3445: a single-file commons resolves a constant in an annotation argument as
+// a project does.
+const Code: String = "ABC"
+const Sample: String = Code
+
+type Tag = String where Matches("[A-Z]{3}") @example(Sample)

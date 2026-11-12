@@ -2390,7 +2390,7 @@ imposed; entries keep the order they were retired in.
 
   **Named follow-ons.** `within` in a `fn` is refused until `~>` in a function
   ([#2682](https://github.com/bynk-lang/bynk/issues/2682)) is resolved; a general `ctx.waitUntil`
-  surface, background tasks beyond `~>` and the timeout handover, parallel CPU work and streams as a
+  surface, background tasks beyond `~>` (now `e.detach()`, [#3437](https://github.com/bynk-lang/bynk/issues/3437): a lambda, `forEach` or helper can detach, and a failure is reported) and the timeout handover, parallel CPU work and streams as a
   concurrency primitive remain non-goals.
 
   This track's doc, `design/tracks/concurrent-effects.md`, is removed. Code comments and the status

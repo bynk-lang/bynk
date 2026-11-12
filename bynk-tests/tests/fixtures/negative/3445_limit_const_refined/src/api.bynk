@@ -1,0 +1,11 @@
+context api
+
+type ByteCount = Int where Positive
+const Cap: ByteCount = 1024
+
+service api from http {
+  @limit(maxBody: Cap)
+  on POST("/u") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

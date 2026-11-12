@@ -1068,10 +1068,13 @@ fn check_event_annotations(table: &UnitTable, errors: &mut Vec<CompileError>) {
             match ann.args.as_slice() {
                 [arg] if arg.label.is_none() => {
                     if !matches!(&arg.value.kind, ExprKind::IntLit { value, .. } if *value > 0) {
-                        errors.push(CompileError::new(
-                            "bynk.event.bad_schema_version",
-                            arg.span,
-                            "`@schema`'s argument must be a positive `Int` literal",
+                        errors.push(crate::annotation_consts::with_const_origin(
+                            CompileError::new(
+                                "bynk.event.bad_schema_version",
+                                arg.span,
+                                "`@schema`'s argument must be a positive `Int` literal, or an `Int` constant bound to one",
+                            ),
+                            arg,
                         ));
                     }
                 }
@@ -3230,7 +3233,7 @@ fn check_service_decls(
     check_rejected_handlers(table, errors);
 
     // #3343: `@name("…")` on the fields of a request record.
-    validate_field_names(table, &typed.types, errors);
+    validate_field_names(table, &typed.types, &typed.consts, errors);
 
     // v0.9: validate HTTP handler shape and check for duplicate routes
     // across all services in this context.
@@ -4263,7 +4266,7 @@ fn cache_ttl_millis(f: &StoreField, errors: &mut Vec<CompileError>) -> Option<i6
                 CompileError::new(
                     "bynk.store.cache_ttl_required",
                     span,
-                    "`@ttl`'s argument must be a duration literal, e.g. `5.minutes`",
+                    "`@ttl`'s argument must be a duration literal, e.g. `5.minutes`, or a `Duration` constant bound to one",
                 )
                 .with_note("a keyed store with no expiry is a `Map`, not a `Cache`"),
             );
@@ -5574,6 +5577,7 @@ fn is_http_token(s: &str) -> bool {
 pub(crate) fn validate_field_names(
     table: &UnitTable,
     types: &HashMap<String, Arc<TypeDecl>>,
+    consts: &HashMap<String, ConstDecl>,
     errors: &mut Vec<CompileError>,
 ) {
     let mut uses: HashMap<String, Vec<RequestSurface>> = HashMap::new();
@@ -5627,23 +5631,46 @@ pub(crate) fn validate_field_names(
                     );
                     continue;
                 }
-                let literal = match ann.args.as_slice() {
-                    [a] if a.label.is_none() => match &a.value.kind {
-                        ExprKind::StrLit(s) => Some(s.clone()),
-                        _ => None,
-                    },
+                let arg = match ann.args.as_slice() {
+                    [a] if a.label.is_none() => Some(a),
                     _ => None,
                 };
+                let literal = arg.and_then(|a| match &a.value.kind {
+                    ExprKind::StrLit(s) => Some(s.clone()),
+                    _ => None,
+                });
                 let Some(literal) = literal else {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.field_name_bad_arg",
-                            ann.span,
-                            "`@name` takes exactly one string literal",
-                        )
-                        .with_note("write `@name(\"__Host-sid\")`"),
-                    );
+                    let mut err = CompileError::new(
+                        "bynk.types.field_name_bad_arg",
+                        ann.span,
+                        "`@name` takes exactly one string literal, or a `String` constant bound to one",
+                    )
+                    .with_note("write `@name(\"__Host-sid\")`, or `const SidCookie: String = \"__Host-sid\"` and `@name(SidCookie)`");
+                    // #3445: a bare name that did not resolve (pass `annotation_consts`).
+                    if let Some(a) = arg
+                        && let ExprKind::Ident(id) = &a.value.kind
+                    {
+                        err = err.with_note(match consts.get(&id.name) {
+                            Some(c) if matches!(c.ty, TypeRef::Base(BaseType::String, _)) => format!(
+                                "`{}` is declared `String`, but its value does not end at a string literal: every constant it passes through must be declared exactly `String`, and the last bound to a string literal",
+                                id.name,
+                            ),
+                            Some(c) => format!(
+                                "`{}` is declared `{}`; `@name` needs a constant declared exactly `String` and bound to a string literal (or to another such constant)",
+                                id.name,
+                                ts_type_ref_display(&c.ty),
+                            ),
+                            None => format!("`{}` is not a constant in scope", id.name),
+                        });
+                    }
+                    errors.push(err);
                     continue;
+                };
+                // #3445: where a diagnostic about the value points: at the
+                // reference, where the author can act, when there is one.
+                let (at, origin) = match arg {
+                    Some(a) if a.from_const.is_some() => (a.value.span, Some(a)),
+                    _ => (ann.span, None),
                 };
                 if external.is_some() {
                     errors.push(CompileError::new(
@@ -5656,7 +5683,7 @@ pub(crate) fn validate_field_names(
                 if surfaces.is_empty() {
                     // One error per record: the root cause is the record's use, not each `@name`.
                     if reported_not_request {
-                        external = Some((literal, ann.span));
+                        external = Some((literal, at));
                         continue;
                     }
                     reported_not_request = true;
@@ -5685,14 +5712,23 @@ pub(crate) fn validate_field_names(
                         None
                     };
                     if let Some(why) = bad {
-                        errors.push(CompileError::new(
-                            "bynk.types.field_name_invalid",
-                            ann.span,
-                            format!("`@name(\"{literal}\")` is not a valid name here: {why}"),
-                        ));
+                        let shown = match origin.and_then(|a| a.from_const.as_ref()) {
+                            Some(c) => format!(
+                                "`@name({})` is not a valid name here: {why} (`{literal}`)",
+                                c.name.name
+                            ),
+                            None => {
+                                format!("`@name(\"{literal}\")` is not a valid name here: {why}")
+                            }
+                        };
+                        let err = CompileError::new("bynk.types.field_name_invalid", at, shown);
+                        errors.push(match origin {
+                            Some(a) => crate::annotation_consts::with_const_origin(err, a),
+                            None => err,
+                        });
                     }
                 }
-                external = Some((literal, ann.span));
+                external = Some((literal, at));
             }
             let (key, span) = external.unwrap_or_else(|| (f.name.name.clone(), f.name.span));
             wire.push((key, span));
@@ -6380,10 +6416,14 @@ fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
             );
         }
         Some(_) => {
-            errors.push(CompileError::new(
-                "bynk.http.cache_bad_max_age",
-                max_age.unwrap().span,
-                "`@cache` `maxAge` must be a positive `Duration` literal (e.g. `5.minutes`)",
+            let arg = max_age.unwrap();
+            errors.push(crate::annotation_consts::with_const_origin(
+                CompileError::new(
+                    "bynk.http.cache_bad_max_age",
+                    arg.span,
+                    "`@cache` `maxAge` must be a positive `Duration` literal (e.g. `5.minutes`), or a `Duration` constant bound to one",
+                ),
+                arg,
             ));
         }
         None => {
@@ -6460,10 +6500,15 @@ fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<Co
                         ),
                     );
                 } else if !matches!(&arg.value.kind, ExprKind::IntLit { value: n, .. } if *n > 0) {
-                    errors.push(CompileError::new(
-                        "bynk.http.limit_bad_max_file",
-                        arg.span,
-                        format!("`@limit` `{name}` must be a positive `Int` literal"),
+                    errors.push(crate::annotation_consts::with_const_origin(
+                        CompileError::new(
+                            "bynk.http.limit_bad_max_file",
+                            arg.span,
+                            format!(
+                                "`@limit` `{name}` must be a positive `Int` literal, or an `Int` constant bound to one"
+                            ),
+                        ),
+                        arg,
                     ));
                 }
             }
@@ -6488,10 +6533,14 @@ fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<Co
     match max_body.map(|a| &a.value.kind) {
         Some(ExprKind::IntLit { value: n, .. }) if *n > 0 => {}
         Some(_) => {
-            errors.push(CompileError::new(
-                "bynk.http.limit_bad_max_body",
-                max_body.unwrap().span,
-                "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`)",
+            let arg = max_body.unwrap();
+            errors.push(crate::annotation_consts::with_const_origin(
+                CompileError::new(
+                    "bynk.http.limit_bad_max_body",
+                    arg.span,
+                    "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`), or an `Int` constant bound to one",
+                ),
+                arg,
             ));
         }
         None => {
@@ -6532,10 +6581,14 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     match content_type.map(|a| &a.value.kind) {
         Some(ExprKind::StrLit(s)) if bynk_syntax::ast::is_media_type(s) => {}
         Some(_) => {
-            errors.push(CompileError::new(
-                "bynk.http.raw_bad_content_type",
-                content_type.unwrap().span,
-                "`@raw` `contentType` must be a media type string literal — `type/subtype`, or `\"*/*\"` to accept any",
+            let arg = content_type.unwrap();
+            errors.push(crate::annotation_consts::with_const_origin(
+                CompileError::new(
+                    "bynk.http.raw_bad_content_type",
+                    arg.span,
+                    "`@raw` `contentType` must be a media type string literal (or a `String` constant bound to one) — `type/subtype`, or `\"*/*\"` to accept any",
+                ),
+                arg,
             ));
         }
         None => {

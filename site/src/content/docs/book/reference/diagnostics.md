@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **852** codes in total.
+There are **853** codes in total.
 
 ## Agents
 
@@ -528,6 +528,7 @@ There are **852** codes in total.
 | [`bynk.requires.unapproved`](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages) | A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | [`bynk.requires.unpinned_dependency`](/book/reference/adapters/#anatomy) | An adapter `binding … requires { … }` entry has an unpinned version range. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
+| [`bynk.send.deprecated`](/book/reference/capabilities/#detach) | The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable). | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | Warning |
 | [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.in_pure_context`](/book/reference/capabilities/#capabilities-in-functions) | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.non_effect`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
@@ -920,7 +921,7 @@ There are **852** codes in total.
 | [`bynk.types.field_access_on_non_record`](/book/reference/types/#record-types) | Field access on a value that is not a record. | [`field_access`](/book/reference/grammar/#rule-field_access) | — |
 | [`bynk.types.field_annotation_unknown`](/book/reference/types/#field-name) | A record field carries an annotation other than `@name("…")`. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_default_on_variant`](/book/reference/types/#field-defaults) | A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given. |  | — |
-| [`bynk.types.field_name_bad_arg`](/book/reference/types/#field-name) | A field's `@name` does not take exactly one string literal. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
+| [`bynk.types.field_name_bad_arg`](/book/reference/types/#field-name) | A field's `@name` does not take exactly one string literal, or a `String` constant bound to one. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_name_case_conflict`](/book/reference/types/#field-name) | Two fields of a `cookies` or `query` record have wire names that differ only in case. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_name_duplicate`](/book/reference/types/#field-name) | A field has more than one `@name`, or two fields of a request record read the same wire name. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_name_invalid`](/book/reference/types/#field-name) | A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name). | [`record_field`](/book/reference/grammar/#rule-record_field) | — |

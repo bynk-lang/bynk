@@ -73,6 +73,7 @@ mod integration {
     mod eq_bound_migration;
     #[path = "events_schema_registry_behaviour.rs"]
     mod events_schema_registry_behaviour;
+    #[path = "explain_coverage.rs"]
     mod explain_coverage;
     #[path = "explain_examples.rs"]
     mod explain_examples;
@@ -124,6 +125,8 @@ mod integration {
     mod reserved_builtin_type_name;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
+    #[path = "send_deprecation_fix.rs"]
+    mod send_deprecation_fix;
     #[path = "snippets.rs"]
     mod snippets;
     #[path = "source_map.rs"]
