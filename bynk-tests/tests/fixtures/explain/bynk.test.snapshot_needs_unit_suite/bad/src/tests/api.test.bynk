@@ -1,0 +1,5 @@
+suite demo.api as system {
+  case "one n" {
+    expect 3 matches snapshot "n"
+  }
+}

@@ -1,0 +1,14 @@
+context demo.api
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "S"), identity = UserId }
+
+service api from http {
+  on GET("/a") () -> Effect[HttpResult[Int]] by u: User {
+    Ok(1)
+  }
+
+  on GET("/health") () -> Effect[HttpResult[Int]] by v: Visitor {
+    Ok(1)
+  }
+}

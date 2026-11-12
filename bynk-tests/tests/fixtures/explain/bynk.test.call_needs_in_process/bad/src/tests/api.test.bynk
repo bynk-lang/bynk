@@ -1,0 +1,6 @@
+suite demo.api {
+  case "a key is measured" as system {
+    let n <- save.call("abc")
+    expect n == 3
+  }
+}

@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "a job is acked" {
+    let r <- packer.message(Wire("{}"))
+    expect r is Ack
+  }
+}

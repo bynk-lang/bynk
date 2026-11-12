@@ -1,0 +1,7 @@
+context demo.api
+
+service packer from queue("packing") {
+  on message(job: String) -> Effect[QueueResult] {
+    Ack
+  }
+}

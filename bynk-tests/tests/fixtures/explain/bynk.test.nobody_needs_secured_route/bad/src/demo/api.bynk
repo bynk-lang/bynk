@@ -1,0 +1,7 @@
+context demo.api
+
+service api from http {
+  on GET("/health") () -> Effect[HttpResult[Int]] by v: Visitor {
+    Ok(1)
+  }
+}

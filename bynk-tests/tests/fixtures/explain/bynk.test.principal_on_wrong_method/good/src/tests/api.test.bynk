@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "a wrong method is refused" {
+    let r <- api.DELETE("/a")
+    expect r is Rejected(MethodNotAllowed)
+  }
+}

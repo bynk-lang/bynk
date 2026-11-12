@@ -1,0 +1,7 @@
+suite demo.api {
+  property "every n" {
+    for all n: Int {
+      expect run(n) matches snapshot "n"
+    }
+  }
+}

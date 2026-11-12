@@ -1,0 +1,3 @@
+commons shop.types
+
+type Sku = String

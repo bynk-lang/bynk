@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "the health check" {
+    let r <- api.GET("/health", RequestHeaders.of(["X-Trace: 1"])) by Visitor
+    expect r is Ok(_)
+  }
+}

@@ -1,0 +1,3 @@
+commons tax
+
+type Rate = Int
