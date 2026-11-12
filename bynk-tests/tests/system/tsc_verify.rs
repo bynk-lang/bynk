@@ -978,34 +978,60 @@ fn emitted_javascript_is_valid_under_node() {
     fs::write(root.join("package.json"), "{\n  \"type\": \"module\"\n}\n")
         .expect("write root package.json");
 
-    let mut staged = 0usize;
-    let mut failures: Vec<String> = Vec::new();
-    for dir in &dirs {
-        if !dir.join("src").is_dir() {
-            continue;
+    // Compile, strip and write each project fixture on a small worker pool
+    // (#3387): serially this was about two thirds of the test outside Node. Each
+    // fixture writes only under its own `root/<name>`, so the workers are
+    // independent.
+    let project_dirs: Vec<&PathBuf> = dirs.iter().filter(|d| d.join("src").is_dir()).collect();
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, 8);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let staged_count = std::sync::atomic::AtomicUsize::new(0);
+    let failures_shared: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(dir) = project_dirs.get(i) else {
+                        break;
+                    };
+                    let name = dir
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("fixture")
+                        .to_string();
+                    let target = fixture_target(dir);
+                    let Ok(out) = compile_fixture(dir, target) else {
+                        continue;
+                    };
+                    let js_out = match bynk_driver::strip::strip_project_to_js(out) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            failures_shared
+                                .lock()
+                                .unwrap()
+                                .push(format!("{name}: strip failed: {e}"));
+                            continue;
+                        }
+                    };
+                    if let Err(e) = write_outputs(&js_out, &root.join(&name)) {
+                        failures_shared
+                            .lock()
+                            .unwrap()
+                            .push(format!("{name}: failed to write JS output: {e}"));
+                        continue;
+                    }
+                    staged_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            });
         }
-        let name = dir
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("fixture")
-            .to_string();
-        let target = fixture_target(dir);
-        let Ok(out) = compile_fixture(dir, target) else {
-            continue;
-        };
-        let js_out = match bynk_driver::strip::strip_project_to_js(out) {
-            Ok(o) => o,
-            Err(e) => {
-                failures.push(format!("{name}: strip failed: {e}"));
-                continue;
-            }
-        };
-        if let Err(e) = write_outputs(&js_out, &root.join(&name)) {
-            failures.push(format!("{name}: failed to write JS output: {e}"));
-            continue;
-        }
-        staged += 1;
-    }
+    });
+    let staged = staged_count.into_inner();
+    let mut failures = failures_shared.into_inner().unwrap();
+    failures.sort();
     assert!(
         failures.is_empty(),
         "staging JS output failed:\n{}",
@@ -1021,6 +1047,8 @@ fn emitted_javascript_is_valid_under_node() {
         .join("support")
         .join("js_check.mjs");
     let out = Command::new("node")
+        .arg("--experimental-vm-modules")
+        .arg("--no-warnings")
         .arg(&harness)
         .arg(&root)
         .output()
@@ -1031,7 +1059,7 @@ fn emitted_javascript_is_valid_under_node() {
         let _ = fs::remove_dir_all(&root);
     } else {
         panic!(
-            "emitted JavaScript is not valid under `node --check` — a TypeScript construct survived \
+            "emitted JavaScript does not parse as an ES module under Node — a TypeScript construct survived \
              stripping, or the JS is malformed.\nFAIL <file> <reason>:\n{}\n{}",
             stdout.trim(),
             stderr.trim(),
