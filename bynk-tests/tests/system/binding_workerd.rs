@@ -2307,6 +2307,12 @@ struct LocalMySql {
 
 const REQUIRE_MYSQL_ENV: &str = "BYNK_REQUIRE_MYSQL";
 
+/// The port of a server someone else started, when set: CI's MariaDB service
+/// container. That server must already have a database `smoke` and a user
+/// `smoke` with the password in [`LocalMySql::url`]. The smoke's `/setup` drops
+/// and recreates its table, so a reused server is fine.
+const MYSQL_PORT_ENV: &str = "BYNK_MYSQL_SMOKE_PORT";
+
 impl LocalMySql {
     fn find(names: &[&str]) -> Option<std::path::PathBuf> {
         let path = std::env::var_os("PATH")?;
@@ -2318,6 +2324,16 @@ impl LocalMySql {
     /// A started server with a database `smoke`, or `None` when this machine
     /// cannot run one.
     fn start() -> Option<Self> {
+        if let Some(port) = std::env::var(MYSQL_PORT_ENV).ok().filter(|p| !p.is_empty()) {
+            let port = port
+                .parse()
+                .unwrap_or_else(|_| panic!("{MYSQL_PORT_ENV} is not a port: {port}"));
+            return Some(Self {
+                dir: std::env::temp_dir().join("bynk-mysql-smoke-external"),
+                port,
+                server: None,
+            });
+        }
         let server_bin = Self::find(&["mariadbd", "mysqld"])?;
         let install = Self::find(&["mariadb-install-db", "mysql_install_db"])?;
         let client = Self::find(&["mariadb", "mysql"])?;
