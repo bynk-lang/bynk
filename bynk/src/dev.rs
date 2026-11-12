@@ -1745,12 +1745,12 @@ fn passthrough_has(args: &[String], flag: &str) -> bool {
 /// itself. The fixed [`bynk_emit::LOCAL_CALL_KEY`], so two `bynk dev
 /// --context` sessions run side by side admit each other's calls.
 /// The keys `bynk dev` gives each Worker through `--var`: the local edge keys (I2, #1971), and
-/// (#3386) a per-run signing key for each `SignedCookie` actor, shared by the Workers of one
-/// session and different on every run, so a cookie from an earlier session never verifies.
+/// (#3386) a local signing key for each `SignedCookie` binding: derived from the binding's name,
+/// so each actor has its own and two `bynk dev --context` sessions side by side admit each other's
+/// cookies. It is for local development only; `deploy` mints its own.
 struct LocalKeys {
     edge: BTreeMap<String, Vec<String>>,
     session: BTreeMap<String, Vec<String>>,
-    session_key: String,
 }
 
 impl LocalKeys {
@@ -1758,7 +1758,6 @@ impl LocalKeys {
         Ok(Self {
             edge: crate::deploy::local_edge_keys(workers_dir, available)?,
             session: crate::deploy::local_session_keys(workers_dir, available)?,
-            session_key: crate::deploy::mint_local_session_key()?,
         })
     }
 
@@ -1767,14 +1766,14 @@ impl LocalKeys {
     fn session_args(&self, worker: &str, passthrough: &[String]) -> Vec<String> {
         let mut args = Vec::new();
         for name in self.session.get(worker).into_iter().flatten() {
-            if passthrough
-                .iter()
-                .any(|a| a.starts_with(&format!("{name}:")))
-            {
+            if passthrough.iter().any(|a| {
+                let a = a.strip_prefix("--var=").unwrap_or(a);
+                a.starts_with(&format!("{name}:"))
+            }) {
                 continue;
             }
             args.push("--var".to_string());
-            args.push(format!("{name}:{}", self.session_key));
+            args.push(format!("{name}:{}", crate::deploy::local_session_key(name)));
         }
         args
     }
@@ -1966,15 +1965,20 @@ mod tests {
         let local = LocalKeys {
             edge: BTreeMap::new(),
             session: BTreeMap::from([("shop".to_string(), vec!["SESSION_KEY".to_string()])]),
-            session_key: "KEY".to_string(),
         };
+        let key = crate::deploy::local_session_key("SESSION_KEY");
         assert_eq!(
             local.session_args("shop", &[]),
-            ["--var", "SESSION_KEY:KEY"]
+            ["--var".to_string(), format!("SESSION_KEY:{key}")]
         );
+        // Each binding has its own key, and it is the same in every session.
+        assert_ne!(key, crate::deploy::local_session_key("ADMIN_KEY"));
+        assert_eq!(key, crate::deploy::local_session_key("SESSION_KEY"));
         assert!(local.session_args("other", &[]).is_empty());
         let own = ["--var".to_string(), "SESSION_KEY:mine".to_string()];
         assert!(local.session_args("shop", &own).is_empty());
+        let eq_form = ["--var=SESSION_KEY:mine".to_string()];
+        assert!(local.session_args("shop", &eq_form).is_empty());
     }
 
     #[test]
