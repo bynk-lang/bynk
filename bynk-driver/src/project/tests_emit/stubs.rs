@@ -1394,6 +1394,24 @@ pub(super) fn platform_double(
                 op("transaction", "_")
             )
         }
+        // Hyperdrive H5 (#3322): a `MySql` instance faults until stubbed, as a
+        // `Postgres` one does. There is no database double: it is a stub-only
+        // kind, and the unit double still records what `expect … called with`
+        // reads.
+        ("bynk.cloudflare", "MySql") => {
+            let op = |op: &str, args: &str| {
+                format!(
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches MySQL — add `stub {name}.{op}({args}) returns …`\");\n    }},\n"
+                )
+            };
+            format!(
+                "  return {{\n{}{}{}{}  }};\n",
+                op("all", "_, _"),
+                op("first", "_, _"),
+                op("run", "_, _"),
+                op("transaction", "_")
+            )
+        }
         // #3300: a fixed version (id `"test"`, no tag, created at the
         // epoch), so a case's result never depends on the deployment;
         // `stub Version.current() returns …` gives another.

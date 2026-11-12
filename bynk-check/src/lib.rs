@@ -56,6 +56,7 @@ pub mod kernel_methods;
 pub mod kernel_op;
 pub mod locals;
 pub mod memo;
+pub mod mysql_sql;
 pub mod narrowing;
 pub mod oracle;
 pub mod packages;

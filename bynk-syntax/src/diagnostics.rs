@@ -861,7 +861,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `RateLimit` a `@limit(n)` and a `@period(d)`, and `Queue` a `@name(\"queue\")`. \
                 The value must be a literal of the option's kind, and one the platform accepts: \
                 `@limit` a positive `Int`, `@period` `10.seconds` or `60.seconds`, \
-                `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@worker` a Worker name and `@name` a \
+                `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@tls` (on a `MySql`) `\"required\"`, \
+                `\"verify-ca\"` or `\"verify-identity\"`, `@worker` a Worker name and `@name` a \
                 queue name, each of 1 to 63 lowercase letters, digits and `-` (a Worker name \
                 may also hold `_`). Each option is given once, and an `@worker` must name a Worker \
                 outside the project, since a context of your own is reached with `consumes`. A bad \
@@ -965,8 +966,8 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.capability.unknown_option",
         blurb: "An option after the kind in `capability Name = Kind @option(…)` must be one that \
                 kind takes: `Service` takes `@worker`, `R2` `@jurisdiction`, `RateLimit` \
-                `@limit` and `@period`, `Queue` `@name`, and `StoredSecret` `@store` and \
-                `@secret`, while `Kv`, `Analytics`, `D1` and `EdgeCache` take none. One the kind \
+                `@limit` and `@period`, `Queue` `@name`, `MySql` `@tls`, and `StoredSecret` `@store` and \
+                `@secret`, while `Kv`, `Analytics`, `D1`, `EdgeCache` and `Postgres` take none. One the kind \
                 does not take is refused rather than ignored, since it is probably a misspelling \
                 or the wrong kind. Drop it, or use one of the options the note lists. An option \
                 that is known but has a bad value is `bynk.capability.invalid_option`.",
@@ -3682,6 +3683,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id)])                 // ✗ two parameters, one value\n\nlet _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id), PgInteger(5)])    // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "postgres-sql-checked-for-syntax",
+    },
+    Explain {
+        code: "bynk.mysql.sql_invalid",
+        blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `MySql` capability, so a syntax error shows up when you check, not on the first request. It also flags a statement of several commands, which the driver does not accept: send each with its own call, or use `transaction`. The parser is a pure-Rust one with a MySQL dialect, not MySQL's own (and MariaDB has forms of its own), so it can refuse valid SQL; that is why this is a warning and never blocks a build. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
+        example: "let _ <- Legacy.all(\"SELEC id FROM orders\", [])        // ✗ expected a statement, found SELEC\n\nlet _ <- Legacy.all(\"SELECT id FROM orders\", [])      // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "mysql-sql-checked-for-syntax",
+    },
+    Explain {
+        code: "bynk.mysql.sql_param_count",
+        blurb: "When the project has a `schema.sql`, Bynk counts the parameters of each literal `MySql` statement: each `?` takes the next value. It checks a list written out in place, or a name `let`-bound to one. A `?` inside a single-quoted string literal, a backtick-quoted name or a comment (`-- ` or `/* … */`) is text, not a parameter, as the driver reads it; the driver does not skip a double-quoted string or a `#` comment, so a `?` in one is counted, and string literals are written with single quotes. Pass one `MySqlValue` for each `?`, or change the SQL. `??`, which mysql2 reads as an identifier placeholder, is counted as two parameters and is not supported.",
+        example: "let _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id)])                    // ✗ two parameters, one value\n\nlet _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id), MySqlInteger(5)])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "mysql-sql-checked-for-syntax",
     },
     Explain {
         code: "bynk.project.duplicate_module_doc",
@@ -8380,6 +8395,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.postgres.sql_invalid",
         "A literal `Postgres` statement does not parse with the Postgres dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not Postgres' own, so it may refuse valid SQL).",
     )),
+    warn(d(
+        "bynk.mysql.sql_invalid",
+        "A literal `MySql` statement does not parse with the MySQL dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not MySQL's own, so it may refuse valid SQL).",
+    )),
+    d(
+        "bynk.mysql.sql_param_count",
+        "A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`.",
+    ),
     d(
         "bynk.postgres.sql_param_count",
         "A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`.",

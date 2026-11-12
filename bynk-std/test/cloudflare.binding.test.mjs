@@ -12,7 +12,8 @@
 // `WorkersStoredSecret` (#3301) against a Secrets Store secret fake, and
 // `WorkersEmail` (#3302) against a `send_email` binding fake, and
 // `WorkersPostgres` (Hyperdrive H1, #3318) against a driver-executor fake (the
-// driver seam itself, with the `prepare: true` guard, is tested in the runtime).
+// driver seam itself, with the `prepare: true` guard, is tested in the runtime),
+// and `WorkersMySql` (Hyperdrive H5, #3322) against the same kind of fake.
 //
 // The fake follows Cloudflare's documented `KVNamespace` contract, not the
 // binding: `get` resolves `null` for an absent key; `list` returns keys in
@@ -24,7 +25,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
+import { WorkersAnalytics, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
@@ -1677,4 +1678,127 @@ t("WorkersPostgres.transaction: an empty list is Ok([]) and opens nothing; a mis
     () => new WorkersPostgres({ HYPERDRIVE_MAIN: { connectionString: SECRET_URL } }, "HYPERDRIVE_MAIN").transaction([{ sql: "x", params: [] }]),
     /needs the Postgres driver/,
   );
+});
+
+// Hyperdrive H5 (#3322): `WorkersMySql`, against a fake of the executor a
+// Worker's compose hands it (the runtime's `mysqlExecute`) and a fake of the
+// Hyperdrive binding, read from its parts (Cloudflare's mysql2 guide).
+const MY_PASSWORD = "my-s3cr3t-pw";
+const MY_BINDING = { host: "db.internal.example", port: 3306, user: "app", password: MY_PASSWORD, database: "shop" };
+
+function myEnv(answer) {
+  const calls = [];
+  const execute = async (endpoint, sql, params) => {
+    calls.push({ endpoint, sql, params });
+    return answer(sql, params);
+  };
+  execute.transaction = async (endpoint, statements) => {
+    const runs = [];
+    for (const s of statements) {
+      calls.push({ endpoint, sql: s.sql, params: s.params, inTransaction: true });
+      const out = answer(s.sql, s.params);
+      if (!out.ok) return out;
+      runs.push({ rowCount: out.rowCount, insertId: out.insertId });
+    }
+    return { ok: true, runs };
+  };
+  return { env: { HYPERDRIVE_LEGACY: MY_BINDING }, execute, calls };
+}
+
+const myOk = (rows, rowCount = rows.length, insertId = 0) => ({ ok: true, rows, rowCount, insertId });
+const myFail = (kind, code, message) => ({ ok: false, failure: { kind, code, message } });
+
+t("WorkersMySql.all: gives every row as JSON text, reading the endpoint from the binding's parts", async () => {
+  const { env, execute, calls } = myEnv(() => myOk([{ id: 1, name: "a" }, { id: 2, name: "b" }]));
+  const r = await new WorkersMySql(env, "HYPERDRIVE_LEGACY", execute).all("select id, name from t where id > ?", [{ tag: "MySqlInteger", value: 0 }]);
+  assert.equal(r.tag, "Ok");
+  assert.deepEqual(JSON.parse(r.value), [{ id: 1, name: "a" }, { id: 2, name: "b" }]);
+  assert.deepEqual(calls[0].endpoint, MY_BINDING);
+  assert.equal(calls[0].sql, "select id, name from t where id > ?");
+  assert.deepEqual(calls[0].params, [{ tag: "MySqlInteger", value: 0 }]);
+});
+
+t("WorkersMySql: a binding with only a connection string is read from that", async () => {
+  const { execute, calls } = myEnv(() => myOk([]));
+  const env = { HYPERDRIVE_LEGACY: { connectionString: "mysql://app:p%40ss@db.example:3307/shop%20db" } };
+  await new WorkersMySql(env, "HYPERDRIVE_LEGACY", execute).all("select 1", []);
+  assert.deepEqual(calls[0].endpoint, { host: "db.example", port: 3307, user: "app", password: "p@ss", database: "shop db" });
+});
+
+t("WorkersMySql.first: the first row, or None when there is none", async () => {
+  const some = myEnv(() => myOk([{ n: 1 }, { n: 2 }]));
+  const a = await new WorkersMySql(some.env, "HYPERDRIVE_LEGACY", some.execute).first("select n from t", []);
+  assert.deepEqual(JSON.parse(a.value.value), { n: 1 });
+  const none = myEnv(() => myOk([]));
+  const b = await new WorkersMySql(none.env, "HYPERDRIVE_LEGACY", none.execute).first("select n from t", []);
+  assert.equal(b.tag, "Ok");
+  assert.equal(b.value, None);
+});
+
+t("WorkersMySql.run: reports the row count and the insert id", async () => {
+  const { env, execute } = myEnv(() => myOk([], 3, 41));
+  const r = await new WorkersMySql(env, "HYPERDRIVE_LEGACY", execute).run("insert into t values (?)", [{ tag: "MySqlText", value: "x" }]);
+  assert.deepEqual(r, { tag: "Ok", value: { rowCount: 3, insertId: 41 } });
+});
+
+t("WorkersMySql: each failure kind is its MySqlError variant, carrying the error number where there is one", async () => {
+  const cases = [
+    [myFail("constraint", 1062, "Duplicate entry"), { tag: "MySqlConstraint", code: 1062, message: "Duplicate entry" }],
+    [myFail("serialization", 1213, "Deadlock found"), { tag: "MySqlSerialization", code: 1213, message: "Deadlock found" }],
+    [myFail("connection", 0, "could not reach the database"), { tag: "MySqlConnection", message: "could not reach the database" }],
+    [myFail("failed", 1064, "syntax error"), { tag: "MySqlFailed", code: 1064, message: "syntax error" }],
+  ];
+  for (const [out, expected] of cases) {
+    const { env, execute } = myEnv(() => out);
+    const r = await new WorkersMySql(env, "HYPERDRIVE_LEGACY", execute).run("x", []);
+    assert.deepEqual(r, { tag: "Err", error: expected });
+  }
+});
+
+t("WorkersMySql: a missing binding or driver faults, naming the binding and never a value", async () => {
+  const noBinding = new WorkersMySql({}, "HYPERDRIVE_LEGACY", async () => myOk([]));
+  await assert.rejects(() => noBinding.all("x", []), /requires a Hyperdrive binding \(env\.HYPERDRIVE_LEGACY\)/);
+  const noDriver = new WorkersMySql({ HYPERDRIVE_LEGACY: MY_BINDING }, "HYPERDRIVE_LEGACY");
+  let seen = "";
+  try {
+    await noDriver.all("x", []);
+  } catch (e) {
+    seen = e.message;
+  }
+  assert.match(seen, /needs the MySQL driver/);
+  assert.ok(!seen.includes(MY_PASSWORD), seen);
+});
+
+t("WorkersMySql: an integration binding's faulting connection string surfaces as a fault", async () => {
+  const env = { HYPERDRIVE_LEGACY: { get connectionString() { throw new Error("bynk: Hyperdrive binding `HYPERDRIVE_LEGACY` has no database in a test"); } } };
+  await assert.rejects(() => new WorkersMySql(env, "HYPERDRIVE_LEGACY", async () => myOk([])).all("x", []), /no database in a test/);
+});
+
+t("WorkersMySql: the password reaches the executor and nothing else", async () => {
+  const { env, execute } = myEnv(() => myFail("failed", 1045, "Access denied for user app"));
+  const r = await new WorkersMySql(env, "HYPERDRIVE_LEGACY", execute).run("x", []);
+  assert.ok(!JSON.stringify(r).includes(MY_PASSWORD));
+});
+
+t("WorkersMySql.transaction: runs the statements in order and reports each run", async () => {
+  const { env, execute, calls } = myEnv((sql) => (sql === "A" ? myOk([], 1, 7) : myOk([], 2, 0)));
+  const r = await new WorkersMySql(env, "HYPERDRIVE_LEGACY", execute).transaction([
+    { sql: "A", params: [] },
+    { sql: "B", params: [{ tag: "MySqlNull" }] },
+  ]);
+  assert.deepEqual(r, { tag: "Ok", value: [{ rowCount: 1, insertId: 7 }, { rowCount: 2, insertId: 0 }] });
+  assert.deepEqual(calls.map((c) => c.sql), ["A", "B"]);
+  assert.ok(calls.every((c) => c.inTransaction));
+});
+
+t("WorkersMySql.transaction: a failure is the result; an empty list is Ok([]) and opens nothing; a missing binding or driver still faults", async () => {
+  const bad = myEnv((sql) => (sql === "B" ? myFail("constraint", 1062, "Duplicate entry") : myOk([], 1)));
+  const r = await new WorkersMySql(bad.env, "HYPERDRIVE_LEGACY", bad.execute).transaction([{ sql: "A", params: [] }, { sql: "B", params: [] }]);
+  assert.deepEqual(r, { tag: "Err", error: { tag: "MySqlConstraint", code: 1062, message: "Duplicate entry" } });
+  const empty = myEnv(() => myOk([]));
+  const e = await new WorkersMySql(empty.env, "HYPERDRIVE_LEGACY", empty.execute).transaction([]);
+  assert.deepEqual(e, { tag: "Ok", value: [] });
+  assert.equal(empty.calls.length, 0);
+  await assert.rejects(() => new WorkersMySql({}, "HYPERDRIVE_LEGACY", empty.execute).transaction([]), /requires a Hyperdrive binding/);
+  await assert.rejects(() => new WorkersMySql({ HYPERDRIVE_LEGACY: MY_BINDING }, "HYPERDRIVE_LEGACY").transaction([{ sql: "x", params: [] }]), /needs the MySQL driver/);
 });

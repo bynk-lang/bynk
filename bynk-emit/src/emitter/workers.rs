@@ -2863,7 +2863,12 @@ fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
         ),
         (|s| matches!(s, BindingSource::Email { .. }), "__SendEmail"),
         (
-            |s| matches!(s, BindingSource::Postgres { .. }),
+            |s| {
+                matches!(
+                    s,
+                    BindingSource::Postgres { .. } | BindingSource::MySql { .. }
+                )
+            },
             "__Hyperdrive",
         ),
         (
@@ -2881,6 +2886,11 @@ fn platform_binding_imports(bindings: &[WorkerBinding]) -> Vec<String> {
     // the Workers that have one.
     if binds(|s| matches!(s, BindingSource::Postgres { .. })) {
         imports.push("__pgExecute".to_string());
+    }
+    // Hyperdrive H5 (#3322): and `mysql` in the build of exactly the Workers
+    // with a `MySql` instance.
+    if binds(|s| matches!(s, BindingSource::MySql { .. })) {
+        imports.push("__mysqlExecute".to_string());
     }
     imports
 }

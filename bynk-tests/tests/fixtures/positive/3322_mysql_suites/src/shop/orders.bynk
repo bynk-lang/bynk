@@ -1,0 +1,40 @@
+context shop.orders
+
+// Hyperdrive H5 (#3322): a `MySql` instance has no test double of its own, as a
+// `Postgres` one has none by default. A test never reaches a database, so every
+// operation faults until the case stubs it. `MySqlError` is a value a handler
+// answers, so a stub can force each variant.
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlValue, MySqlRun }
+
+capability Legacy = MySql
+
+service add {
+	on call(name: String) -> Effect[Result[MySqlRun, MySqlError]] given Legacy {
+		Legacy.run("insert into orders (name) values (?)", [MySqlText(name)])
+	}
+}
+
+service list {
+	on call() -> Effect[Result[String, MySqlError]] given Legacy {
+		Legacy.all("select id, name from orders where id > ?", [MySqlInteger(0)])
+	}
+}
+
+service find {
+	on call(id: Int) -> Effect[Result[Option[String], MySqlError]] given Legacy {
+		Legacy.first("select name from orders where id = ?", [MySqlInteger(id)])
+	}
+}
+
+service api from http {
+	on POST("/orders") () -> Effect[HttpResult[String]] by Visitor given Legacy {
+		let ran <- Legacy.run("insert into orders (name) values (?)", [MySqlText("x")])
+		match ran {
+			Ok(r) => Ok("inserted")
+			Err(MySqlConstraint(_, _)) => Ok("duplicate")
+			Err(_) => Ok("failed")
+		}
+	}
+}

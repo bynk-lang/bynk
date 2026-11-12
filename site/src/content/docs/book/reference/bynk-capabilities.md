@@ -382,6 +382,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
+| **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -1093,6 +1094,150 @@ presence is the switch, and the same file seeds the
 reads (`select[T]`, `firstAs[T]`) are not checked, since their text is a tail the
 compiler completes. The parser is pure Rust, so the check runs everywhere Bynk
 does, the playground included.
+
+### MySQL databases: `MySql`
+
+`MySql` queries an existing MySQL (or MariaDB) database through
+[Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/), over
+[mysql2](https://github.com/sidorares/node-mysql2). It is `Postgres`'s twin: the
+same operations, the same row and transaction rules and the same deploy path, with
+MySQL's placeholders, types and errors. Each database is a named instance, and a
+bare `given MySql` is refused (`bynk.capability.instance_only`). It is
+**experimental**: list `"bynk.cloudflare.MySql"` under `[unstable] allow`. The
+step-by-step version is
+[Connect an existing MySQL database](/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/).
+
+```bynk,fragment
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlValue }
+
+capability Legacy = MySql
+
+service orders from http {
+	on GET("/orders/:id") (id: Int) -> Effect[HttpResult[String]] by Visitor given Legacy {
+		let row <- Legacy.first("select id, name from orders where id = ?", [MySqlInteger(id)])
+		match row {
+			Ok(Some(json)) => Ok(json)
+			Ok(None) => Ok("not found")
+			Err(MySqlConstraint(_, _)) => Ok("conflict")
+			Err(_) => Ok("failed")
+		}
+	}
+}
+```
+
+`Legacy` binds as `env.HYPERDRIVE_LEGACY`, a `[[hyperdrive]]` entry (the prefix is
+`Postgres`'s, since both are Hyperdrive). `bynk.toml` names the connection string's
+environment variable exactly as for `Postgres`
+(`[deploy.hyperdrive.Legacy] connection_env`), and the string is a
+`mysql://user:password@host:3306/database` URL: it is a secret, and never reaches
+the ledger, a generated file, a log, the plan or an error message.
+
+**TLS.** `@tls("…")` says how Hyperdrive secures its connection **to your
+database**; the Worker's own connection to Hyperdrive is not part of it. The modes
+are `"required"` (the default: encrypted, certificate not checked), `"verify-ca"`
+and `"verify-identity"` (the server's certificate is checked against a CA
+certificate, and for `"verify-identity"` its host name too). Anything else is a
+compile error (`bynk.capability.invalid_option`). `bynk build` writes the mode
+beside the Worker's `wrangler.toml`, in `bynk-hyperdrive.json`, which also tells
+`bynk deploy` the config is MySQL's. `bynk deploy` sends `"required"` as the
+config's `sslmode` (`REQUIRED`). The two `verify` modes need a CA certificate your
+Cloudflare account holds, which `bynk deploy` does not upload: for a `verify` mode
+it stops and says to upload the CA (`wrangler cert upload certificate-authority`),
+make the config with `wrangler hyperdrive create … --ca-certificate-id <id>
+--sslmode VERIFY_IDENTITY`, and adopt it with `config_id`. Cloudflare does not
+support `DISABLED` or `PREFERRED`.
+
+**The statement.** The SQL is a string literal (or a `String` constant bound to
+one), so data reaches a statement only as a parameter. Placeholders are `?`, and
+`params` binds them in order. mysql2's `query` substitutes each `?` that is outside
+a string literal, a quoted name and a comment with an escaped value before the
+statement is sent: Bynk uses `query`, not a prepared statement, because a prepared
+statement does not survive Hyperdrive's transaction pooling and cannot bind
+`LIMIT ?, ?`. `??` (mysql2's identifier placeholder) is not supported.
+
+| `MySqlValue` | Binds |
+|---|---|
+| `MySqlNull` | `NULL` |
+| `MySqlInteger(Int)` · `MySqlReal(Float)` | a signed number |
+| `MySqlUnsigned(String)` | an unsigned integer, as its digits: an `Int` is signed, and a `BIGINT UNSIGNED` reaches past it |
+| `MySqlText(String)` | text |
+| `MySqlBytes(Bytes)` | a `BLOB` |
+| `MySqlBoolean(Bool)` | `1` or `0`: a `TINYINT(1)`, MySQL's flag |
+| `MySqlDecimal(String)` · `MySqlJson(String)` | a `DECIMAL` as text and JSON text for a `JSON` column, so neither loses a digit |
+| `MySqlDateTime(String)` | the wall-clock text of a `DATETIME` (`2026-11-12 09:30:00`): no zone, not an instant |
+| `MySqlTimestamp(Instant)` | an `Instant` as UTC text (`2026-11-12 09:30:00.000`): right for a `DATETIME` that holds UTC by convention, and for a `TIMESTAMP` only when the session's zone is UTC |
+
+The variants carry the `MySql` prefix so nothing collides with `PgValue`'s or
+`SqlValue`'s.
+
+**The rows.** `all` gives every row as a JSON array of objects keyed by column
+name, `first` the first row as one object or `None`, for `Json.decode`. The rules
+are fixed: a `BIGINT` (signed or unsigned) and a `DECIMAL` arrive as **strings**,
+a `TINYINT(1)` as `true` or `false` (any other `TINYINT` is a number, and `D1`'s
+`0` and `1` do not apply), a `BLOB` as base64, a `JSON` column nested, and
+`DATETIME`, `TIMESTAMP` and `DATE` as the server's text with no zone put on it
+(Bynk does not invent an instant: an `Instant` field refuses it and a `String`
+field reads it). `run` reports `MySqlRun { rowCount, insertId }`: the rows affected
+and the `AUTO_INCREMENT` id the statement inserted (`0` when none, or past 2^53),
+since MySQL has no `RETURNING`.
+
+**The errors.** Every operation answers a `MySqlError` rather than faulting, keyed
+on MySQL's error number:
+
+| Variant | When |
+|---|---|
+| `MySqlConstraint(code, message)` | `1062` duplicate key, `1048` null in a `NOT NULL` column, `1452` and `1451` a foreign key, `3819` a check |
+| `MySqlSerialization(code, message)` | `1213` a deadlock or `1205` a lock wait timeout, which a retry may clear |
+| `MySqlConnection(message)` | the connection could not be made or was lost; the message is the driver's code, never the host, the user or the password |
+| `MySqlFailed(code, message)` | anything else, with its error number (`0` when the driver gave none) |
+
+MySQL has further failure kinds, so `MySqlError` is extensible and a `match` over
+it needs a wildcard.
+
+**Connections.** Each statement opens its own connection from
+`env.HYPERDRIVE_LEGACY`'s `host`, `port`, `user`, `password` and `database`, with
+`disableEval: true` (Workers forbid `eval`, which mysql2 otherwise uses), and
+closes it before it answers. Cloudflare's guide asks for mysql2 **3.13.0 or
+later** and `nodejs_compat`, which the compatibility date the toolchain emits
+already provides. A Worker with a `MySql` instance gets `mysql2` (pinned to an
+exact version) in `out/package.json`, and a `first-party` `[[npm]]` row in
+`bynk.lock` that needs no approval. Cloudflare allows six simultaneous connections
+per Worker invocation, as for `Postgres`.
+
+**Typed reads and transactions.** `select[T]` and `firstAs[T]` and `transaction`
+behave as `Postgres`'s, with backtick-quoted columns (an embedded backtick
+doubled), a `MySqlStatement { sql, params }` per transaction statement, and
+`MySqlReadError` (`MySqlSql`, `MySqlDecode`). A row field is an `Int`, `Float`,
+`String`, `Bool`, `Bytes` or `Decimal` (or a refined or opaque type over one, or an
+`Option` of either); an `Int` reads a `BIGINT` that arrives as text.
+
+**Tests.** There is no in-memory MySQL: a test never reaches a database, so every
+operation of an instance **faults until the case stubs it**:
+`stub Legacy.run(_, _) returns Ok(MySqlRun { rowCount: 1, insertId: 41 })`, or
+`returns Err(MySqlConstraint(1062, "Duplicate entry"))` to force an error.
+`expect Legacy.run called with sql == "…"` works as for any capability. A
+`MySql` instance has no PGlite-style double and no `system`-tier behaviour.
+
+#### MySQL SQL checked for syntax {#mysql-sql-checked-for-syntax}
+
+A project that keeps a `schema.sql` at its root (beside `bynk.toml`) has each
+literal `MySql` statement checked, in `all`, `first`, `run` and the statements of a
+`transaction`, with [sqlparser](https://github.com/apache/datafusion-sqlparser-rs)'s
+MySQL dialect. It is the switch `Postgres`'s check uses:
+
+- `bynk.mysql.sql_param_count` (an **error**): the statement's `?` placeholders
+  differ in number from the elements of the `params` list written out in place (or
+  `let`-bound). A `?` inside a single-quoted string, a backtick name or a comment
+  (`-- ` or `/* */`) is text, not a parameter. The count follows mysql2, which
+  substitutes inside a double-quoted string and after `#` too: write string
+  literals with single quotes.
+- `bynk.mysql.sql_invalid` (a **warning**): the statement does not parse, or is more
+  than one command. It is a warning because the parser is not MySQL's own (and
+  MariaDB has forms of its own); it never blocks a build.
+
+Nothing is checked against the tables the file defines. Without a `schema.sql`
+nothing is checked, and the typed reads are not checked either.
 
 ### SQL databases: `D1`
 

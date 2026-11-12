@@ -1010,6 +1010,12 @@ export function makeIntegrationEmail(): SendEmail & { sent: Record<string, unkno
  */
 export interface Hyperdrive {
   readonly connectionString: string;
+  /** A `MySql` instance's driver connects from the parts (Cloudflare's mysql2 guide); `password` is a secret. */
+  readonly host?: string;
+  readonly port?: number;
+  readonly user?: string;
+  readonly password?: string;
+  readonly database?: string;
 }
 
 /**
@@ -1022,7 +1028,7 @@ export function makeIntegrationHyperdrive(binding: string): Hyperdrive {
   return {
     get connectionString(): string {
       throw new globalThis.Error(
-        `bynk: Hyperdrive binding \`${binding}\` has no database in a test, which never reaches Postgres — add \`stub <Capability>.all(_, _) returns …\` (or \`first\` or \`run\`)`,
+        `bynk: Hyperdrive binding \`${binding}\` has no database in a test, which never reaches a database — add \`stub <Capability>.all(_, _) returns …\` (or \`first\` or \`run\`)`,
       );
     },
   };

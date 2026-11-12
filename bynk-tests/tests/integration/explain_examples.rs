@@ -63,10 +63,16 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// Explained codes that are **warnings**, which this gate cannot back: it compiles `bad/`
 /// and requires the code among its *errors*. Each is held by a positive fixture
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
-const WARNING_ONLY: &[(&str, &str)] = &[(
-    "bynk.postgres.sql_invalid",
-    "a warning (the parser is not Postgres' own); `positive/3321_postgres_sql_invalid` and `_in_transaction` hold it with `expected_warnings.txt`",
-)];
+const WARNING_ONLY: &[(&str, &str)] = &[
+    (
+        "bynk.postgres.sql_invalid",
+        "a warning (the parser is not Postgres' own); `positive/3321_postgres_sql_invalid` and `_in_transaction` hold it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.mysql.sql_invalid",
+        "a warning (the parser is not MySQL's own); `positive/3322_mysql_sql_invalid` holds it with `expected_warnings.txt`",
+    ),
+];
 
 /// Explained codes whose example is not Bynk source, with the reason. Their
 /// examples show a lockfile, a manifest entry or a command line, which no compile can check.

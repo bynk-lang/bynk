@@ -999,3 +999,151 @@ fn moving_between_adopted_configs_leaves_no_orphan() {
             .adopted
     );
 }
+
+// ---- #3322: a `MySql` instance's config ----
+
+const MYSQL_STRING: &str =
+    "mysql://svc_user:Hunter2-s3cret%21@db-host.internal.example:3307/shopdb?ssl-mode=REQUIRED";
+
+fn mysql_shop(tls: Option<&str>) -> BTreeMap<String, Resources> {
+    let mut resources = shop();
+    let decl = &mut resources.get_mut("shop").unwrap().hyperdrive[0];
+    decl.kind = HyperdriveKind::MySql;
+    decl.tls = tls.map(str::to_string);
+    resources
+}
+
+fn mysql_wants(raw: &'static str, tls: Option<&str>) -> Result<Wants, Vec<String>> {
+    resolve_wants(
+        &names(&["shop"]),
+        &mysql_shop(tls),
+        &settings(&[("Main", Some("MAIN_DATABASE_URL"), &[])]),
+        "default",
+        &lookup(Some(raw)),
+    )
+}
+
+#[test]
+fn a_mysql_string_reads_with_its_own_scheme_and_port() {
+    let origin = parse_connection_string_for(HyperdriveKind::MySql, MYSQL_STRING).unwrap();
+    assert_eq!(
+        (origin.scheme.as_str(), origin.host.as_str(), origin.port),
+        ("mysql", FAKE_HOST, 3307)
+    );
+    assert_eq!(
+        (origin.database.as_str(), origin.user.as_str()),
+        ("shopdb", "svc_user")
+    );
+    assert_eq!(origin.password.expose(), PASSWORD);
+    let default_port =
+        parse_connection_string_for(HyperdriveKind::MySql, "mysql://u:p@h/d").unwrap();
+    assert_eq!(default_port.port, 3306);
+    // A string for the other database is refused, naming the right scheme.
+    assert_eq!(
+        parse_connection_string_for(HyperdriveKind::MySql, STRING).err(),
+        Some(ParseProblem::Scheme)
+    );
+    let problems = mysql_wants(STRING, None).unwrap_err();
+    assert!(
+        problems[0].contains("MySQL connection URL (`mysql://"),
+        "{}",
+        problems[0]
+    );
+    assert!(
+        problems[0].contains("must start with `mysql://`"),
+        "{}",
+        problems[0]
+    );
+    assert!(
+        problems[0].contains("`MySql` capability"),
+        "{}",
+        problems[0]
+    );
+    assert_clean("a refused string's message", &problems.join("\n"));
+}
+
+#[test]
+fn a_mysql_config_is_made_with_the_required_tls_mode_and_a_postgres_one_with_none() {
+    let wants = mysql_wants(MYSQL_STRING, Some("required")).unwrap();
+    let Want::Connection { origin, .. } =
+        &wants[&("shop".to_string(), "HYPERDRIVE_MAIN".to_string())]
+    else {
+        panic!("a connection");
+    };
+    let body = origin_json("shop-main", origin);
+    assert_eq!(body["origin"]["scheme"], "mysql");
+    assert_eq!(body["mtls"]["sslmode"], "REQUIRED");
+    // The default is the same as `required`.
+    assert!(mysql_wants(MYSQL_STRING, None).is_ok());
+    let pg = parse_connection_string(STRING).unwrap();
+    assert!(origin_json("shop-main", &pg).get("mtls").is_none());
+}
+
+#[test]
+fn a_verify_mode_is_refused_for_a_made_config_and_adopted_ones_are_not() {
+    for (mode, sslmode) in [
+        ("verify-ca", "VERIFY_CA"),
+        ("verify-identity", "VERIFY_IDENTITY"),
+    ] {
+        let problems = mysql_wants(MYSQL_STRING, Some(mode)).unwrap_err();
+        assert!(
+            problems[0].contains(&format!("@tls(\"{mode}\")")),
+            "{}",
+            problems[0]
+        );
+        assert!(
+            problems[0].contains(sslmode) && problems[0].contains("config_id"),
+            "{}",
+            problems[0]
+        );
+        assert_clean("the verify message", &problems.join("\n"));
+        // An adopted config has its TLS settings already: nothing to refuse.
+        let adopted = resolve_wants(
+            &names(&["shop"]),
+            &mysql_shop(Some(mode)),
+            &settings(&[("Main", None, &[("default", "cfg-1")])]),
+            "default",
+            &lookup(None),
+        );
+        assert!(adopted.is_ok(), "{mode}");
+    }
+}
+
+#[test]
+fn a_mysql_string_is_in_no_ledger_no_generated_file_and_no_plan() {
+    let (root, lock_path, config) = scratch("mysql-r16");
+    let resources = mysql_shop(Some("required"));
+    let order = names(&["shop"]);
+    let api = Fake::default();
+    let mut lock = DeployLock::default();
+    let wants = mysql_wants(MYSQL_STRING, Some("required")).unwrap();
+    provision(
+        &run_with(&wants, &api),
+        "shop",
+        &resources["shop"],
+        &mut lock,
+        &lock_path,
+        &config,
+        "default",
+    )
+    .unwrap();
+    assert_clean("the ledger", &std::fs::read_to_string(&lock_path).unwrap());
+    assert_clean("wrangler.toml", &std::fs::read_to_string(&config).unwrap());
+    for entry in std::fs::read_dir(&root).unwrap().flatten() {
+        assert_clean(
+            &entry.path().display().to_string(),
+            &std::fs::read_to_string(entry.path()).unwrap(),
+        );
+    }
+    let plan =
+        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    assert_clean("the plan", &plan_report(&plan, DeployFormat::Short));
+    assert_clean("the plan JSON", &plan_report(&plan, DeployFormat::Json));
+    assert_clean("Debug of the wants", &format!("{wants:?}"));
+    let Want::Connection { origin, .. } =
+        &wants[&("shop".to_string(), "HYPERDRIVE_MAIN".to_string())]
+    else {
+        panic!("a connection");
+    };
+    assert_clean("Debug of an origin", &format!("{origin:?}"));
+}

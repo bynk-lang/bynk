@@ -601,6 +601,17 @@ pub fn instantiate_provider_ts_expr(
             args.push(bynk_ts::TsExpr::Ident("__pgExecute".to_string()));
             return expr;
         }
+        // Hyperdrive H5 (#3322): a `MySql` instance the same, with mysql2's.
+        if inst.is_mysql()
+            && let (ProviderNamespaces::Workers { .. }, bynk_ts::TsExpr::New { args, .. }) =
+                (namespaces, &mut expr)
+        {
+            args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                inst.binding.clone(),
+            )));
+            args.push(bynk_ts::TsExpr::Ident("__mysqlExecute".to_string()));
+            return expr;
+        }
         // Review of #1968: anything but a construction to append the binding
         // to would quietly read the default `KV`, so two instances would share
         // a namespace. The one other shape is a test module's placeholder for

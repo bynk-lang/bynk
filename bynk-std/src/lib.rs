@@ -148,6 +148,17 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
         runtime_module: "postgres",
         reached_by: Reach::CapabilityInstance("Postgres"),
     },
+    // Hyperdrive H5 (#3322): `mysql.ts` is the driver seam of `MySql`, handed to
+    // the binding by a Worker's compose, so only a Worker with a `MySql`
+    // instance carries the package. Cloudflare's mysql2 guide needs 3.13.0 or
+    // later (with `disableEval: true`); this is the newest release that was
+    // more than a month old when H5 was cut.
+    FirstPartyNpm {
+        package: "mysql2",
+        version: "3.24.6",
+        runtime_module: "mysql",
+        reached_by: Reach::CapabilityInstance("MySql"),
+    },
     // Hyperdrive H4 (#3321): `pglite.ts` is the opt-in `Postgres` test double
     // (`[test] postgres = "pglite"`), so only a project that opts in carries
     // the package, and only into a test build: the harness is the one place
@@ -640,6 +651,26 @@ pub const EMAIL_BINDING_PREFIX: &str = "EMAIL";
 /// `[[hyperdrive]]` entry whose `id` `bynk deploy` makes or adopts (#3319).
 pub const POSTGRES_BINDING_PREFIX: &str = "HYPERDRIVE";
 
+/// The Worker binding prefix of a `MySql` instance (Hyperdrive H5, #3322, ADR
+/// 0799 D): the same as `Postgres`'s, since both are a `[[hyperdrive]]` entry
+/// and the deploy path is one. `capability Legacy = MySql` binds as
+/// `HYPERDRIVE_LEGACY`.
+pub const MYSQL_BINDING_PREFIX: &str = POSTGRES_BINDING_PREFIX;
+
+/// The one option of a `MySql` instance: the TLS mode of the connection from
+/// Hyperdrive to the database (#3322, DECISION B).
+pub const MYSQL_TLS_OPTION: &str = "tls";
+
+/// The TLS modes `@tls("…")` takes, each with the `sslmode` Cloudflare's
+/// Hyperdrive API spells it as. `required` is the default and needs no CA
+/// certificate; the two `verify` modes check the server's certificate against a
+/// CA certificate the account holds.
+pub const MYSQL_TLS_MODES: &[(&str, &str)] = &[
+    ("required", "REQUIRED"),
+    ("verify-ca", "VERIFY_CA"),
+    ("verify-identity", "VERIFY_IDENTITY"),
+];
+
 /// The option of an `Email` instance that pins every message to one recipient
 /// (`destination_address`).
 pub const EMAIL_TO_OPTION: &str = "to";
@@ -751,6 +782,7 @@ pub const UNITS: &[Unit] = &[
             "WorkersStoredSecret",
             "WorkersEmail",
             "WorkersPostgres",
+            "WorkersMySql",
         ],
         stability: Stability::Stable,
         // Interop I5 (#1972): a Service Binding to a non-Bynk Worker is new
@@ -782,6 +814,7 @@ pub const UNITS: &[Unit] = &[
             "StoredSecret",
             "Email",
             "Postgres",
+            "MySql",
             "Kv.getWith",
             "Kv.putWith",
             "Kv.getBytes",
@@ -794,6 +827,7 @@ pub const UNITS: &[Unit] = &[
             "SqlError",
             "EmailError",
             "PgError",
+            "MySqlError",
         ],
         instantiable: &[
             Instantiable {
@@ -897,6 +931,16 @@ pub const UNITS: &[Unit] = &[
                 capability: "Postgres",
                 binding_prefix: POSTGRES_BINDING_PREFIX,
                 options: &[],
+                required: &[],
+                bare: false,
+                linked: false,
+            },
+            // Hyperdrive H5 (#3322): `@tls("…")` from a closed set, optional
+            // (`required` when absent); every use a named instance.
+            Instantiable {
+                capability: "MySql",
+                binding_prefix: MYSQL_BINDING_PREFIX,
+                options: &[(MYSQL_TLS_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
                 linked: false,
@@ -1526,7 +1570,8 @@ mod tests {
                 ("bynk.cloudflare", "EdgeCache", "EDGE_CACHE"),
                 ("bynk.cloudflare", "StoredSecret", "SECRET"),
                 ("bynk.cloudflare", "Email", "EMAIL"),
-                ("bynk.cloudflare", "Postgres", "HYPERDRIVE")
+                ("bynk.cloudflare", "Postgres", "HYPERDRIVE"),
+                ("bynk.cloudflare", "MySql", "HYPERDRIVE")
             ]
         );
         let kv = instantiable("bynk.cloudflare", "Kv").expect("Kv is instantiable");
@@ -1582,6 +1627,13 @@ mod tests {
         assert!(email.required.is_empty() && !email.bare && !email.linked);
         // Hyperdrive H1 (#3318): a Postgres instance takes no option, is
         // never bare, and is not linked.
+        // Hyperdrive H5 (#3322): a MySql instance takes only `@tls`, is never
+        // bare, is not linked, and shares Postgres's binding prefix.
+        let my = instantiable("bynk.cloudflare", "MySql").expect("MySql is instantiable");
+        assert_eq!(my.option_names().collect::<Vec<_>>(), ["tls"]);
+        assert!(my.required.is_empty() && !my.bare && !my.linked);
+        assert_eq!(MYSQL_BINDING_PREFIX, POSTGRES_BINDING_PREFIX);
+        assert_eq!(MYSQL_TLS_MODES[0], ("required", "REQUIRED"));
         let pg = instantiable("bynk.cloudflare", "Postgres").expect("Postgres is instantiable");
         assert!(pg.options.is_empty() && pg.required.is_empty() && !pg.bare && !pg.linked);
         for u in UNITS {
@@ -1636,6 +1688,7 @@ mod tests {
                 "bynk.cloudflare.StoredSecret",
                 "bynk.cloudflare.Email",
                 "bynk.cloudflare.Postgres",
+                "bynk.cloudflare.MySql",
                 "bynk.cloudflare.Kv.getWith",
                 "bynk.cloudflare.Kv.putWith",
                 "bynk.cloudflare.Kv.getBytes",
@@ -1659,6 +1712,7 @@ mod tests {
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
                 ("bynk.cloudflare", "PgError"),
+                ("bynk.cloudflare", "MySqlError"),
                 ("bynk.crypto", "Digest"),
                 ("bynk.crypto", "Signature"),
                 ("bynk.crypto", "CryptoError"),

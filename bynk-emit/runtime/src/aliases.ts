@@ -9,6 +9,7 @@ import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySign
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
+import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./pglite.ts";
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
@@ -39,6 +40,7 @@ export {
   wireSet as __wireSet,
   WorkersConnection as __WorkersConnection,
   handleEmail as __handleEmail,
+  mysqlExecute as __mysqlExecute,
   makeIntegrationPgliteBinding as __makeIntegrationPgliteBinding,
   makeIntegrationPostgres as __makeIntegrationPostgres,
   pgExecute as __pgExecute,
@@ -134,6 +136,12 @@ export {
 };
 export type {
   InboundMessage as __InboundMessage,
+  MySqlEndpoint as __MySqlEndpoint,
+  MySqlExecute as __MySqlExecute,
+  MySqlOutcome as __MySqlOutcome,
+  MySqlParam as __MySqlParam,
+  MySqlStatementParam as __MySqlStatementParam,
+  MySqlTxOutcome as __MySqlTxOutcome,
   PgExecute as __PgExecute,
   PgOutcome as __PgOutcome,
   PgParam as __PgParam,

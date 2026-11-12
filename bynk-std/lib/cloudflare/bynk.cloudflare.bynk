@@ -13,6 +13,7 @@ adapter bynk.cloudflare {
 		StoredSecret,
 		Email,
 		Postgres,
+		MySql,
 	}
 	exports transparent {
 		KvExpiration,
@@ -52,6 +53,11 @@ adapter bynk.cloudflare {
 		PgRun,
 		PgStatement,
 		PgReadError,
+		MySqlValue,
+		MySqlError,
+		MySqlRun,
+		MySqlStatement,
+		MySqlReadError,
 	}
 
 	---
@@ -551,6 +557,94 @@ adapter bynk.cloudflare {
 		| PgDecode(error: DecodeError)
 
 	---
+	A value bound to a `?` parameter of a `MySql` statement. `MySqlInteger`
+	binds a signed whole number and `MySqlReal` a float; `MySqlText` binds text
+	and `MySqlBytes` bytes. `MySqlBoolean` binds a flag as `1` or `0`, which is
+	what a `TINYINT(1)` column holds.
+
+	`MySqlUnsigned` binds an unsigned integer as its decimal digits, since an
+	`Int` is signed and a `BIGINT UNSIGNED` reaches past it; a value that is not
+	digits only is refused by the server. `MySqlDecimal` binds a `DECIMAL` as
+	text and `MySqlJson` binds JSON text for a `JSON` column, so neither loses a
+	digit to a float.
+
+	MySQL has two date and time types that Postgres does not, and Bynk does not
+	pretend they are one. `MySqlDateTime` binds the wall-clock text of a
+	`DATETIME` (`2026-11-12 09:30:00`), which has no time zone and is not an
+	instant. `MySqlTimestamp` binds an `Instant` as UTC text
+	(`2026-11-12 09:30:00.000`): right for a `DATETIME` column that holds UTC by
+	convention, and for a `TIMESTAMP` column only when the session's time zone is
+	UTC, since MySQL converts a `TIMESTAMP` through the session's zone.
+
+	The variants carry the `MySql` prefix so nothing collides with `PgValue`'s or
+	`SqlValue`'s.
+	---
+	type MySqlValue =
+		| MySqlNull
+		| MySqlInteger(value: Int)
+		| MySqlUnsigned(value: String)
+		| MySqlReal(value: Float)
+		| MySqlText(value: String)
+		| MySqlBytes(value: Bytes)
+		| MySqlBoolean(value: Bool)
+		| MySqlTimestamp(value: Instant)
+		| MySqlDateTime(value: String)
+		| MySqlJson(value: String)
+		| MySqlDecimal(value: String)
+
+	---
+	What a `MySql.run` changed: `rowCount` is the rows the statement affected
+	(for a `SELECT`, returned), and `insertId` the `AUTO_INCREMENT` id of the
+	row it inserted, `0` when it inserted none. MySQL has no `RETURNING`, so
+	`insertId` is how a handler learns the key of the row it just wrote. An id
+	past 2^53 reads as `0`.
+	---
+	type MySqlRun = {
+		rowCount: Int,
+		insertId: Int,
+	}
+
+	---
+	Why a `MySql` statement failed, keyed on MySQL's error number. `MySqlConstraint`
+	is an integrity-constraint violation (`1062` duplicate key, `1048` a column
+	that cannot be null, `1452` and `1451` a foreign key, `3819` a check), an
+	outcome a handler answers (with a `409`, say). `MySqlSerialization` is a
+	deadlock (`1213`) or a lock wait timeout (`1205`), which a retry may clear.
+	`MySqlConnection` is a connection that could not be made or was lost; its
+	message names the driver's code and never the host, the user or the
+	password. `MySqlFailed` is anything else, with its error number (`0` when the
+	driver reported none) and the database's message. MySQL has further failure
+	kinds, so a `match` over this type needs a wildcard. The variants carry the
+	`MySql` prefix because `Constraint` and `Failed` are `SqlError`'s.
+	---
+	type MySqlError =
+		| MySqlConstraint(code: Int, message: String)
+		| MySqlSerialization(code: Int, message: String)
+		| MySqlConnection(message: String)
+		| MySqlFailed(code: Int, message: String)
+
+	---
+	One statement of a `MySql.transaction`: its SQL, a string literal, and its
+	positional parameters (`?`). It stays where it is built: it is never stored,
+	sent or decoded, since one from outside would carry SQL that was never a
+	literal.
+	---
+	type MySqlStatement = {
+		sql: String,
+		params: List[MySqlValue],
+	}
+
+	---
+	Why a typed `MySql` read (`select[T]`, `firstAs[T]`) failed: `MySqlSql` is
+	the statement's own failure, `MySqlDecode` a row that did not fit `T` (a
+	column whose value disagrees with its field's type). The variants carry the
+	`MySql` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+	---
+	type MySqlReadError =
+		| MySqlSql(error: MySqlError)
+		| MySqlDecode(error: DecodeError)
+
+	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with
 	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -883,6 +977,63 @@ adapter bynk.cloudflare {
 		fn transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]
 	}
 
+	---
+	A MySQL (or MariaDB) database reached through Cloudflare Hyperdrive, over
+	mysql2: SQL text and positional parameters (`?`) bound from `MySqlValue`s.
+	The SQL is a string literal, so data reaches a statement only as a
+	parameter. Used only through a named instance, `capability Legacy = MySql`,
+	which binds as `HYPERDRIVE_LEGACY`, a `[[hyperdrive]]` entry; a bare
+	`given MySql` names no database and is refused. Experimental.
+
+	`@tls("…")` sets how Hyperdrive secures its connection to the database:
+	`"required"` (the default), `"verify-ca"` or `"verify-identity"`. Anything
+	else is refused. The Worker's own connection to Hyperdrive is not part of
+	it. `bynk deploy` sends the mode with the config it makes; the two `verify`
+	modes need a CA certificate the account holds, which `bynk deploy` does not
+	upload, so such an instance takes a config that exists (`config_id` in
+	`[deploy.hyperdrive.Legacy]`).
+
+	Deploy and `bynk dev` work as for `Postgres`: the connection string is
+	named by `[deploy.hyperdrive.Legacy] connection_env` in `bynk.toml` and is a
+	secret, a `mysql://user:password@host:3306/database` URL. A statement's
+	parameters are substituted by the driver as escaped literals (mysql2's
+	`query`) and not sent as a prepared statement, so `LIMIT ?, ?` works and a
+	statement survives Hyperdrive's transaction pooling. `??` (mysql2's
+	identifier placeholder) is not supported.
+
+	Rows come back as JSON text for `Json.decode`: `all` gives every row as an
+	array of objects keyed by column name, `first` the first row as one object,
+	or `None` when there is none. A `BIGINT` (signed or unsigned) and a `DECIMAL`
+	arrive as strings, so nothing past 2^53 is lost; a `TINYINT(1)` arrives as
+	`true` or `false` (any other `TINYINT` as a number); a `BLOB` as base64; a
+	`JSON` column nested. `DATETIME`, `TIMESTAMP` and `DATE` arrive as the
+	server's text, `2026-11-12 09:30:00`, with no zone on it: a `String` field
+	reads it and an `Instant` field refuses it.
+
+	`select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+	argument is the statement from `FROM` on, a string literal that must not
+	itself begin with `SELECT`, and the compiler writes the column list from
+	`T`'s field names (each quoted with backticks, an embedded backtick
+	doubled), runs the statement and decodes the rows. `select` gives
+	`Result[List[T], MySqlReadError]`, `firstAs` `Result[Option[T],
+	MySqlReadError]`.
+
+	`transaction` runs its statements in order on one connection, in one
+	transaction: all apply, or none do and the result is the failing
+	statement's error. It runs a fixed list; a read that decides a later write
+	needs an interactive transaction, which this does not offer. `run`
+	executes a write and reports the rows it changed and the id it inserted.
+	Every operation gives a `MySqlError` rather than faulting. Each statement
+	uses its own connection, and Cloudflare allows six simultaneous connections
+	per Worker invocation.
+	---
+	capability MySql {
+		fn all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]
+		fn first(sql: String, params: List[MySqlValue]) -> Effect[Result[Option[String], MySqlError]]
+		fn run(sql: String, params: List[MySqlValue]) -> Effect[Result[MySqlRun, MySqlError]]
+		fn transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]
+	}
+
 	provides Kv = WorkersKv
 
 	provides Service = WorkersService
@@ -906,4 +1057,6 @@ adapter bynk.cloudflare {
 	provides Email = WorkersEmail
 
 	provides Postgres = WorkersPostgres
+
+	provides MySql = WorkersMySql
 }

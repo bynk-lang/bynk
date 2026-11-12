@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError }
+
+capability Legacy = MySql
+
+service probe {
+  on call(table: String) -> Effect[Result[String, MySqlError]] given Legacy {
+    Legacy.all("select * from " + table, [])
+  }
+}

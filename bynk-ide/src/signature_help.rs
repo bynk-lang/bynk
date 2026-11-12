@@ -343,7 +343,8 @@ fn resolve_qualified_from(
 /// #2865: the signature of `D1.select[T]` / `D1.firstAs[T]`, compiler-lowered
 /// over `all`/`first` (so not declared operations of the capability).
 /// Hyperdrive H3 (#3320): and of `Postgres`' (`base`), whose parameters are
-/// `PgValue`s and whose failure is a `PgReadError`.
+/// `PgValue`s and whose failure is a `PgReadError`; H5 (#3322): and of
+/// `MySql`'s, with `MySqlValue`s and a `MySqlReadError`.
 pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
     match (base, member) {
         ("D1", "select") => Some(
@@ -358,12 +359,18 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
         ("Postgres", "firstAs") => Some(
             "firstAs[T](tail: String, params: List[PgValue]) -> Effect[Result[Option[T], PgReadError]]",
         ),
+        ("MySql", "select") => Some(
+            "select[T](tail: String, params: List[MySqlValue]) -> Effect[Result[List[T], MySqlReadError]]",
+        ),
+        ("MySql", "firstAs") => Some(
+            "firstAs[T](tail: String, params: List[MySqlValue]) -> Effect[Result[Option[T], MySqlReadError]]",
+        ),
         _ => None,
     }
 }
 
 /// The bases whose derived instances have the compiler-lowered typed reads.
-pub(crate) const TYPED_READ_BASES: [&str; 2] = ["D1", "Postgres"];
+pub(crate) const TYPED_READ_BASES: [&str; 3] = ["D1", "Postgres", "MySql"];
 
 /// Whether `label` is the typed-read signature of the member `callee` names, so a
 /// user's own `select` operation is never taken for one.

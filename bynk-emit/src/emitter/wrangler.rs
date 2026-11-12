@@ -397,7 +397,9 @@ pub fn emit_wrangler_toml(
             BindingSource::StoredSecret { store, secret, .. } => {
                 stored_secret_block(name, store, secret)
             }
-            BindingSource::Postgres { .. } => hyperdrive_block(name, &binding.name),
+            BindingSource::Postgres { .. } | BindingSource::MySql { .. } => {
+                hyperdrive_block(name, &binding.name)
+            }
             BindingSource::Email { .. } => email_block(name, &binding.source),
             // #3300: a one-per-Worker capability's plain table, holding only
             // its fixed binding name (`[version_metadata]`).
@@ -613,7 +615,12 @@ pub fn worker_bindings(
     bindings.extend(
         instances
             .iter()
-            .filter(|b| matches!(b.source, BindingSource::Postgres { .. }))
+            .filter(|b| {
+                matches!(
+                    b.source,
+                    BindingSource::Postgres { .. } | BindingSource::MySql { .. }
+                )
+            })
             .cloned(),
     );
     // #3302: the outbound email bindings, after the Secrets Store secrets.
@@ -759,7 +766,7 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",
         BindingSource::Email { .. } => "__SendEmail",
-        BindingSource::Postgres { .. } => "__Hyperdrive",
+        BindingSource::Postgres { .. } | BindingSource::MySql { .. } => "__Hyperdrive",
         BindingSource::Singleton { capability } => match capability.as_str() {
             "Version" => "__WorkerVersionMetadata",
             other => unreachable!("singleton `{other}` has no `env` type"),
@@ -961,6 +968,42 @@ pub fn analytics_dataset_name(worker: &str, binding: &str) -> String {
 /// `D1` databases' migrations, one subdirectory per database, as the
 /// project's own `migrations/` folder does.
 pub const D1_MIGRATIONS_DIR: &str = "migrations";
+
+/// Hyperdrive H5 (#3322): the file beside a Worker's `wrangler.toml` that says
+/// which of its `[[hyperdrive]]` bindings are MySQL, and each one's `@tls`
+/// mode. `wrangler.toml`'s stanza names neither (a Hyperdrive config's database
+/// kind and TLS mode are the config's, not the binding's), and `bynk deploy`
+/// needs both to make the config. It is written only for a Worker with a
+/// `MySql` instance, so a `Postgres`-only project's output is unchanged, and it
+/// holds names and modes, never a connection string.
+pub const HYPERDRIVE_MANIFEST: &str = "bynk-hyperdrive.json";
+
+/// The manifest's version. A reader refuses one it does not know.
+pub const HYPERDRIVE_MANIFEST_VERSION: u32 = 1;
+
+/// The `bynk-hyperdrive.json` of a Worker with `bindings`, or `None` when it
+/// has no `MySql` instance. The `tls` field is the `@tls` mode as the source
+/// wrote it (`required` when it wrote none).
+pub fn emit_hyperdrive_manifest(bindings: &[WorkerBinding]) -> Option<String> {
+    let entries: Vec<String> = bindings
+        .iter()
+        .filter_map(|b| match &b.source {
+            BindingSource::MySql { tls, .. } => Some(format!(
+                "    {{ \"binding\": {}, \"kind\": \"mysql\", \"tls\": {} }}",
+                bynk_project::json_string(&b.name),
+                bynk_project::json_string(tls.as_deref().unwrap_or("required")),
+            )),
+            _ => None,
+        })
+        .collect();
+    if entries.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{{\n  \"version\": {HYPERDRIVE_MANIFEST_VERSION},\n  \"hyperdrive\": [\n{}\n  ]\n}}\n",
+        entries.join(",\n")
+    ))
+}
 
 /// P4a (#2602): the account-facing name of a `D1` instance's database. It
 /// moved to the checker with P4b (#2608), which names each instance's
@@ -1743,5 +1786,63 @@ mod binding_tests {
             }
         );
         assert_eq!(later.source, BindingSource::Kv);
+    }
+}
+
+#[cfg(test)]
+mod hyperdrive_manifest_tests {
+    use super::*;
+
+    fn binding(name: &str, source: BindingSource) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    /// Hyperdrive H5 (#3322): the manifest lists the `MySql` bindings with their
+    /// mode (`required` when none was written), and a Worker with only a
+    /// `Postgres` one gets no file, so its output is unchanged.
+    #[test]
+    fn the_manifest_lists_mysql_bindings_only() {
+        let postgres = binding(
+            "HYPERDRIVE_MAIN",
+            BindingSource::Postgres {
+                capability: "Main".to_string(),
+            },
+        );
+        assert_eq!(
+            emit_hyperdrive_manifest(std::slice::from_ref(&postgres)),
+            None
+        );
+        let bindings = [
+            postgres,
+            binding(
+                "HYPERDRIVE_LEGACY",
+                BindingSource::MySql {
+                    capability: "Legacy".to_string(),
+                    tls: Some("verify-identity".to_string()),
+                },
+            ),
+            binding(
+                "HYPERDRIVE_OTHER",
+                BindingSource::MySql {
+                    capability: "Other".to_string(),
+                    tls: None,
+                },
+            ),
+        ];
+        let text = emit_hyperdrive_manifest(&bindings).expect("a MySql binding");
+        assert!(
+            text.contains(
+                r#""binding": "HYPERDRIVE_LEGACY", "kind": "mysql", "tls": "verify-identity""#
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(r#""binding": "HYPERDRIVE_OTHER", "kind": "mysql", "tls": "required""#),
+            "{text}"
+        );
+        assert!(!text.contains("HYPERDRIVE_MAIN"), "{text}");
     }
 }

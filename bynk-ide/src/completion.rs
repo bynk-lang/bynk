@@ -4898,7 +4898,8 @@ fn Box.size(self) -> Int { 1 }
                 "EdgeCache",
                 "StoredSecret",
                 "Email",
-                "Postgres"
+                "Postgres",
+                "MySql"
             ]
         );
         let narrowed: Vec<String> = instance_declaration_completions("capability L = Ra")
@@ -4929,6 +4930,8 @@ fn Box.size(self) -> Int { 1 }
         assert!(instance_declaration_completions("capability Mail = Email ").is_empty());
         // #3318: nor does a `Postgres`, which takes no option.
         assert!(instance_declaration_completions("capability Main = Postgres ").is_empty());
+        // #3322: nor does a `MySql`, whose one option, `@tls`, is optional.
+        assert!(instance_declaration_completions("capability Legacy = MySql ").is_empty());
         assert!(instance_declaration_completions("capability Edge = EdgeCache ").is_empty());
         assert!(instance_declaration_completions("capability L = RateLimit @limit(1) ").is_empty());
         assert!(instance_declaration_completions("let x = R").is_empty());

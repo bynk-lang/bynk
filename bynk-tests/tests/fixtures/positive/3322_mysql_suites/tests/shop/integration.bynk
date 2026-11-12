@@ -1,0 +1,13 @@
+// At `integration` each participant's Hyperdrive binding faults, naming itself,
+// until a case stubs the instance: a test never reaches MySQL.
+suite shop.orders as integration {
+	case "a stub answers" {
+		stub Legacy.run(_, _) returns Err(MySqlConstraint(1062, "dup"))
+		let r <- api.POST("/orders") by Visitor
+		expect r is Ok("duplicate")
+	}
+
+	case "an unstubbed operation faults" {
+		expect api.POST("/orders") by Visitor faults
+	}
+}

@@ -654,6 +654,10 @@ pub enum Callee {
         /// Hyperdrive H3 (#3320): the instance is a `Postgres` one, so the
         /// read decodes with Postgres' rules and fails as a `PgReadError`.
         pg: bool,
+        /// Hyperdrive H5 (#3322): the instance is a `MySql` one: the read
+        /// quotes columns with backticks, decodes MySQL's text forms (the
+        /// Postgres pass over `Int` fields) and fails as a `MySqlReadError`.
+        mysql: bool,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so

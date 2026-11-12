@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "hyperdrive": [
+    { "binding": "HYPERDRIVE_LEGACY", "kind": "mysql", "tls": "verify-identity" }
+  ]
+}

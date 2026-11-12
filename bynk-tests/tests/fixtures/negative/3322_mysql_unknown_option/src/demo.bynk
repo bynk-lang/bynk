@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk.cloudflare { MySql }
+
+capability Legacy = MySql @connection("mysql://db.example/shop")
+
+service probe {
+  on call() -> Effect[Int] given Legacy {
+    Effect.pure(0)
+  }
+}

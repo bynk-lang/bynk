@@ -1,0 +1,28 @@
+context shop.orders
+
+// Hyperdrive H5 (#3322): a `MySql` instance binds as `HYPERDRIVE_LEGACY`, a
+// `[[hyperdrive]]` entry, and the Worker's compose hands the binding mysql2's
+// driver. `@tls("verify-identity")` is read by `bynk deploy`, not the Worker.
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlRun, MySqlValue }
+
+capability Legacy = MySql @tls("verify-identity")
+
+service add {
+	on call(name: String) -> Effect[Result[MySqlRun, MySqlError]] given Legacy {
+		Legacy.run("insert into orders (name, flag, at) values (?, ?, ?)", [MySqlText(name), MySqlBoolean(true), MySqlDateTime("2026-11-12 09:30:00")])
+	}
+}
+
+service list {
+	on call() -> Effect[Result[String, MySqlError]] given Legacy {
+		Legacy.all("select id, name from orders where id > ?", [MySqlInteger(0)])
+	}
+}
+
+service find {
+	on call(id: Int) -> Effect[Result[Option[String], MySqlError]] given Legacy {
+		Legacy.first("select name from orders where id = ?", [MySqlInteger(id)])
+	}
+}

@@ -3663,6 +3663,20 @@ fn build_output(
                     &emitter::ClassTombstones::of(table),
                     d1_migrations,
                 );
+                // Hyperdrive H5 (#3322): which Hyperdrive bindings are MySQL, and
+                // their TLS modes, for `bynk deploy` (a Worker with no `MySql`
+                // instance gets no file).
+                if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(&bindings) {
+                    compiled.push(StagedFile {
+                        output_path: PathBuf::from(format!(
+                            "workers/{dashes}/{}",
+                            emitter::wrangler::HYPERDRIVE_MANIFEST
+                        )),
+                        document: Document::Json(manifest),
+                        source_map: None,
+                        debug_metadata: None,
+                    });
+                }
                 // P4b (#2608): each `D1` database's migrations, beside the
                 // `wrangler.toml` whose `migrations_dir` names them.
                 for binding in &bindings {

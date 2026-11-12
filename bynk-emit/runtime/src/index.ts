@@ -23,6 +23,7 @@ export * from "./http.ts";
 export * from "./queue.ts";
 export * from "./email.ts";
 export * from "./postgres.ts";
+export * from "./mysql.ts";
 export * from "./pglite.ts";
 export * from "./agent.ts";
 export * from "./auth.ts";

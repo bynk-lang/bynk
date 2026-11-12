@@ -250,6 +250,10 @@
             "link": "/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/"
           },
           {
+            "label": "Connect an existing MySQL database",
+            "link": "/book/guides/effects-and-capabilities/connect-an-existing-mysql-database/"
+          },
+          {
             "label": "Apply webhook events that arrive late, twice or out of order",
             "link": "/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/"
           },

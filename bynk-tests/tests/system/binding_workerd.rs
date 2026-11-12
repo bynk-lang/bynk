@@ -252,7 +252,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Postgres\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -2285,6 +2285,361 @@ fn workers_postgres_runs_through_hyperdrive_on_workerd() {
     // host it cannot reach, the local test string's, which is workerd's
     // output and not Bynk's.)
     for secret in ["smoke-pw-4711", "refused-pw-9001", "nowhere-pw-9002"] {
+        assert!(
+            !log.contains(secret),
+            "the wrangler log holds `{secret}`:\n{log}"
+        );
+    }
+}
+
+// ---- Hyperdrive H5 (#3322): `MySql` through `wrangler dev` ----
+
+/// A MariaDB server of the smoke's own, in a scratch directory, on a free port.
+/// Absent when no server binaries are installed, and then the smoke skips (or
+/// fails under `BYNK_REQUIRE_MYSQL`). It runs with `--skip-grant-tables`, so any
+/// user and password are accepted and the connection string still carries both,
+/// as a real one does.
+struct LocalMySql {
+    dir: std::path::PathBuf,
+    port: u16,
+    server: Option<std::process::Child>,
+}
+
+const REQUIRE_MYSQL_ENV: &str = "BYNK_REQUIRE_MYSQL";
+
+impl LocalMySql {
+    fn find(names: &[&str]) -> Option<std::path::PathBuf> {
+        let path = std::env::var_os("PATH")?;
+        std::env::split_paths(&path)
+            .chain(["/usr/sbin", "/usr/bin"].map(std::path::PathBuf::from))
+            .find_map(|dir| names.iter().map(|n| dir.join(n)).find(|p| p.is_file()))
+    }
+
+    /// A started server with a database `smoke`, or `None` when this machine
+    /// cannot run one.
+    fn start() -> Option<Self> {
+        let server_bin = Self::find(&["mariadbd", "mysqld"])?;
+        let install = Self::find(&["mariadb-install-db", "mysql_install_db"])?;
+        let client = Self::find(&["mariadb", "mysql"])?;
+        let dir = std::env::temp_dir().join(format!("bynk-mysql-smoke-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let data = dir.join("data");
+        fs::create_dir_all(&data).ok()?;
+        let installed = Command::new(&install)
+            .args(["--no-defaults", "--user=root", "--skip-test-db"])
+            .arg(format!("--datadir={}", data.display()))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()?
+            .success();
+        if !installed {
+            let _ = fs::remove_dir_all(&dir);
+            return None;
+        }
+        let socket = dir.join("mysql.sock");
+        let mut me = Self {
+            port: free_port(),
+            dir,
+            server: None,
+        };
+        me.server = Some(
+            Command::new(&server_bin)
+                .args(["--no-defaults", "--user=root", "--skip-grant-tables"])
+                .arg(format!("--datadir={}", data.display()))
+                .arg(format!("--socket={}", socket.display()))
+                .arg(format!("--port={}", me.port))
+                .arg("--bind-address=127.0.0.1")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .ok()?,
+        );
+        // Wait for the socket to answer, then make the database.
+        for _ in 0..100 {
+            let ok = Command::new(&client)
+                .args(["--no-defaults", "--user=root"])
+                .arg(format!("--socket={}", socket.display()))
+                .args(["-e", "create database if not exists smoke"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if ok {
+                return Some(me);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        None
+    }
+
+    /// A connection string for this server.
+    fn url(&self) -> String {
+        format!("mysql://smoke:smoke-pw-4712@127.0.0.1:{}/smoke", self.port)
+    }
+}
+
+impl Drop for LocalMySql {
+    fn drop(&mut self) {
+        if let Some(server) = self.server.as_mut() {
+            let _ = server.kill();
+            let _ = server.wait();
+        }
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// The `MySql` smoke's Worker: three instances, one per database the smoke
+/// reaches (a real one; a port nothing listens on; a host that does not
+/// resolve), as the Postgres smoke has.
+const MYSQL_SOURCE: &str = r#"context my.smoke
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlValue, MySqlRun, MySqlStatement }
+
+capability Main = MySql
+capability Refused = MySql
+capability Nowhere = MySql
+
+fn why(e: MySqlError) -> String {
+	match e {
+		MySqlConstraint(code, _) => "constraint \(code)"
+		MySqlSerialization(code, _) => "serialization \(code)"
+		MySqlConnection(message) => "connection: \(message)"
+		MySqlFailed(code, message) => "failed [\(code)] \(message)"
+		_ => "other"
+	}
+}
+
+type Item = { name: String, big: String, flag: Bool }
+
+service api from http {
+	on GET("/ready") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("ready")
+	}
+
+	on GET("/setup") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let dropped <- Main.run("drop table if exists items", [])
+		let made <- Main.run("create table items (name varchar(64) primary key, big bigint unsigned not null, flag tinyint(1) not null, at datetime not null, doc json, raw blob, id int auto_increment unique)", [])
+		match made {
+			Ok(_) => Ok("made")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/insert/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("insert into items (name, big, flag, at, doc, raw) values (?, ?, ?, ?, ?, ?)", [MySqlText(name), MySqlUnsigned("18446744073709551615"), MySqlBoolean(true), MySqlDateTime("2026-01-02 03:04:05"), MySqlJson("{\"k\":[1,2]}"), MySqlBytes(Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))])
+		match ran {
+			Ok(r) => Ok("inserted \(r.rowCount) id \(r.insertId)")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/all") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.all("select name, big, flag, at, doc, raw from items order by name limit ?, ?", [MySqlInteger(0), MySqlInteger(10)])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/typed") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.select[Item]("FROM items WHERE name <> ? ORDER BY name", [MySqlText("zzz")])
+		match rows {
+			Ok(list) => Ok("typed \(list.length())")
+			Err(MySqlSql(e)) => Ok(why(e))
+			Err(MySqlDecode(_)) => Ok("decode")
+		}
+	}
+
+	on GET("/first/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let one <- Main.first("select name, big from items where name = ?", [MySqlText(name)])
+		match one {
+			Ok(Some(json)) => Ok(json)
+			Ok(None) => NotFound
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/update/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("update items set flag = ? where name = ?", [MySqlBoolean(false), MySqlText(name)])
+		match ran {
+			Ok(r) => Ok("updated \(r.rowCount)")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/tx") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let done <- Main.transaction([
+			MySqlStatement { sql: "insert into items (name, big, flag, at) values (?, 1, 0, '2026-01-02 03:04:05')", params: [MySqlText("t1")] },
+			MySqlStatement { sql: "insert into items (name, big, flag, at) values (?, 1, 0, '2026-01-02 03:04:05')", params: [MySqlText("a")] },
+		])
+		match done {
+			Ok(_) => Ok("applied")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/tx-count") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.first("select count(*) as n from items where name = ?", [MySqlText("t1")])
+		match rows {
+			Ok(Some(json)) => Ok(json)
+			Ok(None) => Ok("none")
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/bad") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.all("select * from no_such_table", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/refused") () -> Effect[HttpResult[String]] by Visitor given Refused {
+		let rows <- Refused.all("select 1", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+
+	on GET("/nowhere") () -> Effect[HttpResult[String]] by Visitor given Nowhere {
+		let rows <- Nowhere.all("select 1", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(e) => Ok(why(e))
+		}
+	}
+}
+"#;
+
+#[test]
+fn workers_mysql_runs_through_hyperdrive_on_workerd() {
+    let Some(mysql) = LocalMySql::start() else {
+        if require::is_required(REQUIRE_MYSQL_ENV) {
+            panic!("{REQUIRE_MYSQL_ENV} is set but no MySQL or MariaDB server could be started");
+        }
+        eprintln!(
+            "\n!!! MYSQL SMOKE SKIPPED !!!\nno MySQL or MariaDB server binaries (`mariadbd`, `mariadb-install-db`) were found, or one could not be started\n"
+        );
+        return;
+    };
+    let main = mysql.url();
+    let refused = "mysql://deadly:refused-pw-9003@127.0.0.1:1/db".to_string();
+    let nowhere = "mysql://ghost:nowhere-pw-9004@no-such-host.invalid:3306/db".to_string();
+    let prefix = "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_";
+    let env = [
+        (format!("{prefix}HYPERDRIVE_MAIN"), main.clone()),
+        (format!("{prefix}HYPERDRIVE_REFUSED"), refused.clone()),
+        (format!("{prefix}HYPERDRIVE_NOWHERE"), nowhere.clone()),
+    ];
+    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let Some((failures, log)) = run_smoke_with(
+        "my-smoke",
+        "my",
+        MYSQL_SOURCE,
+        &[],
+        // The first-party `mysql2` package, from the emitted `package.json`
+        // (ADR 0808): the Worker imports it, so its `node:*` imports must
+        // resolve under the emitted compatibility date, and `disableEval`
+        // must be enough for workerd.
+        &install_npm_dependencies,
+        "/ready",
+        FREE_PORTS,
+        &env,
+        &|port| {
+            let q = |text: &str| serde_json::to_string(text).unwrap();
+            let (made, duplicate, updated, none) = (
+                q("made"),
+                q("constraint 1062"),
+                q("updated 1"),
+                q("updated 0"),
+            );
+            let mut failures = check_steps(
+                port,
+                &[
+                    ("/setup", 200, &made),
+                    ("/insert/a", 200, &q("inserted 1 id 1")),
+                    ("/insert/b", 200, &q("inserted 1 id 2")),
+                    ("/first/zzz", 404, ""),
+                    ("/update/a", 200, &updated),
+                    ("/update/zzz", 200, &none),
+                    // A duplicate key is `MySqlConstraint` with MySQL's number.
+                    ("/insert/a", 200, &duplicate),
+                    ("/typed", 200, &q("typed 2")),
+                    // A transaction whose second statement fails applies
+                    // nothing: `t1` was rolled back.
+                    ("/tx", 200, &duplicate),
+                    ("/tx-count", 200, &q(r#"{"n":"0"}"#)),
+                ],
+            );
+            // The rows: a `BIGINT UNSIGNED` past 2^63 is text, a `TINYINT(1)` a
+            // flag, a `DATETIME` the server's text with no zone, a `JSON`
+            // column nested and a `BLOB` base64.
+            let all = q(
+                r#"[{"name":"a","big":"18446744073709551615","flag":false,"at":"2026-01-02 03:04:05","doc":{"k":[1,2]},"raw":"AP8H"},{"name":"b","big":"18446744073709551615","flag":true,"at":"2026-01-02 03:04:05","doc":{"k":[1,2]},"raw":"AP8H"}]"#,
+            );
+            match get(port, "/all") {
+                Ok((200, body)) if body == all => {}
+                other => failures.push(format!("/all: expected {all}, got {other:?}")),
+            }
+            match get(port, "/first/a") {
+                Ok((200, body))
+                    if unquote(&body) == r#"{"name":"a","big":"18446744073709551615"}"# => {}
+                other => failures.push(format!("/first/a: unexpected {other:?}")),
+            }
+            // An error in the statement itself is `MySqlFailed` with its
+            // number (1146, a missing table) and the database's message.
+            match get(port, "/bad") {
+                Ok((200, body)) if unquote(&body).starts_with("failed [1146]") => {}
+                other => failures.push(format!("/bad: expected `failed [1146] …`, got {other:?}")),
+            }
+            for (path, dead, secrets) in [
+                (
+                    "/refused",
+                    &refused,
+                    ["127.0.0.1:1", "deadly", "refused-pw-9003"],
+                ),
+                (
+                    "/nowhere",
+                    &nowhere,
+                    ["no-such-host", "ghost", "nowhere-pw-9004"],
+                ),
+            ] {
+                match get(port, path) {
+                    Ok((200, body)) => {
+                        let body = unquote(&body);
+                        if !body.starts_with("connection:") {
+                            failures.push(format!("{path}: not a `MySqlConnection`: {body}"));
+                        }
+                        for secret in secrets {
+                            if body.contains(secret) {
+                                failures.push(format!(
+                                    "{path}: the answer holds `{secret}` of the connection string: {body}"
+                                ));
+                            }
+                        }
+                        if body.contains(dead.as_str()) {
+                            failures.push(format!("{path}: the answer holds the whole string"));
+                        }
+                    }
+                    other => failures.push(format!("{path}: expected a 200 answer, got {other:?}")),
+                }
+            }
+            failures
+        },
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "`MySql` on workerd disagrees with the contract:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+    for secret in ["smoke-pw-4712", "refused-pw-9003", "nowhere-pw-9004"] {
         assert!(
             !log.contains(secret),
             "the wrangler log holds `{secret}`:\n{log}"

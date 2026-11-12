@@ -827,6 +827,19 @@ impl DerivedInstance {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Postgres"
     }
 
+    /// Whether this is a `MySql` instance (Hyperdrive H5, #3322).
+    pub fn is_mysql(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "MySql"
+    }
+
+    /// The TLS mode a `MySql` instance's `@tls("…")` names, or `None` when it
+    /// carries none (the default, `required`) or is another kind.
+    pub fn tls(&self) -> Option<&str> {
+        self.is_mysql()
+            .then(|| self.option(crate::firstparty::MYSQL_TLS_OPTION))
+            .flatten()
+    }
+
     /// Whether this is an `Email` instance (#3302).
     pub fn is_email(&self) -> bool {
         self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "Email"

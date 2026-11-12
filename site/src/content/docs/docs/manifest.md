@@ -584,7 +584,8 @@ repeat it.
 
 ## `[deploy]` and `[dev]`
 
-Where a `Postgres` instance (`capability Main = Postgres`) gets its connection
+Where a `Postgres` instance (`capability Main = Postgres`), or a `MySql` one
+(`capability Legacy = MySql`, with a `mysql://` URL), gets its connection
 string. A connection string is a secret and `bynk.toml` is committed, so neither
 table holds one: each names an **environment variable** to read it from, and a
 string written in place of a name is refused (without being printed). `Main` is the

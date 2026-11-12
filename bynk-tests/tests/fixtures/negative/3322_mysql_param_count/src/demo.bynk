@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlValue }
+
+capability Legacy = MySql
+
+service probe {
+  on call(id: Int) -> Effect[Result[String, MySqlError]] given Legacy {
+    Legacy.all("select name from orders where id = ? and qty > ? and note <> '?'", [MySqlInteger(id)])
+  }
+}

@@ -10,7 +10,7 @@
     "strict": true,
     "noImplicitAny": true,
     "types": ["node"],
-    "paths": { "postal-mime": ["./node_modules/postal-mime"], "postgres": ["./node_modules/postgres"], "@electric-sql/pglite": ["./node_modules/@electric-sql/pglite"] },
+    "paths": { "postal-mime": ["./node_modules/postal-mime"], "postgres": ["./node_modules/postgres"], "mysql2/promise": ["./node_modules/mysql2/promise"], "@electric-sql/pglite": ["./node_modules/@electric-sql/pglite"] },
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },

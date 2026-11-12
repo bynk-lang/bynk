@@ -1,0 +1,2 @@
+# The syntax finding is a warning: the parser is not MySQL's own.
+bynk.mysql.sql_invalid

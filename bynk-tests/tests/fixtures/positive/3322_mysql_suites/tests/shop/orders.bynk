@@ -1,0 +1,45 @@
+suite shop.orders
+
+case "every operation faults until it is stubbed" {
+	expect add.call("a") faults
+	expect list.call() faults
+	expect find.call(1) faults
+}
+
+case "a stub answers run, all and first, and expect called with reads the call" {
+	stub Legacy.run(_, _) returns Ok(MySqlRun { rowCount: 1, insertId: 41 })
+	stub Legacy.all(_, _) returns Ok("[{\"id\":\"9007199254740993\"}]")
+	stub Legacy.first(_, _) returns Ok(None)
+	let a <- add.call("a")
+	expect a == Ok(MySqlRun { rowCount: 1, insertId: 41 })
+	let l <- list.call()
+	expect l == Ok("[{\"id\":\"9007199254740993\"}]")
+	let f <- find.call(1)
+	expect f == Ok(None)
+	expect Legacy.run called once
+	expect Legacy.run called with sql == "insert into orders (name) values (?)"
+}
+
+case "a stub forces a constraint violation" {
+	stub Legacy.run(_, _) returns Err(MySqlConstraint(1062, "Duplicate entry 'a' for key 'name'"))
+	let a <- add.call("a")
+	expect a is Err(MySqlConstraint(1062, _))
+}
+
+case "a stub forces a deadlock or lock wait timeout" {
+	stub Legacy.all(_, _) returns Err(MySqlSerialization(1213, "Deadlock found when trying to get lock"))
+	let a <- list.call()
+	expect a is Err(MySqlSerialization(1213, _))
+}
+
+case "a stub forces a connection failure" {
+	stub Legacy.first(_, _) returns Err(MySqlConnection("could not reach the database (ECONNREFUSED)"))
+	let b <- find.call(2)
+	expect b is Err(MySqlConnection(_))
+}
+
+case "a stub forces any other failure" {
+	stub Legacy.run(_, _) returns Err(MySqlFailed(1146, "Table 'shop.orders' doesn't exist"))
+	let c <- add.call("a")
+	expect c is Err(MySqlFailed(1146, _))
+}
