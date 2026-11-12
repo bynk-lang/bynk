@@ -14,6 +14,9 @@ pub enum DeployFormat {
 #[derive(Debug, Clone, Default)]
 pub struct DeployOptions {
     pub dry_run: bool,
+    /// `--no-install` (or `BYNK_NO_INSTALL`): stop on a missing npm package
+    /// instead of installing it (#3350).
+    pub no_install: bool,
     pub format: DeployFormat,
     pub yes: bool,
     /// `--context NAME` — deploy this context alone, assuming the contexts it
@@ -592,7 +595,7 @@ pub fn run(
     if !workers::compile_once_reporting(
         project_root,
         &build_dir,
-        workers::Build::new(true, opts.dry_run),
+        workers::Build::new(true, opts.dry_run).no_install(opts.no_install),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;

@@ -53,6 +53,13 @@ compiler: in-process
 | **editor** *(optional)* | `bynk-lsp` | a note — editor features only |
 | **build-from-source** *(optional)* | a Rust toolchain | shown only inside the Bynk repo |
 
+The `test` and `deploy` blocks end with a `package manager` row, naming the tool
+`bynk test`, `bynk dev` and `bynk deploy` install a build's npm packages with and
+the rule that chose it, for example `pnpm (pnpm-lock.yaml is at the project root)`.
+It is informational: no package manager found is not a failure, since only a
+project with npm dependencies needs one. See [Installing npm
+packages](/docs/bynk-cli/#installing-npm-packages).
+
 A `node` below the floor (Node **22.13**: 22 is the oldest major still in
 support, and 22.13 its first release to load `node:sqlite` without a flag) is
 reported as a warning, `v20.11.0 below floor (≥ 22.13)`, with the fix to install a

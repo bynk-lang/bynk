@@ -10,3 +10,4 @@ compiler: in-process
     node — v22.13.0 (path)
     wrangler — missing
       ↳ fix: npm install -g wrangler@4
+    package manager — none found (none of npm, pnpm or bun is on PATH to install the generated project's npm packages; install Node.js (which ships npm), or set `[build] package_manager`)

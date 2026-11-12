@@ -23,6 +23,7 @@ pub mod discovery;
 pub mod doc_examples;
 pub mod fix;
 pub mod mutate;
+pub mod npm_install;
 pub mod output;
 pub mod probe;
 pub mod progress;

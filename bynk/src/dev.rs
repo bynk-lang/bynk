@@ -47,6 +47,9 @@ pub use crate::workers::{
 /// before we get here).
 #[derive(Debug, Clone, Default)]
 pub struct DevOptions {
+    /// `--no-install` (or `BYNK_NO_INSTALL`): stop on a missing npm package
+    /// instead of installing it (#3350).
+    pub no_install: bool,
     /// `--context NAME`, repeatable — which contexts' workers to serve. Empty
     /// serves **every** context in the project, wired (ADR 0096 D3 superseded).
     pub contexts: Vec<String>,
@@ -481,7 +484,7 @@ pub fn run(
     if !crate::workers::compile_once_reporting(
         project_root,
         &build_dir,
-        crate::workers::Build::new(true, false),
+        crate::workers::Build::new(true, false).no_install(opts.no_install),
         bynk_driver::progress::terminal_sink(),
     ) {
         return ExitCode::FAILURE;

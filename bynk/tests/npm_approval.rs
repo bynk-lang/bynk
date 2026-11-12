@@ -381,3 +381,153 @@ fn a_fetch_off_a_terminal_writes_the_lock_and_says_what_awaits_approval() {
     assert_eq!(code, 1, "{out}");
     assert!(!out.contains("awaiting approval"), "{out}");
 }
+
+/// A directory holding `npm`, `pnpm`, `bun` and `yarn` stand-ins that record
+/// that they ran (a file `ran` beside them) and install nothing.
+#[cfg(unix)]
+fn recording_tools(root: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = root.join("fakebin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for tool in ["npm", "pnpm", "bun", "yarn"] {
+        let path = bin.join(tool);
+        std::fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\necho \"{tool} $@\" >> \"{}\"\n",
+                bin.join("ran").display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    bin
+}
+
+/// `bynk <args>` with the recording tools first on PATH.
+#[cfg(unix)]
+fn bynk_with_fake_tools(app: &Path, root: &Path, bin: &Path, args: &[&str]) -> (i32, String) {
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let out = Command::new(bin_path())
+        .args(args)
+        .current_dir(app)
+        .env("BYNK_HOME", root.join("home"))
+        .env("PATH", path)
+        .stdin(Stdio::null())
+        .output()
+        .expect("spawn");
+    (
+        out.status.code().unwrap_or(-1),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+    )
+}
+
+#[cfg(unix)]
+fn bin_path() -> PathBuf {
+    bin("bynk")
+}
+
+/// #3350 (ADR 0575): the install step comes after the build, and the build
+/// refuses an adapter's npm package nobody approved, so no package manager is
+/// ever run for it, whichever one is detected. Once approved, the same build
+/// does run the detected tool.
+#[cfg(unix)]
+#[test]
+fn an_unapproved_adapters_npm_package_is_never_installed() {
+    let root = scratch("never-installed");
+    let (reg, key) = registry(&root);
+    publish(&root, &reg, &key, "money", "1.0.0", "^5.2.0");
+    let app = app(&root, &reg, MONEY, &sessions("money"));
+    // A pnpm project: the detected tool is pnpm, not npm.
+    write(&app.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    let bin = recording_tools(&root);
+    let ran = bin.join("ran");
+
+    let (code, out) = bynk_with_fake_tools(
+        &app,
+        &root,
+        &bin,
+        &[
+            "compile",
+            "--target",
+            "workers",
+            "-o",
+            root.join("w").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("bynk approve jose"), "{out}");
+    assert!(
+        !ran.exists(),
+        "a package manager ran: {}",
+        std::fs::read_to_string(&ran).unwrap_or_default()
+    );
+
+    // The same refusal on `bynk test` and `bynk deploy --dry-run`.
+    for args in [vec!["test"], vec!["deploy", "--dry-run", "--yes"]] {
+        let (code, out) = bynk_with_fake_tools(&app, &root, &bin, &args);
+        assert_ne!(code, 0, "{args:?}: {out}");
+        assert!(
+            !ran.exists(),
+            "{args:?}: a package manager ran: {}",
+            std::fs::read_to_string(&ran).unwrap_or_default()
+        );
+    }
+
+    // Approved, the same build reaches the install step: a dry run names the
+    // package and the detected tool, and still runs nothing.
+    let (code, out) = bynk(&app, &root, &["approve", "jose"]);
+    assert_eq!(code, 0, "{out}");
+    let (_, out) = bynk_with_fake_tools(&app, &root, &bin, &["deploy", "--dry-run", "--yes"]);
+    assert!(
+        out.contains("npm packages that are not installed: jose")
+            && out.contains("`pnpm install --ignore-scripts --ignore-workspace`")
+            && out.contains("pnpm-lock.yaml"),
+        "{out}"
+    );
+    assert!(!ran.exists(), "a dry run ran a package manager");
+
+    // `--no-install` (and `BYNK_NO_INSTALL`) restore the preflight stop, naming
+    // the detected command rather than always `npm install`.
+    for (args, env) in [
+        (vec!["deploy", "--no-install", "--yes"], None),
+        (vec!["deploy", "--yes"], Some(("BYNK_NO_INSTALL", "1"))),
+    ] {
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut cmd = Command::new(bin_path());
+        cmd.args(&args)
+            .current_dir(&app)
+            .env("BYNK_HOME", root.join("home"))
+            .env("PATH", path)
+            .stdin(Stdio::null());
+        if let Some((k, v)) = env {
+            cmd.env(k, v);
+        }
+        let out = cmd.output().expect("spawn");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_ne!(out.status.code(), Some(0), "{args:?}: {text}");
+        assert!(
+            text.contains("npm packages that are not installed: jose")
+                && text.contains("Run `pnpm install --ignore-scripts --ignore-workspace`")
+                && text.contains(".bynk/deploy"),
+            "{args:?}: {text}"
+        );
+        assert!(!ran.exists(), "{args:?}: a package manager ran");
+    }
+}

@@ -854,10 +854,13 @@ shows the same warnings.
 #### Dependencies
 
 The Worker needs `postal-mime` installed beside it: the build's `package.json`
-lists it, exactly pinned, so run `npm install` in `.bynk/deploy` before
-deploying. `bynk deploy` (and `bynk dev`) stop before wrangler and name any
-listed package that is not installed; `--dry-run` only warns, since it installs and
-pushes nothing.
+lists it, exactly pinned. `bynk deploy` (and `bynk dev`) install any listed
+package that is missing into `.bynk/deploy`, before wrangler runs, with the
+package manager you already use (pnpm, bun, Yarn classic or npm); a warm re-run
+installs nothing and needs no network. `--no-install` (or `BYNK_NO_INSTALL=1`)
+stops instead, naming the command to run, for CI that provisions `node_modules`
+itself. `--dry-run` never installs: it reports what it would install, and with
+which tool. See [Installing npm packages](/docs/bynk-cli/#installing-npm-packages).
 
 ### Workers outside the project
 
