@@ -2079,6 +2079,20 @@ emission (a name that is not a token, a value outside the cookie-octet set, an u
 faults the request. A response carrying a `Set-Cookie` is sent with `Cache-Control: private`
 whatever its `@cache` scope.
 
+**Typed cookie writes.** `R.f.cookie(v)` and `R.f.expire()`, where `R` is a record type, `f` one of
+its fields and `R.f` not a value on its own, are checker-typed forms answering a `Cookie`, recognised
+ahead of any other reading of the receiver; a static method `cookie` or `expire` declared on `R`
+takes precedence. `R` MUST be the type of the `cookies` parameter of some `on http` handler of the
+unit that writes the cookie (`bynk.http.cookie_field_not_cookie_record`) and `f` MUST be one of its
+fields (`bynk.http.cookie_field_unknown`). `cookie` takes exactly one argument and `expire` none
+(`bynk.http.cookie_field_arity`), and `f` MUST NOT be a `List` (`bynk.http.cookie_field_list`).
+`cookie(v)` checks `v` against `f`'s type (the `T` of an `Option[T]`) and answers a `Cookie` whose
+`name` is `f`'s wire name (its `@name`, else its own name) and whose `value` is `v` as the `cookies`
+decoder reads it: an `Int` its decimal digits, a `Bool` `true` or `false`, an enum its variant's
+name, anything else its text; every other attribute is the `Cookie` default. `expire()` answers the
+cookie with that name, an empty value, `maxAge: Some(0)` and an epoch `expires`. The field segment
+is a reference to the field for rename and go-to-definition.
+
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
 `"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at

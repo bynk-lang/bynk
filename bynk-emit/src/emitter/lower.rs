@@ -2315,6 +2315,9 @@ fn lower_method_call(
     if let Some(s) = lower_signed_cookie_call(e, args, cx, &mut pre) {
         return pre.finish(s);
     }
+    if let Some(s) = lower_cookie_field_call(e, args, cx, &mut pre) {
+        return pre.finish(s);
+    }
     if let Some(s) = lower_capability_call(e, receiver, method, type_args, args, cx, &mut pre) {
         return pre.finish(s);
     }
@@ -2477,6 +2480,56 @@ fn lower_signed_cookie_call(
         "(async () => __issueSessionCookie(__sessionKeysOf({deps}, \"{actor}\"), \"{actor}\", \"{name}\", \"{same_site}\", {id}, {}, await {deps}.Clock.now()))()",
         seam.ttl_secs
     ))
+}
+
+/// #3446: lower `Record.field.cookie(value)` and `Record.field.expire()` to the `Cookie` record
+/// literal an author would have written by hand: the field's wire name (its `@name`, else its own
+/// name, the key the decoder reads) and the value as the decoder reads it. The leaf table is the
+/// inverse of `fieldsObject`'s (an `Int` its digits, a `Bool` `true`/`false`, an enum its variant's
+/// name, everything else its text), keyed on the same `query_leaf_kind` the decoder's field spec
+/// uses, so the two cannot drift. `expire` is the deletion `clearCookie` sends: empty, `Max-Age=0`,
+/// epoch `Expires`. Every other attribute is the `Cookie` default, applied by the router.
+fn lower_cookie_field_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let Some(Callee::CookieField {
+        record,
+        field,
+        expire,
+    }) = cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let types = &cx.commons().types;
+    let TypeBody::Record(body) = &types.get(&record)?.body else {
+        return None;
+    };
+    let f = body.fields.iter().find(|f| f.name.name == field)?;
+    let name = escape_ts_string(&f.wire_name().unwrap_or_else(|| f.name.name.clone()));
+    if expire {
+        return Some(format!(
+            "({{ name: \"{name}\", value: \"\", maxAge: Some(0), expires: Some(0) }})"
+        ));
+    }
+    let leaf = match &f.type_ref {
+        TypeRef::Option(inner, _) => inner.as_ref(),
+        other => other,
+    };
+    let kind = crate::emitter::workers_entry::query_leaf_kind(leaf, types, false);
+    let value = pre.lower(args.first()?, cx);
+    let text = match kind {
+        "int" | "bool" => format!("String({value})"),
+        "enum" => format!("({value}).tag"),
+        "decimal" => {
+            cx.note_decimal("__bynkDecimalToString");
+            format!("__bynkDecimalToString({value})")
+        }
+        _ => value,
+    };
+    Some(format!("({{ name: \"{name}\", value: {text} }})"))
 }
 
 /// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. Moved out of

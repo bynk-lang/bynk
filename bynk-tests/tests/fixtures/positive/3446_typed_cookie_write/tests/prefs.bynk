@@ -1,0 +1,35 @@
+suite site.prefs {
+	case "a typed write is named by the wire name and valued as the decoder reads it" {
+		let r <- site.POST("/leaves")
+		expect r.cookies().map((c) => c.name) == ["price", "dark", "__Host-visits", "qty", "note"]
+		expect r.cookies().map((c) => c.value) == ["1.50", "true", "42", "7", "hello"]
+	}
+
+	case "an enum writes its variant's name, and attributes spread in" {
+		let r <- site.POST("/theme/dark")
+		expect r.cookies().map((c) => c.name) == ["theme"]
+		expect r.cookies().map((c) => c.value) == ["Dark"]
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.maxAge == Some(365.days)
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+
+	case "expire is the matching deletion" {
+		let r <- site.POST("/theme/reset")
+		match r.cookies().first() {
+			Some(c) => {
+				expect c.name == "theme"
+				expect c.value == ""
+				expect c.maxAge == Some(0.seconds)
+			}
+			None => {
+				expect false
+			}
+		}
+	}
+}
