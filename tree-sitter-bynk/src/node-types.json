@@ -1948,6 +1948,16 @@
     "type": "capability_op",
     "named": true,
     "fields": {
+      "annotation": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "store_annotation",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,

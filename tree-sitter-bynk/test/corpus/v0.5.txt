@@ -24,6 +24,43 @@ context billing {
         return_type: (unit_type)))))
 
 ==========================
+capability operation with an internal annotation (#3458)
+==========================
+
+context billing {
+	capability Store {
+		fn load[T: Codable](key: String) -> Effect[Option[T]] @onUndecodable(miss)
+	}
+}
+
+--------------------------
+
+(source_file
+  (context_decl
+    name: (qualified_name
+      (identifier))
+    (capability_decl
+      name: (identifier)
+      (capability_op
+        name: (identifier)
+        type_param: (type_param
+          name: (identifier)
+          (constraint
+            (identifier)))
+        (param
+          name: (identifier)
+          type: (base_type))
+        return_type: (generic_type_ref
+          name: (builtin_type)
+          arg: (generic_type_ref
+            name: (builtin_type)
+            arg: (identifier)))
+        annotation: (store_annotation
+          name: (identifier)
+          (annotation_arg
+            value: (identifier)))))))
+
+==========================
 generic capability operation (#926)
 ==========================
 

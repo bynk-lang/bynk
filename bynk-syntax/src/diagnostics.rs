@@ -2093,6 +2093,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "capability-operations-take-key-and-codable",
     },
     Explain {
+        code: "bynk.generics.internal_op_annotation",
+        blurb: "A capability operation's reply policy, `@onUndecodable(miss)` or `@onUndecodable(fault)`, says what a reply that does not decode as the operation's payload type means. It belongs to the standard library's own operations, where the provider is reviewed with the runtime, so a capability you declare takes no annotation. Remove it.",
+        example: "capability Store {\n    fn load(id: String) -> Effect[Option[String]] @onUndecodable(miss)   // ✗ internal\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]                    // ✓\n}",
+        page: "/book/reference/generics",
+        anchor: "capability-operations-take-key-and-codable",
+    },
+    Explain {
         code: "bynk.generics.codable_op_return",
         blurb: "A `Codable` parameter of a capability operation is encoded at the call site, so the provider receives plain JSON. Decoding the provider's reply back into `T` would have to say what a failed decode of stored data means, and that is not settled, so `T` may not appear in the return type. Return plain data, such as a `String`, and decode it where the call is made.",
         example: "capability Store {\n    fn load[T: Codable](id: String) -> Effect[Option[T]]   // ✗ `T` in the return type\n}\n\ncapability Store {\n    fn load(id: String) -> Effect[Option[String]]          // ✓ plain data back\n}",
@@ -8597,6 +8604,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.generics.bound_on_capability_op",
         "A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3).",
+        &["capability_op"],
+    ),
+    dg(
+        "bynk.generics.internal_op_annotation",
+        "A capability operation carries an annotation outside the standard library, or a first-party operation's is not `@onUndecodable(miss)` or `@onUndecodable(fault)`: the reply policy of a typed read is internal to first-party operations (#3458).",
         &["capability_op"],
     ),
     dg(

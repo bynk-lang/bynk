@@ -1,0 +1,6 @@
+context bynk.store
+
+capability Store {
+	fn load[T: Codable](key: String) -> Effect[Option[T]] @onUndecodable(miss)  // c
+	fn size() -> Effect[Int]
+}
