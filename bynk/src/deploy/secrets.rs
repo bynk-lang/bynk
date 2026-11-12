@@ -579,6 +579,7 @@ pub(crate) fn foreign_hand_off(
     worker: &str,
     caller: &ForeignCaller,
     value: &str,
+    runner: &str,
 ) -> String {
     let context = context_of(worker);
     let key = bynk_emit::edge_key_to(&context).unwrap_or_else(|| "BYNK_CALL_KEY".to_string());
@@ -588,13 +589,25 @@ pub(crate) fn foreign_hand_off(
         .unwrap_or_else(|| "<foreign-worker>".to_string());
     format!(
         "bynk: minted {binding} for `{actor}`, a foreign caller of `{context}`. Its operator sets it on their Worker:\n\n  \
-         printf '%s' '{value}' | npx wrangler secret put {key} --name {name}\n\n  \
+         printf '%s' '{value}' | {runner} wrangler secret put {key} --name {name}\n\n  \
          It signs its calls to `{context}` as `{actor}` (X-Bynk-Caller), under that key; see the wire format reference.\n  \
          This is the only time the value is shown: `{deploy} --force` mints a new one.\n",
         binding = caller.binding,
         actor = caller.actor,
         deploy = deploy_command(environment),
     )
+}
+
+/// #3438: how a user runs `wrangler` by hand in this project, for the commands
+/// `deploy` prints: the detected package manager's own runner (`npx`,
+/// `pnpm dlx`, `bunx`), and `npx` for Yarn classic, which has none (#3426).
+pub(crate) fn wrangler_runner(manager: bynk_driver::npm_install::PackageManager) -> &'static str {
+    manager.runner_label().unwrap_or("npx")
+}
+
+/// [`wrangler_runner`] for the manager detected in `project_root`.
+pub(crate) fn wrangler_runner_in(project_root: &std::path::Path) -> &'static str {
+    wrangler_runner(bynk_driver::npm_install::system_tool_manager(project_root))
 }
 
 /// Everything the secret step needs, threaded as one value rather than as four
@@ -1576,7 +1589,7 @@ WITH_EQUALS=a=b
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
         };
-        let text = foreign_hand_off("default", "shop-orders", &caller, "abc123");
+        let text = foreign_hand_off("default", "shop-orders", &caller, "abc123", "npx");
         assert!(
             text.contains(
                 "printf '%s' 'abc123' | npx wrangler secret put BYNK_CALL_TO_SHOP__ORDERS --name ledger-svc"
@@ -1592,9 +1605,40 @@ WITH_EQUALS=a=b
             ..caller
         };
         assert!(
-            foreign_hand_off("default", "shop-orders", &unnamed, "abc123")
+            foreign_hand_off("default", "shop-orders", &unnamed, "abc123", "npx")
                 .contains("--name <foreign-worker>"),
             "an undeclared worker is a placeholder to fill in"
         );
+    }
+
+    #[test]
+    fn the_hand_off_names_the_detected_managers_runner() {
+        use bynk_driver::npm_install::PackageManager::{Bun, Npm, Pnpm, Yarn};
+        let caller = ForeignCaller {
+            actor: "Ledger".into(),
+            binding: "LEDGER_CALL_KEY".into(),
+            worker: Some("ledger-svc".into()),
+        };
+        for (manager, runner) in [
+            (Npm, "npx"),
+            (Pnpm, "pnpm dlx"),
+            (Bun, "bunx"),
+            // Yarn classic has no runner: it keeps `npx` (#3426).
+            (Yarn, "npx"),
+        ] {
+            let text = foreign_hand_off(
+                "default",
+                "shop-orders",
+                &caller,
+                "abc123",
+                wrangler_runner(manager),
+            );
+            assert!(
+                text.contains(&format!(
+                    "| {runner} wrangler secret put BYNK_CALL_TO_SHOP__ORDERS --name ledger-svc"
+                )),
+                "{text}"
+            );
+        }
     }
 }
