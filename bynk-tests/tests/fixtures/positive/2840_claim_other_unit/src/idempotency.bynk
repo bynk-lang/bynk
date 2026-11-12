@@ -1,0 +1,12 @@
+adapter idempotency {
+  binding "./idempotency.binding.ts"
+
+  exports capability { Idempotency }
+
+  // Not `bynk`'s: a `claim` here declares no database.
+  capability Idempotency {
+    fn claim(key: String) -> Effect[Bool]
+  }
+
+  provides Idempotency = MemoIdempotency
+}

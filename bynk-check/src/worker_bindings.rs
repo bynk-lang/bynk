@@ -158,6 +158,24 @@ pub enum BindingSource {
     EventsFanout { class_name: String },
 }
 
+/// W30 (#2840): the `capability` of the `D1Database` source of a Worker's
+/// implicit idempotency database. Not an identifier, so no project's own derived
+/// `D1` capability can carry it: whether a binding is the implicit one is
+/// decided by its source, never by its name (a project's `capability
+/// Idempotency = D1` is bound as `D1_IDEMPOTENCY` too).
+pub const IMPLICIT_IDEMPOTENCY_CAPABILITY: &str = "@idempotency";
+
+/// W30 (#2840): the binding of a Worker's implicit idempotency database, named
+/// [`IDEMPOTENCY_BINDING`](crate::d1_migrations::IDEMPOTENCY_BINDING).
+pub fn idempotency_binding() -> WorkerBinding {
+    WorkerBinding {
+        name: crate::d1_migrations::IDEMPOTENCY_BINDING.to_string(),
+        source: BindingSource::D1Database {
+            capability: IMPLICIT_IDEMPOTENCY_CAPABILITY.to_string(),
+        },
+    }
+}
+
 impl BindingSource {
     /// The source in a diagnostic's words.
     pub fn describe(&self) -> String {
@@ -184,6 +202,10 @@ impl BindingSource {
             ),
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
+            }
+            Self::D1Database { capability } if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY => {
+                "the implicit idempotency database of a Worker that calls `Idempotency.claim`"
+                    .to_string()
             }
             Self::D1Database { capability } => {
                 format!("the D1 database binding of derived capability `{capability}`")

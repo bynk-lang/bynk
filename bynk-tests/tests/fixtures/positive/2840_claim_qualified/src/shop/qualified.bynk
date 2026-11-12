@@ -1,0 +1,12 @@
+context shop.qualified
+
+// `claim` through the qualified name declares the implicit claims database too.
+
+consumes bynk
+
+service api from http {
+	on GET("/claim/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given bynk.Idempotency {
+		let _ <- bynk.Idempotency.claim(id, 1.hours)
+		Ok("claimed")
+	}
+}
