@@ -2619,6 +2619,23 @@ fn check_exec_context(name: &str, codes: [&'static str; 3], span: Span, ctx: &mu
     }
 }
 
+/// The methods every `Effect[T]` has: `within` (#2683), `race` (#2711) and
+/// `detach` (#3437), each checked by its own function.
+pub(crate) fn check_effect_method(
+    method: &Ident,
+    receiver: &Expr,
+    args: &[Expr],
+    inner: TyId,
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    match method.name.as_str() {
+        "within" => check_effect_within_method(method, args, inner, span, ctx),
+        "race" => check_effect_race_method(args, inner, span, ctx),
+        _ => check_effect_detach_method(receiver, args, span, ctx),
+    }
+}
+
 /// #2683: `e.within(d)` on any `Effect[T]` — `within(d: Duration) ->
 /// Effect[Result[T, TimedOut]]`. It races `e` against a deadline and hands the
 /// abandoned effect to the execution context's `waitUntil` (it is never

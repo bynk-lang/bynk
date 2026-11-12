@@ -4226,14 +4226,9 @@ fn write_header(commons: &TypedCommons, ctx: &EmitProjectCtx) -> Vec<bynk_ts::Ts
                     .split(", "),
             );
         }
-        if ctx.runtime_use.within() {
-            parts.extend(WITHIN_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.race() {
-            parts.extend(RACE_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
-        }
-        if ctx.runtime_use.detach() {
-            parts.extend(DETACH_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
+        let effects = effect_runtime_imports(&ctx.runtime_use);
+        if !effects.is_empty() {
+            parts.extend(effects.trim_start_matches(", ").split(", "));
         }
         if ctx.runtime_use.fault() {
             parts.extend(FAULT_RUNTIME_IMPORTS.trim_start_matches(", ").split(", "));
@@ -4391,24 +4386,8 @@ fn write_header_single(
         } else {
             ""
         };
-        // #2683: `e.within(d)`'s race, imported only when a body uses it.
-        let within_imports = if runtime_use.within() {
-            WITHIN_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #2711: `a.race(b)`'s helper, imported only when a body uses it.
-        let race_imports = if runtime_use.race() {
-            RACE_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
-        // #3437: `e.detach()`'s reporter, imported only when a body uses it.
-        let detach_imports = if runtime_use.detach() {
-            DETACH_RUNTIME_IMPORTS
-        } else {
-            ""
-        };
+        // #2683, #2711, #3437: the `within`, `race` and `detach` helpers, imported only when a body uses one.
+        let race_imports = effect_runtime_imports(&runtime_use);
         // #2620: `unreachable`/`todo`'s helper, imported only when a body calls one.
         let fault_imports = if runtime_use.fault() {
             FAULT_RUNTIME_IMPORTS
@@ -4490,7 +4469,7 @@ fn write_header_single(
         // group's own name list a second time (the string-building above,
         // unchanged, already gets this exactly right).
         let inside = format!(
-            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{within_imports}{race_imports}{detach_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{session_cookie_imports}{form_codec_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
+            "Ok, Err, Some, None, type Result, type Option, type ValidationError{codec_imports}{bytes_imports}{bytes_ops_imports}{time_ops_imports}{iso_date_imports}{yaml_imports}{settle_all_imports}{race_imports}{fault_imports}{url_ops_imports}{request_headers_imports}{request_cookies_imports}{session_cookie_imports}{form_codec_imports}{request_query_imports}{query_string_imports}{multipart_form_imports}{cookie_string_imports}{eq_imports}{int_imports}{cmp_imports}{http_imports}{queue_imports}"
         );
         let names: Vec<String> = inside.split(", ").map(str::to_string).collect();
         for stmt in runtime_files::runtime_import_stmts(false, &names, "./runtime.js") {
@@ -4584,6 +4563,21 @@ pub const RACE_RUNTIME_IMPORTS: &str = ", __bynkRace";
 
 /// #3437: the `detach` reporter.
 pub const DETACH_RUNTIME_IMPORTS: &str = ", __bynkDetach";
+
+/// The `within`, `race` and `detach` helpers a module uses, as one import
+/// fragment (#2683, #2711, #3437).
+pub fn effect_runtime_imports(ru: &RuntimeUse) -> &'static str {
+    match (ru.within(), ru.race(), ru.detach()) {
+        (false, false, false) => "",
+        (true, false, false) => ", __bynkWithin",
+        (false, true, false) => ", __bynkRace",
+        (false, false, true) => ", __bynkDetach",
+        (true, true, false) => ", __bynkWithin, __bynkRace",
+        (true, false, true) => ", __bynkWithin, __bynkDetach",
+        (false, true, true) => ", __bynkRace, __bynkDetach",
+        (true, true, true) => ", __bynkWithin, __bynkRace, __bynkDetach",
+    }
+}
 
 /// #2620: the deliberate-fault helper behind `unreachable`/`todo`.
 pub const FAULT_RUNTIME_IMPORTS: &str = ", __fault";

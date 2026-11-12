@@ -4293,6 +4293,103 @@ fn lower_store_cell_call(
     None
 }
 
+/// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
+/// when the call's shape is not one the kernel method lowers (the caller falls
+/// through to the instance-call lowering).
+fn lower_effect_kernel_call(
+    e: &Expr,
+    receiver: &Expr,
+    op: EffectOp,
+    args: &[Expr],
+    recv_ty: &Ty,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<String> {
+    let tys = cx.commons().tys();
+    match op {
+        // #2683: `e.within(d)` races the effect against a deadline
+        // and hands the abandoned effect to the handler's execution
+        // context.
+        EffectOp::Within if args.len() == 1 => {
+            cx.note_within();
+            let recv = pre.lower(receiver, cx);
+            let after = pre.lower(&args[0], cx);
+            return Some(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
+        }
+        // #2711: `a.race(b)` takes the first side to succeed and
+        // hands the rest to the same execution context, uncancelled.
+        EffectOp::Race if args.len() == 1 => {
+            cx.note_race();
+            // A chain `a.race(b).race(c)` lowers to one
+            // `__bynkRace([a, b, c], …)`: nesting would let `c` beat
+            // `a` in a same-instant tie, as the inner race settles a
+            // microtask later, and ties go to source order.
+            let mut operands: Vec<&Expr> = vec![&args[0]];
+            let mut head: &Expr = receiver;
+            while let ExprKind::MethodCall {
+                receiver: inner,
+                args: a,
+                ..
+            } = &head.kind
+                && matches!(
+                    cx.commons().callee(head.id),
+                    Some(Callee::Kernel {
+                        op: KernelOp::Effect(EffectOp::Race),
+                        ..
+                    })
+                )
+                && a.len() == 1
+                && matches!(
+                    cx.commons().expr_ty(inner.id).as_deref(),
+                    Some(Ty::Effect(_))
+                )
+            {
+                operands.push(&a[0]);
+                head = inner;
+            }
+            operands.push(head);
+            operands.reverse();
+            let lowered: Vec<String> = operands.into_iter().map(|o| pre.lower(o, cx)).collect();
+            return Some(format!(
+                "__bynkRace([{}], {})",
+                lowered.join(", "),
+                cx.exec_expr()
+            ));
+        }
+        // #3437: `e.detach()` hands the already-running effect to
+        // the execution context and reports a failure (a fault, or
+        // an `Err` when the payload is a `Result`). The static type
+        // picks the route: only a `Result` payload names its error
+        // type to the helper.
+        EffectOp::Detach if args.is_empty() => {
+            cx.note_detach();
+            let recv = pre.lower(receiver, cx);
+            let site = cx
+                .assert_loc()
+                .map(|_| expect_location(cx, e.span.start))
+                .or_else(|| crate::emitter::fault_source_location(e.span.start))
+                .map(|l| crate::emitter::escape_ts_string(&l))
+                .unwrap_or_else(|| format!("offset {}", e.span.start));
+            let err_type = match &recv_ty {
+                Ty::Effect(inner) => match &*tys.get(*inner) {
+                    Ty::Result(_, err) => Some(crate::emitter::escape_ts_string(
+                        &err.display(tys).to_string(),
+                    )),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let tail = err_type.map(|t| format!(", \"{t}\"")).unwrap_or_default();
+            return Some(format!(
+                "__bynkDetach({recv}, {}, \"{site}\"{tail})",
+                cx.exec_expr()
+            ));
+        }
+        EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
+    }
+    None
+}
+
 /// A built-in method call the checker resolved to a typed [`KernelOp`] (#3164):
 /// the one place the emitter turns a kernel operation into TypeScript, matching
 /// on the receiver kind and the operation. `None` when the operation has no
@@ -4516,89 +4613,11 @@ fn lower_kernel_method_call(
                     return Some(s);
                 }
             }
-            // #2683 / #2711: `within` and `race`, on every `Effect[T]`.
+            // #2683 / #2711 / #3437: `within`, `race` and `detach`, on every `Effect[T]`.
             KernelOp::Effect(op) => {
-                match op {
-                    // #2683: `e.within(d)` races the effect against a deadline
-                    // and hands the abandoned effect to the handler's execution
-                    // context.
-                    EffectOp::Within if args.len() == 1 => {
-                        cx.note_within();
-                        let recv = pre.lower(receiver, cx);
-                        let after = pre.lower(&args[0], cx);
-                        return Some(format!("__bynkWithin({recv}, {after}, {})", cx.exec_expr()));
-                    }
-                    // #2711: `a.race(b)` takes the first side to succeed and
-                    // hands the rest to the same execution context, uncancelled.
-                    EffectOp::Race if args.len() == 1 => {
-                        cx.note_race();
-                        // A chain `a.race(b).race(c)` lowers to one
-                        // `__bynkRace([a, b, c], …)`: nesting would let `c` beat
-                        // `a` in a same-instant tie, as the inner race settles a
-                        // microtask later, and ties go to source order.
-                        let mut operands: Vec<&Expr> = vec![&args[0]];
-                        let mut head: &Expr = receiver;
-                        while let ExprKind::MethodCall {
-                            receiver: inner,
-                            args: a,
-                            ..
-                        } = &head.kind
-                            && matches!(
-                                cx.commons().callee(head.id),
-                                Some(Callee::Kernel {
-                                    op: KernelOp::Effect(EffectOp::Race),
-                                    ..
-                                })
-                            )
-                            && a.len() == 1
-                            && matches!(
-                                cx.commons().expr_ty(inner.id).as_deref(),
-                                Some(Ty::Effect(_))
-                            )
-                        {
-                            operands.push(&a[0]);
-                            head = inner;
-                        }
-                        operands.push(head);
-                        operands.reverse();
-                        let lowered: Vec<String> =
-                            operands.into_iter().map(|o| pre.lower(o, cx)).collect();
-                        return Some(format!(
-                            "__bynkRace([{}], {})",
-                            lowered.join(", "),
-                            cx.exec_expr()
-                        ));
-                    }
-                    // #3437: `e.detach()` hands the already-running effect to
-                    // the execution context and reports a failure (a fault, or
-                    // an `Err` when the payload is a `Result`). The static type
-                    // picks the route: only a `Result` payload names its error
-                    // type to the helper.
-                    EffectOp::Detach if args.is_empty() => {
-                        cx.note_detach();
-                        let recv = pre.lower(receiver, cx);
-                        let site = cx
-                            .assert_loc()
-                            .map(|_| expect_location(cx, e.span.start))
-                            .or_else(|| crate::emitter::fault_source_location(e.span.start))
-                            .map(|l| crate::emitter::escape_ts_string(&l))
-                            .unwrap_or_else(|| format!("offset {}", e.span.start));
-                        let err_type = match &recv_ty {
-                            Ty::Effect(inner) => match &*tys.get(*inner) {
-                                Ty::Result(_, err) => Some(crate::emitter::escape_ts_string(
-                                    &err.display(tys).to_string(),
-                                )),
-                                _ => None,
-                            },
-                            _ => None,
-                        };
-                        let tail = err_type.map(|t| format!(", \"{t}\"")).unwrap_or_default();
-                        return Some(format!(
-                            "__bynkDetach({recv}, {}, \"{site}\"{tail})",
-                            cx.exec_expr()
-                        ));
-                    }
-                    EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
+                if let Some(s) = lower_effect_kernel_call(e, receiver, op, args, &recv_ty, cx, pre)
+                {
+                    return Some(s);
                 }
             }
             // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/

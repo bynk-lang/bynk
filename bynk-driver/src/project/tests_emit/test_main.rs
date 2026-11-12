@@ -402,6 +402,65 @@ pub(super) fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
     TsStmt::if_stmt(cond, then_branch, None)
 }
 
+/// #3437: a build whose modules carry the execution-context double drains the
+/// failures a detached effect reported (`globalThis.__bynkDetachedReports`)
+/// after each case, and reports them beside the case: as `detached_failures`
+/// and `detached` on its event, and as a line under it in the human output.
+/// A report does not fail the case, as on Workers (ADR 0478). Gated, so a build
+/// with no execution context keeps its runner unchanged.
+struct DetachReports {
+    enabled: bool,
+}
+
+impl DetachReports {
+    fn drain(&self) -> Option<TsStmt> {
+        self.enabled.then(|| {
+            TsStmt::raw(
+                "const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];".to_string(),
+                None,
+            )
+        })
+    }
+
+    fn entries(&self) -> Vec<TsObjectEntry> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        vec![
+            TsObjectEntry::Prop(
+                "detached_failures".to_string(),
+                ident("(detached.length > 0 ? detached.length : undefined)"),
+            ),
+            TsObjectEntry::Prop(
+                "detached".to_string(),
+                ident("(detached.length > 0 ? detached : undefined)"),
+            ),
+        ]
+    }
+
+    /// The statements of an NDJSON `report`, after the drain.
+    fn wrap_ndjson(&self, stmts: Vec<TsStmt>) -> Vec<TsStmt> {
+        self.drain().into_iter().chain(stmts).collect()
+    }
+
+    /// The statements of the human `report`: drain, the case's line, then the reports.
+    fn wrap_human(&self, stmts: Vec<TsStmt>) -> Vec<TsStmt> {
+        self.wrap_ndjson(stmts)
+            .into_iter()
+            .chain(self.print())
+            .collect()
+    }
+
+    fn print(&self) -> Option<TsStmt> {
+        self.enabled.then(|| {
+            TsStmt::raw(
+                "for (const d of detached) console.log(`    ! a detached effect ${d.kind === \"err\" ? `returned Err (${d.type}${d.variant === null ? \"\" : `.${d.variant}`})` : \"faulted\"} at ${d.site}`);".to_string(),
+                None,
+            )
+        })
+    }
+}
+
 pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -> TsProgram {
     let ext = import_ext.as_str();
     let mut program = TsProgram::new();
@@ -552,43 +611,9 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
     // `retries` is on a remote one, so every other runner is unchanged;
     // `JSON.stringify` drops one a case leaves undefined.
     let generative = tests.iter().any(|t| t.generative);
-    // #3437: a build whose modules carry the execution-context double drains the
-    // failures a detached effect reported (`globalThis.__bynkDetachedReports`)
-    // after each case, and reports them beside the case: as `detached_failures`
-    // and `detached` on its event, and as a line under it in the human output.
-    // A report does not fail the case, as on Workers (ADR 0478). Gated, so a build
-    // with no execution context keeps its runner unchanged.
-    let detach_reports = tests.iter().any(|t| t.detach_reports);
-    let detach_drain = || {
-        detach_reports.then(|| {
-            TsStmt::raw(
-                "const detached = (globalThis as unknown as { __bynkDetachedReports?: { kind: string; site: string; type: string | null; variant: string | null }[] }).__bynkDetachedReports?.splice(0) ?? [];".to_string(),
-                None,
-            )
-        })
-    };
-    let detach_entries = || -> Vec<TsObjectEntry> {
-        if !detach_reports {
-            return Vec::new();
-        }
-        vec![
-            TsObjectEntry::Prop(
-                "detached_failures".to_string(),
-                ident("(detached.length > 0 ? detached.length : undefined)"),
-            ),
-            TsObjectEntry::Prop(
-                "detached".to_string(),
-                ident("(detached.length > 0 ? detached : undefined)"),
-            ),
-        ]
-    };
-    let detach_print = || {
-        detach_reports.then(|| {
-            TsStmt::raw(
-                "for (const d of detached) console.log(`    ! a detached effect ${d.kind === \"err\" ? `returned Err (${d.type}${d.variant === null ? \"\" : `.${d.variant}`})` : \"faulted\"} at ${d.site}`);".to_string(),
-                None,
-            )
-        })
+    // #3437: failures a detached effect reported, drained after each case.
+    let detach = DetachReports {
+        enabled: tests.iter().any(|t| t.detach_reports),
     };
     let generative_entries = || -> Vec<TsObjectEntry> {
         if !generative {
@@ -703,98 +728,80 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             optional: false,
                         }],
                         return_type: None,
-                        body: detach_drain()
-                            .into_iter()
-                            .chain([TsStmt::if_else_same_line_stmt(
-                                member(ident("r"), "pass"),
-                                block(vec![
-                                    TsStmt::increment(ident("passed"), None),
-                                    emit_call(
-                                        vec![
-                                            TsObjectEntry::Prop(
-                                                "type".to_string(),
-                                                str_lit("case"),
+                        body: detach.wrap_ndjson(vec![TsStmt::if_else_same_line_stmt(
+                            member(ident("r"), "pass"),
+                            block(vec![
+                                TsStmt::increment(ident("passed"), None),
+                                emit_call(
+                                    vec![
+                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                        TsObjectEntry::Shorthand("suite".to_string()),
+                                        TsObjectEntry::Prop(
+                                            "name".to_string(),
+                                            member(ident("r"), "name"),
+                                        ),
+                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
+                                    ]
+                                    .into_iter()
+                                    .chain(retries_entry())
+                                    .chain(detach.entries())
+                                    .chain(std::iter::once(duration_entry()))
+                                    .collect(),
+                                ),
+                            ]),
+                            block(vec![
+                                TsStmt::increment(ident("failed"), None),
+                                emit_call(
+                                    vec![
+                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
+                                        TsObjectEntry::Shorthand("suite".to_string()),
+                                        TsObjectEntry::Prop(
+                                            "name".to_string(),
+                                            member(ident("r"), "name"),
+                                        ),
+                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
+                                        TsObjectEntry::Prop(
+                                            "message".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "message"),
                                             ),
-                                            TsObjectEntry::Shorthand("suite".to_string()),
-                                            TsObjectEntry::Prop(
-                                                "name".to_string(),
-                                                member(ident("r"), "name"),
+                                        ),
+                                        TsObjectEntry::Prop(
+                                            "location".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "location"),
                                             ),
-                                            TsObjectEntry::Prop(
-                                                "outcome".to_string(),
-                                                str_lit("pass"),
+                                        ),
+                                        // #2272: the declaration a violated invariant or transition
+                                        // names; absent (`JSON.stringify` drops it) otherwise.
+                                        TsObjectEntry::Prop(
+                                            "violation".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "violation"),
                                             ),
-                                        ]
-                                        .into_iter()
-                                        .chain(retries_entry())
-                                        .chain(detach_entries())
-                                        .chain(std::iter::once(duration_entry()))
-                                        .collect(),
-                                    ),
-                                ]),
-                                block(vec![
-                                    TsStmt::increment(ident("failed"), None),
-                                    emit_call(
-                                        vec![
-                                            TsObjectEntry::Prop(
-                                                "type".to_string(),
-                                                str_lit("case"),
+                                        ),
+                                        // #2272: the steps of a failed history that an agent refused.
+                                        TsObjectEntry::Prop(
+                                            "refusals".to_string(),
+                                            and_expr(
+                                                member(ident("r"), "error"),
+                                                member(member(ident("r"), "error"), "refusals"),
                                             ),
-                                            TsObjectEntry::Shorthand("suite".to_string()),
-                                            TsObjectEntry::Prop(
-                                                "name".to_string(),
-                                                member(ident("r"), "name"),
-                                            ),
-                                            TsObjectEntry::Prop(
-                                                "outcome".to_string(),
-                                                str_lit("fail"),
-                                            ),
-                                            TsObjectEntry::Prop(
-                                                "message".to_string(),
-                                                and_expr(
-                                                    member(ident("r"), "error"),
-                                                    member(member(ident("r"), "error"), "message"),
-                                                ),
-                                            ),
-                                            TsObjectEntry::Prop(
-                                                "location".to_string(),
-                                                and_expr(
-                                                    member(ident("r"), "error"),
-                                                    member(member(ident("r"), "error"), "location"),
-                                                ),
-                                            ),
-                                            // #2272: the declaration a violated invariant or transition
-                                            // names; absent (`JSON.stringify` drops it) otherwise.
-                                            TsObjectEntry::Prop(
-                                                "violation".to_string(),
-                                                and_expr(
-                                                    member(ident("r"), "error"),
-                                                    member(
-                                                        member(ident("r"), "error"),
-                                                        "violation",
-                                                    ),
-                                                ),
-                                            ),
-                                            // #2272: the steps of a failed history that an agent refused.
-                                            TsObjectEntry::Prop(
-                                                "refusals".to_string(),
-                                                and_expr(
-                                                    member(ident("r"), "error"),
-                                                    member(member(ident("r"), "error"), "refusals"),
-                                                ),
-                                            ),
-                                        ]
-                                        .into_iter()
-                                        .chain(retries_entry())
-                                        .chain(detach_entries())
-                                        .chain(generative_entries())
-                                        .chain(std::iter::once(duration_entry()))
-                                        .collect(),
-                                    ),
-                                ]),
-                                None,
-                            )])
-                            .collect(),
+                                        ),
+                                    ]
+                                    .into_iter()
+                                    .chain(retries_entry())
+                                    .chain(detach.entries())
+                                    .chain(generative_entries())
+                                    .chain(std::iter::once(duration_entry()))
+                                    .collect(),
+                                ),
+                            ]),
+                            None,
+                        )]),
                         is_async: false,
                         inline: false,
                     },
@@ -852,44 +859,37 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             optional: false,
                         }],
                         return_type: None,
-                        body: detach_drain()
-                            .into_iter()
-                            .chain([TsStmt::if_else_same_line_stmt(
-                                member(ident("r"), "pass"),
-                                TsStmt::inline_block(
-                                    vec![
-                                        TsStmt::increment(ident("passed"), None),
-                                        console_log(TsExpr::template_lit(
-                                            vec!["  \\u2713 ".to_string(), String::new()],
-                                            vec![member(ident("r"), "name")],
-                                        )),
-                                    ],
-                                    None,
-                                ),
-                                TsStmt::inline_block(
-                                    vec![
-                                        TsStmt::increment(ident("failed"), None),
-                                        console_log(TsExpr::template_lit(
-                                            vec!["  \\u2717 ".to_string(), String::new()],
-                                            vec![member(ident("r"), "name")],
-                                        )),
-                                        if_(
-                                            member(ident("r"), "error"),
-                                            console_log(TsExpr::template_lit(
-                                                vec!["    ".to_string(), String::new()],
-                                                vec![member(
-                                                    member(ident("r"), "error"),
-                                                    "message",
-                                                )],
-                                            )),
-                                        ),
-                                    ],
-                                    None,
-                                ),
+                        body: detach.wrap_human(vec![TsStmt::if_else_same_line_stmt(
+                            member(ident("r"), "pass"),
+                            TsStmt::inline_block(
+                                vec![
+                                    TsStmt::increment(ident("passed"), None),
+                                    console_log(TsExpr::template_lit(
+                                        vec!["  \\u2713 ".to_string(), String::new()],
+                                        vec![member(ident("r"), "name")],
+                                    )),
+                                ],
                                 None,
-                            )])
-                            .chain(detach_print())
-                            .collect(),
+                            ),
+                            TsStmt::inline_block(
+                                vec![
+                                    TsStmt::increment(ident("failed"), None),
+                                    console_log(TsExpr::template_lit(
+                                        vec!["  \\u2717 ".to_string(), String::new()],
+                                        vec![member(ident("r"), "name")],
+                                    )),
+                                    if_(
+                                        member(ident("r"), "error"),
+                                        console_log(TsExpr::template_lit(
+                                            vec!["    ".to_string(), String::new()],
+                                            vec![member(member(ident("r"), "error"), "message")],
+                                        )),
+                                    ),
+                                ],
+                                None,
+                            ),
+                            None,
+                        )]),
                         is_async: false,
                         inline: false,
                     },

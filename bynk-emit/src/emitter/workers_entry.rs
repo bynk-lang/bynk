@@ -1907,15 +1907,10 @@ pub fn emit_worker_entry(
     if runtime_use.settle_all() {
         append_missing_bindings(&mut imports, crate::emitter::SETTLE_ALL_RUNTIME_IMPORTS);
     }
-    if runtime_use.within() {
-        append_missing_bindings(&mut imports, crate::emitter::WITHIN_RUNTIME_IMPORTS);
-    }
-    if runtime_use.race() {
-        append_missing_bindings(&mut imports, crate::emitter::RACE_RUNTIME_IMPORTS);
-    }
-    if runtime_use.detach() {
-        append_missing_bindings(&mut imports, crate::emitter::DETACH_RUNTIME_IMPORTS);
-    }
+    append_missing_bindings(
+        &mut imports,
+        crate::emitter::effect_runtime_imports(&runtime_use),
+    );
     if runtime_use.fault() {
         append_missing_bindings(&mut imports, crate::emitter::FAULT_RUNTIME_IMPORTS);
     }
