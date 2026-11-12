@@ -1,0 +1,18 @@
+context demo
+
+// Hyperdrive H4 (#3321): with no `schema.sql` there is no statement check. Bynk
+// does not own the Postgres schema (ADR 0799 G), so a project that does not
+// supply one gets none: these two statements, which a project with a schema
+// would be refused, compile.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError }
+
+capability Main = Postgres
+
+service probe {
+  on call(id: Int) -> Effect[Result[String, PgError]] given Main {
+    let a <- Main.all("selec id from orders", [])
+    Main.all("select name from orders where id = $1 and qty > $2", [])
+  }
+}

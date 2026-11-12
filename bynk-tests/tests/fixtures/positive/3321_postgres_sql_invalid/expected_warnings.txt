@@ -1,0 +1,2 @@
+# The syntax finding is a warning: the parser is not Postgres' own.
+bynk.postgres.sql_invalid

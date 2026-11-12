@@ -27,6 +27,8 @@ bynk-project.workspace = true
 bynk-ts.workspace = true
 # Refinement-predicate validation in the checker.
 regress.workspace = true
+# Hyperdrive H4 (#3321): the syntax check of a literal `Postgres` statement.
+sqlparser.workspace = true
 
 # #3070: not on wasm32 (the playground has no migrations folder, and the C
 # amalgamation does not build for wasm32-unknown-unknown).

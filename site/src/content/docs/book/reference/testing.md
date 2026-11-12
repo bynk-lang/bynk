@@ -1317,9 +1317,50 @@ fresh for each case:
 | `Version` | `current()` is a fixed version: id `"test"`, no tag, `deployed` at the epoch — at `system` each Worker binds version `"integration"` |
 | `StoredSecret` | each instance's `get()` **faults** until stubbed: a test never reads the Secrets Store, and the stubbed value is never printed |
 | `Email` | each instance is the binding's own provider over an in-memory outbox: a send needs no stub, is recorded (`expect Mail.send called with …`), answers `"test-message-N"`, and faults on 51 recipients, 33 attachments, 25 MiB, neither `text` nor `html`, and a reserved or line-broken header — at `integration` and `system` each Worker binds an outbox |
-| `Postgres` | each instance's `all(_, _)`, `first(_, _)`, `run(_, _)` and `transaction(_)` **fault** until stubbed: a test never reaches a database — at `integration` each Worker's `env.HYPERDRIVE_<NAME>` faults on its connection string until the instance is stubbed |
+| `Postgres` | each instance's `all(_, _)`, `first(_, _)`, `run(_, _)` and `transaction(_)` **fault** until stubbed: a test never reaches a database — at `integration` each Worker's `env.HYPERDRIVE_<NAME>` faults on its connection string until the instance is stubbed. With `[test] postgres = "pglite"` each instance is instead the binding's own provider over a real in-memory Postgres ([PGlite](#postgres-under-test)): statements run for real, on a database that starts each case from `schema.sql` |
 | `Service` | each instance's `send(_)` **faults** until stubbed: a test never reaches the Worker behind it |
 | `Fetch` | `send(_)`, `sendWith(_, _)`, `receiveBytes(_, _)`, `sendBytes(_, _, _)`, `receiveStream(_, _)` and `sendStream(_, _, _)` **fault**: a test never reaches the network |
+
+### Postgres under test {#postgres-under-test}
+
+By default a `Postgres` instance has no database in a test, and every operation
+faults until a case [stubs](#stub) it. A project that wants its statements run
+for real opts in, in `bynk.toml`:
+
+```toml
+[test]
+postgres = "pglite"
+```
+
+Each `Postgres` instance is then the binding's own provider over
+[PGlite](https://pglite.dev/), Postgres compiled to WebAssembly, at the `unit` and
+`integration` tiers alike (at `integration` each Worker's Hyperdrive binding
+carries a database of its own). A case starts from an empty database with the
+project's `schema.sql`, when it has one, applied; that file is also what switches
+[the statement check](/book/reference/bynk-capabilities/#postgres-sql-checked-for-syntax)
+on. A test that needs more than the schema creates it itself, with `run`. A
+`schema.sql` that does not apply faults the case, naming the failure.
+
+Statements behave as they do on Postgres: a unique violation is `PgConstraint`
+with SQLSTATE `23505`, a missing table is `PgFailed` with `42P01`, a `transaction`
+that fails applies none of its statements, and values read under the same rules as
+a deployed Worker (`int8` and `numeric` as text, `timestamptz` as ISO-8601, `bytea` as
+base64, `json` and `jsonb` nested). A `stub` still answers first, so a case forces
+what a single connection cannot make happen:
+
+- **`PgSerialization` (SQLSTATE `40001`) cannot arise.** It needs two concurrent
+  transactions, and the double has one session. Stub the operation to test a retry.
+- **`PgConnection` cannot arise** for the same reason: there is no network.
+- The server is PGlite's PostgreSQL (PGlite 0.5 runs PostgreSQL 18), which is
+  not the version your database runs. A behaviour that changed between the two
+  versions differs, and so do extensions: the managed service's may be missing
+  here.
+
+The cost is start-up, so it is opt-in: the package is about 27 MB installed, a
+database takes about 1.5 s to start (once for each instance, for the whole run:
+a case resets it in a few milliseconds, not starts a new one), and it holds about
+a gigabyte of memory. `bynk test` installs the package (pinned exactly, as a
+first-party dependency) only for a project that opts in.
 
 Expiry is not modelled: a value written with a TTL stays readable for the whole
 case, so a test of TTL expiry on `Kv` or `Idempotency` stubs the read instead

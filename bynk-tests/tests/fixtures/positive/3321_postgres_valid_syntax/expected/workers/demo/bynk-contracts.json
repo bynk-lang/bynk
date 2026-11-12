@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "batch": "fbd51bae9a9e1aa7",
+    "probe": "e03ffb8e2cef5dba"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "batch": "Svc(\"batch\",P(\"name\",B(\"String\")),Ret(R(L(N(\"PgRun\")),N(\"PgError\"))))",
+    "probe": "Svc(\"probe\",P(\"name\",B(\"String\")),Ret(R(B(\"String\"),N(\"PgError\"))))"
+  }
+}

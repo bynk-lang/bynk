@@ -27,6 +27,7 @@ use std::sync::Arc;
 use bynk_check::check_pipeline::{self, prepare_unit_check_ctx};
 use bynk_check::checker;
 use bynk_check::checker::{ExprId, TyId, Types};
+use bynk_check::d1_migrations::pglite_on;
 use bynk_check::expr_types::ExprTypeSink;
 use bynk_check::firstparty::{self, Platform};
 use bynk_check::hints::HintSink;
@@ -2265,6 +2266,48 @@ enum RunChecks {
     },
 }
 
+/// The `D1` side of [`run_checks`]: each instance's migrations directory,
+/// checked and read (P4b, #2608; a directory no instance owns is a warning), and
+/// the in-memory SQLite those migrations build, which every literal D1 statement
+/// is prepared against as its unit is checked (#3070; `[check] d1_sql = false`
+/// turns it off). A project that opts in to the PGlite `Postgres` double
+/// (`[test] postgres = "pglite"`, #3321) hands its `schema.sql`, when it has one,
+/// to the test emitters under [`PG_TEST_KEY`](bynk_check::d1_migrations::PG_TEST_KEY),
+/// after the SQLite check, which reads migrations only.
+fn d1_phase(
+    migration_files: Option<&assets::AssetFolder>,
+    (kinds, unit_tables): (&BTreeMap<String, UnitKind>, &HashMap<String, UnitTable>),
+    (project_root, overlay): (&Path, &HashMap<PathBuf, String>),
+    errors: &mut ErrorSink,
+) -> (
+    bynk_check::d1_migrations::D1Migrations,
+    Option<Arc<bynk_check::d1_sql::D1Sql>>,
+) {
+    let mut migrations = bynk_check::d1_migrations::phase_d1_migrations(
+        migration_files,
+        &bynk_check::d1_migrations::declared_databases(kinds, unit_tables),
+        errors,
+    );
+    let d1_sql = if bynk_project::read_check_config(project_root, overlay).d1_sql {
+        bynk_check::d1_sql::D1Sql::build(&migrations, errors)
+    } else {
+        None
+    };
+    if bynk_project::read_test_postgres(project_root) == bynk_project::TestPostgres::Pglite {
+        let schema = std::fs::read_to_string(project_root.join(bynk_project::PG_SCHEMA_FILE))
+            .ok()
+            .map(|sql| {
+                vec![bynk_check::d1_migrations::MigrationFile {
+                    name: bynk_project::PG_SCHEMA_FILE.to_string(),
+                    sql,
+                }]
+            })
+            .unwrap_or_default();
+        migrations.insert(bynk_check::d1_migrations::PG_TEST_KEY.to_string(), schema);
+    }
+    (migrations, d1_sql)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -2591,21 +2634,14 @@ fn run_checks(
     let fixture_text = fixture_files
         .map(|folder| bynk_check::fixtures::read_declared_fixtures(&parsed, folder, &mut errors))
         .unwrap_or_default();
-    // -- 6a0''. P4b (#2608): each `D1` instance's migrations directory,
-    //           checked and read; a directory no instance owns is a warning.
-    let d1_migrations = bynk_check::d1_migrations::phase_d1_migrations(
+    // -- 6a0''. P4b (#2608), #3070, #3321: the D1 migrations, and the schemas
+    //           literal D1 statements are prepared against.
+    let (d1_migrations, d1_sql) = d1_phase(
         migration_files,
-        &bynk_check::d1_migrations::declared_databases(&kinds, &unit_tables),
+        (&kinds, &unit_tables),
+        (project_root, overlay),
         &mut errors,
     );
-    // #3070: each database's migrations applied to an in-memory SQLite, which
-    //        every literal D1 statement is prepared against as its unit is
-    //        checked below. `[check] d1_sql = false` turns it off.
-    let d1_sql = if bynk_project::read_check_config(project_root, overlay).d1_sql {
-        bynk_check::d1_sql::D1Sql::build(&d1_migrations, &mut errors)
-    } else {
-        None
-    };
     // #1883, slice 2: fixed asset paths against each Worker's routes.
     bynk_check::assets::phase_asset_routes(&parsed, &groups, &kinds, &unit_uses, &mut errors);
     // A deployable Bundle build (no tests: `bynk compile` without
@@ -3340,7 +3376,7 @@ fn build_output(
         &runnable_tests[..]
     };
     if !main_tests.is_empty() {
-        let main_program = emit_test_main(main_tests, import_ext);
+        let main_program = emit_test_main(main_tests, import_ext, pglite_on(d1_migrations));
         compiled.push(StagedFile {
             output_path: PathBuf::from("tests/main.ts"),
             document: Document::Ts(main_program),

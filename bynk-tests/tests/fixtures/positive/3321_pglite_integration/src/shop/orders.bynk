@@ -1,0 +1,29 @@
+context shop.orders
+
+// Hyperdrive H4 (#3321): at the integration tier the Worker is the real
+// compose over a real `Postgres` binding, and `[test] postgres = "pglite"`
+// gives that binding a database: each case starts from `schema.sql`.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgRun, PgValue }
+
+capability Main = Postgres
+
+service api from http {
+	on POST("/orders") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let ran <- Main.run("insert into orders (name) values ($1)", [PgText("first")])
+		match ran {
+			Ok(_) => Ok("inserted")
+			Err(PgConstraint(_, _)) => Ok("duplicate")
+			Err(_) => Ok("failed")
+		}
+	}
+
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor given Main {
+		let rows <- Main.all("select name from orders order by id", [])
+		match rows {
+			Ok(json) => Ok(json)
+			Err(_) => Ok("failed")
+		}
+	}
+}

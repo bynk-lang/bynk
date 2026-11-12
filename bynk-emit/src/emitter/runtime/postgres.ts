@@ -330,8 +330,38 @@ export function makePgExecute(factory: PgFactory): PgExecute {
   return Object.assign(execute, { transaction });
 }
 
-/** The executor a Worker's compose gives `WorkersPostgres`: postgres.js. */
-export const pgExecute: PgExecute = makePgExecute(postgres as unknown as PgFactory);
+/**
+ * Hyperdrive H4 (#3321): the opt-in test double's executors, by the connection
+ * string its Hyperdrive binding carries. A multi-Worker test builds each
+ * Worker's real compose, which hands `WorkersPostgres` this module's
+ * `pgExecute`, so the double is reached by the string and no compose changes.
+ * Only a string in the double's own scheme can be registered, and nothing but
+ * `pglite.ts` registers one, so a deployed Worker's connection string never
+ * finds an entry.
+ */
+const testDoubles = new Map<string, PgExecute>();
+
+/** The scheme of a test double's connection string, which no database has. */
+export const PG_TEST_DOUBLE_SCHEME = "bynk-pglite://";
+
+export function registerPgTestDouble(connectionString: string, execute: PgExecute): void {
+  if (!connectionString.startsWith(PG_TEST_DOUBLE_SCHEME)) {
+    throw new Error("bynk: only a test double's connection string can be registered");
+  }
+  testDoubles.set(connectionString, execute);
+}
+
+const driverExecute = makePgExecute(postgres as unknown as PgFactory);
+
+/** The executor a Worker's compose gives `WorkersPostgres`: postgres.js, or a registered test double. */
+export const pgExecute: PgExecute = Object.assign(
+  (connectionString: string, sql: string, params: readonly PgParam[]): Promise<PgOutcome> =>
+    (testDoubles.get(connectionString) ?? driverExecute)(connectionString, sql, params),
+  {
+    transaction: (connectionString: string, statements: readonly PgStatementParam[]): Promise<PgTxOutcome> =>
+      (testDoubles.get(connectionString) ?? driverExecute).transaction(connectionString, statements),
+  },
+);
 
 // #1653: the `__` aliases emitted code imports.
 export { pgExecute as __pgExecute };

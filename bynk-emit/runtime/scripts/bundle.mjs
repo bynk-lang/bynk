@@ -49,6 +49,7 @@ const MODULES = [
   "queue",
   "email",
   "postgres",
+  "pglite",
   "agent",
   "auth",
   "connection",

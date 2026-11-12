@@ -90,6 +90,10 @@ pub enum Reach {
     /// A context declares an instance of this `bynk.cloudflare` capability
     /// (`capability Main = Postgres`, #3318), named by its base capability.
     CapabilityInstance(&'static str),
+    /// The project's `bynk.toml` opts in to a test double that runs on it
+    /// (`[test] postgres = "pglite"`, #3321). Decided on the manifest, not on
+    /// any source: nothing in a program names a test double.
+    TestPostgresDouble,
 }
 
 /// A first-party npm dependency (ADR 0799 C, #3328): an npm package the
@@ -143,6 +147,17 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
         version: "3.4.5",
         runtime_module: "postgres",
         reached_by: Reach::CapabilityInstance("Postgres"),
+    },
+    // Hyperdrive H4 (#3321): `pglite.ts` is the opt-in `Postgres` test double
+    // (`[test] postgres = "pglite"`), so only a project that opts in carries
+    // the package, and only into a test build: the harness is the one place
+    // that references the module. Pinned at the version ADR 0799 I's
+    // measurements ran.
+    FirstPartyNpm {
+        package: "@electric-sql/pglite",
+        version: "0.5.16",
+        runtime_module: "pglite",
+        reached_by: Reach::TestPostgresDouble,
     },
 ];
 

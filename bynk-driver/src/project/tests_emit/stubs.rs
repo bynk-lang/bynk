@@ -1284,6 +1284,8 @@ pub(super) fn platform_double(
     name: &str,
     harness_clock: bool,
     // P4b (#2608): a `D1` instance's migrations, run on its fresh database.
+    // #3321: for a `Postgres` instance, its `schema.sql` when the project opts
+    // in to PGlite (`Some`, possibly empty), else `None`.
     d1_migrations: Option<&[MigrationFile]>,
 ) -> Option<String> {
     let body = match (owner, cap) {
@@ -1361,6 +1363,21 @@ pub(super) fn platform_double(
         // each instance faults until its operation is stubbed, as `Service`
         // does. The message names the instance and never a connection string:
         // there is none to name.
+        // Hyperdrive H4 (#3321): with `[test] postgres = "pglite"` the real
+        // `WorkersPostgres` over PGlite instead, reset for each case (the
+        // double is built per case) and given the project's `schema.sql`.
+        ("bynk.cloudflare", "Postgres") if d1_migrations.is_some() => {
+            let schema: String = d1_migrations
+                .unwrap_or_default()
+                .iter()
+                .map(|f| f.sql.as_str())
+                .collect();
+            format!(
+                "  const __pg = __makeIntegrationPostgres({name}, {schema});\n  return new bynk_cloudflare__binding.WorkersPostgres(__pg.env, {name}, __pg.execute);\n",
+                name = bynk_project::json_string(name),
+                schema = bynk_project::json_string(&schema),
+            )
+        }
         ("bynk.cloudflare", "Postgres") => {
             let op = |op: &str, args: &str| {
                 format!(

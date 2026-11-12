@@ -77,6 +77,9 @@ url.shop-orders = "https://shop-orders-preview.example.workers.dev"
 
 [test.mutate]
 exclude = []                # paths and `unit.decl` names `bynk test --mutate` leaves alone
+
+[test]
+postgres = "stub"           # "pglite" runs a `Postgres` instance on a real in-memory Postgres in tests
 ```
 
 Delete any line you are happy to leave at its default — the file above is
@@ -667,6 +670,19 @@ production = true
 
 `dev` is reserved for the local `bynk dev` the runner starts itself, and isn't
 a target name.
+
+### `[test] postgres`
+
+What a test's `Postgres` instance is.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `postgres` | `"stub"` or `"pglite"` | `"stub"` | `"stub"`: a test never reaches a database, so each operation faults until the case stubs it. `"pglite"`: each instance runs its statements on [PGlite](https://pglite.dev/), Postgres compiled to WebAssembly, on a database that starts each case from the project's `schema.sql`. See [Postgres under test](/book/reference/testing/#postgres-under-test). |
+
+```toml
+[test]
+postgres = "pglite"
+```
 
 ### `[test.mutate]`
 

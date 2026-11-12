@@ -1,0 +1,13 @@
+[project]
+name = "pglite-unit"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.Postgres"]
+
+# Hyperdrive H4 (#3321): a `Postgres` instance runs on PGlite in a test.
+[test]
+postgres = "pglite"

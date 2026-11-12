@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgValue }
+
+capability Main = Postgres
+
+service probe {
+  on call(id: Int) -> Effect[Result[String, PgError]] given Main {
+    let _ <- Main.all("SELECT id FROM orders WHERE id = $1 AND qty > $2", [PgInteger(id), PgInteger(5)])
+    Effect.pure(Ok("ok"))
+  }
+}

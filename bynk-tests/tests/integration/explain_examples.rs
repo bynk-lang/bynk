@@ -60,6 +60,14 @@ use std::path::{Path, PathBuf};
 
 use bynk_syntax::diagnostics::EXPLANATIONS;
 
+/// Explained codes that are **warnings**, which this gate cannot back: it compiles `bad/`
+/// and requires the code among its *errors*. Each is held by a positive fixture
+/// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
+const WARNING_ONLY: &[(&str, &str)] = &[(
+    "bynk.postgres.sql_invalid",
+    "a warning (the parser is not Postgres' own); `positive/3321_postgres_sql_invalid` and `_in_transaction` hold it with `expected_warnings.txt`",
+)];
+
 /// Explained codes whose example is not Bynk source, with the reason. Their
 /// examples show a lockfile, a manifest entry or a command line, which no compile can check.
 const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
@@ -588,7 +596,11 @@ fn fixture_failures(code: &str, example: &str) -> Vec<String> {
 
 #[test]
 fn every_explanation_example_is_backed_by_a_compiled_pair() {
-    let exempt: BTreeSet<&str> = NOT_BYNK_SOURCE.iter().map(|(code, _)| *code).collect();
+    let exempt: BTreeSet<&str> = NOT_BYNK_SOURCE
+        .iter()
+        .chain(WARNING_ONLY)
+        .map(|(code, _)| *code)
+        .collect();
     let failures: Vec<String> = EXPLANATIONS
         .iter()
         .filter(|e| !exempt.contains(e.code))
@@ -607,10 +619,10 @@ fn every_explanation_example_is_backed_by_a_compiled_pair() {
 #[test]
 fn explain_fixtures_and_exemptions_name_explained_codes() {
     let explained: BTreeSet<&str> = EXPLANATIONS.iter().map(|e| e.code).collect();
-    for (code, reason) in NOT_BYNK_SOURCE {
+    for (code, reason) in NOT_BYNK_SOURCE.iter().chain(WARNING_ONLY) {
         assert!(
             explained.contains(code),
-            "NOT_BYNK_SOURCE lists `{code}`, which has no explanation"
+            "an exemption lists `{code}`, which has no explanation"
         );
         assert!(!reason.is_empty(), "`{code}` is exempt without a reason");
         assert!(

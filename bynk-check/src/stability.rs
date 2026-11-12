@@ -42,6 +42,12 @@ pub struct StabilityPolicy {
     /// The experimental item paths; an item under one is experimental too.
     /// [`firstparty::experimental_items`] unless a test supplies its own.
     pub experimental: Vec<String>,
+    /// #3321: whether the project supplies a `schema.sql`, which switches on the
+    /// check of each literal `Postgres` statement (`pg_sql`). Not a stability
+    /// matter: the policy is the one project-wide value every unit's check
+    /// already carries (and is hashed into), so this rides with it rather than
+    /// through each of the ways a unit is checked.
+    pub pg_sql: bool,
 }
 
 impl Default for StabilityPolicy {
@@ -64,9 +70,14 @@ impl StabilityPolicy {
         let allow = project_root
             .map(|root| bynk_project::read_unstable_config(root, overlay).allow)
             .unwrap_or_default();
+        let pg_sql = project_root.is_some_and(|root| {
+            let schema = root.join(bynk_project::PG_SCHEMA_FILE);
+            overlay.contains_key(&schema) || schema.is_file()
+        });
         Self {
             allow,
             experimental: firstparty::experimental_items(),
+            pg_sql,
         }
     }
 
@@ -76,6 +87,7 @@ impl StabilityPolicy {
         Self {
             allow: Vec::new(),
             experimental: Vec::new(),
+            pg_sql: false,
         }
     }
 
@@ -165,6 +177,7 @@ mod tests {
         StabilityPolicy {
             allow: allow.iter().map(|s| s.to_string()).collect(),
             experimental: experimental.iter().map(|s| s.to_string()).collect(),
+            pg_sql: false,
         }
     }
 

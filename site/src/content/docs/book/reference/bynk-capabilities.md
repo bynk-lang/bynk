@@ -1065,6 +1065,35 @@ write needs the transaction held open between them; Bynk does not offer that, so
 make the decision in one statement (`insert … select`, `update … where`) or retry
 on `PgSerialization`.
 
+#### Postgres SQL checked for syntax {#postgres-sql-checked-for-syntax}
+
+Bynk does not own your Postgres schema: it is made and changed outside the
+project, so there are no migrations to check a statement against, as there are for
+[`D1`](#sql-checked-against-the-migrations). A project that keeps a schema file
+can still have each literal statement checked. Put a `schema.sql` at the project
+root (beside `bynk.toml`) and `bynk check` checks every literal statement of a
+`Postgres` capability, in `all`, `first`, `run` and the statements of a
+`transaction`:
+
+- `bynk.postgres.sql_param_count` (an **error**): the statement's highest `$n`
+  differs from the number of elements in the `params` list written out in place
+  (or `let`-bound). The count follows Postgres' rule and is exact: a `$n` inside a
+  string, a quoted name, a comment or a dollar-quoted body is text, not a
+  parameter.
+- `bynk.postgres.sql_invalid` (a **warning**): the statement does not parse with
+  the Postgres dialect of [sqlparser](https://github.com/apache/datafusion-sqlparser-rs),
+  or is more than one command (a prepared statement takes one). It is a warning
+  because that parser is not Postgres' own and can refuse valid SQL, a newer or
+  rarer form; it never blocks a build.
+
+Nothing is checked against the tables and columns the file defines: the file's
+presence is the switch, and the same file seeds the
+[PGlite test double](/book/reference/testing/#postgres-under-test). Without a
+`schema.sql` nothing is checked, and deleting it turns the check off. The typed
+reads (`select[T]`, `firstAs[T]`) are not checked, since their text is a tail the
+compiler completes. The parser is pure Rust, so the check runs everywhere Bynk
+does, the playground included.
+
 ### SQL databases: `D1`
 
 `D1` queries a D1 database, Cloudflare's SQLite. Each database is a named

@@ -99,6 +99,10 @@ regress = "0.12"
 # built from the binding's migrations. Bundled so every release target (and CI)
 # runs the same SQLite; the C amalgamation is compiled by `cc`.
 rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
+# Hyperdrive H4 (#3321): a pure-Rust SQL parser, to check a literal `Postgres`
+# statement's syntax when the project supplies a `schema.sql`. libpg_query
+# (`pg_query`) was rejected: it needs libclang to build.
+sqlparser = "0.64.0"
 proptest = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"

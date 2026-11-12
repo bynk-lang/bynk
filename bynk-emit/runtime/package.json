@@ -12,6 +12,7 @@
     "verify": "npm run typecheck && npm run test && npm run check"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
     "@types/node": "26.6.6",
     "postal-mime": "4.1.4",
     "postgres": "3.4.5",

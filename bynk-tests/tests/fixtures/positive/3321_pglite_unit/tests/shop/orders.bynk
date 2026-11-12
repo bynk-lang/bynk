@@ -1,0 +1,52 @@
+suite shop.orders
+
+case "a statement runs for real" {
+	let a <- add.call("first")
+	expect a == Ok(PgRun { rowCount: 1 })
+	let l <- list.call()
+	expect l == Ok("[{\"id\":1,\"name\":\"first\",\"qty\":\"1\"}]")
+}
+
+case "a case starts from the schema alone: the row and the sequence are gone" {
+	let a <- add.call("first")
+	expect a == Ok(PgRun { rowCount: 1 })
+	let l <- list.call()
+	expect l == Ok("[{\"id\":1,\"name\":\"first\",\"qty\":\"1\"}]")
+}
+
+case "a unique violation is a constraint error with its SQLSTATE" {
+	let a <- add.call("same")
+	expect a == Ok(PgRun { rowCount: 1 })
+	let b <- add.call("same")
+	expect b is Err(PgConstraint("23505", _))
+}
+
+case "a typed read decodes an int8 and a timestamptz" {
+	let a <- add.call("typed")
+	expect a == Ok(PgRun { rowCount: 1 })
+	let f <- find.call(1)
+	match f {
+		Ok(Some(o)) => {
+			expect o.name == "typed"
+			expect o.qty == 1
+		}
+		_ => expect false
+	}
+}
+
+case "a transaction applies all of its statements or none" {
+	let a <- add.call("old")
+	expect a == Ok(PgRun { rowCount: 1 })
+	let ok <- rename.call("old", "new")
+	expect ok == Ok([PgRun { rowCount: 1 }, PgRun { rowCount: 1 }])
+	let clash <- rename.call("new", "old")
+	expect clash is Err(PgConstraint("23505", _))
+	let l <- list.call()
+	expect l == Ok("[{\"id\":1,\"name\":\"new\",\"qty\":\"1\"},{\"id\":2,\"name\":\"old\",\"qty\":\"1\"}]")
+}
+
+case "a stub still answers before the database" {
+	stub Main.run(_, _) returns Err(PgSerialization("could not serialize access"))
+	let a <- add.call("x")
+	expect a is Err(PgSerialization(_))
+}
