@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The runtime gains `requestBodyStream`, a lazy, cap-counted `Stream[Bytes]` over a request body, and `BodyTooLarge`, the first step of streaming a `@raw` request body (#3380, #3180 slice 3)
----
+# 0818 — A `@raw` handler streams its request body as a `Stream[Bytes]` under the route's cap
 
-## ADR: stream-request-body-into-raw-handler
-title: A `@raw` handler streams its request body as a `Stream[Bytes]` under the route's cap
-summary: `body: Stream[Bytes]` on a `@raw` route; a lazy, single-pass, counted body; a mid-stream overrun answers the route's `413`
+- **Status:** Accepted (v0.562.3)
 
 **Context.** A handler's body was always read whole before the handler ran
 (`readCapped`, which concatenates every chunk), so the largest upload a service
@@ -86,9 +81,11 @@ Node client sending a `duplex: "half"` `ReadableStream` body:
    must finish reading before it returns, which a Bynk handler does by
    construction (its effects complete before it returns). A response body
    *derived* from the request stream, pulling it lazily after the handler has
-   returned (an echo of 8 MiB), streams without error, so `RawStreamed` over a
-   mapped request body is permitted by the platform. A sequential read of 64 MiB
-   then a reply is fine.
+   returned (an echo of 8 MiB), streamed without error on Miniflare driven
+   directly, but failed under `wrangler dev`'s proxy (`Network connection lost`,
+   and an uncaught "This ReadableStream is currently locked to a reader" from the
+   proxy), so it is neither promised nor part of the smoke test, and is not
+   checked on the edge. A sequential read of 64 MiB then a reply is fine.
 
 *Bundle target.* The HTTP router is `workers_entry.rs` only; the bundle emits an
 `on http` handler as a plain method (`http_handler_method_name_ir`) that the host

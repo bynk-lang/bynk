@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.562.3** | The runtime gains `requestBodyStream`, a lazy, cap-counted `Stream[Bytes]` over a request body, and `BodyTooLarge`, the first step of streaming a `@raw` request body (#3380, #3180 slice 3) |
 | **v0.562.2** | A test keeps the Book's upgrading page ordered, non-empty and matched to the changelog (#3178) |
 | **v0.562.1** | Three diagnostic notes no longer give stale advice — `bynk.parse.doc_block_contains_code` suggests a `//` divider, `bynk.generics.generic_non_record` names alias bodies, and `bynk.generics.generic_sum_embeds` says to wrap with `.mapErr(…)` |
 | **v0.562.0** | A `MySql` instance kind reaches an existing MySQL or MariaDB database through Hyperdrive over mysql2 (`capability Legacy = MySql`, `?` placeholders, `MySqlValue` and `MySqlError`, an `@tls("…")` option), with the same typed reads, transactions, deploy path and `schema.sql` statement check as `Postgres` |
