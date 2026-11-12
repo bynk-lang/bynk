@@ -531,6 +531,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "signed-cookies",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_write_directly",
+        blurb: "A `SignedCookie` actor's session cookie is minted by `Actor.issue(identity)`, which signs it with the actor's key, and removed by `Actor.expire()`, and the CSRF check keys off that actor. A cookie record's `R.field.cookie(v)` or `R.field.expire()` whose field is read under the session cookie's name would write or clear the credential without any of that, so it is refused. Keep the session cookie out of the record and use the actor's own members.",
+        example: "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],\n  theme: Option[String],\n}\n\nOk(\"x\").withCookie(Prefs.session.cookie(\"forged\"))   // ✗ the session cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(\"dark\"))        // ✓ another cookie",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_write_literal",
+        blurb: "A `Cookie { name: \"__Host-session\", … }` literal named like a `SignedCookie` actor's session cookie would write or clear the credential by hand, without the actor's signing key, expiry or CSRF seam, so it is refused. Write it with `Actor.issue(identity)` and remove it with `Actor.expire()`.",
+        example: "Ok(\"x\").withCookie(Cookie { name: \"__Host-session\", value: \"forged\" })   // ✗ the actor's cookie\n\nOk(\"x\").withCookie(Cookie { name: \"theme\", value: \"dark\" })            // ✓ another cookie",
+        page: "/book/reference/actors",
+        anchor: "signed-cookies",
+    },
+    Explain {
         code: "bynk.actor.sum_requires_binder",
         blurb: "`by A | B` tries the actors in order and the first that verifies the caller wins. \
                 Which one that was is only known when a request arrives, so the handler learns it \
@@ -2590,6 +2604,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "Created(\"ok\").withCookie(Cookie { name: \"__Secure-sid\", value: \"a\", secure: false })   // ✗\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Secure-sid\", value: \"a\" })                  // ✓",
         page: "/book/reference/http",
         anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_untyped_has_field",
+        blurb: "`Cookie { name: \"theme\", value: \"Dark\" }` is a cookie in no record, but here the record `Prefs` reads that cookie by that name, so the name and the value are written twice with nothing relating them: a renamed field or a changed type leaves the write valid and wrong. It is a warning. Write it from the record, `Prefs.theme.cookie(Dark)`, which is named by the field's wire name and valued as its decoder reads it; keep the attributes by spreading it into a `Cookie` literal. Where the literal is only a name and a value that provably decodes, the quick-fix does the rewrite.",
+        example: "Ok(\"x\").withCookie(Cookie { name: \"theme\", value: \"Dark\" })   // ⚠ `Prefs` reads this cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))                       // ✓",
+        page: "/book/reference/http",
+        anchor: "typed-cookie-write",
+    },
+    Explain {
+        code: "bynk.http.cookie_value_undecodable",
+        blurb: "An untyped `Cookie` literal is named for a field of a `cookies` record, so the next request is read by that field's decoder, and its literal value is one the decoder rejects (an enum is read by its exact, case-sensitive variant name, an `Int` by its digits, a `Bool` by `true` or `false`). The write compiles and is sent, and then every later request is answered `400`. It is an error. Write the cookie from the record, `Prefs.theme.cookie(Dark)`, which checks the value against the field.",
+        example: "Ok(\"x\").withCookie(Cookie { name: \"mode\", value: \"dark\" })   // ✗ `Mode` is read as `Light` or `Dark`\n\nOk(\"x\").withCookie(Cookie { name: \"mode\", value: \"Dark\" })   // ✓",
+        page: "/book/reference/http",
+        anchor: "typed-cookie-write",
     },
     Explain {
         code: "bynk.http.cookies_field_not_stringy",
@@ -7806,6 +7834,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `SignedCookie` `cookie` does not start with `__Host-` (warning).",
     )),
     d(
+        "bynk.actor.signed_cookie_write_directly",
+        "A cookie record's typed write names the session cookie that a `SignedCookie` actor consumes.",
+    ),
+    d(
+        "bynk.actor.signed_cookie_write_literal",
+        "An untyped `Cookie` literal is named like a `SignedCookie` actor's session cookie.",
+    ),
+    d(
         "bynk.actor.sum_requires_binder",
         "A multi-actor sum `by` clause has no binder to match the resolved actor.",
     ),
@@ -8886,6 +8922,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.cookie_secure_prefix",
         "A `__Secure-` cookie literal is not `secure`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.cookie_untyped_has_field",
+        "An untyped `Cookie` literal is named like a field of a cookie record of the unit (a warning).",
+        &["http_handler"],
+    )),
+    dg(
+        "bynk.http.cookie_value_undecodable",
+        "An untyped `Cookie` literal's value is one the record field that reads that cookie would reject.",
         &["http_handler"],
     ),
     dg(
