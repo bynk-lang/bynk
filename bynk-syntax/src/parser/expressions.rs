@@ -1150,7 +1150,7 @@ impl<'a> Parser<'a> {
                         "expected an expression, found `{`",
                     )
                     .with_note(
-                        "bare record-spread `{ ...base, ... }` is the only `{`-led expression in v0.5; for record construction, use `TypeName { ... }`",
+                        "bare record-spread `{ ...base, ... }` is the only `{`-led expression; for record construction, use `TypeName { ... }`",
                     ))
                 }
             }

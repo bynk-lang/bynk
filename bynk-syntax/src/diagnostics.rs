@@ -1817,13 +1817,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "generic-record-types",
     },
     Explain {
-        code: "bynk.generics.generic_record_at_boundary",
-        blurb: "Despite its name, this is about `Val[T]`, not about a boundary: a generic type can cross one through its codec. `Val` fabricates a value from the declaration of `T`, which is not yet done for each instantiation of a generic type, bare, `Val[Box]`, or applied, `Val[Box[Int]]`. Build the value with a record literal instead.",
-        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
-        page: "/book/reference/testing",
-        anchor: "val",
-    },
-    Explain {
         code: "bynk.generics.generic_sum_embeds",
         blurb: "`embeds E as V` lets `?` wrap an `E` error in the variant `V`, picking the variant by the error's type. In a generic sum that conversion would have to hold for every instantiation, which is not supported. Drop the `embeds` clause and wrap the error by hand where it is needed, with `.mapErr(Payment)`, or make the sum non-generic.",
         example: "type PayError = enum { Declined }\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)\n    embeds PayError as Payment    // ✗ a generic sum cannot embed\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)             // ✓ no `embeds`; wrap with `.mapErr(Payment)`",
@@ -6161,6 +6154,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "val",
     },
     Explain {
+        code: "bynk.val.generic_type",
+        blurb: "`Val[T]` fabricates a value for a test from the declaration of `T`. \
+                That is not yet done for each instantiation of a generic type, so \
+                `Val` refuses one whether it is written bare, `Val[Box]`, or \
+                applied, `Val[Box[Int]]`. The type itself is fine, and may cross a \
+                boundary through its codec; only fabrication is missing. Build the \
+                value yourself instead: a record literal for a generic record, \
+                one of its variants for a generic sum.",
+        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
         code: "bynk.val.literal_violates",
         blurb: "A pinned `Val[T](…)` is checked against the refinement of `T` at \
                 compile time, and this literal breaks it, so the test would build \
@@ -7337,11 +7343,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["type_decl"],
     ),
     dg(
-        "bynk.generics.generic_record_at_boundary",
-        "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec.",
-        &[],
-    ),
-    dg(
         "bynk.generics.generic_sum_embeds",
         "A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593).",
         &["type_decl"],
@@ -7398,7 +7399,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.uninferable_type_arg",
-        "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a.",
+        "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value.",
         &["call"],
     ),
     dg(
@@ -10012,6 +10013,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.val.arity",
         "`Val[T]` was given the wrong number of pin arguments.",
+        &["val_expr"],
+    ),
+    dg(
+        "bynk.val.generic_type",
+        "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379.",
         &["val_expr"],
     ),
     dg(
