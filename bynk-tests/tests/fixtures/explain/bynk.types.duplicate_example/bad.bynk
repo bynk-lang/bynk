@@ -1,0 +1,3 @@
+commons demo
+
+type Code = String where Matches("[A-Z]{3}") @example("ABC") @example("XYZ")

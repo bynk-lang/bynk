@@ -2371,6 +2371,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "json-for-non-bynk-clients",
     },
     Explain {
+        code: "bynk.http.json_invalid_field",
+        blurb: "The `options` field of a `json { }` section says how response bodies write an `Option`, and it is read at compile time, so its value is the bare word `tagged` (the default, `{\"kind\": \"Some\", …}`) or `plain` (`Some(v)` as `v`, `None` as `null`). Any other word, a string or a computed value is refused. Write one of the two. The route-level form is `@json(options: …)`, checked by `bynk.http.json_invalid_arg`.",
+        example: "service api from http {\n    json { options: compact }   // ✗ `tagged` or `plain`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    json { options: plain }     // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "json-for-non-bynk-clients",
+    },
+    Explain {
         code: "bynk.http.json_not_http",
         blurb: "A `json { }` section chooses how a service's HTTP response bodies write `Option`, tagged or plain. Only a `from http` service has response bodies, so on a `cron` or other service the section is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `limits` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.limits_not_http`. For the per-route form, see `bynk.http.json_on_non_http`.",
         example: "service jobs from cron {\n    json { options: plain }   // ✗ a schedule has no response body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    json { options: plain }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
@@ -2498,6 +2505,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "raw-request-bodies",
     },
     Explain {
+        code: "bynk.http.raw_duplicate",
+        blurb: "`@raw` says the route reads its body as untouched bytes and names the one media type it accepts. A handler has one body, so a second `@raw` has no meaning: the router would have two media types to compare with and nothing to decide between them. Keep one. To accept more than one type, use `\"*/*\"`, or write a route for each. Another body annotation on the same route is `bynk.http.body_kind_conflict`.",
+        example: "@raw(contentType: \"image/png\")\n@raw(contentType: \"image/jpeg\")    // ✗ a second `@raw`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"*/*\")           // ✓ one `@raw`, any type\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "raw-request-bodies",
+    },
+    Explain {
         code: "bynk.http.raw_error_status",
         blurb: "`RawError` answers with an error status and a body you render yourself, so its first argument must name a 4xx or 5xx `HttpResult` variant, such as `Forbidden` or `ErrorStatus.Conflict`, written as a name. A number, a 2xx name or an expression is refused, so a failure cannot be sent as a success. The diagnostic lists the names. A status name anywhere else is `bynk.http.error_status_position`.",
         example: "RawError(200, Bytes.empty(), \"text/plain\")        // ✗ the status is a name, not a number\n\nRawError(NotFound, Bytes.empty(), \"text/plain\")   // ✓",
@@ -2508,6 +2522,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.http.raw_on_bodyless",
         blurb: "`@raw` marks a request body as untouched octets, so it belongs on a `POST`, `PUT` or `PATCH` route with a `body: Bytes` parameter. On a `GET`, a `DELETE` or a route with no `body` there is nothing for it to mark. It is about the request, not the response: to answer with bytes, return `Raw(body, contentType)`. `@form` on such a route is `bynk.http.form_on_bodyless`.",
         example: "@raw(contentType: \"image/png\")   // ✗ a `GET` has no body\non GET(\"/avatars/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓ an upload route\n@limit(maxBody: 5_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        page: "/book/reference/http",
+        anchor: "raw-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.raw_unknown_arg",
+        blurb: "`@raw` takes one argument, `contentType:`, the media type the route accepts. The set is closed, so a misspelt or invented argument is refused rather than ignored, which would leave the route behaving otherwise than you wrote. A size ceiling is not an argument of `@raw`: it is a separate `@limit(maxBody: …)`. Remove the argument. A bad `contentType` is `bynk.http.raw_bad_content_type`.",
+        example: "@raw(contentType: \"image/png\", maxSize: 10)   // ✗ not an argument of `@raw`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")                // ✓\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
     },
@@ -2531,6 +2552,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on GET(\"/items\") () -> Effect[String] by v: Visitor { … }   // ✗ no `HttpResult`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
         page: "/book/reference/http",
         anchor: "handler-form",
+    },
+    Explain {
+        code: "bynk.http.security_invalid_field",
+        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. Write the value out. A field other than these two is `bynk.http.security_unknown_field`.",
+        example: "service api from http {\n    security { hsts: 180 }         // ✗ a `Duration`, not a number\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }    // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "security-headers",
     },
     Explain {
         code: "bynk.http.security_not_http",
@@ -5260,11 +5288,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "decimal",
     },
     Explain {
+        code: "bynk.types.derives_automatic",
+        blurb: "`derives` opts a type into a capability it does not have by default, and `Ord` is the only one: it needs every field to be orderable, so you ask for it. `Eq`, `Key` and `Codable` hold for a type without being asked, so naming one does nothing, and the compiler refuses it rather than leave a clause that suggests it matters. Remove the name, which the compiler's fix does. Any other name is `bynk.generics.unknown_constraint`.",
+        example: "type Point = { x: Int, y: Int } derives Eq    // ✗ `Eq` holds already\n\ntype Point = { x: Int, y: Int }               // ✓",
+        page: "/book/reference/types",
+        anchor: "ordering-your-own-types",
+    },
+    Explain {
         code: "bynk.types.derives_field_not_orderable",
         blurb: "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
         example: "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
         page: "/book/reference/types",
         anchor: "ordering-your-own-types",
+    },
+    Explain {
+        code: "bynk.types.duplicate_example",
+        blurb: "`@example` gives `Val` the one value to use for a `Matches` or `IsoDate` refinement, which it cannot invent. A second `@example` would leave two candidates and no rule for choosing, so a refinement takes at most one. Keep the one you want. An example that does not satisfy the refinement is `bynk.types.example_violates`.",
+        example: "type Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\") @example(\"XYZ\")    // ✗ a second example\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")                       // ✓",
+        page: "/book/reference/testing",
+        anchor: "val-example",
     },
     Explain {
         code: "bynk.types.duplicate_literal_arm",
@@ -5414,6 +5456,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.types.field_annotation_unknown",
+        blurb: "`@name(\"…\")` is the only annotation a record field takes: it gives the field the key it has on an HTTP request where that key is not an identifier. Any other annotation is refused rather than ignored, so a misspelt one cannot silently do nothing. Write `@name`, or drop the annotation.",
+        example: "type Filter = {\n    @rename(\"page-size\") pageSize: Option[Int],    // ✗ only `@name` exists\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],      // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "field-name",
+    },
+    Explain {
         code: "bynk.types.field_default_on_variant",
         blurb: "Only a record's fields take defaults. A variant is built like a call, with every \
                 payload field given, so a default on a payload field would be an optional argument \
@@ -5423,6 +5472,48 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Retry =\n    | Never\n    | Times(n: Int = 3)    // ✗ a variant's field has no default\n\ntype Backoff = { n: Int = 3 }\n\ntype Retry =\n    | Never\n    | Times(opts: Backoff)    // ✓ the record carries the default",
         page: "/book/reference/types",
         anchor: "field-defaults",
+    },
+    Explain {
+        code: "bynk.types.field_name_bad_arg",
+        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal: not a number, a constant, a computed value, a second argument or none. Write the key as a literal, as in `@name(\"__Host-sid\")`.",
+        example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "field-name",
+    },
+    Explain {
+        code: "bynk.types.field_name_case_conflict",
+        blurb: "A `cookies` or `query` record is read by name, and names that differ only in case are easily confused: a client that sends `page` would not match `Page`, yet both look like the same parameter. So two fields of such a record may not have wire names that differ only in case. Rename one. Two fields with exactly the same wire name are `bynk.types.field_name_duplicate`.",
+        example: "type Filter = {\n    @name(\"Page\") a: Option[Int],\n    @name(\"page\") b: Option[Int],    // ✗ differs from `Page` only in case\n}\n\ntype Filter = {\n    @name(\"Page\") a: Option[Int],\n    @name(\"size\") b: Option[Int],    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "field-name",
+    },
+    Explain {
+        code: "bynk.types.field_name_duplicate",
+        blurb: "A field's wire name is the key a request reader looks it up by, so two fields of one record cannot share one: both would read the same value. A field's wire name is its `@name`, or its own name when it has none. A field may also carry only one `@name`. Give each field its own key. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+        example: "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "field-name",
+    },
+    Explain {
+        code: "bynk.types.field_name_invalid",
+        blurb: "A `@name` has to be usable as a key where the record is read. It may not be empty, and on a `cookies` record it must be a cookie name, an RFC 9110 token: no spaces, quotes or separators such as `;` `,` or `=`. A name the request could never carry would make the field unreachable. Use a valid token, such as `__Host-sid`.",
+        example: "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "field-name",
+    },
+    Explain {
+        code: "bynk.types.field_name_not_request_record",
+        blurb: "`@name` renames the key a request reader looks for. Only a record that is the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler is read that way, so on any other record the annotation would do nothing. Remove it, or make the record that parameter. A record used as a JSON body or result may not carry `@name` either: `bynk.types.field_name_record_not_boundary`.",
+        example: "type Plain = {\n    @name(\"x-y\") a: String,    // ✗ `Plain` is not read from a request\n}\n\ntype Plain = {\n    a: String,                // ✓\n}",
+        page: "/book/reference/types",
+        anchor: "field-name",
+    },
+    Explain {
+        code: "bynk.types.field_name_record_not_boundary",
+        blurb: "A record with `@name` fields is read off a request by those names, but its JSON form uses the field names, so using it as a JSON body, a result, a store field, an event or a call argument would make the two forms disagree. It may only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter. Use a second record, without `@name`, for the other position.",
+        example: "type Filter = {\n    @name(\"page-size\") pageSize: Option[Int],\n}\n\ntype FilterView = {\n    pageSize: Option[Int],\n}\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[Filter]] by v: Visitor { … }        // ✗\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[FilterView]] by v: Visitor { … }    // ✓",
+        page: "/book/reference/types",
+        anchor: "field-name",
     },
     Explain {
         code: "bynk.types.field_refinement_not_base",
@@ -5437,6 +5528,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Point = { x: Int, y: Int }\n\nfn origin() -> Point {\n    Point { x: 0, y: \"0\" }    // ✗ `y` is an `Int`\n}\n\nfn origin() -> Point {\n    Point { x: 0, y: 0 }    // ✓\n}",
         page: "/book/reference/types",
         anchor: "record-types",
+    },
+    Explain {
+        code: "bynk.types.form_uncodable",
+        blurb: "`Form.decode[T]` and `Form.encode` read and write the flat `key=value` text a `@form` route handles, so `T` must be a record of fields a form can carry: a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`. Form keys have no nesting, so a nested record, or a type that is not a record, is refused. Put the nested record's fields in `T` itself. A `@form` route's own body has the same rule: `bynk.http.form_field_not_stringy`.",
+        example: "type Address = { city: String }\ntype Signup = { email: String, address: Address }\n\nForm.decode[Signup](text)    // ✗ `address` is a nested record\n\ntype Signup = { email: String, city: String }\n\nForm.decode[Signup](text)    // ✓",
+        page: "/book/reference/types",
+        anchor: "form-codec",
     },
     Explain {
         code: "bynk.types.function_at_boundary",
@@ -5545,6 +5643,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "predicates",
     },
     Explain {
+        code: "bynk.types.is_base_mismatch",
+        blurb: "`value is Quantity` runs a refined type's predicates against the value. A refined type is a base type plus predicates, so the value must have that base: an `Int` can be checked against `Int where …`, but a `String` has nothing for an `Int` range to test. Check the value against a refined type over its own type, or convert it first, for example by parsing the `String`.",
+        example: "type Quantity = Int where InRange(1, 100)\n\ns is Quantity    // ✗ `s` is a `String`, `Quantity` is over `Int`\n\nn is Quantity    // ✓ `n` is an `Int`",
+        page: "/book/reference/refined-types",
+        anchor: "narrowing-with-is",
+    },
+    Explain {
         code: "bynk.types.is_literal_pattern",
         blurb: "`is` tests a value's variant or refined type, not its value, so `x is 31` would read as a type test while meaning equality. Bynk refuses it rather than let the two readings blur. Compare with `==` instead. In a `match`, a literal is a fine pattern, because a `match` arm tests a value there.",
         example: "fn thirty(x: Int) -> Bool {\n    x is 31           // ✗ `is` tests a type, not a value\n}\n\nfn thirty(x: Int) -> Bool {\n    x == 31           // ✓\n}",
@@ -5564,6 +5669,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn teen(age: Int) -> Bool {\n    age is 13..19                // ✗ `is` tests a type, not a range\n}\n\nfn teen(age: Int) -> Bool {\n    age >= 13 && age <= 19       // ✓\n}",
         page: "/book/guides/type-system/narrow-with-is",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.types.is_refined_pattern",
+        blurb: "`is` tests a value against a type or a variant. An inline refinement, `_ where Positive`, is a pattern for a `match` arm, and is not accepted after `is`: a rule worth testing is worth a name, which also lets every other place use it. Declare a refined type and write `n is Natural`, or move the test into a `match` arm.",
+        example: "n is _ where Positive    // ✗ not a pattern for `is`\n\ntype Natural = Int where Positive\n\nn is Natural             // ✓ name the refinement",
+        page: "/book/reference/refined-types",
+        anchor: "narrowing-with-is",
     },
     Explain {
         code: "bynk.types.is_unknown_variant",
@@ -5723,6 +5835,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Shape = | Circle(r: Int, d: Int) | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r: x, y) => x    // ✗ one named binding, one positional\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(x, y) => x       // ✓ all positional\n        Dot => 0\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.negative_length",
+        blurb: "`MinLength`, `MaxLength` and `Length` count the characters of a string, and a length cannot be below zero, so `MinLength(-1)` would hold for every string and `MaxLength(-1)` for none. The compiler takes a negative argument to be a mistake and refuses it. Give a length of zero or more. A set of predicates that no value can satisfy is `bynk.types.empty_refinement`.",
+        example: "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
+        page: "/book/reference/refined-types",
+        anchor: "string",
     },
     Explain {
         code: "bynk.types.never_inferred",
@@ -5979,6 +6098,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.types.rounding_mode_position",
+        blurb: "A rounding mode is written `RoundingMode.<mode>` where the rounding happens, as the mode argument of a `Decimal`'s `round` or `div`. It is not a value: it cannot be bound to a name, stored or passed around, so the rounding at each call is visible at that call. Write the mode at the call. A mode that is not a `RoundingMode.<mode>` at all is `bynk.types.unknown_rounding_mode`.",
+        example: "let mode = RoundingMode.HalfUp         // ✗ a mode is not a value\n\nprice.round(2, RoundingMode.HalfUp)    // ✓ written where it rounds",
+        page: "/book/reference/types",
+        anchor: "decimal",
+    },
+    Explain {
+        code: "bynk.types.select_tail_has_select",
+        blurb: "`select[T]` and `firstAs[T]` write the `SELECT` and the column list themselves, from the fields of the row record `T`, so the SQL you give is only the rest, starting at `FROM`. That way the columns are spelt once and cannot drift from the type. Start at `FROM`. A query that cannot (a `WITH` or a parenthesised one) is read with `all` and `Json.decodeSql`, which take the whole statement.",
+        example: "let _ <- Orders.select[Order](\"SELECT id, total FROM orders\", [])    // ✗ the compiler writes `SELECT`\n\nlet _ <- Orders.select[Order](\"FROM orders\", [])                      // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "d1-typed-reads",
+    },
+    Explain {
         code: "bynk.types.sequence_needs_result",
         blurb: "`sequenceAll` and `sequenceTry` fold a `List[Result[T, E]]` into one `Result`, so every element must already be a `Result`. A list of plain values has no failures to collect. Map each element through a function that returns a `Result` first, as in `xs.map(check).sequenceAll()`. `sequenceAll` gathers every error, and `sequenceTry` stops at the first.",
         example: "fn check(n: Int) -> Result[Int, String] { … }\n\nfn all(xs: List[Int]) -> Result[List[Int], List[String]] {\n    xs.sequenceAll()                // ✗ the elements are `Int`s, not `Result`s\n}\n\nfn all(xs: List[Int]) -> Result[List[Int], List[String]] {\n    xs.map(check).sequenceAll()     // ✓\n}",
@@ -5991,6 +6124,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn first() -> Option[Int] {\n    Some(\"a\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn first() -> Option[Int] {\n    Some(1)    // ✓\n}",
         page: "/book/guides/type-system/result-and-optionals",
         anchor: "construct-values",
+    },
+    Explain {
+        code: "bynk.types.sql_not_literal",
+        blurb: "The SQL of a `D1`, `Postgres` or `MySql` call must be a string literal, or a `String` constant bound to one, so it is fixed when the program compiles and no request data can become part of the statement: that is how SQL injection happens. An interpolated string, a parameter or a `let` binding is refused. Put the value in the parameter list, as `?1` with `Text(id)`, which is always bound and never spliced in.",
+        example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = '\\(id)'\", [])         // ✗ built at run time\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])      // ✓ bound",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "sql-databases-d1",
+    },
+    Explain {
+        code: "bynk.types.sql_row_shape",
+        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes`, or a refined or opaque type over one, or an `Option` of either (Postgres and MySQL also read `Decimal`); a nested record, a list or an enum has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
+        example: "type Money = { cents: Int }\ntype Order = { id: String, total: Money }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `total` is a record\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "d1-typed-reads",
     },
     Explain {
         code: "bynk.types.stream_at_boundary",
@@ -6066,6 +6213,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(diameter: d) => d    // ✗ `Circle` has no field `diameter`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(radius: r) => r    // ✓\n        Dot => 0\n    }\n}",
         page: "/book/reference/types",
         anchor: "matching",
+    },
+    Explain {
+        code: "bynk.types.unknown_rounding_mode",
+        blurb: "`Decimal`'s `round` and `div` must be told how to break a tie, and the choice is part of the money arithmetic, so it is named, not defaulted: write `RoundingMode.<mode>` as the last argument, where the mode is one of `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` or `HalfEven`. A number, a string or a variable is refused. A mode kept in a binding is `bynk.types.rounding_mode_position`.",
+        example: "price.round(2, 1)                        // ✗ not a rounding mode\n\nprice.round(2, RoundingMode.HalfEven)    // ✓",
+        page: "/book/reference/types",
+        anchor: "decimal",
+    },
+    Explain {
+        code: "bynk.types.unknown_static_member",
+        blurb: "`HttpResult` is a built-in type with a fixed set of variants, the HTTP statuses a handler can answer with, such as `Ok`, `Created`, `NotFound` and `ServerError`. `HttpResult.Nope` names one that does not exist, usually a misspelling or a status the set does not include. Pick one of the listed variants. A type you declared yourself is checked by `bynk.resolve.unknown_static_member`.",
+        example: "HttpResult.Nope        // ✗ no such variant\n\nHttpResult.NotFound    // ✓",
+        page: "/book/reference/http",
+        anchor: "httpresult-variants",
     },
     Explain {
         code: "bynk.types.unknown_variant_in_pattern",
@@ -9930,7 +10091,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.select_tail_has_select",
-        "A `D1` or `Postgres` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`.",
+        "A `D1`, `Postgres` or `MySql` `select[T]` or `firstAs[T]` statement does not start at `FROM` (for example it begins with `SELECT`, `WITH` or a parenthesis); the compiler writes the `SELECT` and column list from `T`.",
         &["method_call"],
     ),
     dg(
@@ -9995,7 +10156,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.unknown_static_member",
-        "Referenced an unknown static member on a type.",
+        "A name after `HttpResult.` that is not one of its variants. An unknown member of a type you declared is `bynk.resolve.unknown_static_member`.",
         &["field_access"],
     ),
     dg(

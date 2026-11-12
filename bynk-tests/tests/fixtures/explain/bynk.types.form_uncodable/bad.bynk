@@ -1,0 +1,8 @@
+commons demo
+
+type Address = { city: String }
+type Signup = { email: String, address: Address }
+
+fn read(text: String) -> Result[Signup, DecodeError] {
+    Form.decode[Signup](text)
+}
