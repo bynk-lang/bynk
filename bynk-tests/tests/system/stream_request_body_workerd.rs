@@ -259,7 +259,7 @@ fn chunks_of(total: usize, each: usize) -> Vec<Vec<u8>> {
 }
 
 #[test]
-fn a_streamed_raw_body_is_counted_unread_and_echoed_on_workerd() {
+fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
     if !tool_exists("npx") && skip("`npx` is not on PATH") {
         return;
     }
