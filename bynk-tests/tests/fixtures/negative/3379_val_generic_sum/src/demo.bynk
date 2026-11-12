@@ -1,0 +1,7 @@
+commons demo
+
+type Loaded[T] =
+  | Ready(value: T)
+  | Pending
+
+fn double(n: Int) -> Int { n + n }

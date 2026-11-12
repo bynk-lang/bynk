@@ -1,2 +1,2 @@
 bynk.val.generic_type
-`Val[Box[…]]` cannot fabricate a value of a generic type in v0.157
+`Val[Box[…]]` cannot fabricate a value of a generic type

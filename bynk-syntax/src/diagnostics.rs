@@ -6146,8 +6146,8 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `Val` refuses one whether it is written bare, `Val[Box]`, or \
                 applied, `Val[Box[Int]]`. The type itself is fine, and may cross a \
                 boundary through its codec; only fabrication is missing. Build the \
-                value with a record literal instead, giving each field what the \
-                test needs.",
+                value yourself instead: a record literal for a generic record, \
+                one of its variants for a generic sum.",
         example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
         page: "/book/reference/testing",
         anchor: "val",
