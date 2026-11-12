@@ -4387,7 +4387,7 @@ fn write_header_single(
             ""
         };
         // #2683, #2711, #3437: the `within`, `race` and `detach` helpers, imported only when a body uses one.
-        let race_imports = effect_runtime_imports(&runtime_use);
+        let race_imports = effect_runtime_imports(runtime_use);
         // #2620: `unreachable`/`todo`'s helper, imported only when a body calls one.
         let fault_imports = if runtime_use.fault() {
             FAULT_RUNTIME_IMPORTS

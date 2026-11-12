@@ -1,0 +1,9 @@
+commons demo.doreq
+
+fn attempt() -> Effect[Result[Int, String]] {
+  Effect.pure(Ok(1))
+}
+
+fn bad() -> Effect[()] {
+  do attempt()
+}

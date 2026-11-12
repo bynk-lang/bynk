@@ -1,0 +1,11 @@
+context app
+
+capability Store {
+  fn count() -> Effect[Int]
+}
+
+service jobs {
+  on call() -> Effect[()] given Store {
+    do Store.count()
+  }
+}

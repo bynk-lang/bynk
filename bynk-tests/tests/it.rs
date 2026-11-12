@@ -297,6 +297,8 @@ mod system {
     mod detach_workerd;
     #[path = "deterministic_diagnostic_order_behaviour.rs"]
     mod deterministic_diagnostic_order_behaviour;
+    #[path = "do_valued_fault_behaviour.rs"]
+    mod do_valued_fault_behaviour;
     #[path = "doc_examples_check_behaviour.rs"]
     mod doc_examples_check_behaviour;
     #[path = "embed_check_behaviour.rs"]

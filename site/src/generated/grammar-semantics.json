@@ -556,16 +556,16 @@
   ],
   "do_stmt": [
     {
+      "code": "bynk.effect.do_discards_result",
+      "summary": "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, write `let _ <- e` to discard it deliberately, or `do e.detach()` to stop waiting and have a failure reported."
+    },
+    {
       "code": "bynk.effect.do_in_pure_context",
       "summary": "A `do` statement was used in a pure (non-effectful) context."
     },
     {
       "code": "bynk.effect.do_on_non_effect",
       "summary": "A `do` statement was applied to a non-`Effect` value."
-    },
-    {
-      "code": "bynk.effect.do_requires_unit",
-      "summary": "A `do` statement was applied to a valued `Effect[T]`; `do` performs a unit effect, so a real result would be dropped — use `let _ <- e` instead."
     }
   ],
   "effect_let_stmt": [
