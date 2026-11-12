@@ -123,6 +123,8 @@ mod integration {
     mod reserved_builtin_type_name;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
+    #[path = "send_deprecation_fix.rs"]
+    mod send_deprecation_fix;
     #[path = "snippets.rs"]
     mod snippets;
     #[path = "source_map.rs"]

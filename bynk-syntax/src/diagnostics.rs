@@ -5007,6 +5007,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.send.deprecated",
+        blurb: "`~>` is deprecated: `e.detach()` says the same thing as an ordinary effect statement, works for any `Effect[T]` and inside a lambda, `forEach` or helper, and reports a fault or an `Err` instead of losing it. A warning, not an error: `bynk check --fix` rewrites each `~> e` to `do e.detach()`. `~>` will be removed in the next release, after which it is a parse error. For a unit effect that does not need to outlive the handler, plain `do e` is enough; `Logger` calls finish before they return.",
+        example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")             // ⚠ deprecated\n    Effect.pure(())\n}\n\n\
+                  on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✓ the same, as an ordinary statement\n    Effect.pure(())\n}",
+        page: "/book/reference/capabilities",
+        anchor: "detach",
+    },
+    Explain {
         code: "bynk.send.in_agent_handler",
         blurb: "`~>` starts an effect and lets the handler carry on, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So the send is refused, and so is one inside a closure there. Await it instead, with `do` for an `Effect[()]` or `let _ <-`, or move the send to the service handler that calls the agent. A `~>` of a store operation is `bynk.send.store_op`.",
         example: "on call bump() -> Effect[()] given Logger {\n    ~> Logger.info(\"bump\")      // ✗ an agent handler cannot send\n    do count.update((n) => n + 1)\n}\n\n\
@@ -10151,6 +10159,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.secrets.computed_name",
         "A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning).",
+    )),
+    warn(dg(
+        "bynk.send.deprecated",
+        "The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable).",
+        &["effect_send_stmt"],
     )),
     dg(
         "bynk.send.in_agent_handler",

@@ -4622,6 +4622,7 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
             Statement::Send(s) => {
                 // v0.79: `~> e` — fire-and-forget. Effectful context only, like
                 // `<-`; the reply is never awaited, so nothing is bound.
+                let errors_before = ctx.errors.len();
                 if !ctx.effectful {
                     ctx.errors.push(
                         CompileError::new(
@@ -4713,6 +4714,11 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                         );
                     }
                     None => {}
+                }
+                // A refused send has the refusal to fix first; the deprecation
+                // is for one that would otherwise be accepted.
+                if ctx.errors.len() == errors_before {
+                    warn_send_deprecated(s, ctx);
                 }
             }
             Statement::Do(d) => check_do(d, true, ctx),
@@ -7339,4 +7345,51 @@ mod pure_helper_pins {
         assert!(!numeric_mix(Some(BaseType::Float), Some(BaseType::Float)));
         assert!(!numeric_mix(None, Some(BaseType::Int)));
     }
+}
+
+/// #3437: `~> e` is deprecated in favour of `do e.detach()`, which says the same
+/// thing as an ordinary effect statement and works anywhere an `Effect[()]` does.
+/// A warning with a machine-applicable rewrite: `~>` becomes `do ` and `.detach()`
+/// follows the operand (parenthesised unless it already ends a postfix chain). In
+/// an agent handler `detach` is refused too, so the warning carries no rewrite
+/// there.
+fn warn_send_deprecated(s: &bynk_syntax::ast::SendStmt, ctx: &mut Ctx) {
+    let mut err = CompileError::new(
+        "bynk.send.deprecated",
+        s.span,
+        "the `~>` send is deprecated — write `do e.detach()`",
+    )
+    .with_note(
+        "`e.detach()` stops waiting for `e` as `~>` does, for any `Effect[T]`, and reports a fault or an `Err` instead of losing it; `bynk check --fix` rewrites each `~> e` to `do e.detach()`",
+    );
+    if !ctx.in_agent_handler {
+        let postfix_safe = matches!(
+            s.value.kind,
+            ExprKind::Call { .. }
+                | ExprKind::MethodCall { .. }
+                | ExprKind::Ident(_)
+                | ExprKind::FieldAccess { .. }
+                | ExprKind::Paren(_)
+        );
+        let (open, close) = if postfix_safe {
+            ("do ", ".detach()")
+        } else {
+            ("do (", ").detach()")
+        };
+        err = err.with_suggestion(
+            "rewrite to `do e.detach()`",
+            vec![
+                (
+                    Span::new(s.span.start, s.value.span.start),
+                    open.to_string(),
+                ),
+                (
+                    Span::new(s.value.span.end, s.value.span.end),
+                    close.to_string(),
+                ),
+            ],
+            Applicability::MachineApplicable,
+        );
+    }
+    ctx.errors.push(err);
 }

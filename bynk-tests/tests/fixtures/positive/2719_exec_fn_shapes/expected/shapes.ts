@@ -2,7 +2,7 @@
 // context shapes
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
-import { __bynkSettleAll, __bynkWithin, __bynkRace } from "./__bynk_runtime/settle.js";
+import { __bynkSettleAll, __bynkWithin, __bynkRace, __bynkDetach } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
@@ -35,7 +35,7 @@ export const Dice = {
 };
 
 export async function twice(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __exec.waitUntil(f(n));
+  __bynkDetach(f(n), __exec, "src/shapes.bynk:27:2");
   const __r0 = await f(n + 1);
   return n;
 }
@@ -69,7 +69,7 @@ export async function tick(n: number, __exec: { waitUntil(promise: globalThis.Pr
 }
 
 export async function guarded(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __exec.waitUntil(f(n));
+  __bynkDetach(f(n), __exec, "src/shapes.bynk:70:2");
   return n;
 }
 

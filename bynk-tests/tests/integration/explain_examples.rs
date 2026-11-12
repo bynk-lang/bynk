@@ -65,6 +65,10 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.send.deprecated",
+        "a warning; `positive/221_async_send_waituntil` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.actor.signed_cookie_ttl_long",
         "a warning; `positive/3386_signed_cookie_ttl_long` holds it with `expected_warnings.txt`",
     ),

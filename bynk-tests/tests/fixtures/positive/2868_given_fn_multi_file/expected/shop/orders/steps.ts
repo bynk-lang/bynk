@@ -2,6 +2,7 @@
 // context shop.orders
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkDetach } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 
 import type { Audit, Meter } from "./audit.js";
@@ -15,7 +16,7 @@ export async function book(n: number, deps: { Audit: Audit; Logger: bynk.Logger 
 }
 
 export async function announce(n: number, deps: { Audit: Audit }, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __exec.waitUntil(deps.Audit.note(n));
+  __bynkDetach(deps.Audit.note(n), __exec, "src/shop/orders/steps.bynk:15:2");
   return n;
 }
 
