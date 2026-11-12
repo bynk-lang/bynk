@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk test`, `bynk dev` and `bynk deploy` install the build's npm packages with your own package manager (`--no-install` opts out)
----
+# 0820 — Install a build's npm packages automatically, with the user's own package manager
 
-## ADR: automatic-npm-install-with-the-users-package-manager
-title: Install a build's npm packages automatically, with the user's own package manager
-summary: bynk test, dev and deploy install missing npm packages into the generated directory with the detected package manager; `--no-install` restores the preflight stop
+- **Status:** Accepted (v0.569.2)
 
 **Context.** Since ADR 0799 C a generated build can depend on npm packages: the
 toolchain's own (`postal-mime` for inbound email, `postgres`, `mysql2`) pinned
