@@ -249,6 +249,10 @@ A line with no colon is ignored, and names are case-insensitive, as on the wire.
 At the `unit` and `integration` tiers the value reaches the handler directly; at
 `system` the driver sends the lines as the request's headers, beside the ones it
 sets itself (`content-type`, and the credential of an actor's `by`), which win.
+The one exception is a [`SignedCookie`](/book/reference/actors/#signed-cookies) route's
+`Sec-Fetch-Site`: the driver sends `same-origin`, as a browser's own page would, so a case that
+sets `Sec-Fetch-Site` and `Origin` itself probes the route's CSRF check
+(`RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])`).
 
 A route that declares no `headers:` parameter can still be sent headers in a
 `system` case, by a trailing `RequestHeaders` argument after the route's own
@@ -669,10 +673,10 @@ Eight reserved principals drive the failures. Each yields the same
 
 | Principal | What the `system` driver sends | Legal on |
 |---|---|---|
-| `by Nobody` | no credential: no `Authorization` header, or no signature headers | a route with a Bearer, `Oidc` or `Signature` actor |
-| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish | a route with a `Signature`, Bearer or `Oidc` actor |
+| `by Nobody` | no credential: no `Authorization` header, no session cookie, or no signature headers | a route with a Bearer, `Oidc`, `SignedCookie` or `Signature` actor |
+| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on a `SignedCookie` route, a well-formed cookie signed with a key the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish | a route with a `Signature`, Bearer, `SignedCookie` or `Oidc` actor |
 | `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
-| `by Expired` | a Bearer or `Oidc` token with a valid `sub`, correctly signed, whose `exp` is one hour before the test clock | a route with a Bearer or `Oidc` actor |
+| `by Expired` | a Bearer or `Oidc` token, or a `SignedCookie` cookie, with a valid `sub`, correctly signed, whose lifetime ended an hour before the test clock | a route with a Bearer, `SignedCookie` or `Oidc` actor |
 | `by WrongIssuer` | an `Oidc` token correctly signed and unexpired, whose `iss` is not the actor's issuer | a route with an `Oidc` actor |
 | `by WrongAudience` | an `Oidc` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor |
 | `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |

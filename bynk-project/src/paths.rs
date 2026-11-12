@@ -225,7 +225,10 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("workers", &["compatibility_flags", "workers_dev"]),
     ("deploy", &["hyperdrive"]),
     ("dev", &["hyperdrive"]),
-    ("build", &["out", "target", "platform", "emit"]),
+    (
+        "build",
+        &["out", "target", "platform", "emit", "package_manager"],
+    ),
     ("check", &["d1_sql"]),
     ("profile", PROFILE_NAMES),
     ("unstable", &["allow"]),
@@ -704,6 +707,9 @@ pub struct BuildConfig {
     pub platform: Option<String>,
     /// `ts` or `js`.
     pub emit: Option<String>,
+    /// #3350: the package manager that installs the generated build
+    /// directory's npm packages: `npm`, `pnpm`, `bun` or `yarn`.
+    pub package_manager: Option<String>,
     /// The `[profile.<name>]` tables present, by profile name.
     pub profiles: BTreeMap<String, ProfileConfig>,
 }
@@ -858,6 +864,7 @@ fn build_config_from(table: &toml::Table) -> Result<BuildConfig, ProjectPathsErr
         target: get("target", Some(&["bundle", "workers"]))?,
         platform: get("platform", Some(&["cloudflare", "node", "browser"]))?,
         emit: get("emit", Some(&["ts", "js"]))?,
+        package_manager: get("package_manager", Some(&["npm", "pnpm", "bun", "yarn"]))?,
         profiles: BTreeMap::new(),
     })
 }

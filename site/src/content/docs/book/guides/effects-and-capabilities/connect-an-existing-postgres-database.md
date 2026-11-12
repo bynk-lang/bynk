@@ -160,9 +160,10 @@ the driver; it is never logged and never appears in an error. Keep it out of sou
 and out of `wrangler.toml`.
 
 The Worker also needs the `postgres` npm package, which the build adds to
-`out/package.json` (pinned to an exact version). Run `npm install` in the build
-directory before `bynk dev` or `bynk deploy`; both stop and name the package if it
-is missing.
+`out/package.json` (pinned to an exact version). `bynk dev`, `bynk deploy` and
+`bynk test` install it into the build directory with your own package manager
+when it is missing; [`--no-install`](/docs/bynk-cli/#installing-npm-packages)
+stops instead, naming the command to run.
 
 ## Mind the connection limit
 
