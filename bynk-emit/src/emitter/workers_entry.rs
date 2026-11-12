@@ -650,6 +650,14 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(wanted);
 }
 
+/// #3386: the cookie a route's `SignedCookie` seam reads, if it has one.
+fn signed_cookie_name(
+    h: &bynk_syntax::ast::Handler,
+    actors: &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
+) -> Option<String> {
+    bynk_check::actors::signed_cookie_seam_for(h, actors).map(|s| s.cookie)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_entry(
     context: &str,
@@ -796,8 +804,7 @@ pub fn emit_worker_entry(
                     bearer: bynk_check::actors::bearer_seam_for(h, &table.actors).is_some(),
                     // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
                     oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
-                    signed_cookie: bynk_check::actors::signed_cookie_seam_for(h, &table.actors)
-                        .map(|s| s.cookie),
+                    signed_cookie: signed_cookie_name(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so
