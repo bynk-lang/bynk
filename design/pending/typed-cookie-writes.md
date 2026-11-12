@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
 changelog: A cookie is written from the record that reads it with `Prefs.theme.cookie(Dark)` and `Prefs.theme.expire()`, named by the field's wire name and valued as the decoder reads it
 ---
 
