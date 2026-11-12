@@ -76,7 +76,7 @@ service api from http {
 	}
 
 	// Who am I? The session cookie names the live session; the typed `cookies`
-	// record has already checked it is a `Token`.
+	// record has already checked it is a `Token` (a malformed one is a `400`).
 	on GET("/me") (cookies: SessionCookies) -> Effect[HttpResult[UserId]] by Visitor {
 		match cookies.sid {
 			None => Unauthorized,
@@ -90,13 +90,19 @@ service api from http {
 		}
 	}
 
-	// Log out: end the session and clear the cookie.
-	on POST("/logout") (cookies: SessionCookies) -> Effect[HttpResult[String]] by Visitor {
-		match cookies.sid {
+	// Log out: end the session and clear the cookie. This handler reads the raw
+	// `RequestCookies` view, not the typed record: a typed `cookies` record rejects a
+	// malformed `__Host-sid` with a `400` before the handler runs, and logout must still
+	// clear such a cookie, whatever it holds.
+	on POST("/logout") (cookies: RequestCookies) -> Effect[HttpResult[String]] by Visitor {
+		match cookies.get("__Host-sid") {
 			None => NoContent,
-			Some(token) => {
-				do Sessions("default").logout(token)
-				NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" })
+			Some(raw) => match Token.of(raw) {
+				Ok(token) => {
+					do Sessions("default").logout(token)
+					NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" })
+				},
+				Err(_) => NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" }),
 			},
 		}
 	}

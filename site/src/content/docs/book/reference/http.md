@@ -412,7 +412,7 @@ A cookie is not authentication: it reaches the router from the client, so treat 
 as input to check. A cookie-backed actor is separate. See
 [#3181](https://github.com/bynk-lang/bynk/issues/3181).
 
-### Reading a prefixed cookie: `RequestCookies` {#request-cookies}
+### Reading a prefixed cookie {#request-cookies}
 
 A cookie named `__Host-sid` or `__Secure-id` is not a legal record field name. There are two
 ways to read it. The typed way is a [`@name`](/book/reference/types/#field-name) on the field,
