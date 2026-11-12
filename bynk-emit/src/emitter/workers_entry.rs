@@ -2759,6 +2759,19 @@ fn form_field_specs(
 /// codec checking refinements and filling defaults. #3386: a route guarded by a `SignedCookie`
 /// actor consumes that cookie at the seam, so it is hidden from either form. Returns whether the
 /// parameter was a `cookies` one (a `:cookies` path segment is a path parameter instead).
+/// #2341: the `RequestHeaders` a handler is passed. #3386: on a `SignedCookie` route the session
+/// cookie is hidden from its `Cookie` header, as it is from the `cookies` views.
+fn request_headers_arg(route: &HttpRoute) -> TsExpr {
+    let mut args = vec![ident("request")];
+    args.extend(
+        route
+            .signed_cookie
+            .as_deref()
+            .map(|h| str_lit(crate::emitter::escape_ts_string(h))),
+    );
+    call(ident("__requestHeaders"), args)
+}
+
 fn bind_cookies_param(
     route: &HttpRoute,
     p: &bynk_syntax::ast::Param,
@@ -3232,7 +3245,7 @@ fn emit_http_route_dispatch(
         }
         // #2341 (decision A): `headers` is the request's headers, read-only.
         if pname == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
-            call_args.push(call(ident("__requestHeaders"), vec![ident("request")]));
+            call_args.push(request_headers_arg(route));
             continue;
         }
         // #2854 (decision B): `query: RequestQuery` is the raw query string.

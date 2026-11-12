@@ -736,10 +736,18 @@ export interface RequestHeaders {
 
 /** #2341 (L4): the request's headers, or — in a test — `"name: value"` lines
  *  (`RequestHeaders.of`); a line without a colon is ignored. */
-export function requestHeaders(source: Request | readonly string[]): RequestHeaders {
+export function requestHeaders(source: Request | readonly string[], hideCookie?: string): RequestHeaders {
   let headers: Headers;
   if (source instanceof Request) {
     headers = source.headers;
+    // #3386: a `SignedCookie` actor's credential is consumed at the seam; the handler's view of the
+    // `Cookie` header omits it, as its `cookies` views do (and drops the header if nothing is left).
+    if (hideCookie !== undefined && headers.has("cookie")) {
+      headers = new Headers(headers);
+      const rest = cookiePairs(headers.get("cookie")).filter(([n]) => n !== hideCookie);
+      if (rest.length === 0) headers.delete("cookie");
+      else headers.set("cookie", rest.map(([n, v]) => `${n}=${v}`).join("; "));
+    }
   } else {
     headers = new Headers();
     for (const line of source) {

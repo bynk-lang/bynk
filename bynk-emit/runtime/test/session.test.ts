@@ -268,7 +268,7 @@ test("the default clock is Date.now", async () => {
 });
 
 // -- the router's cookie and CSRF helpers (http.ts) --------------------------------------------
-import { cookieObject, csrfAllowed, requestCookies, sessionCookieOf } from "../src/http.ts";
+import { cookieObject, csrfAllowed, requestCookies, requestHeaders, sessionCookieOf } from "../src/http.ts";
 
 const req = (headers: Record<string, string>, url = "https://api.example.com/x", method = "POST") =>
   new Request(url, { method, headers });
@@ -373,4 +373,21 @@ test("a key that is not a string, or empty, is a fault that names the key", asyn
       return true;
     });
   }
+});
+
+test("requestHeaders hides the session cookie from the Cookie header and keeps the others", () => {
+  const request = new Request("https://x/", { headers: { cookie: "__Host-session=abc.def.ghi; theme=dark" } });
+  const view = requestHeaders(request, "__Host-session");
+  assert.deepEqual(view.get("cookie"), { tag: "Some", value: "theme=dark" });
+  assert.deepEqual(view.get("Cookie"), { tag: "Some", value: "theme=dark" });
+  // Without the hide argument (any other route) the header is untouched.
+  assert.deepEqual(requestHeaders(request).get("cookie"), {
+    tag: "Some",
+    value: "__Host-session=abc.def.ghi; theme=dark",
+  });
+});
+
+test("requestHeaders drops the Cookie header when the session cookie was the only one", () => {
+  const request = new Request("https://x/", { headers: { cookie: "__Host-session=abc.def.ghi" } });
+  assert.deepEqual(requestHeaders(request, "__Host-session").get("cookie"), { tag: "None" });
 });
