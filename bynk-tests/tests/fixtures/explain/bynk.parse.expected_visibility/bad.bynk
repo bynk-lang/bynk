@@ -1,0 +1,5 @@
+context shop
+
+exports { P }
+
+type P = { a: Int }

@@ -1,0 +1,7 @@
+context shop
+
+capability Clock {
+    fn now() -> Effect[Int]
+}
+
+provides Clock = SystemClock

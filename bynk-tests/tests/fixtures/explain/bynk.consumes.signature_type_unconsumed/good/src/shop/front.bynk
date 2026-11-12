@@ -1,0 +1,12 @@
+context shop.front
+
+consumes shop.ledger
+
+consumes shop.order
+
+service check {
+    on call(id: String) -> Effect[String] {
+        let o <- shop.ledger.domestic(id)
+        Effect.pure(o.id)
+    }
+}

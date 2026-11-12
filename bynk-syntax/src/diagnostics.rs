@@ -759,6 +759,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-an-asset",
     },
     Explain {
+        code: "bynk.asset.outside_context_or_commons",
+        blurb: "An `asset` is a file the platform serves, shipped with each context that declares it or `uses` a commons that does. An adapter is the host boundary, not a deployed unit of its own, so an `asset` there is refused. Declare it in a context or a commons. For text compiled into the program rather than served, see `bynk.embed.outside_context_or_commons`.",
+        example: "// app/host.bynk\nadapter app.host\n\nbinding \"./host.binding.ts\"\n\nasset style = \"assets/board.css\"        // ✗ an adapter cannot declare an asset\n\n// app/page.bynk\ncommons app.page\n\nasset style = \"assets/board.css\"        // ✓ in a commons",
+        page: "/book/reference/assets",
+        anchor: "declaring-an-asset",
+    },
+    Explain {
         code: "bynk.asset.path_conflict",
         blurb: "A fixed asset path names one file, and a Worker serves one file at it, so two assets \
                 cannot both claim `/legal.txt`. One path cannot be a folder of another either, as \
@@ -792,6 +799,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                 asset style = \"assets/board.css\"        // ✓",
         page: "/book/reference/assets",
         anchor: "declaring-an-asset",
+    },
+    Explain {
+        code: "bynk.boundary.ambiguous_type",
+        blurb: "A context can export a record whose field has a type it does not export. Reading that field through a value you got from it needs the field's type, and if two contexts you consume each declare a type of that name with different shapes, the compiler cannot tell which is meant. Rename one of the two so a name stands for one shape across the contexts you consume.",
+        example: "// shop/quotes.bynk\ntype Amount = { cents: Int }\ntype Wrap = { inner: Amount }\n\n// shop/other.bynk\ntype Amount = { dollars: Int }\n\n// shop/till.bynk\nconsumes shop.quotes\nconsumes shop.other\n\n    let w <- shop.quotes.wrap()\n    Effect.pure(w.inner.cents)           // ✗ which `Amount` is `inner`?\n\n// shop/other.bynk\ntype Price = { dollars: Int }            // ✓ one name, one shape",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "rename-an-exported-type-that-clashes-with-one-of-yours",
     },
     Explain {
         code: "bynk.boundary.structural_mismatch",
@@ -1095,6 +1109,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declare-the-dependency-and-call-the-service",
     },
     Explain {
+        code: "bynk.consumes.signature_type_unconsumed",
+        blurb: "A service you call may take or return a type declared in a third context. The value crosses the call as that context's type, so your context has to state the dependency itself: it does not inherit it from the service's context. Add `consumes` for the context the error names.",
+        example: "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
+        page: "/book/guides/program-structure/consume-services",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.consumes.target_is_commons",
         blurb: "`consumes` is for depending on a context, or on an adapter: it is how you call a service and use the capabilities the other unit exports. A commons has neither. It is shared types and functions, brought in with `uses`. Replace `consumes` with `uses`.",
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nconsumes money                   // ✗ `money` is a commons\nuses money                       // ✓ shared declarations come in with `uses`",
@@ -1224,6 +1245,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "opaque-types",
     },
     Explain {
+        code: "bynk.context.external_provider",
+        blurb: "A provider with no body (`provides Clock = SystemClock`) says its implementation comes from elsewhere, and only an `adapter` has a binding to supply it. In a context every provider is written in Bynk, so it needs a body implementing the capability's operations. Add one, or move the capability into an adapter if the code is TypeScript. The reverse mistake is `bynk.adapter.provider_has_body`.",
+        example: "provides Clock = SystemClock             // ✗ no body, and a context has no binding\n\nprovides Clock = SystemClock {           // ✓ implemented in Bynk\n    fn now() -> Effect[Int] {\n        Effect.pure(0)\n    }\n}",
+        page: "/book/reference/capabilities",
+        anchor: "providing-a-capability",
+    },
+    Explain {
         code: "bynk.context.opaque_inspection",
         blurb: "A context that writes `exports opaque { T }` lets other contexts hold a `T`, pass it on and \
                 call its methods, but not look inside it: they cannot `match` on it, read a field, \
@@ -1245,6 +1273,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   exports transparent { Status }   // ✓ the owner shares the shape",
         page: "/book/reference/types",
         anchor: "opaque-types",
+    },
+    Explain {
+        code: "bynk.context.rebrand_construction",
+        blurb: "A context that `uses` a commons gets its sum types by name, but not their variant constructors, so `Circle(1.0)` is refused there: the context re-exports the type under its own name, without the constructors. Build the value in the commons, in a function that returns it, and call that function from the context.",
+        example: "// geo/shapes.bynk\ncommons geo.shapes\n\ntype Shape = | Circle(radius: Float) | Square(side: Float)\n\n// app/main.bynk\ncontext app.main\n\nuses geo.shapes\n\nfn unit() -> Shape {\n    Circle(1.0)                          // ✗ constructors are not in scope here\n}\n\n// geo/shapes.bynk\nfn unitCircle() -> Shape { Circle(1.0) } // ✓ built in the commons\n\n// app/main.bynk\nfn unit() -> Shape {\n    unitCircle()                         // ✓ called from the context\n}",
+        page: "/book/reference/types",
+        anchor: "",
     },
     Explain {
         code: "bynk.contract.duplicate_name",
@@ -1365,6 +1400,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id)])                 // ✗ two parameters, one value\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id), Integer(100)])    // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "sql-checked-against-the-migrations",
+    },
+    Explain {
+        code: "bynk.dependency.path_outside_root",
+        blurb: "Your own project's path dependencies can point anywhere, but a dependency's own path dependencies are honoured only when they stay inside the workspace: a path out of it names a directory that need not exist where the package is used. A fetched package's path dependencies are never honoured. Move the target into the workspace.",
+        example: "# lib/bynk.toml, a dependency of the project\n[dependencies]\ncore = { package = \"acme/core\", path = \"../../outside\" }   // ✗ outside the workspace\n\ncore = { package = \"acme/core\", path = \"../core\" }         // ✓ a workspace member",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
     },
     Explain {
         code: "bynk.duration.literal_overflow",
@@ -1539,6 +1581,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                 exists but cannot be read is `bynk.embed.unreadable_file`.",
         example: "embed shell = \"embeds/page.html\"        // ✗ no such file in the project\n\
                 embed shell = \"embeds/page.html\"        // ✓ once embeds/page.html exists",
+        page: "/book/reference/embeds",
+        anchor: "declaring-an-embed",
+    },
+    Explain {
+        code: "bynk.embed.outside_context_or_commons",
+        blurb: "An `embed` is compiled into the Worker of each context that declares it, or that `uses` a commons that does. An adapter is the host boundary, not a Worker, so it has nowhere to carry the text, and an `embed` there is refused. Declare it in a context or a commons, and have the context use that. For a file the platform serves rather than compiles in, see `bynk.asset.outside_context_or_commons`.",
+        example: "// app/host.bynk\nadapter app.host\n\nbinding \"./host.binding.ts\"\n\nembed shell = \"embeds/page.html\"        // ✗ an adapter cannot embed\n\n// app/page.bynk\ncommons app.page\n\nembed shell = \"embeds/page.html\"        // ✓ in a commons",
         page: "/book/reference/embeds",
         anchor: "declaring-an-embed",
     },
@@ -2964,6 +3013,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "dependencies-only-tests-use",
     },
     Explain {
+        code: "bynk.package.duplicate_source",
+        blurb: "A build holds one copy of each package, so every dependency on a package must reach it in the same directory. Two entries that name one package but point at different directories would give two copies, with two sets of types where there should be one. Point both at the same directory, or drop one. Two aliases onto one directory are fine.",
+        example: "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\nutil = { package = \"acme/lib\", path = \"vendor/lib\" }   // ✗ `acme/lib` from a second directory\n\nutil = { package = \"acme/lib\", path = \"pkg/lib\" }      // ✓ the same directory",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
         code: "bynk.package.name_mismatch",
         blurb: "A path dependency gives the package's name twice: `package = \"acme/lib\"` in your `[dependencies]`, and `name` under `[package]` in the manifest at that path. They must agree, so that what you asked for is what you get. A mismatch usually means the path is the wrong directory, or the package was renamed. Correct whichever is wrong.",
         example: "[dependencies]\nmoney = { package = \"acme/money\", path = \"pkg/lib\" }   // ✗ `pkg/lib` is the package `acme/lib`\n\nmoney = { package = \"acme/lib\", path = \"pkg/lib\" }     // ✓ the name it declares",
@@ -2983,6 +3039,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "commons notify          // in the package `acme/lib`\n\nuses lib.notifiy      // ✗ the package declares no `notifiy`\n\nuses lib.notify       // ✓",
         page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
         anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.unsupported_in_dependency",
+        blurb: "A dependency may not declare an `asset` or an `embed`, because the path would be resolved against the project that consumes it, whose `assets/` or `embeds/` folder is not the package's. Move the file into your own project, and have the package take its content as an argument. The same rule covers an `embed`.",
+        example: "commons board                           // in the package `acme/lib`\n\nasset style = \"assets/board.css\"        // ✗ a dependency cannot declare one\nfn sheet() -> String { style.url }\n\ncommons board\n\nfn sheet(url: String) -> String { url } // ✓ the project supplies the URL",
+        page: "/book/reference/assets",
+        anchor: "declaring-an-asset",
     },
     Explain {
         code: "bynk.par.invalid_statement",
@@ -3138,6 +3201,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "332-doc-blocks",
     },
     Explain {
+        code: "bynk.parse.duplicate_cors",
+        blurb: "A service has one CORS policy, and it applies to every route in it. Two `cors` blocks could grant different things, and the reader would not know which holds, so the second is refused. Merge them into one. `security` and `limits` follow the same rule (`bynk.parse.duplicate_security`, `bynk.parse.duplicate_limits`), as does `json` (`bynk.parse.duplicate_json`).",
+        example: "service api from http {\n    cors { origins: [\"https://a.example\"] }\n    cors { origins: [\"https://b.example\"] }          // ✗ a second `cors`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://a.example\", \"https://b.example\"] }   // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "cors",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_json",
+        blurb: "A service's `json` policy sets whether its response bodies use plain or tagged JSON, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@json` on its handler. The same rule holds for `cors`, `security` and `limits`, as `bynk.parse.duplicate_cors` shows.",
+        example: "service api from http {\n    json { options: plain }\n    json { options: tagged }                         // ✗ a second `json`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    json { options: plain }                          // ✓ one setting\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "json-for-non-bynk-clients",
+    },
+    Explain {
         code: "bynk.parse.empty_agent",
         blurb: "An agent is its storage and the `on call` handlers that read and \
                 change it. One with no handler can never be called, so it is \
@@ -3221,6 +3298,34 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
         page: "/book/spec/syntactic-grammar",
         anchor: "441-service_decl",
+    },
+    Explain {
+        code: "bynk.parse.event_pattern_empty",
+        blurb: "A pattern in `from Events(E { … })` narrows delivery to events whose fields match, so it must name at least one field to match on. An empty `E {}` filters nothing and only looks as if it does. For every event of the type, drop the braces: `from Events(E)`.",
+        example: "service OnPaid from Events(Paid {}) {         // ✗ a pattern with no fields\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice OnPaid from Events(Paid) {            // ✓ every `Paid`\n    on event(e: Paid) -> Effect[()] { … }\n}",
+        page: "/book/guides/events/understand-events",
+        anchor: "filtering-delivery-with-a-pattern",
+    },
+    Explain {
+        code: "bynk.parse.expected_agent_key",
+        blurb: "An agent is addressed by its key, so the key is the first thing in its body: `key id: Type`. Anything else there, usually a `store` field written first, is refused, so that how an agent is found is the first thing a reader sees. Move the `key` line to the top.",
+        example: "agent Counter {\n    store n: Cell[Int]                   // ✗ the key comes first\n    key id: String\n\n    on call get() -> Effect[Int] { … }\n}\n\nagent Counter {\n    key id: String                       // ✓\n    store n: Cell[Int]\n\n    on call get() -> Effect[Int] { … }\n}",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.parse.expected_agent_storage",
+        blurb: "An agent exists to hold state, and its state is its `store` fields, so one with none is refused. Declare at least one. A `store` field has a kind such as `Cell`, `Map` or `Set`. An agent with storage but no handler is `bynk.parse.empty_agent`.",
+        example: "agent Counter {                          // ✗ no `store` field\n    key id: String\n\n    on call get() -> Effect[Int] { … }\n}\n\nagent Counter {\n    key id: String\n    store n: Cell[Int]                   // ✓\n\n    on call get() -> Effect[Int] { … }\n}",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.parse.expected_visibility",
+        blurb: "An `exports` clause says how consumers may use what it lists, so it needs a visibility: `exports opaque { … }` keeps a type's shape private to its context, `exports transparent { … }` shows it, and `exports capability { … }` offers a capability. A bare `exports { … }` is refused: the choice decides what other units can rely on, so it is written out. Pick one.",
+        example: "exports { P }                           // ✗ no visibility\n\nexports transparent { P }               // ✓",
+        page: "/book/reference/grammar",
+        anchor: "rule-exports_decl",
     },
     Explain {
         code: "bynk.parse.exports_after_decls",
@@ -3533,6 +3638,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "precedence",
     },
     Explain {
+        code: "bynk.parse.policy_order",
+        blurb: "A service's policies open its body, before any handler, in one fixed order: `cors`, `security`, `limits`, then `json`, each optional. One fixed layout means a reader always finds a service's cross-cutting rules at the top, and the formatter has a single form to write. A policy after a later one, or after a handler, is refused. Reorder them. A policy given twice is a separate error, such as `bynk.parse.duplicate_cors`.",
+        example: "service api from http {\n    limits { maxBody: 1_048_576 }\n    cors { origins: [\"*\"] }               // ✗ `cors` comes before `limits`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"*\"] }               // ✓ policies in order\n    limits { maxBody: 1_048_576 }\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "cors",
+    },
+    Explain {
         code: "bynk.parse.record_pattern_in_is_unparenthesised",
         blurb: "After `is`, a record pattern is written in parentheses. Bare, \
                 the `{` that opens its fields could equally open the block of \
@@ -3614,6 +3726,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.parse.storage_after_phase",
+        blurb: "An agent's body is ordered: its `key`, its storage fields (`state` and `store`), its invariants and migrations, then its handlers. Putting the fields first means the whole shape of the agent's persisted state is read before any code that uses it. A storage field declared after an invariant or a handler is refused. Move it up beside the other fields.",
+        example: "agent Counter {\n    key id: String\n    store count: Cell[Int]\n\n    on call bump() -> Effect[()] { … }\n\n    store extra: Cell[Int] = 0            // ✗ storage after a handler\n}\n\nagent Counter {\n    key id: String\n    store count: Cell[Int]\n    store extra: Cell[Int] = 0            // ✓ with the other fields\n\n    on call bump() -> Effect[()] { … }\n}",
+        page: "/book/reference/agents",
+        anchor: "declaration",
+    },
+    Explain {
+        code: "bynk.parse.transition_after_handler",
+        blurb: "A `transition` checks each committed step of an agent against the one before it, so it belongs with the agent's invariants, above the handlers whose steps it constrains. One written after a handler is refused. Move it above the first handler. `bynk.parse.invariant_after_handler` and `bynk.parse.migrate_after_handler` are the same rule for invariants and migrations.",
+        example: "agent Counter {\n    key id: String\n    store n: Cell[Int]\n\n    on call get() -> Effect[Int] { … }\n\n    transition up:                        // ✗ after a handler\n        new.n >= old.n\n}\n\nagent Counter {\n    key id: String\n    store n: Cell[Int]\n\n    transition up:                        // ✓ before the handlers\n        new.n >= old.n\n\n    on call get() -> Effect[Int] { … }\n}",
+        page: "/book/reference/agent-invariants",
+        anchor: "step-invariants",
+    },
+    Explain {
         code: "bynk.parse.unknown_effect_method",
         blurb: "`Effect.pure(value)` is the only operation spelled on `Effect` \
                 itself in an expression: it lifts a plain value into \
@@ -3657,6 +3783,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   type Age = Int where InRange(0, 150)    // ✓",
         page: "/book/spec/type-system",
         anchor: "63-refinement-predicates",
+    },
+    Explain {
+        code: "bynk.parse.unknown_tier",
+        blurb: "A test case's tier says how much of the program it runs against, and there are three: `unit`, `integration` and `system`. Any other name after `as` is refused, usually a misspelling. Leave the clause out for `unit`, the default.",
+        example: "case \"doubles\" as weird {               // ✗ not a tier\n    expect double(2) == 4\n}\n\ncase \"doubles\" as unit {                // ✓\n    expect double(2) == 4\n}",
+        page: "/book/reference/testing",
+        anchor: "tiers-the-as-tier-clause",
     },
     Explain {
         code: "bynk.parse.uses_after_decls",
@@ -3726,6 +3859,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   commons text       // ✓ the doc stays in case.bynk",
         page: "/book/guides/program-structure/document-your-code",
         anchor: "one-module-doc-per-unit",
+    },
+    Explain {
+        code: "bynk.project.export_context",
+        blurb: "A package's `exports` list names the commons and adapters it shares. A context is a deployment unit, owned by the project that deploys it, so a package never shares one, and listing one is refused. Remove it, or move what other projects need into a commons and list that. A name that is no unit of the package at all is `bynk.project.export_unknown`.",
+        example: "[package]\nname = \"acme/shop\"\nexports = [\"shop.checkout\"]     // ✗ a context\n\nexports = [\"money\"]             // ✓ a commons",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "make-a-package",
     },
     Explain {
         code: "bynk.project.inconsistent_commons_name",

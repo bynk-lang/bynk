@@ -1,0 +1,9 @@
+adapter app.host
+
+binding "./host.binding.ts"
+
+capability Greeter {
+  fn hello() -> Effect[String]
+}
+
+provides Greeter = HostGreeter

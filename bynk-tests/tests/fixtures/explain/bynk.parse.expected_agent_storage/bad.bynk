@@ -1,0 +1,9 @@
+context shop
+
+agent Counter {
+    key id: String
+
+    on call get() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}
