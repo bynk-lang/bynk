@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.557**.
+written against **v0.558**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,9 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.558.2** | `bynk explain` covers eighteen more codes across `package`, `requires`, `lambda`, `record_spread`, `json`, `duration`, `namespace`, `messages`, `given`, `cell` and `resolve` (#3163) |
+| **v0.558.1** | bynk explain covers nineteen more codes under test and project |
+| **v0.558.0** | A `Postgres` instance has typed reads `select[T]` and `firstAs[T]`, which write the column list from `T` and decode the rows (an `int8` into an `Int`, a `timestamptz` into an `Instant`), and `transaction`, which runs a fixed list of `PgStatement`s all or none |
 | **v0.557.3** | `bynk explain` covers twenty-two more codes under the types, embed, asset and d1 prefixes |
 | **v0.557.2** | `bynk explain` covers twenty-four more codes under `invariant`, `transition`, `within`, `race`, `send`, `par`, `index`, `store`, `query`, `cron` and `queue` (#3163) |
 | **v0.557.1** | `bynk explain` covers twenty-two more codes under the http and cloudflare prefixes |

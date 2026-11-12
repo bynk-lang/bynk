@@ -1,0 +1,18 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres }
+
+capability Main = Postgres
+
+type Order = { id: Int, qty: Int }
+
+service probe {
+  on call() -> Effect[Bool] given Main {
+    let a <- Main.select[Order]("SELECT id, qty FROM orders", [])
+    let b <- Main.select[Order]("  select * FROM orders", [])
+    let c <- Main.firstAs[Order]("WITH x AS (SELECT 1) SELECT 1", [])
+    let d <- Main.firstAs[Order]("FROM orders", [])
+    a is Ok(_) && b is Ok(_) && c is Ok(_) && d is Ok(_)
+  }
+}

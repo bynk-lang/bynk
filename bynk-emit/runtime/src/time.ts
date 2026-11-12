@@ -78,3 +78,72 @@ export function __bynkInstantFromIso(s: string): Option<number> {
   date.setUTCFullYear(year);
   return Some(date.getTime() - offsetMinutes * 60_000);
 }
+
+// Hyperdrive H3 (#3320, ADR 0799 F): the `Instant` a Postgres `timestamptz`
+// arrives as. The boundary codec reads an `Instant` as whole epoch milliseconds
+// (ADR 0114) and has no ISO-8601 rule, and `Json.decode`'s wire format stays
+// as it is, so a typed `Postgres` read converts the text *before* the codec
+// runs, here, as `Json.decodeSql` does for SQLite's flags.
+//
+// The forms read are the ones a `timestamptz` renders as: the driver's
+// `toISOString()` (`2026-11-11T12:34:56.789Z`), and the server's own text
+// (`::text`, `to_char`, a `jsonb` member): a space for the `T`, a fraction of up
+// to six digits, and an offset that may be `+00`, `+05:30`, `-0800`, or (for a
+// zone with a historic offset) `+05:53:28`. The result is always UTC epoch
+// milliseconds, a fraction past milliseconds truncated toward the earlier
+// instant. A form with no offset (a `timestamp`, which names no instant), the
+// special values `infinity` and `-infinity`, a `BC` year and anything else
+// is `null`. The driver keeps those as text (`PG_DATE_TYPES` in `postgres.ts`): only a
+// finite `timestamptz` reaches here as a `Date`'s ISO text, so a `timestamp`, a `date`
+// and an infinite value are refused by the `Instant` field, not read as UTC or `null`.
+const PG_TIMESTAMP =
+  /^(\d{4})-(\d{2})-(\d{2})[ Tt](\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?:([Zz])|([+-])(\d{2})(?::?(\d{2})(?::?(\d{2}))?)?)$/;
+
+export function __bynkInstantFromPgText(s: string): number | null {
+  const m = PG_TIMESTAMP.exec(s);
+  if (m === null) {
+    return null;
+  }
+  const local = __bynkInstantFromIso(`${m[1]}-${m[2]}-${m[3]}T${m[4]}Z`);
+  if (local.tag !== "Some") {
+    return null;
+  }
+  if (m[5] !== undefined) {
+    return local.value;
+  }
+  const hours = Number(m[7]);
+  const minutes = m[8] === undefined ? 0 : Number(m[8]);
+  const seconds = m[9] === undefined ? 0 : Number(m[9]);
+  if (hours > 23 || minutes > 59 || seconds > 59) {
+    return null;
+  }
+  const offsetMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
+  return local.value - (m[6] === "-" ? -offsetMs : offsetMs);
+}
+
+// A typed `Postgres` read's pass over the parsed rows, before the codec: at
+// each `Instant` column (`instants`) a text becomes epoch milliseconds, and at
+// each `Int` column (`ints`) the text of an `int8` becomes a number when it is
+// a whole number within ±(2^53 − 1). Anything else is left alone, so the codec
+// reports it: an `int8` past 2^53 fails the decode rather than losing digits.
+export function __bynkPgRow(row: unknown, instants: readonly string[], ints: readonly string[]): void {
+  if (row === null || typeof row !== "object" || Array.isArray(row)) {
+    return;
+  }
+  const o = row as Record<string, unknown>;
+  for (const k of instants) {
+    const v = o[k];
+    if (typeof v === "string") {
+      const ms = __bynkInstantFromPgText(v);
+      if (ms !== null) {
+        o[k] = ms;
+      }
+    }
+  }
+  for (const k of ints) {
+    const v = o[k];
+    if (typeof v === "string" && /^-?\d+$/.test(v) && Number.isSafeInteger(Number(v))) {
+      o[k] = Number(v) + 0;
+    }
+  }
+}

@@ -1,0 +1,9 @@
+context shop
+
+uses lib.internal
+
+service api {
+  on call(n: Int) -> Effect[Int] {
+    Effect.pure(n)
+  }
+}

@@ -1519,6 +1519,18 @@ function pgEnv(answer) {
     calls.push({ connectionString, sql, params });
     return answer(sql, params);
   };
+  // A transaction on the fake: each statement is answered in turn on a copy of
+  // the world, which is kept only if none fails (the executor's `sql.begin`).
+  execute.transaction = async (connectionString, statements) => {
+    const counts = [];
+    for (const s of statements) {
+      calls.push({ connectionString, sql: s.sql, params: s.params, inTransaction: true });
+      const out = answer(s.sql, s.params);
+      if (!out.ok) return out;
+      counts.push(out.rowCount);
+    }
+    return { ok: true, rowCounts: counts };
+  };
   return { env: { HYPERDRIVE_MAIN: { connectionString: SECRET_URL } }, execute, calls };
 }
 
@@ -1595,4 +1607,74 @@ t("WorkersPostgres: the connection string reaches the executor and nothing else"
   const { env, execute } = pgEnv(() => pgFail("failed", "28P01", "password authentication failed for user app"));
   const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).run("x", []);
   assert.ok(!JSON.stringify(r).includes("s3cr3t") && !JSON.stringify(r).includes(SECRET_URL));
+});
+
+// Hyperdrive H3 (#3320): `WorkersPostgres.transaction`.
+t("WorkersPostgres.transaction: runs the statements in order in one transaction and reports each row count", async () => {
+  const { env, execute, calls } = pgEnv((sql) => pgOk([], sql.startsWith("insert") ? 1 : 5));
+  const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).transaction([
+    { sql: "insert into a values ($1)", params: [{ tag: "PgInteger", value: 1 }] },
+    { sql: "update b set n = n + 1", params: [] },
+  ]);
+  assert.deepEqual([r.tag, r.value], ["Ok", [{ rowCount: 1 }, { rowCount: 5 }]]);
+  assert.deepEqual(calls.map((c) => [c.sql, c.inTransaction, c.connectionString]), [
+    ["insert into a values ($1)", true, SECRET_URL],
+    ["update b set n = n + 1", true, SECRET_URL],
+  ]);
+  assert.deepEqual(calls[0].params, [{ tag: "PgInteger", value: 1 }]);
+});
+
+t("WorkersPostgres.transaction: a failure in the second statement rolls back the first and is the result", async () => {
+  // A table of rows, and an executor whose transaction applies to a copy and
+  // keeps it only when every statement succeeded (what `sql.begin` guarantees).
+  let committed = [];
+  const env = { HYPERDRIVE_MAIN: { connectionString: SECRET_URL } };
+  const execute = async () => pgOk([]);
+  execute.transaction = async (_cs, statements) => {
+    const scratch = [...committed];
+    const counts = [];
+    for (const s of statements) {
+      if (s.sql === "insert into stock values ($1)") {
+        if (scratch.includes(s.params[0].value)) return pgFail("constraint", "23505", "duplicate key value violates unique constraint");
+        scratch.push(s.params[0].value);
+        counts.push(1);
+      }
+    }
+    committed = scratch;
+    return { ok: true, rowCounts: counts };
+  };
+  const insert = (n) => ({ sql: "insert into stock values ($1)", params: [{ tag: "PgInteger", value: n }] });
+  const pg = new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute);
+  assert.equal((await pg.transaction([insert(1)])).tag, "Ok");
+  // 2 is new, 1 is a duplicate: the second statement fails, so 2 must not stay.
+  const r = await pg.transaction([insert(2), insert(1)]);
+  assert.equal(r.tag, "Err");
+  assert.deepEqual(r.error, { tag: "PgConstraint", sqlstate: "23505", message: "duplicate key value violates unique constraint" });
+  assert.deepEqual(committed, [1]);
+});
+
+t("WorkersPostgres.transaction: each failure kind is its PgError variant; the connection string never leaks", async () => {
+  for (const [answer, tag] of [
+    [pgFail("serialization", "40001", "could not serialize"), "PgSerialization"],
+    [pgFail("connection", "", "could not reach the database (CONNECTION_CLOSED)"), "PgConnection"],
+    [pgFail("failed", "28P01", "password authentication failed for user app"), "PgFailed"],
+  ]) {
+    const { env, execute } = pgEnv(() => answer);
+    const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).transaction([{ sql: "x", params: [] }]);
+    assert.equal(r.tag, "Err");
+    assert.equal(r.error.tag, tag);
+    assert.ok(!JSON.stringify(r).includes("s3cr3t") && !JSON.stringify(r).includes(SECRET_URL));
+  }
+});
+
+t("WorkersPostgres.transaction: an empty list is Ok([]) and opens nothing; a missing binding or driver still faults", async () => {
+  const { env, execute, calls } = pgEnv(() => pgOk([]));
+  const r = await new WorkersPostgres(env, "HYPERDRIVE_MAIN", execute).transaction([]);
+  assert.deepEqual([r.tag, r.value], ["Ok", []]);
+  assert.equal(calls.length, 0);
+  await assert.rejects(() => new WorkersPostgres({}, "HYPERDRIVE_MAIN", execute).transaction([]), /requires a Hyperdrive binding/);
+  await assert.rejects(
+    () => new WorkersPostgres({ HYPERDRIVE_MAIN: { connectionString: SECRET_URL } }, "HYPERDRIVE_MAIN").transaction([{ sql: "x", params: [] }]),
+    /needs the Postgres driver/,
+  );
 });

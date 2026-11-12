@@ -1,0 +1,12 @@
+commons shop.messages
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" @reference {
+  "cart.empty" => "Your basket is empty."
+}
+
+messages "fr" {
+  "cart.empty" => "Votre panier est vide."
+}

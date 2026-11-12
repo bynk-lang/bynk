@@ -1,0 +1,11 @@
+context demo.api
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("pong")
+  }
+}
+
+fn run(n: Int) -> Int {
+  n
+}

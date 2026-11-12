@@ -1,0 +1,5 @@
+commons demo
+
+fn warn(what: String) -> Effect[()] given Logger {
+    Logger.warn(what)
+}

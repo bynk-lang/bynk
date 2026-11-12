@@ -381,7 +381,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
-| **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
+| **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 
 `Kv` is backed by a Worker KV namespace bound as `env.KV`; the
 `[[kv_namespaces]]` stanza is derived for you.
@@ -984,7 +984,83 @@ every operation of an instance **faults until the case stubs it**, as a
 string until the case stubs the instance. `Postgres` has no `system`-tier
 behaviour, where a stub has no effect.
 
-`transaction` and the typed `select`/`firstAs` are not part of this surface yet.
+A typed read lowers over `all` and `first`, so stubbing those stubs it, with the
+rows as JSON text: `stub Main.all(_, _) returns Ok("[{\"id\":\"1\"}]")`.
+`transaction` faults the same way until `stub Main.transaction(_) returns …`.
+
+#### Postgres typed reads: `select[T]` and `firstAs[T]`
+
+`select[T]` and `firstAs[T]` read rows straight into a record, as they do for
+[`D1`](#typed-reads-selectt-and-firstast), so the column list is not spelt twice.
+The first argument is the statement **from `FROM` on**, a string literal (or a
+`String` constant bound to one) that must not begin with `SELECT`
+(`bynk.types.select_tail_has_select`); the compiler writes `SELECT` and `T`'s
+fields as quoted identifiers, in declaration order, ahead of it at compile time,
+so the SQL is still a constant. Quoting is Postgres': double quotes, with an
+embedded quote doubled.
+
+```bynk,fragment
+type Order = { id: Int, name: String, placed: Instant, note: Option[String] }
+
+service feed {
+	on call(min: Int) -> Effect[Result[List[Order], PgReadError]] given Main {
+		Main.select[Order]("FROM orders WHERE id > $1 ORDER BY id", [PgInteger(min)])
+	}
+}
+// runs: SELECT "id", "name", "placed", "note" FROM orders WHERE id > $1 ORDER BY id
+```
+
+A field selects the column of the same name; there is no renaming, so a computed
+column stays with `all` and `Json.decode`. The tail is a literal
+(`bynk.types.sql_not_literal`), and `T` is the row itself, so `select[List[Row]]`
+is refused (`bynk.types.sql_row_shape`).
+
+`select` gives `Result[List[T], PgReadError]` and `firstAs`
+`Result[Option[T], PgReadError]`. `PgReadError` is `PgSql(PgError)` for the
+statement's own failure and `PgDecode(DecodeError)` for a row that did not
+decode. The variants carry the `Pg` prefix because `Sql` and `Decode` are
+`SqlReadError`'s.
+
+A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal` or
+`Instant` (or a refined or opaque type over one, or an `Option` of either). Two
+of the rows' text forms are read for you, and only in a typed read:
+
+- An `Int` field reads an `int8` that arrives as text, when it is a whole number
+  within ±2^53. A larger one fails the decode, naming the field, rather than
+  losing digits; read it as a `Decimal` or a `String` column instead.
+- An `Instant` field reads a `timestamptz`'s ISO-8601 text and normalises it to
+  UTC. The forms are the driver's (`2026-11-11T12:34:56.789Z`) and Postgres' own
+  text (`2026-11-11 12:34:56.789+00`, `…+05:30`, `…-0800`, a fraction of up to six
+  digits, truncated to milliseconds). A `timestamp` column (no zone, so no
+  instant), a `date` column, `infinity` and a `BC` year fail the decode, and a
+  `String` field reads each as the server's text: the executor keeps those as
+  text, and only a finite `timestamptz` is read as an instant. `Json.decode`
+  still reads an `Instant` as epoch milliseconds, as before.
+
+#### Postgres transactions: `transaction`
+
+`transaction(statements)` runs a fixed list of statements **in order, all or
+none**, on one connection. A `PgStatement` is `{ sql, params }`, with the `sql` a
+literal as for `all`; if one statement fails, every earlier one is rolled back,
+the later ones do not run, and the result is that statement's `PgError`. It gives
+one `PgRun` per statement, in order.
+
+```bynk,fragment
+Main.transaction([
+	PgStatement { sql: "insert into orders (name) values ($1)", params: [PgText(name)] },
+	PgStatement { sql: "update stock set qty = qty - 1 where name = $1", params: [PgText(name)] },
+])
+```
+
+A `PgStatement` stays where it is built, as a `SqlStatement` does: it cannot be
+stored, sent, received or decoded (`bynk.types.sql_statement_at_boundary`), since
+one from outside would carry SQL that was never a literal. An empty list is
+`Ok([])` and opens no connection (a missing binding still faults first).
+
+`transaction` runs a list known up front. A read whose result decides a later
+write needs the transaction held open between them; Bynk does not offer that, so
+make the decision in one statement (`insert … select`, `update … where`) or retry
+on `PgSerialization`.
 
 ### SQL databases: `D1`
 

@@ -1362,16 +1362,19 @@ pub(super) fn platform_double(
         // does. The message names the instance and never a connection string:
         // there is none to name.
         ("bynk.cloudflare", "Postgres") => {
-            let op = |op: &str| {
+            let op = |op: &str, args: &str| {
                 format!(
-                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches Postgres — add `stub {name}.{op}(_, _) returns …`\");\n    }},\n"
+                    "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `{name}.{op}` is not stubbed, and a test never reaches Postgres — add `stub {name}.{op}({args}) returns …`\");\n    }},\n"
                 )
             };
+            // `transaction` (#3320) takes one argument; the typed reads lower
+            // over `all` and `first`, so stubbing those stubs them.
             format!(
-                "  return {{\n{}{}{}  }};\n",
-                op("all"),
-                op("first"),
-                op("run")
+                "  return {{\n{}{}{}{}  }};\n",
+                op("all", "_, _"),
+                op("first", "_, _"),
+                op("run", "_, _"),
+                op("transaction", "_")
             )
         }
         // #3300: a fixed version (id `"test"`, no tag, created at the

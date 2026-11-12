@@ -1,0 +1,3 @@
+commons bynk.foo
+
+type Tag = String
