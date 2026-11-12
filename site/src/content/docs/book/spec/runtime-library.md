@@ -629,3 +629,38 @@ effect. It rides the same uncaught-fault channel as an invariant violation: the 
 faults, the agent's commit does not happen, and the caller observes a fault, not an outcome;
 a fault claim (§7.4.12a) holds for it. Like the other runtime helpers it is codegen, not
 part of the published emit ABI (ADR 0310).
+
+## §7.4.17 The `detach` reporter (#3437)
+
+`__bynkDetach(promise, exec, site, errType?)` is the runtime half of `e.detach()` (§5.5). `promise`
+is the effect, already running, `exec` the execution context (`deps.__exec`), `site` the
+`path:line:col` of the `detach`, and `errType` the display name of the error type when the
+effect is an `Effect[Result[_, E]]`; it is absent for every other payload.
+
+```typescript
+export function __bynkDetach(
+  promise: Promise<unknown>,
+  exec: { waitUntil(promise: Promise<unknown>): void; report?(record: Report): void },
+  site: string,
+  errType?: string,
+): Promise<void>;
+```
+
+The contract: it returns at once, never awaiting `promise`, after handing the effect to
+`exec.waitUntil`. A failure is **reported, never lost**, by the runtime and not through `Logger`:
+
+- A **fault** (the promise rejects) is passed on **unchanged** as a rejected promise into
+  `waitUntil`, the mechanism of the entry's own fault report (#2192), so the platform records an
+  exception with the original stack. The rejection is handled first, so a host that never awaits
+  `waitUntil` sees no unhandled rejection, and `site` is attached to an object reason as
+  `detachedAt`.
+- An **`Err`** (when `errType` is present and the value's `tag` is `"Err"`) is reported as one
+  structured `console.error` record, `{ message: "a detached effect returned Err", level:
+  "error", fields: { site, type, variant } }`, where `variant` is the error's `tag` when it is a
+  sum, else empty. The payload is **never** reported, because it can hold a credential.
+- `Ok`, and any payload that is not a `Result`, report nothing.
+
+When `exec` has a `report` hook, as the test harness's double does, each report is handed to it
+and not logged, and it does not fail the case (ADR 0478). Like `__bynkSettleAll`, it is
+codegen, not part of the published emit ABI (ADR 0310), and lives in the `settle` runtime
+module.

@@ -52,9 +52,12 @@ as an `HttpResult[User]`, so `Ok(u)` binds `u` as a `User`. The same holds for
 match or `is` test on the outcome is checked like any other: an unknown variant,
 a wrong arity, or a method the payload's type lacks is an error.
 
-A handler that sends with `~>` runs in a case as on the Worker: the send is
+A handler that detaches an effect (`e.detach()`) runs in a case as on the Worker: the effect is
 handed to the execution context's `waitUntil`, and the runner awaits every
-such send after the call returns, so the case's expectations see its effects.
+such effect after the call returns, so the case's expectations see its effects.
+A failure the detached effect reports (a fault, or an `Err` when it is a
+`Result`) does not fail the case, as on the Worker: the runner prints each
+under the case and counts them as `detached_failures` in `--format json`.
 
 ```bynk,fragment
 suite app.web {
@@ -514,7 +517,7 @@ suite shop.inventory as system {
   records whether the consumer called `ack()` or `retry()`, and the address yields
   `Ack` or `Retry(reason)` with the reason the consumer gave. A consumer that
   faults is retried, as on the platform, so the address yields `Retry`.
-- **The execution context is settled**: any `~>` send the handler hands to
+- **The execution context is settled**: any detached effect the handler hands to
   `waitUntil` finishes before the address returns.
 - **State carries through the case.** Every address in a `system` case reaches
   the same participants, so a later `api.GET(…)` reads what the sweeper or the
@@ -1123,7 +1126,7 @@ stub Pricing.quote(_) never                        // never completes
   `within(2.seconds)` against a stub `after 3.seconds` therefore yields
   `Err(TimedOut { after: 2.seconds })` every time, with no sleeping. **A tie goes to
   the effect:** a stub that completes exactly at the deadline wins.
-- **Abandoned effects settle at the end of the call**, as `~>` sends do. An abandoned
+- **Abandoned effects settle at the end of the call**, as detached effects do. An abandoned
   `after` effect completes by moving the clock on; an abandoned `never` is left, since
   nothing will ever finish it. A call that can never complete and has no `within` to
   end it faults the case.

@@ -11,7 +11,7 @@ import * as bynk from "../../bynk.js";
 
 export const api = {
   async http_GET(deps: { Logger: bynk.Logger; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<HttpResult<string>> {
-    __bynkDetach(deps.Logger.info("hi"), deps.__exec, "src/tally.bynk:9:3");
+    await __bynkDetach(deps.Logger.info("hi"), deps.__exec, "src/tally.bynk:9:6");
     return HttpResult.Ok("hi");
   },
 };

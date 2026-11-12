@@ -6,6 +6,6 @@ import { __bynkDetach } from "../../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../../__bynk_runtime/errors.js";
 
 export async function announce(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __bynkDetach(f(n), __exec, "pkg/lib/src/notify.bynk:4:3");
+  await __bynkDetach(f(n), __exec, "pkg/lib/src/notify.bynk:4:6");
   return n;
 }

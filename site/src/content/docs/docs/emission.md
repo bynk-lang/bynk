@@ -140,17 +140,19 @@ are the ones that carry control flow or effects. Exact semantics are in
 | admitted literal | inline brand cast `(literal as T)` |
 | `?` (try) | early-return on `Err` |
 | `<-` (bind) | `await` |
-| `~>` (async send) | `ctx.__exec.waitUntil(…)` on workers; in-process on bundle |
+| `e.detach()`, `~>` (async send) | `__bynkDetach(…, ctx.__exec, …)`, which hands the effect to `waitUntil` on workers and reports a failure; in-process on bundle |
 
 Two of these are worth reading closely when debugging generated code:
 
 - **`?`** unwraps a `Result`: on `Ok` it continues with the inner value; on `Err`
   it returns that `Err` from the enclosing function immediately. In a stack trace,
   an early return from the middle of a handler is almost always a `?`.
-- **`~>`** is fire-and-forget. On the **workers** target it is registered with
-  `ctx.__exec.waitUntil(…)` so the runtime keeps the invocation alive until the
-  send completes, even after the response has been returned. On **bundle** it runs
-  in-process. Either way the caller does not await the result.
+- **`e.detach()`** (and the deprecated `~>`) is fire-and-forget. On the **workers** target the
+  effect is handed to `ctx.__exec.waitUntil(…)` by `__bynkDetach`, so the runtime keeps the
+  invocation alive until it completes, even after the response has been returned; a fault is
+  passed on unchanged and an `Err` of a `Result` is logged as one structured record. On
+  **bundle** it runs in-process and a failure is logged. Either way the caller does not await
+  the result.
 
 A `match` arm binds its payload as `const` before the arm body, so a debugger sees
 named locals rather than repeated `.tag` access:
@@ -235,8 +237,8 @@ export default {
 };
 ```
 
-`ctx` is Cloudflare's execution context. It is optional unless a handler sends
-with `~>`, so an in-process caller such as the test runner can omit it. A
+`ctx` is Cloudflare's execution context. It is optional unless a handler detaches
+an effect (`detach`, `~>`), so an in-process caller such as the test runner can omit it. A
 fault `fetch` or `queue` catches is logged, then handed to `ctx.waitUntil` as
 a rejected promise, so Cloudflare records it as the invocation's exception and
 applies an uploaded source map to its stack. See

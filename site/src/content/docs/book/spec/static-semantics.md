@@ -1219,35 +1219,52 @@ effectful position and MUST be applied to an `Effect`
 capability call or a cross-context call MUST NOT occur in a pure context
 (`bynk.effect.capability_in_pure_context`, `bynk.effect.cross_context_in_pure_context`).
 
-An **asynchronous send** (`~>`, §4.8.5) MUST likewise occur in an effectful
-position (`bynk.send.in_pure_context`) and MUST be applied to an `Effect`
-(`bynk.send.non_effect`). Because a send does not await its reply and binds
-nothing, its reply MUST be `Effect[()]` — the **error gate**: a send whose
-operation returns a non-unit `Effect[T]` is rejected (`bynk.send.requires_unit`),
-since the value or error `T` would be silently discarded. "No value" and "no
-need to wait" are independent: to *await* a unit-returning effect (a durable
-write that must join the commit) keep the `<-` bind; to await and discard a
-**valued** reply, write `let _ <- e`. A send is a statement, never an expression.
+A **detached effect** (`e.detach()`, #3437) stops waiting for an effect that is already
+running. `detach` is a kernel method on every `Effect[T]` that returns `Effect[()]`, so it is an
+ordinary effect: `do e.detach()` and `let _ <- e.detach()` are statements, and it may be the body
+of a lambda or the last expression of a function. It MUST occur in an effectful position
+(`bynk.detach.in_pure_context`). It never starts anything, because an effect is an eager promise
+started where its expression is evaluated: it hands the running promise to the execution
+context's `waitUntil` and completes at once. "No value" and "no need to wait" are independent: to
+*await* a unit-returning effect (a durable write that must join the commit) keep the `<-` bind;
+to await and discard a **valued** reply, write `do e` (a `Result` reply is refused, so write
+`let _ <- e`); to stop waiting, write `do e.detach()`.
 
-**Delivery guarantee.** A send is **immediate and best-effort**
+**Delivery guarantee.** A detach is **immediate and best-effort**
 ([ADR 0106](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0106-async-message-send.md)).
-The effect starts when the statement executes, not at the handler's commit. It is **not
-retried**, and a delivery that fails, or never completes, is **never observed by the
-sender**: the send binds nothing, the handler's result does not depend on it, and a fault in
-it cannot fail or alter the handler. A program MUST NOT rely on a send having been delivered.
+The effect starts when its expression is evaluated, not at the handler's commit. It is **not
+retried**, it MAY be cut short by the platform once the response has been sent, and its outcome is
+**never returned to the sender**: the handler's result does not depend on it, and a fault in it
+cannot fail or alter the handler. A program MUST NOT rely on a detached effect having completed.
 Unlike the producers that promise **at-least-once** delivery, a queue
 message ([ADR 0122](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0122-queue-is-a-delivery-concern.md))
 and an `Events` emission ([§5.7b](#events)), which are redelivered until handled and whose
-consumers are therefore written to be idempotent. A `~>` send carries no such promise. To
+consumers are therefore written to be idempotent. A detach carries no such promise. To
 await the effect, or to have its fault reach the handler, use `<-` or `do`.
 
-A send MUST NOT occur in an **agent handler** body, a closure within one included
-(`bynk.send.in_agent_handler`): an agent handler runs inside the agent's Durable
-Object and has no execution context to keep a fire-and-forget effect alive past
-it, so its effects are awaited (`let _ <- e`, `do e`). A send of the agent's own
-**store operation** is refused with its own code (`bynk.send.store_op`): a store
+**A detached failure is reported, never lost.** A detached effect has no caller to receive a
+failure, so the runtime reports it ([§7.4.17](/book/spec/runtime-library/#7417-the-detach-reporter-3437)),
+and not `Logger`. The route is chosen from the effect's static type. A **fault** (the effect's
+promise rejects) is passed to the platform's exception path unchanged. When the effect is an
+`Effect[Result[_, E]]` an **`Err`** is reported as one structured `console.error` record carrying
+the site and the error's type name and, for a sum type, its variant tag, and never its payload.
+`Ok`, and every other payload, report nothing. A test records each report and does not fail the
+case.
+
+A `detach` MUST NOT occur in an **agent handler** body, a closure within one included
+(`bynk.detach.in_agent_handler`): an agent handler runs inside the agent's Durable
+Object and has no execution context to keep a detached effect alive past
+it, so its effects are awaited (`let _ <- e`, `do e`). A `detach` of the agent's own
+**store operation** is refused with its own code (`bynk.detach.store_op`): a store
 write is staged and committed atomically at the handler boundary, so there is
-nothing to send without waiting for — write it as `do field.op(…)`.
+nothing to detach without waiting for — write it as `do field.op(…)`.
+
+**The asynchronous send `~>` (deprecated, #3437).** `~> e` (§4.8.5) is the older spelling. It
+MUST be applied to an `Effect` (`bynk.send.non_effect`) whose reply is `Effect[()]` — the **error
+gate** (`bynk.send.requires_unit`) — and has the same position rules, under `bynk.send.in_pure_context`,
+`bynk.send.in_agent_handler` and `bynk.send.store_op`. It warns, `bynk.send.deprecated`, and
+`bynk check --fix` rewrites it to `do e.detach()`. It lowers through the same reporter, so its
+failures are reported too. It is removed in the next release.
 
 A send MAY occur in an effectful `fn` or method (#2719): the function takes the execution
 context from its caller. See *The execution context in functions* below.
@@ -1272,7 +1289,7 @@ and `do e`; each binding is checked exactly as the same statement written outsid
 the block, against the scope *outside* it. Anything else is
 `bynk.par.invalid_statement`, naming the statement: a `let` with a refutable
 pattern and an `else`, a plain `let` (it has no effect to overlap), `~>` (a
-fire-and-forget send has nothing to join), `:=` or a mutating `store` operation
+fire-and-forget send has nothing to join; a `do e.detach()` is an ordinary `do`), `:=` or a mutating `store` operation
 (`store` writes stay sequential), `expect`, `advance`, a nested `par`, and an
 empty block. A `?` in a binding is `bynk.par.question_in_join` (a `?` inside a
 lambda belongs to the lambda). This is permanent: `?` takes a `Result` value, not
@@ -1303,7 +1320,7 @@ separately. Nothing the block started is still running when it completes or
 raises, so no work outlives the handler, and the fault a program sees does not
 depend on timing. Effects that completed before the fault keep their effects
 (ADR 0109 D4: a cross-agent `<-` call commits as it returns; `store` writes are
-staged and discarded; `~>` sends stand). A `par` block is legal in an agent handler:
+staged and discarded; a detached effect stands). A `par` block is legal in an agent handler:
 an input gate that is open while a handler awaits a subrequest is open for a join
 too, so a join adds no interleaving a sequence of `<-`s does not already allow —
 the one thing it removes is the synchronous gap between two adjacent lines, which
@@ -1333,8 +1350,8 @@ Because the abandoned effect needs an execution context to be handed to, `within
 is legal only where a service handler's `deps` carry one: in a **service handler's
 body**, a lambda written there included (`xs.parTraverse((x) => S.op(x).within(d))`
 closes over the handler's `deps`). It MUST NOT occur in an **agent handler**, a
-lambda within one included (`bynk.within.in_agent_handler`), for the reason a `~>`
-send MUST NOT (an agent handler has no execution context; the Durable Object's own
+lambda within one included (`bynk.within.in_agent_handler`), for the reason a `detach`
+MUST NOT (an agent handler has no execution context; the Durable Object's own
 `waitUntil` is a recorded follow-up). It MUST occur in an effectful position
 (`bynk.within.in_pure_context`), and it MUST NOT occur in a provider operation or a
 WebSocket handler (`bynk.within.outside_handler`): a WebSocket handler runs in the
@@ -1368,10 +1385,10 @@ method, as `within` may. Its argument is consumed
 by the call, so the unawaited-effect check (`bynk.effect.unbound_effect`) does not flag
 it. The `race` of a `race`, or of a `within`, composes: `a.race(b).within(d)`.
 
-**The execution context in functions (#2719).** `~>`, `within` and `race` MAY occur in
+**The execution context in functions (#2719).** `detach`, `~>`, `within` and `race` MAY occur in
 an effectful `fn` or method. A function takes the execution context from its caller, so
 the compiler works out which functions need it: the **needs-context set** holds every
-effectful function whose body (a lambda in it included) uses `~>`, or a `within` or
+effectful function whose body (a lambda in it included) uses `~>`, or a `detach`, `within` or
 `race` the checker resolved as the kernel method on an `Effect` receiver (never by
 name: a user type's own `race` method puts nothing in the set), or that calls a function
 in the set, or names one as a value. It is a fixed point over the whole build,
@@ -1381,7 +1398,7 @@ handler included), a Bundle `on call` handler, a lambda written in either, anoth
 function in the set, or a test `case` body. A call or a reference to such a function in
 an **agent handler**, a **WebSocket handler** or a **provider operation** MUST be refused
 (`bynk.exec.unavailable`), with a note naming the chain of functions down to the
-construct. A direct `~>`, `within` or `race` written in a test `case` body remains
+construct. A direct `detach`, `~>`, `within` or `race` written in a test `case` body remains
 refused.
 
 **Implicit unit tail (§4.8.1).** A block with no trailing expression has value
@@ -2727,7 +2744,7 @@ consumed seam of the unit under test (`consumes` declares, `given` requires,
   completion before a deadline at the same instant, so **a tie goes to the effect**.
   When the call returns, the harness settles the effects `within` abandoned (an
   abandoned `after` effect completes by moving the clock on; an abandoned `never`
-  is left), as it settles `~>` sends, so an expectation sees them. A call that can
+  is left), as it settles detached effects, so an expectation sees them. A call that can
   never complete and has no `within` to end it faults the case. A module whose
   target does not call `within` and whose stubs take no time keeps the plain counter
   clock, byte for byte. Latency exists where `stub` does: at `system`, and under

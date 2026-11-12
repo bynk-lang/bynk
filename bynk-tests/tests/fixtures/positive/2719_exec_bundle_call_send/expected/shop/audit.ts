@@ -6,7 +6,7 @@ import { __bynkDetach } from "../__bynk_runtime/settle.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export async function logIt(id: number, f: (a0: number) => globalThis.Promise<void>, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __bynkDetach(f(id), __exec, "src/shop/audit.bynk:16:2");
+  await __bynkDetach(f(id), __exec, "src/shop/audit.bynk:16:5");
   return id;
 }
 
@@ -26,7 +26,7 @@ export const __NoLedgerProvider = { token: __LedgerToken, factory: () => new NoL
 
 export const audit = {
   async call(id: number, deps: { Ledger: Ledger; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<number> {
-    __bynkDetach(deps.Ledger.book(id), deps.__exec, "src/shop/audit.bynk:22:3");
+    await __bynkDetach(deps.Ledger.book(id), deps.__exec, "src/shop/audit.bynk:22:6");
     return id;
   },
 };

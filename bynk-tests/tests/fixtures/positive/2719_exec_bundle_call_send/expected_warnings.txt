@@ -1,2 +1,0 @@
-# #3437: `~>` is deprecated for `do e.detach()`; the corpus is rewritten in the next increment.
-bynk.send.deprecated

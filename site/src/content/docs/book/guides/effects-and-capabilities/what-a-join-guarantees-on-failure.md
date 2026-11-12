@@ -31,7 +31,7 @@ finished before the failure keep their effect, in the same way as in sequential 
 
 - a call to another agent or context that returned has run, and stays run;
 - writes to the agent's own `store` are staged and discarded with the failed handler;
-- a `~>` send that was already sent stands.
+- an `e.detach()` that was already handed to the runtime stands.
 
 ## In an agent handler
 

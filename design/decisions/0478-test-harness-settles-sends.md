@@ -1,6 +1,6 @@
 # 0478 — The test harness supplies an execution context and settles `~>` sends
 
-- **Status:** Accepted (v0.334)
+- **Status:** Accepted (v0.334). **Amended by [[0824]]** (the exec double records the failures a detached effect reports, and does not fail the case).
 
 **Context.** A handler whose body uses `~>` hands the send's promise to
 `deps.__exec.waitUntil`, which the Worker entry threads from the request's

@@ -14,9 +14,9 @@ export const api = {
     const __r0 = Some(1);
     if (__r0.tag === "Some") {
       const x = __r0.value;
-      if ((() => {
+      if (await (async () => {
     if (x > 0) {
-      __bynkDetach(deps.Logger.info("positive"), deps.__exec, "notify.bynk:13:9");
+      await __bynkDetach(deps.Logger.info("positive"), deps.__exec, "notify.bynk:13:12");
       return true;
     } else {
       return false;

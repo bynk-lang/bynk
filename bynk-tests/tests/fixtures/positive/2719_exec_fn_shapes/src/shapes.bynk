@@ -2,7 +2,7 @@ context shapes
 
 consumes bynk
 
-// #2719: `~>`, `within` and `race` in a `fn`. A function that uses one, or calls
+// #2719: `detach`, `within` and `race` in a `fn`. A function that uses one, or calls
 // or names one that does, takes the execution context as a hidden trailing
 // parameter; every call passes it on.
 
@@ -24,7 +24,7 @@ provides Quotes = FixedQuotes {
 
 // A free function that sends.
 fn twice(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
-	~> f(n)
+	do f(n).detach()
 	let _ <- f(n + 1)
 	Effect.pure(n)
 }
@@ -67,7 +67,7 @@ fn guarded(f: (Int) -> Effect[()], n: Int) -> Effect[Int]
 	requires positive: n > 0
 	ensures kept: result == n
 {
-	~> f(n)
+	do f(n).detach()
 	Effect.pure(n)
 }
 
