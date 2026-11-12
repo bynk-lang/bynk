@@ -1,0 +1,12 @@
+context shop.cart
+
+removed agent Cart
+
+agent Cart {
+  key id: String
+  store total: Cell[Int] = 0
+
+  on call read() -> Effect[Int] {
+    total
+  }
+}

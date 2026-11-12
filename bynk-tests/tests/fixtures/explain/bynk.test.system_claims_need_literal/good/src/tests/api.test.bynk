@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "a workflow is admitted" {
+    let r <- api.GET("/who") by Workload("wid", TokenClaims.of(["repository: acme/money"]))
+    expect r is Ok("wid")
+  }
+}

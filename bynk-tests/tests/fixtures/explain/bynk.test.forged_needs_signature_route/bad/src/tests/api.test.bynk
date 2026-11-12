@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "a stale request is refused" {
+    let r <- api.GET("/me") by Stale
+    expect r is Rejected(Unauthorized)
+  }
+}

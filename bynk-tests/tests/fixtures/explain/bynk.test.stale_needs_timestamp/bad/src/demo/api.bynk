@@ -1,0 +1,23 @@
+context demo.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "S"), identity = UserId }
+
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Sig", timestamp = "X-Ts", tolerance = 300) }
+
+actor Legacy { auth = Signature(secret = "LEGACY_SECRET", header = "X-Legacy-Sig") }
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+    Ok(u.identity)
+  }
+
+  on POST("/hook") (body: String) -> Effect[HttpResult[String]] by Hook {
+    Ok(body)
+  }
+
+  on POST("/legacy") (body: String) -> Effect[HttpResult[String]] by Legacy {
+    Ok(body)
+  }
+}

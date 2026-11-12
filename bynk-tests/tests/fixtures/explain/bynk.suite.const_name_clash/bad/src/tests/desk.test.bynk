@@ -1,0 +1,6 @@
+suite demo.desk {
+  const Limit: Int = 9
+  case "c" {
+    expect twice(Limit) == 10
+  }
+}
