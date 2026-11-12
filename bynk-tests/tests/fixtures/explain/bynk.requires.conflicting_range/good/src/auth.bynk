@@ -1,0 +1,11 @@
+adapter auth {
+  binding "./auth.binding.ts" requires { "jose": "^5" }
+
+  exports capability { Jwt }
+
+  capability Jwt {
+    fn sign(secret: String) -> Effect[String]
+  }
+
+  provides Jwt = JoseJwt
+}

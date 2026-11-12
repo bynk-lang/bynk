@@ -1,0 +1,6 @@
+suite demo.api {
+  case "raw text is refused" {
+    let r <- api.POST("/n", Wire("0")) by Visitor
+    expect r is Rejected(RefinementViolation(_))
+  }
+}

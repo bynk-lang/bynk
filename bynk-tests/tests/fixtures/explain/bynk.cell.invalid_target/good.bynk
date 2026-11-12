@@ -1,0 +1,11 @@
+context probe
+
+agent Seen {
+    key id: String
+
+    store ids: Set[Int]
+
+    on call mark(n: Int) -> Effect[()] {
+        let _ <- ids.add(n)
+    }
+}

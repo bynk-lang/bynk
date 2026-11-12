@@ -1,0 +1,5 @@
+commons internal
+
+fn helper(n: Int) -> Int {
+    n
+}

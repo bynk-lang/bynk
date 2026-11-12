@@ -1,0 +1,6 @@
+suite demo.api {
+  case "a forged token is refused" {
+    let r <- api.GET("/a") by Forged
+    expect r is Rejected(Unauthorized)
+  }
+}

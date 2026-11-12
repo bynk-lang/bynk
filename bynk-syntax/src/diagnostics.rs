@@ -829,6 +829,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "derived-capabilities",
     },
     Explain {
+        code: "bynk.cell.invalid_target",
+        blurb: "A `:=` replaces the value of a `Cell`, the one store kind that holds a single value. A `Set`, `Map`, `Log` or `Cache` has no one value to replace; each changes through its own operations (`add`, `put`, `append`), and a name that is not a `store` field of the agent has nothing to write. Use the operation the field's kind offers, or declare the field `Cell[T]` if a single replaceable value is what you want. The same check covers a `migrate from` step that assigns a field.",
+        example: "store ids: Set[Int]\n\nids := n               // ✗ a `Set` has no single value to replace\n\nlet _ <- ids.add(n)    // ✓ the operation the kind offers",
+        page: "/book/reference/agents",
+        anchor: "reading-and-writing-state",
+    },
+    Explain {
         code: "bynk.cell.self_reference",
         blurb: "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell \
                 it is writing. Computing the new value from the old one is a hidden \
@@ -1168,6 +1175,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id)])                 // ✗ two parameters, one value\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id), Integer(100)])    // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "sql-checked-against-the-migrations",
+    },
+    Explain {
+        code: "bynk.duration.literal_overflow",
+        blurb: "`5.minutes` is a `Duration`, which the compiler stores as a whole number of milliseconds, so it multiplies the count by the unit when it reads the literal. A count whose total does not fit in a 64-bit integer is refused rather than wrapped into a wrong or negative span. No real timeout or interval is that large: write a smaller count, or a smaller unit.",
+        example: "fn forever() -> Duration { 9007199254740991.days }   // ✗ overflows the millisecond range\n\nfn forever() -> Duration { 365.days }                // ✓",
+        page: "/book/reference/types",
+        anchor: "duration",
     },
     Explain {
         code: "bynk.effect.bind_in_pure_context",
@@ -1769,6 +1783,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "",
     },
     Explain {
+        code: "bynk.given.fn_outside_context",
+        blurb: "`given` lets a function use capabilities, and only a context declares which capabilities it consumes. A commons is shared by every context that uses it, and those may consume different capabilities, so a function in a commons or a suite cannot declare `given`. Take the operation as a parameter instead, and pass `(m) => Logger.error(m)` from the handler, or move the function into the context that consumes the capability. A method cannot declare `given` anywhere: that is `bynk.given.fn_unsupported`.",
+        example: "fn warn(what: String) -> Effect[()] given Logger { … }   // ✗ a commons function has no `given`\n\nfn warn(log: (String) -> Effect[()], what: String) -> Effect[()] { … }   // ✓ the caller passes the operation in",
+        page: "/book/reference/capabilities",
+        anchor: "capabilities-in-functions",
+    },
+    Explain {
         code: "bynk.given.fn_unsupported",
         blurb: "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
         example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
@@ -2336,11 +2357,25 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-predicate-surface",
     },
     Explain {
+        code: "bynk.json.encode_plain_generic",
+        blurb: "`Json.encodePlain` writes an `Option` as its value or `null`, which it can do only when it knows the type. A generic function is compiled once for every `T`, and encodes through its `Codable` witness, which always writes `Option` in the tagged form `{\"kind\":\"Some\",…}`. Encode at a concrete type, or use `Json.encode` if the tagged form will do. A concrete type that is ambiguous in plain form is `bynk.json.nested_option_plain`.",
+        example: "fn plain[T: Codable](v: T) -> String { Json.encodePlain(v) }   // ✗ `T` could be an `Option`\n\nfn plain(v: Option[Int]) -> String { Json.encodePlain(v) }     // ✓ a concrete type",
+        page: "/book/reference/types",
+        anchor: "plain-json",
+    },
+    Explain {
         code: "bynk.json.nested_option_plain",
         blurb: "Plain JSON writes `Some(v)` as `v` and `None` as `null`, so it can only be read back if `v` is never itself `null`. In an `Option[Option[T]]` or an `Option[()]`, `Some(None)` and `None` (or `Some(())` and `None`) would both be written `null`, and the decoder could not tell them apart. The compiler refuses the type wherever plain encoding is asked for: in the response type of a route whose `json { options: plain }` or `@json(options: plain)` applies, or in the argument of `Json.encodePlain`, through records, sums, containers and generic arguments alike. The tagged form, which `Json.encode` and a route's default use, writes `Option` as `{\"kind\":\"Some\",\"value\":…}` and has no such ambiguity. Either flatten the type, model the distinction as a sum type, or keep that route tagged.",
         example: "type Row = { id: String, note: Option[Option[String]] }\n\non GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ `Some(None)` and `None` both write `null`\n\ntype Row = { id: String, note: Option[String] }   // ✓",
         page: "/book/reference/types",
         anchor: "plain-json",
+    },
+    Explain {
+        code: "bynk.lambda.unannotated_param",
+        blurb: "A lambda's parameter types come from where it is used: passed to `map` over a `List[Int]`, `(x) => x + 1` takes `x: Int`. A lambda standing alone, bound by a `let` for instance, has no such context, and the compiler asks for the type rather than guess it from the body. Annotate the parameter, or pass the lambda directly where a function type is expected.",
+        example: "let f = (x) => x + x          // ✗ nothing says what `x` is\n\nlet f = (x: Int) => x + x     // ✓ annotated",
+        page: "/book/spec/static-semantics",
+        anchor: "",
     },
     Explain {
         code: "bynk.lex.bad_escape",
@@ -2588,6 +2623,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "the-smallest-bundle",
     },
     Explain {
+        code: "bynk.messages.multiple_reference",
+        blurb: "A message bundle is checked against one reference locale, which is also the fallback when a requested locale is not declared. With two blocks marked `@reference` there are two answers, so exactly one per commons may carry the mark. Keep `@reference` on the locale your strings are written in first and take it off the others. No block marked at all is `bynk.messages.missing_reference`.",
+        example: "messages \"en\" @reference { … }\nmessages \"fr\" @reference { … }   // ✗ a second reference\n\nmessages \"fr\" { … }              // ✓",
+        page: "/book/guides/localisation/declare-a-message-bundle",
+        anchor: "the-smallest-bundle",
+    },
+    Explain {
         code: "bynk.messages.outside_commons",
         blurb: "A `messages` block is pure, stateless data, which is what a `commons` holds. A \
                 context carries services and state and an adapter wraps foreign code, and neither \
@@ -2625,6 +2667,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "adding-a-locale",
     },
     Explain {
+        code: "bynk.namespace.reserved",
+        blurb: "The `bynk` root belongs to the toolchain: its own libraries, such as `bynk.list`, and the platform adapters live there and are added to a build when a unit consumes them. A unit of yours named `bynk` or `bynk.<anything>` could collide with one of them, so the name is refused for every kind of unit. Rename the unit so its first segment is not `bynk`, and move its file to match.",
+        example: "// bynk/foo.bynk\ncommons bynk.foo    // ✗ `bynk` is the toolchain's namespace\n\n// shop/foo.bynk\ncommons shop.foo    // ✓",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
         code: "bynk.observe.unknown_op",
         blurb: "`expect Cap.op called` checks the calls recorded for one \
                 operation of a capability, so `op` must be declared by that \
@@ -2639,6 +2688,48 @@ pub const EXPLANATIONS: &[Explain] = &[
                   expect Logger.log called     // ✓",
         page: "/book/reference/testing",
         anchor: "observation",
+    },
+    Explain {
+        code: "bynk.package.alias_shadows_unit",
+        blurb: "The key of a `[dependencies]` entry is the alias a unit reaches the package by, as in `lib.notify`. If one of the project's own units also starts with that word, `shop.cart` for an alias `shop`, then `shop.…` could mean the package or the unit, and the compiler will not choose. Rename the alias, which is the key, or rename the unit.",
+        example: "[dependencies]\nshop = { package = \"acme/lib\", path = \"pkg/lib\" }   // ✗ the project has a unit `shop`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ an alias no unit starts with",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.dependency_not_found",
+        blurb: "A path dependency points at a directory that is a package: it has its own `bynk.toml` with a `[package]` table. The path is read from the manifest that names it. The entry is refused when there is no readable `bynk.toml` there, when it is not valid, or when it has no `[package]`. Correct the path, or add the manifest to the package.",
+        example: "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/libs\" }   // ✗ no `bynk.toml` at `pkg/libs`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ the package's directory",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "depend-on-it",
+    },
+    Explain {
+        code: "bynk.package.dev_dependency_in_source",
+        blurb: "A `[dev-dependencies]` package is there for the project's suites, and a deployable build leaves suites out, so a package that only suites need is never compiled into it. A context or commons that reached one would break that build, so only a suite may. If the source needs the package, move its entry to `[dependencies]`; otherwise keep the use in a suite.",
+        example: "// bynk.toml\n[dev-dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\n\n// shop.bynk\nuses lib.notify      // ✗ a `[dev-dependencies]` alias is for suites\n\n// bynk.toml\n[dependencies]       // ✓ the entry moved here\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "dependencies-only-tests-use",
+    },
+    Explain {
+        code: "bynk.package.name_mismatch",
+        blurb: "A path dependency gives the package's name twice: `package = \"acme/lib\"` in your `[dependencies]`, and `name` under `[package]` in the manifest at that path. They must agree, so that what you asked for is what you get. A mismatch usually means the path is the wrong directory, or the package was renamed. Correct whichever is wrong.",
+        example: "[dependencies]\nmoney = { package = \"acme/money\", path = \"pkg/lib\" }   // ✗ `pkg/lib` is the package `acme/lib`\n\nmoney = { package = \"acme/lib\", path = \"pkg/lib\" }     // ✓ the name it declares",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.unit_not_exported",
+        blurb: "A package lists in `exports` the units it offers to its users, and keeps the rest free to change, as a library keeps its internals. A unit that exists but is not listed is refused, so a consumer cannot come to rely on it. Use one of the exported units, or ask the package to export it. Leaving `exports` out shares every commons and adapter. A name the package does not declare at all is `bynk.package.unknown_unit`.",
+        example: "exports = [\"notify\"]      // in the package's `bynk.toml`\n\nuses lib.internal     // ✗ not in `exports`\n\nuses lib.notify       // ✓ an exported unit",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
+    },
+    Explain {
+        code: "bynk.package.unknown_unit",
+        blurb: "A dependency is reached as `alias.unit`, where the unit is a commons or adapter the package declares. A name after the alias that matches none of them is refused, most often because it is misspelt. The diagnostic's note lists the units the package shares. A unit that exists but is not exported is `bynk.package.unit_not_exported`.",
+        example: "commons notify          // in the package `acme/lib`\n\nuses lib.notifiy      // ✗ the package declares no `notifiy`\n\nuses lib.notify       // ✓",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "what-the-checks-catch",
     },
     Explain {
         code: "bynk.par.invalid_statement",
@@ -3348,6 +3439,59 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "sum-types",
     },
     Explain {
+        code: "bynk.project.duplicate_module_doc",
+        blurb: "A unit's module doc is one piece of prose. When a unit is split \
+                across files, at most one of them may open with it: with two, the \
+                tools would have to join them in some file order and the result \
+                would read oddly. The error names every file that carries one. \
+                Keep the doc in the file that best introduces the unit, and remove \
+                the others.",
+        example: "// text/case.bynk\n\
+                  ---\n\
+                  Text helpers.\n\
+                  ---\n\
+                  commons text\n\n\
+                  // text/trim.bynk\n\
+                  ---\n\
+                  Trimming.\n\
+                  ---\n\
+                  commons text       // ✗ a second module doc\n\n\
+                  commons text       // ✓ the doc stays in case.bynk",
+        page: "/book/guides/program-structure/document-your-code",
+        anchor: "one-module-doc-per-unit",
+    },
+    Explain {
+        code: "bynk.project.inconsistent_commons_name",
+        blurb: "A source file's path is its unit's identity: `context \
+                commerce.orders` lives at `commerce/orders.bynk`, or in a file \
+                under `commerce/orders/`, relative to an include root. A reader \
+                can then find a unit from its name alone. Rename the file or \
+                directory to match the declared name, or change the name. Test \
+                suites are exempt.",
+        example: "// pricing.bynk\n\
+                  commons tax     // ✗ the path says `pricing`\n\n\
+                  // tax.bynk\n\
+                  commons tax     // ✓",
+        page: "/book/guides/projects-build-and-deployment/layout",
+        anchor: "path-identity",
+    },
+    Explain {
+        code: "bynk.project.kind_conflict",
+        blurb: "A name belongs to one unit, so every file declaring it must agree \
+                on its kind. One file saying `commons shop` and another `context \
+                shop` would make the name both a library and a deployable unit. \
+                Give the files different names, or make them the same kind. A \
+                context is the deployable unit, and a commons is the shared code \
+                it uses.",
+        example: "// shop/types.bynk\n\
+                  commons shop        // ✗ the name is also a context\n\
+                  commons shop.types  // ✓\n\n\
+                  // shop/api.bynk\n\
+                  context shop",
+        page: "/book/spec/compilation-model",
+        anchor: "83-source-layout-and-test-ness",
+    },
+    Explain {
         code: "bynk.property.where_not_bool",
         blurb: "A `where` clause on `for all` discards each generated input \
                 that fails it, so it must be a `Bool`. A filter of another \
@@ -3471,6 +3615,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "record-types",
     },
     Explain {
+        code: "bynk.record_spread.type_mismatch",
+        blurb: "A spread, `T { ...base, x: 1 }`, copies the fields of `base` that you do not name, so the result has the base's own type. It cannot convert one record type to another, even one with the same fields, and a `T` that names a different type from the base's is refused. Write the base's type, or, to build a different record, give every field: `Point { x: s.x, y: s.y }`. A base that is not a record is `bynk.record_spread.non_record_base`.",
+        example: "type Point = { x: Int, y: Int }\ntype Size = { x: Int, y: Int }\n\nfn widen(s: Size) -> Size { Point { ...s, x: 1 } }   // ✗ `s` is a `Size`, not a `Point`\n\nfn widen(s: Size) -> Size { Size { ...s, x: 1 } }    // ✓ the base's own type",
+        page: "/book/reference/types",
+        anchor: "record-types",
+    },
+    Explain {
         code: "bynk.record_spread.unknown_field",
         blurb: "A record spread, `T { ...base, field: value }`, copies every field of `base` and replaces the ones you list. Each listed field has to be one the record declares: a misspelt or invented name would otherwise be dropped silently, or build a value that is not a `T`. Check the field name against the type's declaration. To add a field, declare it on the type first.",
         example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
@@ -3510,6 +3661,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "withdraw-a-version",
     },
     Explain {
+        code: "bynk.requires.conflicting_range",
+        blurb: "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
+        example: "// auth.bynk\nbinding \"./auth.binding.ts\" requires { \"jose\": \"^5\" }\n\n// tokens.bynk\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^4\" }   // ✗ `auth` already requires `^5`\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5\" }   // ✓ one range",
+        page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
+        anchor: "a-dependency-that-wraps-an-npm-library",
+    },
+    Explain {
         code: "bynk.requires.unapproved",
         blurb: "An adapter in a git or registry dependency requires an npm package \
                 your project hasn't approved. A dependency's adapters bring their \
@@ -3527,6 +3685,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   required-by = [\"acme/money:tokens\"]\napproved = true",
         page: "/book/guides/projects-build-and-deployment/share-code-between-projects",
         anchor: "approve-a-dependencys-npm-packages",
+    },
+    Explain {
+        code: "bynk.requires.unpinned_dependency",
+        blurb: "An adapter's `requires` states the npm versions its binding is written against, and the build installs exactly what it says. `*`, `x`, `latest` and a range with no digit in it accept whatever version is newest on the day, so two builds of the same source can differ. Name a range that has a version in it, such as `^5.2.0`.",
+        example: "binding \"./tokens.binding.ts\" requires { \"jose\": \"*\" }        // ✗ any version at all\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5.2.0\" }   // ✓ a pinned range",
+        page: "/book/reference/adapters",
+        anchor: "anatomy",
     },
     Explain {
         code: "bynk.resolve.ambiguous_variant",
@@ -3570,6 +3735,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaring-a-constant",
     },
     Explain {
+        code: "bynk.resolve.const_outside_context_or_commons",
+        blurb: "An adapter is the program's boundary with the host: it declares capabilities and the providers a binding supplies, not values for the program to share, so a `const` is refused there. Declare the constant in a commons, which a unit reads by `uses`, or in the context that needs it, and move it out of the adapter.",
+        example: "// tokens.bynk\nconst Lifetime: Int = 3600     // ✗ an adapter declares no constants\n\n// limits.bynk\ncommons limits\nconst Lifetime: Int = 3600     // ✓ in a commons",
+        page: "/book/reference/constants",
+        anchor: "declaring-a-constant",
+    },
+    Explain {
         code: "bynk.resolve.duplicate_const",
         blurb: "A constant is a value that every use of its name reads, so a name is declared once in a unit. With two `Limit`s, a use would have two values to read. Rename one, or delete the repeat. A constant whose name is a function's, a type's or another declaration's in the unit is `bynk.resolve.name_conflict`.",
         example: "const Limit: Int = 1\nconst Limit: Int = 2   // ✗ `Limit` is already declared\n\nconst Cap: Int = 2     // ✓ a different name",
@@ -3601,6 +3773,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.resolve.duplicate_param",
         blurb: "A function's parameters are read by name in its body, and a call passes them in order, so each name may appear once in the list. A repeat is usually two different parameters meant, and the body could see only one of them. Rename one of the two, or remove it.",
         example: "fn area(w: Int, w: Int) -> Int { w * w }   // ✗ `w` declared twice\n\nfn area(w: Int, h: Int) -> Int { w * h }   // ✓ distinct names",
+        page: "/book/spec/static-semantics",
+        anchor: "",
+    },
+    Explain {
+        code: "bynk.resolve.duplicate_service",
+        blurb: "A service is called by its name, and the name is one of the unit's top-level names, so two services of one name leave a call with nothing to choose between. Rename one, or delete the repeat. The same holds for the other named declarations: `bynk.resolve.duplicate_agent`, `bynk.resolve.duplicate_actor`, `bynk.resolve.duplicate_capability` and `bynk.resolve.duplicate_provider`, and for the entries of a message bundle, `bynk.resolve.duplicate_message_code` and `bynk.resolve.duplicate_message_locale`.",
+        example: "service orders { … }\nservice orders { … }     // ✗ `orders` is already declared\n\nservice refunds { … }    // ✓ a name of its own",
         page: "/book/spec/static-semantics",
         anchor: "",
     },
@@ -4149,6 +4328,39 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "suite-blocks",
     },
     Explain {
+        code: "bynk.test.actor_identity_required",
+        blurb: "An actor that declares an `identity` stands for one particular \
+                caller, and the handler reads that identity. A case that acts as \
+                the actor must therefore say which caller, as in `by \
+                User(\"bob\")`; a bare `by User` leaves the handler nothing to \
+                read. A handler that binds its caller (`by c: Caller`) wants the \
+                calling context's name the same way. Add the identity. The reverse \
+                mistake is `bynk.test.actor_no_identity`.",
+        example: "// demo/api.bynk\n\
+                  type UserId = String where NonEmpty\n\
+                  actor User { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/a\") by User          // ✗ which user?\n\
+                  let r <- api.GET(\"/a\") by User(\"bob\")   // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
+    },
+    Explain {
+        code: "bynk.test.actor_no_identity",
+        blurb: "A case supplies an identity only when the actor has one to give. \
+                An actor that declares no `identity`, and the failure principals \
+                `Nobody`, `Forged`, `Stale` and `Expired`, which present a missing \
+                or bad credential and so no verified caller, take no argument. \
+                Write `by Nobody`, not `by Nobody(\"bob\")`. For an actor that \
+                does declare an identity and is given none, see \
+                `bynk.test.actor_identity_required`.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/a\") by Nobody(\"bob\")   // ✗ no credential, so no identity\n\
+                  let r <- api.GET(\"/a\") by Nobody          // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
         code: "bynk.test.advance_not_clock",
         blurb: "`advance` moves the harness clock, the single time source a test \
                 owns, so it names `Clock` and nothing else. No other capability \
@@ -4200,6 +4412,42 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "time-in-tests",
     },
     Explain {
+        code: "bynk.test.call_needs_in_process",
+        blurb: "A service with an `on call` handler is internal to a deployment: \
+                it has no public route, and a `system` case can only send requests \
+                through the Worker's front door. So `svc.call(…)` is refused in \
+                one. Call it at `unit` or `integration`, or drive an http route \
+                that reaches it. For the event equivalent, see \
+                `bynk.test.event_needs_in_process`.",
+        example: "// demo/api.bynk\n\
+                  service save { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  case \"a key is measured\" as system {   // ✗ `save` has no public route\n\
+                  case \"a key is measured\" {             // ✓\n\
+                  \x20\x20\x20\x20let n <- save.call(\"abc\")\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "suite-blocks",
+    },
+    Explain {
+        code: "bynk.test.event_needs_in_process",
+        blurb: "`svc.event(e)` hands an event straight to a subscriber. At \
+                `system`, an event reaches a subscriber only through its \
+                publisher's fan-out across the deployed Workers, so there is no \
+                direct delivery to make. Drive the handler that publishes the \
+                event, or deliver the event at `unit` or `integration`. For the \
+                `on call` equivalent, see `bynk.test.call_needs_in_process`.",
+        example: "// shop/ledger.bynk\n\
+                  service OnPlaced from Events(Placed) { … }\n\n\
+                  // tests/ledger.test.bynk\n\
+                  case \"a placed order is booked\" as system {   // ✗ no direct delivery at `system`\n\
+                  case \"a placed order is booked\" {             // ✓\n\
+                  \x20\x20\x20\x20let _ <- OnPlaced.event(Placed { id: \"o1\" })\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "event-address",
+    },
+    Explain {
         code: "bynk.test.event_not_subscribed",
         blurb: "`svc.event(e)` delivers an event through the handler the \
                 service subscribes with, so it takes the one event named in \
@@ -4214,6 +4462,133 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let _ <- OnPlaced.event(Placed { id: \"o1\" })      // ✓",
         page: "/book/reference/testing",
         anchor: "event-address",
+    },
+    Explain {
+        code: "bynk.test.expired_needs_bearer_route",
+        blurb: "`by Expired` sends an expired token, so it needs a route whose \
+                seam checks one: a `Bearer` or `Oidc` actor. A public route, or \
+                one guarded by a `Signature` actor, has no token to expire; for a \
+                `Signature` route `by Stale` sends a stale signature. Drive a \
+                route guarded by a `Bearer` or `Oidc` actor. See \
+                `bynk.test.nobody_needs_secured_route` for the same limit on \
+                `Nobody`.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/a\") () -> Effect[HttpResult[Int]] by u: User { … }\n\
+                  on GET(\"/health\") () -> Effect[HttpResult[Int]] by v: Visitor { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/health\") by Expired   // ✗ a public route has no token\n\
+                  let r <- api.GET(\"/a\") by Expired        // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.extra_headers_authorization",
+        blurb: "A case sends a credential only through its `by` clause: the driver \
+                builds the `Authorization` header (or the signature headers) from \
+                the actor it acts as. Sending an `Authorization` header as an \
+                extra request header, in `RequestHeaders.of`, would give the \
+                request two competing credentials, so it is refused. Choose the \
+                actor with `by`, and keep `RequestHeaders` for other headers.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/health\", RequestHeaders.of([\"Authorization: Bearer x\"])) by Visitor   // ✗\n\
+                  let r <- api.GET(\"/health\", RequestHeaders.of([\"X-Trace: 1\"])) by Visitor                // ✓",
+        page: "/book/reference/testing",
+        anchor: "request-headers",
+    },
+    Explain {
+        code: "bynk.test.faults_needs_in_process",
+        blurb: "`expect <call> faults` claims that a handler throws. At `system` a \
+                fault reaches the case as an error response from the deployed \
+                Worker, not a throw, so claim it at `unit` or `integration`, or \
+                assert the response. A claim driven `by Nobody`, `Forged` or \
+                `Stale` fails at every tier: only a `system` case reaches the auth \
+                seam that refuses the request. Assert `Rejected(Unauthorized)` in \
+                a `system` case instead.",
+        example: "// tests/api.test.bynk\n\
+                  expect api.GET(\"/a\") by Nobody faults     // ✗ a seam rejects, nothing throws\n\n\
+                  case \"no token is refused\" as system {    // ✓\n\
+                  \x20\x20\x20\x20let r <- api.GET(\"/a\") by Nobody\n\
+                  \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "faults",
+    },
+    Explain {
+        code: "bynk.test.forged_needs_system",
+        blurb: "`by Forged`, `by Stale` and the other bad-credential principals \
+                send a forged or out-of-date credential to the real auth seam, \
+                which only a `system` case reaches. In process the seam is skipped \
+                and the identity is simply given, so there is nothing to refuse. \
+                Move the case to `system` with `as system`.",
+        example: "// tests/api.test.bynk\n\
+                  case \"a forged token is refused\" {            // ✗ not a system case\n\
+                  case \"a forged token is refused\" as system {  // ✓\n\
+                  \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
+                  \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.nobody_needs_secured_route",
+        blurb: "`by Nobody` sends no credential so that a route's auth seam \
+                answers `401`. A public route, guarded by `Visitor`, has no seam \
+                that refuses anyone, so the case would test nothing and is \
+                refused. Use `by Nobody` on a route guarded by a `Bearer`, `Oidc` \
+                or `Signature` actor, and act as `Visitor` on a public one. For \
+                the other failure principals, see \
+                `bynk.test.expired_needs_bearer_route`.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/health\") () -> Effect[HttpResult[Int]] by v: Visitor { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/health\") by Nobody     // ✗ a public route has no seam\n\
+                  let r <- api.GET(\"/health\") by Visitor    // ✓",
+        page: "/book/reference/testing",
+        anchor: "failure-principals",
+    },
+    Explain {
+        code: "bynk.test.principal_claims_not_oidc",
+        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
+                carries, which the handler reads and the actor's rules check. A \
+                `Bearer` actor's token holds an identity and nothing else, so \
+                there is no claim set to fill, and the argument is refused. Drop \
+                the claims, or test a route guarded by an `Oidc` actor. See \
+                `bynk.test.actor_no_identity` for the other extra argument.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a Bearer actor\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\")                                               // ✓",
+        page: "/book/reference/testing",
+        anchor: "token-claims",
+    },
+    Explain {
+        code: "bynk.test.principal_identity_mismatch",
+        blurb: "A handler guarded by an actor runs as that actor, so a case must \
+                act as it, with the identity type it declares. `by Visitor` \
+                carries no identity, so it cannot stand in for `User`, and an \
+                actor outside the handler's `by` sum is no member of it. Act as \
+                the actor the handler names. To exercise an unauthenticated \
+                request instead, use `by Nobody` in a `system` case.",
+        example: "// demo/api.bynk\n\
+                  actor User { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/a\") by Visitor        // ✗ the handler is `by u: User`\n\
+                  let r <- api.GET(\"/a\") by User(\"bob\")    // ✓",
+        page: "/book/reference/testing",
+        anchor: "call-site-by",
+    },
+    Explain {
+        code: "bynk.test.principal_on_wrong_method",
+        blurb: "A wrong-method test, such as `DELETE` on a path declared only for \
+                `GET`, expects the `405` the router returns before any handler is \
+                chosen. No handler runs, so there is no actor to act as, and a \
+                `by` clause would suggest otherwise. Drop the `by` clause. To test \
+                who may call a route, address a method it does declare.",
+        example: "// tests/api.test.bynk\n\
+                  let r <- api.DELETE(\"/a\") by User(\"bob\")   // ✗ no handler runs\n\
+                  let r <- api.DELETE(\"/a\")                  // ✓\n\
+                  expect r is Rejected(MethodNotAllowed)",
+        page: "/book/reference/testing",
+        anchor: "wrong-method",
     },
     Explain {
         code: "bynk.test.principal_required",
@@ -4306,6 +4681,24 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "snapshots",
     },
     Explain {
+        code: "bynk.test.snapshot_in_property",
+        blurb: "A snapshot is keyed by its case and name, so it holds one value. A \
+                `property` runs its body once for each generated input, so there \
+                is no single value to store. Snapshot a fixed value in a `case`, \
+                and let the property assert what holds for every input.",
+        example: "// tests/api.test.bynk\n\
+                  property \"every n\" {\n\
+                  \x20\x20\x20\x20for all n: Int {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20expect run(n) matches snapshot \"n\"   // ✗ many inputs, one snapshot\n\
+                  \x20\x20\x20\x20}\n\
+                  }\n\n\
+                  case \"one n\" {\n\
+                  \x20\x20\x20\x20expect run(3) matches snapshot \"n\"       // ✓\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
         code: "bynk.test.snapshot_name_not_literal",
         blurb: "A snapshot is stored under its name, so the name must be a \
                 string literal: the compiler then knows every snapshot a suite \
@@ -4313,6 +4706,29 @@ pub const EXPLANATIONS: &[Explain] = &[
                 name as a literal.",
         example: "expect read(\"a\") matches snapshot name        // ✗ not a string literal\n\
                   expect read(\"a\") matches snapshot \"first\"     // ✓",
+        page: "/book/reference/testing",
+        anchor: "snapshots",
+    },
+    Explain {
+        code: "bynk.test.snapshot_needs_unit_suite",
+        blurb: "A snapshot is stored in a file beside its unit suite and compared \
+                by the unit harness, so `matches snapshot` works only in a \
+                unit-tier `case` of a suite that tests a unit. A `system` case, or \
+                an integration or system suite, has no store to compare against. \
+                Take the snapshot in a unit case. See \
+                `bynk.test.snapshot_in_property` for the other place it is \
+                refused.",
+        example: "// tests/api.test.bynk\n\
+                  suite demo.api as system {\n\
+                  \x20\x20\x20\x20case \"one n\" {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20expect 3 matches snapshot \"n\"   // ✗ no snapshot store at `system`\n\
+                  \x20\x20\x20\x20}\n\
+                  }\n\n\
+                  suite demo.api {                             // ✓ a unit suite\n\
+                  \x20\x20\x20\x20case \"one n\" {\n\
+                  \x20\x20\x20\x20\x20\x20\x20\x20expect 3 matches snapshot \"n\"\n\
+                  \x20\x20\x20\x20}\n\
+                  }",
         page: "/book/reference/testing",
         anchor: "snapshots",
     },
@@ -4342,6 +4758,39 @@ pub const EXPLANATIONS: &[Explain] = &[
                   let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
         page: "/book/reference/testing",
         anchor: "call-site-by",
+    },
+    Explain {
+        code: "bynk.test.wire_http_only",
+        blurb: "`Wire(…)` delivers raw text to an http body or path segment. A \
+                queue message, a cron tick, an `on call` or an event has no raw \
+                text form: it is a typed value, and `Wire` would hand it to a \
+                typed decoder as a string and fail confusingly at run time. Pass \
+                the typed value. To drive an http route with raw text, see \
+                `bynk.test.wire_needs_system`.",
+        example: "// demo/api.bynk\n\
+                  service packer from queue(\"packing\") { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- packer.message(Wire(\"{}\"))   // ✗ a queue takes a typed message\n\
+                  let r <- packer.message(\"{}\")         // ✓",
+        page: "/book/reference/testing",
+        anchor: "driving-a-rejection-with-wire",
+    },
+    Explain {
+        code: "bynk.test.wire_needs_system",
+        blurb: "`Wire(…)` hands raw text to the real boundary, before any \
+                decoding, so that a case can check what the boundary refuses. Only \
+                a `system` case has a real boundary: below it the handler is \
+                called directly, and the text would go in unchecked. Promote the \
+                case with `as system`, or pass a typed value instead. For other \
+                addresses, see `bynk.test.wire_http_only`.",
+        example: "// tests/api.test.bynk\n\
+                  case \"raw text is refused\" {            // ✗ not a system case\n\
+                  case \"raw text is refused\" as system {  // ✓\n\
+                  \x20\x20\x20\x20let r <- api.POST(\"/n\", Wire(\"0\")) by Visitor\n\
+                  \x20\x20\x20\x20expect r is Rejected(RefinementViolation(_))\n\
+                  }",
+        page: "/book/reference/testing",
+        anchor: "driving-a-rejection-with-wire",
     },
     Explain {
         code: "bynk.transition.cross_agent_reference",

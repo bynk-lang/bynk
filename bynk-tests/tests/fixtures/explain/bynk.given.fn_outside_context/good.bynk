@@ -1,0 +1,5 @@
+commons demo
+
+fn warn(log: (String) -> Effect[()], what: String) -> Effect[()] {
+    log(what)
+}

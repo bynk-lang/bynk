@@ -1,0 +1,9 @@
+[project]
+name = "shop"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[dev-dependencies]
+lib = { package = "acme/lib", path = "pkg/lib" }

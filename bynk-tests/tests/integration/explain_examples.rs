@@ -61,8 +61,20 @@ use std::path::{Path, PathBuf};
 use bynk_syntax::diagnostics::EXPLANATIONS;
 
 /// Explained codes whose example is not Bynk source, with the reason. Their
-/// examples show a lockfile or a command line, which no compile can check.
+/// examples show a lockfile, a manifest entry or a command line, which no compile can check.
 const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
+    (
+        "bynk.package.alias_shadows_unit",
+        "the example is a `[dependencies]` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.package.dependency_not_found",
+        "the example is a `[dependencies]` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.package.name_mismatch",
+        "the example is a `[dependencies]` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
     (
         "bynk.registry.withdrawn",
         "the example is the rendered diagnostic and a `bynk update` command",

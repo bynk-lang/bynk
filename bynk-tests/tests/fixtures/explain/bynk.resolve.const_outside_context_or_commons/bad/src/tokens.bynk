@@ -1,0 +1,11 @@
+adapter tokens {
+  binding "./tokens.binding.ts"
+
+  const Lifetime: Int = 3600
+
+  capability Jwt {
+    fn sign(secret: String) -> Effect[String]
+  }
+
+  provides Jwt = JoseJwt
+}

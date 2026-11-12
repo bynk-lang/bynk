@@ -1,0 +1,5 @@
+commons notify
+
+fn announce(n: Int) -> Int {
+    n
+}
