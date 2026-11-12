@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.567.2** | `bynk.store.annotation_unsupported` says `@bounded` is recognised but has no effect yet, with the alternative in the note, and the stale storage-kind and annotation doc comments are corrected |
 | **v0.567.1** | Bynk supports TypeScript 7 only (#3420): the TypeScript 5 floor is dropped, `bynk doctor` warns on a `tsc` below 7, and CI verifies under 7 on every leg |
 | **v0.567.0** | A `SignedCookie` actor issues and deletes its session cookie with `User.issue(identity)` and `User.expire()` (#3386) |
 | **v0.566.1** | A `system` test case that builds a first-party record such as `File` resolves `Bytes`, `Duration` and `Instant` statics inside it |
