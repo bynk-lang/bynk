@@ -1629,7 +1629,10 @@ pub fn describe_effect_method_at(
     let tok = tokens.iter().find(|t| {
         t.span.start <= offset
             && offset < t.span.end
-            && matches!(&text[t.span.start..t.span.end], "within" | "race" | "detach")
+            && matches!(
+                &text[t.span.start..t.span.end],
+                "within" | "race" | "detach"
+            )
     })?;
     let word = &text[tok.span.start..tok.span.end];
     let before = text[..tok.span.start].trim_end();

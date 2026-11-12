@@ -703,80 +703,98 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             optional: false,
                         }],
                         return_type: None,
-                        body: detach_drain().into_iter().chain([TsStmt::if_else_same_line_stmt(
-                            member(ident("r"), "pass"),
-                            block(vec![
-                                TsStmt::increment(ident("passed"), None),
-                                emit_call(
-                                    vec![
-                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
-                                        TsObjectEntry::Shorthand("suite".to_string()),
-                                        TsObjectEntry::Prop(
-                                            "name".to_string(),
-                                            member(ident("r"), "name"),
-                                        ),
-                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("pass")),
-                                    ]
-                                    .into_iter()
-                                    .chain(retries_entry())
-                                    .chain(detach_entries())
-                                    .chain(std::iter::once(duration_entry()))
-                                    .collect(),
-                                ),
-                            ]),
-                            block(vec![
-                                TsStmt::increment(ident("failed"), None),
-                                emit_call(
-                                    vec![
-                                        TsObjectEntry::Prop("type".to_string(), str_lit("case")),
-                                        TsObjectEntry::Shorthand("suite".to_string()),
-                                        TsObjectEntry::Prop(
-                                            "name".to_string(),
-                                            member(ident("r"), "name"),
-                                        ),
-                                        TsObjectEntry::Prop("outcome".to_string(), str_lit("fail")),
-                                        TsObjectEntry::Prop(
-                                            "message".to_string(),
-                                            and_expr(
-                                                member(ident("r"), "error"),
-                                                member(member(ident("r"), "error"), "message"),
+                        body: detach_drain()
+                            .into_iter()
+                            .chain([TsStmt::if_else_same_line_stmt(
+                                member(ident("r"), "pass"),
+                                block(vec![
+                                    TsStmt::increment(ident("passed"), None),
+                                    emit_call(
+                                        vec![
+                                            TsObjectEntry::Prop(
+                                                "type".to_string(),
+                                                str_lit("case"),
                                             ),
-                                        ),
-                                        TsObjectEntry::Prop(
-                                            "location".to_string(),
-                                            and_expr(
-                                                member(ident("r"), "error"),
-                                                member(member(ident("r"), "error"), "location"),
+                                            TsObjectEntry::Shorthand("suite".to_string()),
+                                            TsObjectEntry::Prop(
+                                                "name".to_string(),
+                                                member(ident("r"), "name"),
                                             ),
-                                        ),
-                                        // #2272: the declaration a violated invariant or transition
-                                        // names; absent (`JSON.stringify` drops it) otherwise.
-                                        TsObjectEntry::Prop(
-                                            "violation".to_string(),
-                                            and_expr(
-                                                member(ident("r"), "error"),
-                                                member(member(ident("r"), "error"), "violation"),
+                                            TsObjectEntry::Prop(
+                                                "outcome".to_string(),
+                                                str_lit("pass"),
                                             ),
-                                        ),
-                                        // #2272: the steps of a failed history that an agent refused.
-                                        TsObjectEntry::Prop(
-                                            "refusals".to_string(),
-                                            and_expr(
-                                                member(ident("r"), "error"),
-                                                member(member(ident("r"), "error"), "refusals"),
+                                        ]
+                                        .into_iter()
+                                        .chain(retries_entry())
+                                        .chain(detach_entries())
+                                        .chain(std::iter::once(duration_entry()))
+                                        .collect(),
+                                    ),
+                                ]),
+                                block(vec![
+                                    TsStmt::increment(ident("failed"), None),
+                                    emit_call(
+                                        vec![
+                                            TsObjectEntry::Prop(
+                                                "type".to_string(),
+                                                str_lit("case"),
                                             ),
-                                        ),
-                                    ]
-                                    .into_iter()
-                                    .chain(retries_entry())
-                                    .chain(detach_entries())
-                                    .chain(generative_entries())
-                                    .chain(std::iter::once(duration_entry()))
-                                    .collect(),
-                                ),
-                            ]),
-                            None,
-                        )]).collect(),
+                                            TsObjectEntry::Shorthand("suite".to_string()),
+                                            TsObjectEntry::Prop(
+                                                "name".to_string(),
+                                                member(ident("r"), "name"),
+                                            ),
+                                            TsObjectEntry::Prop(
+                                                "outcome".to_string(),
+                                                str_lit("fail"),
+                                            ),
+                                            TsObjectEntry::Prop(
+                                                "message".to_string(),
+                                                and_expr(
+                                                    member(ident("r"), "error"),
+                                                    member(member(ident("r"), "error"), "message"),
+                                                ),
+                                            ),
+                                            TsObjectEntry::Prop(
+                                                "location".to_string(),
+                                                and_expr(
+                                                    member(ident("r"), "error"),
+                                                    member(member(ident("r"), "error"), "location"),
+                                                ),
+                                            ),
+                                            // #2272: the declaration a violated invariant or transition
+                                            // names; absent (`JSON.stringify` drops it) otherwise.
+                                            TsObjectEntry::Prop(
+                                                "violation".to_string(),
+                                                and_expr(
+                                                    member(ident("r"), "error"),
+                                                    member(
+                                                        member(ident("r"), "error"),
+                                                        "violation",
+                                                    ),
+                                                ),
+                                            ),
+                                            // #2272: the steps of a failed history that an agent refused.
+                                            TsObjectEntry::Prop(
+                                                "refusals".to_string(),
+                                                and_expr(
+                                                    member(ident("r"), "error"),
+                                                    member(member(ident("r"), "error"), "refusals"),
+                                                ),
+                                            ),
+                                        ]
+                                        .into_iter()
+                                        .chain(retries_entry())
+                                        .chain(detach_entries())
+                                        .chain(generative_entries())
+                                        .chain(std::iter::once(duration_entry()))
+                                        .collect(),
+                                    ),
+                                ]),
+                                None,
+                            )])
+                            .collect(),
                         is_async: false,
                         inline: false,
                     },
@@ -834,37 +852,44 @@ pub(crate) fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: 
                             optional: false,
                         }],
                         return_type: None,
-                        body: detach_drain().into_iter().chain([TsStmt::if_else_same_line_stmt(
-                            member(ident("r"), "pass"),
-                            TsStmt::inline_block(
-                                vec![
-                                    TsStmt::increment(ident("passed"), None),
-                                    console_log(TsExpr::template_lit(
-                                        vec!["  \\u2713 ".to_string(), String::new()],
-                                        vec![member(ident("r"), "name")],
-                                    )),
-                                ],
-                                None,
-                            ),
-                            TsStmt::inline_block(
-                                vec![
-                                    TsStmt::increment(ident("failed"), None),
-                                    console_log(TsExpr::template_lit(
-                                        vec!["  \\u2717 ".to_string(), String::new()],
-                                        vec![member(ident("r"), "name")],
-                                    )),
-                                    if_(
-                                        member(ident("r"), "error"),
+                        body: detach_drain()
+                            .into_iter()
+                            .chain([TsStmt::if_else_same_line_stmt(
+                                member(ident("r"), "pass"),
+                                TsStmt::inline_block(
+                                    vec![
+                                        TsStmt::increment(ident("passed"), None),
                                         console_log(TsExpr::template_lit(
-                                            vec!["    ".to_string(), String::new()],
-                                            vec![member(member(ident("r"), "error"), "message")],
+                                            vec!["  \\u2713 ".to_string(), String::new()],
+                                            vec![member(ident("r"), "name")],
                                         )),
-                                    ),
-                                ],
+                                    ],
+                                    None,
+                                ),
+                                TsStmt::inline_block(
+                                    vec![
+                                        TsStmt::increment(ident("failed"), None),
+                                        console_log(TsExpr::template_lit(
+                                            vec!["  \\u2717 ".to_string(), String::new()],
+                                            vec![member(ident("r"), "name")],
+                                        )),
+                                        if_(
+                                            member(ident("r"), "error"),
+                                            console_log(TsExpr::template_lit(
+                                                vec!["    ".to_string(), String::new()],
+                                                vec![member(
+                                                    member(ident("r"), "error"),
+                                                    "message",
+                                                )],
+                                            )),
+                                        ),
+                                    ],
+                                    None,
+                                ),
                                 None,
-                            ),
-                            None,
-                        )]).chain(detach_print()).collect(),
+                            )])
+                            .chain(detach_print())
+                            .collect(),
                         is_async: false,
                         inline: false,
                     },

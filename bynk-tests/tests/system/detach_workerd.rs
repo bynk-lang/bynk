@@ -118,7 +118,6 @@ fn get(port: u16, path: &str) -> Result<(u16, String), String> {
     Ok((status, body))
 }
 
-
 #[test]
 fn a_detached_fault_and_err_are_reported_on_workerd() {
     if !tool_exists("npx") && skip("`npx` is not on PATH") {
@@ -153,7 +152,12 @@ fn a_detached_fault_and_err_are_reported_on_workerd() {
         wrangler::Wrangler::spawn(
             base_command("npx")
                 .args(["-y", WRANGLER, "dev"])
-                .args(["--port", &port.to_string(), "--inspector-port", &inspector.to_string()])
+                .args([
+                    "--port",
+                    &port.to_string(),
+                    "--inspector-port",
+                    &inspector.to_string(),
+                ])
                 .current_dir(&dir)
                 .stdout(Stdio::from(out_log))
                 .stderr(Stdio::from(err_log)),
@@ -190,10 +194,20 @@ fn a_detached_fault_and_err_are_reported_on_workerd() {
         }
         std::thread::sleep(Duration::from_millis(500));
     };
-    assert_eq!(status, 200, "a detached Err leaves the response alone\n{}", log());
+    assert_eq!(
+        status,
+        200,
+        "a detached Err leaves the response alone\n{}",
+        log()
+    );
     assert!(body.contains("err handed"), "{body}");
     let (status, body) = get(port, "/fault/x").expect("the fault route answers");
-    assert_eq!(status, 200, "a detached fault leaves the response alone\n{}", log());
+    assert_eq!(
+        status,
+        200,
+        "a detached fault leaves the response alone\n{}",
+        log()
+    );
     assert!(body.contains("fault handed"), "{body}");
 
     // `waitUntil` work is reported after the response; give it a moment.
@@ -205,8 +219,14 @@ fn a_detached_fault_and_err_are_reported_on_workerd() {
     }
     let log = log();
     assert!(log.contains("a detached effect returned Err"), "{log}");
-    assert!(log.contains("MailError") && log.contains("Bounced"), "{log}");
-    assert!(!log.contains("hunter2"), "the payload must not be reported:\n{log}");
+    assert!(
+        log.contains("MailError") && log.contains("Bounced"),
+        "{log}"
+    );
+    assert!(
+        !log.contains("hunter2"),
+        "the payload must not be reported:\n{log}"
+    );
     assert!(
         log.contains("Uncaught Error") && log.contains("detached boom"),
         "a rejected waitUntil promise is recorded as an exception:\n{log}"

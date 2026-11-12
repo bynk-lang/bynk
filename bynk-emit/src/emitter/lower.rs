@@ -4592,9 +4592,7 @@ fn lower_kernel_method_call(
                             },
                             _ => None,
                         };
-                        let tail = err_type
-                            .map(|t| format!(", \"{t}\""))
-                            .unwrap_or_default();
+                        let tail = err_type.map(|t| format!(", \"{t}\"")).unwrap_or_default();
                         return Some(format!(
                             "__bynkDetach({recv}, {}, \"{site}\"{tail})",
                             cx.exec_expr()
