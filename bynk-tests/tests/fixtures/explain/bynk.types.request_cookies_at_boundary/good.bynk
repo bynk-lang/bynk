@@ -1,0 +1,11 @@
+context api
+
+type Session = {
+    sid: String,
+}
+
+service api from http {
+    on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok(cookies.get("sid").getOrElse("-"))
+    }
+}

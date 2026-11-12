@@ -1,0 +1,18 @@
+context shop
+
+type Order = { id: String, total: Int }
+
+type Report = {
+    orders: List[Order],
+}
+
+agent Orders {
+    key shop: String
+
+    store all: Map[String, Order]
+
+    on call report() -> Effect[Report] {
+        let orders <- all.values.collect()
+        Effect.pure(Report { orders: orders })
+    }
+}
