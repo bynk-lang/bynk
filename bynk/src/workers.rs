@@ -271,7 +271,8 @@ pub fn select_contexts(
 }
 
 /// Build the `wrangler dev` invocation for a resolved provenance: an installed
-/// binary is run directly; an npx-provisionable one goes through `npx --yes`.
+/// binary is run directly; a provisionable one goes through the package
+/// manager's runner (`npx --yes`, `pnpm dlx`, `bunx`).
 /// `None` when wrangler is genuinely missing.
 pub fn wrangler_command(provenance: &Provenance, subcommand: &str) -> Option<Command> {
     match provenance {
@@ -280,13 +281,17 @@ pub fn wrangler_command(provenance: &Provenance, subcommand: &str) -> Option<Com
             cmd.arg(subcommand);
             Some(cmd)
         }
-        Provenance::Npx => {
-            // #1758: the resolved `npx`, so Windows runs its `npx.cmd` shim.
-            let mut cmd = Command::new(crate::probe::program_path("npx"));
-            // #524: pinned provisioning, per the repo's npx convention — an
+        Provenance::Runner(manager) => {
+            // Yarn classic has no runner, so a probe never reports it; npx is
+            // the historical default should one arrive.
+            let program = manager.runner_program().unwrap_or("npx");
+            // #1758: the resolved runner, so Windows runs its `.cmd` shim.
+            let mut cmd = Command::new(crate::probe::program_path(program));
+            // #524: pinned provisioning, per the repo's runner convention — an
             // unpinned `wrangler` here meant the dev server could drift from
             // the wrangler the tests and deploys run.
-            cmd.arg("--yes").arg("wrangler@4").arg(subcommand);
+            cmd.args(manager.runner_args("wrangler@4", "wrangler"))
+                .arg(subcommand);
             Some(cmd)
         }
         Provenance::Missing => None,

@@ -85,6 +85,136 @@ impl PackageManager {
     }
 }
 
+impl PackageManager {
+    /// The program that runs a package's binary without installing it first:
+    /// `npx`, `pnpm` (as `pnpm dlx`) or `bunx`. Yarn classic has none.
+    pub fn runner_program(self) -> Option<&'static str> {
+        match self {
+            Self::Npm => Some("npx"),
+            Self::Pnpm => Some("pnpm"),
+            Self::Bun => Some("bunx"),
+            Self::Yarn => None,
+        }
+    }
+
+    /// The runner as a user would say it, for messages and `bynk doctor`:
+    /// `npx`, `pnpm dlx` or `bunx`.
+    pub fn runner_label(self) -> Option<&'static str> {
+        match self {
+            Self::Npm => Some("npx"),
+            Self::Pnpm => Some("pnpm dlx"),
+            Self::Bun => Some("bunx"),
+            Self::Yarn => None,
+        }
+    }
+
+    /// The arguments after [`Self::runner_program`] that run `bin` from the
+    /// package `package` (which may be pinned, `typescript@5`), downloading it
+    /// on first use. `npx` needs `--yes` to skip its prompt; `pnpm dlx` and
+    /// `bunx` do not prompt.
+    pub fn runner_args(self, package: &str, bin: &str) -> Vec<String> {
+        let own = |parts: &[&str]| parts.iter().map(|p| (*p).to_string()).collect::<Vec<_>>();
+        match self {
+            Self::Npm => own(&["--yes", "-p", package, bin]),
+            Self::Pnpm => own(&["dlx", "--package", package, bin]),
+            Self::Bun => own(&["--package", package, bin]),
+            Self::Yarn => Vec::new(),
+        }
+    }
+
+    /// The command that installs `package` globally.
+    pub fn global_install(self, package: &str) -> String {
+        match self {
+            Self::Npm => format!("npm install -g {package}"),
+            Self::Pnpm => format!("pnpm add -g {package}"),
+            Self::Bun => format!("bun add -g {package}"),
+            Self::Yarn => format!("yarn global add {package}"),
+        }
+    }
+
+    /// The command that adds `package` to the project as a dev dependency.
+    pub fn dev_install(self, package: &str) -> String {
+        match self {
+            Self::Npm => format!("npm install --save-dev {package}"),
+            Self::Pnpm => format!("pnpm add -D {package}"),
+            Self::Bun => format!("bun add -d {package}"),
+            Self::Yarn => format!("yarn add -D {package}"),
+        }
+    }
+
+    /// The runner this tool gives a user, given what is on PATH: its own when
+    /// it has one and it is found, else `npx` when found (a Yarn classic user,
+    /// who has no runner, or a detected tool that is not installed), else none.
+    pub fn runner(self, tb: &dyn Toolbox) -> Option<PackageManager> {
+        let found = |m: PackageManager| match m {
+            PackageManager::Npm => tb.npx_available(),
+            other => other
+                .runner_program()
+                .is_some_and(|program| tb.on_path(program).is_some()),
+        };
+        [self, PackageManager::Npm]
+            .into_iter()
+            .find(|m| m.runner_program().is_some() && found(*m))
+    }
+}
+
+/// The programs to try, in order, to run `tool` (a binary of `package`, which
+/// may be pinned): the tool itself, then the runner that fetches it on demand
+/// when `manager` (or `npx`, for a manager with no runner) is on PATH. Each is
+/// a program name with its leading arguments.
+pub fn tool_ladder(
+    tool: &str,
+    package: &str,
+    manager: PackageManager,
+    tb: &dyn Toolbox,
+) -> Vec<(String, Vec<String>)> {
+    let mut rungs = vec![(tool.to_string(), Vec::new())];
+    if let Some(runner) = manager.runner(tb)
+        && let Some(program) = runner.runner_program()
+    {
+        rungs.push((program.to_string(), runner.runner_args(package, tool)));
+    }
+    rungs
+}
+
+/// [`tool_ladder`] over the real PATH.
+pub fn system_tool_ladder(
+    tool: &str,
+    package: &str,
+    manager: PackageManager,
+) -> Vec<(String, Vec<String>)> {
+    tool_ladder(tool, package, manager, &SystemToolbox)
+}
+
+/// The package manager the toolchain's own tool fallbacks and install hints
+/// follow: the detected one, or npm (today's behaviour) when detection finds
+/// none or names an unknown tool.
+pub fn tool_manager(
+    project: &dyn Project,
+    setting: Option<&str>,
+    tb: &dyn Toolbox,
+) -> PackageManager {
+    detect(project, setting, tb)
+        .map(|d| d.manager)
+        .unwrap_or(PackageManager::Npm)
+}
+
+/// [`tool_manager`] over the project's real files and the process environment,
+/// reading `[build] package_manager` from its `bynk.toml`, with PATH seen
+/// through `tb`.
+pub fn manager_in(project_root: &Path, tb: &dyn Toolbox) -> PackageManager {
+    tool_manager(
+        &RealProject(project_root),
+        configured_manager(project_root).as_deref(),
+        tb,
+    )
+}
+
+/// [`manager_in`] over the real PATH.
+pub fn system_tool_manager(project_root: &Path) -> PackageManager {
+    manager_in(project_root, &SystemToolbox)
+}
+
 /// The rule that chose the package manager, for `bynk doctor` and messages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rule {
@@ -1149,6 +1279,189 @@ mod tests {
             real_install("yarn");
         } else {
             eprintln!("skipping: Yarn classic is not installed");
+        }
+    }
+
+    /// A toolbox with chosen programs on PATH and `npx` present or not.
+    struct Tools {
+        path: &'static [&'static str],
+        npx: bool,
+    }
+
+    impl Toolbox for Tools {
+        fn on_path(&self, tool: &str) -> Option<PathBuf> {
+            self.path
+                .contains(&tool)
+                .then(|| PathBuf::from(format!("/bin/{tool}")))
+        }
+        fn in_dir(&self, _: &Path, _: &str) -> Option<PathBuf> {
+            None
+        }
+        fn version(&self, _: &Path) -> Option<Version> {
+            None
+        }
+        fn npx_available(&self) -> bool {
+            self.npx
+        }
+    }
+
+    #[test]
+    fn each_manager_runs_a_pinned_package_binary_its_own_way() {
+        let args = |m: PackageManager| m.runner_args("typescript@5", "tsc");
+        assert_eq!(
+            args(PackageManager::Npm),
+            ["--yes", "-p", "typescript@5", "tsc"]
+        );
+        assert_eq!(
+            args(PackageManager::Pnpm),
+            ["dlx", "--package", "typescript@5", "tsc"]
+        );
+        assert_eq!(
+            args(PackageManager::Bun),
+            ["--package", "typescript@5", "tsc"]
+        );
+        assert!(args(PackageManager::Yarn).is_empty());
+        let programs = PackageManager::ALL.map(PackageManager::runner_program);
+        assert_eq!(programs, [Some("npx"), Some("pnpm"), Some("bunx"), None]);
+        let labels = PackageManager::ALL.map(PackageManager::runner_label);
+        assert_eq!(labels, [Some("npx"), Some("pnpm dlx"), Some("bunx"), None]);
+    }
+
+    #[test]
+    fn each_manager_has_its_own_install_commands() {
+        let global = PackageManager::ALL.map(|m| m.global_install("wrangler@4"));
+        assert_eq!(
+            global,
+            [
+                "npm install -g wrangler@4",
+                "pnpm add -g wrangler@4",
+                "bun add -g wrangler@4",
+                "yarn global add wrangler@4"
+            ]
+        );
+        let dev = PackageManager::ALL.map(|m| m.dev_install("wrangler@4"));
+        assert_eq!(
+            dev,
+            [
+                "npm install --save-dev wrangler@4",
+                "pnpm add -D wrangler@4",
+                "bun add -d wrangler@4",
+                "yarn add -D wrangler@4"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_runner_is_the_managers_own_else_npx_else_none() {
+        let all = Tools {
+            path: &["pnpm", "bunx"],
+            npx: true,
+        };
+        assert_eq!(
+            PackageManager::Pnpm.runner(&all),
+            Some(PackageManager::Pnpm)
+        );
+        assert_eq!(PackageManager::Bun.runner(&all), Some(PackageManager::Bun));
+        assert_eq!(PackageManager::Npm.runner(&all), Some(PackageManager::Npm));
+        // Yarn classic has no runner: `npx` when it is there (decision A) ...
+        assert_eq!(PackageManager::Yarn.runner(&all), Some(PackageManager::Npm));
+        // ... and the plain message (no runner) when it is not.
+        let none = Tools {
+            path: &["yarn"],
+            npx: false,
+        };
+        assert_eq!(PackageManager::Yarn.runner(&none), None);
+        // A detected tool that is not installed falls back to `npx` too.
+        let npx_only = Tools {
+            path: &[],
+            npx: true,
+        };
+        assert_eq!(
+            PackageManager::Pnpm.runner(&npx_only),
+            Some(PackageManager::Npm)
+        );
+        assert_eq!(PackageManager::Bun.runner(&none), None);
+    }
+
+    #[test]
+    fn the_tool_ladder_is_the_tool_then_the_runner() {
+        let tb = Tools {
+            path: &["pnpm"],
+            npx: true,
+        };
+        let rungs = tool_ladder("tsc", "typescript@5", PackageManager::Pnpm, &tb);
+        assert_eq!(
+            rungs,
+            [
+                ("tsc".to_string(), vec![]),
+                (
+                    "pnpm".to_string(),
+                    ["dlx", "--package", "typescript@5", "tsc"]
+                        .map(String::from)
+                        .to_vec()
+                )
+            ]
+        );
+        // Yarn classic goes through `npx`, as before.
+        let yarn = tool_ladder("tsx", "tsx", PackageManager::Yarn, &tb);
+        assert_eq!(yarn[1].0, "npx");
+        assert_eq!(yarn[1].1, ["--yes", "-p", "tsx", "tsx"]);
+        // With no runner at all, only the tool itself is tried.
+        let bare = Tools {
+            path: &[],
+            npx: false,
+        };
+        assert_eq!(
+            tool_ladder("tsx", "tsx", PackageManager::Yarn, &bare).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn tool_manager_reuses_detection_and_defaults_to_npm() {
+        let pnpm = Fake {
+            files: BTreeMap::from([("pnpm-lock.yaml", String::new())]),
+            ..Fake::default()
+        };
+        assert_eq!(tool_manager(&pnpm, None, &pnpm), PackageManager::Pnpm);
+        // Nothing detected, or an unknown setting: today's npm behaviour.
+        let empty = Fake::default();
+        assert_eq!(tool_manager(&empty, None, &empty), PackageManager::Npm);
+        assert_eq!(
+            tool_manager(&empty, Some("nope"), &empty),
+            PackageManager::Npm
+        );
+    }
+
+    /// The real tools, where installed: the flags in the issue run a pinned
+    /// `typescript@5` for real. Skips cleanly when the tool is absent.
+    #[test]
+    fn real_runners_run_a_pinned_tsc() {
+        if std::env::var_os("BYNK_REAL_RUNNERS").is_none() {
+            eprintln!("skipping: set BYNK_REAL_RUNNERS=1 to download and run each tool");
+            return;
+        }
+        for manager in [
+            PackageManager::Pnpm,
+            PackageManager::Bun,
+            PackageManager::Npm,
+        ] {
+            let program = manager.runner_program().expect("a runner");
+            let Ok(path) = which::which(program) else {
+                eprintln!("skipping {}: not installed", manager.name());
+                continue;
+            };
+            let out = Command::new(path)
+                .args(manager.runner_args("typescript@5", "tsc"))
+                .arg("--version")
+                .output()
+                .expect("runs");
+            let text = String::from_utf8_lossy(&out.stdout);
+            assert!(
+                out.status.success() && text.contains("Version 5."),
+                "{}: {text}",
+                manager.name()
+            );
         }
     }
 }

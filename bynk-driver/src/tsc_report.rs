@@ -16,6 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::npm_install::PackageManager;
 use bynk_project::AttributedError;
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
@@ -285,15 +286,13 @@ enum Ran {
     Unavailable(Vec<String>),
 }
 
-/// The `tsc` ladder `bynk test` uses (`tsc`, then `npx -p typescript@<major>
-/// tsc`), type-checking only. There is no `tsx` rung: it does not type-check.
-fn run_tsc(tsconfig: &Path) -> Ran {
+/// The `tsc` ladder `bynk test` uses (`tsc`, then the package manager's runner
+/// fetching `typescript@<major>`), type-checking only. There is no `tsx` rung:
+/// it does not type-check.
+fn run_tsc(tsconfig: &Path, manager: PackageManager) -> Ran {
     use std::process::{Command, Stdio};
     let pkg = format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
-    let runners: [(&str, Vec<&str>); 2] = [
-        ("tsc", vec![]),
-        ("npx", vec!["--yes", "-p", pkg.as_str(), "tsc"]),
-    ];
+    let runners = crate::npm_install::system_tool_ladder("tsc", &pkg, manager);
     let mut failures = Vec::new();
     for (prog, prefix) in &runners {
         let Some(path) = crate::test_runner::resolve_tool(prog) else {
@@ -368,6 +367,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
             return false;
         }
     };
+    let manager = crate::npm_install::system_tool_manager(input);
     let tmp = match private_temp_dir() {
         Ok(t) => t,
         Err(e) => {
@@ -383,7 +383,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
                 return false;
             }
         }
-        match run_tsc(&root.join("tsconfig.json")) {
+        match run_tsc(&root.join("tsconfig.json"), manager) {
             Ran::Passed => true,
             Ran::Unavailable(why) => {
                 eprintln!(
@@ -393,8 +393,11 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
                     eprintln!("  {w}");
                 }
                 eprintln!(
-                    "  Install it with `npm install -g typescript@{}`.",
-                    bynk_emit::TYPESCRIPT_MAJOR_TESTED
+                    "  Install it with `{}`.",
+                    manager.global_install(&format!(
+                        "typescript@{}",
+                        bynk_emit::TYPESCRIPT_MAJOR_TESTED
+                    ))
                 );
                 false
             }

@@ -31,7 +31,7 @@ use std::time::Duration;
 use bynk_driver::project::{ProjectPaths, try_read_project_paths};
 
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
-use crate::probe::{self, DetectOpts, Provenance, Toolbox};
+use crate::probe::{self, Provenance, Toolbox};
 use crate::report::{self, Format};
 use crate::shell::exit_status_byte;
 
@@ -630,18 +630,11 @@ pub fn run(
     //    Resolve wrangler once with doctor's provenance ordering; an npx
     //    resolution downloads on first use, so it is a notice, never a silent
     //    green path.
-    let probe = probe::detect(
-        tb,
-        "wrangler",
-        DetectOpts {
-            project_root: Some(project_root),
-            allow_npx: true,
-        },
-    );
-    if matches!(probe.provenance, Provenance::Npx) {
-        eprintln!("bynk: wrangler resolved via npx — it will download on first run.");
+    let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
+    if let Some(runner) = probe.provenance.runner_label() {
+        eprintln!("bynk: wrangler resolved via {runner} — it will download on first run.");
     }
-    if let Some(notice) = wrangler_age_notice(&probe) {
+    if let Some(notice) = wrangler_age_notice(&probe, manager) {
         eprintln!("{notice}");
     }
     if matches!(probe.provenance, Provenance::Missing) {
@@ -1469,7 +1462,8 @@ fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
     if !needs_wrangler_warmup(provenance, serving) {
         return true;
     }
-    eprintln!("bynk dev: installing wrangler via npx once before starting the contexts…");
+    let runner = provenance.runner_label().unwrap_or("npx");
+    eprintln!("bynk dev: installing wrangler via {runner} once before starting the contexts…");
     let warmed = wrangler_command(provenance, "--version").map(|mut cmd| {
         cmd.stdout(std::process::Stdio::null())
             .status()
@@ -1477,7 +1471,7 @@ fn warm_up_wrangler(provenance: &Provenance, serving: usize) -> bool {
     });
     if warmed != Some(true) {
         eprintln!(
-            "bynk: `npx --yes wrangler@4 --version` failed — wrangler could not be installed via npx."
+            "bynk: `{runner}` could not install `wrangler@4` (`--version` failed) — wrangler could not be installed via {runner}."
         );
         return false;
     }
@@ -1611,7 +1605,10 @@ fn collect_bynk_files(dir: &Path, excludes: &[PathBuf], visit: &mut dyn FnMut(&P
 /// Bynk, so this names the cause and the fix first. A warning, not a refusal:
 /// the version is `doctor`'s judgement, and the wrangler itself has the last
 /// word. `None` when the wrangler is new enough, or can't be versioned (npx).
-pub fn wrangler_age_notice(probe: &probe::Probe) -> Option<String> {
+pub fn wrangler_age_notice(
+    probe: &probe::Probe,
+    manager: bynk_driver::npm_install::PackageManager,
+) -> Option<String> {
     let v = probe
         .version
         .filter(|_| doctor::wrangler_below_min(probe))?;
@@ -1621,7 +1618,7 @@ pub fn wrangler_age_notice(probe: &probe::Probe) -> Option<String> {
          `{}`.",
         bynk_emit::WRANGLER_MIN,
         bynk_emit::COMPATIBILITY_DATE,
-        doctor::wrangler_upgrade_remedy(probe)
+        doctor::wrangler_upgrade_remedy(probe, manager)
     ))
 }
 
@@ -1722,7 +1719,7 @@ fn inspector_port_in_use(serving: &[Serving]) -> Option<u16> {
 /// an npx resolution installs on first use, and only several spawns at once
 /// race each other in npm's `_npx` cache; a lone context installs alone.
 pub fn needs_wrangler_warmup(provenance: &Provenance, contexts: usize) -> bool {
-    matches!(provenance, Provenance::Npx) && contexts > 1
+    matches!(provenance, Provenance::Runner(_)) && contexts > 1
 }
 
 /// Whether the `--` passthrough carries `flag`, which the driver also injects.
@@ -1864,6 +1861,7 @@ pub fn serving_report(serving: &[Serving]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bynk_driver::npm_install::PackageManager;
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -2182,8 +2180,14 @@ mod tests {
     #[test]
     fn npx_is_warmed_up_only_for_several_contexts() {
         // #1957: parallel first-run `npx` installs race in npm's cache.
-        assert!(needs_wrangler_warmup(&Provenance::Npx, 2));
-        assert!(!needs_wrangler_warmup(&Provenance::Npx, 1));
+        assert!(needs_wrangler_warmup(
+            &Provenance::Runner(PackageManager::Npm),
+            2
+        ));
+        assert!(!needs_wrangler_warmup(
+            &Provenance::Runner(PackageManager::Npm),
+            1
+        ));
         let installed = Provenance::Path(PathBuf::from("/usr/bin/wrangler"));
         assert!(!needs_wrangler_warmup(&installed, 2));
     }

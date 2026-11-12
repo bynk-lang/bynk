@@ -70,6 +70,7 @@ pub fn run(tb: &dyn Toolbox, project_root: &Path, opts: &TailOptions) -> ExitCod
         DetectOpts {
             project_root: Some(project_root),
             allow_npx: true,
+            manager: Some(bynk_driver::npm_install::manager_in(project_root, tb)),
         },
     );
     if matches!(probe.provenance, Provenance::Missing) {

@@ -220,9 +220,9 @@ appears, listing each context's URL, once they all do (see
 ## When `wrangler` isn't installed
 
 `bynk dev` resolves `wrangler` the same way `doctor` does: a project-local
-`node_modules/.bin/wrangler` wins, then a global install, then `npx`. If it can
-only be reached through `npx`, `bynk dev` says so — `npx` *downloads* wrangler on
-first use, so it's a one-time pause, not a missing tool. Run [`bynk doctor
+`node_modules/.bin/wrangler` wins, then a global install, then your package manager's runner (`npx`, `pnpm dlx` or
+`bunx`, by the package manager bynk detects). If it can only be reached through a
+runner, `bynk dev` says which — a runner *downloads* wrangler on first use, so it's a one-time pause, not a missing tool. Run [`bynk doctor
 --only deploy`](/docs/editor-and-tooling/doctor/) to see exactly what you have.
 
 ## Deploying
