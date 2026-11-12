@@ -49,9 +49,21 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
+      {
+        if (method === "POST" && path === "/reset") {
+          __route = "POST /reset";
+          const result = await surface.http_POST_reset();
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
+        }
+      }
       if (path === "/a") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/reset") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       return new globalThis.Response("Not Found", { status: 404 });

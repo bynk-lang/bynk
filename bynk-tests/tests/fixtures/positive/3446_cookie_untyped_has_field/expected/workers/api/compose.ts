@@ -13,5 +13,8 @@ export function compose(env: Env) {
     async http_GET_a(cookies: handlers.Prefs) {
       return handlers.api.http_GET_a(cookies, deps);
     },
+    async http_POST_reset() {
+      return handlers.api.http_POST_reset(deps);
+    },
   };
 }

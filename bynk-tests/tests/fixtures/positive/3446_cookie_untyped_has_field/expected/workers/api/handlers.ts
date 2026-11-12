@@ -28,6 +28,9 @@ export const api = {
   async http_GET_a(cookies: Prefs, deps: {}): globalThis.Promise<HttpResult<string>> {
     return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "theme", value: "Dark", maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false })] }))(HttpResult.Ok("x"));
   },
+  async http_POST_reset(deps: {}): globalThis.Promise<HttpResult<void>> {
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), { ...({ name: "theme", value: "", maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }), value: "", maxAge: Some(0), expires: Some(0) }] }))(HttpResult.NoContent);
+  },
 };
 
 export function __serialise_Prefs(value: Prefs): __JsonValue {

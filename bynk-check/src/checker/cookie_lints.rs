@@ -156,7 +156,9 @@ fn decodes(leaf: &Leaf, text: &str) -> bool {
 /// field, a text the decoder would not read).
 fn typed_argument(leaf: &Leaf, text: &str) -> Option<String> {
     match leaf {
-        Leaf::Int | Leaf::Bool | Leaf::Enum(_) if decodes(leaf, text) => Some(text.to_string()),
+        // An `Int` is written canonically (`007` and `-0` read as `7` and `0`).
+        Leaf::Int if decodes(leaf, text) => text.parse::<i64>().ok().map(|n| n.to_string()),
+        Leaf::Bool | Leaf::Enum(_) if decodes(leaf, text) => Some(text.to_string()),
         Leaf::PlainString => Some(format!(
             "\"{}\"",
             text.replace('\\', "\\\\").replace('"', "\\\"")
@@ -227,7 +229,11 @@ pub(super) fn check(shape: &CookieShape, arg: &Expr, ctx: &mut Ctx) {
         ExprKind::StrLit(s) => Some((s.as_str(), v.span)),
         _ => None,
     });
+    // An empty value is how a cookie is deleted (`clearCookie`, or `maxAge: Some(0.seconds)`): there
+    // is then no value for the decoder to read, so it is neither refused nor rewritten as a set.
+    let deletion = literal.is_some_and(|(text, _)| text.is_empty());
     if let Some((text, span)) = literal
+        && !deletion
         && !decodes(&leaf, text)
     {
         ctx.errors.push(
@@ -255,10 +261,15 @@ pub(super) fn check(shape: &CookieShape, arg: &Expr, ctx: &mut Ctx) {
         return;
     }
     let call = format!("{record}.{}", field.name.name);
+    let write = if deletion {
+        format!("{call}.expire()")
+    } else {
+        format!("{call}.cookie(…)")
+    };
     let mut warning = CompileError::new(
         "bynk.http.cookie_untyped_has_field",
         arg.span,
-        format!("this cookie is read by `{call}`; write it with `{call}.cookie(…)`"),
+        format!("this cookie is read by `{call}`; write it with `{write}`"),
     )
     .with_note(
         "the typed write is named by the field's wire name and valued as its decoder reads it, so a rename or a changed type cannot leave the two disagreeing",
@@ -269,7 +280,11 @@ pub(super) fn check(shape: &CookieShape, arg: &Expr, ctx: &mut Ctx) {
         .fields
         .iter()
         .all(|f| f.name.name == "name" || f.name.name == "value");
-    if bare
+    if deletion {
+        warning = warning.with_note(
+            "`expire()` is the matching deletion: empty, `Max-Age=0` and an epoch `Expires`; give it the same `Path` and `Domain` the cookie was set with",
+        );
+    } else if bare
         && let Some((text, _)) = literal
         && let Some(argument) = typed_argument(&leaf, text)
     {

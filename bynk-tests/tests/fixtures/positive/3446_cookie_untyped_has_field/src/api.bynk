@@ -10,4 +10,9 @@ service api from http {
   on GET("/a") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("x").withCookie(Cookie { name: "theme", value: "Dark" })
   }
+
+  // Deleting is an empty value, which no decoder reads: a warning to use `expire()`, not an error.
+  on POST("/reset") () -> Effect[HttpResult[()]] by v: Visitor {
+    NoContent.clearCookie(Cookie { name: "theme", value: "" })
+  }
 }
