@@ -286,7 +286,7 @@ fn partial_parse_checks_surviving_declarations_without_echoes() {
         (
             "demo/guard.bynk",
             "bynk.parse.expected_token",
-            "expected a string or integer scheme config value",
+            "expected a string, integer, duration or identifier scheme config value",
         ),
         (
             "demo/headless.bynk",

@@ -87,6 +87,10 @@ function decodeKey(name: string, value: unknown): Uint8Array {
   return bytes;
 }
 
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 interface ImportedKey {
   readonly kid: string;
   readonly bytes: Uint8Array;
@@ -104,7 +108,7 @@ async function loadKeys(keys: SessionKeys): Promise<{ current: ImportedKey; prev
   if (keys.previous === undefined || keys.previous === null || keys.previous === "") return { current, previous: null };
   const prevBytes = decodeKey("previous", keys.previous);
   const previous = { kid: await keyId(prevBytes), bytes: prevBytes };
-  if (previous.kid === current.kid) {
+  if (previous.kid === current.kid || bytesEqual(prevBytes, secretBytes)) {
     keyFault("the session keys `secret` and `previous` are the same key");
   }
   return { current, previous };
@@ -174,6 +178,11 @@ export async function verifySignedCookie(
   ttlSecs: number,
   nowMs: number = Date.now(),
 ): Promise<Result<{ readonly sub: string }, string>> {
+  // The bound on a cookie's lifetime is the actor's `ttl`; one that is not a positive whole number
+  // would turn it off (`NaN` compares false), so it is a fault, as it is for the signer.
+  if (!Number.isSafeInteger(ttlSecs) || ttlSecs <= 0) {
+    throw new RangeError("a session ttl must be a positive whole number of seconds");
+  }
   const { current, previous } = await loadKeys(keys);
   if (value.length === 0 || value.length > MAX_COOKIE_CHARS) return Err("malformed cookie");
   const parts = value.split(".");

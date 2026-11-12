@@ -1090,15 +1090,18 @@ export function sessionCookieOf(request: Request, name: string): string | null {
 }
 
 /** #3386: whether a state-changing request to a cookie-authenticated route is one the browser's user
- *  meant to make, from fetch metadata. `Sec-Fetch-Site` of `same-origin` (or `none`) is accepted; any
- *  other request must carry an `Origin` that is exactly one of `allowedOrigins` (the service's
- *  credentialed `cors` origins), or, when the browser sent no `Sec-Fetch-Site` at all, this request's
- *  own origin. A request revealing neither header is refused. */
+ *  meant to make, from fetch metadata. Only `Sec-Fetch-Site: same-origin` passes on its own. Any other
+ *  request (`same-site`, `cross-site`, `none` or an unknown value) must carry an `Origin` that is
+ *  **exactly** one of `allowedOrigins`, the service's credentialed `cors` origins (scheme, host and port;
+ *  a sibling subdomain is accepted only if listed; a wildcard or `null` never qualifies), or, when the
+ *  browser sent no `Sec-Fetch-Site` at all, this request's own origin. `none` is a user-initiated
+ *  navigation, which a state-changing request is not, so it is refused like the rest. A request that
+ *  reveals neither header is refused. */
 export function csrfAllowed(request: Request, allowedOrigins: readonly string[]): boolean {
   const site = request.headers.get("sec-fetch-site");
-  if (site === "same-origin" || site === "none") return true;
+  if (site === "same-origin") return true;
   const origin = request.headers.get("origin");
-  if (origin === null || origin === "null") return false;
+  if (origin === null || origin === "null" || origin === "*") return false;
   if (site === null) {
     let own: string;
     try {
@@ -1108,7 +1111,7 @@ export function csrfAllowed(request: Request, allowedOrigins: readonly string[])
     }
     if (origin === own) return true;
   }
-  return allowedOrigins.includes(origin);
+  return allowedOrigins.some((o) => o === origin && o !== "*" && o !== "null");
 }
 
 /** #3277 (decisions A, B): decode the request's `Cookie` header into the JSON

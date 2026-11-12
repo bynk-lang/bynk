@@ -79,11 +79,13 @@ context owns, as for `Bearer`. A `SignedCookie` secret may not be any other acto
 
 **What the seam does.** A route guarded by a `SignedCookie` actor runs, before the body:
 
-1. **A CSRF check**, on `POST`, `PUT`, `PATCH` and `DELETE` (a `GET` is safe and skips it). The
-   request passes if the browser's `Sec-Fetch-Site` is `same-origin` (or `none`). Otherwise its
-   `Origin` must be exactly one of the service's [`cors`](/book/reference/http/#cors) origins
-   (the service must declare `credentials: true`) or, when the browser sent no `Sec-Fetch-Site`,
-   this request's own origin. A request that reveals neither header is refused. Failure is `403`.
+1. **A CSRF check**, on `POST`, `PUT`, `PATCH` and `DELETE` (a `GET` is safe and skips it). Only a request
+   whose `Sec-Fetch-Site` is `same-origin` passes on its own. Any other (`same-site`, `cross-site`, `none`, a
+   user-initiated navigation that a state-changing request is not, or an unknown value) must carry an
+   `Origin` that is **exactly** one of the service's [`cors`](/book/reference/http/#cors) origins (scheme,
+   host and port; the service must declare `credentials: true`, a sibling subdomain counts only if it is
+   listed, and a wildcard or `null` never qualifies). When the browser sent no `Sec-Fetch-Site` at all, this
+   request's own origin passes too. A request that reveals neither header is refused. Failure is `403`.
 2. **Reading the cookie.** A missing cookie, or one sent more than once (a sign of cookie tossing
    from another path or subdomain), is `401`.
 3. **Verifying it.** HMAC-SHA-256 under `secret`, or `previous` when the cookie's `kid` names it;
