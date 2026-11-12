@@ -8,7 +8,7 @@ import { QueueResult } from "../__bynk_runtime/queue.js";
 import { EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
 
 export const support = {
-  async queue_support_0(mail: InboundEmail, deps: { identity: { readonly address: string; readonly dmarc: { readonly tag: string } } }): globalThis.Promise<EmailVerdict> {
+  async queue_support_0(mail: InboundEmail, deps: { identity: { readonly address: string; readonly dmarc: { readonly tag: "DmarcPass" } | { readonly tag: "DmarcFail" } | { readonly tag: "DmarcNone" } } }): globalThis.Promise<EmailVerdict> {
     return EmailVerdict.Forward("team@shop.example");
   },
 };
