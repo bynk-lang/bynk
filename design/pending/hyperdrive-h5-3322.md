@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, emit_abi_shapes, ts_writes, diagnostic_coverage, explained_codes
 changelog: A `MySql` instance kind reaches an existing MySQL or MariaDB database through Hyperdrive over mysql2 (`capability Legacy = MySql`, `?` placeholders, `MySqlValue` and `MySqlError`, an `@tls("…")` option), with the same typed reads, transactions, deploy path and `schema.sql` statement check as `Postgres`
 ---
 

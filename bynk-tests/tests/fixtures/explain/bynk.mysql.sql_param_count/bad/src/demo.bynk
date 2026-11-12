@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { MySql, MySqlError, MySqlValue }
+
+capability Legacy = MySql
+
+service probe {
+  on call(id: Int) -> Effect[Result[String, MySqlError]] given Legacy {
+    let _ <- Legacy.all("SELECT id FROM orders WHERE id = ? AND qty > ?", [MySqlInteger(id)])
+    Effect.pure(Ok("ok"))
+  }
+}

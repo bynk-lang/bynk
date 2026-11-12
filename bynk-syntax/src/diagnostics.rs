@@ -2899,6 +2899,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "adding-a-locale",
     },
     Explain {
+        code: "bynk.mysql.sql_invalid",
+        blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `MySql` capability, so a syntax error shows up when you check, not on the first request. It also flags a statement of several commands, which the driver does not accept: send each with its own call, or use `transaction`. The parser is a pure-Rust one with a MySQL dialect, not MySQL's own (and MariaDB has forms of its own), so it can refuse valid SQL; that is why this is a warning and never blocks a build. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
+        example: "let _ <- Legacy.all(\"SELEC id FROM orders\", [])        // ✗ expected a statement, found SELEC\n\nlet _ <- Legacy.all(\"SELECT id FROM orders\", [])      // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "mysql-sql-checked-for-syntax",
+    },
+    Explain {
+        code: "bynk.mysql.sql_param_count",
+        blurb: "When the project has a `schema.sql`, Bynk counts the parameters of each literal `MySql` statement: each `?` takes the next value. It checks a list written out in place, or a name `let`-bound to one. A `?` inside a single-quoted string literal, a backtick-quoted name or a comment (`-- ` or `/* … */`) is text, not a parameter, as the driver reads it; the driver does not skip a double-quoted string or a `#` comment, so a `?` in one is counted, and string literals are written with single quotes. Pass one `MySqlValue` for each `?`, or change the SQL. `??`, which mysql2 reads as an identifier placeholder, is counted as two parameters and is not supported.",
+        example: "let _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id)])                    // ✗ two parameters, one value\n\nlet _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id), MySqlInteger(5)])    // ✓",
+        page: "/book/reference/bynk-capabilities",
+        anchor: "mysql-sql-checked-for-syntax",
+    },
+    Explain {
         code: "bynk.namespace.reserved",
         blurb: "The `bynk` root belongs to the toolchain: its own libraries, such as `bynk.list`, and the platform adapters live there and are added to a build when a unit consumes them. A unit of yours named `bynk` or `bynk.<anything>` could collide with one of them, so the name is refused for every kind of unit. Rename the unit so its first segment is not `bynk`, and move its file to match.",
         example: "// bynk/foo.bynk\ncommons bynk.foo    // ✗ `bynk` is the toolchain's namespace\n\n// shop/foo.bynk\ncommons shop.foo    // ✓",
@@ -3683,20 +3697,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id)])                 // ✗ two parameters, one value\n\nlet _ <- Main.all(\"SELECT id FROM orders WHERE id = $1 AND qty > $2\", [PgInteger(id), PgInteger(5)])    // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "postgres-sql-checked-for-syntax",
-    },
-    Explain {
-        code: "bynk.mysql.sql_invalid",
-        blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `MySql` capability, so a syntax error shows up when you check, not on the first request. It also flags a statement of several commands, which the driver does not accept: send each with its own call, or use `transaction`. The parser is a pure-Rust one with a MySQL dialect, not MySQL's own (and MariaDB has forms of its own), so it can refuse valid SQL; that is why this is a warning and never blocks a build. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
-        example: "let _ <- Legacy.all(\"SELEC id FROM orders\", [])        // ✗ expected a statement, found SELEC\n\nlet _ <- Legacy.all(\"SELECT id FROM orders\", [])      // ✓",
-        page: "/book/reference/bynk-capabilities",
-        anchor: "mysql-sql-checked-for-syntax",
-    },
-    Explain {
-        code: "bynk.mysql.sql_param_count",
-        blurb: "When the project has a `schema.sql`, Bynk counts the parameters of each literal `MySql` statement: each `?` takes the next value. It checks a list written out in place, or a name `let`-bound to one. A `?` inside a single-quoted string literal, a backtick-quoted name or a comment (`-- ` or `/* … */`) is text, not a parameter, as the driver reads it; the driver does not skip a double-quoted string or a `#` comment, so a `?` in one is counted, and string literals are written with single quotes. Pass one `MySqlValue` for each `?`, or change the SQL. `??`, which mysql2 reads as an identifier placeholder, is counted as two parameters and is not supported.",
-        example: "let _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id)])                    // ✗ two parameters, one value\n\nlet _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id), MySqlInteger(5)])    // ✓",
-        page: "/book/reference/bynk-capabilities",
-        anchor: "mysql-sql-checked-for-syntax",
     },
     Explain {
         code: "bynk.project.duplicate_module_doc",
@@ -7970,6 +7970,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.messages.placeholder_mismatch",
         "A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's.",
     ),
+    warn(d(
+        "bynk.mysql.sql_invalid",
+        "A literal `MySql` statement does not parse with the MySQL dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not MySQL's own, so it may refuse valid SQL).",
+    )),
+    d(
+        "bynk.mysql.sql_param_count",
+        "A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`.",
+    ),
     d(
         "bynk.namespace.reserved",
         "A user unit is named `bynk` or `bynk.*`; the `bynk` root is reserved for the toolchain.",
@@ -8395,14 +8403,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.postgres.sql_invalid",
         "A literal `Postgres` statement does not parse with the Postgres dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not Postgres' own, so it may refuse valid SQL).",
     )),
-    warn(d(
-        "bynk.mysql.sql_invalid",
-        "A literal `MySql` statement does not parse with the MySQL dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not MySQL's own, so it may refuse valid SQL).",
-    )),
-    d(
-        "bynk.mysql.sql_param_count",
-        "A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`.",
-    ),
     d(
         "bynk.postgres.sql_param_count",
         "A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`.",

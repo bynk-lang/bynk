@@ -1029,9 +1029,14 @@ adapter bynk.cloudflare {
 	---
 	capability MySql {
 		fn all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]
-		fn first(sql: String, params: List[MySqlValue]) -> Effect[Result[Option[String], MySqlError]]
+		fn first(
+			sql: String,
+			params: List[MySqlValue]
+		) -> Effect[Result[Option[String], MySqlError]]
 		fn run(sql: String, params: List[MySqlValue]) -> Effect[Result[MySqlRun, MySqlError]]
-		fn transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]
+		fn transaction(
+			statements: List[MySqlStatement]
+		) -> Effect[Result[List[MySqlRun], MySqlError]]
 	}
 
 	provides Kv = WorkersKv

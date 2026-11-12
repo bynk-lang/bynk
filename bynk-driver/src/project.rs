@@ -485,6 +485,49 @@ type Overlay = HashMap<PathBuf, String>;
 /// One file list per `trees` entry — the same shape `phase_discovery` and
 /// `run_checks`'s own `discovered` parameter already use.
 type Discovered = Vec<Vec<PathBuf>>;
+/// The files a Worker's bindings stage beside its `wrangler.toml`: P4b (#2608)
+/// each `D1` database's migrations, under the `migrations_dir` the config names,
+/// and Hyperdrive H5 (#3322) which Hyperdrive bindings are MySQL and their TLS
+/// modes, for `bynk deploy` (a Worker with no `MySql` instance gets no file).
+fn stage_binding_files(
+    bindings: &[emitter::wrangler::WorkerBinding],
+    dashes: &str,
+    d1_migrations: &bynk_check::d1_migrations::D1Migrations,
+    compiled: &mut Vec<StagedFile>,
+) {
+    if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(bindings) {
+        compiled.push(StagedFile {
+            output_path: PathBuf::from(format!(
+                "workers/{dashes}/{}",
+                emitter::wrangler::HYPERDRIVE_MANIFEST
+            )),
+            document: Document::Json(manifest),
+            source_map: None,
+            debug_metadata: None,
+        });
+    }
+    for binding in bindings {
+        if !matches!(
+            binding.source,
+            emitter::wrangler::BindingSource::D1Database { .. }
+        ) {
+            continue;
+        }
+        let database = emitter::wrangler::d1_database_name(dashes, &binding.name);
+        for file in d1_migrations.get(&database).into_iter().flatten() {
+            compiled.push(StagedFile {
+                output_path: PathBuf::from(format!(
+                    "workers/{dashes}/{}/{database}/{}",
+                    emitter::wrangler::D1_MIGRATIONS_DIR,
+                    file.name
+                )),
+                document: Document::Sql(file.sql.clone()),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
+    }
+}
 
 /// #2223: the trees a manifest-backed project compiles — its own
 /// ([`Roots::trees`]) and then each path dependency's
@@ -3663,43 +3706,7 @@ fn build_output(
                     &emitter::ClassTombstones::of(table),
                     d1_migrations,
                 );
-                // Hyperdrive H5 (#3322): which Hyperdrive bindings are MySQL, and
-                // their TLS modes, for `bynk deploy` (a Worker with no `MySql`
-                // instance gets no file).
-                if let Some(manifest) = emitter::wrangler::emit_hyperdrive_manifest(&bindings) {
-                    compiled.push(StagedFile {
-                        output_path: PathBuf::from(format!(
-                            "workers/{dashes}/{}",
-                            emitter::wrangler::HYPERDRIVE_MANIFEST
-                        )),
-                        document: Document::Json(manifest),
-                        source_map: None,
-                        debug_metadata: None,
-                    });
-                }
-                // P4b (#2608): each `D1` database's migrations, beside the
-                // `wrangler.toml` whose `migrations_dir` names them.
-                for binding in &bindings {
-                    if !matches!(
-                        binding.source,
-                        emitter::wrangler::BindingSource::D1Database { .. }
-                    ) {
-                        continue;
-                    }
-                    let database = emitter::wrangler::d1_database_name(&dashes, &binding.name);
-                    for file in d1_migrations.get(&database).into_iter().flatten() {
-                        compiled.push(StagedFile {
-                            output_path: PathBuf::from(format!(
-                                "workers/{dashes}/{}/{database}/{}",
-                                emitter::wrangler::D1_MIGRATIONS_DIR,
-                                file.name
-                            )),
-                            document: Document::Sql(file.sql.clone()),
-                            source_map: None,
-                            debug_metadata: None,
-                        });
-                    }
-                }
+                stage_binding_files(&bindings, &dashes, d1_migrations, &mut compiled);
                 // #1883, slice 1b: the static files this Worker serves — its
                 // own and those of every commons its `uses` closure reaches —
                 // under its assets directory, with `_headers` and the
