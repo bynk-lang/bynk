@@ -140,31 +140,69 @@ impl Rest {
         path: &str,
         body: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        self.send("POST", path, Some(body))
+    }
+
+    /// A `PUT` with a JSON body, answered as [`Rest::get`] is (#3319: replacing
+    /// a Hyperdrive config).
+    pub(crate) fn put(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.send("PUT", path, Some(body))
+    }
+
+    /// A `DELETE`, answered as [`Rest::get`] is (#3319: pruning a Hyperdrive
+    /// config).
+    pub(crate) fn delete(&self, path: &str) -> Result<serde_json::Value, String> {
+        self.send("DELETE", path, None)
+    }
+
+    /// A write to an account path. Errors name the method and path and what
+    /// Cloudflare answered, never the request body: a body can carry a secret.
+    fn send(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
         let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
-        let mut response = self
-            .agent
-            .post(&url)
-            .header(
-                "Authorization",
-                &format!("Bearer {}", self.credentials.token),
-            )
-            .header("Content-Type", "application/json")
-            .send(body.to_string())
-            .map_err(|e| format!("POST {path}: {e}"))?;
+        let auth = format!("Bearer {}", self.credentials.token);
+        let mut response = match (method, body) {
+            ("POST", Some(b)) => self
+                .agent
+                .post(&url)
+                .header("Authorization", &auth)
+                .header("Content-Type", "application/json")
+                .send(b.to_string()),
+            ("PUT", Some(b)) => self
+                .agent
+                .put(&url)
+                .header("Authorization", &auth)
+                .header("Content-Type", "application/json")
+                .send(b.to_string()),
+            _ => self
+                .agent
+                .delete(&url)
+                .header("Authorization", &auth)
+                .call(),
+        }
+        .map_err(|e| format!("{method} {path}: {e}"))?;
         let status = response.status().as_u16();
         let text = response
             .body_mut()
             .read_to_string()
-            .map_err(|e| format!("POST {path}: {e}"))?;
+            .map_err(|e| format!("{method} {path}: {e}"))?;
         let body: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("POST {path}: unreadable answer ({e})"))?;
+            .map_err(|e| format!("{method} {path}: unreadable answer ({e})"))?;
         if status != 200 || body.get("success") != Some(&serde_json::Value::Bool(true)) {
             let errors = body
                 .get("errors")
                 .map(serde_json::Value::to_string)
                 .unwrap_or_default();
             return Err(format!(
-                "POST {path}: Cloudflare answered {status} {errors}"
+                "{method} {path}: Cloudflare answered {status} {errors}"
             ));
         }
         Ok(body)

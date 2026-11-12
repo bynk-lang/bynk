@@ -89,6 +89,56 @@ struct WorkersTable {
     workers_dev: Option<bool>,
 }
 
+/// Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.
+/// No table holds a connection string: it is a secret, and `bynk.toml` is
+/// committed.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployTable {
+    /// Hyperdrive settings, keyed by the `Postgres` capability's name
+    /// (`capability Main = Postgres` is `Main`).
+    hyperdrive: Option<std::collections::BTreeMap<String, DeployHyperdriveEntry>>,
+}
+
+/// One `Postgres` capability's Hyperdrive config at deploy.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployHyperdriveEntry {
+    /// The name of the environment variable `bynk deploy` reads the
+    /// connection string from (`postgres://user:password@host:5432/db`). The
+    /// deploy creates the Hyperdrive config from it, or updates the config
+    /// when the string changes. The string is never written to the ledger,
+    /// the plan or a generated file. A missing variable fails the deploy.
+    connection_env: Option<String>,
+    /// Hyperdrive config ids that already exist, by deployment environment
+    /// (`default`, or an `--env` name). An environment listed here is adopted
+    /// as it is and needs no connection string.
+    config_id: Option<std::collections::BTreeMap<String, String>>,
+}
+
+/// Settings `bynk dev` reads.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DevTable {
+    /// Local Hyperdrive connection strings, keyed by the `Postgres`
+    /// capability's name.
+    hyperdrive: Option<std::collections::BTreeMap<String, DevHyperdriveEntry>>,
+}
+
+/// One `Postgres` capability's connection string under `bynk dev`.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DevHyperdriveEntry {
+    /// The name of the environment variable `bynk dev` reads the local
+    /// connection string from, and hands to `wrangler dev` as
+    /// `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>`.
+    connection_env: String,
+}
+
 /// Defaults for `bynk build`, which takes no flags. A flag overrides its key.
 /// `bynk compile` and `bynk dev`/`deploy`/`test` do not read this table.
 #[derive(JsonSchema)]
@@ -330,6 +380,8 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "paths" => generator.subschema_for::<PathsTable>(),
         "lsp" => generator.subschema_for::<LspTable>(),
         "workers" => generator.subschema_for::<WorkersTable>(),
+        "deploy" => generator.subschema_for::<DeployTable>(),
+        "dev" => generator.subschema_for::<DevTable>(),
         "build" => generator.subschema_for::<BuildTable>(),
         "check" => generator.subschema_for::<CheckTable>(),
         "profile" => generator.subschema_for::<ProfileTable>(),

@@ -151,6 +151,14 @@ pub enum ProjectPathsError {
     BadBuild { key: &'static str, reason: String },
     /// #3054: a `[profile.<name>]` table that isn't well formed.
     BadProfile { profile: String, reason: String },
+    /// #3319: a `[deploy.hyperdrive.<Capability>]` or `[dev.hyperdrive.<Capability>]`
+    /// entry that is not well formed. Never carries the value it was given: a
+    /// connection string written there is a secret.
+    BadHyperdrive {
+        table: &'static str,
+        capability: String,
+        reason: String,
+    },
     /// #2138: a `[test.targets.<name>]` entry that is not well formed.
     BadTestTarget { target: String, reason: String },
     /// #2207 (`project_and_package`): both `[project]` and `[package]`, so the
@@ -213,6 +221,8 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     ("workers", &["compatibility_flags", "workers_dev"]),
+    ("deploy", &["hyperdrive"]),
+    ("dev", &["hyperdrive"]),
     ("build", &["out", "target", "platform", "emit"]),
     ("check", &["d1_sql"]),
     ("profile", PROFILE_NAMES),
@@ -245,7 +255,7 @@ const WORKSPACE_ROOT_TABLES: &[&str] = &["workspace", "registries"];
 
 /// Tables a user might write for a feature that is designed but not built,
 /// with the issue that tracks it.
-const PLANNED_TABLES: &[(&str, &str)] = &[("deploy", "#551")];
+const PLANNED_TABLES: &[(&str, &str)] = &[];
 
 /// Every table name `bynk.toml` accepts, fixed-key and map tables alike, in
 /// documentation order.
@@ -362,6 +372,13 @@ impl std::fmt::Display for ProjectPathsError {
             }
             ProjectPathsError::BadProfile { profile, reason } => {
                 write!(f, "`[profile.{profile}]` {reason}")
+            }
+            ProjectPathsError::BadHyperdrive {
+                table,
+                capability,
+                reason,
+            } => {
+                write!(f, "`[{table}.{capability}]` {reason}")
             }
             ProjectPathsError::BadTestTarget { target, reason } => {
                 write!(f, "`[test.targets.{target}]` {reason}")
@@ -541,6 +558,8 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "test" => drop(test_targets_from(entries)?),
             "package" => drop(crate::manifest::package_config_from(entries)?),
             "workspace" => drop(crate::manifest::workspace_config_from(entries)?),
+            "deploy" => drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?),
+            "dev" => drop(crate::hyperdrive::dev_hyperdrive_from(entries)?),
             _ => {}
         }
     }
@@ -1669,8 +1688,18 @@ mod manifest_tests {
     }
 
     #[test]
-    fn a_planned_table_names_its_issue() {
-        assert!(err("[deploy]\ngroups = []\n").contains("not yet supported (#551)"));
+    fn the_deploy_and_dev_tables_take_hyperdrive_entries_only() {
+        check_manifest_str(
+            "[deploy.hyperdrive.Main]\nconnection_env = \"MAIN_DATABASE_URL\"\n\n\
+             [dev.hyperdrive.Main]\nconnection_env = \"LOCAL_URL\"\n",
+        )
+        .expect("accepted");
+        assert!(err("[deploy]\ngroups = []\n").contains("`groups`"));
+        assert!(err("[dev]\nport = 1\n").contains("`port`"));
+        assert!(
+            err("[deploy.hyperdrive.Main]\nconnection_env = \"postgres://u:p@h/d\"\n")
+                .contains("not the string itself")
+        );
     }
 
     #[test]
@@ -1713,11 +1742,12 @@ mod manifest_tests {
         check_manifest_str("paths = { include = [\"src\"] }\n").expect("accepted");
     }
 
-    /// #1770 review: a planned table keeps its issue whatever shape it takes.
+    /// #1770 review: a table written as an array of tables, or as a plain
+    /// array, is refused, not read as an absent table.
     #[test]
-    fn a_planned_table_in_any_shape_names_its_issue() {
-        assert!(err("[[deploy]]\nname = \"acme\"\n").contains("(#551)"));
-        assert!(err("deploy = [\"acme\"]\n").contains("(#551)"));
+    fn a_table_in_another_shape_is_refused() {
+        assert!(err("[[deploy]]\nname = \"acme\"\n").contains("`deploy`"));
+        assert!(err("deploy = [\"acme\"]\n").contains("`deploy`"));
     }
 
     /// #2207: a map table written in another shape is told to be a table.

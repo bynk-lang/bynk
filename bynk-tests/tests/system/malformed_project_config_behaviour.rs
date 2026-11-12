@@ -49,15 +49,15 @@ fn a_typo_d_paths_key_fails_loudly_instead_of_being_silently_ignored() {
     );
 }
 
-/// #1665: an unknown table (here one for a planned `bynk deploy` feature) used
-/// to build cleanly with none of its behaviour. It now fails, naming the issue.
+/// #1665: an unknown key in a known table (here `[deploy]`) used to build
+/// cleanly with none of its behaviour. It now fails, naming the key.
 #[test]
 fn an_unknown_table_fails_loudly_instead_of_being_silently_ignored() {
     let (ok, out) = check("tests/fixtures/behaviour/unknown_manifest_table");
     assert!(!ok, "expected failure, but the build succeeded:\n{out}");
     assert!(
-        out.contains("[deploy]") && out.contains("not yet supported (#551)"),
-        "expected the table named and its issue cited, got:\n{out}"
+        out.contains("[deploy]") && out.contains("groups"),
+        "expected the table and the key named, got:\n{out}"
     );
 }
 

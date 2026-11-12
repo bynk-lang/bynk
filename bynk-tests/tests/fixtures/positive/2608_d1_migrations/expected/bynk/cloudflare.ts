@@ -966,11 +966,14 @@ export const __EmailToken: symbol = globalThis.Symbol("Email");
  * `[[hyperdrive]]` entry; a bare `given Postgres` names no database and is
  * refused. Experimental.
  *
- * `bynk deploy` does not create the Hyperdrive configuration yet. The
- * generated `wrangler.toml` carries a placeholder `id`; create the
- * configuration with `wrangler hyperdrive create` and put its id there, and
- * for `bynk dev` set `localConnectionString` (see "Connect an existing
- * Postgres database" in the Book).
+ * `bynk deploy` makes the Hyperdrive configuration, from the connection
+ * string in the environment variable `[deploy.hyperdrive.Main]
+ * connection_env` names in `bynk.toml`, or adopts one named by `config_id`;
+ * the generated `wrangler.toml` carries a placeholder `id` it replaces.
+ * `bynk dev` reads the local connection string from the variable
+ * `[dev.hyperdrive.Main] connection_env` names. A connection string is never
+ * written to `bynk.toml` (see "Connect an existing Postgres database" in the
+ * Book).
  *
  * Rows come back as JSON text for `Json.decode`: `all` gives every row as an
  * array of objects keyed by column name, `first` the first row as one object,

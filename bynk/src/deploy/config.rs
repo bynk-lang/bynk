@@ -33,6 +33,9 @@ struct WranglerConfig {
     /// P4a (#2602): the `[[d1_databases]]` of the `D1` instances.
     #[serde(default)]
     d1_databases: Vec<D1DatabaseBinding>,
+    /// #3319: the `[[hyperdrive]]` of the `Postgres` instances.
+    #[serde(default)]
+    hyperdrive: Vec<HyperdriveStanza>,
     /// P3 (#2342): the `[[ratelimits]]` of the `RateLimit` instances.
     #[serde(default)]
     ratelimits: Vec<RateLimitBinding>,
@@ -210,6 +213,46 @@ pub(crate) struct StoredSecretDecl {
 }
 
 #[derive(Debug, Deserialize)]
+struct HyperdriveStanza {
+    /// `HYPERDRIVE_<SNAKE>`: the instance's binding.
+    binding: String,
+}
+
+/// #3319: one `Postgres` instance's Hyperdrive config, as the emitted config
+/// declares it. Its id is made (or adopted) by the deploy and kept in the
+/// ledger; nothing about the connection string is in the config.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HyperdriveDecl {
+    /// `HYPERDRIVE_<SNAKE>`, the key the ledger records the config under.
+    pub(crate) binding: String,
+}
+
+impl HyperdriveDecl {
+    /// The capability's name as the source wrote it, recovered from the
+    /// binding (`HYPERDRIVE_MAIN` is `Main`): the key of `[deploy.hyperdrive]`
+    /// is matched case-insensitively and with `_` and nothing between words
+    /// ignored, since a binding is the capability's upper snake case and loses
+    /// its capitalisation.
+    pub(crate) fn matches_capability(&self, capability: &str) -> bool {
+        bynk_check::worker_bindings::instance_binding_name(
+            bynk_check::firstparty::POSTGRES_BINDING_PREFIX,
+            capability,
+        ) == self.binding
+    }
+
+    /// The binding's words, lower-cased and dashed (`HYPERDRIVE_MAIN_DB` is
+    /// `main-db`), which the config's account-facing name is derived from.
+    pub(crate) fn kebab(&self) -> String {
+        let prefix = format!("{}_", bynk_check::firstparty::POSTGRES_BINDING_PREFIX);
+        self.binding
+            .strip_prefix(&prefix)
+            .unwrap_or(&self.binding)
+            .to_ascii_lowercase()
+            .replace('_', "-")
+    }
+}
+
+#[derive(Debug, Deserialize)]
 struct D1DatabaseBinding {
     /// `D1_<SNAKE>`: the instance's binding.
     binding: String,
@@ -296,6 +339,11 @@ pub(crate) struct Resources {
     /// written into the config before the push; reported, never deleted, when
     /// its instance goes.
     pub(crate) d1_databases: Vec<D1Decl>,
+    /// #3319: the Hyperdrive configs of the `Postgres` instances, in binding
+    /// order. Each is made from a connection string the deploy reads from an
+    /// environment variable, or adopted by id; its id is recorded in the
+    /// ledger and written into the config before the push.
+    pub(crate) hyperdrive: Vec<HyperdriveDecl>,
     /// P3 (#2342): the bindings of the `RateLimit` instances, in binding
     /// order. Each has a `namespace_id` the ledger allocates; the limit and
     /// the window are configuration the push carries, not identity.
@@ -382,6 +430,7 @@ impl Default for Resources {
             kv_instances: Vec::new(),
             r2_buckets: Vec::new(),
             d1_databases: Vec::new(),
+            hyperdrive: Vec::new(),
             ratelimits: Vec::new(),
             analytics_datasets: Vec::new(),
             stored_secrets: Vec::new(),
@@ -609,6 +658,12 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         })
         .collect::<Result<_, String>>()?;
     d1_databases.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut hyperdrive: Vec<HyperdriveDecl> = parsed
+        .hyperdrive
+        .into_iter()
+        .map(|h| HyperdriveDecl { binding: h.binding })
+        .collect();
+    hyperdrive.sort_by(|a, b| a.binding.cmp(&b.binding));
     Ok(Resources {
         binds_to: binds_to.into_iter().map(|s| s.service).collect(),
         foreign_services: foreign
@@ -639,6 +694,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         },
         r2_buckets,
         d1_databases,
+        hyperdrive,
         ratelimits,
         analytics_datasets,
         stored_secrets,
@@ -903,6 +959,23 @@ pub(crate) fn materialise_d1_databases(
     std::fs::write(path, patched).is_ok()
 }
 
+/// #3319: materialise each `Postgres` binding's Hyperdrive config id into the
+/// generated config at `path`, by binding. A named environment's block copies
+/// the stanza from here ([`synthesise_environment_block`]). Only ids go in: the
+/// connection string never reaches a generated file.
+pub(crate) fn materialise_hyperdrive_ids(path: &Path, ids: &BTreeMap<String, String>) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(patched) = bynk_emit::emitter::wrangler::materialise_hyperdrive_ids(&text, ids) else {
+        return false;
+    };
+    if patched == text {
+        return true;
+    }
+    std::fs::write(path, patched).is_ok()
+}
+
 /// #3301: materialise each linked `StoredSecret`'s store id into the generated
 /// config at `path`, by binding. A named environment's block copies the stanza
 /// from here ([`synthesise_environment_block`]).
@@ -1052,6 +1125,13 @@ pub(crate) fn synthesise_environment_block(
     // environment's name and id (`materialise_d1_databases` runs first).
     if let Some(databases) = doc.get("d1_databases") {
         env_block.insert("d1_databases".to_string(), databases.clone());
+    }
+
+    // #3319: each Hyperdrive config as the deploy materialised it, under this
+    // environment's id (`materialise_hyperdrive_ids` runs first). A named
+    // environment's block does not inherit the top level's bindings.
+    if let Some(configs) = doc.get("hyperdrive") {
+        env_block.insert("hyperdrive".to_string(), configs.clone());
     }
 
     // P3b (#2582): each dataset under its environment-qualified name, or
@@ -1260,6 +1340,16 @@ pub(crate) mod tests {
                 .map(|(binding, senders)| EmailSendersDecl {
                     binding: binding.to_string(),
                     senders: senders.iter().map(|s| s.to_string()).collect(),
+                })
+                .collect();
+            self
+        }
+        /// Derived `Postgres` instances, as their bindings (#3319).
+        pub(crate) fn hyperdrive(mut self, bindings: &[&str]) -> Self {
+            self.hyperdrive = bindings
+                .iter()
+                .map(|binding| HyperdriveDecl {
+                    binding: binding.to_string(),
                 })
                 .collect();
             self

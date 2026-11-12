@@ -10,7 +10,7 @@ defaults, and a manifest that lists only `[project]` behaves identically to one
 that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
 (`bynk-fmt`), which both the CLI and the language server read it through;
 `[lsp]` by the language server; `[build]` and `[profile.*]` by `bynk build`; `[workers]` by the compiler, for a Workers
-build; `[check]` by the compiler, for checks that read more than the source; `[test]` by the test runner, for a run against a deployment.
+build; `[deploy]` by `bynk deploy` and `[dev]` by `bynk dev`, for the connection strings of `Postgres` instances; `[check]` by the compiler, for checks that read more than the source; `[test]` by the test runner, for a run against a deployment.
 
 A project is an **application** (`[project]`) or a shareable **package**
 (`[package]`), never both. A directory whose `bynk.toml` holds `[workspace]`
@@ -65,6 +65,12 @@ d1_sql = true               # false stops literal D1 SQL being checked: prepared
 
 [unstable]
 allow = []                  # experimental standard-library items to use
+
+[deploy.hyperdrive.Main]    # no default: a `Postgres` instance's Hyperdrive config
+connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the connection string from
+
+[dev.hyperdrive.Main]       # no default: its local database under `bynk dev`
+connection_env = "MAIN_LOCAL_DATABASE_URL"
 
 [test.targets.preview]      # no default: a deployment `bynk test --against` may use
 url.shop-orders = "https://shop-orders-preview.example.workers.dev"
@@ -132,8 +138,7 @@ bynk: `[project]` has no key named `nmae` — did you mean `name`?
 bynk: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
 ```
 
-A table for a feature that is planned but not built (`[deploy]`) gets the same
-error, naming the issue that tracks the feature, so it can't read as working. The language server doesn't refuse
+The language server doesn't refuse
 a manifest: it reads the `[paths]`, `[fmt]` and `[lsp]` it needs and ignores
 the rest, so run `bynk check` to see what is wrong with one.
 
@@ -573,6 +578,33 @@ is an error.
 generated `wrangler.toml`. It must be `true` or `false`; anything else is an
 error. A deployment environment inherits it, so `bynk deploy --env` doesn't
 repeat it.
+
+## `[deploy]` and `[dev]`
+
+Where a `Postgres` instance (`capability Main = Postgres`) gets its connection
+string. A connection string is a secret and `bynk.toml` is committed, so neither
+table holds one: each names an **environment variable** to read it from, and a
+string written in place of a name is refused (without being printed). `Main` is the
+capability's name.
+
+```toml
+[deploy.hyperdrive.Main]
+connection_env = "MAIN_DATABASE_URL"
+config_id = { production = "0123456789abcdef0123456789abcdef" }
+
+[dev.hyperdrive.Main]
+connection_env = "MAIN_LOCAL_DATABASE_URL"
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `connection_env` | `[deploy.hyperdrive.<Capability>]` | string | The environment variable `bynk deploy` reads the connection string from, to make or update the Hyperdrive config. Required for an environment with no `config_id`. |
+| `config_id` | `[deploy.hyperdrive.<Capability>]` | table of strings | The id of a config that already exists, by deployment environment (`default`, or an `--env` name). That environment adopts it and needs no connection string. |
+| `connection_env` | `[dev.hyperdrive.<Capability>]` | string | The environment variable `bynk dev` reads the local connection string from, and sets as `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>` on that Worker's `wrangler dev`. |
+
+An entry needs a `connection_env`, a `config_id`, or both. See [Deploy to
+Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)
+and [Run locally](/book/guides/projects-build-and-deployment/run-locally/#a-local-postgres-database).
 
 ## `[unstable]`
 

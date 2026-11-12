@@ -134,6 +134,35 @@ nothing, because a migration runs once, by name: add a new file instead.
 `bynk dev` points out such an edit only for a file it applied in the same
 session; after a restart it can't tell. With `-- --remote` nothing is applied.
 
+## A local Postgres database
+
+`wrangler dev` does not reach Hyperdrive: a [`Postgres`
+instance](/book/reference/bynk-capabilities/#postgres-databases-postgres)
+(`capability Main = Postgres`) connects to a database of your own. Name the
+environment variable that holds its connection string in `bynk.toml`, per
+capability:
+
+```toml
+[dev.hyperdrive.Main]
+connection_env = "MAIN_LOCAL_DATABASE_URL"
+```
+
+```sh
+export MAIN_LOCAL_DATABASE_URL="postgres://postgres:postgres@localhost:5432/shop"
+bynk dev
+```
+
+`bynk dev` reads the variable and sets
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_MAIN` (the capability's
+binding, `HYPERDRIVE_<NAME>`) on that Worker's `wrangler dev`, and on nothing else.
+The string is not written to `bynk.toml`, a file under the build directory, an
+argument or a log. A variable `bynk.toml` names but the environment lacks stops
+`bynk dev` before it serves, naming the variable and the capability. A `Postgres`
+instance with no `[dev.hyperdrive]` entry is left to
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>` already in your
+environment, and `bynk dev` warns when neither is there. Under `-- --remote` the
+Worker uses the account's config and no local string applies.
+
 ## Debugging the workers (`--inspect`)
 
 `bynk dev --inspect` serves with the V8 inspector enabled, so you can attach a

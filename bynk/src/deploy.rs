@@ -48,6 +48,7 @@ use bynk_emit::emitter::wrangler::KV_NAMESPACE_ID_PLACEHOLDER;
 mod config;
 mod facts;
 mod graph;
+mod hyperdrive;
 mod ledger;
 mod linked;
 mod pins;

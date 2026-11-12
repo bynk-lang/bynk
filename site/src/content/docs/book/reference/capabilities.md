@@ -352,9 +352,9 @@ on it unchanged.
   `[[send_email]]`, whose senders `bynk deploy` checks and never configures
   ([Outbound email](/book/reference/bynk-capabilities/#outbound-email-email)).
   `Postgres` takes none: it binds as `HYPERDRIVE_<NAME>`, a `[[hyperdrive]]`
-  entry whose `id` is a placeholder until the Hyperdrive configuration exists,
-  and `bynk deploy` does not create it yet
-  ([Postgres databases](/book/reference/bynk-capabilities/#postgres-databases-postgres)).
+  entry whose `id` is a placeholder `bynk deploy` replaces with the Hyperdrive
+  configuration it makes from a connection string in an environment variable
+  `bynk.toml` names ([Postgres databases](/book/reference/bynk-capabilities/#postgres-databases-postgres)).
   `EdgeCache` takes none, and a context declares at most one
   (`bynk.cloudflare.edge_cache_duplicate`): it turns on the Worker's edge cache
   and has no binding ([Edge caching](/book/reference/bynk-capabilities/#edge-caching-edgecache)).

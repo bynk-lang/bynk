@@ -6,5 +6,5 @@ compatibility_flags = ["global_fetch_strictly_public"]
 
 [[hyperdrive]]
 binding = "HYPERDRIVE_MAIN"
-id = "<HYPERDRIVE_MAIN_ID>" # replace with the id from `wrangler hyperdrive create`
+id = "<HYPERDRIVE_MAIN_ID>" # set at deploy time
 
