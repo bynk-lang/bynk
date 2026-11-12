@@ -235,8 +235,8 @@ or a missing parameter shows in the editor instead of as a `PgFailed` on the fir
 request:
 
 ```bynk,fragment
-Main.all("selec name from orders", [])                      // warning: bynk.postgres.sql_invalid
-Main.all("select name from orders where id = $1", [])       // error: bynk.postgres.sql_param_count
+let _ <- Main.all("selec name from orders", [])                      // warning: bynk.postgres.sql_invalid
+let _ <- Main.all("select name from orders where id = $1", [])       // error: bynk.postgres.sql_param_count
 ```
 
 It does not check names against your tables: Bynk does not own the schema. Without
