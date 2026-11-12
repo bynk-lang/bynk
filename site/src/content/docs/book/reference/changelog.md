@@ -28,6 +28,8 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.576.2** | `bynk revert` recognises a rollback as Cloudflare reports it (trigger `deployment`), so a second revert no longer goes back to the release just left |
+| **v0.576.1** | `MySql.run` answers `MySqlFailed` for an `insertId` or row count past 2^53, where it read as `0` |
 | **v0.576.0** | A constant of the exact base type is accepted in `@ttl`, `@retain`, `@cache(maxAge:, immutable:)`, `@limit`, `@schema`, `@raw(contentType:)` and `@example` |
 | **v0.575.0** | A `String` constant bound to a literal is accepted as `@name`'s argument, through one resolution pass shared with the SQL rule |
 | **v0.574.1** | The repository's own corpus, spec §5.5, the guides and the reference describe `e.detach()` and the deprecated `~>` |
