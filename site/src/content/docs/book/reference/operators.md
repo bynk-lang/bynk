@@ -15,7 +15,7 @@ title: Operators & built-ins
 | `is` | binary | sum value + pattern | `Bool` | variant test, may bind ([guide](/book/guides/type-system/narrow-with-is/)) |
 | `?` | postfix | `Result` | unwraps `Ok` | propagates `Err`; only in a `Result`-returning fn |
 | `<-` | bind | `Effect[T]` | `T` | sequences an effect in a `let` |
-| `~>` | prefix | `Effect[()]` | statement | asynchronous (fire-and-forget) send; the reply is discarded, so it is restricted to `Effect[()]`, and not allowed in an agent handler ([guide](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/)) |
+| `~>` | prefix | `Effect[()]` | statement | **deprecated** asynchronous send, rewritten by `bynk check --fix` to `do e.detach()`; restricted to `Effect[()]`, and not allowed in an agent handler ([guide](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/)) |
 
 There is no string concatenation operator: `+` requires numeric operands.
 

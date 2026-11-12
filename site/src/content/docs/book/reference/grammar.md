@@ -2177,10 +2177,11 @@ formatter drops them (#2654).
 
 {{#grammar effect_send_stmt}}
 
-Sends an effect asynchronously without awaiting its reply: `~> effect`. The
-caller does not wait and binds nothing; legal only when the reply is `Effect[()]`
-(see the error gate below). Contrast `let _ <- effect`, which awaits the reply
-and discards it.
+**Deprecated** (#3437): write `do effect.detach()`; `bynk check --fix` rewrites
+each one, and the statement is removed in the next release. Sends an effect
+asynchronously without awaiting its reply: `~> effect`. The caller does not wait
+and binds nothing; legal only when the reply is `Effect[()]` (see the error gate
+below). Contrast `let _ <- effect`, which awaits the reply and discards it.
 
 **Static semantics.**
 {{#grammar-semantics effect_send_stmt}}
