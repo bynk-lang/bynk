@@ -1620,8 +1620,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.effect.do_discards_result",
-        blurb: "`do e` awaits an effect and discards what it returns, which is fine for a unit or an ordinary value but not for a `Result`: an `Err` dropped this way is lost without a trace. Bind it and handle the error with `let r <- e` and a `match` (or `?`). If dropping the outcome is really what you want, write `let _ <- e`, which is legal and keeps the discard visible in the source. A type alias for a `Result` is refused too. `do` on a plain value is `bynk.effect.do_on_non_effect`.",
-        example: "fn send() -> Effect[Result[Int, Text]] {\n    Effect.pure(Ok(1))\n}\n\nfn run() -> Effect[()] {\n    do send()                    // ✗ would silently drop an `Err`\n}\n\nfn run() -> Effect[()] {\n    let _ <- send()              // ✓ the discard is written out\n    Effect.pure(())\n}",
+        blurb: "`do e` awaits an effect and discards what it returns, which is fine for a unit or an ordinary value but not for a `Result`: an `Err` dropped this way is lost without a trace. Bind it and handle the error with `let r <- e` and a `match` (or `?`). If dropping the outcome is really what you want, write `let _ <- e`, which is legal and keeps the discard visible in the source. `do` on a plain value is `bynk.effect.do_on_non_effect`.",
+        example: "fn send() -> Effect[Result[Int, String]] {\n    Effect.pure(Ok(1))\n}\n\nfn run() -> Effect[()] {\n    do send()                    // ✗ would silently drop an `Err`\n}\n\nfn run() -> Effect[()] {\n    let _ <- send()              // ✓ the discard is written out\n    Effect.pure(())\n}",
         page: "/book/guides/effects-and-capabilities/understand-the-capability-model",
         anchor: "why-effects-are-gated",
     },

@@ -273,8 +273,6 @@ mod system {
     mod cli_rooting;
     #[path = "commons_type_in_capability_behaviour.rs"]
     mod commons_type_in_capability_behaviour;
-    #[path = "do_valued_fault_behaviour.rs"]
-    mod do_valued_fault_behaviour;
     #[path = "compatibility_flags_cli.rs"]
     mod compatibility_flags_cli;
     #[path = "compile_esm.rs"]
@@ -295,6 +293,8 @@ mod system {
     mod debug_inspect;
     #[path = "deterministic_diagnostic_order_behaviour.rs"]
     mod deterministic_diagnostic_order_behaviour;
+    #[path = "do_valued_fault_behaviour.rs"]
+    mod do_valued_fault_behaviour;
     #[path = "doc_examples_check_behaviour.rs"]
     mod doc_examples_check_behaviour;
     #[path = "embed_check_behaviour.rs"]

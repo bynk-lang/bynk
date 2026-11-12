@@ -1257,8 +1257,8 @@ MUST occur in an effectful position (`bynk.effect.do_in_pure_context`) and MUST
 be applied to an `Effect[T]` (`bynk.effect.do_on_non_effect`). Unlike a send,
 the effect *is* awaited and joins the enclosing computation, so a fault in it
 rejects the enclosing handler exactly as for `let x <- e`. `do e` is `let _ <- e`
-for every `T` that is not a `Result`. When `T` is a `Result` (after any type alias
-is resolved) the statement is refused (`bynk.effect.do_discards_result`): an
+for every `T` that is not a `Result`. When `T` is a `Result` (including one reached by instantiating a generic
+callee) the statement is refused (`bynk.effect.do_discards_result`): an
 `Err` must not be dropped without a visible spelling, and the explicit
 `let _ <- e` remains legal. In a generic body an opaque type parameter `T` is
 accepted, since the checker cannot know that a caller will instantiate it with a

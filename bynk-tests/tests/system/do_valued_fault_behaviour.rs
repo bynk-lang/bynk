@@ -34,8 +34,8 @@ fn fault_in_discarded_valued_do_rejects_handler() {
         eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
         return;
     }
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/behaviour/do_valued_fault");
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/behaviour/do_valued_fault");
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("do-valued-fault")
         .join("out");
