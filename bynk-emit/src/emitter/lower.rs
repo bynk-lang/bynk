@@ -2510,26 +2510,39 @@ fn lower_cookie_field_call(
     let f = body.fields.iter().find(|f| f.name.name == field)?;
     let name = escape_ts_string(&f.wire_name().unwrap_or_else(|| f.name.name.clone()));
     if expire {
-        return Some(format!(
-            "({{ name: \"{name}\", value: \"\", maxAge: Some(0), expires: Some(0) }})"
-        ));
+        return Some(typed_cookie_literal(&name, "\"\"", "Some(0)", "Some(0)"));
     }
     let leaf = match &f.type_ref {
         TypeRef::Option(inner, _) => inner.as_ref(),
         other => other,
     };
     let kind = crate::emitter::workers_entry::query_leaf_kind(leaf, types, false);
-    let value = pre.lower(args.first()?, cx);
-    let text = match kind {
-        "int" | "bool" => format!("String({value})"),
-        "enum" => format!("({value}).tag"),
-        "decimal" => {
-            cx.note_decimal("__bynkDecimalToString");
-            format!("__bynkDecimalToString({value})")
-        }
-        _ => value,
-    };
-    Some(format!("({{ name: \"{name}\", value: {text} }})"))
+    let mut value = pre.lower(args.first()?, cx);
+    if kind == "decimal" {
+        // A `Decimal` is its rendered text on the wire; the runtime helper takes it as such.
+        cx.note_decimal("__bynkDecimalToString");
+        value = format!("__bynkDecimalToString({value})");
+    }
+    // The helper rides the cookie-helper import group (`SESSION_COOKIE_RUNTIME_IMPORTS`).
+    cx.note_session_cookie();
+    let text = format!("__cookieValue(\"{kind}\", {value})");
+    Some(typed_cookie_literal(
+        &name,
+        &text,
+        "{ tag: \"None\" as const }",
+        "{ tag: \"None\" as const }",
+    ))
+}
+
+/// #3446: the `Cookie` record literal of a typed write, with every attribute the record's
+/// defaults give (the router and `serialiseCookie` read them all: they apply no defaults of their
+/// own), as a hand-written `Cookie { name, value }` lowers.
+fn typed_cookie_literal(name: &str, value: &str, max_age: &str, expires: &str) -> String {
+    format!(
+        "({{ name: \"{name}\", value: {value}, maxAge: {max_age}, expires: {expires}, \
+         domain: {{ tag: \"None\" as const }}, path: \"/\", secure: true, httpOnly: true, \
+         sameSite: {{ tag: \"Lax\" as const }}, partitioned: false }})"
+    )
 }
 
 /// Lower a cross-context capability call (`B.Cap.op(…)`) or service call, or `None` when the call is not one. Moved out of
