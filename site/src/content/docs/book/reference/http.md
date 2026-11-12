@@ -423,7 +423,9 @@ handler runs:
 type SessionCookies = {
   @name("__Host-sid") sid: Option[Token],
 }
+```
 
+```bynk,fragment
 on GET("/me") (cookies: SessionCookies) -> Effect[HttpResult[String]] by v: Visitor {
   match cookies.sid {
     Some(t) => Ok("\(t)")
