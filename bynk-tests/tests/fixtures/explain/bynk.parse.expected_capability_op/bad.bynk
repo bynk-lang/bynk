@@ -1,0 +1,5 @@
+context shop
+
+capability Clock {
+    now() -> Effect[Int]
+}

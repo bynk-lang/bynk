@@ -635,8 +635,8 @@ There are **849** codes in total.
 | [`bynk.parse.doc_block_contains_code`](/book/spec/lexical-grammar/#332-doc-blocks) | A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation. |  | — |
 | [`bynk.parse.duplicate_cors`](/book/reference/http/#cors) | A service declares more than one `cors { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.parse.duplicate_json`](/book/reference/http/#json-for-non-bynk-clients) | A service declares more than one `json { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.duplicate_limits` | A service declares more than one `limits { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
-| `bynk.parse.duplicate_security` | A service declares more than one `security { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.parse.duplicate_limits`](/book/reference/http/#request-body-limits) | A service declares more than one `limits { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
+| [`bynk.parse.duplicate_security`](/book/reference/http/#security-headers) | A service declares more than one `security { }` policy. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.parse.empty_agent`](/book/reference/agents/#declaration) | An `agent` body is empty. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | [`bynk.parse.empty_capability`](/book/reference/capabilities/#declaring-a-capability) | A `capability` body is empty. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.parse.empty_interpolation`](/book/spec/lexical-grammar/#322a-string_interpolation) | An interpolation hole `\(…)` contains no expression. |  | — |
@@ -645,19 +645,19 @@ There are **849** codes in total.
 | [`bynk.parse.event_pattern_empty`](/book/guides/events/understand-events/#filtering-delivery-with-a-pattern) | A `from Events(E { ... })` subscription pattern listed no fields — use `from Events(E)` (no braces) for an unfiltered subscription. |  | — |
 | [`bynk.parse.expected_agent_key`](/book/reference/agents/#declaration) | Expected a `key` declaration in an agent. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
 | [`bynk.parse.expected_agent_storage`](/book/reference/agents/#declaration) | An agent declares no storage — it has no `store` fields. |  | — |
-| `bynk.parse.expected_base_type` | Expected a base type. | [`base_type`](/book/reference/grammar/#rule-base_type) | — |
-| `bynk.parse.expected_capability_op` | Expected a capability operation. | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
-| `bynk.parse.expected_expression` | Expected an expression. |  | — |
-| `bynk.parse.expected_handler` | Expected a handler. | [`handler`](/book/reference/grammar/#rule-handler) | — |
-| `bynk.parse.expected_item` | Expected a declaration. |  | — |
-| `bynk.parse.expected_predicate` | Expected a refinement predicate. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.parse.expected_provider_op` | Expected a provider operation. | [`provider_op`](/book/reference/grammar/#rule-provider_op) | — |
-| `bynk.parse.expected_token` | Expected a specific token. |  | — |
-| `bynk.parse.expected_type` | Expected a type. |  | — |
+| [`bynk.parse.expected_base_type`](/book/reference/grammar/#rule-sum_type) | Expected a base type. | [`base_type`](/book/reference/grammar/#rule-base_type) | — |
+| [`bynk.parse.expected_capability_op`](/book/reference/grammar/#rule-capability_op) | Expected a capability operation. | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
+| [`bynk.parse.expected_expression`](/book/reference/grammar/#rule-record_construction) | Expected an expression. |  | — |
+| [`bynk.parse.expected_handler`](/book/reference/grammar/#rule-handler) | Expected a handler. | [`handler`](/book/reference/grammar/#rule-handler) | — |
+| [`bynk.parse.expected_item`](/book/reference/grammar/#rule-source_file) | Expected a declaration. |  | — |
+| [`bynk.parse.expected_predicate`](/book/reference/refined-types/#predicates) | Expected a refinement predicate. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
+| [`bynk.parse.expected_provider_op`](/book/reference/grammar/#rule-provider_op) | Expected a provider operation. | [`provider_op`](/book/reference/grammar/#rule-provider_op) | — |
+| [`bynk.parse.expected_token`](/book/reference/grammar/#rule-fn_decl) | Expected a specific token. |  | — |
+| [`bynk.parse.expected_type`](/book/reference/grammar/#rule-_type_ref) | Expected a type. |  | — |
 | `bynk.parse.expected_unit_header` | Expected a `commons` or `context` header. |  | — |
 | [`bynk.parse.expected_visibility`](/book/reference/grammar/#rule-exports_decl) | Expected a visibility keyword. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
 | [`bynk.parse.exports_after_decls`](/book/spec/syntactic-grammar/) | `exports` appears after other declarations. | [`exports_decl`](/book/reference/grammar/#rule-exports_decl) | — |
-| `bynk.parse.extra_tokens` | Unexpected tokens after an otherwise complete construct. |  | — |
+| [`bynk.parse.extra_tokens`](/book/reference/grammar/#rule-source_file) | Unexpected tokens after an otherwise complete construct. |  | — |
 | [`bynk.parse.generic_arg_count`](/book/reference/types/#built-in-generic-types) | Wrong number of generic type arguments. | [`generic_type_ref`](/book/reference/grammar/#rule-generic_type_ref) | — |
 | [`bynk.parse.handler_in_agent`](/book/reference/agents/#declaration) | A protocol handler (`on GET`/`schedule`/`message`) was declared in an agent. | [`handler`](/book/reference/grammar/#rule-handler) | — |
 | [`bynk.parse.invariant_after_handler`](/book/reference/agent-invariants/#declaration) | An `invariant` was declared after a handler; invariants precede handlers. |  | — |
@@ -672,8 +672,8 @@ There are **849** codes in total.
 | [`bynk.parse.list_rest_not_last`](/book/reference/types/#list-patterns) | A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available. | [`list_pattern`](/book/reference/grammar/#rule-list_pattern) | — |
 | [`bynk.parse.malformed_float_literal`](/book/spec/lexical-grammar/#321a-float_literal) | A float literal is missing a digit on one side of the `.` (`1.`, `.5`). | [`float_literal`](/book/reference/grammar/#rule-float_literal) | — |
 | [`bynk.parse.match_ends_block`](/book/guides/type-system/match/#flatten-a-staircase) | A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow. | [`block`](/book/reference/grammar/#rule-block) | — |
-| `bynk.parse.migrate_after_handler` | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
-| `bynk.parse.migrate_item` | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
+| [`bynk.parse.migrate_after_handler`](/book/reference/agents/#migrations) | A `migrate` step is declared after an agent handler; migration steps precede the handlers. |  | — |
+| [`bynk.parse.migrate_item`](/book/reference/agents/#migrations) | A `migrate` step's body holds something other than `field := value`, `let` or `drop field`. |  | — |
 | [`bynk.parse.multiple_docs`](/book/spec/static-semantics/#one-doc-per-target) | A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block. |  | — |
 | `bynk.parse.nesting_too_deep` | An expression or type nests deeper than the parser's fixed limit. |  | — |
 | [`bynk.parse.no_remainder_operator`](/book/reference/operators/#remainder) | `%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's). |  | — |
@@ -689,7 +689,7 @@ There are **849** codes in total.
 | [`bynk.parse.transition_after_handler`](/book/reference/agent-invariants/#step-invariants) | A `transition` is declared after an agent handler; step invariants precede the handlers. |  | — |
 | `bynk.parse.unexpected_adapter` | An `adapter` appeared where it is not allowed. |  | — |
 | `bynk.parse.unexpected_context` | A `context` appeared where it is not allowed. | [`context_decl`](/book/reference/grammar/#rule-context_decl) | — |
-| `bynk.parse.unexpected_eof` | Unexpected end of input. |  | — |
+| [`bynk.parse.unexpected_eof`](/book/reference/grammar/#rule-commons_decl) | Unexpected end of input. |  | — |
 | `bynk.parse.unexpected_suite` | A `suite` appeared where it is not allowed. | [`suite_decl`](/book/reference/grammar/#rule-suite_decl) | — |
 | [`bynk.parse.unknown_effect_method`](/book/spec/syntactic-grammar/#4619-effect_pure_expr) | An unknown method on `Effect`. |  | — |
 | [`bynk.parse.unknown_handler_kind`](/book/spec/syntactic-grammar/#442a-handler) | An unknown handler form (expected `call`, an HTTP method, `schedule`, or `message`). | [`handler`](/book/reference/grammar/#rule-handler) | — |

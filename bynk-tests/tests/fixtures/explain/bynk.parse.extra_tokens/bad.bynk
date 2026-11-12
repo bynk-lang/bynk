@@ -1,0 +1,4 @@
+commons demo {
+    fn one() -> Int { 1 }
+}
+}
