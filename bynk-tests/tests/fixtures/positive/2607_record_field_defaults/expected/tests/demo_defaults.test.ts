@@ -77,7 +77,7 @@ async function test_a_written_field_keeps_its_value() {
     type Options = __ns_demo_defaults.Options;
     type Page<T> = __ns_demo_defaults.Page<T>;
     type Retry = __ns_demo_defaults.Retry;
-    const o = { name: "w", count: 9, mode: Mode.Fast, note: None, retry: { tag: "Times", n: 2 }, timeout: { tag: "None" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
+    const o = { name: "w", count: 9, mode: Mode.Fast, note: None, retry: { tag: "Times" as const, n: 2 }, timeout: { tag: "None" as const }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
     if (!(o.count === 9)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:22:10", 589, 601, "expect o.count == 9\n  expected: o.count == 9\n  actual:   " + __bynkShow((o.count)) + " == " + __bynkShow((9))); }
     if (!(__bynkEq(o.mode, Mode.Fast))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:23:10", 611, 630, "expect o.mode == Mode.Fast\n  expected: o.mode == Mode.Fast\n  actual:   " + __bynkShow((o.mode)) + " == " + __bynkShow((Mode.Fast))); }
     if (!(__bynkEq(o.note, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:24:10", 640, 654, "expect o.note == None\n  expected: o.note == None\n  actual:   " + __bynkShow((o.note)) + " == " + __bynkShow((None))); }
@@ -121,7 +121,7 @@ async function test_a_spread_takes_unwritten_fields_from_its_base__not_the_defau
     type Options = __ns_demo_defaults.Options;
     type Page<T> = __ns_demo_defaults.Page<T>;
     type Retry = __ns_demo_defaults.Retry;
-    const base = { name: "b", count: 5, mode: { tag: "Careful" }, retry: { tag: "Times", n: 2 }, timeout: { tag: "None" }, note: { tag: "Some", value: "default note" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
+    const base = { name: "b", count: 5, mode: { tag: "Careful" as const }, retry: { tag: "Times" as const, n: 2 }, timeout: { tag: "None" as const }, note: { tag: "Some" as const, value: "default note" }, tags: ["a"], meta: new globalThis.Map(), seen: new globalThis.Set(), inner: { a: 7, label: "inner" } };
     const o = { ...base, name: "s" };
     if (!(o.count === 5)) { throw __bynkExpectFailure("tests/demo/defaults.bynk:35:10", 954, 966, "expect o.count == 5\n  expected: o.count == 5\n  actual:   " + __bynkShow((o.count)) + " == " + __bynkShow((5))); }
     if (!(o.name === "s")) { throw __bynkExpectFailure("tests/demo/defaults.bynk:36:10", 976, 989, "expect o.name == \"s\"\n  expected: o.name == \"s\"\n  actual:   " + __bynkShow((o.name)) + " == " + __bynkShow(("s"))); }
@@ -213,7 +213,7 @@ async function test_a_generic_record_s_defaults_hold_at_an_instantiation() {
     type Options = __ns_demo_defaults.Options;
     type Page<T> = __ns_demo_defaults.Page<T>;
     type Retry = __ns_demo_defaults.Retry;
-    const built: Page<number> = { note: "p", items: [], next: { tag: "None" } };
+    const built: Page<number> = { note: "p", items: [], next: { tag: "None" as const } };
     if (!(__bynkEq(built.items, []))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:62:10", 1729, 1746, "expect built.items == []\n  expected: built.items == []\n  actual:   " + __bynkShow((built.items)) + " == " + __bynkShow(([]))); }
     if (!(__bynkEq(built.next, None))) { throw __bynkExpectFailure("tests/demo/defaults.bynk:63:10", 1756, 1774, "expect built.next == None\n  expected: built.next == None\n  actual:   " + __bynkShow((built.next)) + " == " + __bynkShow((None))); }
     const p = decodedPage("{\"items\":[1,2]}");

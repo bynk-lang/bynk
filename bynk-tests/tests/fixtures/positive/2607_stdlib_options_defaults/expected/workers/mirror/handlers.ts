@@ -21,7 +21,7 @@ export function request(url: string): Request {
 
 export const plain = {
   async call(url: string, deps: { Fetch: bynk.Fetch }): globalThis.Promise<number> {
-    const res = await deps.Fetch.sendWith(request(url), { timeout: { tag: "None" }, redirect: { tag: "Follow" } });
+    const res = await deps.Fetch.sendWith(request(url), { timeout: { tag: "None" as const }, redirect: { tag: "Follow" as const } });
     switch (res.tag) {
       case "Ok": {
         const r = res.value;
@@ -37,7 +37,7 @@ export const plain = {
 
 export const bounded = {
   async call(url: string, deps: { Fetch: bynk.Fetch }): globalThis.Promise<number> {
-    const res = await deps.Fetch.sendWith(request(url), { timeout: Some(5000), redirect: { tag: "Follow" } });
+    const res = await deps.Fetch.sendWith(request(url), { timeout: Some(5000), redirect: { tag: "Follow" as const } });
     switch (res.tag) {
       case "Ok": {
         const r = res.value;

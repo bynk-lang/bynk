@@ -16,7 +16,7 @@ export const Login = {
 };
 
 export function session(id: string): Cookie {
-  return { name: "__Host-sid", value: id, maxAge: Some(1800000), expires: { tag: "None" }, domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false };
+  return { name: "__Host-sid", value: id, maxAge: Some(1800000), expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false };
 }
 
 export const api = {
@@ -27,13 +27,13 @@ export const api = {
     return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (session("abc"))] }))(HttpResult.SeeOther("/home"));
   },
   async http_POST_prefs(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "lang", value: "fr", maxAge: Some(86400000), expires: { tag: "None" }, domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false })] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "theme", value: "dark", path: "/app", maxAge: { tag: "None" }, expires: { tag: "None" }, domain: { tag: "None" }, secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false })] }))(HttpResult.NoContent));
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "lang", value: "fr", maxAge: Some(86400000), expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false })] }))(((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "theme", value: "dark", path: "/app", maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false })] }))(HttpResult.NoContent));
   },
   async http_POST_logout(deps: {}): globalThis.Promise<HttpResult<void>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), { ...({ name: "__Host-sid", value: "", maxAge: { tag: "None" }, expires: { tag: "None" }, domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false }), value: "", maxAge: Some(0), expires: Some(0) }] }))(HttpResult.NoContent);
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), { ...({ name: "__Host-sid", value: "", maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false }), value: "", maxAge: Some(0), expires: Some(0) }] }))(HttpResult.NoContent);
   },
   async http_POST_bad(body: Login, deps: {}): globalThis.Promise<HttpResult<void>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "sid", value: body.user, maxAge: { tag: "None" }, expires: { tag: "None" }, domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false })] }))(HttpResult.NoContent);
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "sid", value: body.user, maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false })] }))(HttpResult.NoContent);
   },
 };
 

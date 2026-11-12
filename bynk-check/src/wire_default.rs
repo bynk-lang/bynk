@@ -547,6 +547,10 @@ fn empty_collection(init: &Expr, collection: &str) -> Result<(), DefaultReason> 
 /// has at runtime (`{ tag: … }` sums and `Option`/`Result`, a real `Map`/`Set`)
 /// rather than its wire JSON.
 ///
+/// Each tag is written `as const`: an unannotated `const x = { … }` in a test
+/// body would otherwise widen `tag` to `string`, and the literal would no longer
+/// be assignable to its `Option`/`Result`/sum type (#3404).
+///
 /// It is self-contained on purpose: a literal may build a record declared in
 /// another unit (`FetchOptions` from `bynk`), whose default names values
 /// (`Redirect.Follow`) the literal's own module never imports. Writing each
@@ -626,10 +630,10 @@ fn value_in(
             }
         }
         TypeRef::Option(inner, _) => match &init.kind {
-            ExprKind::None => Ok("{ tag: \"None\" }".to_string()),
+            ExprKind::None => Ok("{ tag: \"None\" as const }".to_string()),
             ExprKind::Some(e) => {
                 let v = value_in(e, inner, types, cx)?;
-                Ok(format!("{{ tag: \"Some\", value: {v} }}"))
+                Ok(format!("{{ tag: \"Some\" as const, value: {v} }}"))
             }
             _ => Err(DefaultReason::from(
                 "an `Option` field default must be `Some(...)` or `None`".to_string(),
@@ -638,11 +642,11 @@ fn value_in(
         TypeRef::Result(ok, err, _) => match &init.kind {
             ExprKind::Ok(e) => {
                 let v = value_in(e, ok, types, cx)?;
-                Ok(format!("{{ tag: \"Ok\", value: {v} }}"))
+                Ok(format!("{{ tag: \"Ok\" as const, value: {v} }}"))
             }
             ExprKind::Err(e) => {
                 let v = value_in(e, err, types, cx)?;
-                Ok(format!("{{ tag: \"Err\", error: {v} }}"))
+                Ok(format!("{{ tag: \"Err\" as const, error: {v} }}"))
             }
             _ => Err(DefaultReason::from(
                 "a `Result` field default must be `Ok(...)` or `Err(...)`".to_string(),
@@ -690,7 +694,7 @@ fn value_sum(
     cx: Cx<'_>,
 ) -> Result<String, DefaultReason> {
     let (variant, args) = sum_default_parts(sum_name, variants, init)?;
-    let mut parts = vec![format!("tag: \"{}\"", variant.0)];
+    let mut parts = vec![format!("tag: \"{}\" as const", variant.0)];
     for ((field, ty), arg) in variant.1.iter().zip(args.iter()) {
         let v = value_in(arg, ty, types, cx)?;
         parts.push(format!("{field}: {v}"));

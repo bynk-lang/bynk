@@ -86,7 +86,7 @@ async function test_a_message_is_accepted() {
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("tests/support.bynk:4:12", 160, 171, "expect r is Accept"); }
     if (!(__bynkEq(r, EmailVerdict.Accept))) { throw __bynkExpectFailure("tests/support.bynk:5:12", 183, 194, "expect r == Accept\n  expected: r == Accept\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((EmailVerdict.Accept))); }
     if (!(!__bynkEq(r, EmailVerdict.Reject("no")))) { throw __bynkExpectFailure("tests/support.bynk:6:12", 206, 223, "expect r != Reject(\"no\")\n  expected: r != Reject(\"no\")\n  actual:   " + __bynkShow((r)) + " != " + __bynkShow((EmailVerdict.Reject("no")))); }

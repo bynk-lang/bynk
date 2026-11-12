@@ -212,7 +212,7 @@ async function test_a_refund_is_forwarded() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "refund", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "refund", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "billing@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:7:12", 422, 458, "expect r is Forward(\"billing@shop.example\")"); }
     return { pass: true };
   } catch (e) {
@@ -228,7 +228,7 @@ async function test_a_rejected_message_carries_the_handler_s_reason() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "spam", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "spam", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "not wanted"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:12:12", 646, 671, "expect r is Reject(\"not wanted\")"); }
     return { pass: true };
   } catch (e) {
@@ -244,7 +244,7 @@ async function test_a_message_with_no_DMARC_verdict_is_accepted_without_a_reply(
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:17:12", 872, 883, "expect r is Accept"); }
     return { pass: true };
   } catch (e) {
@@ -261,7 +261,7 @@ async function test_a_message_Cloudflare_authenticated_is_answered() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const signed: ReadonlyMap<string, string> = new globalThis.Map(new globalThis.Map<string, string>()).set("authentication-results", "mx.cloudflare.net; dmarc=pass header.from=b.example");
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed, messageId: "", text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed, messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     void (((__d) => {
         switch (__d.tag) {
           case "Reply": {
