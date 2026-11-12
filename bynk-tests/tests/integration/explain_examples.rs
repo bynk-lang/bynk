@@ -52,6 +52,15 @@
 //! `diagnostics.rs`; a blank line is `\n\`. The layout needs no fixture, so it
 //! is reported even for a code whose fixture fails to load.
 //!
+//! **Target and schema history.** A project-form side is compiled for the
+//! bundle target, with no recorded schema history. Two files at the side's own
+//! root (`bad/`, `good/`; each side has its own) change that, as a negative
+//! fixture's do: `target.txt` holding `workers` compiles it for the Workers
+//! target, `platform.txt` (`node` or `browser`, a fixture with no `bynk.toml`
+//! only) for another platform, and a `bynk.schema.lock` is read as the project's
+//! recorded schema history, so the schema-evolution rules can fire. A code whose
+//! rule needs one of these gives both sides the same file.
+//!
 //! [`Explain::example`]: bynk_syntax::diagnostics::Explain::example
 
 use std::collections::BTreeSet;
@@ -191,11 +200,29 @@ fn errors_of(source: &str, tag: &str) -> Vec<Reported> {
     }
 }
 
+/// How a project-form side is compiled: its `target.txt` (`workers`; the
+/// bundle target when absent), its `platform.txt` (read by the compile) and,
+/// when it has a `bynk.schema.lock`, that recorded schema history. Each is
+/// read from the side's own root (`bad/`, `good/`), as a negative fixture's
+/// are, and a side with none compiles as before.
+fn side_settings(
+    root: &Path,
+) -> (
+    bynk_driver::project::BuildTarget,
+    Option<bynk_driver::project::SchemaLock>,
+) {
+    let schema = root
+        .join("bynk.schema.lock")
+        .is_file()
+        .then(|| bynk_driver::schema_lock::read_only(root).unwrap_or_else(|e| panic!("{e}")));
+    (super::e2e::fixture_target(root), schema)
+}
+
 /// Compile a project tree as the project-mode negative fixtures are, reading
 /// each error's line in the file it is attributed to. The tree is only read.
 fn project_errors(root: &Path) -> Vec<Reported> {
-    let target = bynk_driver::project::BuildTarget::Bundle;
-    let Err(failure) = super::e2e::compile_fixture(root, target) else {
+    let (target, schema) = side_settings(root);
+    let Err(failure) = super::e2e::compile_fixture_with(root, target, schema) else {
         return Vec::new();
     };
     failure
@@ -967,4 +994,23 @@ fn an_error_with_no_source_file_is_reported_as_such() {
     assert_eq!(out.len(), 1, "{out:?}");
     assert!(out[0].contains("no source file to read"), "{out:?}");
     assert!(!out[0].contains("marks `✗`"), "{out:?}");
+}
+
+#[test]
+fn a_side_is_compiled_as_its_own_files_say() {
+    use bynk_driver::project::{BuildTarget, SchemaLock};
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("explain-side-settings");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    // Neither file: the bundle target, no recorded schema history.
+    let (target, schema) = side_settings(&root);
+    assert!(matches!(target, BuildTarget::Bundle));
+    assert!(schema.is_none());
+    // `target.txt` and a `bynk.schema.lock` change both.
+    fs::write(root.join("target.txt"), "workers\n").unwrap();
+    fs::write(root.join("bynk.schema.lock"), "").unwrap();
+    let (target, schema) = side_settings(&root);
+    assert!(matches!(target, BuildTarget::Workers));
+    assert!(matches!(schema, Some(SchemaLock::On { .. })));
+    let _ = fs::remove_dir_all(&root);
 }
