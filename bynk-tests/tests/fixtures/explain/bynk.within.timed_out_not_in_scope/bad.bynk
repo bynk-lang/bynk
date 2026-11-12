@@ -1,0 +1,12 @@
+context demo
+
+capability Pricing {
+    fn quote(id: Int) -> Effect[Int]
+}
+
+service shop {
+    on call(id: Int) -> Effect[Int] given Pricing {
+        let r <- Pricing.quote(id).within(2.seconds)
+        Effect.pure(1)
+    }
+}

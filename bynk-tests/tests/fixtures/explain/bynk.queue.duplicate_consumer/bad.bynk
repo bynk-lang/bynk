@@ -1,0 +1,11 @@
+context demo
+
+service worker from queue("jobs") {
+    on message(message: String) -> Effect[QueueResult] {
+        Effect.pure(Ack)
+    }
+
+    on message(message: String) -> Effect[QueueResult] {
+        Effect.pure(Ack)
+    }
+}
