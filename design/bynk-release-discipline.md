@@ -47,6 +47,10 @@ carries the two things an upgrader needs:
    milestone to this one, written as one coherent upgrade, not the day-by-day
    play-by-play. If a surface was added and then refined across three increments,
    the milestone note describes the surface as it lands, once.
+   *How it is built today:* an increment's `breaking:` pending field is stamped into
+   the Book's [Upgrading](../site/src/content/docs/book/reference/upgrading.md) page,
+   and `cargo xtask release-notes` assembles each release body's "Upgrading from vX"
+   section from it (#3178); a test keeps the page ordered and matched to the changelog.
 2. **Codemods, post-1.0** — the automation for the mechanical part of a breaking
    change. [ADR 0123](decisions/0123-state-block-cutover-and-codemod.md) is the
    per-cutover template: it settled that *pre-1.0*, with the corpus the only Bynk

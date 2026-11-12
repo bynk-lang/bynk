@@ -1568,7 +1568,7 @@ fn doc_block_contains_code(span: Span) -> CompileError {
     .with_note(
         "a line of three or more dashes opens or closes a doc block, so two dash \
          dividers turn the code between them into documentation; for a divider use a \
-         line comment with text, such as `-- Helpers --`, and to show code in a doc \
+         line comment with text, such as `// Helpers`, and to show code in a doc \
          block put it in a Markdown code fence (```)",
     )
 }
@@ -4376,6 +4376,22 @@ mod tests {
                 .any(|e| e.category == "bynk.parse.doc_block_contains_code"),
             "{errs:?}"
         );
+    }
+
+    /// #3378: the divider the note recommends is itself valid source. It once
+    /// suggested a `--` comment, which `bynk.lex.legacy_comment` refuses.
+    #[test]
+    fn the_divider_the_doc_block_note_suggests_parses() {
+        let src =
+            "commons m\n\n--------\nfn helper() -> Int { 1 }\n--------\nfn f() -> Int { 2 }\n";
+        let errs = parse_str(src).unwrap_err();
+        let note = &errs[0].notes[0];
+        let divider = note
+            .split('`')
+            .nth(1)
+            .expect("the note quotes a divider in backticks");
+        let fixed = format!("commons m\n\n{divider}\nfn helper() -> Int {{ 1 }}\n");
+        assert_eq!(strict_codes(&fixed), [] as [&str; 0], "{divider:?}");
     }
 
     /// The orphan shape (a blank line before `fn f`) is the same error, beside
