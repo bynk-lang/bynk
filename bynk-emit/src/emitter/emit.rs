@@ -3054,6 +3054,9 @@ fn seam_identity_ts_type(seam: &ActorSeamIr) -> bynk_ts::TsType {
             "dmarc",
             // #3397: the `DmarcVerdict` union itself, not `{ tag: string }`,
             // so `s.identity.dmarc` passes where a `DmarcVerdict` is expected.
+            // Keep the variants in step with `DmarcVerdict` in
+            // `bynk-std/lib/cloudflare/bynk.cloudflare.bynk` and the runtime's
+            // `email.ts`.
             bynk_ts::TsType::union(
                 ["DmarcPass", "DmarcFail", "DmarcNone"]
                     .into_iter()
