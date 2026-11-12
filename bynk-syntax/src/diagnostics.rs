@@ -4811,7 +4811,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.store.annotation_unsupported",
         blurb: "A storage annotation has a fixed set of kinds it applies to and a meaning that arrives in stages. `@bounded` is recognised on `Queue` and `Log`, but nothing acts on it yet, so it is refused rather than accepted and ignored. Leave it off. To limit a `Log`, use `@retain`, which drops entries older than a period. A known annotation on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
-        example: "store trail: Log[Event] @bounded(100)     // ✗ `@bounded` is not yet supported\n\nstore trail: Log[Event] @retain(30.days)   // ✓ keep 30 days of entries",
+        example: "store trail: Log[Event] @bounded(100)     // ✗ `@bounded` is recognised but has no effect yet\n\nstore trail: Log[Event] @retain(30.days)   // ✓ keep 30 days of entries",
         page: "/book/reference/agents",
         anchor: "storage-annotations",
     },

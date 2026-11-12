@@ -3647,20 +3647,19 @@ fn actor_identity_ty_guarded<'a>(
     }
 }
 
-/// The closed storage-kind catalogue (design notes §10). `Cell` and `Map` are
-/// functional; the rest (`Set`/`Log`/`Queue`/`Cache`) parse and validate as known
-/// kinds but are gated (`bynk.store.kind_unsupported`).
+/// The closed storage-kind catalogue (design notes §10). Every kind is functional
+/// but `Queue`, which parses and validates as a known kind and is refused
+/// (`bynk.store.kind_unsupported`).
 const STORAGE_KINDS: &[&str] = &["Cell", "Map", "Set", "Log", "Queue", "Cache"];
 
 /// The closed storage-annotation registry (ADR 0111 D2/D3): each `@name` with the
-/// storage kind(s) it attaches to and the slice that makes it functional. v0.85
-/// (slice 3a) lands the grammar + registry; every annotation is gated
-/// (`bynk.store.annotation_unsupported`) until its slice — so `functional` is
-/// `false` for all of them here, flipped per-name as later slices land.
+/// storage kind(s) it attaches to. `functional` is whether anything acts on the
+/// annotation: it is `true` for `@ttl`, `@retain` and `@indexed`, and `false`
+/// only for `@bounded`, which is recognised and refused
+/// (`bynk.store.annotation_unsupported`) until it has a meaning.
 struct AnnotationSpec {
     name: &'static str,
     kinds: &'static [&'static str],
-    slice: &'static str,
     functional: bool,
 }
 
@@ -3668,25 +3667,21 @@ const ANNOTATIONS: &[AnnotationSpec] = &[
     AnnotationSpec {
         name: "ttl",
         kinds: &["Cache"],
-        slice: "the Cache slice",
         functional: true,
     },
     AnnotationSpec {
         name: "retain",
         kinds: &["Log"],
-        slice: "the Log slice",
         functional: true,
     },
     AnnotationSpec {
         name: "indexed",
         kinds: &["Map"],
-        slice: "the query-algebra track",
         functional: true,
     },
     AnnotationSpec {
         name: "bounded",
         kinds: &["Queue", "Log"],
-        slice: "the Queue/Log slices",
         functional: false,
     },
 ];
@@ -3694,7 +3689,7 @@ const ANNOTATIONS: &[AnnotationSpec] = &[
 /// Validate a `store` field's annotations against the closed registry (ADR 0111):
 /// an unknown name is `bynk.store.unknown_annotation`; a known name on the wrong
 /// kind is `bynk.store.annotation_kind_mismatch`; a known name on the right kind
-/// whose slice has not landed is `bynk.store.annotation_unsupported`. `head` is
+/// that nothing acts on yet is `bynk.store.annotation_unsupported`. `head` is
 /// the (already known-valid) storage kind of the field.
 fn validate_store_annotations(
     f: &StoreField,
@@ -3742,13 +3737,11 @@ fn validate_store_annotations(
                 CompileError::new(
                     "bynk.store.annotation_unsupported",
                     ann.span,
-                    format!(
-                        "`@{name}` is not yet supported — it lands with {}",
-                        spec.slice
-                    ),
+                    format!("`@{name}` is recognised but has no effect yet"),
                 )
                 .with_note(
-                    "the annotation grammar is in place; its meaning arrives with its slice",
+                    "leave the annotation off; to limit a `Log`, use `@retain`, which drops \
+                     entries older than a period",
                 ),
             );
             continue;
