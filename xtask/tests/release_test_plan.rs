@@ -27,6 +27,12 @@ struct Fixture {
     dir: PathBuf,
 }
 
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
 impl Fixture {
     fn new(tag: &str) -> Self {
         let dir =
@@ -58,7 +64,7 @@ jq -r "$q" "$f"
     fn run(&self, sha: &str, event: &str, id: u32, jobs: &[(&str, &str)]) {
         self.put(
             &format!(
-                "repos/o/r/actions/workflows/ci.yml/runs?head_sha={sha}&event={event}&per_page=1"
+                "repos/o/r/actions/workflows/ci.yml/runs?head_sha={sha}&event={event}&branch=main&per_page=1"
             ),
             &format!(r#"{{"workflow_runs":[{{"id":{id}}}]}}"#),
         );
@@ -107,7 +113,6 @@ jq -r "$q" "$f"
             String::from_utf8_lossy(&out.stderr)
         );
         let text = std::fs::read_to_string(&out_file).unwrap();
-        let _ = std::fs::remove_dir_all(&self.dir);
         Some(text.trim().strip_prefix("matrix=").unwrap().to_string())
     }
 }
@@ -287,5 +292,52 @@ fn a_lookalike_stamp_commit_does_not_borrow_its_parents_runs() {
     );
     if let Some(m) = f.plan("push", "sss") {
         assert_eq!(m, r#"["macos-latest","windows-latest"]"#);
+    }
+}
+
+#[test]
+fn a_failed_job_on_a_stamp_commit_is_not_overridden_by_its_parent() {
+    let f = Fixture::new("stampfail");
+    f.commit(
+        "sss",
+        "chore(stamp): assign version",
+        "bynk-stamp[bot]",
+        "ppp",
+    );
+    f.run("sss", "push", 1, &[(LINUX, "failure"), (SYSTEM, "success")]);
+    f.run(
+        "ppp",
+        "push",
+        2,
+        &[
+            (LINUX, "success"),
+            (SYSTEM, "success"),
+            (MAC, "success"),
+            (WIN, "success"),
+        ],
+    );
+    if let Some(m) = f.plan("push", "sss") {
+        assert_eq!(m, ALL);
+    }
+}
+
+#[test]
+fn an_in_progress_or_cancelled_job_is_not_a_pass() {
+    for (tag, conclusion) in [("inprogress", "null"), ("cancelled", "\"cancelled\"")] {
+        let f = Fixture::new(tag);
+        f.commit("aaa", "feat: x", "someone", "p");
+        f.put(
+            "repos/o/r/actions/workflows/ci.yml/runs?head_sha=aaa&event=push&branch=main&per_page=1",
+            r#"{"workflow_runs":[{"id":1}]}"#,
+        );
+        f.put(
+            "repos/o/r/actions/runs/1/jobs?per_page=100",
+            &format!(
+                r#"{{"jobs":[{{"name":"{LINUX}","conclusion":"success"}},{{"name":"{SYSTEM}","conclusion":"success"}},{{"name":"{MAC}","conclusion":"success"}},{{"name":"{WIN}","conclusion":{conclusion}}}]}}"#
+            ),
+        );
+        if let Some(m) = f.plan("push", "aaa") {
+            assert_eq!(m, r#"["windows-latest"]"#, "{tag}");
+        }
     }
 }

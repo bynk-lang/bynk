@@ -23,6 +23,15 @@
 #     tier. So an OS leg only stands in for the release's leg if Linux passed
 #     those too.
 #
+#     This is a REDUCTION, not only deduplication: the release used to be (with
+#     the nightly) the one gate that ran those tsc/node passes
+#     (tsc_verify, behaviour_fixtures, examples, example_tests_behaviour) on
+#     Windows and macOS, and a release that drops those legs no longer does.
+#     It rests on the same "OS-independent, run on Linux" argument ci.yml's
+#     `ci-os` already does. The nightly still runs the full `ci` profile on all
+#     three OSes. To close the gap instead, also require the latest nightly to
+#     be green on that OS before dropping a non-Linux leg.
+#
 # Which run answers, per job: the commit's `push` run on main, then its
 # `merge_group` run (the queue passes the Linux legs and the push run then
 # skips them). The first run that has the job decides: a leg that ran and did
@@ -56,7 +65,7 @@ fi
 # run's own gating counts as absent.
 job_state() {
   local sha=$1 event=$2 name=$3 run_id
-  run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&event=$event&per_page=1" \
+  run_id="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&event=$event&branch=main&per_page=1" \
     --jq '.workflow_runs[0].id // empty' 2>/dev/null || true)"
   [ -n "$run_id" ] || { echo none; return; }
   gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
