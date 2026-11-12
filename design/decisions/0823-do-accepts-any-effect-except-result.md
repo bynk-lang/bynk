@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `do e` accepts any `Effect[T]` except a `Result`; `bynk.effect.do_discards_result` replaces `bynk.effect.do_requires_unit`
-probes: diagnostic_coverage
----
+# 0823 — `do` accepts any `Effect[T]` except `Result`
 
-## ADR: do-accepts-any-effect-except-result
-title: `do` accepts any `Effect[T]` except `Result`
-summary: Amends ADR 0170 decision B: the `do` gate protects an `Err`, not a valued reply
+- **Status:** Accepted (v0.571)
 
 **Context.** ADR 0170 B limited `do e` to `Effect[()]`, borrowing the gate from `~>` (ADR 0106 D2). For `~>` the gate has a second job, since a send is never awaited. `do` awaits, so a fault still propagates; the gate only guards against dropping an `Err`, a `Result` problem rather than a valued-reply one. Every `Effect[Int]` write or `Effect[Id]` insert paid the `let _ <- e` ceremony ADR 0170 meant to remove. Proposal #3436, accepted.
 
