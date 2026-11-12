@@ -2252,6 +2252,27 @@ fn check_by_clause_contracts(
             .with_note("add a `(body: T)` parameter to the handler"),
         );
     }
+    // #3380: a `Signature` actor computes its HMAC over the whole body before the
+    // handler runs, so the body cannot be a stream the handler reads afterwards.
+    if let Some(params) = params
+        && members
+            .iter()
+            .any(|(_, c)| c.scheme == actors::Scheme::Signature)
+        && let Some(body) = params
+            .iter()
+            .find(|p| p.name.name == "body" && is_byte_stream(&p.type_ref))
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.http.stream_body_signature",
+                body.type_ref.span(),
+                "a `Signature` route cannot take a streamed `body`",
+            )
+            .with_note(
+                "the signature is an HMAC over the whole body, verified before the handler runs; take `body: Bytes` for a signed webhook, or sign the head (a header or the path) and verify the content out of band",
+            ),
+        );
+    }
     // v0.52: sum reachability — a decidable, scheme-level check. No two peers
     // share a scheme (the second is unreachable); a `None` catch-all (`Visitor`)
     // accepts everyone, so it must come last. The compiler does not reason about
@@ -3242,9 +3263,7 @@ fn check_service_decls(
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
     for service in table.services.values() {
-        if let Some(policy) = &service.cors {
-            validate_cors_policy(service, policy, errors);
-        }
+        validate_service_cors(service, errors);
     }
 
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
@@ -4717,6 +4736,94 @@ fn check_agent_decls(
     }
 }
 
+/// A service's CORS checks: its `cors { }` policy (ADR 0159) and, #3329, the
+/// cross-site cookie warning that depends on it.
+fn validate_service_cors(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+    if let Some(policy) = &service.cors {
+        validate_cors_policy(service, policy, errors);
+    }
+    warn_cross_site_cookie_without_credentials(service, errors);
+}
+
+/// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
+/// `from http` service whose handlers attach a `Cookie { … sameSite:
+/// SameSite.Unrestricted … }` (`withCookie`/`clearCookie`) but whose `cors`
+/// policy lacks `credentials: true` (or that has none). The browser withholds
+/// the cookie from credential-less cross-site requests, so it can never return.
+fn warn_cross_site_cookie_without_credentials(
+    service: &ServiceDecl,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        return;
+    }
+    if service.cors.as_ref().is_some_and(|c| c.credentials()) {
+        return;
+    }
+    let mut hit: Option<Span> = None;
+    for handler in &service.handlers {
+        let mut exprs: Vec<&Expr> = Vec::new();
+        for s in &handler.body.statements {
+            bynk_syntax::ast::statement_exprs(s, &mut exprs);
+        }
+        exprs.push(&handler.body.tail);
+        let mut visit = |e: &Expr| {
+            if hit.is_some() {
+                return;
+            }
+            let ExprKind::MethodCall { method, args, .. } = &e.kind else {
+                return;
+            };
+            if method.name != "withCookie" && method.name != "clearCookie" {
+                return;
+            }
+            let Some(arg) = args.first() else { return };
+            let ExprKind::RecordConstruction {
+                type_name, fields, ..
+            } = &arg.kind
+            else {
+                return;
+            };
+            let unrestricted = type_name.name == "Cookie" && fields.iter().any(|f| {
+                f.name.name == "sameSite"
+                    && matches!(
+                        f.value.as_ref().map(|v| &v.kind),
+                        Some(ExprKind::FieldAccess { field, .. }) if field.name == "Unrestricted"
+                    )
+            });
+            if unrestricted {
+                hit = Some(arg.span);
+            }
+        };
+        fn walk(e: &Expr, f: &mut dyn FnMut(&Expr)) {
+            f(e);
+            for c in bynk_syntax::ast::expr_children(e) {
+                walk(c, f);
+            }
+        }
+        for e in exprs {
+            walk(e, &mut visit);
+        }
+        if hit.is_some() {
+            break;
+        }
+    }
+    let Some(span) = hit else { return };
+    errors.push(
+        CompileError::new(
+            "bynk.http.cookie_cross_site_without_credentials",
+            span,
+            format!(
+                "service `{}` sets a `SameSite.Unrestricted` cookie but does not declare `cors {{ credentials: true }}`, so a cross-origin `fetch` can never send it back",
+                service.name.name
+            ),
+        )
+        .with_note(
+            "add `cors { origins: [...], credentials: true }` if a page on another origin must send it back; a cookie used only in cross-site navigations, embeds or SSO callbacks needs no `cors`, and `SameSite.Lax` suits one that need not cross sites",
+        ),
+    );
+}
+
 /// Validate a service's `cors { }` policy (v0.131, ADR 0159). The grammar is
 /// lenient — any `name: value` field parses — so the checker is where the closed
 /// field set, the value shapes, and the spec-mandated wildcard/credentials
@@ -5320,6 +5427,23 @@ fn validate_http_handler(
                 );
             }
         }
+        // #3380: a streamed `body`'s route cannot take a sum of actors either: its
+        // wrapper reads and verifies the body itself.
+        if is_body
+            && is_byte_stream(&p.type_ref)
+            && let Some(by) = handler.by_clause.as_ref().filter(|b| b.is_sum())
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.stream_body_on_sum_route",
+                    by.span,
+                    "a route with a streamed `body` cannot take a sum of actors",
+                )
+                .with_note(
+                    "a multi-actor route reads and verifies the body itself before the handler runs; name one actor, or split the route",
+                ),
+            );
+        }
         if !is_path && !is_body && !is_headers && !is_query && !is_cookies {
             errors.push(
                 CompileError::new(
@@ -5362,7 +5486,7 @@ fn validate_http_handler(
                         method.as_str()
                     ),
                 )
-                .with_note("GET and DELETE requests conventionally carry no body in Bynk v0.9"),
+                .with_note("GET and DELETE requests conventionally carry no body"),
             );
         }
     }
@@ -5845,17 +5969,19 @@ fn validate_handler_annotations(
                     continue;
                 };
                 validate_raw_args(ann, errors);
-                if !matches!(body.type_ref, TypeRef::Base(BaseType::Bytes, _)) {
+                if !matches!(body.type_ref, TypeRef::Base(BaseType::Bytes, _))
+                    && !is_byte_stream(&body.type_ref)
+                {
                     errors.push(
                         CompileError::new(
                             "bynk.http.raw_body_not_bytes",
                             body.type_ref.span(),
                             format!(
-                                "the `body` of a `@raw` handler must be `Bytes`, but it is `{}`",
+                                "the `body` of a `@raw` handler must be `Bytes` or `Stream[Bytes]`, but it is `{}`",
                                 ts_type_ref_display(&body.type_ref),
                             ),
                         )
-                        .with_note("a raw body is handed to the handler as its octets, undecoded"),
+                        .with_note("a raw body is handed to the handler as its octets, undecoded: whole as `Bytes`, or chunk by chunk as a `Stream[Bytes]`"),
                     );
                 }
                 let route_cap = handler.limit_max_body();
@@ -5985,6 +6111,12 @@ fn validate_handler_annotations(
             }
         }
     }
+}
+
+/// #3380: whether `r` is exactly `Stream[Bytes]`, the one stream type a `@raw`
+/// handler's `body` may be.
+pub(crate) fn is_byte_stream(r: &TypeRef) -> bool {
+    matches!(r, TypeRef::Stream(inner, _) if matches!(**inner, TypeRef::Base(BaseType::Bytes, _)))
 }
 
 /// #3276: the body cap above which a `@multipart` route is warned about: a quarter

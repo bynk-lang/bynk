@@ -1,0 +1,38 @@
+suite store.blobs {
+	case "a streamed body reaches the handler chunk by chunk" {
+		let r <- blobs.PUT("/blobs/:name", "a.bin", Stream.of([Bytes.fromUtf8("abc"), Bytes.fromUtf8("de")]))
+		expect r is Ok("a.bin 5")
+	}
+
+	case "an empty body is an empty stream" {
+		let r <- blobs.PUT("/blobs/:name", "empty.bin", Stream.of([Bytes.fromUtf8("")]))
+		expect r is Ok("empty.bin 0")
+	}
+}
+
+suite store.blobs as system {
+	case "a streamed body round-trips through the router" {
+		let r <- blobs.PUT("/blobs/:name", "a.bin", Stream.of([Bytes.fromUtf8("abc"), Bytes.fromUtf8("de")]))
+		expect r is Ok("a.bin 5")
+	}
+
+	case "a body of exactly the cap is delivered whole" {
+		let r <- blobs.PUT("/blobs/:name", "cap.bin", Stream.of([Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567"), Bytes.fromUtf8("01234567")]))
+		expect r is Ok("cap.bin 64")
+	}
+
+	case "a body past the cap is refused on the bytes read, with no content-length to go by" {
+		let r <- blobs.PUT("/blobs/:name", "big.bin", Wire("this body is a good deal longer than sixty-four bytes, which is the service cap"))
+		expect r is Rejected(PayloadTooLarge(_))
+	}
+
+	case "a streamed route refuses another content type" {
+		let r <- blobs.PUT("/zips/:name", "a.zip", Wire("not a zip"))
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a streamed overrun is rendered by on rejected, like any other 413" {
+		let r <- rendered.PUT("/rendered/:name", "big.bin", Wire("this body is a good deal longer than sixty-four bytes, which is the service cap")) by Visitor
+		expect r is Handled(PayloadTooLarge("too_large"))
+	}
+}

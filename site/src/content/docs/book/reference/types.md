@@ -376,7 +376,8 @@ the producer aborts the stream as faults abort handlers.
 A stream's end-to-end uses are [**streamed HTTP responses**](/book/reference/http/#streamed-responses):
 `Streaming(stream)` returns an SSE body consuming a `Stream[String]`, and
 [`RawStreamed(body, contentType)`](/book/reference/http/#streamed-raw-responses)
-a raw body from a `Stream[Bytes]`. A richer
+a raw body from a `Stream[Bytes]`; and [a `@raw` request body](/book/reference/http/#streamed-request-bodies),
+which a handler can receive as a `Stream[Bytes]`. A richer
 combinator vocabulary and live runtime sources are later increments of the
 real-time track.
 

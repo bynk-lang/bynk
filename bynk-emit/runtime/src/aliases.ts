@@ -16,7 +16,7 @@ import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.t
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { BodyTooLarge, applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, isBodyTooLarge, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cookieObject, cookieString, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
 import { makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AnalyticsDataset, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerVersionMetadata } from "./storage.ts";
@@ -72,7 +72,7 @@ export {
   headResponse as __headResponse,
   withPlainJson as __withPlainJson,
   httpResultToResponse as __httpResultToResponse,
-  isBodyTooLarge as __isBodyTooLarge,
+  untilBodyTooLarge as __untilBodyTooLarge,
   invariantViolation as __invariantViolation,
   makeAgent as __makeAgent,
   makeIntegrationDoNamespace as __makeIntegrationDoNamespace,

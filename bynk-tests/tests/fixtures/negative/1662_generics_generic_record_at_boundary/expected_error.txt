@@ -1,2 +1,0 @@
-bynk.generics.generic_record_at_boundary
-`Val[Box[…]]` cannot fabricate a value of a generic type in v0.157

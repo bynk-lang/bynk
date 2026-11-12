@@ -143,7 +143,7 @@
     },
     {
       "code": "bynk.generics.uninferable_type_arg",
-      "summary": "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a."
+      "summary": "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value."
     },
     {
       "code": "bynk.resolve.arity_mismatch",
@@ -924,6 +924,14 @@
     {
       "code": "bynk.http.cache_public_reads_cookies",
       "summary": "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another."
+    },
+    {
+      "code": "bynk.http.cookie_cross_site_without_credentials",
+      "summary": "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning)."
+    },
+    {
+      "code": "bynk.http.cookie_domain_widens",
+      "summary": "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning)."
     },
     {
       "code": "bynk.http.cookie_host_prefix",
@@ -1844,6 +1852,10 @@
     {
       "code": "bynk.val.arity",
       "summary": "`Val[T]` was given the wrong number of pin arguments."
+    },
+    {
+      "code": "bynk.val.generic_type",
+      "summary": "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379."
     },
     {
       "code": "bynk.val.literal_violates",

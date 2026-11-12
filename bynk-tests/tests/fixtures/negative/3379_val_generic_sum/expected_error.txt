@@ -1,0 +1,2 @@
+bynk.val.generic_type
+`Val[Loaded[…]]` cannot fabricate a value of a generic type

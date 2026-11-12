@@ -170,6 +170,20 @@ export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
   return typeof error === "object" && error !== null && (error as { bynkBodyTooLarge?: unknown }).bynkBodyTooLarge === true;
 }
 
+// #3380: awaits a streamed route's handler, telling a body that crossed its cap
+// while the handler was reading it (`tooLarge`) from the handler's own result.
+// Anything else the handler throws is rethrown, for the Worker's fault path.
+export async function untilBodyTooLarge<T>(
+  handled: Promise<T>,
+): Promise<{ readonly tooLarge: true } | { readonly tooLarge: false; readonly value: T }> {
+  try {
+    return { tooLarge: false, value: await handled };
+  } catch (e) {
+    if (isBodyTooLarge(e)) return { tooLarge: true };
+    throw e;
+  }
+}
+
 // #3380: the request body of a streamed `@raw` route, as the `Stream[Bytes]`
 // the handler receives (an `AsyncIterable<Uint8Array>`, ADR 0128 D6).
 //
@@ -182,8 +196,9 @@ export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
 //   `readCapped` does. The pull that crosses `cap` cancels the reader and
 //   throws `BodyTooLarge`.
 // - Released. `return()` (an early stop, a faulted sink) cancels the reader once
-//   reading has begun. A stream that is never read is never started: the router
-//   cancels the body itself when the handler returns.
+//   reading has begun. A stream that is never read is never started, and an
+//   unread body is released by the platform when the request ends (checked on
+//   workerd for #3380).
 // - Single-pass is not enforced here: the consumer claims it (`claimStream`),
 //   as the R2 and Fetch bindings' streams are (ADR 0665 C).
 export async function* requestBodyStream(request: Request, cap: number): AsyncGenerator<Uint8Array, void, undefined> {
