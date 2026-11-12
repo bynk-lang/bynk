@@ -61,8 +61,8 @@ fn halves(d: Decimal) -> Bool {
   never a float. `min`, `max` and `sortBy` take one too, as `Decimal` is `Ord`.
   `average(key)` does not (`bynk.query.sum_needs_numeric`): a mean is a division,
   and a `Decimal` division needs a scale and a rounding mode that `average` has no
-  place for. Sum the key, then divide by the count: `total.div(n, 2,
-  RoundingMode.HalfEven)`.
+  place for. Sum the key, then divide by the count as a `Decimal`:
+  `total.div(Decimal.fromInt(n), 2, RoundingMode.HalfEven)`.
 - **`/` is not defined.** A quotient has no exact decimal answer, so division
   states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)`
   (`bynk.types.decimal_division_unscaled`). A zero divisor faults, as `Int`

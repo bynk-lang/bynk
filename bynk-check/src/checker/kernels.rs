@@ -220,7 +220,7 @@ fn require_numeric(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
     // scale and a rounding mode that `average` has no place for.
     let note = if key.base(tys) == Some(BaseType::Decimal) {
         "averaging a `Decimal` needs an explicit scale and rounding mode: `sum` the key, then \
-         `div(n, scale, mode)` by the count"
+         `div(Decimal.fromInt(n), scale, mode)` by the count"
     } else if method.ends_with(".sum") {
         "numeric keys are `Int`, `Float`, `Duration` and `Decimal` (and refined types over them)"
     } else {

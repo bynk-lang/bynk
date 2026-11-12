@@ -197,6 +197,8 @@ fn average_over_a_decimal_key_says_why_and_points_at_sum_then_div() {
         "notes: {:?}",
         e.notes
     );
+    // `Decimal.div` takes a `Decimal` divisor, so a count has to become one.
+    assert!(notes.contains("Decimal.fromInt"), "notes: {:?}", e.notes);
 }
 
 #[test]
