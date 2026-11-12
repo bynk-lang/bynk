@@ -215,6 +215,19 @@ test("real access-denied and denied-command texts never reach the handler with t
   }
 });
 
+test("a transaction whose later statement answers an id past 2^53 rolls back", async () => {
+  const f = fake((sql) =>
+    sql === "B" ? { affectedRows: 1, insertId: 9007199254740992 } : { affectedRows: 1, insertId: 0 },
+  );
+  const out = await makeMySqlExecute(f.factory).transaction(ENDPOINT, [
+    { sql: "A", params: [] },
+    { sql: "B", params: [] },
+  ]);
+  assert.equal(out.ok, false);
+  if (!out.ok) assert.match(out.failure.message, /past the Int range/);
+  assert.deepEqual(f.events, ["begin", "query A", "query B", "rollback", "end"]);
+});
+
 test("a transaction commits all or rolls back at the first failure", async () => {
   const ok = fake(() => ({ affectedRows: 1, insertId: 0 }));
   const done = await makeMySqlExecute(ok.factory).transaction(ENDPOINT, [
