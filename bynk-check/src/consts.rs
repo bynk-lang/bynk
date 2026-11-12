@@ -530,14 +530,20 @@ pub fn compose_unit_consts(
 /// values a constant can be bound to directly (a constant's initialiser has no
 /// operators, calls or interpolation, [`static_error`]).
 pub fn is_literal_of(kind: &ExprKind, base: BaseType) -> bool {
-    matches!(
-        (base, kind),
-        (BaseType::String, ExprKind::StrLit(_))
-            | (BaseType::Int, ExprKind::IntLit { .. })
-            | (BaseType::Bool, ExprKind::BoolLit(_))
-            | (BaseType::Float, ExprKind::FloatLit { .. })
-            | (BaseType::Duration, ExprKind::DurationLit { .. })
-    )
+    let numeric = |k: &ExprKind| match base {
+        BaseType::Int => matches!(k, ExprKind::IntLit { .. }),
+        BaseType::Float => matches!(k, ExprKind::FloatLit { .. }),
+        BaseType::Decimal => matches!(k, ExprKind::DecimalLit { .. }),
+        _ => false,
+    };
+    match kind {
+        ExprKind::StrLit(_) => base == BaseType::String,
+        ExprKind::BoolLit(_) => base == BaseType::Bool,
+        ExprKind::DurationLit { .. } => base == BaseType::Duration,
+        // A negative numeric literal is a static initialiser too ([`static_error`]).
+        ExprKind::UnaryOp(UnaryOp::Neg, inner) => numeric(&inner.kind),
+        k => numeric(k),
+    }
 }
 
 /// #3445: the literal a constant denotes, following constant-to-constant

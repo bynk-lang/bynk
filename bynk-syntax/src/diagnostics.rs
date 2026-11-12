@@ -1815,7 +1815,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.event.bad_schema_version",
         blurb: "`@schema(N)` states the version an event is at, so that the number can be reviewed in the source and is checked against the version the registry computes. `N` must be one positive `Int` literal, given by position, and `@schema` may appear once on an event: `@schema(0)`, `@schema(\"2\")`, `@schema(v: 2)` and a second `@schema` are all refused. Write `@schema(2)`, or drop the annotation, since the registry tracks the version anyway.",
-        example: "event Paid @schema(0) = {    // ✗ versions start at 1\nevent Paid @schema(1) = {    // ✓\n    id: String,\n}",
+        example: "event Paid @schema(0) = {    // ✗ versions start at 1\nevent Paid @schema(1) = {    // ✓\n    id: String,\n}\n\nconst Version: Int = 1\nevent Refunded @schema(Version) = {    // ✓ an `Int` constant bound to a literal\n    id: String,\n}",
         page: "/book/guides/events/understand-events",
         anchor: "asserting-a-schema-version-with-scheman",
     },
@@ -2475,7 +2475,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.http.cache_bad_max_age",
         blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number, a string or a singular unit such as `1.hour` is refused; the units are plural: `30.seconds`, `5.minutes`, `1.hours`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
-        example: "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        example: "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hours\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "caching",
     },
@@ -2761,7 +2761,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.http.limit_bad_max_body",
         blurb: "`@limit` sets the byte ceiling above which the router answers `413`, so it must give a `maxBody`, and only the author can know the right one: it is a positive `Int` literal counting bytes. There is no size literal yet, so `\"1MB\"` or `1.mb` is refused; write the count, `1_048_576` for 1 MiB. The service-wide default is `limits { maxBody: … }`.",
-        example: "@limit(maxBody: \"1MB\")    // ✗ a byte count, not a string\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_048_576)   // ✓ 1 MiB\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        example: "@limit(maxBody: \"1MB\")    // ✗ a byte count, not a string\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_048_576)   // ✓ 1 MiB\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst NoteCap: Int = 1_048_576\n@limit(maxBody: NoteCap)   // ✓ an `Int` constant bound to a literal\non POST(\"/drafts\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "request-body-limits",
     },
@@ -2859,7 +2859,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.http.raw_bad_content_type",
         blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`. Write `\"image/png\"`, or `\"*/*\"` to accept any type.",
-        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓",
+        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
     },
@@ -5151,7 +5151,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.store.cache_ttl_required",
         blurb: "A `Cache` is a keyed store whose entries expire, so it needs `@ttl(<duration>)`, how long an entry lives. Without an expiry it would only be a `Map`. The argument must be a `Duration` literal such as `5.minutes`; a bare number (`@ttl(5)`) or a computed value is refused too, because the lifetime has to be known when the program compiles. Add the annotation, or declare a `Map` if entries should be kept until removed.",
-        example: "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓",
+        example: "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓\n\nconst Life: Duration = 5.minutes\nstore quick: Cache[String, Int] @ttl(Life)   // ✓ a `Duration` constant bound to a literal",
         page: "/book/reference/agents",
         anchor: "storage-annotations",
     },
@@ -6311,7 +6311,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 the type is declared, not evaluated, so a call such as `Code.of(\"ABC\")`, a name or \
                 a literal of another type is refused. Write the value itself, as a string for a \
                 `String` base.",
-        example: "type Code = String where Matches(\"[A-Z]{3}\") @example(Code.of(\"ABC\"))    // ✗ a call, not a literal\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")            // ✓",
+        example: "type Code = String where Matches(\"[A-Z]{3}\") @example(Code.of(\"ABC\"))    // ✗ a call, not a literal\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")            // ✓\n\nconst Sample: String = \"ABC\"\ntype Tag = String where Matches(\"[A-Z]{3}\") @example(Sample)   // ✓ a `String` constant bound to a literal",
         page: "/book/reference/testing",
         anchor: "val-example",
     },

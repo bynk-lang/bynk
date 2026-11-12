@@ -25,7 +25,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bynk_syntax::ast::{
-    Annotation, BaseType, CommonsItem, ConstRef, ExprKind, SourceUnit, TypeBody,
+    Annotation, BaseType, Commons, CommonsItem, ConstRef, ExprKind, Handler, RecordField,
+    Refinement, SourceUnit, TypeBody, TypeDecl, TypeRef,
 };
 use bynk_syntax::error::CompileError;
 
@@ -42,12 +43,38 @@ struct ArgRule {
     base: BaseType,
 }
 
+const fn rule(annotation: &'static str, label: Option<&'static str>, base: BaseType) -> ArgRule {
+    ArgRule {
+        annotation,
+        label,
+        base,
+    }
+}
+
 /// The record-field annotations: `@name("…")` (ADR 0812 C).
-const FIELD_RULES: &[ArgRule] = &[ArgRule {
-    annotation: "name",
-    label: None,
-    base: BaseType::String,
-}];
+const FIELD_RULES: &[ArgRule] = &[rule("name", None, BaseType::String)];
+
+/// A `store` field's annotations: `@ttl(d)` and `@retain(d)`.
+const STORE_RULES: &[ArgRule] = &[
+    rule("ttl", None, BaseType::Duration),
+    rule("retain", None, BaseType::Duration),
+];
+
+/// An event's annotation: `@schema(n)`.
+const EVENT_RULES: &[ArgRule] = &[rule("schema", None, BaseType::Int)];
+
+/// A handler's annotations: `@cache(maxAge:, immutable:)`, `@limit(…)` and
+/// `@raw(contentType:)`. The keyword arguments (`@cache(scope: public)`,
+/// `@json(options: plain)`) and `@indexed(by:)` name words or fields, not
+/// values, so they have no rule.
+const HANDLER_RULES: &[ArgRule] = &[
+    rule("cache", Some("maxAge"), BaseType::Duration),
+    rule("cache", Some("immutable"), BaseType::Bool),
+    rule("limit", Some("maxBody"), BaseType::Int),
+    rule("limit", Some("maxFile"), BaseType::Int),
+    rule("limit", Some("maxParts"), BaseType::Int),
+    rule("raw", Some("contentType"), BaseType::String),
+];
 
 /// What the pass reads of the unit it is resolving in.
 struct Scope<'a> {
@@ -110,16 +137,87 @@ fn rewrite_annotations(
     changed
 }
 
+/// `@example(lit)` after a refinement: one literal of the refinement's base.
+fn rewrite_example(
+    refinement: &mut Option<Refinement>,
+    base: BaseType,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let Some(r) = refinement else {
+        return false;
+    };
+    rewrite_annotations(
+        &mut r.annotations,
+        &[rule("example", None, base)],
+        scope,
+        refs,
+    )
+}
+
+/// The base a record field's inline refinement applies to (as
+/// `checker::refinements` reads it): the field's own base type, or that of a
+/// refined type it names in this unit.
+fn field_base(field: &RecordField, scope: &Scope) -> Option<BaseType> {
+    match &field.type_ref {
+        TypeRef::Base(b, _) => Some(*b),
+        TypeRef::Named(id) => match &scope.tables.get(scope.unit)?.types.get(&id.name)?.body {
+            TypeBody::Refined { base, .. } => Some(*base),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn rewrite_handlers(handlers: &mut [Handler], scope: &Scope, refs: &mut RefSink) -> bool {
+    let mut changed = false;
+    for h in handlers {
+        changed |= rewrite_annotations(&mut h.annotations, HANDLER_RULES, scope, refs);
+    }
+    changed
+}
+
+fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
+    let mut changed = false;
+    match &mut decl.body {
+        TypeBody::Refined {
+            base, refinement, ..
+        }
+        | TypeBody::Opaque {
+            base, refinement, ..
+        } => changed |= rewrite_example(refinement, *base, scope, refs),
+        TypeBody::Record(rec) => {
+            for field in &mut rec.fields {
+                changed |= rewrite_annotations(&mut field.annotations, FIELD_RULES, scope, refs);
+                if let Some(base) = field_base(field, scope) {
+                    changed |= rewrite_example(&mut field.refinement, base, scope, refs);
+                }
+            }
+        }
+        _ => {}
+    }
+    changed
+}
+
 /// Rewrite every literal-only annotation argument of `items`.
 fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -> bool {
     let mut changed = false;
     for item in items {
-        if let CommonsItem::Type(decl) = item
-            && let TypeBody::Record(rec) = &mut decl.body
-        {
-            for field in &mut rec.fields {
-                changed |= rewrite_annotations(&mut field.annotations, FIELD_RULES, scope, refs);
+        match item {
+            CommonsItem::Type(decl) => changed |= rewrite_type(decl, scope, refs),
+            CommonsItem::Event(ev) => {
+                changed |= rewrite_annotations(&mut ev.annotations, EVENT_RULES, scope, refs);
             }
+            CommonsItem::Service(svc) => {
+                changed |= rewrite_handlers(&mut svc.handlers, scope, refs)
+            }
+            CommonsItem::Agent(agent) => {
+                for f in &mut agent.store_fields {
+                    changed |= rewrite_annotations(&mut f.annotations, STORE_RULES, scope, refs);
+                }
+                changed |= rewrite_handlers(&mut agent.handlers, scope, refs);
+            }
+            _ => {}
         }
     }
     changed
@@ -190,4 +288,37 @@ pub fn with_const_origin(err: CompileError, arg: &bynk_syntax::ast::AnnotationAr
         None => err,
     };
     err.with_note(format!("the value comes from `const {}`", c.name.name))
+}
+
+/// The single-file form of [`resolve_annotation_consts`], for a commons checked
+/// on its own (`bynk check file.bynk`, the playground, the editor's single-file
+/// mode): no `uses`, so only the file's own constants are in scope. It runs the
+/// same pass over a one-unit project, so the rules cannot differ.
+pub fn resolve_single_file(commons: &mut Commons) {
+    use std::path::PathBuf;
+    let name = commons.name.joined();
+    let file = ParsedFile::synthetic(
+        PathBuf::from("single.bynk"),
+        PathBuf::from("single.bynk"),
+        String::new(),
+        SourceUnit::Commons(commons.clone()),
+        UnitKind::Commons,
+    );
+    let mut parsed = [file];
+    let groups = BTreeMap::from([(name.clone(), vec![0])]);
+    let kinds = BTreeMap::from([(name.clone(), UnitKind::Commons)]);
+    let mut discarded = Vec::new();
+    let table = build_unit_table(&name, UnitKind::Commons, &[0], &parsed, &mut discarded);
+    let mut tables = HashMap::from([(name, table)]);
+    resolve_annotation_consts(
+        &groups,
+        &kinds,
+        &mut parsed,
+        &mut tables,
+        &HashMap::new(),
+        &mut RefSink::new(),
+    );
+    if let SourceUnit::Commons(rewritten) = parsed[0].unit() {
+        *commons = rewritten.clone();
+    }
 }

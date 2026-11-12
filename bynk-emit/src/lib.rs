@@ -99,7 +99,7 @@ fn check_single_file(
     }
     // ADR 0117: parse-time warnings (orphan doc blocks) ride alongside the
     // AST — they surface with the build's warnings instead of failing it.
-    let (commons, mut warnings) = match parser::parse_with_warnings(&tokens, source) {
+    let (mut commons, mut warnings) = match parser::parse_with_warnings(&tokens, source) {
         Ok(parsed) => parsed,
         // #1663: the strict parse stops at the first syntax error. Diagnose the
         // file as the editor does instead, and still refuse to compile it.
@@ -109,6 +109,9 @@ fn check_single_file(
             ));
         }
     };
+    // #3445: a constant named by a literal-only annotation argument is replaced
+    // by the literal it denotes, as the project path does.
+    bynk_check::annotation_consts::resolve_single_file(&mut commons);
     // v0.20a: function types are confined to non-boundary positions — the same
     // rule the project path applies.
     let mut boundary_errors = Vec::new();
