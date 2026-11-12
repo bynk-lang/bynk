@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The runtime gains `requestBodyStream`, a lazy, cap-counted `Stream[Bytes]` over a request body, and `BodyTooLarge`, the first step of streaming a `@raw` request body (#3380, #3180 slice 3)
----
+# 0818 — A `@raw` handler streams its request body as a `Stream[Bytes]` under the route's cap
 
-## ADR: stream-request-body-into-raw-handler
-title: A `@raw` handler streams its request body as a `Stream[Bytes]` under the route's cap
-summary: `body: Stream[Bytes]` on a `@raw` route; a lazy, single-pass, counted body; a mid-stream overrun answers the route's `413`
+- **Status:** Accepted (v0.562.3)
 
 **Context.** A handler's body was always read whole before the handler ran
 (`readCapped`, which concatenates every chunk), so the largest upload a service
