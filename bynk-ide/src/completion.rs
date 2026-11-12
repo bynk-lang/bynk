@@ -224,10 +224,16 @@ pub fn complete_in(
     if auth_scheme_position(line_prefix) {
         return auth_scheme_candidates();
     }
+    // 3c. #3446: `Record.field.<cursor>` on a cookie record — the typed cookie write and deletion.
+    if let Some((record, field)) = cookie_field_receiver(line_prefix) {
+        return cookie_field_members(&record, &field, doc_text, files);
+    }
     // 4. `UpperIdent.<cursor>` — name-receiver members: sum variants, refined/
     //    opaque `of`/`unsafe`, capability ops, or built-in type statics.
     if let Some(receiver) = member_receiver(line_prefix) {
-        return member_candidates(&receiver, doc_text, files);
+        let mut items = member_candidates(&receiver, doc_text, files);
+        items.extend(cookie_record_fields(&receiver, doc_text, files));
+        return items;
     }
     // v0.124 (slice 3): the non-keyword clause/construction contexts, before the
     // generic type/keyword/expression cells they would otherwise fall into.
@@ -711,6 +717,133 @@ fn member_receiver(line: &str) -> Option<String> {
         return None;
     }
     Some(recv.to_string())
+}
+
+/// #3446: `Record.field.<partial>` at the cursor → `Some(("Record", "field"))`: an uppercase-initial
+/// record name, a lowercase field, then the dot being completed.
+fn cookie_field_receiver(line: &str) -> Option<(String, String)> {
+    let head = line
+        .trim_end_matches(|c: char| c.is_alphanumeric() || c == '_')
+        .strip_suffix('.')?;
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+    let field_start = head
+        .char_indices()
+        .rfind(|&(_, c)| !is_ident(c))
+        .map_or(0, |(i, c)| i + c.len_utf8());
+    let field = &head[field_start..];
+    if field.is_empty() || !field.starts_with(|c: char| c.is_ascii_lowercase()) {
+        return None;
+    }
+    let before = head[..field_start].strip_suffix('.')?;
+    let record = member_receiver(&format!("{before}."))?;
+    Some((record, field.to_string()))
+}
+
+/// #3446: the records of this source that some `on http` handler takes as its `cookies` parameter,
+/// with each one's fields as `(name, type, wire name)`.
+pub(crate) fn cookie_record_fields_of(
+    record: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Option<Vec<(String, bynk_syntax::ast::TypeRef, String)>> {
+    use bynk_syntax::ast::{HandlerKind, TypeBody};
+    let mut decl: Option<Vec<(String, bynk_syntax::ast::TypeRef, String)>> = None;
+    let mut taken_as_cookies = false;
+    for_each_unit(doc_text, files, |unit| {
+        let items = match unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            _ => return,
+        };
+        for item in items {
+            match item {
+                CommonsItem::Type(t) if t.name.name == record => {
+                    if let TypeBody::Record(r) = &t.body {
+                        decl = Some(
+                            r.fields
+                                .iter()
+                                .map(|f| {
+                                    (
+                                        f.name.name.clone(),
+                                        f.type_ref.clone(),
+                                        f.wire_name().unwrap_or_else(|| f.name.name.clone()),
+                                    )
+                                })
+                                .collect(),
+                        );
+                    }
+                }
+                CommonsItem::Service(svc) => {
+                    taken_as_cookies |= svc.handlers.iter().any(|h| {
+                        matches!(h.kind, HandlerKind::Http { .. })
+                            && h.params.iter().any(|p| {
+                                p.name.name == "cookies"
+                                    && matches!(&p.type_ref,
+                                        bynk_syntax::ast::TypeRef::Named(id) if id.name == record)
+                            })
+                    });
+                }
+                _ => {}
+            }
+        }
+    });
+    decl.filter(|_| taken_as_cookies)
+}
+
+/// #3446: after `Record.` on a cookie record, its fields: each is written with `.cookie(v)` or
+/// removed with `.expire()`.
+fn cookie_record_fields(
+    record: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
+    cookie_record_fields_of(record, doc_text, files)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(name, ty, wire)| {
+            Completion::item(
+                name,
+                CompletionKind::Field,
+                Some(format!(
+                    "{} — cookie `{wire}` of `{record}`; `.cookie(v)` writes it, `.expire()` removes it",
+                    crate::symbols::type_ref_str(&ty)
+                )),
+            )
+        })
+        .collect()
+}
+
+/// #3446: after `Record.field.`, `cookie(value)` and `expire()`.
+fn cookie_field_members(
+    record: &str,
+    field: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
+    let Some(fields) = cookie_record_fields_of(record, doc_text, files) else {
+        return Vec::new();
+    };
+    let Some((_, ty, wire)) = fields.into_iter().find(|(n, _, _)| n == field) else {
+        return Vec::new();
+    };
+    let value = match &ty {
+        bynk_syntax::ast::TypeRef::Option(inner, _) => crate::symbols::type_ref_str(inner),
+        other => crate::symbols::type_ref_str(other),
+    };
+    vec![
+        Completion::item(
+            "cookie".to_string(),
+            CompletionKind::Member,
+            Some(format!(
+                "cookie(value: {value}) -> Cookie — the cookie `{wire}`, valued as `{record}`'s decoder reads it"
+            )),
+        ),
+        Completion::item(
+            "expire".to_string(),
+            CompletionKind::Member,
+            Some(format!("expire() -> Cookie — deletes the cookie `{wire}`")),
+        ),
+    ]
 }
 
 /// v0.124 (slice 3): the cursor is at a field-*name* position of a record
@@ -4135,6 +4268,43 @@ mod tests {
         assert!(!is_keyword_position("  let x ="));
         assert!(!is_keyword_position("  x: "));
         assert!(!complete("", "context a.b\n", None).is_empty());
+    }
+
+    #[test]
+    fn a_cookie_record_completes_its_fields_then_cookie_and_expire() {
+        let src = "context a.b\n\
+            type Theme = enum { Light, Dark }\n\
+            type Prefs = { theme: Theme = Light, @name(\"__Host-visits\") visits: Option[Int] }\n\
+            service s from http {\n\
+              on GET(\"/p\") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"x\") }\n\
+            }\n";
+        let fields = complete("  Ok(\"x\").withCookie(Prefs.", src, None);
+        assert!(find(&fields, "theme", CompletionKind::Field).is_some());
+        assert!(find(&fields, "visits", CompletionKind::Field).is_some());
+        let members = complete("  Ok(\"x\").withCookie(Prefs.visits.", src, None);
+        let cookie = find(&members, "cookie", CompletionKind::Member).expect("cookie");
+        assert!(
+            cookie
+                .detail
+                .as_deref()
+                .unwrap_or("")
+                .contains("value: Int"),
+            "{:?}",
+            cookie.detail
+        );
+        assert!(
+            cookie
+                .detail
+                .as_deref()
+                .unwrap_or("")
+                .contains("__Host-visits"),
+            "{:?}",
+            cookie.detail
+        );
+        assert!(find(&members, "expire", CompletionKind::Member).is_some());
+        // a record no handler decodes as `cookies` has no cookie members
+        let plain = "context a.b\ntype P = { x: Int }\n";
+        assert!(complete("  P.x.", plain, None).is_empty());
     }
 
     #[test]

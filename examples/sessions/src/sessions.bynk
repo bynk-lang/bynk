@@ -66,8 +66,7 @@ service api from http {
 			Ok(token) => {
 				do Sessions("default").login(token, body.user)
 				Created("ok").withCookie(Cookie {
-					name: "__Host-sid",
-					value: text,
+					...SessionCookies.sid.cookie(token),
 					maxAge: Some(30.minutes),
 				})
 			},
@@ -100,9 +99,9 @@ service api from http {
 			Some(raw) => match Token.of(raw) {
 				Ok(token) => {
 					do Sessions("default").logout(token)
-					NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" })
+					NoContent.withCookie(SessionCookies.sid.expire())
 				},
-				Err(_) => NoContent.clearCookie(Cookie { name: "__Host-sid", value: "" }),
+				Err(_) => NoContent.withCookie(SessionCookies.sid.expire()),
 			},
 		}
 	}
