@@ -330,8 +330,8 @@ fn resolve_qualified_from(
     match (out, derived_base) {
         // #2865: a derived `D1`'s typed reads are lowered by the compiler, so
         // `D1` declares no operation for them.
-        (None, Some(base)) if base == "D1" && d1_typed_read(member).is_some() => {
-            d1_typed_read(member).map(str::to_string)
+        (None, Some(base)) if typed_read(&base, member).is_some() => {
+            typed_read(&base, member).map(str::to_string)
         }
         (None, Some(base)) if !followed.contains(&base) => {
             resolve_qualified_from(&base, member, doc_text, files, followed)
@@ -342,16 +342,37 @@ fn resolve_qualified_from(
 
 /// #2865: the signature of `D1.select[T]` / `D1.firstAs[T]`, compiler-lowered
 /// over `all`/`first` (so not declared operations of the capability).
-pub(crate) fn d1_typed_read(member: &str) -> Option<&'static str> {
-    match member {
-        "select" => Some(
+/// Hyperdrive H3 (#3320): and of `Postgres`' (`base`), whose parameters are
+/// `PgValue`s and whose failure is a `PgReadError`.
+pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
+    match (base, member) {
+        ("D1", "select") => Some(
             "select[T](tail: String, params: List[SqlValue]) -> Effect[Result[List[T], SqlReadError]]",
         ),
-        "firstAs" => Some(
+        ("D1", "firstAs") => Some(
             "firstAs[T](tail: String, params: List[SqlValue]) -> Effect[Result[Option[T], SqlReadError]]",
+        ),
+        ("Postgres", "select") => Some(
+            "select[T](tail: String, params: List[PgValue]) -> Effect[Result[List[T], PgReadError]]",
+        ),
+        ("Postgres", "firstAs") => Some(
+            "firstAs[T](tail: String, params: List[PgValue]) -> Effect[Result[Option[T], PgReadError]]",
         ),
         _ => None,
     }
+}
+
+/// The bases whose derived instances have the compiler-lowered typed reads.
+pub(crate) const TYPED_READ_BASES: [&str; 2] = ["D1", "Postgres"];
+
+/// Whether `label` is the typed-read signature of the member `callee` names, so a
+/// user's own `select` operation is never taken for one.
+pub(crate) fn is_typed_read_label(callee: &str, label: &str) -> bool {
+    callee.rsplit_once('.').is_some_and(|(_, m)| {
+        TYPED_READ_BASES
+            .iter()
+            .any(|b| typed_read(b, m) == Some(label))
+    })
 }
 
 fn base_name(b: BaseType) -> &'static str {
@@ -553,6 +574,32 @@ mod tests {
         );
         assert!(resolve_label("Orders.firstAs", DOC, None).is_some());
         assert!(resolve_label("Orders.all", DOC, None).is_some());
+    }
+
+    /// Hyperdrive H3 (#3320): a derived `Postgres` has them too, over `PgValue`
+    /// and `PgReadError`, and `transaction` is its declared operation.
+    #[test]
+    fn a_derived_postgres_has_the_typed_reads_and_transaction() {
+        const DOC: &str =
+            "context a\n\nconsumes bynk.cloudflare { Postgres }\n\ncapability Main = Postgres\n";
+        assert_eq!(
+            resolve_label("Main.select", DOC, None).as_deref(),
+            Some(
+                "select[T](tail: String, params: List[PgValue]) -> Effect[Result[List[T], PgReadError]]"
+            )
+        );
+        assert_eq!(
+            resolve_label("Main.firstAs", DOC, None).as_deref(),
+            Some(
+                "firstAs[T](tail: String, params: List[PgValue]) -> Effect[Result[Option[T], PgReadError]]"
+            )
+        );
+        assert_eq!(
+            resolve_label("Main.transaction", DOC, None).as_deref(),
+            Some(
+                "transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]"
+            )
+        );
     }
 
     /// Review of #1968: a derivation cycle in unchecked source resolves

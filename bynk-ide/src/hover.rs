@@ -386,10 +386,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 crate::signature_help::resolve_label(&callee, text, input.files).map(|sig| {
                     // Only the D1 typed-read signature gets the column note, so a
                     // user's own `select` op never does.
-                    let typed = callee
-                        .rsplit_once('.')
-                        .and_then(|(_, m)| crate::signature_help::d1_typed_read(m))
-                        .is_some_and(|d| sig == d);
+                    let typed = crate::signature_help::is_typed_read_label(&callee, &sig);
                     format!(
                         "```bynk\n{sig}\n```{}",
                         if typed {

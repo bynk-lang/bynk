@@ -569,6 +569,35 @@ export const PgError = {
 };
 
 /**
+ * One statement of a `Postgres.transaction`: its SQL, a string literal, and
+ * its positional parameters (`$1`, `$2`, …). It stays where it is built: it is
+ * never stored, sent or decoded, since one from outside would carry SQL that
+ * was never a literal.
+ */
+export interface PgStatement {
+  readonly sql: string;
+  readonly params: readonly PgValue[];
+}
+
+export const PgStatement = {
+};
+
+/**
+ * Why a typed `Postgres` read (`select[T]`, `firstAs[T]`) failed: `PgSql` is
+ * the statement's own failure, `PgDecode` a row that did not fit `T` (a
+ * column whose value disagrees with its field's type). The variants carry the
+ * `Pg` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+ */
+export type PgReadError =
+    { readonly tag: "PgSql"; readonly error: PgError }
+  | { readonly tag: "PgDecode"; readonly error: DecodeError };
+
+export const PgReadError = {
+  PgSql: (error: PgError): PgReadError => ({ tag: "PgSql", error }),
+  PgDecode: (error: DecodeError): PgReadError => ({ tag: "PgDecode", error }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -950,6 +979,22 @@ export const __EmailToken: symbol = globalThis.Symbol("Email");
  * `bytea` as base64 (a `Bytes` field decodes it); `json` and `jsonb` nested as
  * JSON. A `boolean` arrives as `true` or `false`, not `0` or `1`.
  *
+ * `select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+ * argument is the statement from `FROM` on, a string literal that must not
+ * itself begin with `SELECT`, and the compiler writes the column list from
+ * `T`'s field names (each quoted in Postgres style: double quotes, an
+ * embedded quote doubled), runs the statement and decodes the rows. `select`
+ * gives `Result[List[T], PgReadError]`, `firstAs` `Result[Option[T],
+ * PgReadError]`. A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes`,
+ * `Decimal` or `Instant` (or a refined or opaque type over one, or an
+ * `Option` of either). An `Int` reads an `int8` that arrives as text, and an
+ * `Instant` reads the ISO-8601 text of a `timestamptz`, with any offset.
+ *
+ * `transaction` runs its statements in order on one connection, in one
+ * transaction: all apply, or none do and the result is the failing
+ * statement's error. It runs a fixed list; a read that decides a later write
+ * needs an interactive transaction, which this does not offer.
+ *
  * `run` executes a write and reports the rows it changed. Every operation
  * gives a `PgError` rather than faulting. Each statement uses its own
  * connection, opened and closed around it, and Cloudflare allows six
@@ -960,6 +1005,7 @@ export interface Postgres {
   all(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<string, PgError>>;
   first(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<Option<string>, PgError>>;
   run(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<PgRun, PgError>>;
+  transaction(statements: readonly PgStatement[]): globalThis.Promise<Result<readonly PgRun[], PgError>>;
 }
 
 export const __PostgresToken: symbol = globalThis.Symbol("Postgres");
@@ -1588,6 +1634,39 @@ export function __deserialise_PgError(json: __JsonValue, path: string = "$"): Re
   }
 }
 
+export function __serialise_PgReadError(value: PgReadError): __JsonValue {
+  switch (value.tag) {
+    case "PgSql": {
+      return { kind: "PgSql", error: __serialise_PgError(value.error) };
+    }
+    case "PgDecode": {
+      return { kind: "PgDecode", error: value.error as unknown as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_PgReadError(json: __JsonValue, path: string = "$"): Result<PgReadError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "PgSql": {
+  const __r_error = __deserialise_PgError(obj["error"], `${path}.error`);
+  if (__r_error.tag === "Err") return __r_error;
+  const __error = __r_error.value;
+      return Ok({ tag: "PgSql", error: __error } as PgReadError);
+    }
+    case "PgDecode": {
+  const __error = obj["error"] as unknown as DecodeError;
+      return Ok({ tag: "PgDecode", error: __error } as PgReadError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_PgRun(value: PgRun): __JsonValue {
   return {
     rowCount: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.rowCount),
@@ -1607,6 +1686,28 @@ export function __deserialise_PgRun(json: __JsonValue, path: string = "$"): Resu
   }
   const __rowCount = obj["rowCount"];
   return Ok({ rowCount: __rowCount } as PgRun);
+}
+
+export function __serialise_PgStatement(value: PgStatement): __JsonValue {
+  return {
+    sql: value.sql as __JsonValue,
+    params: __serialise_List_PgValue(value.params),
+  };
+}
+
+export function __deserialise_PgStatement(json: __JsonValue, path: string = "$"): Result<PgStatement, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["sql"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sql`, expected: "string", actual: typeof obj["sql"] });
+  }
+  const __sql = obj["sql"];
+  const __r_params = __deserialise_List_PgValue(obj["params"], `${path}.params`);
+  if (__r_params.tag === "Err") return __r_params;
+  const __params = __r_params.value;
+  return Ok({ sql: __sql, params: __params } as PgStatement);
 }
 
 export function __serialise_PgValue(value: PgValue): __JsonValue {
@@ -2502,6 +2603,25 @@ export function __deserialise_List_KvKey(json: __JsonValue, path: string = "$"):
   if (__r_el.tag === "Err") return __r_el;
   const __el = __r_el.value;
   out.push(__el as KvKey);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_PgValue(value: readonly PgValue[]): __JsonValue {
+  return value.map((v) => __serialise_PgValue(v));
+}
+
+export function __deserialise_List_PgValue(json: __JsonValue, path: string = "$"): Result<readonly PgValue[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: PgValue[] = [];
+  for (let i = 0; i < json.length; i++) {
+  const item = json[i];
+  const __r_el = __deserialise_PgValue(item, `${path}[${i}]`);
+  if (__r_el.tag === "Err") return __r_el;
+  const __el = __r_el.value;
+  out.push(__el as PgValue);
   }
   return Ok(out);
 }

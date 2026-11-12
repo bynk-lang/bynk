@@ -8,7 +8,7 @@ import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispat
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
-import { pgExecute, type PgExecute, type PgOutcome, type PgParam } from "./postgres.ts";
+import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
@@ -134,6 +134,8 @@ export type {
   PgExecute as __PgExecute,
   PgOutcome as __PgOutcome,
   PgParam as __PgParam,
+  PgStatementParam as __PgStatementParam,
+  PgTxOutcome as __PgTxOutcome,
   SenderIdentity as __SenderIdentity,
   AgentWire as __AgentWire,
   BoundaryError as __BoundaryError,

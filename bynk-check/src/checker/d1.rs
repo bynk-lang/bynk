@@ -17,10 +17,15 @@ pub(crate) const SQL_STATEMENT: &str = "SqlStatement";
 /// The `D1` operations whose first argument is SQL text.
 const SQL_TEXT_OPS: &[&str] = &["all", "first", "run"];
 
+/// Hyperdrive H3 (#3320): the first-party record a `Postgres.transaction`
+/// statement is. It is held to the same rules as [`SQL_STATEMENT`].
+pub(crate) const PG_STATEMENT: &str = "PgStatement";
+
 /// Whether `name`, in the project's type table, is `bynk.cloudflare`'s own
-/// `SqlStatement`, found by its declaration's file as the crypto key types are.
+/// `SqlStatement` or `PgStatement`, found by its declaration's file as the
+/// crypto key types are.
 pub(crate) fn is_sql_statement_type(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
-    name == SQL_STATEMENT
+    (name == SQL_STATEMENT || name == PG_STATEMENT)
         && types.get(name).is_some_and(|decl| {
             crate::firstparty::unit(crate::firstparty::CLOUDFLARE_UNIT).is_some_and(|unit| {
                 decl.span.file == crate::project_model::firstparty_file_id(unit)
@@ -391,13 +396,14 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
 /// binding, so it is not one. A spread that keeps `sql` copies a statement
 /// that was itself built from a literal.
 pub(crate) fn check_statement_fields(ty: TyId, fields: &[FieldInit], ctx: &mut Ctx) {
-    let is_statement = matches!(
-        &*ctx.tys.get(ty),
-        Ty::Named { name, kind: NamedKind::Record, .. } if is_sql_statement_type(name, &ctx.input.types)
-    );
-    if !is_statement {
-        return;
-    }
+    let statement = match &*ctx.tys.get(ty) {
+        Ty::Named {
+            name,
+            kind: NamedKind::Record,
+            ..
+        } if is_sql_statement_type(name, &ctx.input.types) => name.clone(),
+        _ => return,
+    };
     for f in fields.iter().filter(|f| f.name.name == "sql") {
         let literal = f
             .value
@@ -405,50 +411,64 @@ pub(crate) fn check_statement_fields(ty: TyId, fields: &[FieldInit], ctx: &mut C
             .is_some_and(|v| sql_literal_text(v, ctx).is_some());
         if !literal {
             let span = f.value.as_ref().map_or(f.name.span, |v| v.span);
-            ctx.errors
-                .push(sql_not_literal(span, "a `SqlStatement`'s `sql`"));
+            let what = format!("a `{statement}`'s `sql`");
+            ctx.errors.push(if statement == PG_STATEMENT {
+                sql_not_literal_with(span, &what, "`$1`, `$2`")
+            } else {
+                sql_not_literal(span, &what)
+            });
         }
     }
 }
 
-/// The diagnostic for a `SqlStatement` in a storable or boundary position.
-pub(crate) fn statement_at_boundary(span: Span, what: &str) -> CompileError {
+/// The diagnostic for a `SqlStatement` or `PgStatement` (`statement`) in a
+/// storable or boundary position.
+pub(crate) fn statement_at_boundary(span: Span, what: &str, statement: &str) -> CompileError {
     CompileError::new(
         "bynk.types.sql_statement_at_boundary",
         span,
         format!(
-            "a `SqlStatement` cannot appear in {what} — a statement received or restored from outside would carry SQL that was never a literal"
+            "a `{statement}` cannot appear in {what} — a statement received or restored from outside would carry SQL that was never a literal"
         ),
     )
     .with_note("send or store the values, and build the statement where it runs")
 }
 
-/// Whether a `Json` codec target is, or holds, a `SqlStatement`. A user type
-/// cannot hold one (its declaration is refused), so only the built-in
-/// containers need looking through.
-pub(crate) fn carries_statement(
+/// The statement type (`SqlStatement` or `PgStatement`) a `Json` codec target
+/// is, or holds. A user type cannot hold one (its declaration is refused), so
+/// only the built-in containers need looking through.
+pub(crate) fn carried_statement(
     t: TyId,
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
-) -> bool {
+) -> Option<String> {
     match &*tys.get(t) {
         Ty::Named { name, args, .. } => {
-            is_sql_statement_type(name, types)
-                || args.iter().any(|a| carries_statement(*a, types, tys))
+            if is_sql_statement_type(name, types) {
+                Some(name.clone())
+            } else {
+                args.iter().find_map(|a| carried_statement(*a, types, tys))
+            }
         }
         Ty::Result(a, b) | Ty::Map(a, b) => {
-            carries_statement(*a, types, tys) || carries_statement(*b, types, tys)
+            carried_statement(*a, types, tys).or_else(|| carried_statement(*b, types, tys))
         }
-        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => carries_statement(*a, types, tys),
-        _ => false,
+        Ty::Option(a) | Ty::List(a) | Ty::Set(a) => carried_statement(*a, types, tys),
+        _ => None,
     }
 }
 
 /// The typed reads of a derived `D1` instance, which the compiler lowers over
 /// `all`/`first` (#2865); they are not declared operations of the capability.
 pub(crate) fn is_typed_read(derived_from: Option<&(String, String)>, method: &str) -> bool {
-    matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && base == "D1")
+    matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && matches!(base.as_str(), "D1" | "Postgres"))
         && matches!(method, "select" | "firstAs")
+}
+
+/// Hyperdrive H3 (#3320): whether the derived instance is a `Postgres` one, so
+/// its typed reads use `PgValue`, `PgReadError` and Postgres' column types.
+pub(crate) fn is_postgres(derived_from: Option<&(String, String)>) -> bool {
+    matches!(derived_from, Some((unit, base)) if unit == crate::firstparty::CLOUDFLARE_UNIT && base == "Postgres")
 }
 
 /// The column list the compiler writes for a row record: each field's name as
@@ -490,7 +510,9 @@ fn begins_with_select(tail: &str) -> bool {
 /// instance (#2865): `T` is a row record, the tail a string literal from
 /// `FROM` on. Records the lowering (`Callee::D1Select`) and types the call
 /// `Effect[Result[List[T], SqlReadError]]` (`firstAs`: `Option[T]`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_typed_read(
+    derived_from: Option<&(String, String)>,
     cap: &str,
     method: &Ident,
     type_args: &[TypeRef],
@@ -500,6 +522,14 @@ pub(crate) fn check_typed_read(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    if let Some((unit, base)) = derived_from {
+        super::calls::refuse_experimental(
+            &format!("{unit}.{base}.{}", method.name),
+            method.span,
+            ctx,
+        );
+    }
+    let pg = is_postgres(derived_from);
     let name = format!("{cap}.{}", method.name);
     let bail = |ctx: &mut Ctx| {
         for a in args {
@@ -543,12 +573,16 @@ pub(crate) fn check_typed_read(
             })
         })
     };
-    let (Some(value_ty), Some(read_err)) = (named("SqlValue", ctx), named("SqlReadError", ctx))
-    else {
+    let (value_name, read_name) = if pg {
+        ("PgValue", "PgReadError")
+    } else {
+        ("SqlValue", "SqlReadError")
+    };
+    let (Some(value_ty), Some(read_err)) = (named(value_name, ctx), named(read_name, ctx)) else {
         ctx.errors.push(CompileError::new(
             "bynk.capability.unknown_operation",
             span,
-            format!("`{name}` needs `bynk.cloudflare`'s `SqlValue` and `SqlReadError` in scope"),
+            format!("`{name}` needs `bynk.cloudflare`'s `{value_name}` and `{read_name}` in scope"),
         ));
         return bail(ctx);
     };
@@ -561,7 +595,7 @@ pub(crate) fn check_typed_read(
             method.name
         ))
     } else {
-        check_row_shape(t, &ctx.input.types, tys).and_then(|()| match &*tys.get(t) {
+        check_row_shape_for(t, &ctx.input.types, tys, pg).and_then(|()| match &*tys.get(t) {
             Ty::Named { name, .. } if select_columns(name, &ctx.input.types).is_empty() => {
                 Err(format!("`{name}` has no fields to select"))
             }
@@ -575,10 +609,14 @@ pub(crate) fn check_typed_read(
                 type_args[0].span(),
                 format!("`{name}` reads SQL rows, but {why}"),
             )
-            .with_note(
+            .with_note(if pg {
+                "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
+                 `Bytes`, `Decimal` or `Instant` (or a refined or opaque type over one, or an \
+                 `Option` of either)"
+            } else {
                 "the row is a record whose fields are `Int`, `Float`, `String`, `Bool` or \
-                 `Bytes` (or a refined or opaque type over one, or an `Option` of either)",
-            ),
+                 `Bytes` (or a refined or opaque type over one, or an `Option` of either)"
+            }),
         );
         ok = false;
     }
@@ -625,9 +663,10 @@ pub(crate) fn check_typed_read(
             }
         }
         None => {
-            ctx.errors.push(sql_not_literal(
+            ctx.errors.push(sql_not_literal_with(
                 args[0].span,
                 &format!("the SQL of `{cap}.{}`", method.name),
+                if pg { "`$1`, `$2`" } else { "`?1`, `?2`" },
             ));
             // The tail is not an ordinary argument here; still type it for hover.
             let _ = type_of(&args[0], None, ctx);
@@ -659,7 +698,11 @@ pub(crate) fn check_typed_read(
         _ => None,
     };
     let sql = sql.filter(|_| ok)?;
-    if let Ty::Named { name: row, .. } = &*tys.get(t)
+    // A `Postgres` read is not recorded as a site: the schema a site is
+    // prepared against is a D1 migration's SQLite, which says nothing of
+    // Postgres (as for `all`, `first` and `run`).
+    if !pg
+        && let Ty::Named { name: row, .. } = &*tys.get(t)
         && let Some(TypeBody::Record(record)) = ctx.input.types.get(row).map(|d| &d.body)
     {
         ctx.callees.insert(
@@ -686,6 +729,7 @@ pub(crate) fn check_typed_read(
             row: t,
             sql,
             first,
+            pg,
         },
     );
     let rows = if first {
@@ -702,6 +746,17 @@ pub(crate) fn check_row_shape(
     t: TyId,
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
+) -> Result<(), String> {
+    check_row_shape_for(t, types, tys, false)
+}
+
+/// [`check_row_shape`] for a dialect: a `Postgres` row (`pg`) may also hold an
+/// `Instant`, which a `timestamptz` column arrives as (#3320).
+pub(crate) fn check_row_shape_for(
+    t: TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+    pg: bool,
 ) -> Result<(), String> {
     let row = match &*tys.get(t) {
         Ty::List(r) => *r,
@@ -727,7 +782,7 @@ pub(crate) fn check_row_shape(
         return Err(format!("`{name}` is not a row record"));
     };
     for f in &record.fields {
-        if !is_column(&f.type_ref, types) {
+        if !is_column(&f.type_ref, types, pg) {
             return Err(format!(
                 "field `{}` of `{name}` is not a column type",
                 f.name.name
@@ -739,36 +794,52 @@ pub(crate) fn check_row_shape(
 
 /// A type a SQLite column decodes to: a scalar (`Bytes` from base64), a
 /// refined or opaque type over one, or an `Option` of either.
-fn is_column(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+fn is_column(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>, pg: bool) -> bool {
     match r {
         TypeRef::Option(inner, _) => {
-            !matches!(**inner, TypeRef::Option(..)) && is_column(inner, types)
+            !matches!(**inner, TypeRef::Option(..)) && is_column(inner, types, pg)
         }
-        TypeRef::Base(b, _) => is_column_base(*b),
+        TypeRef::Base(b, _) => is_column_base(*b, pg),
         TypeRef::Named(id) => types.get(&id.name).is_some_and(|d| match &d.body {
-            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => is_column_base(*base),
+            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => {
+                is_column_base(*base, pg)
+            }
             _ => false,
         }),
         _ => false,
     }
 }
 
-fn is_column_base(b: BaseType) -> bool {
-    !matches!(b, BaseType::Duration | BaseType::Instant)
+fn is_column_base(b: BaseType, pg: bool) -> bool {
+    match b {
+        BaseType::Duration => false,
+        BaseType::Instant => pg,
+        _ => true,
+    }
 }
 
 /// The names of `T`'s row fields that decode as `Bool` (directly, through an
 /// `Option`, or under a refined or opaque type), for `Json.decodeSql`'s pass
 /// over SQLite's `0`/`1`. `T` has passed `check_row_shape`.
 pub fn row_bool_fields(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Vec<String> {
-    fn is_bool(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    row_base_fields(row, types, BaseType::Bool)
+}
+
+/// The names of `T`'s row fields whose type is `base` (directly, through an
+/// `Option`, or under a refined or opaque type): the columns a dialect's pass
+/// over the parsed rows converts before the codec runs (`Bool` for SQLite's
+/// `0`/`1`; `Int` and `Instant` for Postgres' text forms, #3320).
+pub fn row_base_fields(
+    row: &str,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    base: BaseType,
+) -> Vec<String> {
+    fn is_base(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>, want: BaseType) -> bool {
         match r {
-            TypeRef::Option(inner, _) => is_bool(inner, types),
-            TypeRef::Base(b, _) => *b == BaseType::Bool,
+            TypeRef::Option(inner, _) => is_base(inner, types, want),
+            TypeRef::Base(b, _) => *b == want,
             TypeRef::Named(id) => types.get(&id.name).is_some_and(|d| match &d.body {
-                TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => {
-                    *base == BaseType::Bool
-                }
+                TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => *base == want,
                 _ => false,
             }),
             _ => false,
@@ -778,7 +849,7 @@ pub fn row_bool_fields(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Vec
         Some(TypeBody::Record(record)) => record
             .fields
             .iter()
-            .filter(|f| is_bool(&f.type_ref, types))
+            .filter(|f| is_base(&f.type_ref, types, base))
             .map(|f| f.name.name.clone())
             .collect(),
         _ => Vec::new(),

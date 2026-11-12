@@ -50,6 +50,8 @@ adapter bynk.cloudflare {
 		PgValue,
 		PgError,
 		PgRun,
+		PgStatement,
+		PgReadError,
 	}
 
 	---
@@ -528,6 +530,27 @@ adapter bynk.cloudflare {
 		| PgFailed(sqlstate: String, message: String)
 
 	---
+	One statement of a `Postgres.transaction`: its SQL, a string literal, and
+	its positional parameters (`$1`, `$2`, …). It stays where it is built: it is
+	never stored, sent or decoded, since one from outside would carry SQL that
+	was never a literal.
+	---
+	type PgStatement = {
+		sql: String,
+		params: List[PgValue],
+	}
+
+	---
+	Why a typed `Postgres` read (`select[T]`, `firstAs[T]`) failed: `PgSql` is
+	the statement's own failure, `PgDecode` a row that did not fit `T` (a
+	column whose value disagrees with its field's type). The variants carry the
+	`Pg` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+	---
+	type PgReadError =
+		| PgSql(error: PgError)
+		| PgDecode(error: DecodeError)
+
+	---
 	An R2 bucket: objects stored and read as `Bytes` or streamed, with
 	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
@@ -828,6 +851,22 @@ adapter bynk.cloudflare {
 	`bytea` as base64 (a `Bytes` field decodes it); `json` and `jsonb` nested as
 	JSON. A `boolean` arrives as `true` or `false`, not `0` or `1`.
 
+	`select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+	argument is the statement from `FROM` on, a string literal that must not
+	itself begin with `SELECT`, and the compiler writes the column list from
+	`T`'s field names (each quoted in Postgres style: double quotes, an
+	embedded quote doubled), runs the statement and decodes the rows. `select`
+	gives `Result[List[T], PgReadError]`, `firstAs` `Result[Option[T],
+	PgReadError]`. A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes`,
+	`Decimal` or `Instant` (or a refined or opaque type over one, or an
+	`Option` of either). An `Int` reads an `int8` that arrives as text, and an
+	`Instant` reads the ISO-8601 text of a `timestamptz`, with any offset.
+
+	`transaction` runs its statements in order on one connection, in one
+	transaction: all apply, or none do and the result is the failing
+	statement's error. It runs a fixed list; a read that decides a later write
+	needs an interactive transaction, which this does not offer.
+
 	`run` executes a write and reports the rows it changed. Every operation
 	gives a `PgError` rather than faulting. Each statement uses its own
 	connection, opened and closed around it, and Cloudflare allows six
@@ -838,6 +877,7 @@ adapter bynk.cloudflare {
 		fn all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]
 		fn first(sql: String, params: List[PgValue]) -> Effect[Result[Option[String], PgError]]
 		fn run(sql: String, params: List[PgValue]) -> Effect[Result[PgRun, PgError]]
+		fn transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]
 	}
 
 	provides Kv = WorkersKv

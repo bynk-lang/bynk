@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Some, None } from "../src/result.ts";
-import { __bynkInstantFromIso, __bynkInstantToIso, __bynkIsIsoDate } from "../src/time.ts";
+import { __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantToIso, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
 
 // Standard-library K3 (#2592).
 test("toIso writes UTC with three fraction digits and Z", () => {
@@ -113,4 +113,77 @@ test("isIsoDate agrees with Instant.fromIso at midnight over generated strings",
     const viaInstant = __bynkInstantFromIso(`${d}T00:00:00Z`).tag === "Some";
     assert.equal(__bynkIsIsoDate(d), viaInstant, d);
   }
+});
+
+// Hyperdrive H3 (#3320): the forms a Postgres `timestamptz` arrives as.
+const NOON = Date.UTC(2026, 10, 11, 12, 34, 56, 789);
+
+test("fromPgText reads the driver's ISO form and the server's own text, each as UTC", () => {
+  const forms: [string, number][] = [
+    ["2026-11-11T12:34:56.789Z", NOON],
+    ["2026-11-11T12:34:56.789z", NOON],
+    ["2026-11-11 12:34:56.789+00", NOON],
+    ["2026-11-11 12:34:56.789+00:00", NOON],
+    ["2026-11-11 12:34:56.789+0000", NOON],
+    ["2026-11-11 13:34:56.789+01", NOON],
+    ["2026-11-11 18:04:56.789+05:30", NOON],
+    ["2026-11-11 18:04:56.789+0530", NOON],
+    ["2026-11-11 04:34:56.789-08", NOON],
+    ["2026-11-11 04:34:56.789-08:00", NOON],
+    ["2026-11-11 12:34:56.789123+00", NOON],
+    ["2026-11-11 12:34:56+00", NOON - 789],
+    ["2026-11-11 12:34:56.7+00", NOON - 89],
+    ["2026-11-11 18:28:24.789+05:53:28", NOON],
+    ["2026-11-11T12:34:56.789000+00:00", NOON],
+    ["1970-01-01 00:00:00+00", 0],
+    ["1969-12-31 23:59:59.999+00", -1],
+  ];
+  for (const [text, ms] of forms) {
+    assert.equal(__bynkInstantFromPgText(text), ms, text);
+  }
+});
+
+test("fromPgText is null for anything that names no instant", () => {
+  for (const text of [
+    "2026-11-11 12:34:56",
+    "2026-11-11 12:34:56.789",
+    "infinity",
+    "-infinity",
+    "0044-03-15 12:00:00+00 BC",
+    "2026-02-30 12:00:00+00",
+    "2026-11-11 24:00:00+00",
+    "2026-11-11 12:34:56+24",
+    "2026-11-11 12:34:56+05:60",
+    "12345-11-11 12:34:56+00",
+    "yesterday",
+    "",
+  ]) {
+    assert.equal(__bynkInstantFromPgText(text), null, text);
+  }
+});
+
+test("pgRow converts the named Instant and Int columns and leaves everything else to the codec", () => {
+  const row: Record<string, unknown> = {
+    at: "2026-11-11 12:34:56.789+00",
+    bad: "yesterday",
+    n: "9007199254740991",
+    neg: "-12",
+    zero: "-0",
+    big: "9007199254740993",
+    frac: "1.5",
+    already: 7,
+    other: "2026-11-11 12:34:56.789+00",
+  };
+  __bynkPgRow(row, ["at", "bad", "already", "missing"], ["n", "neg", "zero", "big", "frac", "already"]);
+  assert.equal(row.at, NOON);
+  assert.equal(row.bad, "yesterday");
+  assert.equal(row.n, 9007199254740991);
+  assert.equal(row.neg, -12);
+  assert.ok(Object.is(row.zero, 0));
+  assert.equal(row.big, "9007199254740993");
+  assert.equal(row.frac, "1.5");
+  assert.equal(row.already, 7);
+  assert.equal(row.other, "2026-11-11 12:34:56.789+00");
+  // Not a row: nothing to convert, nothing thrown.
+  for (const v of [null, 3, "x", [1]]) __bynkPgRow(v, ["at"], ["n"]);
 });

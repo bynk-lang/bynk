@@ -9145,7 +9145,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.select_tail_has_select",
-        "A `D1` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`.",
+        "A `D1` or `Postgres` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`.",
         &["method_call"],
     ),
     dg(
@@ -9160,17 +9160,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.sql_not_literal",
-        "A `D1` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or a `SqlStatement`'s `sql`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` parameter (standard-library P4c).",
+        "A `D1` or `Postgres` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or the `sql` of a `SqlStatement` or a `PgStatement`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` or `PgValue` parameter (standard-library P4c, Hyperdrive H1 and H3).",
         &["method_call", "record_construction", "record_spread"],
     ),
     dg(
         "bynk.types.sql_row_shape",
-        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c).",
+        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3).",
         &["method_call"],
     ),
     d(
         "bynk.types.sql_statement_at_boundary",
-        "A `bynk.cloudflare` `SqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c).",
+        "A `bynk.cloudflare` `SqlStatement` or `PgStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c).",
     ),
     d(
         "bynk.types.stream_at_boundary",

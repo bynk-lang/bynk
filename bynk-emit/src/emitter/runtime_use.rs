@@ -96,6 +96,9 @@ pub struct RuntimeUse {
     bytes_ops: Cell<bool>,
     /// K3 (#2592): the module references the `Instant` ISO-8601 helpers.
     time_ops: Cell<bool>,
+    /// Hyperdrive H3 (#3320): the module references `__bynkPgRow`, the typed
+    /// `Postgres` reads' pass over a row's `Instant` and `Int` columns.
+    pg_rows: Cell<bool>,
     /// #2867: an `IsoDate` refinement check was emitted.
     iso_date: Cell<bool>,
     /// #3214: the module lowers `Yaml.decode[T]` and imports the YAML parser.
@@ -225,6 +228,11 @@ impl RuntimeUse {
     /// Record that the module references the `Instant` ISO-8601 helpers (#2592).
     pub fn note_time_ops(&self) {
         self.time_ops.set(true);
+    }
+
+    /// Record that the module references the typed `Postgres` read helper (#3320).
+    pub fn note_pg_rows(&self) {
+        self.pg_rows.set(true);
     }
 
     /// Record that the module references the percent-encoding helpers (#2594).
@@ -539,6 +547,11 @@ impl RuntimeUse {
     /// Whether the `Instant` ISO-8601 helpers must be imported (#2592).
     pub fn time_ops(&self) -> bool {
         self.time_ops.get()
+    }
+
+    /// Whether the typed `Postgres` read helper must be imported (#3320).
+    pub fn pg_rows(&self) -> bool {
+        self.pg_rows.get()
     }
 
     /// Whether the percent-encoding helpers must be imported (#2594).

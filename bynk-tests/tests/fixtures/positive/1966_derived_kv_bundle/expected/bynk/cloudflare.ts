@@ -567,6 +567,35 @@ export const PgError = {
 };
 
 /**
+ * One statement of a `Postgres.transaction`: its SQL, a string literal, and
+ * its positional parameters (`$1`, `$2`, …). It stays where it is built: it is
+ * never stored, sent or decoded, since one from outside would carry SQL that
+ * was never a literal.
+ */
+export interface PgStatement {
+  readonly sql: string;
+  readonly params: readonly PgValue[];
+}
+
+export const PgStatement = {
+};
+
+/**
+ * Why a typed `Postgres` read (`select[T]`, `firstAs[T]`) failed: `PgSql` is
+ * the statement's own failure, `PgDecode` a row that did not fit `T` (a
+ * column whose value disagrees with its field's type). The variants carry the
+ * `Pg` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+ */
+export type PgReadError =
+    { readonly tag: "PgSql"; readonly error: PgError }
+  | { readonly tag: "PgDecode"; readonly error: DecodeError };
+
+export const PgReadError = {
+  PgSql: (error: PgError): PgReadError => ({ tag: "PgSql", error }),
+  PgDecode: (error: DecodeError): PgReadError => ({ tag: "PgDecode", error }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -948,6 +977,22 @@ export const __EmailToken: symbol = globalThis.Symbol("Email");
  * `bytea` as base64 (a `Bytes` field decodes it); `json` and `jsonb` nested as
  * JSON. A `boolean` arrives as `true` or `false`, not `0` or `1`.
  *
+ * `select[T]` and `firstAs[T]` read rows straight into a record `T`: the
+ * argument is the statement from `FROM` on, a string literal that must not
+ * itself begin with `SELECT`, and the compiler writes the column list from
+ * `T`'s field names (each quoted in Postgres style: double quotes, an
+ * embedded quote doubled), runs the statement and decodes the rows. `select`
+ * gives `Result[List[T], PgReadError]`, `firstAs` `Result[Option[T],
+ * PgReadError]`. A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes`,
+ * `Decimal` or `Instant` (or a refined or opaque type over one, or an
+ * `Option` of either). An `Int` reads an `int8` that arrives as text, and an
+ * `Instant` reads the ISO-8601 text of a `timestamptz`, with any offset.
+ *
+ * `transaction` runs its statements in order on one connection, in one
+ * transaction: all apply, or none do and the result is the failing
+ * statement's error. It runs a fixed list; a read that decides a later write
+ * needs an interactive transaction, which this does not offer.
+ *
  * `run` executes a write and reports the rows it changed. Every operation
  * gives a `PgError` rather than faulting. Each statement uses its own
  * connection, opened and closed around it, and Cloudflare allows six
@@ -958,6 +1003,7 @@ export interface Postgres {
   all(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<string, PgError>>;
   first(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<Option<string>, PgError>>;
   run(sql: string, params: readonly PgValue[]): globalThis.Promise<Result<PgRun, PgError>>;
+  transaction(statements: readonly PgStatement[]): globalThis.Promise<Result<readonly PgRun[], PgError>>;
 }
 
 export const __PostgresToken: symbol = globalThis.Symbol("Postgres");

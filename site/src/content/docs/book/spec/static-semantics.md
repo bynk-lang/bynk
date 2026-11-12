@@ -1464,7 +1464,23 @@ and `expect` apply to it unchanged. The rules:
   `id` is a placeholder until the Hyperdrive configuration exists. The SQL
   argument of each of its operations MUST be a string literal, or a `String`
   constant bound to one (`bynk.types.sql_not_literal`), with `$1`, `$2`, … as its
-  placeholders.
+  placeholders. So MUST the `sql` of each `PgStatement` of a `transaction`
+  (Hyperdrive H3, #3320). A `PgStatement` MUST NOT appear in a storable or
+  boundary position or as a `Json` codec target
+  (`bynk.types.sql_statement_at_boundary`), as a `SqlStatement` MUST NOT. Its
+  `transaction(statements)` runs the statements in order, all or none. Like
+  `D1`'s, a derived `Postgres` instance has the compiler-lowered typed reads
+  `select[T](tail, params)` and `firstAs[T](tail, params)`: the tail MUST be a
+  string literal or constant that continues from `FROM`
+  (`bynk.types.select_tail_has_select`, `bynk.types.sql_not_literal`), `T` MUST
+  be a row record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`,
+  `Decimal` or `Instant` (or a refined or opaque type over one, or an `Option`
+  of either) (`bynk.types.sql_row_shape`), and the call has type
+  `Effect[Result[List[T], PgReadError]]` (`firstAs`: `Option[T]`). The compiler
+  writes the column list from `T`'s field names as Postgres quoted identifiers.
+  The rows decode through the boundary codec, with an `Int` field read from the
+  text of an `int8` and an `Instant` field from the ISO-8601 text of a
+  `timestamptz` (normalised to UTC) before it runs; `Json.decode` reads neither.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
   `Queue`, `Analytics`, `EdgeCache`, `Email` and `Postgres` are such kinds.

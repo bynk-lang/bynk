@@ -1,0 +1,2 @@
+bynk.types.sql_not_literal the SQL of `Main.select` must be a string literal or a `String` constant bound to one
+# exact

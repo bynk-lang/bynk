@@ -198,9 +198,12 @@ pub(crate) fn check_codable(ctx: &mut Ctx, ty: TyId, span: Span, site: &CodableS
             .push(super::kernels::recursive_generic_error(&rec, span));
         return false;
     }
-    if super::d1::carries_statement(ty, &ctx.input.types, tys) {
-        ctx.errors
-            .push(super::d1::statement_at_boundary(span, "a `Codable` type"));
+    if let Some(statement) = super::d1::carried_statement(ty, &ctx.input.types, tys) {
+        ctx.errors.push(super::d1::statement_at_boundary(
+            span,
+            "a `Codable` type",
+            &statement,
+        ));
         return false;
     }
     if !json_codable(ty, &ctx.input.types, tys, &ctx.type_vars) || ty == tys.intern(Ty::Unit) {
