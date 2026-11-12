@@ -5,7 +5,7 @@ interface __BynkCacheDouble {
 }
 // #3437: what a detached effect's failure reports. The double's `report` records
 // each one on `__bynkDetachedReports`, which the runner drains after each case (`globalThis.__bynkDetachedReports`); a
-// report does not fail the case, as on Workers (ADR 0478).
+// report does not fail the case, as on Workers (ADR 0478). Attribution is best-effort: a report landing after its case was drained (a case that threw before `__bynkSettle` finished) shows under the next case.
 type __BynkDetachedReport = { kind: string; site: string; type: string | null; variant: string | null };
 // One list on `globalThis`, shared by every module's double.
 const __bynkDetachedReports: __BynkDetachedReport[] = ((globalThis as unknown as { __bynkDetachedReports?: __BynkDetachedReport[] }).__bynkDetachedReports ??= []);
