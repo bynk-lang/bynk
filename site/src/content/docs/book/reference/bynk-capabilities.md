@@ -911,12 +911,15 @@ service orders from http {
 }
 ```
 
-`Main` binds as `env.HYPERDRIVE_MAIN`, a `[[hyperdrive]]` entry whose `id` is a
-placeholder. **`bynk deploy` does not create the Hyperdrive configuration yet**:
-make one with `wrangler hyperdrive create` and write its id into the generated
-`wrangler.toml`, and for `bynk dev` give it a `localConnectionString` (or set
-`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_MAIN`). Provisioning and
-`bynk dev` wiring are the next slice.
+`Main` binds as `env.HYPERDRIVE_MAIN`, a `[[hyperdrive]]` entry whose `id`
+`bynk deploy` fills in. `bynk.toml` says where the connection string comes from,
+by the name of an environment variable and never the string:
+`[deploy.hyperdrive.Main] connection_env = "MAIN_DATABASE_URL"` makes (or updates)
+the Hyperdrive config at deploy, or `config_id = { production = "…" }` adopts one
+that exists; `[dev.hyperdrive.Main] connection_env = "MAIN_LOCAL_DATABASE_URL"`
+names the local database `bynk dev` serves. See
+[Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)
+and [Connect an existing Postgres database](/book/guides/effects-and-capabilities/connect-an-existing-postgres-database/).
 
 **The statement.** The SQL is a string literal (or a `String` constant bound to
 one), as for [`D1`](#sql-databases-d1), so data reaches a statement only as a

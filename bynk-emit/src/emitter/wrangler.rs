@@ -688,10 +688,11 @@ fn stored_secret_block(binding: TomlValue, store: &str, secret: &str) -> TomlBlo
 }
 
 /// Hyperdrive H1 (#3318): the `[[hyperdrive]]` entry of a `Postgres` instance.
-/// The configuration is made outside the build until H2
-/// (`wrangler hyperdrive create`), so its `id` is a placeholder to replace, as
-/// D1's is until a deploy fills it. `bynk dev` needs `localConnectionString` or
-/// `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>`.
+/// The configuration is made by `bynk deploy` (or adopted: `bynk.toml`'s
+/// `[deploy.hyperdrive]`), so its `id` is a placeholder it replaces, as D1's
+/// is. `bynk dev` needs `[dev.hyperdrive]` in `bynk.toml`, or
+/// `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>` in the
+/// environment.
 fn hyperdrive_block(name: TomlValue, binding: &str) -> TomlBlock {
     TomlBlock::array_table(
         "hyperdrive",
@@ -700,7 +701,7 @@ fn hyperdrive_block(name: TomlValue, binding: &str) -> TomlBlock {
             TomlEntry::with_comment(
                 "id",
                 TomlValue::str(hyperdrive_id_placeholder(binding)),
-                "replace with the id from `wrangler hyperdrive create`",
+                "set at deploy time",
             ),
         ],
     )
@@ -973,7 +974,7 @@ pub fn d1_database_id_placeholder(binding: &str) -> String {
 }
 
 /// Hyperdrive H1 (#3318): the placeholder `id` of Hyperdrive binding `binding`,
-/// which the author replaces with a configuration id until H2 provisions one.
+/// which `bynk deploy` replaces with the id of its Hyperdrive config.
 pub fn hyperdrive_id_placeholder(binding: &str) -> String {
     format!("<{binding}_ID>")
 }
@@ -1031,6 +1032,67 @@ pub fn materialise_d1_databases(
                     set_string_preserving_decor(item, &value);
                     changed = true;
                 }
+            }
+        }
+    }
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
+}
+
+/// Hyperdrive H2 (#3319): a generated `wrangler.toml`'s `[[hyperdrive]]`
+/// entries as `(binding, id)`, in file order; an entry missing either is
+/// skipped. In a freshly generated file `id` is the placeholder.
+pub fn hyperdrive_entries(text: &str) -> Result<Vec<(String, String)>, String> {
+    let doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    Ok(doc
+        .get("hyperdrive")
+        .and_then(|i| i.as_array_of_tables())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| {
+            Some((
+                t.get("binding")?.as_str()?.to_string(),
+                t.get("id")?.as_str()?.to_string(),
+            ))
+        })
+        .collect())
+}
+
+/// Hyperdrive H2 (#3319): point `[[hyperdrive]]` entries at their configs,
+/// structurally, by binding: each entry whose binding `ids` lists gets that
+/// id. Unchanged text when nothing differs, as [`materialise_d1_databases`].
+/// Only an id is written: the connection string is never an input here.
+pub fn materialise_hyperdrive_ids(
+    text: &str,
+    ids: &std::collections::BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e| format!("invalid wrangler.toml: {e}"))?;
+    let mut changed = false;
+    if let Some(entries) = doc
+        .get_mut("hyperdrive")
+        .and_then(|i| i.as_array_of_tables_mut())
+    {
+        for entry in entries.iter_mut() {
+            let Some(id) = entry
+                .get("binding")
+                .and_then(|b| b.as_str())
+                .and_then(|b| ids.get(b))
+                .cloned()
+            else {
+                continue;
+            };
+            if let Some(item) = entry.get_mut("id")
+                && item.as_str() != Some(id.as_str())
+            {
+                set_string_preserving_decor(item, &id);
+                changed = true;
             }
         }
     }

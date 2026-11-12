@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.559**.
+written against **v0.560**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.560.0** | `bynk deploy` makes, syncs or adopts the Hyperdrive config of a `Postgres` instance from a connection string in an environment variable `bynk.toml` names, and `bynk dev` wires the local one |
 | **v0.559.1** | `bynk explain` gains thirty-three entries under the actor, adapter, capability, consumes, exports and generics codes (#3163) |
 | **v0.559.0** | The request readers apply `@name("…")`: a renamed `cookies`, `query` or `@form`/`@multipart` body field is read from, and written to, its wire key (#3343, slice 2) |
 | **v0.558.2** | `bynk explain` covers eighteen more codes across `package`, `requires`, `lambda`, `record_spread`, `json`, `duration`, `namespace`, `messages`, `given`, `cell` and `resolve` (#3163) |
