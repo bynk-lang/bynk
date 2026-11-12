@@ -2879,6 +2879,12 @@ fn check_service_decls(
         }
     }
 
+    // #3329: a cross-site cookie (`SameSite.Unrestricted`) is only ever sent back
+    // by a credentialed cross-origin request, so the service needs `cors { credentials: true }`.
+    for service in table.services.values() {
+        warn_cross_site_cookie_without_credentials(service, errors);
+    }
+
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
     // is legal and still stamps the safe defaults — only a *declared* block is
     // validated here.)
@@ -4347,6 +4353,85 @@ fn check_agent_decls(
             );
         }
     }
+}
+
+/// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
+/// `from http` service whose handlers attach a `Cookie { … sameSite:
+/// SameSite.Unrestricted … }` (`withCookie`/`clearCookie`) but whose `cors`
+/// policy lacks `credentials: true` (or that has none). The browser withholds
+/// the cookie from credential-less cross-site requests, so it can never return.
+fn warn_cross_site_cookie_without_credentials(
+    service: &ServiceDecl,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        return;
+    }
+    if service.cors.as_ref().is_some_and(|c| c.credentials()) {
+        return;
+    }
+    let mut hit: Option<Span> = None;
+    for handler in &service.handlers {
+        let mut exprs: Vec<&Expr> = Vec::new();
+        for s in &handler.body.statements {
+            bynk_syntax::ast::statement_exprs(s, &mut exprs);
+        }
+        exprs.push(&handler.body.tail);
+        let mut visit = |e: &Expr| {
+            if hit.is_some() {
+                return;
+            }
+            let ExprKind::MethodCall { method, args, .. } = &e.kind else {
+                return;
+            };
+            if method.name != "withCookie" && method.name != "clearCookie" {
+                return;
+            }
+            let Some(arg) = args.first() else { return };
+            let ExprKind::RecordConstruction {
+                type_name, fields, ..
+            } = &arg.kind
+            else {
+                return;
+            };
+            let unrestricted = type_name.name == "Cookie" && fields.iter().any(|f| {
+                f.name.name == "sameSite"
+                    && matches!(
+                        f.value.as_ref().map(|v| &v.kind),
+                        Some(ExprKind::FieldAccess { field, .. }) if field.name == "Unrestricted"
+                    )
+            });
+            if unrestricted {
+                hit = Some(arg.span);
+            }
+        };
+        fn walk(e: &Expr, f: &mut dyn FnMut(&Expr)) {
+            f(e);
+            for c in bynk_syntax::ast::expr_children(e) {
+                walk(c, f);
+            }
+        }
+        for e in exprs {
+            walk(e, &mut visit);
+        }
+        if hit.is_some() {
+            break;
+        }
+    }
+    let Some(span) = hit else { return };
+    errors.push(
+        CompileError::new(
+            "bynk.http.cookie_cross_site_without_credentials",
+            span,
+            format!(
+                "service `{}` sets a `SameSite.Unrestricted` cookie but does not declare `cors {{ credentials: true }}`, so the browser can never send it back cross-site",
+                service.name.name
+            ),
+        )
+        .with_note(
+            "add `cors { origins: [...], credentials: true }` to the service, or use `SameSite.Lax` if the cookie need not cross sites",
+        ),
+    );
 }
 
 /// Validate a service's `cors { }` policy (v0.131, ADR 0159). The grammar is

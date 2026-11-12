@@ -926,6 +926,14 @@
       "summary": "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another."
     },
     {
+      "code": "bynk.http.cookie_cross_site_without_credentials",
+      "summary": "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so the browser can never send it back cross-site (warning)."
+    },
+    {
+      "code": "bynk.http.cookie_domain_widens",
+      "summary": "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning)."
+    },
+    {
       "code": "bynk.http.cookie_host_prefix",
       "summary": "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`."
     },
