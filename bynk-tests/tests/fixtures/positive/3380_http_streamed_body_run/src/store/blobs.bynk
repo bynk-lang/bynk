@@ -1,0 +1,23 @@
+context store.blobs
+
+service blobs from http {
+	// The cap a streamed body is counted against as the handler reads it.
+	limits { maxBody: 64 }
+
+	// A streamed raw body of any type: the handler pulls it chunk by chunk and the
+	// reply is how many bytes it read, so the answer does not depend on how the
+	// transport happened to split them.
+	@raw(contentType: "*/*")
+	on PUT("/blobs/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		let total = chunks.fold(0, (acc, b) => acc + b.length())
+		Ok("\(name) \(total)")
+	}
+
+	// The same route with a declared media type, to probe the `415`.
+	@raw(contentType: "application/zip")
+	on PUT("/zips/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+		let chunks <- body.collect()
+		Ok("\(name) \(chunks.length())")
+	}
+}

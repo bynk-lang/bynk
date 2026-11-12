@@ -411,6 +411,8 @@ mod system {
     mod store_behaviour;
     #[path = "stream_behaviour.rs"]
     mod stream_behaviour;
+    #[path = "stream_request_body_workerd.rs"]
+    mod stream_request_body_workerd;
     #[path = "suite_filter.rs"]
     mod suite_filter;
     #[path = "system_suite_heading_behaviour.rs"]
