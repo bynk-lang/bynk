@@ -895,7 +895,7 @@ fn all_emitted_typescript_strips_under_node() {
 // `bynk compile --emit js` type-strips the emitted TypeScript to JavaScript via
 // `bynk_driver::strip::strip_project_to_js` (oxc). These two tests guard that path: the first
 // is pure-Rust and always runs (the strip must succeed on every fixture and yield
-// a JS-shaped tree); the second runs the emitted `.js` through `node --check` to
+// a JS-shaped tree); the second parses the emitted `.js` as ES modules in Node to
 // confirm it is valid, runnable ES module syntax with no TypeScript residue.
 // ---------------------------------------------------------------------------
 
@@ -958,7 +958,8 @@ fn js_artefact_strips_every_fixture_to_js_shape() {
 }
 
 /// Stage every project fixture's `--emit js` output into one tree and run
-/// `node --check` over every `.js` — proof the stripped output is valid, runnable
+/// parse every `.js` as an ES module in one Node process (`vm.SourceTextModule`,
+/// parse only) — proof the stripped output is valid, runnable
 /// ES-module JavaScript (a surviving type annotation would fail the check). Node
 /// is the only requirement; skips loudly when it is absent, like the `tsc` gate.
 #[test]
@@ -974,9 +975,6 @@ fn emitted_javascript_is_valid_under_node() {
     let root = std::env::temp_dir().join(format!("bynk-js-verify-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create js-verify temp root");
-    // Make Node parse the emitted `.js` as ES modules regardless of Node version.
-    fs::write(root.join("package.json"), "{\n  \"type\": \"module\"\n}\n")
-        .expect("write root package.json");
 
     // Compile, strip and write each project fixture on a small worker pool
     // (#3387): serially this was about two thirds of the test outside Node. Each
