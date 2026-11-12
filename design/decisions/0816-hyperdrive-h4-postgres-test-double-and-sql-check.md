@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
-changelog: A `Postgres` instance can run on PGlite in tests (`[test] postgres = "pglite"`), and a `schema.sql` switches on a syntax and placeholder-count check of each literal statement (`bynk.postgres.sql_invalid` as a warning, `bynk.postgres.sql_param_count` as an error)
----
+# 0816 — Hyperdrive H4 adds an opt-in PGlite `Postgres` test double and a `schema.sql`-gated statement check
 
-## ADR: hyperdrive-h4-postgres-test-double-and-sql-check
-title: Hyperdrive H4 adds an opt-in PGlite `Postgres` test double and a `schema.sql`-gated statement check
-summary: PGlite is adopted as an opt-in double on measurements, stub-only stays the default; a `schema.sql` at the root switches on a syntax warning (sqlparser) and an exact placeholder-count error
+- **Status:** Accepted (v0.561)
 
 **Context.** After H1 every `Postgres` call in a test must be stubbed, whereas `D1` runs a real SQLite (ADR 0666, 0728) and has its SQL checked at compile time (ADR 0763). ADR 0799 I deferred the test double to this slice, and ADR 0799 G allowed a later check with libpg_query when a `schema.sql` is supplied. Proposal #3321 (part of #3184), decisions A and B, accepted as recommended. The measurements did not contradict A, so it stands; B's parser was changed on review, from libpg_query to `sqlparser` (below). What the numbers settled for A is *how* PGlite is used (one database per instance, reset per case) and what it cannot model.
 

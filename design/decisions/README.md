@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0816](0816-hyperdrive-h4-postgres-test-double-and-sql-check.md) | **Hyperdrive H4 adds an opt-in PGlite `Postgres` test double and a `schema.sql`-gated statement check** (v0.561) — PGlite is adopted as an opt-in double on measurements, stub-only stays the default; a `schema.sql` at the root switches on a syntax warning (sqlparser) and an exact placeholder-count error | Accepted (v0.561) |
 | [0815](0815-hyperdrive-h2-deploy-and-dev.md) | **Hyperdrive H2 provisions a Postgres instance's config from an environment variable, and wires `bynk dev`** (v0.560) — Where the connection string comes from, how a deploy makes, syncs, adopts and prunes the config, and what keeps the string out of every file and message | Accepted (v0.560) |
 | [0814](0814-field-name-readers.md) | **The request readers apply a record field's `@name` wire key** (v0.559) — Where a renamed field is read, written and documented, and what an error names | Accepted (v0.559) |
 | [0813](0813-hyperdrive-h3-typed-reads-and-transaction.md) | **Hyperdrive H3: typed reads and `transaction` for `Postgres`, and what stays apart from `decodeSql`** (v0.558) — Variant names, how an `Instant` and an `int8` are read, why `decodeSql` is not unified with the codec yet, and how a transaction reaches the driver | Accepted (v0.558) |
