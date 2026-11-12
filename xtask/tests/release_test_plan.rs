@@ -84,7 +84,9 @@ jq -r "$q" "$f"
     /// The `matrix` output, or None when `jq` is unavailable.
     fn plan(&self, event: &str, sha: &str) -> Option<String> {
         if Command::new("jq").arg("--version").output().is_err() {
-            assert!(!cfg!(target_os = "linux"), "jq is required");
+            if cfg!(target_os = "linux") {
+                panic!("jq is required");
+            }
             return None;
         }
         let out_file = self.dir.join("out");
