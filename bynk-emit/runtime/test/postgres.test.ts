@@ -333,12 +333,12 @@ test("the real default executor's transaction reports an unreachable host as a c
 // the real postgres.js type parsers (no connection is made: `options.parsers` is
 // built from the `types` the executor passes).
 import postgres from "postgres";
-import { PG_DATE_TYPES } from "../src/postgres.ts";
+import { PG_TYPES } from "../src/postgres.ts";
 import { jsonRow } from "../src/postgres.ts";
 import { __bynkPgRow } from "../src/time.ts";
 
 test("a timestamp, a date and an infinity stay text and an Instant refuses them; a finite timestamptz is converted", () => {
-  const parsers = (postgres("postgres://u:p@127.0.0.1:1/db", { types: PG_DATE_TYPES }) as unknown as {
+  const parsers = (postgres("postgres://u:p@127.0.0.1:1/db", { types: PG_TYPES }) as unknown as {
     options: { parsers: Record<number, (text: string) => unknown> };
   }).options.parsers;
   const row = jsonRow({
@@ -367,5 +367,64 @@ test("a timestamp, a date and an infinity stay text and an Instant refuses them;
 test("the executor opens its client with the date types", async () => {
   const f = fake(() => rows([]));
   await makePgExecute(f.factory)(URL_WITH_SECRET, "select 1", []);
-  assert.equal(f.opened[0]!.options.types, PG_DATE_TYPES);
+  assert.equal(f.opened[0]!.options.types, PG_TYPES);
+});
+
+// Corrections to H1 (#3320), found by H2's smoke against local Hyperdrive.
+
+test("a PgJson reaches the server as the text it is: the real driver's json and jsonb serializers pass it through", () => {
+  const options = (postgres("postgres://u:p@127.0.0.1:1/db", { types: PG_TYPES }) as unknown as {
+    options: { serializers: Record<number, (x: unknown) => string>; parsers: Record<number, (t: string) => unknown> };
+  }).options;
+  const text = '{"k":[1,2],"s":"a\\"b"}';
+  // 114 is `json`, 3802 `jsonb`: a `$n::jsonb` parameter is described as 3802.
+  for (const oid of [114, 3802]) {
+    assert.equal(options.serializers[oid]!(text), text);
+    assert.deepEqual(JSON.parse(options.serializers[oid]!(text)), { k: [1, 2], s: 'a"b' });
+  }
+  // The driver's own default would have stored a JSON string: the bug.
+  const stock = (postgres("postgres://u:p@127.0.0.1:1/db") as unknown as {
+    options: { serializers: Record<number, (x: unknown) => string> };
+  }).options;
+  assert.equal(stock.serializers[3802]!(text), JSON.stringify(text));
+  // Results are unchanged: parsed and nested.
+  assert.deepEqual(options.parsers[3802]!(text), { k: [1, 2], s: 'a"b' });
+});
+
+test("a PgJson parameter is handed to the driver as text, and the executor opens the client with the types", async () => {
+  const f = fake(() => rows([]));
+  await makePgExecute(f.factory)(URL_WITH_SECRET, "insert into t (m) values ($1::jsonb)", [
+    { tag: "PgJson", value: '{"a":[1]}' },
+  ]);
+  assert.equal(f.calls[0]!.params[0], '{"a":[1]}');
+  assert.equal(f.opened[0]!.options.types, PG_TYPES);
+});
+
+test("a socket error with no code is a connection failure, with a fixed message that names no host", () => {
+  for (const text of [
+    "connection attempt failed",
+    "Network connection lost.",
+    "connect failed: Connection refused (127.0.0.1:1)",
+    "proxy request failed, cannot connect to the specified address",
+    "getaddrinfo ENOTFOUND db.internal.example",
+  ]) {
+    const f = classifyPgError(new Error(text));
+    assert.deepEqual([f.kind, f.sqlstate, f.message], ["connection", "", "could not reach the database"], text);
+  }
+});
+
+test("the database's own errors and ordinary failures are not mistaken for a connection failure", () => {
+  // A server error has a SQLSTATE: its message may say anything.
+  const server = classifyPgError(Object.assign(new Error('relation "connection" does not exist'), { code: "42P01" }));
+  assert.deepEqual([server.kind, server.sqlstate], ["failed", "42P01"]);
+  assert.equal(classifyPgError(new Error("syntax error at or near selec")).kind, "failed");
+  assert.equal(classifyPgError(new Error("expected a number")).kind, "failed");
+});
+
+test("an unreachable host through the real driver is PgConnection-shaped, with no password or host in it", async () => {
+  const out = await pgExecute("postgres://app:s3cr3t@db.invalid.example:1/db", "select 1", []);
+  assert.ok(!out.ok);
+  if (out.ok) return;
+  assert.equal(out.failure.kind, "connection");
+  assert.ok(!out.failure.message.includes("s3cr3t") && !out.failure.message.includes("db.invalid.example"));
 });

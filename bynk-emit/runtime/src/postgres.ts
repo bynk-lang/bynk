@@ -94,7 +94,8 @@ interface PgRows extends ReadonlyArray<Record<string, unknown>> {
   readonly count?: number | null;
 }
 /**
- * How the driver reads the date and time types (Hyperdrive H3, #3320). postgres.js
+ * How the driver reads and writes the date, time and JSON types (Hyperdrive H3,
+ * #3320). postgres.js
  * parses `date`, `timestamp` and `timestamptz` alike with `new Date(text)`, which
  * would make a zone-less `timestamp` an instant (in the Worker's UTC) and a
  * `date` midnight, and an `infinity` an invalid date (which `jsonColumn` writes
@@ -102,10 +103,22 @@ interface PgRows extends ReadonlyArray<Record<string, unknown>> {
  * ADR 0799 F); a `timestamp`, a `date` and an infinite value stay as the
  * server's text, which an `Instant` field refuses and a `String` field reads.
  */
-export const PG_DATE_TYPES = (() => {
+export const PG_TYPES = (() => {
   // The driver's own `date` serializer, kept so a `Date` parameter binds as it did.
   const serialize = (x: unknown): string => (x instanceof Date ? x : new Date(x as string | number)).toISOString();
   return {
+    // Correction to H1 (#3320): a `PgJson` is text that is already JSON, and the
+    // driver's own `json` serializer is `JSON.stringify`, which registers for `json`
+    // and `jsonb` alike and so quoted that text a second time (a jsonb string,
+    // not the object or array). Text passes through unchanged; anything else (a
+    // `PgText` bound where the server asks for json is text too) is the same.
+    // Results are unchanged: `json` and `jsonb` columns arrive parsed and nested.
+    json: {
+      to: 114,
+      from: [114, 3802],
+      serialize: (x: unknown): string => (typeof x === "string" ? x : JSON.stringify(x)),
+      parse: (text: string): unknown => JSON.parse(text),
+    },
     // `date` and `timestamp`: the server's text, unparsed.
     date: { to: 1184, from: [1082, 1114], serialize, parse: (text: string): string => text },
     // `timestamptz`: a `Date`, unless it is `infinity` or `-infinity`.
@@ -144,6 +157,17 @@ function codeOf(e: unknown): string {
 const SQLSTATE = /^[0-9A-Z]{5}$/;
 
 /**
+ * What `cloudflare:sockets` (through postgres.js' `workerd` build) and workerd's
+ * Hyperdrive proxy throw when no connection can be made or one is lost: plain
+ * errors with **no** `code`, such as `connection attempt failed` (an unreachable
+ * port or an unresolvable host under local Hyperdrive) and `Network connection
+ * lost.`. Matched on the message, and only for an error that is not the
+ * database's own (a `PostgresError` has a SQLSTATE and is classified above).
+ */
+const SOCKET_FAILURE =
+  /connection attempt failed|network connection lost|connection (?:was )?(?:refused|reset|closed|lost|timed out)|connect(?:ion)? (?:failed|timed out|timeout)|proxy request failed|could not connect|unable to connect|hostname (?:could not be|cannot be) resolved|getaddrinfo|socket (?:closed|hang up)/i;
+
+/**
  * Map a driver error. A SQLSTATE of class `23` (integrity constraint) is
  * `constraint`; `40001` is `serialization`; a connection code with no SQLSTATE
  * is `connection`; everything else is `failed`. A connection failure's message
@@ -159,6 +183,12 @@ export function classifyPgError(e: unknown): PgFailure {
   }
   if (CONNECTION_CODES.has(code)) {
     return { kind: "connection", sqlstate: "", message: `could not reach the database (${code})` };
+  }
+  // No SQLSTATE and no known code: a socket error from the runtime carries only a
+  // message. The message returned is fixed, as above: the driver's own can name
+  // the host and port.
+  if (SOCKET_FAILURE.test(message)) {
+    return { kind: "connection", sqlstate: "", message: "could not reach the database" };
   }
   return { kind: "failed", sqlstate: "", message };
 }
@@ -240,7 +270,7 @@ export function jsonRow(row: Record<string, unknown>): Record<string, unknown> {
 export function makePgExecute(factory: PgFactory): PgExecute {
   // `max: 1`: one statement needs one connection. `fetch_types: false` is the
   // `workerd` build's default, written down so it is not left to it.
-  const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false, types: PG_DATE_TYPES });
+  const open = (connectionString: string): PgSql => factory(connectionString, { max: 1, fetch_types: false, types: PG_TYPES });
   const close = async (client: PgSql | undefined): Promise<void> => {
     if (client === undefined) return;
     try {

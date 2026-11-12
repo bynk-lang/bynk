@@ -106,6 +106,24 @@ are out of scope) was accepted as recommended and is carried out as written:
   An empty list is `Ok([])` and opens no connection. The executor the compose
   passes is now a function with a `transaction` member, so the compose and the
   binding's constructor are unchanged.
+- **H. Two corrections to H1's runtime, found by H2's smoke against local
+  Hyperdrive.** (1) A `PgJson` parameter was stored as a JSON *string*:
+  postgres.js registers its `json` serializer, `JSON.stringify`, for both `json`
+  (114) and `jsonb` (3802), so a `$n::jsonb` parameter that was already JSON
+  text was quoted a second time. The executor now overrides the `json` type so
+  text passes through unchanged (results still arrive parsed and nested), which
+  stores an object or array. A test applies the real driver's serializers to a
+  `PgJson` and compares them with the stock default. (2) A connection failure
+  arrived as `PgFailed` with an empty SQLSTATE: the `workerd` build's socket
+  errors (`connection attempt failed`, `Network connection lost.`, a refused or
+  unresolvable connection) are plain errors with no `code`, which `classifyPgError`,
+  keyed on driver codes, did not see. An error with no SQLSTATE and none of the
+  known codes whose message is one of those socket failures is now `PgConnection`
+  with the fixed message `could not reach the database`, never the driver's text,
+  which can name the host. A server error always has a SQLSTATE and is classified
+  before the message is looked at, so a message that merely mentions a
+  connection is not misread. Both are tested, the second through the real driver
+  against an unresolvable host.
 - **G. Test tiers.** A typed read lowers over `all` and `first`, so stubbing
   those stubs it (the rows as JSON text); `transaction` faults until stubbed,
   like the other operations.

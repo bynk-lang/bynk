@@ -125,7 +125,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("None", "result"),
     ("Ok", "result"),
     ("Option", "result"),
-    ("PG_DATE_TYPES", "postgres"),
+    ("PG_TYPES", "postgres"),
     ("ParseFailure", "email"),
     ("ParseSuccess", "email"),
     ("PgExecute", "postgres"),
