@@ -181,3 +181,48 @@ fn int_plus_without_string_gets_no_interpolation_note() {
     let e = sole(&errors(&src), "bynk.types.type_mismatch");
     assert!(e.notes.is_empty(), "{:?}", e.notes);
 }
+
+// -- `average` over a `Decimal` (#3421) --
+
+#[test]
+fn average_over_a_decimal_key_says_why_and_points_at_sum_then_div() {
+    let e = errors(
+        "commons demo {\n  type Line = { price: Decimal }\n\n  fn mean(lines: List[Line]) -> Option[Float] {\n    lines.average((l) => l.price)\n  }\n}\n",
+    );
+    let e = sole(&e, "bynk.query.sum_needs_numeric");
+    let notes = e.notes.join(" ");
+    assert!(notes.contains("scale"), "notes: {:?}", e.notes);
+    assert!(
+        notes.contains("`sum`") && notes.contains("`div("),
+        "notes: {:?}",
+        e.notes
+    );
+}
+
+#[test]
+fn average_over_a_non_numeric_key_keeps_the_numeric_key_note() {
+    let e = errors(
+        "commons demo {\n  type Line = { name: String }\n\n  fn mean(lines: List[Line]) -> Option[Float] {\n    lines.average((l) => l.name)\n  }\n}\n",
+    );
+    let e = sole(&e, "bynk.query.sum_needs_numeric");
+    let notes = e.notes.join(" ");
+    assert!(notes.contains("numeric keys are"), "notes: {:?}", e.notes);
+    assert!(
+        !notes.contains("scale"),
+        "no Decimal advice for a String: {:?}",
+        e.notes
+    );
+}
+
+#[test]
+fn sum_over_a_non_numeric_key_lists_decimal_among_the_numeric_keys() {
+    let e = errors(
+        "commons demo {\n  type Line = { name: String }\n\n  fn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.name)\n  }\n}\n",
+    );
+    let e = sole(&e, "bynk.query.sum_needs_numeric");
+    assert!(
+        e.notes.join(" ").contains("`Decimal`"),
+        "`sum` takes a `Decimal`, so the note names it: {:?}",
+        e.notes
+    );
+}

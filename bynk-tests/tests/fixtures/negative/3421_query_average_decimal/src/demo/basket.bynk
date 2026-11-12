@@ -1,0 +1,17 @@
+context demo.basket
+
+type Line = {
+	sku: String,
+	price: Decimal,
+}
+
+agent Basket {
+	key id: String
+
+	store lines: Map[String, Line]
+
+	// `Query.sum` takes a `Decimal` key; `Query.average` does not.
+	on call mean() -> Effect[Option[Float]] {
+		lines.average((l) => l.price)
+	}
+}

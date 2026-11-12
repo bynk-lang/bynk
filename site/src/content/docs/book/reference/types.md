@@ -54,9 +54,15 @@ fn halves(d: Decimal) -> Bool {
   scale; a product has the sum of the scales. `1.10d + 2.20d == 3.30d`.
 - `==`, `!=`, `<`, `<=`, `>`, `>=` compare **by numeric value**, so
   `1.20d == 1.2d`. `scale()` still tells them apart. A `Decimal` is `Ord` and
-  `Key` (a `Map` key or `Set` member holds `1.20d` and `1.2d` as one key), and
-  `list.sum(key)` over a `Decimal` key is exact. A `Decimal` prints in a string
-  hole as its canonical text (`"total: \(price)"`).
+  `Key` (a `Map` key or `Set` member holds `1.20d` and `1.2d` as one key). A
+  `Decimal` prints in a string hole as its canonical text (`"total: \(price)"`).
+- **Aggregations.** `sum(key)` takes a `Decimal` key, on a `List` and on a `Query`
+  (a stored `Map`'s), and is **exact**: it returns a `Decimal` (`0d` when empty),
+  never a float. `min`, `max` and `sortBy` take one too, as `Decimal` is `Ord`.
+  `average(key)` does not (`bynk.query.sum_needs_numeric`): a mean is a division,
+  and a `Decimal` division needs a scale and a rounding mode that `average` has no
+  place for. Sum the key, then divide by the count: `total.div(n, 2,
+  RoundingMode.HalfEven)`.
 - **`/` is not defined.** A quotient has no exact decimal answer, so division
   states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)`
   (`bynk.types.decimal_division_unscaled`). A zero divisor faults, as `Int`

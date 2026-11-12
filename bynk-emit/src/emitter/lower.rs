@@ -3837,6 +3837,7 @@ fn lower_store_held_map_call(
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
+                        runtime_use: cx.runtime_use(),
                     },
                     tys,
                 )
@@ -3993,6 +3994,7 @@ fn lower_store_map_call(
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
+                        runtime_use: cx.runtime_use(),
                     },
                     tys,
                 )
@@ -4199,6 +4201,7 @@ fn lower_store_log_call(
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
+                        runtime_use: cx.runtime_use(),
                     },
                     tys,
                 )
@@ -4312,6 +4315,7 @@ fn lower_kernel_method_call(
                         other_elem_ts: &other_elem_ts,
                         keyed: query_keyed(e, method, args, cx),
                         key_cmp: query_key_cmp(method, args, cx),
+                        runtime_use: cx.runtime_use(),
                     },
                     tys,
                 ) {
@@ -6068,6 +6072,9 @@ struct QueryShape<'a> {
     /// The comparator expression for `sortBy`/`min`/`max` (#2787); `None` keeps
     /// the bare `<`/`>` operators, for `Int`/`String`/`Duration`/`Instant` keys.
     key_cmp: Option<String>,
+    /// The module's runtime-helper record, so a lowering that needs a helper
+    /// imports it (`Query.sum` over a `Decimal` key needs `__bynkDecimalAdd`, #3421).
+    runtime_use: &'a RuntimeUse,
 }
 
 /// The comparator for a `Query` `sortBy`/`min`/`max` key, as `lower_list_kernel`
@@ -6167,6 +6174,7 @@ fn lower_query_method(
         other_elem_ts,
         keyed,
         key_cmp,
+        runtime_use,
     } = shape;
     let keyed = *keyed;
     let elem_el = ts_array_elem(elem_ts);
@@ -6272,6 +6280,21 @@ fn lower_query_method(
         )),
         (QueryOp::Any, [p]) => terminal(format!("{source}.some((__x) => ({p})(__x))")),
         (QueryOp::All, [p]) => terminal(format!("{source}.every((__x) => ({p})(__x))")),
+        // #3421: a `Decimal` key sums exactly, as `List.sum` does (#2622): from the
+        // zero decimal through the runtime's exact add, never a float `+`.
+        (QueryOp::Sum, [key])
+            if matches!(
+                result_ty.map(|t| tys.get(t)).as_deref(),
+                Some(Ty::Effect(inner)) if matches!(&*tys.get(*inner), Ty::Base(BaseType::Decimal))
+            ) =>
+        {
+            runtime_use.note_decimal("__bynkDecimalAdd");
+            terminal(format!(
+                "{source}.reduce((__s: {}, __x) => __bynkDecimalAdd(__s, ({key})(__x)), {})",
+                crate::emitter::DECIMAL_TS_TYPE,
+                crate::emitter::decimal_ts_literal("0", 0)
+            ))
+        }
         (QueryOp::Sum, [key]) => terminal(format!(
             "{source}.reduce((__s: number, __x) => __s + ({key})(__x), 0)"
         )),

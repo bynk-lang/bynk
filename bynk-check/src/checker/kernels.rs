@@ -198,21 +198,45 @@ fn require_key_ord(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
     super::ordering::check_ord(ctx, key, span, &super::ordering::OrdSite::Key(method));
 }
 
+/// The type of `sum(key)` on a `List` or a `Query`: a `Decimal` key sums exactly
+/// to a plain `Decimal` (#2622, and on a `Query` too, #3421); any other key must
+/// be numeric and the sum has its type.
+fn sum_result(key: TyId, method: &str, span: Span, ctx: &mut Ctx) -> TyId {
+    let tys = ctx.tys;
+    if key.base(tys) == Some(BaseType::Decimal) {
+        return tys.intern(Ty::Base(BaseType::Decimal));
+    }
+    require_numeric(key, method, span, ctx);
+    key
+}
+
 fn require_numeric(key: TyId, method: &str, span: Span, ctx: &mut Ctx) {
     let tys = ctx.tys;
-    if !is_numeric(key, tys) {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.query.sum_needs_numeric",
-                span,
-                format!(
-                    "`{method}` needs a numeric key, but the key function returns `{}`",
-                    key.display(tys)
-                ),
-            )
-            .with_note("numeric keys are `Int`, `Float`, `Duration` (and refined types over them)"),
-        );
+    if is_numeric(key, tys) {
+        return;
     }
+    // #3421: `sum` takes a `Decimal` key (it returns before reaching here), but
+    // `average` does not: a mean is a division, and `Decimal` division needs a
+    // scale and a rounding mode that `average` has no place for.
+    let note = if key.base(tys) == Some(BaseType::Decimal) {
+        "averaging a `Decimal` needs an explicit scale and rounding mode: `sum` the key, then \
+         `div(n, scale, mode)` by the count"
+    } else if method.ends_with(".sum") {
+        "numeric keys are `Int`, `Float`, `Duration` and `Decimal` (and refined types over them)"
+    } else {
+        "numeric keys are `Int`, `Float`, `Duration` (and refined types over them)"
+    };
+    ctx.errors.push(
+        CompileError::new(
+            "bynk.query.sum_needs_numeric",
+            span,
+            format!(
+                "`{method}` needs a numeric key, but the key function returns `{}`",
+                key.display(tys)
+            ),
+        )
+        .with_note(note),
+    );
 }
 
 /// The element or key of `distinct`, `distinctBy`, `groupBy` or a join: any `Key`
@@ -815,12 +839,7 @@ pub(crate) fn check_list_kernel_method(
                 return None;
             }
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sum` key", ctx)?;
-            // #2622: a `Decimal` key sums exactly, to a plain `Decimal`.
-            if key.base(tys) == Some(BaseType::Decimal) {
-                return Some(tys.intern(Ty::Base(BaseType::Decimal)));
-            }
-            require_numeric(key, "List.sum", args[0].span, ctx);
-            Some(key)
+            Some(sum_result(key, "List.sum", args[0].span, ctx))
         }
         Some(ListOp::Min | ListOp::Max) => {
             if !arity(1, ctx) {
@@ -1093,8 +1112,7 @@ pub(crate) fn check_query_kernel_method(
                 return None;
             }
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `Query.sum` key", ctx)?;
-            require_numeric(key, "Query.sum", args[0].span, ctx);
-            Some(eff(key))
+            Some(eff(sum_result(key, "Query.sum", args[0].span, ctx)))
         }
         Some(QueryOp::Min | QueryOp::Max) => {
             if !arity(1, ctx) {

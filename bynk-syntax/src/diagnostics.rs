@@ -9340,7 +9340,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.query.sum_needs_numeric",
-        "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`).",
+        "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).",
         &[],
     ),
     dg(
