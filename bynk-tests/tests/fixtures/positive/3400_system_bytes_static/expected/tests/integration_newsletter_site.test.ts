@@ -109,7 +109,7 @@ async function test_a_first_party_record_s_other_statics_resolve_too() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const remembered = { label: "x", cookie: { name: "k", value: "v", maxAge: Some(5000), expires: Some(9000), domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false } };
+    const remembered = { label: "x", cookie: { name: "k", value: "v", maxAge: Some(5000), expires: Some(9000), domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false } };
     if (!(remembered.label === "x")) { throw __bynkExpectFailure("tests/site.bynk:23:10", 669, 692, "expect remembered.label == \"x\"\n  expected: remembered.label == \"x\"\n  actual:   " + __bynkShow((remembered.label)) + " == " + __bynkShow(("x"))); }
     return { pass: true };
   } catch (e) {

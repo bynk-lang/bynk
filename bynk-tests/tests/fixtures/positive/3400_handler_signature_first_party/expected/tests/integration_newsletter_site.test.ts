@@ -92,7 +92,7 @@ async function test_a_handler_signature_only_first_party_type() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const c = { name: "k", value: "v", maxAge: Some(5000), expires: { tag: "None" }, domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" }, partitioned: false };
+    const c = { name: "k", value: "v", maxAge: Some(5000), expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, sameSite: { tag: "Lax" as const }, partitioned: false };
     if (!(c.name === "k")) { throw __bynkExpectFailure("tests/site.bynk:6:10", 334, 347, "expect c.name == \"k\"\n  expected: c.name == \"k\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("k"))); }
     return { pass: true };
   } catch (e) {
