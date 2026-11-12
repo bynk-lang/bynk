@@ -8,6 +8,9 @@ import {
   httpResultToResponse,
   headResponse,
   claimStream,
+  BodyTooLarge,
+  isBodyTooLarge,
+  requestBodyStream,
   applyCors,
   corsPreflightResponse,
   applySecurityHeaders,
@@ -1471,4 +1474,110 @@ test("multipartObject reads a renamed text part and file part, and rejections na
   assert.equal(form.get("doc-title"), "hi");
   assert.notEqual(form.get("photo-file"), null);
   assert.equal(form.get("title"), null);
+});
+
+// ---- #3380: a streamed `@raw` request body ----
+
+// A request whose body yields `chunks` one pull at a time, recording how many it
+// has been asked for (`pulled`) and whether the body was cancelled.
+function pullCountedRequest(chunks: Uint8Array[]) {
+  const state = { pulled: 0, cancelled: false };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        const next = chunks[state.pulled];
+        state.pulled++;
+        if (next === undefined) controller.close();
+        else controller.enqueue(next);
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const request = new Request("https://t.invalid/up", { method: "PUT", body, duplex: "half" } as RequestInit);
+  return { request, state };
+}
+
+async function drain(stream: AsyncIterable<Uint8Array>): Promise<number[]> {
+  const out: number[] = [];
+  for await (const chunk of stream) out.push(chunk.byteLength);
+  return out;
+}
+
+test("requestBodyStream: yields the chunks in order, within the cap", async () => {
+  const { request } = pullCountedRequest([new Uint8Array(3), new Uint8Array(5), new Uint8Array(2)]);
+  assert.deepEqual(await drain(requestBodyStream(request, 10)), [3, 5, 2]);
+});
+
+test("requestBodyStream: a body of exactly the cap is delivered; one byte over faults BodyTooLarge", async () => {
+  const exact = pullCountedRequest([new Uint8Array(6), new Uint8Array(4)]);
+  assert.deepEqual(await drain(requestBodyStream(exact.request, 10)), [6, 4]);
+  const over = pullCountedRequest([new Uint8Array(6), new Uint8Array(5)]);
+  await assert.rejects(
+    () => drain(requestBodyStream(over.request, 10)),
+    (e: unknown) => isBodyTooLarge(e) && e instanceof BodyTooLarge && e.cap === 10,
+  );
+  assert.equal(over.state.cancelled, true, "the body is cancelled once past the cap");
+});
+
+test("requestBodyStream: counts the bytes read, not a declared Content-Length", async () => {
+  const { request } = pullCountedRequest([new Uint8Array(8), new Uint8Array(8)]);
+  const lying = new Request(request, { headers: { "content-length": "4" } });
+  await assert.rejects(() => drain(requestBodyStream(lying, 10)), isBodyTooLarge);
+});
+
+test("requestBodyStream: lazy, nothing is read until the first pull, and one chunk per pull", async () => {
+  const { request, state } = pullCountedRequest([new Uint8Array(1), new Uint8Array(1), new Uint8Array(1)]);
+  const stream = requestBodyStream(request, 100);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(state.pulled, 0, "constructing the stream reads nothing");
+  const iterator = stream[Symbol.asyncIterator]();
+  await iterator.next();
+  const afterFirst = state.pulled;
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(state.pulled, afterFirst, "no read-ahead while the consumer is not pulling");
+  assert.ok(afterFirst <= 1);
+});
+
+test("requestBodyStream: stopping early cancels the body; a never-started stream does not touch it", async () => {
+  const early = pullCountedRequest([new Uint8Array(1), new Uint8Array(1), new Uint8Array(1)]);
+  const iterator = requestBodyStream(early.request, 100)[Symbol.asyncIterator]();
+  await iterator.next();
+  await iterator.return?.();
+  assert.equal(early.state.cancelled, true);
+  const never = pullCountedRequest([new Uint8Array(1)]);
+  void requestBodyStream(never.request, 100);
+  assert.equal(never.state.pulled, 0);
+  assert.equal(never.state.cancelled, false);
+});
+
+test("requestBodyStream: an empty or absent body is an empty stream; empty chunks are skipped", async () => {
+  assert.deepEqual(await drain(requestBodyStream(new Request("https://t.invalid/", { method: "PUT" }), 10)), []);
+  const { request } = pullCountedRequest([new Uint8Array(0), new Uint8Array(2), new Uint8Array(0)]);
+  assert.deepEqual(await drain(requestBodyStream(request, 10)), [2]);
+});
+
+test("requestBodyStream: a source that throws faults the read with its own error and is released", async () => {
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.error(new Error("socket reset"));
+    },
+  });
+  const request = new Request("https://t.invalid/up", { method: "PUT", body, duplex: "half" } as RequestInit);
+  await assert.rejects(() => drain(requestBodyStream(request, 10)), /socket reset/);
+});
+
+test("requestBodyStream: single-pass is the consumer's claim, as for every stream", async () => {
+  const { request } = pullCountedRequest([new Uint8Array(1)]);
+  const stream = requestBodyStream(request, 10);
+  claimStream(stream);
+  assert.throws(() => claimStream(stream), /a stream can be read only once/);
+});
+
+test("isBodyTooLarge: only the cap error", () => {
+  assert.equal(isBodyTooLarge(new BodyTooLarge(5)), true);
+  assert.equal(isBodyTooLarge(new Error("x")), false);
+  assert.equal(isBodyTooLarge(null), false);
 });
