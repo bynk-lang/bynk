@@ -1194,6 +1194,23 @@ export function requestCookiesHeader(view: RequestCookies): string {
   return (view as unknown as Record<symbol, string | undefined>)[REQUEST_COOKIES_HEADER] ?? "";
 }
 
+/** #3446: the text a typed cookie write gives `value` — the inverse of `fieldsObject`'s leaf
+ *  rules, so a cookie the write produces decodes back to the value written: an `Int` its
+ *  digits, a `Bool` `true`/`false`, an enum (in memory `{ tag }`) its variant's name, and
+ *  anything else (a `String`, a refined or opaque type over one, a `Decimal` already
+ *  rendered) its text. `kind` is the field's `QueryField` kind. */
+export function cookieValue(kind: QueryField["kind"], value: unknown): string {
+  switch (kind) {
+    case "int":
+    case "bool":
+      return String(value);
+    case "enum":
+      return (value as { readonly tag: string }).tag;
+    default:
+      return value as string;
+  }
+}
+
 /** #3277: a `cookies` record's wire form as the `Cookie` header a request for it
  *  carries (`a=1; b=x; b=y`), `""` when every field is absent. A list repeats its
  *  name, an `Option` is its value or nothing. Test drivers use it. */

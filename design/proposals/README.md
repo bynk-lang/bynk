@@ -116,7 +116,8 @@ Concretely, the implementing PR must, *where the increment touches them*:
   spaces after a `\` line continuation as `\x20`, and a blank line as `\n\`
   (a line holding only `\` prints nothing). A blurb may name other codes in backticks, and each must be real. Warnings and
   internal codes may be left to the one-line registry summary. The `explained_codes` probe ratchets coverage
-  upwards; the backlog is tracked in #3163.
+  upwards, and `explain_coverage.rs` fails a new error code that is neither explained nor
+  named, with a reason, on its exception list; the backlog is tracked in #3163.
 - **Keep examples consistent and compiling.** Snippets demonstrating the same
   thing use the same form; prefer `{{#include}}` from a compiled worked example
   over hand-written fences so CI keeps them honest and they cannot rot.

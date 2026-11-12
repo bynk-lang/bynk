@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0827](0827-typed-cookie-writes.md) | **A typed cookie write from the cookie record's field** (v0.577) — `Record.field.cookie(v)` and `Record.field.expire()` are checker-typed forms answering a `Cookie` named and encoded as the record's decoder reads it; amends ADR 0806 E | Accepted (v0.577) |
 | [0826](0826-annotation-argument-constants.md) | **A constant in a literal-only annotation argument** (v0.575) — One resolution pass replaces a bare constant argument with its literal ahead of every validator and reader; amends ADR 0678 C for annotation arguments and extends ADR 0762 beyond SQL | Accepted (v0.575) |
 | [0825](0825-detach-effect-method.md) | **`e.detach()`, a compiler-inserted failure route for detached effects** (v0.573) — A kernel method on `Effect[T]` that hands a running effect to `waitUntil`, with a runtime-reported failure route | Accepted (v0.573) |
 | [0824](0824-detach-effect-method.md) | **`e.detach()`, a compiler-inserted failure route for detached effects** (v0.572) — A kernel method on `Effect[T]` that hands a running effect to `waitUntil`, with a runtime-reported failure route | Accepted (v0.572) |
