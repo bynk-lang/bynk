@@ -1,0 +1,10 @@
+commons c {
+  type Line = {
+    price: Decimal,
+  }
+  // A mean is a division, and `Decimal` division needs a scale and a rounding
+  // mode, so `List.average` refuses a `Decimal` key (`List.sum` takes one).
+  fn mean(lines: List[Line]) -> Option[Float] {
+    lines.average((l) => l.price)
+  }
+}
