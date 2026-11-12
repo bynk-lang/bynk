@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.564.6** | A guide, Stream a large upload, for a `@raw` handler that takes its request body as a `Stream[Bytes]` and passes it to R2, with the cross-links, and a check that OpenAPI describes a streamed `@raw` body like a buffered one (#3380, closes #3180) |
 | **v0.564.5** | `bynk explain` gains twenty entries under the parse, context, boundary, consumes, embed, asset, package, project and dependency codes (#3163) |
 | **v0.564.4** | `bynk explain` now covers 42 more codes under the service, ws, history, observe, val, tier, stub, store, queue, race, within, held, provider, suite, fixture and contract prefixes. |
 | **v0.564.3** | `bynk explain` gains twenty-three entries under the types and http codes (#3163) |
