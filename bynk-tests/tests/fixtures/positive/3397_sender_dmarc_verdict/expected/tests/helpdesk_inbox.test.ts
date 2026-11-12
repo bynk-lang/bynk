@@ -85,7 +85,7 @@ async function test_the_sender_s_dmarc_verdict_reaches_a_DmarcVerdict_parameter(
     type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "hi", messageId: "", headers: new globalThis.Map(), text: { tag: "None" }, html: { tag: "None" }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "hi", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("tests/inbox.bynk:4:12", 215, 226, "expect r is Accept"); }
     return { pass: true };
   } catch (e) {

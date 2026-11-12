@@ -10,6 +10,6 @@ import { Cookie, SameSite } from "../../bynk.js";
 
 export const api = {
   async http_POST_login(deps: {}): globalThis.Promise<HttpResult<string>> {
-    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "sid", value: "a", sameSite: SameSite.Unrestricted, maxAge: { tag: "None" }, expires: { tag: "None" }, domain: { tag: "None" }, path: "/", secure: true, httpOnly: true, partitioned: false })] }))(HttpResult.Created("ok"));
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), ({ name: "sid", value: "a", sameSite: SameSite.Unrestricted, maxAge: { tag: "None" as const }, expires: { tag: "None" as const }, domain: { tag: "None" as const }, path: "/", secure: true, httpOnly: true, partitioned: false })] }))(HttpResult.Created("ok"));
   },
 };
