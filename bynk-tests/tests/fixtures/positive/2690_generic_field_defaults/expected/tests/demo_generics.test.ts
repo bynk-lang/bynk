@@ -69,7 +69,7 @@ async function test_a_written_field_keeps_its_value() {
     type Outcome<T> = __ns_demo_generics.Outcome<T>;
     type Paginated<T> = __ns_demo_generics.Paginated<T>;
     type Search = __ns_demo_generics.Search;
-    const s = { query: "q", page: { items: ["x"], next: { tag: "None" } }, outcome: Outcome.Done(1) };
+    const s = { query: "q", page: { items: ["x"], next: { tag: "None" as const } }, outcome: Outcome.Done(1) };
     if (!(__bynkEq(s.page.items, ["x"]))) { throw __bynkExpectFailure("tests/demo/generics.bynk:15:10", 420, 441, "expect s.page.items == [\"x\"]\n  expected: s.page.items == [\"x\"]\n  actual:   " + __bynkShow((s.page.items)) + " == " + __bynkShow((["x"]))); }
     if (!(__bynkEq(s.outcome, Outcome.Done(1)))) { throw __bynkExpectFailure("tests/demo/generics.bynk:16:10", 451, 471, "expect s.outcome == Done(1)\n  expected: s.outcome == Done(1)\n  actual:   " + __bynkShow((s.outcome)) + " == " + __bynkShow((Outcome.Done(1)))); }
     return { pass: true };
