@@ -268,6 +268,17 @@ pub(crate) fn resolve_wants(
                 );
                 continue;
             }
+            // Hyperdrive H5 (#3322, DECISION B): the `verify` modes check the
+            // server's certificate against a CA certificate the account holds,
+            // which this deploy cannot upload, so such a config is made by hand
+            // and adopted. Said before the string is read: it needs none.
+            if let Some(mode) = decl.tls.as_deref().filter(|m| *m != "required") {
+                problems.push(format!(
+                    "{what} has `@tls(\"{mode}\")`, which needs a CA certificate the deploy does not upload: upload it (`wrangler cert upload certificate-authority`), make the config with `wrangler hyperdrive create … --ca-certificate-id <id> --sslmode {}`, and adopt it with `config_id` for environment `{environment}` in `[deploy.hyperdrive]`",
+                    if mode == "verify-ca" { "VERIFY_CA" } else { "VERIFY_IDENTITY" },
+                ));
+                continue;
+            }
             let Some(variable) = &entry.connection_env else {
                 problems.push(format!(
                     "{what} has no `connection_env` and no `config_id` for environment `{environment}` in bynk.toml's `[deploy.hyperdrive]`"
@@ -280,17 +291,6 @@ pub(crate) fn resolve_wants(
                 ));
                 continue;
             };
-            // Hyperdrive H5 (#3322, DECISION B): the `verify` modes check the
-            // server's certificate against a CA certificate the account holds,
-            // which this deploy cannot upload, so such a config is made by hand
-            // and adopted. Said before the string is read: it needs none.
-            if let Some(mode) = decl.tls.as_deref().filter(|m| *m != "required") {
-                problems.push(format!(
-                    "{what} has `@tls(\"{mode}\")`, which needs a CA certificate the deploy does not upload: upload it (`wrangler cert upload certificate-authority`), make the config with `wrangler hyperdrive create … --ca-certificate-id <id> --sslmode {}`, and adopt it with `config_id` for environment `{environment}` in `[deploy.hyperdrive]`",
-                    if mode == "verify-ca" { "VERIFY_CA" } else { "VERIFY_IDENTITY" },
-                ));
-                continue;
-            }
             match parse_connection_string_for(decl.kind, &raw) {
                 Ok(mut origin) => {
                     if decl.kind == HyperdriveKind::MySql {

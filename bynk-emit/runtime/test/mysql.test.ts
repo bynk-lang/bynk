@@ -164,6 +164,26 @@ test("a failure never carries the password or the host", async () => {
   assert.equal(redactEndpoint("pw s3cr3t!pw and s3cr3t!pw", ENDPOINT), "pw [redacted] and [redacted]");
 });
 
+test("real access-denied and denied-command texts never reach the handler with the user or host", async () => {
+  const texts: [number, string][] = [
+    [1045, "Access denied for user 'app'@'10.0.0.5' (using password: YES)"],
+    [1044, "Access denied for user 'app'@'%' to database 'shop'"],
+    [1049, "Unknown database 'shop'"],
+    [1142, "SELECT command denied to user 'app'@'10.0.0.5' for table 'orders'"],
+    [1130, "Host 'db.internal.example' is not allowed to connect to this MySQL server"],
+  ];
+  for (const [errno, text] of texts) {
+    const f = fake(() => {
+      throw new DriverError(text, errno);
+    });
+    const out = await makeMySqlExecute(f.factory)(ENDPOINT, "SELECT 1", []);
+    assert.equal(out.ok, false);
+    const shown = JSON.stringify(out);
+    assert.doesNotMatch(shown, /10\.0\.0\.5|db\.internal|'app'|\bapp\b/, `${errno}: ${shown}`);
+    if (!out.ok && [1044, 1045, 1049].includes(errno)) assert.equal(out.failure.kind, "connection");
+  }
+});
+
 test("a transaction commits all or rolls back at the first failure", async () => {
   const ok = fake(() => ({ affectedRows: 1, insertId: 0 }));
   const done = await makeMySqlExecute(ok.factory).transaction(ENDPOINT, [

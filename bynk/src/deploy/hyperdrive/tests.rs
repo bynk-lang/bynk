@@ -1097,6 +1097,23 @@ fn a_verify_mode_is_refused_for_a_made_config_and_adopted_ones_are_not() {
             problems[0]
         );
         assert_clean("the verify message", &problems.join("\n"));
+        // The guidance comes first: a user with no connection string (as a
+        // verify mode wants) and no variable set is told to adopt, not that
+        // the variable is missing.
+        let unset = resolve_wants(
+            &names(&["shop"]),
+            &mysql_shop(Some(mode)),
+            &settings(&[("Main", Some("MAIN_DATABASE_URL"), &[])]),
+            "default",
+            &lookup(None),
+        )
+        .unwrap_err();
+        assert!(
+            unset[0].contains("`config_id`") && unset[0].contains("certificate"),
+            "{}",
+            unset[0]
+        );
+        assert!(!unset[0].contains("is not set"), "{}", unset[0]);
         // An adopted config has its TLS settings already: nothing to refuse.
         let adopted = resolve_wants(
             &names(&["shop"]),

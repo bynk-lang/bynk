@@ -163,6 +163,16 @@ const CONSTRAINT_ERRNOS = new Set([1062, 1048, 1452, 1451, 3819]);
 /** Deadlock and lock-wait timeout: the statement may succeed if tried again. */
 const RETRY_ERRNOS = new Set([1213, 1205]);
 
+/**
+ * Access and authentication failures: `1044` (access denied to a database),
+ * `1045` (access denied for a user), `1049` (unknown database) and `1698`
+ * (socket-style authentication refused). The server's text names the user and
+ * the client's host (`Access denied for user 'app'@'10.0.0.5'`), which a
+ * handler must not receive, so these are `connection` failures with a fixed
+ * message and the error number.
+ */
+const ACCESS_ERRNOS = new Set([1044, 1045, 1049, 1698]);
+
 /** Server-side "connection gone" numbers (`2002`-`2013` are the client library's). */
 const CONNECTION_ERRNOS = new Set([1040, 1053, 1129, 1130, 1152, 1153, 1154, 1155, 1156, 1157, 1158, 1159, 1160, 1161]);
 
@@ -199,6 +209,9 @@ export function classifyMySqlError(e: unknown): MySqlFailure {
   const message = e instanceof Error ? e.message : String(e);
   if (CONSTRAINT_ERRNOS.has(errno)) return { kind: "constraint", code: errno, message };
   if (RETRY_ERRNOS.has(errno)) return { kind: "serialization", code: errno, message };
+  if (ACCESS_ERRNOS.has(errno)) {
+    return { kind: "connection", code: errno, message: `could not connect to the database (access refused, ${errno})` };
+  }
   if (CONNECTION_CODES.has(code) || CONNECTION_ERRNOS.has(errno) || (errno >= 2002 && errno <= 2013)) {
     return {
       kind: "connection",
@@ -213,13 +226,15 @@ export function classifyMySqlError(e: unknown): MySqlFailure {
 }
 
 /**
- * `text` with the endpoint's password removed (and the host and user, which the
- * driver's own messages can carry). The driver does not put the password in a
- * message, and this is the second line.
+ * `text` with the endpoint's password, user and host, and any `'user'@'host'`
+ * account, removed: the second line of defence behind the fixed messages above.
  */
 export function redactEndpoint(text: string, endpoint: MySqlEndpoint): string {
-  let out = text;
-  for (const secret of [endpoint.password, encodeURIComponent(endpoint.password)]) {
+  // MySQL writes an account as `'user'@'host'`; whatever those are, they go.
+  let out = text.replace(/'[^']*'@'[^']*'/g, "[redacted]");
+  const secrets = [endpoint.password, encodeURIComponent(endpoint.password), endpoint.user, endpoint.host];
+  for (const secret of secrets) {
+    // A secret of fewer than three characters is left: removing it would mangle the message.
     if (secret.length >= 3) out = out.split(secret).join("[redacted]");
   }
   return out;
