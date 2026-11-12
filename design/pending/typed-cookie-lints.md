@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: An untyped `Cookie` literal named for a cookie record's field is warned about and its undecodable value refused; the `SignedCookie` cookie cannot be written by hand or from a record, and the typed name is judged by the prefix rules
 breaking: A `Cookie { name, value }` literal named for a field of a `cookies` record whose literal `value` that field's decoder rejects (`value: "dark"` for an enum read as `Dark`) is now the error `bynk.http.cookie_value_undecodable`, and an untyped `Cookie` literal named like a `SignedCookie` actor's session cookie is `bynk.actor.signed_cookie_write_literal`; fix the value, write it with `Record.field.cookie(v)`, or write the session cookie with `Actor.issue`/`Actor.expire`.
 ---
