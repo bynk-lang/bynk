@@ -6,7 +6,7 @@ import * as bynk__binding from "./bynk-cloudflare.js";
 import * as bynk_cloudflare__binding from "./bynk/cloudflare.binding.js";
 
 export function composeApp(env?: unknown) {
-  const demo_platDeps = { Clock: new bynk__binding.ClockProvider(), Fetch: new bynk__binding.FetchProvider(), Idempotency: new bynk__binding.IdempotencyProvider({ Clock: new bynk__binding.ClockProvider() }), Kv: new bynk_cloudflare__binding.WorkersKv(env), Locale: new bynk__binding.LocaleProvider(), Logger: new bynk__binding.LoggerProvider(), Random: new bynk__binding.RandomProvider(), Secrets: new bynk__binding.SecretsProvider(env) };
+  const demo_platDeps = { Clock: new bynk__binding.ClockProvider(), Fetch: new bynk__binding.FetchProvider(), Idempotency: new bynk__binding.IdempotencyProvider({ Clock: new bynk__binding.ClockProvider() }, env), Kv: new bynk_cloudflare__binding.WorkersKv(env), Locale: new bynk__binding.LocaleProvider(), Logger: new bynk__binding.LoggerProvider(), Random: new bynk__binding.RandomProvider(), Secrets: new bynk__binding.SecretsProvider(env) };
   const demo_platSurface = demo_plat.__makeSurface(demo_platDeps);
 
   return {

@@ -743,7 +743,7 @@ pub const UNITS: &[Unit] = &[
         binding: Binding::PerPlatform,
         id_block: 0,
         platform: None,
-        env_providers: &["SecretsProvider"],
+        env_providers: &["SecretsProvider", "IdempotencyProvider"],
         stability: Stability::Stable,
         // K5a (#2586), K5b (#2604), K5c (#2627): the new operations, until a
         // service has used them.

@@ -11,7 +11,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const Idempotency = new bynk__binding.IdempotencyProvider({ Clock: new bynk__binding.ClockProvider() });
+  const Idempotency = new bynk__binding.IdempotencyProvider({ Clock: new bynk__binding.ClockProvider() }, env);
   const deps = { Idempotency };
   return {
     async http_POST_hooks_Param_id(id: string) {
