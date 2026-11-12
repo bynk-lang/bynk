@@ -225,8 +225,9 @@ A detached reply is never silently lost. A failure is reported by the runtime, n
   credential.
 - `Ok`, and any `T` that is not a `Result`, report nothing.
 
-Detaching is immediate and best-effort: it is not retried, and the platform may cut it short once the
-response has been sent. In a test, the harness records each report and does not fail the case, as on
+Detaching is immediate and best-effort: it is not retried. On Workers, `waitUntil` work can run for up to
+30 seconds after the response is sent or the client disconnects, shared across the request; promises still
+unsettled then are cancelled (local `workerd` does not enforce this). In a test, the harness records each report and does not fail the case, as on
 Workers.
 
 It is legal exactly where [`within`](#within) is, and an agent handler or a pure body is refused:

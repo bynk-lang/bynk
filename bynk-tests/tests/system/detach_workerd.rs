@@ -12,8 +12,8 @@
 //!
 //! The 30-second limit on `waitUntil` work after the response is *not* checked
 //! here: local `workerd` does not enforce it (a 40 s `waitUntil` ran to the end
-//! in a probe), so the guide states no number until it is confirmed against the
-//! platform.
+//! in a probe). Cloudflare documents it at
+//! <https://developers.cloudflare.com/workers/runtime-apis/context/>.
 //!
 //! Skips loudly without the toolchain; a non-empty `BYNK_REQUIRE_WORKERD`
 //! turns the skip into a failure.
