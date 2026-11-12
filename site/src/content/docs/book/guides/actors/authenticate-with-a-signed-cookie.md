@@ -67,7 +67,7 @@ to*, not that they should have it.
 `secret` names a variable, not a key. `bynk deploy` mints a strong key the first time and sets it on the
 Worker, keeps it on later deploys, and replaces it only with `--force`
 ([deploy guide](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#session-keys)).
-`bynk dev` uses a fresh key per run. A key that is missing, not base64url, or under 32 bytes faults the
+`bynk dev` uses a local key derived from the variable's name. A key that is missing, not base64url, or under 32 bytes faults the
 request rather than letting anyone in.
 
 To **rotate** the key without signing everyone out: declare `previous = "SESSION_KEY_PREV"`, move the old

@@ -29,7 +29,8 @@ only, standing alone on its route (never a sum member or a refinement base, and 
   accept. `previous` is accepted for verification only, selected by `kid`, so a key rotates without
   signing everyone out. `secret` and `previous` must differ from each other and from other actors'
   secrets. `bynk deploy` mints a key when the variable is unset, keeps a held one, and replaces it only
-  under `--force`; `bynk dev` uses a fresh key per run.
+  under `--force`; `bynk dev` uses a local key derived per binding. Contexts that share a binding share one minted
+  key, and a deploy that would split them is refused.
 - **`ttl` is required** (a session has no sensible default), and over 30 days warns. The default name
   is `__Host-session`; an unprefixed name warns. `Domain` and `Path` are not configurable.
 - **Issuing.** `Actor.issue(identity)` is an effect needing `Clock`, and `Actor.expire()` is the
