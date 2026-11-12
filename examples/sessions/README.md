@@ -20,9 +20,10 @@ What it shows:
   `Random.bytes(16).toBase64Url()` and returns it with
   `Created("ok").withCookie(Cookie { name: "__Host-sid", value: token, maxAge: Some(30.minutes) })`.
   The `Cookie` defaults are the safe ones (`Secure`, `HttpOnly`, `SameSite=Lax`,
-  `Path=/`). `GET /me` and `POST /logout` read it back through `cookies: RequestCookies`, the raw
-  view, because a hyphenated `__Host-sid` cannot be a record field; the handler builds its own
-  `Token`, which checks the cookie against the same refinement. The `__Host-` prefix binds the
+  `Path=/`). `GET /me` and `POST /logout` read it back through a typed `cookies: SessionCookies`
+  record whose field is `@name("__Host-sid") sid: Option[Token]`: a hyphenated name cannot be
+  a field name, so `@name` gives the field the key the browser sends, and the router checks the
+  token against its refinement before the handler runs. The `__Host-` prefix binds the
   cookie to this origin, and the compiler checks it: a `Cookie` literal with that name must
   be `secure`, have `path: "/"` and no `domain`. Logout ends the session and clears the
   cookie with `clearCookie`.

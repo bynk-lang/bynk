@@ -8,12 +8,13 @@ type LoginRequest = {
 }
 
 ---
-The cookies a request carries. `sid` is the session token: the router
-decodes and validates it before the handler runs, so a malformed token never
-reaches the cache. A missing cookie is `None`.
+The cookies a request carries. `sid` is the session token, read from the
+`__Host-sid` cookie: a hyphen cannot be part of a field name, so `@name` gives the
+field the wire name the browser sends. The router decodes and validates it before the
+handler runs, so a malformed token never reaches the cache. A missing cookie is `None`.
 ---
 type SessionCookies = {
-	sid: Option[Token],
+	@name("__Host-sid") sid: Option[Token],
 }
 
 ---
@@ -51,17 +52,6 @@ agent Sessions {
 	}
 }
 
-// The session token the request's `__Host-sid` cookie carries, if it is one.
-fn session(cookies: RequestCookies) -> Option[Token] {
-	match cookies.get("__Host-sid") {
-		None => None,
-		Some(raw) => match Token.of(raw) {
-			Ok(token) => Some(token),
-			Err(_) => None,
-		},
-	}
-}
-
 service api from http {
 	// Log in: mint an unguessable token, store the session under it, and hand it
 	// to the browser in a `__Host-` cookie (`Secure`, `HttpOnly` and `SameSite=Lax`
@@ -85,12 +75,10 @@ service api from http {
 		}
 	}
 
-	// A `__Host-` name cannot be a record field, so these handlers read the raw
-	// `RequestCookies` view and build their own `Token`, which checks the cookie
-	// against the same refinement the typed boundary would.
-	// Who am I? The session cookie names the live session.
-	on GET("/me") (cookies: RequestCookies) -> Effect[HttpResult[UserId]] by Visitor {
-		match session(cookies) {
+	// Who am I? The session cookie names the live session; the typed `cookies`
+	// record has already checked it is a `Token`.
+	on GET("/me") (cookies: SessionCookies) -> Effect[HttpResult[UserId]] by Visitor {
+		match cookies.sid {
 			None => Unauthorized,
 			Some(token) => {
 				let who <- Sessions("default").whoami(token)
@@ -103,8 +91,8 @@ service api from http {
 	}
 
 	// Log out: end the session and clear the cookie.
-	on POST("/logout") (cookies: RequestCookies) -> Effect[HttpResult[String]] by Visitor {
-		match session(cookies) {
+	on POST("/logout") (cookies: SessionCookies) -> Effect[HttpResult[String]] by Visitor {
+		match cookies.sid {
 			None => NoContent,
 			Some(token) => {
 				do Sessions("default").logout(token)
