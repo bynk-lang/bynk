@@ -106,7 +106,7 @@ fn every_binding_operation_is_tested_and_passes() {
         // #2840: the compiler's own migration for the implicit idempotency
         // database, which the Cloudflare tests run `claim` against.
         let migration = &bynk_check::d1_migrations::implicit_migrations(
-            bynk_check::d1_migrations::IDEMPOTENCY_BINDING,
+            &bynk_check::worker_bindings::idempotency_binding(),
         )
         .expect("the idempotency database has a migration")[0];
         fs::write(out.join(&migration.name), &migration.sql).unwrap();
