@@ -86,11 +86,6 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
         if let Some(seam) = bynk_check::actors::signature_seam_for(handler, &table.actors) {
             names.insert(seam.secret);
         }
-        // #3386: a `SignedCookie` actor's signing key. (Its optional `previous` key is not
-        // declared: a deploy has no need to demand a key being rotated out.)
-        if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, &table.actors) {
-            names.insert(seam.secret);
-        }
         for member in bynk_check::actors::sum_members_for(handler, &table.actors)
             .into_iter()
             .flatten()
@@ -107,6 +102,24 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
         }
     }
     names
+}
+
+/// #3386: the `SignedCookie` actors this context's handlers are guarded by or issue for, each
+/// with the env binding of its signing key, by actor name. Unlike an `actor`'s auth secret, a
+/// session key is **not** declared for the user to supply: `deploy` mints it when it is unset,
+/// and `bynk dev` uses a per-run one. (The optional `previous` key is the operator's, so it is
+/// not listed.) Every `SignedCookie` actor of the context counts, so a context that only issues
+/// the cookie (a login service) still gets its key.
+pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String)> {
+    let mut keys: Vec<(String, String)> = table
+        .actors
+        .values()
+        .filter_map(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+        .map(|s| (s.actor, s.secret))
+        .collect();
+    keys.sort();
+    keys.dedup();
+    keys
 }
 
 /// I3 (#1971): the foreign callers this context's `on call` handlers admit, by
@@ -165,7 +178,12 @@ pub fn secret_reads(
 /// secrets but declares none, which is exactly the context this file now exists
 /// to describe.
 pub fn emit_secrets_manifest(table: &UnitTable, reads: &SecretReads) -> Option<String> {
-    render(&declared_secrets(table), reads, &foreign_callers(table))
+    render(
+        &declared_secrets(table),
+        reads,
+        &foreign_callers(table),
+        &session_keys(table),
+    )
 }
 
 /// Render a resolved name set. Split from the derivation so the file's shape is
@@ -179,13 +197,35 @@ fn render(
     declared: &BTreeSet<String>,
     reads: &SecretReads,
     foreign: &[bynk_check::actors::ForeignCaller],
+    session: &[(String, String)],
 ) -> Option<String> {
     // `complete` is the third thing worth saying: a context that reads one
     // computed name and nothing else knows something — that it does not know —
     // and the file has to carry it or the driver cannot.
-    if declared.is_empty() && reads.names.is_empty() && reads.complete && foreign.is_empty() {
+    if declared.is_empty()
+        && reads.names.is_empty()
+        && reads.complete
+        && foreign.is_empty()
+        && session.is_empty()
+    {
         return None;
     }
+    // #3386: `session` likewise only when there is one, additive within version 2.
+    let session = if session.is_empty() {
+        String::new()
+    } else {
+        let rendered: Vec<String> = session
+            .iter()
+            .map(|(actor, secret)| {
+                format!(
+                    "    {{ \"actor\": {}, \"secret\": {} }}",
+                    json_string(actor),
+                    json_string(secret)
+                )
+            })
+            .collect();
+        format!(",\n  \"session\": [\n{}\n  ]", rendered.join(",\n"))
+    };
     // I3 (#1971): `foreign` only when there is one. It is additive within
     // version 2 rather than a version 3: a manifest without it says, truly,
     // that the context admits no foreign caller, so an older file reads the
@@ -213,7 +253,7 @@ fn render(
     // Hand-rendered rather than via serde: this crate does not depend on
     // serde_json, and the shape is a handful of fields.
     Some(format!(
-        "{{\n  \"version\": {MANIFEST_VERSION},\n  \"declared\": {},\n  \"read\": {},\n  \"read_complete\": {}{foreign}\n}}\n",
+        "{{\n  \"version\": {MANIFEST_VERSION},\n  \"declared\": {},\n  \"read\": {},\n  \"read_complete\": {}{foreign}{session}\n}}\n",
         json_array(declared),
         json_array(&reads.names),
         reads.complete,
@@ -241,6 +281,19 @@ mod tests {
     }
 
     #[test]
+    fn a_session_key_is_listed_beside_the_declared_secrets_not_among_them() {
+        let session = [("User".to_string(), "SESSION_KEY".to_string())];
+        let text =
+            render(&set(&[]), &reads(&[], true), &[], &session).expect("a session key renders");
+        assert_eq!(
+            text,
+            "{\n  \"version\": 2,\n  \"declared\": [],\n  \"read\": [],\n  \"read_complete\": true,\n  \"session\": [\n    { \"actor\": \"User\", \"secret\": \"SESSION_KEY\" }\n  ]\n}\n"
+        );
+        // Declared secrets are the operator's to supply; the session key is not one of them.
+        assert!(!text.contains("\"declared\": [\n"));
+    }
+
+    #[test]
     fn a_name_is_escaped_as_a_json_string() {
         assert_eq!(json_string("AUTH_JWT_SECRET"), "\"AUTH_JWT_SECRET\"");
         // A secret name is a Bynk string literal, so it is arbitrary text; the
@@ -263,16 +316,16 @@ mod tests {
     fn a_manifest_appears_when_anything_is_known_and_not_otherwise() {
         // Nothing at all — no file. A project with no secrets must not grow one
         // into every worker directory.
-        assert_eq!(render(&set(&[]), &reads(&[], true), &[]), None);
+        assert_eq!(render(&set(&[]), &reads(&[], true), &[], &[]), None);
 
         // A read with no declared secret is exactly the context slice 3's rule
         // would have stayed silent about — and exactly the one worth describing.
-        assert!(render(&set(&[]), &reads(&["API_KEY"], true), &[]).is_some());
+        assert!(render(&set(&[]), &reads(&["API_KEY"], true), &[], &[]).is_some());
 
         // Knowing that you *don't* know is knowledge too: a context whose only
         // secret is computed still emits, or the driver cannot say its list is
         // incomplete.
-        assert!(render(&set(&[]), &reads(&[], false), &[]).is_some());
+        assert!(render(&set(&[]), &reads(&[], false), &[], &[]).is_some());
     }
 
     /// The committed shape, byte for byte — it is a file a reviewer reads in a
@@ -285,14 +338,19 @@ mod tests {
         // A `BTreeSet` orders the names, so the file is byte-stable for a given
         // context rather than dependent on handler iteration order.
         assert_eq!(
-            render(&set(&["B_SECRET", "A_SECRET"]), &reads(&["R"], true), &[])
-                .expect("a non-empty set renders"),
+            render(
+                &set(&["B_SECRET", "A_SECRET"]),
+                &reads(&["R"], true),
+                &[],
+                &[]
+            )
+            .expect("a non-empty set renders"),
             "{\n  \"version\": 2,\n  \"declared\": [\n    \"A_SECRET\",\n    \"B_SECRET\"\n  ],\n  \
              \"read\": [\n    \"R\"\n  ],\n  \"read_complete\": true\n}\n",
         );
         // The empty-list and false-flag shapes, which the fixtures also carry.
         assert_eq!(
-            render(&set(&["ONLY"]), &reads(&[], false), &[]).expect("renders"),
+            render(&set(&["ONLY"]), &reads(&[], false), &[], &[]).expect("renders"),
             "{\n  \"version\": 2,\n  \"declared\": [\n    \"ONLY\"\n  ],\n  \
              \"read\": [],\n  \"read_complete\": false\n}\n",
         );
@@ -315,7 +373,7 @@ mod tests {
             },
         ];
         assert_eq!(
-            render(&set(&[]), &reads(&[], true), &foreign).expect("a foreign caller renders"),
+            render(&set(&[]), &reads(&[], true), &foreign, &[]).expect("a foreign caller renders"),
             "{\n  \"version\": 2,\n  \"declared\": [],\n  \"read\": [],\n  \"read_complete\": true,\n  \
              \"foreign\": [\n    { \"actor\": \"Ledger\", \"secret\": \"LEDGER_CALL_KEY\", \"worker\": \"ledger-svc\" },\n    \
              { \"actor\": \"Legacy\", \"secret\": \"LEGACY_CALL_KEY\" }\n  ]\n}\n",

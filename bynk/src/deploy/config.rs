@@ -456,6 +456,20 @@ pub(crate) struct Resources {
     /// from the manifest's `foreign` list. `deploy` mints each one's secret,
     /// sets it here, and prints the hand-off for the foreign Worker.
     pub(crate) foreign_callers: Vec<ForeignCaller>,
+    /// #3386: the signing key of each `SignedCookie` actor this context declares, from the
+    /// manifest's `session` list. `deploy` mints each one that is unset.
+    pub(crate) session_keys: Vec<SessionKey>,
+}
+
+/// #3386: one `SignedCookie` actor of a context, as the manifest records it: the env binding of
+/// its signing key, which `deploy` mints when unset.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct SessionKey {
+    /// The actor's name.
+    pub(crate) actor: String,
+    /// The name of the env binding holding the key: a name, never a value.
+    #[serde(rename = "secret")]
+    pub(crate) binding: String,
 }
 
 /// I3 (#1971): one foreign caller a context admits, as the manifest records it.
@@ -510,6 +524,7 @@ impl Default for Resources {
             read_secrets: Vec::new(),
             reads_complete: true,
             foreign_callers: Vec::new(),
+            session_keys: Vec::new(),
         }
     }
 }
@@ -538,6 +553,9 @@ struct SecretsManifest {
     /// admits no foreign caller, which is what an older manifest means too.
     #[serde(default)]
     foreign: Vec<ForeignCaller>,
+    /// #3386: additive within version 2, like `foreign`.
+    #[serde(default)]
+    session: Vec<SessionKey>,
 }
 
 fn read_complete_default() -> bool {
@@ -571,6 +589,7 @@ fn read_secrets_manifest(worker_dir: &Path) -> Result<SecretsManifest, String> {
             // all, computed or otherwise.
             read_complete: true,
             foreign: Vec::new(),
+            session: Vec::new(),
         });
     }
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -790,6 +809,7 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
         foreign_callers: secrets.foreign,
+        session_keys: secrets.session,
     })
 }
 
@@ -1481,6 +1501,18 @@ pub(crate) mod tests {
                 .map(|(binding, worker)| ForeignService {
                     binding: binding.to_string(),
                     worker: worker.to_string(),
+                })
+                .collect();
+            self
+        }
+        /// #3386: the signing key each `SignedCookie` actor of this context holds, as
+        /// `(actor, binding)`.
+        pub(crate) fn session_keys(mut self, keys: &[(&str, &str)]) -> Self {
+            self.session_keys = keys
+                .iter()
+                .map(|(actor, binding)| SessionKey {
+                    actor: actor.to_string(),
+                    binding: binding.to_string(),
                 })
                 .collect();
             self
