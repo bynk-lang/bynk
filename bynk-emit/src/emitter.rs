@@ -4548,7 +4548,7 @@ pub const PG_ROWS_RUNTIME_IMPORTS: &str = ", __bynkPgRow";
 /// The runtime names a module takes from the `time` module: the `Instant`
 /// helpers and the typed `Postgres` read pass, each only when the module
 /// references it.
-pub(crate) fn time_runtime_imports(ru: &runtime_use::RuntimeUse) -> String {
+pub fn time_runtime_imports(ru: &runtime_use::RuntimeUse) -> String {
     let mut imports = String::new();
     if ru.time_ops() {
         imports.push_str(TIME_OPS_RUNTIME_IMPORTS);

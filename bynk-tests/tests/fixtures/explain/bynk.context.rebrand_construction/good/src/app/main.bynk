@@ -1,0 +1,7 @@
+context app.main
+
+uses geo.shapes
+
+fn unit() -> Shape {
+    unitCircle()
+}

@@ -666,6 +666,43 @@ service api from http {
     assert_eq!(schema["required"], serde_json::json!(["e-mail"]));
 }
 
+/// #3380: a `@raw` route whose `body` is a `Stream[Bytes]` is described exactly as one
+/// whose `body` is `Bytes`: binary, under its declared media type. Whether the server
+/// reads the body whole is not part of the wire contract.
+#[test]
+fn a_streamed_raw_body_is_described_like_a_buffered_one() {
+    let dir = scratch("streamed-raw");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+service api from http {
+  limits { maxBody: 1_000_000 }
+
+  @raw(contentType: "application/zip")
+  on PUT("/streamed/:name") (name: String, body: Stream[Bytes]) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(name)
+  }
+
+  @raw(contentType: "application/zip")
+  on PUT("/buffered/:name") (name: String, body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok(name)
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let streamed = &d["paths"]["/streamed/{name}"]["put"]["requestBody"];
+    let buffered = &d["paths"]["/buffered/{name}"]["put"]["requestBody"];
+    assert_eq!(streamed, buffered, "{streamed:?} vs {buffered:?}");
+    assert_eq!(
+        streamed["content"]["application/zip"]["schema"]["format"],
+        "binary"
+    );
+}
+
 /// #3386: a route guarded by a `SignedCookie` actor is documented with an `apiKey` security scheme
 /// `in: cookie`, named after the cookie, and the seam's refusals: `401` on every such route and
 /// `403` (a cross-site request) on a state-changing one.

@@ -999,7 +999,7 @@ rows as JSON text: `stub Main.all(_, _) returns Ok("[{\"id\":\"1\"}]")`.
 #### Postgres typed reads: `select[T]` and `firstAs[T]`
 
 `select[T]` and `firstAs[T]` read rows straight into a record, as they do for
-[`D1`](#typed-reads-selectt-and-firstast), so the column list is not spelt twice.
+[`D1`](#d1-typed-reads), so the column list is not spelt twice.
 The first argument is the statement **from `FROM` on**, a string literal (or a
 `String` constant bound to one) that must not begin with `SELECT`
 (`bynk.types.select_tail_has_select`); the compiler writes `SELECT` and `T`'s
@@ -1344,7 +1344,7 @@ of either (`NULL` is `None`), or a `List` of such records. Anything else is
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.
 
-#### Typed reads: `select[T]` and `firstAs[T]`
+#### Typed reads: `select[T]` and `firstAs[T]` {#d1-typed-reads}
 
 `select[T]` and `firstAs[T]` read rows straight into a record, so the `SELECT`
 column list isn't spelt twice. The first argument is the statement **from

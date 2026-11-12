@@ -1,0 +1,15 @@
+context api
+
+type Filter = {
+    @name("page-size") pageSize: Option[Int],
+}
+
+type FilterView = {
+    pageSize: Option[Int],
+}
+
+service api from http {
+    on GET("/f") (query: Filter) -> Effect[HttpResult[FilterView]] by v: Visitor {
+        Ok(FilterView { pageSize: query.pageSize })
+    }
+}

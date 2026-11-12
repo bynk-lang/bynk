@@ -46,6 +46,31 @@ only, standing alone on its route (never a sum member or a refinement base, and 
   `by Nobody`, `by Forged` and `by Expired` probe the seam. The driver sends `same-origin` by default
   so a case's own headers probe the CSRF check, and an end-to-end matrix pins the rule.
 
+**Deviations from the accepted proposal.** What shipped differs from #3386 in these ways, each made
+during the build and each a tightening rather than a loosening:
+
+- **`bynk.actor.signed_cookie_issue_outside_handler` is new.** The proposal listed
+  `signed_cookie_issue_outside_context`; an actor is sealed by scope, so another context cannot name
+  it and that code is unreachable and was not added. The new code refuses `Actor.issue` in a provider or
+  an agent instead, because the signing key reaches a service handler's dependencies and not theirs:
+  the call compiled but would have faulted on every request.
+- **One signing key per binding across contexts.** Contexts that list the same `secret` variable (a
+  login service that issues the cookie, an API that it guards) must hold the same value. `bynk deploy`
+  mints it once and sets it on each, and refuses a run that would split them (a sibling already holds one,
+  or `--context` reaches only some), since Cloudflare never returns a secret's value.
+- **`bynk dev` uses a local key derived from the binding's name**, not a fresh key per run: distinct per
+  actor, and the same in every `bynk dev --context` session so two side by side accept each other's
+  cookies.
+- **The handler's `RequestHeaders` view omits the session cookie too.** The proposal said the raw
+  `headers.get("Cookie")` cannot be intercepted; the router can and does, as for `RequestCookies`.
+- **`Sec-Fetch-Site: none` is refused on a state-changing request**, whatever its `Origin` (the
+  proposal's sketch accepted `none`); a navigation is never a state-changing request.
+- **A `SignedCookie` stands alone on its route.** A sum member was recommended (open question 10) but
+  the per-arm CSRF rule is not built, so a sum is refused (`signed_cookie_not_in_sum`); the maintainer
+  changed that answer to single-actor only.
+- **`ttl` and the `Duration`/`Ident` config values** are parsed as typed values (`ttl = 12.hours`,
+  `sameSite = Lax`) rather than as strings, and a sub-second `ttl` is an error.
+
 **Consequences.** A service can authenticate a browser with no store and no hand-written cookie. A
 stateless cookie cannot be revoked before `ttl`; ending the session is `expire()` (this browser) or
 rotating the key (everyone). Store-backed sessions, a refresh flow, and encrypted cookies are deferred

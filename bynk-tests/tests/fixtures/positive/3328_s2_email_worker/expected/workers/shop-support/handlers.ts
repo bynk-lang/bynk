@@ -13,7 +13,7 @@ import { __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerd
 export { type InboundEmail };
 
 export const support = {
-  async queue_support_0(mail: InboundEmail, deps: { identity: { readonly address: string; readonly dmarc: { readonly tag: string } } }): globalThis.Promise<EmailVerdict> {
+  async queue_support_0(mail: InboundEmail, deps: { identity: { readonly address: string; readonly dmarc: { readonly tag: "DmarcPass" } | { readonly tag: "DmarcFail" } | { readonly tag: "DmarcNone" } } }): globalThis.Promise<EmailVerdict> {
     return (__bynkEq(deps.identity.dmarc, DmarcVerdict.DmarcPass) ? EmailVerdict.Reply({ text: Some("Thanks, we have your message."), subject: { tag: "None" }, html: { tag: "None" } }) : EmailVerdict.Reject("sender not verified"));
   },
 };

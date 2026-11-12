@@ -1,0 +1,10 @@
+context shop
+
+agent Counter {
+    store n: Cell[Int]
+    key id: String
+
+    on call get() -> Effect[Int] {
+        n
+    }
+}

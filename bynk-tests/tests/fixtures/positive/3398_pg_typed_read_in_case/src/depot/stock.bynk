@@ -1,0 +1,21 @@
+context depot.stock
+
+// #3398: a typed `Postgres` read called straight from a test case needs the
+// runtime's row pass imported into the test module, as a handler's module does.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgReadError, PgRun, PgValue }
+
+capability Main = Postgres
+
+type Order = {
+	id: Int,
+	qty: Int,
+	placed: Instant,
+}
+
+service add {
+	on call() -> Effect[Result[PgRun, PgError]] given Main {
+		Main.run("insert into orders default values", [])
+	}
+}

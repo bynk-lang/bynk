@@ -1,0 +1,6 @@
+suite demo.c {
+  case "c" {
+    let r = discount(100, 10)
+    expect r <= 100
+  }
+}

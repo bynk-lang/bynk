@@ -1,0 +1,9 @@
+context api
+
+type Plain = {
+    a: String,
+}
+
+fn show(p: Plain) -> String {
+    p.a
+}

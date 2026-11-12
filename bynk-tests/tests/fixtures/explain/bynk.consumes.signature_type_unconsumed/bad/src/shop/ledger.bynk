@@ -1,0 +1,9 @@
+context shop.ledger
+
+consumes shop.order
+
+service domestic {
+    on call(id: String) -> Effect[Order] {
+        Effect.pure(Order { id: id })
+    }
+}
