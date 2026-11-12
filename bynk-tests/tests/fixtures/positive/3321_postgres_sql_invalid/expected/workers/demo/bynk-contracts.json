@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "probe": "ceec73f86f992e92"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "probe": "Svc(\"probe\",Ret(R(B(\"String\"),N(\"PgError\"))))"
+  }
+}

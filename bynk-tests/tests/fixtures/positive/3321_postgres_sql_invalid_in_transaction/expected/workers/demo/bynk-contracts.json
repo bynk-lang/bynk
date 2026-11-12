@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "probe": "df71a107a130c3c5"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "probe": "Svc(\"probe\",P(\"name\",B(\"String\")),Ret(R(L(N(\"PgRun\")),N(\"PgError\"))))"
+  }
+}

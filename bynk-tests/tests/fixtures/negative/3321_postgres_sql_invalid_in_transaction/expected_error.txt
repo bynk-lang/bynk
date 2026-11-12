@@ -1,2 +1,0 @@
-bynk.postgres.sql_invalid
-syntax error at end of input

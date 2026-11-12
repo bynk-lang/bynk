@@ -1,0 +1,29 @@
+context demo
+
+// Hyperdrive H4 (#3321): Postgres-specific syntax, with a `schema.sql`, that
+// the statement check must accept: jsonb operators, ON CONFLICT … DO UPDATE,
+// RETURNING, `::` casts, a CTE, `FOR UPDATE SKIP LOCKED` and `= ANY($n)`.
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, PgError, PgRun, PgStatement, PgValue }
+
+capability Main = Postgres
+
+service probe {
+  on call(name: String) -> Effect[Result[String, PgError]] given Main {
+    let a <- Main.all("select id, data->>'name' as name, data->'tags'->0 from events where data @> $1::jsonb", [PgJson("{}")])
+    let b <- Main.all("insert into orders (name, qty) values ($1, $2) on conflict (name) do update set qty = orders.qty + excluded.qty returning id, qty", [PgText(name), PgInteger(1)])
+    let c <- Main.all("with recent as (select * from orders where placed > $1::timestamptz) select count(*) from recent", [PgNull])
+    let d <- Main.first("select id from orders where id = any($1::int8[]) order by id for update skip locked limit 1", [PgNull])
+    Main.all("update orders set qty = qty - 1 where name = $1 returning *", [PgText(name)])
+  }
+}
+
+service batch {
+  on call(name: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+    Main.transaction([
+      PgStatement { sql: "insert into orders (name) values ($1) on conflict do nothing", params: [PgText(name)] },
+      PgStatement { sql: "delete from orders where qty::int < $1", params: [PgInteger(0)] },
+    ])
+  }
+}

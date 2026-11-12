@@ -3671,8 +3671,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.postgres.sql_invalid",
-        blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `Postgres` capability with Postgres' own parser, so a syntax error is a compile error, not a failure on the first request. It also refuses a statement of several commands, which a prepared statement does not accept: send each with its own call, or use `transaction`. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
-        example: "let _ <- Main.all(\"SELEC id FROM orders\", [])        // ✗ syntax error at or near \"SELEC\"\n\nlet _ <- Main.all(\"SELECT id FROM orders\", [])      // ✓",
+        blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `Postgres` capability, so a syntax error shows up when you check, not on the first request. It also flags a statement of several commands, which a prepared statement does not accept: send each with its own call, or use `transaction`. The parser is a pure-Rust one with a Postgres dialect, not Postgres' own, so it can refuse valid SQL, a newer or rarer form; that is why this is a warning and never blocks a build. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
+        example: "let _ <- Main.all(\"SELEC id FROM orders\", [])        // ✗ expected a statement, found SELEC\n\nlet _ <- Main.all(\"SELECT id FROM orders\", [])      // ✓",
         page: "/book/reference/bynk-capabilities",
         anchor: "postgres-sql-checked-for-syntax",
     },
@@ -8376,10 +8376,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A sum-type or enum variant name is not capitalised.",
         &["sum_variant", "enum_type"],
     ),
-    d(
+    warn(d(
         "bynk.postgres.sql_invalid",
-        "A literal `Postgres` statement does not parse (or is more than one command), in a project that has a `schema.sql`.",
-    ),
+        "A literal `Postgres` statement does not parse with the Postgres dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not Postgres' own, so it may refuse valid SQL).",
+    )),
     d(
         "bynk.postgres.sql_param_count",
         "A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`.",

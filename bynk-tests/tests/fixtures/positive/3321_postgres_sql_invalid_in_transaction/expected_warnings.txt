@@ -1,0 +1,2 @@
+# A statement inside a `transaction` is checked as a call's is.
+bynk.postgres.sql_invalid

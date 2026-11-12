@@ -228,14 +228,15 @@ setting out and tests stay as quick as before, with every operation stubbed. See
 
 ## Catch a bad statement at compile time
 
-The same `schema.sql` switches on a check. `bynk check` parses each literal
-statement with Postgres' own parser and counts its `$n` placeholders against the
-list you pass, so a typo or a missing parameter is an error in the editor instead of
-a `PgFailed` on the first request:
+The same `schema.sql` switches on a check. `bynk check` counts the `$n`
+placeholders of each literal statement against the list you pass (an error), and
+parses the statement (a warning, since the parser is not Postgres' own), so a typo
+or a missing parameter shows in the editor instead of as a `PgFailed` on the first
+request:
 
 ```bynk,fragment
-Main.all("selec name from orders", [])                      // bynk.postgres.sql_invalid
-Main.all("select name from orders where id = $1", [])       // bynk.postgres.sql_param_count
+Main.all("selec name from orders", [])                      // warning: bynk.postgres.sql_invalid
+Main.all("select name from orders where id = $1", [])       // error: bynk.postgres.sql_param_count
 ```
 
 It does not check names against your tables: Bynk does not own the schema. Without

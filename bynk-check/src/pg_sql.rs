@@ -6,20 +6,22 @@
 //! statement against, as `bynk.d1.sql_invalid` does for D1 (ADR 0763). What can
 //! be checked without one is the text:
 //!
-//! - `bynk.postgres.sql_invalid`: the statement does not parse (libpg_query, the
-//!   parser Postgres itself is built from), or holds more than one command (a
-//!   prepared statement takes exactly one, so the driver would refuse it);
-//! - `bynk.postgres.sql_param_count`: the statement's highest `$n` differs from
-//!   the number of parameters the call passes.
+//! - `bynk.postgres.sql_invalid` (a **warning**): the statement does not parse
+//!   with `sqlparser`'s Postgres dialect, or holds more than one command (a
+//!   prepared statement takes one, so the driver would refuse it);
+//! - `bynk.postgres.sql_param_count` (an error): the statement's highest `$n`
+//!   differs from the number of parameters the call passes.
+//!
+//! `sqlparser` is a pure-Rust parser and is not Postgres' own, so it can refuse
+//! valid Postgres (a newer or rarer form). That is why the syntax finding is a
+//! warning: an advisory check must never block a program that runs. The
+//! parameter count is exact (it is a scanner of this file's own, below, pinned
+//! by tests to Postgres' rules), so a mismatch is an error. `libpg_query`
+//! (`pg_query`) would be exact on syntax too, but needs libclang to build.
 //!
 //! The check is off unless `schema.sql` is at the project root: its presence is
 //! the project saying it keeps a Postgres schema Bynk may take an interest in.
-//!
-//! The parameter count is [`placeholder_count`], a scanner of this file's own
-//! (the `agrees_with_libpg_query` test pins it to the parser's `$n` nodes), so it
-//! holds on every target. The syntax check needs libpg_query, which is C and
-//! has no `wasm32-unknown-unknown` build, so on `wasm32` (the playground, which
-//! has no `schema.sql` either) a statement is never reported as invalid.
+//! The parser has no C, so it builds on every target, `wasm32` included.
 
 /// What is wrong with a statement's text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,11 +50,12 @@ pub fn check_statement(sql: &str, passed: Option<usize>) -> Vec<PgSqlProblem> {
     out
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn syntax_problem(sql: &str) -> Option<String> {
-    match pg_query::parse(sql, 0) {
+    use sqlparser::dialect::PostgreSqlDialect;
+    use sqlparser::parser::Parser;
+    match Parser::parse_sql(&PostgreSqlDialect {}, sql) {
         Err(e) => Some(parse_message(&e.to_string())),
-        Ok(parsed) if parsed.protobuf.stmts.len() > 1 => Some(
+        Ok(statements) if statements.len() > 1 => Some(
             "a statement is one command: a prepared statement refuses several, so send each with its own call (or use `transaction`)"
                 .to_string(),
         ),
@@ -60,19 +63,12 @@ fn syntax_problem(sql: &str) -> Option<String> {
     }
 }
 
-/// libpg_query's message, without the prefix the crate puts in front of it.
-#[cfg(not(target_arch = "wasm32"))]
+/// The parser's message, without the prefix it puts in front of it.
 fn parse_message(text: &str) -> String {
-    let text = text
-        .strip_prefix("Parse error: ")
-        .or_else(|| text.strip_prefix("Invalid statement: "))
-        .unwrap_or(text);
-    text.trim().to_string()
-}
-
-#[cfg(target_arch = "wasm32")]
-fn syntax_problem(_: &str) -> Option<String> {
-    None
+    text.strip_prefix("sql parser error: ")
+        .unwrap_or(text)
+        .trim()
+        .to_string()
 }
 
 /// The number of parameters a statement uses: its highest `$n`, which is how
@@ -195,58 +191,63 @@ fn dollar_quote_end(b: &[u8], i: usize) -> Option<usize> {
     )
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The statements the scanner is held to: parameters in every position and
-    /// text that only looks like one.
-    const STATEMENTS: &[&str] = &[
-        "select 1",
-        "select $1",
-        "select $1, $2, $3",
-        "select $2, $1",
-        "select * from t where a = $1 and b = $1",
-        "select '$9'",
-        "select E'it\\'s $9', $1",
-        "select 'it''s $9', $2, $1",
-        "select \"$9\" from t where a = $1",
-        "select 1 -- $9\n, $1",
-        "select /* $9 /* nested $8 */ $7 */ $1",
-        "select $$ $9 $$, $1",
-        "select $tag$ $9 $tag$, $1, $2",
-        "select $1::int + $10::int, $2, $3, $4, $5, $6, $7, $8, $9",
-        "insert into t (a, b) values ($1, $2) returning id",
-        "update t set a = $1 where id = $2",
-        "select array[$1, $2]",
-        "select $1 as e from t where x ilike '%' || $2 || '%'",
+    /// The statements the scanner is held to: the highest `$n`, with text that
+    /// only looks like a parameter.
+    const COUNTS: &[(&str, usize)] = &[
+        ("select 1", 0),
+        ("select $1", 1),
+        ("select $1, $2, $3", 3),
+        ("select $2, $1", 2),
+        ("select * from t where a = $1 and b = $1", 1),
+        ("select '$9'", 0),
+        ("select E'it\\'s $9', $1", 1),
+        ("select 'it''s $9', $2, $1", 2),
+        ("select \"$9\" from t where a = $1", 1),
+        ("select 1 -- $9\n, $1", 1),
+        ("select /* $9 /* nested $8 */ $7 */ $1", 1),
+        ("select $$ $9 $$, $1", 1),
+        ("select $tag$ $9 $tag$, $1, $2", 2),
+        ("select $1::int + $10::int", 10),
+        ("insert into t (a, b) values ($1, $2) returning id", 2),
+        ("select array[$1, $2]", 2),
+        ("select x ilike '%' || $2 || '%' from t", 2),
     ];
 
-    /// The highest `$n` libpg_query's parse tree holds, from the `ParamRef`
-    /// nodes in its debug rendering (its `nodes()` walk does not descend into
-    /// every list, a `VALUES` row among them).
-    fn parser_count(sql: &str) -> usize {
-        let tree = format!("{:?}", pg_query::parse(sql, 0).expect("parses").protobuf);
-        let mut highest = 0;
-        let mut rest = tree.as_str();
-        while let Some(at) = rest.find("ParamRef") {
-            rest = &rest[at + "ParamRef".len()..];
-            let Some(at) = rest.find("number: ") else {
-                break;
-            };
-            let digits: String = rest[at + "number: ".len()..]
-                .chars()
-                .take_while(char::is_ascii_digit)
-                .collect();
-            highest = highest.max(digits.parse().unwrap_or(0));
+    #[test]
+    fn the_scanner_counts_by_postgres_rules() {
+        for (sql, n) in COUNTS {
+            assert_eq!(placeholder_count(sql), *n, "{sql}");
         }
-        highest
     }
 
+    /// Valid Postgres, in the forms the docs and the tests of this repository
+    /// use: none of them may be reported.
+    pub(crate) const VALID_POSTGRES: &[&str] = &[
+        "select id, data->>'name' as name, data->'tags'->0 from events where data @> $1::jsonb",
+        "insert into orders (name, qty) values ($1, $2) on conflict (name) do update set qty = orders.qty + excluded.qty returning id, qty",
+        "insert into orders (name) values ($1) on conflict do nothing",
+        "update orders set qty = qty - 1 where id = $1 returning *",
+        "delete from orders where id = any($1::int8[])",
+        "select $1::timestamptz, $2::numeric(12, 2), $3::text[]",
+        "with recent as (select * from orders where placed > $1) select count(*) from recent",
+        "select distinct on (name) name, qty from orders order by name, qty desc",
+        "select id from orders where name ilike $1 order by id limit $2 offset $3",
+        "select id, row_number() over (partition by name order by id) from orders",
+        "select * from orders where id = $1 for update skip locked",
+        "select generate_series(1, $1)",
+        "insert into archive select * from orders where placed < $1",
+        "select * from orders o join items i on i.order_id = o.id where o.id = $1",
+        "create table if not exists t (id serial primary key, doc jsonb not null default '{}'::jsonb, at timestamptz default now())",
+    ];
+
     #[test]
-    fn agrees_with_libpg_query() {
-        for sql in STATEMENTS {
-            assert_eq!(placeholder_count(sql), parser_count(sql), "{sql}");
+    fn valid_postgres_has_no_problem() {
+        for sql in VALID_POSTGRES {
+            assert_eq!(check_statement(sql, None), vec![], "{sql}");
         }
     }
 
@@ -262,7 +263,7 @@ mod tests {
     fn a_syntax_error_is_invalid() {
         let got = check_statement("selec 1", Some(0));
         assert!(
-            matches!(got.as_slice(), [PgSqlProblem::Invalid(m)] if m.contains("syntax error")),
+            matches!(got.as_slice(), [PgSqlProblem::Invalid(_)]),
             "{got:?}"
         );
     }

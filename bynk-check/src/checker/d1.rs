@@ -455,10 +455,10 @@ fn pg_problem(problem: crate::pg_sql::PgSqlProblem, span: Span) -> CompileError 
         PgSqlProblem::Invalid(message) => CompileError::new(
             "bynk.postgres.sql_invalid",
             span,
-            format!("this is not a Postgres statement: {message}"),
+            format!("this may not be a Postgres statement: {message}"),
         )
         .with_note(
-            "checked with Postgres' own parser because the project has a `schema.sql`; delete that file to turn the check off",
+            "a warning, not an error: the parser is a pure-Rust one, not Postgres' own, and can refuse valid SQL. It runs because the project has a `schema.sql`; delete that file to turn the check off",
         ),
         PgSqlProblem::ParamCount { expected, passed } => CompileError::new(
             "bynk.postgres.sql_param_count",
