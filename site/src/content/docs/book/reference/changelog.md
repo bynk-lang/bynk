@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.560.1** | `examples/sessions` reads its `__Host-sid` cookie through a typed `@name("__Host-sid")` record, and the HTTP reference shows both ways to read a prefixed cookie (#3343, closing slice) |
 | **v0.560.0** | `bynk deploy` makes, syncs or adopts the Hyperdrive config of a `Postgres` instance from a connection string in an environment variable `bynk.toml` names, and `bynk dev` wires the local one |
 | **v0.559.1** | `bynk explain` gains thirty-three entries under the actor, adapter, capability, consumes, exports and generics codes (#3163) |
 | **v0.559.0** | The request readers apply `@name("…")`: a renamed `cookies`, `query` or `@form`/`@multipart` body field is read from, and written to, its wire key (#3343, slice 2) |
