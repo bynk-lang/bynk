@@ -367,7 +367,7 @@ kernel_ops! {
         Send = "send", "send(frame: F) -> Effect[()]";
         Close = "close", "close() -> Effect[()]";
     }
-/// `Effect[T]` (#2683, #2711): `within` and `race`, on every `Effect`.
+/// `Effect[T]` (#2683, #2711, #3437): `within`, `race` and `detach`, on every `Effect`.
     EffectOp {
         // #2683: `e.within(d)` races `e` against a deadline and hands the
         // abandoned effect to the execution context's `waitUntil`; it is never
@@ -377,6 +377,10 @@ kernel_ops! {
         // uncancelled, to the execution context's `waitUntil`, so its side effects
         // still happen. Meant for idempotent work.
         Race = "race", "race(other: Effect[T]) -> Effect[T]";
+        // #3437: `e.detach()` stops waiting for `e`: it returns once the effect
+        // has been handed to the runtime, not once it has finished. A fault or
+        // an `Err` in it is reported by the runtime, never lost.
+        Detach = "detach", "detach() -> Effect[()]";
     }
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176; design doc §2.8.3),
 /// beyond [`EffectOp`]: the compiler-synthesised methods on the universal

@@ -377,6 +377,8 @@ mod system {
     mod package_exports;
     #[path = "par_behaviour.rs"]
     mod par_behaviour;
+    #[path = "detach_workerd.rs"]
+    mod detach_workerd;
     #[path = "par_gate_workerd.rs"]
     mod par_gate_workerd;
     #[path = "par_traverse_behaviour.rs"]

@@ -2133,6 +2133,9 @@ pub(super) fn append_runtime_use_imports(names: &mut Vec<String>, ru: &RuntimeUs
     if ru.race() {
         append_missing_bindings(names, emitter::RACE_RUNTIME_IMPORTS);
     }
+    if ru.detach() {
+        append_missing_bindings(names, emitter::DETACH_RUNTIME_IMPORTS);
+    }
     if ru.fault() {
         append_missing_bindings(names, emitter::FAULT_RUNTIME_IMPORTS);
     }

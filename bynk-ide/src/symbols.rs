@@ -1614,8 +1614,8 @@ pub fn describe_self_at(
     Some(format!("```bynk\nself: {name}\n```"))
 }
 
-/// #2683, #2711: hover on the `within` of `e.within(d)` or the `race` of
-/// `a.race(b)`, where the receiver is an `Effect`: its signature and what it
+/// #2683, #2711, #3437: hover on the `within` of `e.within(d)`, the `race` of
+/// `a.race(b)` or the `detach` of `e.detach()`, where the receiver is an `Effect`: its signature and what it
 /// does and does not do. The kernel methods have no declaration to read a doc
 /// from, so these are written here; the receiver's type keeps a user type's own
 /// `within` or `race` method from being described as them.
@@ -1629,7 +1629,7 @@ pub fn describe_effect_method_at(
     let tok = tokens.iter().find(|t| {
         t.span.start <= offset
             && offset < t.span.end
-            && matches!(&text[t.span.start..t.span.end], "within" | "race")
+            && matches!(&text[t.span.start..t.span.end], "within" | "race" | "detach")
     })?;
     let word = &text[tok.span.start..tok.span.end];
     let before = text[..tok.span.start].trim_end();
@@ -1641,6 +1641,21 @@ pub fn describe_effect_method_at(
     let recv = bynk_check::expr_types::type_at_offset(expr_types, dot.checked_sub(1)?, tys)?;
     if !matches!(&*tys.get(recv), bynk_check::checker::Ty::Effect(_)) {
         return None;
+    }
+    if word == "detach" {
+        return Some(
+            "```bynk\ndetach() -> Effect[()]\n```\n\n\
+             Stops waiting for the effect: returns once the effect has been handed to the \
+             runtime, not once it has finished. The effect is already running (an effect starts \
+             where its expression is evaluated), so `detach` never starts or delays it.\n\n\
+             **A failure is reported, never lost.** A fault goes to the platform's exception \
+             path; an `Err` (when `T` is a `Result`) is logged as one structured record naming \
+             the site and the error's type and variant, but not its payload. Detaching is \
+             best-effort: it is not retried, and the platform may cut it short after the \
+             response.\n\n\
+             Only where an execution context exists, as `within`: not in an agent handler."
+                .to_string(),
+        );
     }
     if word == "race" {
         return Some(
@@ -3478,6 +3493,18 @@ mod tests {
         assert!(hover.contains("loser is not cancelled"), "{hover}");
         assert!(hover.contains("idempotent"), "{hover}");
         let on_int = [(Span::new(8, dot), int)];
+        assert!(describe_effect_method_at(src, at, &on_int, &tys).is_none());
+
+        // #3437: `detach` says it stops waiting, and that a failure is reported.
+        let src = "do p.get(1).detach()\n";
+        let dot = src.find(".detach").unwrap();
+        let at = src.find("detach").unwrap() + 1;
+        let on_effect = [(Span::new(3, dot), effect)];
+        let hover = describe_effect_method_at(src, at, &on_effect, &tys).expect("detach hovers");
+        assert!(hover.contains("detach() -> Effect[()]"), "{hover}");
+        assert!(hover.contains("not once it has finished"), "{hover}");
+        assert!(hover.contains("reported, never lost"), "{hover}");
+        let on_int = [(Span::new(3, dot), int)];
         assert!(describe_effect_method_at(src, at, &on_int, &tys).is_none());
     }
 

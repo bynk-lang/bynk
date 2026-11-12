@@ -771,6 +771,7 @@ pub(super) fn emit_integration_module(
             envs,
             remote: remote.is_some(),
             generative: false,
+            detach_reports: harness_participants.iter().any(sends),
         },
     ))
 }

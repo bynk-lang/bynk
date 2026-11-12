@@ -4569,7 +4569,38 @@ fn lower_kernel_method_call(
                             cx.exec_expr()
                         ));
                     }
-                    EffectOp::Within | EffectOp::Race => {}
+                    // #3437: `e.detach()` hands the already-running effect to
+                    // the execution context and reports a failure (a fault, or
+                    // an `Err` when the payload is a `Result`). The static type
+                    // picks the route: only a `Result` payload names its error
+                    // type to the helper.
+                    EffectOp::Detach if args.is_empty() => {
+                        cx.note_detach();
+                        let recv = pre.lower(receiver, cx);
+                        let site = cx
+                            .assert_loc()
+                            .map(|_| expect_location(cx, e.span.start))
+                            .or_else(|| crate::emitter::fault_source_location(e.span.start))
+                            .map(|l| crate::emitter::escape_ts_string(&l))
+                            .unwrap_or_else(|| format!("offset {}", e.span.start));
+                        let err_type = match &recv_ty {
+                            Ty::Effect(inner) => match &*tys.get(*inner) {
+                                Ty::Result(_, err) => Some(crate::emitter::escape_ts_string(
+                                    &err.display(tys).to_string(),
+                                )),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        let tail = err_type
+                            .map(|t| format!(", \"{t}\""))
+                            .unwrap_or_default();
+                        return Some(format!(
+                            "__bynkDetach({recv}, {}, \"{site}\"{tail})",
+                            cx.exec_expr()
+                        ));
+                    }
+                    EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
                 }
             }
             // §2.8.3: the `Effect[Result[T, E]]` combinators — `mapOk`/`mapErr`/

@@ -1291,6 +1291,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                         col: l.col,
                     }),
                     retries: None,
+                    detached_failures: None,
                     tier: c.tier.map(str::to_string),
                     kind: c.generative.map(str::to_string),
                     seed: None,

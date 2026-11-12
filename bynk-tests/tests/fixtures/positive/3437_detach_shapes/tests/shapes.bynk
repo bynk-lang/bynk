@@ -1,0 +1,21 @@
+suite shapes {
+	case "a detached effect of any type completes the handler" {
+		let r <- run.call(0)
+		expect r == 0
+	}
+
+	case "a detached Err does not fail the case" {
+		let r <- run.call(1)
+		expect r == 1
+	}
+
+	case "a detached Err with a payload does not fail the case" {
+		let r <- run.call(2)
+		expect r == 2
+	}
+
+	case "a helper detaches" {
+		let _ <- notify(1)
+		expect true
+	}
+}

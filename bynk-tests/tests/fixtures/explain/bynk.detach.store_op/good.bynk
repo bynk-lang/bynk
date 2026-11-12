@@ -1,0 +1,11 @@
+context r
+
+agent Counter {
+  key id: String
+
+  store count: Cell[Int]
+
+  on call bump() -> Effect[()] {
+    do count.update((n) => n + 1)
+  }
+}

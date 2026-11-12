@@ -1,7 +1,7 @@
 //! #2719: which functions need the execution context, and where one is not
 //! available to give them.
 //!
-//! `~>`, `e.within(d)` and `a.race(b)` hand work to the execution context's
+//! `~>`, `e.detach()`, `e.within(d)` and `a.race(b)` hand work to the execution context's
 //! `waitUntil`. A service handler reaches it as `deps.__exec`; a function has
 //! no `deps`, so a function whose body (or a function it calls, or names as a
 //! value) uses one of the three takes it as a hidden trailing parameter. This
@@ -386,7 +386,9 @@ fn scan_with<'a>(
                 op: KernelOp::Effect(op),
             }) => {
                 if matches!(&*tys.get(*recv), Ty::Effect(_)) {
-                    facts.timed = true;
+                    // `detach` registers no timer, so it does not put a test
+                    // module on virtual time.
+                    facts.timed |= !matches!(op, crate::kernel_op::EffectOp::Detach);
                     facts.direct.get_or_insert((op.name(), e.span));
                 }
             }

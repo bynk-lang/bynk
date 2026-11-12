@@ -961,6 +961,7 @@ pub(super) fn emit_test_module(
             envs: Vec::new(),
             remote: false,
             generative: has_properties,
+            detach_reports: uses_send,
             snapshot_files: snapshot_keys.keys().cloned().collect(),
         },
     ))

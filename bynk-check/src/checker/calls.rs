@@ -3613,6 +3613,12 @@ pub(crate) fn check_method_call(
                 let r = check_effect_race_method(args, *inner, span, ctx);
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
+            // #3437: `detach` is on every `Effect[T]` too.
+            if method.name == "detach" {
+                let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
+                let r = check_effect_detach_method(receiver, args, span, ctx);
+                return record_kernel(ctx, expr_id, recv_ty, op, method, r);
+            }
             if let Ty::Result(ok, err) = &*tys.get(*inner) {
                 let kop = EffectResultOp::from_name(&method.name);
                 let r = check_effect_result_kernel_method(method, kop, args, *ok, *err, span, ctx);

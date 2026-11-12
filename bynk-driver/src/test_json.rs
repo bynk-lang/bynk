@@ -131,6 +131,12 @@ pub struct Case {
     /// in a remote run. Absent when it wasn't retried.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retries: Option<u32>,
+    /// #3437: how many failures a detached effect (`e.detach()`) reported while the
+    /// case ran, each a fault or an `Err`. A report does not fail the case, as on
+    /// Workers (ADR 0478), so the count is how a noisy detach shows up. Absent when
+    /// none was reported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detached_failures: Option<u32>,
     /// The case's effective tier, `"unit"`, `"integration"` or `"system"`
     /// (ADR 0153), attached from the compile's case table: the suite `kind`
     /// follows the module name and cannot say it. Appended last and omitted when
@@ -438,6 +444,7 @@ impl TestRun {
                 message: Some(reason.clone()),
                 location: None,
                 retries: None,
+                detached_failures: None,
                 // A remote or smoke run skips only `system` cases.
                 tier: Some("system".to_string()),
                 kind: None,
@@ -628,6 +635,11 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         .and_then(serde_json::Value::as_u64)
         .filter(|n| *n > 0)
         .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    let detached_failures = value
+        .get("detached_failures")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|n| *n > 0)
+        .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
     let violation = value.get("violation").map(violation_from_json);
     let refusals = refusals_from_json(value.get("refusals"));
     Case {
@@ -636,6 +648,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         message,
         location,
         retries,
+        detached_failures,
         tier: None,
         kind: str_opt(value, "kind"),
         seed: str_opt(value, "seed"),

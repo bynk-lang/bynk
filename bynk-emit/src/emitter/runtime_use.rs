@@ -109,6 +109,8 @@ pub struct RuntimeUse {
     within: Cell<bool>,
     /// #2711: the module references `a.race(b)`'s helper, `__bynkRace`.
     race: Cell<bool>,
+    /// #3437: the module references `e.detach()`'s reporter, `__bynkDetach`.
+    detach: Cell<bool>,
     /// #2620: the module references `unreachable`/`todo`'s helper, `__fault`.
     fault: Cell<bool>,
     /// #2683: the test module runs on virtual time, so an addressed call is
@@ -262,6 +264,11 @@ impl RuntimeUse {
     /// Record that the module references the `within` race (#2683).
     pub fn note_within(&self) {
         self.within.set(true);
+    }
+
+    /// Record that the module references the `detach` reporter (#3437).
+    pub fn note_detach(&self) {
+        self.detach.set(true);
     }
 
     /// Record that the module references the `race` helper (#2711).
@@ -591,6 +598,11 @@ impl RuntimeUse {
     /// Whether `__fault` must be imported (#2620).
     pub fn fault(&self) -> bool {
         self.fault.get()
+    }
+
+    /// Whether `__bynkDetach` must be imported (#3437).
+    pub fn detach(&self) -> bool {
+        self.detach.get()
     }
 
     /// Whether `__bynkRace` must be imported (#2711).

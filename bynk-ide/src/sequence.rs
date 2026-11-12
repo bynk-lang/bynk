@@ -450,6 +450,28 @@ impl<'a> Builder<'a> {
         ret: bool,
     ) {
         let inner = peel_paren(expr);
+        // #3437: `e.detach()` is the asynchronous arrow, as `~> e` is: the call it
+        // wraps is drawn without a return. Read from the shape (the walk has no
+        // types), and only under `do` or `<-`, where an effect is awaited.
+        if arrow == Some(Arrow::Awaited)
+            && let ExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+                ..
+            } = &inner.kind
+            && method.name == "detach"
+            && args.is_empty()
+        {
+            self.walk_value(
+                receiver,
+                current_block,
+                depth,
+                Some(Arrow::FireAndForget),
+                false,
+            );
+            return;
+        }
         match &inner.kind {
             // Control flow in return position keeps the `ret` flag: each
             // branch's own tail is what the handler ultimately returns.
@@ -1112,6 +1134,29 @@ service nestedService {
             .get("misc")
             .cloned()
             .expect("sequence_info entry for misc")
+    }
+
+    /// #3437: `do e.detach()` is the same asynchronous arrow as `~> e`: a Send,
+    /// with no paired Return.
+    #[test]
+    fn detach_is_a_fire_and_forget_send() {
+        let src = MISC_SRC.replace("~> Logger.info(\"hi\")", "do Logger.info(\"hi\").detach()");
+        assert_ne!(src, MISC_SRC);
+        let root = setup_project("misc-detach", &[("misc.bynk", &src)]);
+        let diag = crate::testkit::diagnose_project(&root);
+        let info = misc_info(&diag);
+
+        let ctx = parse_context(&src);
+        let svc = find_service(&ctx, "fireService");
+        let model = sequence_model(
+            &svc.handlers[0],
+            HandlerOwner::Service("fireService"),
+            &svc.default_given,
+            svc.default_by.as_ref(),
+            Some(&info),
+        );
+        assert_eq!(model.messages.len(), 1, "a detach has no paired Return");
+        assert_eq!(model.messages[0].kind, MessageKind::Send);
     }
 
     #[test]

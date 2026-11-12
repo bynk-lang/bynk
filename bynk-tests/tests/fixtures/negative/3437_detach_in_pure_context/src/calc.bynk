@@ -1,0 +1,7 @@
+commons calc
+
+fn label(n: Int) -> String {
+  // a pure free function is not an effectful body, so `detach` is illegal here
+  let _ = Effect.pure(()).detach()
+  "n=\(n)"
+}

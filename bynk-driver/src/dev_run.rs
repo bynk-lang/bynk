@@ -379,6 +379,7 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                     col: l["col"].as_u64().unwrap_or(0) as u32,
                 }),
                 retries: c["retries"].as_u64().map(|n| n as u32),
+                detached_failures: c["detached_failures"].as_u64().map(|n| n as u32),
                 tier: c["tier"].as_str().map(str::to_string),
                 kind: c["kind"].as_str().map(str::to_string),
                 seed: c["seed"].as_str().map(str::to_string),

@@ -1,0 +1,6 @@
+context demo
+
+fn twice(ping: Effect[()], n: Int) -> Int {
+    do ping.detach()
+    n * 2
+}

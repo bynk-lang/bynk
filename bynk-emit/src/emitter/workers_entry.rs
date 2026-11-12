@@ -1913,6 +1913,9 @@ pub fn emit_worker_entry(
     if runtime_use.race() {
         append_missing_bindings(&mut imports, crate::emitter::RACE_RUNTIME_IMPORTS);
     }
+    if runtime_use.detach() {
+        append_missing_bindings(&mut imports, crate::emitter::DETACH_RUNTIME_IMPORTS);
+    }
     if runtime_use.fault() {
         append_missing_bindings(&mut imports, crate::emitter::FAULT_RUNTIME_IMPORTS);
     }

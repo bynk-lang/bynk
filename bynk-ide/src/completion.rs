@@ -4508,9 +4508,14 @@ fn Box.size(self) -> Int { 1 }
             Some("race(other: Effect[T]) -> Effect[T]")
         );
 
+        // #3437: `detach` is offered on every `Effect`.
+        let detach = find(&items, "detach", CompletionKind::Member).expect("detach is offered");
+        assert_eq!(detach.detail.as_deref(), Some("detach() -> Effect[()]"));
+
         let result = TYS.intern(Ty::Result(int, int));
         let fallible = TYS.intern(Ty::Effect(result));
         let items = value_member_candidates(fallible, &TYS, "context a.b\n", None);
+        assert!(find(&items, "detach", CompletionKind::Member).is_some());
         assert!(find(&items, "within", CompletionKind::Member).is_some());
         assert!(find(&items, "race", CompletionKind::Member).is_some());
         assert!(find(&items, "mapOk", CompletionKind::Member).is_some());
