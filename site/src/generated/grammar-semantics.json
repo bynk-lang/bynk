@@ -717,7 +717,7 @@
     },
     {
       "code": "bynk.types.unknown_static_member",
-      "summary": "Referenced an unknown static member on a type."
+      "summary": "A name after `HttpResult.` that is not one of its variants. An unknown member of a type you declared is `bynk.resolve.unknown_static_member`."
     }
   ],
   "fixture_decl": [
@@ -1241,7 +1241,7 @@
     },
     {
       "code": "bynk.types.select_tail_has_select",
-      "summary": "A `D1` or `Postgres` `select[T]` or `firstAs[T]` statement begins with `SELECT`; the compiler writes the `SELECT` and column list from `T`, so the literal starts at `FROM`."
+      "summary": "A `D1`, `Postgres` or `MySql` `select[T]` or `firstAs[T]` statement does not start at `FROM` (it begins with `SELECT`, or with `WITH` or a parenthesis); the compiler writes the `SELECT` and column list from `T`."
     },
     {
       "code": "bynk.types.sequence_needs_result",

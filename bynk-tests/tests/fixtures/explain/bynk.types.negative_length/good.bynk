@@ -1,0 +1,3 @@
+commons demo
+
+type Short = String where MinLength(8)

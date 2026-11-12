@@ -1340,7 +1340,7 @@ of either (`NULL` is `None`), or a `List` of such records. Anything else is
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.
 
-#### Typed reads: `select[T]` and `firstAs[T]`
+#### Typed reads: `select[T]` and `firstAs[T]` {#d1-typed-reads}
 
 `select[T]` and `firstAs[T]` read rows straight into a record, so the `SELECT`
 column list isn't spelt twice. The first argument is the statement **from
