@@ -1252,14 +1252,17 @@ nothing to send without waiting for — write it as `do field.op(…)`.
 A send MAY occur in an effectful `fn` or method (#2719): the function takes the execution
 context from its caller. See *The execution context in functions* below.
 
-A **`do` statement** (`do e`, §4.8.6) performs a unit effect without a binder: it
+A **`do` statement** (`do e`, §4.8.6) performs an effect without a binder: it
 MUST occur in an effectful position (`bynk.effect.do_in_pure_context`) and MUST
-be applied to an `Effect[()]` (`bynk.effect.do_on_non_effect`,
-`bynk.effect.do_requires_unit`). Unlike a send, the effect *is* awaited and joins
-the enclosing computation — `do e` is exactly `let _ <- e` when the awaited value
-is unit. The unit gate is the send's error gate transplanted: a **valued** reply
-(`Effect[T]`, `T ≠ ()`) is rejected so that discarding a real value stays the
-explicit `let _ <- e`.
+be applied to an `Effect[T]` (`bynk.effect.do_on_non_effect`). Unlike a send,
+the effect *is* awaited and joins the enclosing computation, so a fault in it
+rejects the enclosing handler exactly as for `let x <- e`. `do e` is `let _ <- e`
+for every `T` that is not a `Result`. When `T` is a `Result` (after any type alias
+is resolved) the statement is refused (`bynk.effect.do_discards_result`): an
+`Err` must not be dropped without a visible spelling, and the explicit
+`let _ <- e` remains legal. In a generic body an opaque type parameter `T` is
+accepted, since the checker cannot know that a caller will instantiate it with a
+`Result`. `HttpResult[T]` and `Option[T]` are not excluded.
 
 A **`par` block** (`par { … }`, §4.8.7b; #2640) joins independent effects: it
 issues every effect it holds, in source order, before awaiting any of them, and

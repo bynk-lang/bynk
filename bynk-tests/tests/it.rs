@@ -273,6 +273,8 @@ mod system {
     mod cli_rooting;
     #[path = "commons_type_in_capability_behaviour.rs"]
     mod commons_type_in_capability_behaviour;
+    #[path = "do_valued_fault_behaviour.rs"]
+    mod do_valued_fault_behaviour;
     #[path = "compatibility_flags_cli.rs"]
     mod compatibility_flags_cli;
     #[path = "compile_esm.rs"]

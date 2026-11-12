@@ -35,8 +35,9 @@ So Bynk gives you a small grid, and a distinct spelling for each cell:
   waiting, nothing bound. Read it as "send `op(a)` to its recipient, don't wait."
 
 (If you reach for the missing top-right cell — a valued reply you don't want to
-wait for — Bynk asks you to be honest and write `let _ <- op(a)`: await it and
-discard the value, rather than silently dropping data.)
+wait for — Bynk asks you to be honest and write `do op(a)` (or `let _ <- op(a)`): await it and
+discard the value, rather than silently dropping data. A `Result` reply is the one
+exception: `do` refuses it, so write `let _ <- op(a)` to discard it on purpose.)
 
 This mirrors UML's message arrows: a filled arrowhead with a dashed return for a
 synchronous call, an open arrowhead with no return for an asynchronous message.

@@ -1,0 +1,12 @@
+suite app
+
+case "a valued do still awaits and succeeds" {
+  stub Store.count() returns 3
+  let _ <- jobs.call()
+  expect Store.count called once
+}
+
+case "a fault in a discarded valued effect rejects the handler" {
+  stub Store.count() fails
+  expect jobs.call() faults
+}

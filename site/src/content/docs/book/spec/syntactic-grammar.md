@@ -1462,11 +1462,12 @@ is bound. Well-formedness — including the requirement that the reply be
 
 {{#grammar do_stmt}}
 
-`do` and an effect expression — a **unit effect statement** (ADR 0170). Like an
+`do` and an effect expression — an **effect statement** (ADR 0170). Like an
 `effect_send_stmt` it carries **no binder**; unlike it, the effect *is* awaited
 and joins the enclosing computation. The binder-free spelling of `let _ <- e`
-when the awaited value is unit. Well-formedness — including the requirement that
-the operand be `Effect[()]` (a valued reply keeps the explicit `let _ <- e`): §5.
+for any effect whose result is not a `Result`. Well-formedness — including the
+requirement that the operand be an `Effect[T]` with `T` not a `Result` (a
+`Result` keeps the explicit `let _ <- e`): §5.
 
 ### §4.8.7 assign_stmt (v0.81)
 
