@@ -34,3 +34,11 @@ service replay from http {
     }
   }
 }
+
+// A returned `Err` releases the claim too.
+service ledger {
+  on call(id: String) -> Effect[Result[String, String]] given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
+    if id == "bad" { Err("rejected") } else { Ok("done") }
+  }
+}

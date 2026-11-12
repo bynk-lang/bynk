@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "ledger": "48f0a78810606341"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "ledger": "Svc(\"ledger\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  }
+}

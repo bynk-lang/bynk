@@ -985,12 +985,14 @@ pub(super) const IDEMPOTENCY_DOUBLE_BODY: &str = r#"  const store = new globalTh
       return __CLAIM__.Claimed;
     },
     // Hidden from the capability: a handler's claim scope, as the real
-    // providers take it (released on failure, confirmed otherwise).
+    // providers take it (a lease, then released on failure or confirmed).
     __track() {
-      const held: { key: string; expiresAfter: number }[] = [];
+      const held: { key: string; expiresAfter: number; until: number }[] = [];
       return {
+        lease: (expiresAfter: number) => globalThis.Math.min(expiresAfter, 30000),
         note(key: string, claim: { tag: string }, expiresAfter: number) {
-          if (claim.tag === "Claimed") held.push({ key, expiresAfter });
+          const until = claims.get(key);
+          if (claim.tag === "Claimed" && until !== undefined) held.push({ key, expiresAfter, until });
           return claim;
         },
         async settle(result: { tag?: string; status?: number } | null | undefined, threw: boolean) {
@@ -1001,6 +1003,7 @@ pub(super) const IDEMPOTENCY_DOUBLE_BODY: &str = r#"  const store = new globalTh
             (tag !== undefined && ["ServerError", "NotImplemented", "BadGateway", "ServiceUnavailable", "GatewayTimeout"].includes(tag)) ||
             (tag === "RawError" && (result?.status ?? 0) >= 500);
           for (const h of held) {
+            if (claims.get(h.key) !== h.until) continue;
             if (failed) claims.delete(h.key);
             else claims.set(h.key, __NOW__ + h.expiresAfter);
           }

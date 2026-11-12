@@ -2293,24 +2293,18 @@ fn scope_idempotency_key(
     args_lowered[0] = format!("`{scope}::${{{}}}`", args_lowered[0]);
 }
 
-/// The lease, in milliseconds, a claim made in a handler holds before the
-/// handler settles it. A handler that settles confirms the claim for its full
-/// `expiresAfter` (or releases it on failure); one whose instance dies first
-/// leaves a claim that lapses after the lease, so a retry can claim again. 30 s
-/// matches the `waitUntil` limit.
-const CLAIM_LEASE_MS: u32 = 30_000;
-
 /// W30 (#2840): lower a first-party `Idempotency.claim(key, expiresAfter)` made
 /// in a service handler so the claim is recorded in the handler's claim scope
-/// (`__claims`, declared by [`wrap_claim_scope`]). The claim is taken for
-/// `min(expiresAfter, lease)`; `note` remembers the key when it was `Claimed`,
-/// and the scope confirms it for the full `expiresAfter` or releases it when
-/// the handler exits. The call itself still goes through
+/// (`__claims`, declared by [`claim_scope_wrapper`]). The scope decides how long
+/// the claim is first taken for (`lease`: a short lease when the provider will
+/// settle it, the full `expiresAfter` when it won't); `note` remembers the key
+/// when it was `Claimed`, and the scope confirms it for the full `expiresAfter`
+/// or releases it when the handler exits. The call itself still goes through
 /// `<deps>.Idempotency.claim`, so a `stub` of it applies.
 fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> String {
     cx.claim_scope_used = true;
     format!(
-        "(await (async (__k: string, __t: number) => __claims.note(__k, await {cap_expr}.claim(__k, globalThis.Math.min(__t, {CLAIM_LEASE_MS})), __t))({}, {}))",
+        "(await (async (__k: string, __t: number) => __claims.note(__k, await {cap_expr}.claim(__k, __claims.lease(__t)), __t))({}, {}))",
         args[0], args[1]
     )
 }
@@ -2318,14 +2312,15 @@ fn tracked_claim_call(cap_expr: &str, args: &[String], cx: &mut LowerCtx) -> Str
 /// W30 (#2840): wrap a service handler's already-lowered function body so the
 /// claims it made are settled when it exits. `__claims` is the provider's own
 /// scope (`Idempotency.__track()`, hidden: not in the capability), or a no-op
-/// scope for a provider without one. A thrown fault releases the claims; a
+/// scope for a provider without one, which takes the claim for its full
+/// window and never settles it. A thrown fault releases the claims; a
 /// returned `Err` or a 5xx `HttpResult` does too; any other outcome confirms
 /// them. Returns the text to put before and after the body, which is left
 /// where it is so its source-map checkpoints stay valid.
 fn claim_scope_wrapper(indent: usize) -> (String, String) {
     let pad = " ".repeat(indent);
     let before = format!(
-        "{pad}const __claims = (deps.Idempotency as unknown as {{ __track?: () => {{ note<C>(k: string, c: C, t: number): C; settle(r: unknown, threw: boolean): Promise<void> }} }}).__track?.() ?? {{ note: <C>(_k: string, c: C, _t: number) => c, settle: async (_r: unknown, _threw: boolean) => {{}} }};\n{pad}let __r;\n{pad}try {{\n{pad}__r = await (async () => {{\n"
+        "{pad}const __claims = (deps.Idempotency as unknown as {{ __track?: () => {{ note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> }} }}).__track?.() ?? {{ note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {{}} }};\n{pad}let __r;\n{pad}try {{\n{pad}__r = await (async () => {{\n"
     );
     let after = format!(
         "{pad}}})();\n{pad}}} catch (__e) {{\n{pad}  await __claims.settle(undefined, true);\n{pad}  throw __e;\n{pad}}}\n{pad}await __claims.settle(__r, false);\n{pad}return __r;\n"
@@ -10265,6 +10260,15 @@ mod idempotency_scoping_tests {
         scope_idempotency_key(true, "claim", &mut args, &cx);
         assert_eq!(args[0], "`shop.hooks.api.POST::${id}`");
         assert_eq!(args[1], "3600000");
+    }
+
+    /// A provider with no `__track` gets a scope that takes a claim for its
+    /// whole window, so nothing is cut to the lease with no settle to extend it.
+    #[test]
+    fn a_provider_without_a_scope_takes_the_full_window() {
+        let (before, _) = claim_scope_wrapper(4);
+        assert!(before.contains("lease: (t: number) => t"), "{before}");
+        assert!(before.contains("__track?.() ??"), "{before}");
     }
 
     /// A capability merely named `"Idempotency"` from some other adapter or

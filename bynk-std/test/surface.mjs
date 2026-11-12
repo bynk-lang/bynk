@@ -973,4 +973,25 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     clock.t = 30_000;
     assert.equal((await idem.claim("k", 30_000)).tag, "Claimed");
   });
+
+  t("IdempotencyProvider.__track: a scope takes a claim for its lease, never longer than the window asked for", async () => {
+    const scope = new b.IdempotencyProvider({ Clock: fakeClock(0) }).__track();
+    assert.equal(scope.lease(1_000_000), 30_000);
+    assert.equal(scope.lease(5_000), 5_000);
+  });
+
+  t("IdempotencyProvider.__track: a handler that outlives its lease leaves the retry's claim alone", async () => {
+    const clock = fakeClock(0);
+    const idem = new b.IdempotencyProvider({ Clock: clock });
+    const slow = idem.__track();
+    slow.note("k", await idem.claim("k", 30_000), 1_000_000);
+    clock.t = 30_000; // the lease lapsed; a retry claims the key
+    const retry = idem.__track();
+    retry.note("k", await idem.claim("k", 30_000), 1_000_000);
+    await slow.settle({ tag: "Err" }, false); // the slow handler fails late
+    assert.equal((await idem.claim("k", 30_000)).tag, "AlreadyClaimed", "the retry's claim survives");
+    await retry.settle({ tag: "Ok" }, false);
+    clock.t = 30_000 + 999_999;
+    assert.equal((await idem.claim("k", 1)).tag, "AlreadyClaimed", "and is confirmed for its full window");
+  });
 }
