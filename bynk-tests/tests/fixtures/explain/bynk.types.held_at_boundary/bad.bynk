@@ -1,0 +1,7 @@
+context room
+
+type Frame = { text: String }
+
+type Session = {
+    conn: Connection[Frame],
+}

@@ -1,0 +1,7 @@
+commons demo.retry
+
+type Backoff = { n: Int = 3 }
+
+type Retry =
+    | Never
+    | Times(opts: Backoff)
