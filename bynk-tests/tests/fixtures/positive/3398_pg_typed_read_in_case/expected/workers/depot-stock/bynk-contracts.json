@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "add": "f42a44f2eba2a28a"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "add": "Svc(\"add\",Ret(R(N(\"PgRun\"),N(\"PgError\"))))"
+  }
+}
