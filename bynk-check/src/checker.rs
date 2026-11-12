@@ -4224,7 +4224,7 @@ pub(super) fn check_do(d: &DoStmt, check_context: bool, ctx: &mut Ctx) {
                     ),
                 )
                 .with_note(
-                    "bind it and handle the error with `let r <- e` and a `match` (or `?`); to discard it deliberately, write `let _ <- e`",
+                    "bind it and handle the error with `let r <- e` and a `match` (or `?`); to discard it deliberately, write `let _ <- e`, or `do e.detach()` to stop waiting for it and have a failure reported",
                 )
                 .with_suggestion(
                     "discard the result deliberately with `let _ <- e`",

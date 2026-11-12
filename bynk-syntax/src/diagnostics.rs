@@ -8310,7 +8310,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.effect.do_discards_result",
-        "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, or write `let _ <- e` to discard it deliberately.",
+        "A `do` statement was applied to an `Effect[Result[_, _]]`, which would drop an `Err`; bind it, write `let _ <- e` to discard it deliberately, or `do e.detach()` to stop waiting and have a failure reported.",
         &["do_stmt"],
     ),
     dg(
