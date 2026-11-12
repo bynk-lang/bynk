@@ -538,6 +538,80 @@ pub(crate) fn secrets_file_passthrough_refusal(
     ))
 }
 
+/// The secrets `deploy` decides itself rather than asking the user for: a foreign caller's
+/// (I3, #1971) and a `SignedCookie` actor's signing key (#3386), over the Workers in a run.
+struct ManagedKeys<'a> {
+    order: &'a [String],
+    resources: &'a BTreeMap<String, Resources>,
+    listed: &'a BTreeMap<String, Option<BTreeSet<String>>>,
+}
+
+impl ManagedKeys<'_> {
+    /// Every such secret's name in the project, which is never spread as an ordinary secret.
+    fn names(&self) -> BTreeSet<String> {
+        self.resources
+            .values()
+            .flat_map(|r| {
+                let session = r.session_keys.iter().map(|k| k.binding.clone());
+                r.foreign_callers
+                    .iter()
+                    .map(|f| f.binding.clone())
+                    .chain(session)
+            })
+            .collect()
+    }
+
+    /// What this run does with each, by (worker, secret): a value the operator supplies, the one
+    /// the Worker holds (kept), or a fresh one minted. A refusal is the text to print. A foreign
+    /// caller's mint is hex and handed off; a session key's is base64url and stays on its Worker,
+    /// where a supplied value must be one the runtime accepts, so a weak key is caught here.
+    fn decide(
+        &self,
+        lock: &DeployLock,
+        opts: &DeployOptions,
+        source: &SecretSource,
+    ) -> Result<BTreeMap<(String, String), ForeignKey>, String> {
+        let mut keys = BTreeMap::new();
+        for worker in self.order {
+            let presence = |binding: &str| {
+                presence_of(
+                    binding,
+                    self.listed[worker].as_ref(),
+                    !lock.is_deployed(&opts.environment, worker),
+                )
+            };
+            for caller in &self.resources[worker].foreign_callers {
+                let supplied = value_from_source(&caller.binding, source);
+                let decision = decide_foreign_key(
+                    supplied,
+                    presence(&caller.binding),
+                    opts.force,
+                    &mut mint_edge_key,
+                )
+                .map_err(|e| foreign_binding_refusal(&opts.environment, worker, caller, &e))?;
+                keys.insert((worker.clone(), caller.binding.clone()), decision);
+            }
+            for key in &self.resources[worker].session_keys {
+                let supplied = value_from_source(&key.binding, source);
+                let decision = decide_session_key(
+                    supplied,
+                    presence(&key.binding),
+                    opts.force,
+                    &mut mint_session_key,
+                )
+                .map_err(|e| {
+                    format!(
+                        "bynk: the session key `{}` of the `SignedCookie` actor `{}` on `{worker}`: {e}\n",
+                        key.binding, key.actor
+                    )
+                })?;
+                keys.insert((worker.clone(), key.binding.clone()), decision);
+            }
+        }
+        Ok(keys)
+    }
+}
+
 /// Run the slice-0 single-context deployment pipeline.
 pub fn run(
     tb: &dyn Toolbox,
@@ -1114,35 +1188,22 @@ pub fn run(
             }
         }
     }
-    // I3 (#1971): each foreign caller's secret, on the context in the run that
-    // admits it. Only that end is ours, so a `--context` run decides it too.
-    let foreign_secrets: BTreeSet<String> = resources
-        .values()
-        .flat_map(|r| r.foreign_callers.iter().map(|f| f.binding.clone()))
-        .collect();
-    let mut foreign_keys: BTreeMap<(String, String), ForeignKey> = BTreeMap::new();
-    for worker in &order {
-        for caller in &resources[worker].foreign_callers {
-            let presence = presence_of(
-                &caller.binding,
-                listed[worker].as_ref(),
-                !lock.is_deployed(&opts.environment, worker),
-            );
-            let supplied = value_from_source(&caller.binding, &secret_source);
-            match decide_foreign_key(supplied, presence, opts.force, &mut mint_edge_key) {
-                Ok(decision) => {
-                    foreign_keys.insert((worker.clone(), caller.binding.clone()), decision);
-                }
-                Err(e) => {
-                    eprint!(
-                        "{}",
-                        foreign_binding_refusal(&opts.environment, worker, caller, &e)
-                    );
-                    return ExitCode::FAILURE;
-                }
-            }
+    // I3 (#1971): each foreign caller's secret, and (#3386) each `SignedCookie` actor's signing
+    // key, on the context in the run that holds it. Only that end is ours, so a `--context` run
+    // decides them too.
+    let managed = ManagedKeys {
+        order: &order,
+        resources: &resources,
+        listed: &listed,
+    };
+    let foreign_secrets = managed.names();
+    let foreign_keys = match managed.decide(&lock, opts, &secret_source) {
+        Ok(keys) => keys,
+        Err(e) => {
+            eprint!("{e}");
+            return ExitCode::FAILURE;
         }
-    }
+    };
     // Shared across the loop so two contexts wanting the same secret prompt
     // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
     let mut resolved_secrets = BTreeMap::new();
@@ -2484,6 +2545,12 @@ pub(crate) fn derive_plan<'a>(
                         name: f.binding.clone(),
                         origin: Origin::Managed,
                     }))
+                    // #3386: and each `SignedCookie` actor's signing key, which `deploy`
+                    // mints when it is unset.
+                    .chain(declared.session_keys.iter().map(|k| WantedSecret {
+                        name: k.binding.clone(),
+                        origin: Origin::Managed,
+                    }))
                     .map(|want| PlanSecret {
                         name: want.name,
                         origin: want.origin,
@@ -3495,6 +3562,25 @@ pub(crate) mod tests {
             serde_json::json!([{ "binding": "SERVICE_BILLING", "worker": "legacy-billing" }])
         );
         assert_eq!(json["contexts"][0]["binds_to"], serde_json::json!([]));
+    }
+
+    /// #3386: a `SignedCookie` actor's signing key is a managed secret in the plan: `deploy` mints
+    /// it, so it is listed (as `managed`) without the operator naming it.
+    #[test]
+    fn a_session_key_is_a_managed_secret_in_the_plan() {
+        let resources = project(vec![(
+            "shop-api",
+            Resources::default().session_keys(&[("User", "SESSION_KEY")]),
+        )]);
+        let order = names(&["shop-api"]);
+        let plan = plan_of(&order, &resources, &DeployLock::default());
+        let json: serde_json::Value =
+            serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+        let secrets = json["contexts"][0]["secrets"].clone();
+        assert_eq!(
+            secrets,
+            serde_json::json!([{ "name": "SESSION_KEY", "origin": "managed", "action": "set" }])
+        );
     }
 
     /// Track §11 Q8: warn, never refuse. Each Worker is asked once however

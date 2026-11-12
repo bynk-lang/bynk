@@ -128,7 +128,7 @@ or keep the session on the server (see `examples/sessions`) if you need to log o
 
 The handler never sees the credential: the router leaves the session cookie out of the handler's
 `cookies` record and raw `RequestCookies` view, and a record that names it is refused
-(`bynk.actor.signed_cookie_read_directly`). `bynk deploy` requires the `secret` variable to be set.
+(`bynk.actor.signed_cookie_read_directly`). `bynk deploy` mints the `secret` variable when it is unset (see [Signed cookies](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#session-keys)).
 Key minting at deploy and the system-tier test driver follow in later versions of the same increment
 ([#3386](https://github.com/bynk-lang/bynk/issues/3386)).
 

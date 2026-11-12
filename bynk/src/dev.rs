@@ -23,6 +23,7 @@
 //! selection rule ([`select_contexts`]) that replaced ADR 0096 D3's ambiguity
 //! error.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -518,7 +519,7 @@ pub fn run(
     // I2 (#1971): over every built Worker, not only the served ones, so a
     // context served here alone still admits a caller served by another
     // `bynk dev --context` session.
-    let edge_keys = match crate::deploy::local_edge_keys(&workers_dir, &available) {
+    let local = match LocalKeys::read(&workers_dir, &available) {
         Ok(keys) => keys,
         Err(e) => {
             eprintln!("bynk: {e}");
@@ -709,13 +710,13 @@ pub fn run(
                 cmd.arg("-c").arg(config);
             }
         }
-        let keys = edge_keys
+        let keys = local
+            .edge
             .get(&s.worker)
             .map(Vec::as_slice)
             .unwrap_or_default();
-        for arg in serve_args(s, keys) {
-            cmd.arg(arg);
-        }
+        cmd.args(serve_args(s, keys));
+        cmd.args(local.session_args(&s.worker, &opts.wrangler_args));
         for arg in &opts.wrangler_args {
             cmd.arg(arg);
         }
@@ -1743,6 +1744,42 @@ fn passthrough_has(args: &[String], flag: &str) -> bool {
 /// its edge's key, and a lone context still delivers its own events to
 /// itself. The fixed [`bynk_emit::LOCAL_CALL_KEY`], so two `bynk dev
 /// --context` sessions run side by side admit each other's calls.
+/// The keys `bynk dev` gives each Worker through `--var`: the local edge keys (I2, #1971), and
+/// (#3386) a per-run signing key for each `SignedCookie` actor, shared by the Workers of one
+/// session and different on every run, so a cookie from an earlier session never verifies.
+struct LocalKeys {
+    edge: BTreeMap<String, Vec<String>>,
+    session: BTreeMap<String, Vec<String>>,
+    session_key: String,
+}
+
+impl LocalKeys {
+    fn read(workers_dir: &Path, available: &[String]) -> Result<Self, String> {
+        Ok(Self {
+            edge: crate::deploy::local_edge_keys(workers_dir, available)?,
+            session: crate::deploy::local_session_keys(workers_dir, available)?,
+            session_key: crate::deploy::mint_local_session_key()?,
+        })
+    }
+
+    /// `--var NAME:<key>` for each session key a Worker holds, except one the operator already
+    /// passes after `--` (that is theirs).
+    fn session_args(&self, worker: &str, passthrough: &[String]) -> Vec<String> {
+        let mut args = Vec::new();
+        for name in self.session.get(worker).into_iter().flatten() {
+            if passthrough
+                .iter()
+                .any(|a| a.starts_with(&format!("{name}:")))
+            {
+                continue;
+            }
+            args.push("--var".to_string());
+            args.push(format!("{name}:{}", self.session_key));
+        }
+        args
+    }
+}
+
 fn serve_args(s: &Serving, edge_keys: &[String]) -> Vec<String> {
     let mut args = Vec::new();
     for key in edge_keys {
@@ -1922,6 +1959,22 @@ mod tests {
             two.iter().map(|s| s.inspector_port).collect::<Vec<_>>(),
             vec![Some(9300), Some(9301)]
         );
+    }
+
+    #[test]
+    fn a_session_key_is_a_per_run_var_unless_the_operator_passes_their_own() {
+        let local = LocalKeys {
+            edge: BTreeMap::new(),
+            session: BTreeMap::from([("shop".to_string(), vec!["SESSION_KEY".to_string()])]),
+            session_key: "KEY".to_string(),
+        };
+        assert_eq!(
+            local.session_args("shop", &[]),
+            ["--var", "SESSION_KEY:KEY"]
+        );
+        assert!(local.session_args("other", &[]).is_empty());
+        let own = ["--var".to_string(), "SESSION_KEY:mine".to_string()];
+        assert!(local.session_args("shop", &own).is_empty());
     }
 
     #[test]

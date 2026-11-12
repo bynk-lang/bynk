@@ -74,6 +74,7 @@ nothing speculative. If it isn't in the generated `wrangler.toml`, it isn't
 | An `on cron` handler | Nothing to create — the schedule rides the config |
 | `consumes` another context | Nothing to create — it sets the deploy order |
 | An `actor` with `auth = Bearer/Signature` | Sets that secret, and refuses to deploy without it |
+| An `actor` with `auth = SignedCookie` | Mints its signing key (32 random bytes) when it is unset, and sets it; see [Session keys](#session-keys) |
 
 A context using all three of the first kinds plans like this:
 
@@ -346,6 +347,25 @@ each time, for nothing.
 One consequence worth knowing: `--dry-run` never authenticates, which is what
 lets you plan offline — so a plan says `set` for everything, and the skip shows
 up when you actually run.
+
+### Session keys
+
+A [`SignedCookie`](/book/reference/actors/#signed-cookies) actor signs the session cookies it issues, so
+it needs a key, and the key has to be long and random. You never choose one: when the variable named by
+`secret` is unset, `bynk deploy` mints 32 random bytes (unpadded base64url), sets it on the Worker and
+prints only its name, as for any secret. A plan lists it as `managed`.
+
+- **Re-deploying keeps it.** A key the Worker already holds is left alone, so redeploying does not log
+  anyone out.
+- **`--force` replaces it, and ends every session signed under the old key.** Cloudflare never returns a
+  secret's value, so `deploy` cannot keep a minted key as the `previous` one.
+- **To rotate without a global logout,** supply the keys yourself (in `--secrets-file` or the
+  environment): the new key as `secret`, and the old one, from your own record, as the actor's `previous`
+  variable, which you set with `wrangler secret put`. Keep `previous` for one `ttl`, then remove it. A
+  value you supply is checked here: it must be base64url of at least 32 bytes, so a weak key is refused
+  at deploy rather than faulting the first login.
+- **`bynk dev` uses a fresh key for each run**, so a cookie from an earlier session never verifies.
+  A `--var NAME:value` you pass after `--` is yours and is left alone.
 
 ### Edge keys
 
