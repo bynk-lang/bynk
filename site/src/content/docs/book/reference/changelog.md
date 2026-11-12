@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.576.3** | The `wrangler` commands `bynk deploy` prints (`secret put`, `delete`) and the guides name the detected package manager's runner (`pnpm dlx`, `bunx`, `npx`) |
 | **v0.576.2** | `bynk revert` recognises a rollback as Cloudflare reports it (trigger `deployment`), so a second revert no longer goes back to the release just left |
 | **v0.576.1** | `MySql.run` answers `MySqlFailed` for an `insertId` or row count past 2^53, where it read as `0` |
 | **v0.576.0** | A constant of the exact base type is accepted in `@ttl`, `@retain`, `@cache(maxAge:, immutable:)`, `@limit`, `@schema`, `@raw(contentType:)` and `@example` |
