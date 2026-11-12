@@ -70,7 +70,7 @@ jobs:
           node-version: "24"
       # Global CLI install, not a `uses:` action, so there is no lockfile or
       # commit-hash to pin against (Scorecard Pinned-Dependencies has no hash
-      # mechanism for `npm install -g`). Range-pinned to major 5. Accepted, #828.
+      # mechanism for `npm install -g`). Range-pinned to major 7 (TYPESCRIPT_MAJOR_TESTED, #3420). Accepted, #828.
       - name: Install TypeScript
         if: ${{ inputs.run_tests }}
         run: npm install -g typescript@7

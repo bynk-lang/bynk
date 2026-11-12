@@ -1059,8 +1059,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
+      # The version check keeps a failed or shadowed install from silently
+      # verifying under another major (Linux only; the legs share the pin).
       - name: Install TypeScript
-        run: npm install -g typescript@7
+        run: |
+          npm install -g typescript@7
+          v="$(tsc --version 2>/dev/null || true)"
+          case "$v" in
+            "Version 7."*) echo "$v" ;;
+            *) echo "::error::expected TypeScript 7, got: ${v:-no tsc on PATH}"; exit 1 ;;
+          esac
       # See the `test` job's note on why wrangler is provisioned once, serially,
       # before the suite. Mandatory on Linux (BYNK_REQUIRE_WORKERD).
       - name: Pre-warm the npx cache for wrangler

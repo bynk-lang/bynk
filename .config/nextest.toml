@@ -154,8 +154,8 @@ default-filter = 'not ((binary_id(bynk-tests::it) & test(/^system::/)) | (binary
 # `test` job; the nightly runs the full `ci` profile there instead). The whole
 # suite minus the corpus-wide passes that type-check or run every fixture's
 # emitted code under tsc/node. Those are OS-independent (the same emitted code,
-# the same Node and tsc), they run on Linux in the same stage (`test-system`), and on the 3-core macOS runner they were ~900 of ~2100
-# test-seconds. Not a tier profile: the tier probe does not partition it.
+# the same Node and tsc), they run on Linux in the same stage (`test-system`),
+# and on the 3-core macOS runner they were ~900 of ~2100 test-seconds. Not a tier profile: the tier probe does not partition it.
 [profile.ci-os]
 inherits = "ci"
 default-filter = 'not (binary_id(bynk-tests::it) & (test(/^system::tsc_verify::/) | test(/^system::behaviour_fixtures::/) | test(/^system::examples::/) | test(/^system::example_tests_behaviour::/)))'
