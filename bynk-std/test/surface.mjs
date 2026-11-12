@@ -916,4 +916,27 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     clock.t = 150;
     assert.deepEqual(await idem.dedup("k"), Some("second"));
   });
+
+  t("IdempotencyProvider.claim: the first claim wins, a repeat is AlreadyClaimed until it lapses", async () => {
+    const clock = fakeClock(0);
+    const idem = new b.IdempotencyProvider({ Clock: clock });
+    assert.equal((await idem.claim("k", 100)).tag, "Claimed");
+    clock.t = 99;
+    assert.equal((await idem.claim("k", 100)).tag, "AlreadyClaimed");
+    clock.t = 100;
+    assert.equal((await idem.claim("k", 100)).tag, "Claimed", "free again at now + expiresAfter");
+  });
+
+  t("IdempotencyProvider.claim: concurrent claims of one key yield exactly one Claimed", async () => {
+    const idem = new b.IdempotencyProvider({ Clock: fakeClock(0) });
+    const all = await Promise.all(Array.from({ length: 20 }, () => idem.claim("k", 100)));
+    assert.equal(all.filter((c) => c.tag === "Claimed").length, 1);
+  });
+
+  t("IdempotencyProvider.claim: is independent of dedup and remember", async () => {
+    const idem = new b.IdempotencyProvider({ Clock: fakeClock(0) });
+    await idem.remember("k", 1, 100);
+    assert.equal((await idem.claim("k", 100)).tag, "Claimed");
+    assert.deepEqual(await idem.dedup("other"), None);
+  });
 }

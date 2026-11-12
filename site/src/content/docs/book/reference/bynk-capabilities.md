@@ -35,7 +35,7 @@ environment), so code that stays on this surface is portable.
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/guides/localisation/understand-localisation/). |
-| **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` — mechanical dedup for at-least-once delivery. See below. |
+| **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` · `claim(key: String, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once delivery. See below. |
 | **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context, fire-and-forget. See below. |
 
 `Fetch` sends a request over the public internet. On Cloudflare that holds even
@@ -77,8 +77,30 @@ durable, platform-native provider is a named but unfiled future direction (see
 [the retired track's closing summary](https://github.com/bynk-lang/bynk/blob/main/design/archive/retired-tracks.md)
 for why that's a separate axis from portability, not a variant of it).
 
+#### `claim`: first delivery wins
+
+`dedup` then `remember` is check-then-act: two deliveries of one key that arrive together
+can both miss and both run. `claim` is the race-free form. The first call for a key
+returns `Claimed`, and every later call within `expiresAfter` returns `AlreadyClaimed`:
+
+```bynk,ignore
+consumes bynk { Idempotency, Claim }
+
+on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+  let Claim.Claimed <- Idempotency.claim(id, 7.days) else { Ok("duplicate") }
+  Ok("processed")
+}
+```
+
+`claim` records no outcome, so there is nothing to replay: use it when the work should run
+at most once. It is separate from `dedup`/`remember`, which never see a claim. A claim is
+not released if the work after it fails, so a retry of that delivery is told
+`AlreadyClaimed` until the window ends. The key is scoped to the calling handler as for
+`dedup`. The in-memory provider makes the claim atomic within one process; it is no more
+durable than `dedup`.
+
 The `key` you pass is automatically scoped to the calling handler's own qualified name
-before it reaches the provider — `Idempotency.dedup[T]("order-1")` inside `on call` of
+before it reaches the provider — `Idempotency.dedup[T]("order-1")` (and `remember`, `claim`) inside `on call` of
 service `ordering` in context `shop.reserve` actually stores against
 `"shop.reserve.ordering.call::order-1"`. Two unrelated handlers can therefore never
 collide on the same literal key by accident; only two calls that are genuinely the *same*

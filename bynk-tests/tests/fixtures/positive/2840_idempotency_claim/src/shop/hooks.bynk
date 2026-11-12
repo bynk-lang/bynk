@@ -1,0 +1,10 @@
+context shop.hooks
+
+consumes bynk { Idempotency, Claim }
+
+service api from http {
+  on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
+    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
+    Ok("processed")
+  }
+}

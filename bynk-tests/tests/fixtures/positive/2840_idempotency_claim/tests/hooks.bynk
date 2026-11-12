@@ -1,0 +1,23 @@
+suite shop.hooks {
+  case "the first delivery is processed and a repeat is a duplicate" {
+    let first <- api.POST("/hooks/:id", "d1") by Visitor
+    expect first is Ok("processed")
+    let again <- api.POST("/hooks/:id", "d1") by Visitor
+    expect again is Ok("duplicate")
+  }
+
+  case "another key is its own claim" {
+    let a <- api.POST("/hooks/:id", "d1") by Visitor
+    expect a is Ok("processed")
+    let b <- api.POST("/hooks/:id", "d2") by Visitor
+    expect b is Ok("processed")
+  }
+
+  case "a claim lapses after its window" {
+    let first <- api.POST("/hooks/:id", "d1") by Visitor
+    expect first is Ok("processed")
+    advance Clock by 61.minutes
+    let later <- api.POST("/hooks/:id", "d1") by Visitor
+    expect later is Ok("processed")
+  }
+}

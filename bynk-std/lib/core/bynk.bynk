@@ -16,6 +16,7 @@ adapter bynk {
 		Redirect,
 		TimedOut,
 		LogLevel,
+		Claim,
 		EventEnvelope,
 	}
 
@@ -307,6 +308,12 @@ adapter bynk {
 	}
 
 	---
+	The outcome of an `Idempotency.claim`: `Claimed` for the first caller to
+	claim a key, `AlreadyClaimed` for every later one while the claim lasts.
+	---
+	type Claim = enum { Claimed, AlreadyClaimed }
+
+	---
 	Mechanical dedup for at-least-once delivery (design notes §12). `dedup`
 	checks for a cached outcome under `key`; on a cache miss the caller
 	computes its outcome and writes it back with `remember` (`record` is a
@@ -315,10 +322,19 @@ adapter bynk {
 	time. `expiresAfter` sets the retention window a call to `remember`
 	establishes. Slice 0 (ADR 0282): a single
 	in-memory provider, lost on process restart — no durability guarantee yet.
+
+	`claim` is the race-free form: the first call for a key returns `Claimed`
+	and every later call within `expiresAfter` returns `AlreadyClaimed`, as one
+	step, so two concurrent deliveries cannot both be told they are first.
+	`dedup` then `remember` is check-then-act, and two concurrent deliveries
+	can both miss. A claim is not released if the work after it fails: the key
+	stays claimed until it expires. `claim` records no outcome and is separate
+	from `dedup`/`remember`.
 	---
 	capability Idempotency {
 		fn dedup[T](key: String) -> Effect[Option[T]]
 		fn remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]
+		fn claim(key: String, expiresAfter: Duration) -> Effect[Claim]
 	}
 
 	---

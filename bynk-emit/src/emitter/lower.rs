@@ -2248,7 +2248,8 @@ fn encode_capability_args(
 }
 
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
-/// `Idempotency.remember[T](key, value, expiresAfter)` both take the
+/// `Idempotency.remember[T](key, value, expiresAfter)` and
+/// `Idempotency.claim(key, expiresAfter)` all take the
 /// developer-supplied dedup key as their first argument (already lowered, in
 /// `args_lowered[0]`). Rewrite it in place to a template literal prefixed with
 /// the calling handler's own qualified name, so two unrelated handlers that
@@ -2273,7 +2274,7 @@ fn scope_idempotency_key(
     args_lowered: &mut [String],
     cx: &LowerCtx,
 ) {
-    if !is_first_party || !matches!(method, "dedup" | "remember") {
+    if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
         return;
     }
     let scope = cx
@@ -10178,6 +10179,30 @@ mod idempotency_scoping_tests {
         let mut args = vec!["orderId".to_string()];
         scope_idempotency_key(true, "dedup", &mut args, &cx);
         assert_eq!(args[0], "`shop.reserve.ordering.call::${orderId}`");
+    }
+
+    /// `claim` takes its key first, like `dedup` and `remember`, so it is
+    /// scoped to the calling handler the same way.
+    #[test]
+    fn claim_is_scoped_like_dedup() {
+        let commons = empty_commons();
+        let cross_context = bynk_check::resolver::CrossContextInfo::default();
+        let runtime_use = RuntimeUse::default();
+        let cx = LowerCtx::new(
+            ModuleCtx::new(&commons, &cross_context, &runtime_use),
+            BodyMode::ServiceHandler {
+                handler: HandlerShared {
+                    handler_scope: Some("shop.hooks.api.POST".to_string()),
+                    ..HandlerShared::default()
+                },
+                deps_identity_binder: None,
+                actor_sum_binder: None,
+            },
+        );
+        let mut args = vec!["id".to_string(), "3600000".to_string()];
+        scope_idempotency_key(true, "claim", &mut args, &cx);
+        assert_eq!(args[0], "`shop.hooks.api.POST::${id}`");
+        assert_eq!(args[1], "3600000");
     }
 
     /// A capability merely named `"Idempotency"` from some other adapter or

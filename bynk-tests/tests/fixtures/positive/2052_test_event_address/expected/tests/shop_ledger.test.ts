@@ -54,15 +54,26 @@ function __bynkRecordDeps(deps: any, spec: Record<string, string[]>, obs: { log:
 
 type __Idempotency_dedup_Call = { key: string };
 type __Idempotency_remember_Call = { key: string; value: unknown; expiresAfter: number };
+type __Idempotency_claim_Call = { key: string; expiresAfter: number };
 
 function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
-  const store = new globalThis.Map<string, unknown>();
+  const store = new globalThis.Map<string, { value: unknown; until: number }>();
+  const claims = new globalThis.Map<string, number>();
   return {
     async dedup(key) {
-      return (store.has(key) ? Some(store.get(key)) : None) as never;
+      const hit = store.get(key);
+      return (hit !== undefined && hit.until > 0 ? Some(hit.value) : None) as never;
     },
-    async remember(key, value) {
-      store.set(key, value);
+    async remember(key, value, expiresAfter) {
+      store.set(key, { value, until: 0 + expiresAfter });
+    },
+    async claim(key, expiresAfter) {
+      const until = claims.get(key);
+      if (until !== undefined && until > 0) {
+        return __ns_bynk.Claim.AlreadyClaimed;
+      }
+      claims.set(key, 0 + expiresAfter);
+      return __ns_bynk.Claim.Claimed;
     },
   };
 }
@@ -76,14 +87,15 @@ async function test_an_event_delivered_twice_is_counted_once() {
   try {
     __ns_shop_ledger.__resetAgents();
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Idempotency: ["dedup", "remember"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
     const { Books, OnDomestic, OnPlaced, OnV1, OnV2, __makeBooks } = __ns_shop_ledger;
     const { Placed, Region } = __ns_shop_order;
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -124,8 +136,9 @@ async function test_dedup_holds_at_integration_too() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -165,8 +178,9 @@ async function test_a_default_envelope_is_fresh_on_each_delivery() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -207,8 +221,9 @@ async function test_a_default_envelope_carries_the_current_schema_version() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -249,8 +264,9 @@ async function test_the_pattern_filter_is_honoured() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
@@ -290,8 +306,9 @@ async function test_the_schema_guard_is_honoured() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { BytesResponse, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type EventEnvelope = __ns_bynk.EventEnvelope;
     type FetchError = __ns_bynk.FetchError;
