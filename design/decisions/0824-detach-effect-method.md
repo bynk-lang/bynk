@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `e.detach()` on any `Effect[T]` stops waiting for a running effect and reports a fault or an `Err` through the runtime instead of losing it
-probes: diagnostic_coverage, emit_diagnostics, ts_writes, explained_codes
----
+# 0824 — `e.detach()`, a compiler-inserted failure route for detached effects
 
-## ADR: detach-effect-method
-title: `e.detach()`, a compiler-inserted failure route for detached effects
-summary: A kernel method on `Effect[T]` that hands a running effect to `waitUntil`, with a runtime-reported failure route
+- **Status:** Accepted (v0.572)
 
 **Context.** `~>` carries two meanings, "do not wait" and "unit only" (#3183). A detached `Err` has no caller to receive it, so splitting them is only coherent if a detached failure is reported. Proposal #3437 (accepted) settles the route and the surface.
 
