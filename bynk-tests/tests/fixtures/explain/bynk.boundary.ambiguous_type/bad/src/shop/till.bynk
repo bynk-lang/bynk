@@ -1,0 +1,12 @@
+context shop.till
+
+consumes shop.quotes
+
+consumes shop.other
+
+service total {
+    on call() -> Effect[Int] {
+        let w <- shop.quotes.wrap()
+        Effect.pure(w.inner.cents)
+    }
+}

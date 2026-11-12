@@ -106,6 +106,18 @@ const NOT_BYNK_SOURCE: &[(&str, &str)] = &[
         "the example is a `[dependencies]` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
     ),
     (
+        "bynk.project.export_context",
+        "the example is a `[package] exports` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.package.duplicate_source",
+        "the example is a `[dependencies]` entry in `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
+        "bynk.dependency.path_outside_root",
+        "the example is a `[dependencies]` entry in a dependency's `bynk.toml`, and the diagnostic is attributed to the manifest, which has no line to check",
+    ),
+    (
         "bynk.registry.withdrawn",
         "the example is the rendered diagnostic and a `bynk update` command",
     ),

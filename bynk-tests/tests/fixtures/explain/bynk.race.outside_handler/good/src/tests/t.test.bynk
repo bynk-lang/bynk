@@ -1,0 +1,6 @@
+suite demo.q {
+  case "quote" {
+    let r <- quotes.call()
+    expect true
+  }
+}

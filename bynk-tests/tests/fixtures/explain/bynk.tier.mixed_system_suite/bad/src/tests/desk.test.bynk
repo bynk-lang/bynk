@@ -1,0 +1,11 @@
+suite demo.desk as system {
+  case "the desk checks" {
+    let n <- demo.desk.check(5)
+    expect n == 5
+  }
+
+  case "a local one" as unit {
+    let n <- local.call(1)
+    expect n == 2
+  }
+}

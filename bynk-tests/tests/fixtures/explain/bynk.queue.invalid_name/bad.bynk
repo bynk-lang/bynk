@@ -1,0 +1,5 @@
+context svc
+
+service worker from queue("Order_Events") {
+  on message(message: String) -> Effect[QueueResult] { Ack }
+}

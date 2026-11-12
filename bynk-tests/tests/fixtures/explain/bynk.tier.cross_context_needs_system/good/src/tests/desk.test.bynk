@@ -1,0 +1,6 @@
+suite demo.desk as system {
+  case "the desk checks" {
+    let n <- demo.desk.check(5)
+    expect n == 5
+  }
+}
