@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **852** codes in total.
+There are **853** codes in total.
 
 ## Agents
 
@@ -528,6 +528,7 @@ There are **852** codes in total.
 | [`bynk.requires.unapproved`](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages) | A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | [`bynk.requires.unpinned_dependency`](/book/reference/adapters/#anatomy) | An adapter `binding … requires { … }` entry has an unpinned version range. | [`binding_decl`](/book/reference/grammar/#rule-binding_decl) | — |
 | `bynk.secrets.computed_name` | A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning). |  | Warning |
+| [`bynk.send.deprecated`](/book/reference/capabilities/#detach) | The `~>` send is deprecated in favour of `do e.detach()` (warning; auto-fixable). | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | Warning |
 | [`bynk.send.in_agent_handler`](/book/spec/static-semantics/) | A `~>` send was used in an agent handler, which has no execution context to keep a fire-and-forget send alive. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.in_pure_context`](/book/reference/capabilities/#capabilities-in-functions) | A `~>` send was used in a pure (non-effectful) context. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |
 | [`bynk.send.non_effect`](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/#the-error-gate) | A `~>` send was applied to a non-`Effect` value. | [`effect_send_stmt`](/book/reference/grammar/#rule-effect_send_stmt) | — |

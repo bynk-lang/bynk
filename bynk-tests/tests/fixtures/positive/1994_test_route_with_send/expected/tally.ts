@@ -2,6 +2,7 @@
 // context tally
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __bynkDetach } from "./__bynk_runtime/settle.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __readStored, __commitStored, __noteClock } from "./__bynk_runtime/entries.js";
@@ -73,8 +74,8 @@ export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectName
 
 export const api = {
   async http_GET(deps: { Logger: bynk.Logger; __exec: { waitUntil(promise: globalThis.Promise<unknown>): void } }): globalThis.Promise<HttpResult<string>> {
-    deps.__exec.waitUntil(deps.Logger.info("hi"));
-    deps.__exec.waitUntil(__makeCounter("a").bump(deps));
+    __bynkDetach(deps.Logger.info("hi"), deps.__exec, "src/tally.bynk:16:3");
+    __bynkDetach(__makeCounter("a").bump(deps), deps.__exec, "src/tally.bynk:17:3");
     return HttpResult.Ok("hi");
   },
 };

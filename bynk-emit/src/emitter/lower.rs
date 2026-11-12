@@ -1187,10 +1187,20 @@ fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent:
             for st in pre.stmts() {
                 write_line(out, indent, st);
             }
+            // #3437: `~>` lowers through the same helper as `e.detach()`, so its
+            // faults are labelled and a failure is reported. Its operand is
+            // `Effect[()]`, so there is no `Err` to name.
+            cx.note_detach();
+            let site = cx
+                .assert_loc()
+                .map(|_| expect_location(cx, s.span.start))
+                .or_else(|| crate::emitter::fault_source_location(s.span.start))
+                .map(|l| crate::emitter::escape_ts_string(&l))
+                .unwrap_or_else(|| format!("offset {}", s.span.start));
             write_line(
                 out,
                 indent,
-                &format!("{}.waitUntil({value});", cx.exec_expr()),
+                &format!("__bynkDetach({value}, {}, \"{site}\");", cx.exec_expr()),
             );
         }
         Statement::Do(d) => {

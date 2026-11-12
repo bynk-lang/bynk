@@ -2,6 +2,7 @@
 // context notify
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkDetach } from "../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService, __boundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -15,7 +16,7 @@ export const api = {
       const x = __r0.value;
       if ((() => {
     if (x > 0) {
-      deps.__exec.waitUntil(deps.Logger.info("positive"));
+      __bynkDetach(deps.Logger.info("positive"), deps.__exec, "notify.bynk:13:9");
       return true;
     } else {
       return false;

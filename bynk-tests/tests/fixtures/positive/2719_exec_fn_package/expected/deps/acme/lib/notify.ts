@@ -2,9 +2,10 @@
 // commons $acme_lib.notify
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../../__bynk_runtime/result.js";
+import { __bynkDetach } from "../../../__bynk_runtime/settle.js";
 import type { ValidationError } from "../../../__bynk_runtime/errors.js";
 
 export async function announce(f: (a0: number) => globalThis.Promise<void>, n: number, __exec: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<number> {
-  __exec.waitUntil(f(n));
+  __bynkDetach(f(n), __exec, "pkg/lib/src/notify.bynk:4:3");
   return n;
 }
