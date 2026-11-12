@@ -1,0 +1,10 @@
+context shop
+
+actor Admin { auth = None }
+actor Support { auth = None }
+
+service api from http {
+    on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+        Ok(1)
+    }
+}

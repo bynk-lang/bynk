@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.570.1** | `bynk explain` gains twenty-one entries under the `http`, `types` and `resolve` codes (#3163) |
 | **v0.570.0** | `bynk openapi` documents a `SignedCookie` route's cookie scheme, hover, completion and signature help know `User.issue` and `User.expire`, and the scheme has a guide, reference, an example cross-reference and an ADR (#3386); closes #3181 |
 | **v0.569.2** | `bynk test`, `bynk dev` and `bynk deploy` install the build's npm packages with your own package manager (`--no-install` opts out) |
 | **v0.569.1** | The `bynk explain` entry for `bynk.query.sum_needs_numeric` says `sum` takes a `Decimal` key on a `List` and a `Query`, and how to average a `Decimal` |

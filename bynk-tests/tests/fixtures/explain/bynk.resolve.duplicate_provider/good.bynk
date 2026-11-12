@@ -1,0 +1,21 @@
+context shop
+
+capability Clock {
+    fn now() -> Effect[Int]
+}
+
+capability Calendar {
+    fn today() -> Effect[Int]
+}
+
+provides Clock = FixedClock {
+    fn now() -> Effect[Int] {
+        Effect.pure(0)
+    }
+}
+
+provides Calendar = FixedCalendar {
+    fn today() -> Effect[Int] {
+        Effect.pure(1)
+    }
+}

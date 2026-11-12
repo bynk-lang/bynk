@@ -224,30 +224,30 @@ There are **849** codes in total.
 | [`bynk.http.extra_param`](/book/reference/http/#handler-form) | A handler parameter is not a path parameter, `body`, `headers` or `query`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.form_body_not_record`](/book/reference/http/#form-bodies) | The `body` of a `@form` handler is not a record type. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | `bynk.http.form_bool_without_default` | A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
-| `bynk.http.form_duplicate` | A handler carries more than one `@form` annotation. |  | — |
+| [`bynk.http.form_duplicate`](/book/reference/http/#form-bodies) | A handler carries more than one `@form` annotation. |  | — |
 | [`bynk.http.form_field_not_stringy`](/book/reference/http/#form-bodies) | A field of a `@form` body record has a type a form cannot carry. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.form_on_bodyless`](/book/reference/http/#form-bodies) | A `@form` or `@multipart` annotation is placed on a handler that takes no body. |  | — |
 | [`bynk.http.form_on_sum_route`](/book/reference/http/#form-bodies) | A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself. |  | — |
-| `bynk.http.form_unknown_arg` | A `@form` annotation is given an argument; it takes none. |  | — |
+| [`bynk.http.form_unknown_arg`](/book/reference/http/#form-bodies) | A `@form` annotation is given an argument; it takes none. |  | — |
 | `bynk.http.header_question_not_found` | `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`). |  | Warning |
 | [`bynk.http.headers_wrong_type`](/book/reference/http/#request-headers) | An HTTP handler's `headers` parameter is not typed `RequestHeaders`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.invalid_path`](/book/reference/http/#handler-form) | An HTTP route path is malformed. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
-| `bynk.http.json_duplicate` | A handler carries more than one `@json` annotation. |  | — |
+| [`bynk.http.json_duplicate`](/book/reference/http/#json-for-non-bynk-clients) | A handler carries more than one `@json` annotation. |  | — |
 | [`bynk.http.json_invalid_arg`](/book/reference/http/#json-for-non-bynk-clients) | A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`. |  | — |
 | [`bynk.http.json_invalid_field`](/book/reference/http/#json-for-non-bynk-clients) | A `json { }` policy's `options` is not `tagged` or `plain`. |  | — |
 | [`bynk.http.json_not_http`](/book/reference/http/#json-for-non-bynk-clients) | A `json { }` policy appears on a service that is not `from http`. |  | — |
 | [`bynk.http.json_on_non_http`](/book/reference/http/#json-for-non-bynk-clients) | A `@json` annotation is placed on a handler that is not `on http`. |  | — |
-| `bynk.http.json_unknown_arg` | A `@json` annotation has an argument outside the closed set (`options`). |  | — |
-| `bynk.http.json_unknown_field` | A `json { }` policy declares a field outside the closed set (`options`). |  | — |
+| [`bynk.http.json_unknown_arg`](/book/reference/http/#json-for-non-bynk-clients) | A `@json` annotation has an argument outside the closed set (`options`). |  | — |
+| [`bynk.http.json_unknown_field`](/book/reference/http/#json-for-non-bynk-clients) | A `json { }` policy declares a field outside the closed set (`options`). |  | — |
 | [`bynk.http.limit_bad_max_body`](/book/reference/http/#request-body-limits) | A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal. |  | — |
 | [`bynk.http.limit_bad_max_file`](/book/reference/http/#request-body-limits) | A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal. |  | — |
-| `bynk.http.limit_duplicate` | A handler carries more than one `@limit` annotation. |  | — |
+| [`bynk.http.limit_duplicate`](/book/reference/http/#request-body-limits) | A handler carries more than one `@limit` annotation. |  | — |
 | [`bynk.http.limit_on_bodyless`](/book/reference/http/#request-body-limits) | A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE). |  | — |
 | [`bynk.http.limit_on_non_multipart`](/book/reference/http/#request-body-limits) | A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`. |  | — |
 | [`bynk.http.limit_unknown_arg`](/book/reference/http/#request-body-limits) | A `@limit` annotation has an argument outside the closed set (`maxBody`). |  | — |
 | [`bynk.http.limits_invalid_field`](/book/reference/http/#request-body-limits) | A `limits` policy field (`maxBody`) has the wrong value shape. |  | — |
 | [`bynk.http.limits_not_http`](/book/reference/http/#request-body-limits) | A `limits { }` policy appears on a service that is not `from http`. |  | — |
-| `bynk.http.limits_unknown_field` | A `limits { }` policy declares a field outside the closed set. |  | — |
+| [`bynk.http.limits_unknown_field`](/book/reference/http/#request-body-limits) | A `limits { }` policy declares a field outside the closed set. |  | — |
 | [`bynk.http.multipart_body_unbounded`](/book/reference/http/#multipart-bodies) | A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`). |  | — |
 | `bynk.http.multipart_large_cap` | A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning). |  | Warning |
 | [`bynk.http.path_param_not_stringy`](/book/reference/http/#handler-form) | A path parameter's type is not constructible from a string. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
@@ -266,7 +266,7 @@ There are **849** codes in total.
 | [`bynk.http.return_not_effect_http_result`](/book/reference/http/#handler-form) | An HTTP handler does not return `Effect[HttpResult[T]]`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.security_invalid_field`](/book/reference/http/#security-headers) | A `security` policy field (`hsts`/`nosniff`) has the wrong value shape. |  | — |
 | [`bynk.http.security_not_http`](/book/reference/http/#security-headers) | A `security { }` policy appears on a service that is not `from http`. |  | — |
-| `bynk.http.security_unknown_field` | A `security { }` policy declares a field outside the closed set. |  | — |
+| [`bynk.http.security_unknown_field`](/book/reference/http/#security-headers) | A `security { }` policy declares a field outside the closed set. |  | — |
 | [`bynk.http.stream_body_not_raw`](/book/reference/http/#streamed-request-bodies) | A `Stream[Bytes]` `body` is on a handler that is not `@raw`. |  | — |
 | [`bynk.http.stream_body_on_sum_route`](/book/reference/http/#streamed-request-bodies) | A route with a streamed `body` has a `by` clause that is a sum of actors, whose wrapper reads the body itself. |  | — |
 | [`bynk.http.stream_body_signature`](/book/reference/http/#streamed-request-bodies) | A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first. |  | — |
@@ -773,18 +773,18 @@ There are **849** codes in total.
 | [`bynk.resolve.const_cycle`](/book/reference/constants/#what-an-initialiser-may-be) | Constants refer to each other in a cycle, so none of them has a value. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_name_case`](/book/reference/constants/#declaring-a-constant) | A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`). | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.const_outside_context_or_commons`](/book/reference/constants/#declaring-a-constant) | A `const` declaration appears outside a context or commons. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
-| `bynk.resolve.duplicate_actor` | Two actors share a name. |  | — |
-| `bynk.resolve.duplicate_agent` | Two agents share a name. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
-| `bynk.resolve.duplicate_capability` | Two capabilities share a name. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
+| [`bynk.resolve.duplicate_actor`](/book/reference/actors/#declaration) | Two actors share a name. |  | — |
+| [`bynk.resolve.duplicate_agent`](/book/reference/agents/#declaration) | Two agents share a name. | [`agent_decl`](/book/reference/grammar/#rule-agent_decl) | — |
+| [`bynk.resolve.duplicate_capability`](/book/reference/capabilities/#declaring-a-capability) | Two capabilities share a name. | [`capability_decl`](/book/reference/grammar/#rule-capability_decl) | — |
 | [`bynk.resolve.duplicate_const`](/book/reference/constants/#declaring-a-constant) | Two constants share a name. | [`const_decl`](/book/reference/grammar/#rule-const_decl) | — |
 | [`bynk.resolve.duplicate_field`](/book/reference/types/#record-types) | A record, or one variant's payload, declares a field twice. | [`record_type`](/book/reference/grammar/#rule-record_type) | — |
 | [`bynk.resolve.duplicate_field_init`](/book/reference/types/#record-types) | A record construction initialises a field twice. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
 | `bynk.resolve.duplicate_fn` | Two functions share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
-| `bynk.resolve.duplicate_message_code` | A message bundle declares the same code twice in one block. |  | — |
-| `bynk.resolve.duplicate_message_locale` | Two `messages` blocks in one bundle declare the same locale tag. |  | — |
+| [`bynk.resolve.duplicate_message_code`](/book/guides/localisation/declare-a-message-bundle/#the-smallest-bundle) | A message bundle declares the same code twice in one block. |  | — |
+| [`bynk.resolve.duplicate_message_locale`](/book/guides/localisation/declare-a-message-bundle/#adding-a-locale) | Two `messages` blocks in one bundle declare the same locale tag. |  | — |
 | [`bynk.resolve.duplicate_method`](/book/spec/static-semantics/) | Two methods share a name. | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.resolve.duplicate_param`](/book/spec/static-semantics/) | A parameter name is repeated. | [`param`](/book/reference/grammar/#rule-param) | — |
-| `bynk.resolve.duplicate_provider` | A capability is provided more than once. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
+| [`bynk.resolve.duplicate_provider`](/book/reference/capabilities/#providing-a-capability) | A capability is provided more than once. | [`provider_decl`](/book/reference/grammar/#rule-provider_decl) | — |
 | [`bynk.resolve.duplicate_service`](/book/spec/static-semantics/) | Two services share a name. | [`service_decl`](/book/reference/grammar/#rule-service_decl) | — |
 | [`bynk.resolve.duplicate_type`](/book/spec/static-semantics/) | Two types share a name. | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.resolve.duplicate_variant`](/book/reference/types/#sum-types) | A sum type declares a variant twice. | [`sum_type`](/book/reference/grammar/#rule-sum_type) | — |
@@ -925,11 +925,11 @@ There are **849** codes in total.
 | [`bynk.types.field_name_record_not_boundary`](/book/reference/types/#field-name) | A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_refinement_not_base`](/book/reference/types/#record-types) | An inline field refinement requires a base or refined type. | [`record_field`](/book/reference/grammar/#rule-record_field) | — |
 | [`bynk.types.field_value_mismatch`](/book/reference/types/#record-types) | A record field was given a value of the wrong type. | [`record_construction`](/book/reference/grammar/#rule-record_construction) | — |
-| `bynk.types.file_at_boundary` | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |
+| [`bynk.types.file_at_boundary`](/book/reference/types/#file) | A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned. |  | — |
 | [`bynk.types.form_uncodable`](/book/reference/types/#form-codec) | `Form.decode` or `Form.encode` names a type that is not a record of form fields (a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`). |  | — |
 | [`bynk.types.function_at_boundary`](/book/reference/types/) | A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary. | [`function_type_ref`](/book/reference/grammar/#rule-function_type_ref) | — |
 | [`bynk.types.guard_not_bool`](/book/reference/types/#matching) | A match-arm `if` guard is not a `Bool` expression. | [`match_arm`](/book/reference/grammar/#rule-match_arm) | — |
-| `bynk.types.headers_at_boundary` | `RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
+| [`bynk.types.headers_at_boundary`](/book/reference/http/#request-headers) | `RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | [`bynk.types.held_at_boundary`](/book/reference/types/#connection) | A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2). |  | — |
 | [`bynk.types.held_not_comparable`](/book/reference/types/#connection) | A held value (`Connection[F]`) is compared with `==`/`!=` — held values have identity, not value-equality (§2.9.3, real-time track slice 2). |  | — |
 | [`bynk.types.if_branch_mismatch`](/book/spec/static-semantics/) | The branches of an `if` have different types. | [`if_expr`](/book/reference/grammar/#rule-if_expr) | — |
@@ -975,7 +975,7 @@ There are **849** codes in total.
 | [`bynk.types.polynomial_regex`](/book/reference/types/#regular-expressions) | A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree; a regex method's pattern has no bound to excuse it. | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
 | `bynk.types.polynomial_regex_capped` | A `Matches` pattern's matching time grows polynomially with input length, but a `MaxLength` or `Length` predicate bounds the input small enough for its degree (warning). | [`refinement`](/book/reference/grammar/#rule-refinement) | Warning |
 | [`bynk.types.predicate_base_mismatch`](/book/reference/refined-types/#predicates) | A predicate does not apply to the type's base (e.g. a string predicate on an `Int`). | [`refinement`](/book/reference/grammar/#rule-refinement) | — |
-| `bynk.types.query_at_boundary` | A `Query` type appears in a storable or boundary-crossing position — a query is built and executed in place, never persisted or sent (ADR 0115). |  | — |
+| [`bynk.types.query_at_boundary`](/book/reference/types/#query) | A `Query` type appears in a storable or boundary-crossing position — a query is built and executed in place, never persisted or sent (ADR 0115). |  | — |
 | [`bynk.types.question_error_mismatch`](/book/guides/type-system/result-and-optionals/) | `?` propagates an error type incompatible with the function's. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | [`bynk.types.question_on_non_result`](/book/guides/type-system/result-and-optionals/) | `?` was applied to a non-`Result` value. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
 | [`bynk.types.question_option_outside_http`](/book/guides/type-system/result-and-optionals/#methods) | `?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`. | [`question_expr`](/book/reference/grammar/#rule-question_expr) | — |
@@ -983,9 +983,9 @@ There are **849** codes in total.
 | [`bynk.types.range_pattern_on_non_int`](/book/reference/types/#range-patterns) | A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`. | [`int_range`](/book/reference/grammar/#rule-int_range) | — |
 | [`bynk.types.record_pattern_on_non_record`](/book/reference/types/#record-patterns) | A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in). | [`record_pattern`](/book/reference/grammar/#rule-record_pattern) | — |
 | [`bynk.types.regex_not_literal`](/book/reference/types/#regular-expressions) | A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.types.rejection_at_boundary` | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
-| `bynk.types.request_cookies_at_boundary` | `RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
-| `bynk.types.request_query_at_boundary` | `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
+| [`bynk.types.rejection_at_boundary`](/book/reference/http/#rendering-rejections) | `BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
+| [`bynk.types.request_cookies_at_boundary`](/book/reference/http/#request-cookies) | `RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
+| [`bynk.types.request_query_at_boundary`](/book/reference/http/#request-query) | `RequestQuery` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent. |  | — |
 | [`bynk.types.return_mismatch`](/book/reference/types/) | A returned value does not match the declared return type. |  | — |
 | [`bynk.types.rounding_mode_position`](/book/reference/types/#decimal) | `RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622). |  | — |
 | [`bynk.types.select_tail_has_select`](/book/reference/bynk-capabilities/#d1-typed-reads) | A `D1`, `Postgres` or `MySql` `select[T]` or `firstAs[T]` statement does not start at `FROM` (for example it begins with `SELECT`, `WITH` or a parenthesis); the compiler writes the `SELECT` and column list from `T`. | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
@@ -993,7 +993,7 @@ There are **849** codes in total.
 | [`bynk.types.some_value_mismatch`](/book/guides/type-system/result-and-optionals/#construct-values) | A `Some` payload has the wrong type. | [`some_expr`](/book/reference/grammar/#rule-some_expr) | — |
 | [`bynk.types.sql_not_literal`](/book/reference/bynk-capabilities/#sql-databases-d1) | A `D1` or `Postgres` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or the `sql` of a `SqlStatement` or a `PgStatement`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` or `PgValue` parameter (standard-library P4c, Hyperdrive H1 and H3). | [`method_call`](/book/reference/grammar/#rule-method_call), [`record_construction`](/book/reference/grammar/#rule-record_construction), [`record_spread`](/book/reference/grammar/#rule-record_spread) | — |
 | [`bynk.types.sql_row_shape`](/book/reference/bynk-capabilities/#d1-typed-reads) | `Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3). | [`method_call`](/book/reference/grammar/#rule-method_call) | — |
-| `bynk.types.sql_statement_at_boundary` | A `bynk.cloudflare` `SqlStatement` or `PgStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c). |  | — |
+| [`bynk.types.sql_statement_at_boundary`](/book/reference/bynk-capabilities/#sql-databases-d1) | A `bynk.cloudflare` `SqlStatement`, `PgStatement` or `MySqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c). |  | — |
 | [`bynk.types.stream_at_boundary`](/book/reference/types/#stream) | A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields). |  | — |
 | [`bynk.types.stream_not_comparable`](/book/reference/types/#stream) | A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0). |  | — |
 | [`bynk.types.type_mismatch`](/book/reference/operators/) | An operator or built-in method got an operand of a type it does not accept, or two operands that had to match did not. |  | — |

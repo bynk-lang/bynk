@@ -1,0 +1,24 @@
+context gallery
+
+consumes bynk { File }
+
+type Upload = { photo: File }
+
+agent Gallery {
+    key id: String
+
+    store photo: Cell[Option[Bytes]]
+
+    on call count() -> Effect[Int] {
+        Effect.pure(0)
+    }
+}
+
+service api from http {
+    limits { maxBody: 1_000_000 }
+
+    @multipart
+    on POST("/photos") (body: Upload) -> Effect[HttpResult[Int]] by v: Visitor {
+        Ok(body.photo.bytes.length())
+    }
+}

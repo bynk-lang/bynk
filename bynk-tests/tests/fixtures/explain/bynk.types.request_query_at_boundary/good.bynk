@@ -1,0 +1,11 @@
+context api
+
+type Search = {
+    term: String,
+}
+
+service api from http {
+    on GET("/search") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok(query.get("q").getOrElse("-"))
+    }
+}
