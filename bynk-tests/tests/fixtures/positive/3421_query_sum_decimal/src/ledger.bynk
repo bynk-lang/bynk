@@ -1,0 +1,34 @@
+context ledger
+
+// #3421: `Query.sum` over a `Decimal` key sums exactly, as `List.sum` does: from
+// the zero decimal through the runtime's exact add, never a float `+`.
+
+type Line = {
+  sku: String,
+  price: Decimal,
+}
+
+agent Basket {
+  key id: String
+
+  store lines: Map[String, Line]
+
+  on call add(sku: String, price: Decimal) -> Effect[()] {
+    lines.put(sku, Line { sku: sku, price: price })
+  }
+
+  on call total() -> Effect[Decimal] {
+    lines.sum((l) => l.price)
+  }
+
+  on call totalText() -> Effect[String] {
+    let t <- lines.sum((l) => l.price)
+    t.toString()
+  }
+
+  // A built query, terminated by `sum`.
+  on call dearText(floor: Decimal) -> Effect[String] {
+    let t <- lines.filter((l) => l.price > floor).sum((l) => l.price)
+    t.toString()
+  }
+}

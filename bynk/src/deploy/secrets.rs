@@ -73,6 +73,18 @@ pub(crate) struct SecretSource {
 }
 
 impl SecretSource {
+    /// A source holding `file`'s values, for a test.
+    #[cfg(test)]
+    pub(crate) fn of_values(file: &[(&str, &str)]) -> Self {
+        Self {
+            file: file
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            named: BTreeSet::new(),
+        }
+    }
+
     /// Read the source the options describe. Failing to read a named file is an
     /// error rather than an empty source: the user pointed at it, so silently
     /// proceeding with no values would surface later as a missing-secret error
@@ -411,6 +423,99 @@ pub(crate) fn mint_edge_key() -> Result<String, String> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|e| format!("could not generate an edge key: {e}"))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+const BASE64URL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/// Unpadded base64url, the form a session key takes (the runtime reads it strictly).
+fn base64url_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | (u32::from(*b) << (16 - 8 * i)));
+        let chars = chunk.len() + 1;
+        for i in 0..chars {
+            out.push(BASE64URL[((n >> (18 - 6 * i)) & 63) as usize] as char);
+        }
+    }
+    out
+}
+
+/// The bytes of an unpadded base64url string, or `None` for anything else.
+fn base64url_decode(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 4 == 1 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for c in s.bytes() {
+        let v = BASE64URL.iter().position(|b| *b == c)? as u32;
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// The least a session key may be, in bytes (the runtime refuses a shorter one).
+const SESSION_KEY_MIN_BYTES: usize = 32;
+
+/// #3386: a fresh session key: 32 random bytes, unpadded base64url.
+pub(crate) fn mint_session_key() -> Result<String, String> {
+    let mut bytes = [0u8; SESSION_KEY_MIN_BYTES];
+    getrandom::fill(&mut bytes).map_err(|e| format!("could not generate a session key: {e}"))?;
+    Ok(base64url_encode(&bytes))
+}
+
+/// #3386: the signing key `bynk dev` uses for one session-key binding: derived from the binding's
+/// name, so it differs per actor and is the same in every `bynk dev --context` session (two side by
+/// side admit each other's cookies, as they admit each other's calls under the local edge key). It
+/// is a local-development key only: it is public in this source and `deploy` never uses it.
+pub(crate) fn local_session_key(binding: &str) -> String {
+    use sha2::{Digest, Sha256};
+    base64url_encode(&Sha256::digest(format!(
+        "bynk dev session key v1:{binding}"
+    )))
+}
+
+/// #3386: whether a value an operator supplies for a session key is one the runtime will accept:
+/// canonical unpadded base64url of at least 32 bytes. Caught here, at deploy, rather than as a
+/// faulted request on the first login.
+pub(crate) fn check_session_key(value: &str) -> Result<(), String> {
+    let bytes = base64url_decode(value).filter(|b| base64url_encode(b) == value);
+    match bytes {
+        None => Err("a session key is unpadded base64url (letters, digits, `-` and `_`)".into()),
+        Some(b) if b.len() < SESSION_KEY_MIN_BYTES => Err(format!(
+            "a session key must be at least {SESSION_KEY_MIN_BYTES} bytes; this one is {}",
+            b.len()
+        )),
+        Some(_) => Ok(()),
+    }
+}
+
+/// #3386: what this run does with a `SignedCookie` actor's signing key, on the context that
+/// declares it: as for a foreign caller's secret ([`decide_foreign_key`]), except that a value the
+/// operator supplies must be a key the runtime accepts, and nothing is handed off (only this
+/// context holds it). Unset, `deploy` mints one; set, it is kept unless `--force`, which replaces
+/// it, **ending every session signed under the old key** (Cloudflare never returns a secret's
+/// value, so a minted key cannot be kept as the `previous` one: supply `secret` and `previous`
+/// yourself to rotate without a global logout).
+pub(crate) fn decide_session_key(
+    supplied: Option<String>,
+    presence: Presence,
+    force: bool,
+    mint: &mut dyn FnMut() -> Result<String, String>,
+) -> Result<ForeignKey, String> {
+    if let Some(value) = &supplied {
+        check_session_key(value)?;
+    }
+    decide_foreign_key(supplied, presence, force, mint)
 }
 
 /// I3 (#1971): what this run does with one foreign caller's secret, on the
@@ -1303,6 +1408,114 @@ WITH_EQUALS=a=b
         );
         assert!(Origin::Managed.required());
         assert_eq!(Origin::Managed.label(), "managed");
+    }
+
+    // ---- #3386: a `SignedCookie` actor's signing key --------------------------
+
+    /// 32 bytes of 0xAB, as unpadded base64url (43 characters).
+    const GOOD_KEY: &str = "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s";
+
+    fn session(
+        supplied: Option<&str>,
+        presence: Presence,
+        force: bool,
+        mut mint: impl FnMut() -> Result<String, String>,
+    ) -> Result<ForeignKey, String> {
+        decide_session_key(supplied.map(str::to_string), presence, force, &mut mint)
+    }
+
+    #[test]
+    fn base64url_round_trips_and_matches_the_alphabet() {
+        for len in 0..40usize {
+            let bytes: Vec<u8> = (0..len).map(|i| (i * 37 + 11) as u8).collect();
+            let text = base64url_encode(&bytes);
+            assert!(
+                text.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            );
+            assert!(!text.contains('='));
+            assert_eq!(base64url_decode(&text), Some(bytes), "len {len}");
+        }
+        // The standard test vector, and the URL alphabet.
+        assert_eq!(
+            base64url_encode(b"Many hands make light work."),
+            "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu"
+        );
+        assert_eq!(base64url_encode(&[0xfb, 0xff, 0xfe]), "-__-");
+        assert_eq!(base64url_decode("a"), None);
+        assert_eq!(base64url_decode("ab+/"), None);
+        assert_eq!(base64url_decode("ab=="), None);
+    }
+
+    #[test]
+    fn a_minted_session_key_is_32_random_bytes_the_runtime_accepts() {
+        let a = mint_session_key().expect("the OS has randomness");
+        let b = mint_session_key().expect("the OS has randomness");
+        assert_eq!(a.len(), 43);
+        assert_ne!(a, b);
+        assert!(check_session_key(&a).is_ok());
+        assert_eq!(base64url_decode(&a).map(|v| v.len()), Some(32));
+    }
+
+    #[test]
+    fn a_supplied_session_key_must_be_one_the_runtime_accepts() {
+        assert!(check_session_key(GOOD_KEY).is_ok());
+        assert!(check_session_key("").is_err());
+        assert!(check_session_key("short").is_err());
+        // 31 bytes: one short.
+        assert!(
+            check_session_key(&base64url_encode(&[7u8; 31]))
+                .unwrap_err()
+                .contains("at least 32")
+        );
+        assert!(check_session_key(&base64url_encode(&[7u8; 33])).is_ok());
+        for bad in [
+            "not base64url!",
+            "AAAA=",
+            &format!("{GOOD_KEY}=")[..],
+            "+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/+/",
+        ] {
+            assert!(check_session_key(bad).is_err(), "{bad}");
+        }
+        // A non-canonical encoding (a stray trailing bit) is refused, as the runtime refuses it.
+        let mut twin = GOOD_KEY.to_string();
+        twin.pop();
+        twin.push('t');
+        assert!(check_session_key(&twin).is_err());
+    }
+
+    #[test]
+    fn a_new_session_key_is_minted_and_a_held_one_kept() {
+        let set = Ok(ForeignKey::Set {
+            value: "minted".into(),
+            minted: true,
+        });
+        assert_eq!(session(None, Absent, false, minted), set);
+        assert_eq!(session(None, Present, true, minted), set);
+        assert_eq!(session(None, Present, false, never), Ok(ForeignKey::Keep));
+        assert_eq!(session(None, Unknown, false, never), Ok(ForeignKey::Keep));
+    }
+
+    #[test]
+    fn a_supplied_session_key_is_set_where_absent_or_forced_and_never_minted_over() {
+        let set = Ok(ForeignKey::Set {
+            value: GOOD_KEY.into(),
+            minted: false,
+        });
+        assert_eq!(session(Some(GOOD_KEY), Absent, false, never), set);
+        assert_eq!(session(Some(GOOD_KEY), Present, true, never), set);
+        assert_eq!(
+            session(Some(GOOD_KEY), Present, false, never),
+            Ok(ForeignKey::Keep)
+        );
+    }
+
+    #[test]
+    fn a_weak_supplied_session_key_is_refused_before_anything_is_decided() {
+        for presence in [Absent, Present, Unknown] {
+            assert!(session(Some("hunter2"), presence, true, never).is_err());
+            assert!(session(Some(""), presence, false, never).is_err());
+        }
     }
 
     // ---- I3 (#1971): foreign callers' secrets ---------------------------------

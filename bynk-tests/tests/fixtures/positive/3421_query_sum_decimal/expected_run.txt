@@ -1,0 +1,2 @@
+# #3421: Query.sum over a Decimal key is exact; run by bynkc/tests/behaviour_fixtures.rs.
+passed=3 failed=0
