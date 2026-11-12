@@ -46,6 +46,7 @@ const LOCK_FILE: &str = "bynk.deploy.lock";
 use bynk_emit::emitter::wrangler::KV_NAMESPACE_ID_PLACEHOLDER;
 
 mod config;
+mod destinations;
 mod facts;
 mod graph;
 mod hyperdrive;
@@ -59,6 +60,7 @@ mod secrets;
 mod senders;
 
 use config::*;
+use destinations::*;
 use graph::*;
 use ledger::*;
 use linked::*;

@@ -19,6 +19,8 @@
 //!   depend on). Under it, a missing Node, or one too old for
 //!   `stripTypeScriptTypes` (< 22.13), fails rather than skips.
 
+#[path = "../par/mod.rs"]
+mod par;
 #[path = "../require/mod.rs"]
 mod require;
 
@@ -347,11 +349,15 @@ fn emitted_typescript_passes_tsc_strict() {
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create tsc-verify temp root");
 
-    let mut failures: Vec<String> = Vec::new();
-    // Fixture names successfully staged into the tree — the set the single
-    // `tsc` run actually type-checks.
-    let mut staged: Vec<String> = Vec::new();
-    for dir in &dirs {
+    // Compile and stage each fixture on a worker pool (#3387): each writes only
+    // under its own `root/<name>`, and `par_map` keeps the results in fixture
+    // order, so `staged` and `failures` come out as they did serially.
+    enum Staging {
+        Staged(String),
+        Skipped,
+        Failed(String),
+    }
+    let results = par::par_map(&dirs, |dir| {
         let name = dir
             .file_name()
             .and_then(|s| s.to_str())
@@ -362,36 +368,44 @@ fn emitted_typescript_passes_tsc_strict() {
             // #1767: a single-file fixture (`input.bynk` → one `.ts`) imports
             // nothing but `./runtime.js`, so staged beside the runtime it is a
             // complete module graph like any project's.
-            match stage_single_file(dir, &root.join(&name)) {
-                Ok(true) => staged.push(name),
-                Ok(false) => {}
-                Err(failure) => failures.push(failure),
-            }
-            continue;
+            return match stage_single_file(dir, &root.join(&name)) {
+                Ok(true) => Staging::Staged(name),
+                Ok(false) => Staging::Skipped,
+                Err(failure) => Staging::Failed(failure),
+            };
         }
         let target = fixture_target(dir);
         let compiled = match compile_fixture(dir, target) {
             Ok(out) => out,
             Err(errors) => {
                 let rendered = bynk_driver::render::render_project_errors(&errors);
-                failures.push(format!(
+                return Staging::Failed(format!(
                     "\n=== {} ===\nexpected compile success but got errors:\n{}",
                     dir.display(),
                     rendered,
                 ));
-                continue;
             }
         };
         let fixture_root = root.join(&name);
         if let Err(e) = write_outputs(&compiled, &fixture_root) {
-            failures.push(format!(
+            return Staging::Failed(format!(
                 "\n=== {} ===\nfailed to write emitted output to {}: {e}",
                 dir.display(),
                 fixture_root.display(),
             ));
-            continue;
         }
-        staged.push(name);
+        Staging::Staged(name)
+    });
+    let mut failures: Vec<String> = Vec::new();
+    // Fixture names successfully staged into the tree: the set the chunked
+    // `tsc` runs actually type-check.
+    let mut staged: Vec<String> = Vec::new();
+    for r in results {
+        match r {
+            Staging::Staged(name) => staged.push(name),
+            Staging::Skipped => {}
+            Staging::Failed(f) => failures.push(f),
+        }
     }
 
     // A root `tsconfig.json` (from `emit_tsconfig`) that each chunk's config
@@ -895,7 +909,7 @@ fn all_emitted_typescript_strips_under_node() {
 // `bynk compile --emit js` type-strips the emitted TypeScript to JavaScript via
 // `bynk_driver::strip::strip_project_to_js` (oxc). These two tests guard that path: the first
 // is pure-Rust and always runs (the strip must succeed on every fixture and yield
-// a JS-shaped tree); the second runs the emitted `.js` through `node --check` to
+// a JS-shaped tree); the second parses the emitted `.js` as ES modules in Node to
 // confirm it is valid, runnable ES module syntax with no TypeScript residue.
 // ---------------------------------------------------------------------------
 
@@ -958,7 +972,8 @@ fn js_artefact_strips_every_fixture_to_js_shape() {
 }
 
 /// Stage every project fixture's `--emit js` output into one tree and run
-/// `node --check` over every `.js` — proof the stripped output is valid, runnable
+/// parse every `.js` as an ES module in one Node process (`vm.SourceTextModule`,
+/// parse only) — proof the stripped output is valid, runnable
 /// ES-module JavaScript (a surviving type annotation would fail the check). Node
 /// is the only requirement; skips loudly when it is absent, like the `tsc` gate.
 #[test]
@@ -974,38 +989,61 @@ fn emitted_javascript_is_valid_under_node() {
     let root = std::env::temp_dir().join(format!("bynk-js-verify-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create js-verify temp root");
-    // Make Node parse the emitted `.js` as ES modules regardless of Node version.
-    fs::write(root.join("package.json"), "{\n  \"type\": \"module\"\n}\n")
-        .expect("write root package.json");
 
-    let mut staged = 0usize;
-    let mut failures: Vec<String> = Vec::new();
-    for dir in &dirs {
-        if !dir.join("src").is_dir() {
-            continue;
+    // Compile, strip and write each project fixture on a small worker pool
+    // (#3387): serially this was about two thirds of the test outside Node. Each
+    // fixture writes only under its own `root/<name>`, so the workers are
+    // independent.
+    let project_dirs: Vec<&PathBuf> = dirs.iter().filter(|d| d.join("src").is_dir()).collect();
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, 8);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let staged_count = std::sync::atomic::AtomicUsize::new(0);
+    let failures_shared: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(dir) = project_dirs.get(i) else {
+                        break;
+                    };
+                    let name = dir
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("fixture")
+                        .to_string();
+                    let target = fixture_target(dir);
+                    let Ok(out) = compile_fixture(dir, target) else {
+                        continue;
+                    };
+                    let js_out = match bynk_driver::strip::strip_project_to_js(out) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            failures_shared
+                                .lock()
+                                .unwrap()
+                                .push(format!("{name}: strip failed: {e}"));
+                            continue;
+                        }
+                    };
+                    if let Err(e) = write_outputs(&js_out, &root.join(&name)) {
+                        failures_shared
+                            .lock()
+                            .unwrap()
+                            .push(format!("{name}: failed to write JS output: {e}"));
+                        continue;
+                    }
+                    staged_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            });
         }
-        let name = dir
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("fixture")
-            .to_string();
-        let target = fixture_target(dir);
-        let Ok(out) = compile_fixture(dir, target) else {
-            continue;
-        };
-        let js_out = match bynk_driver::strip::strip_project_to_js(out) {
-            Ok(o) => o,
-            Err(e) => {
-                failures.push(format!("{name}: strip failed: {e}"));
-                continue;
-            }
-        };
-        if let Err(e) = write_outputs(&js_out, &root.join(&name)) {
-            failures.push(format!("{name}: failed to write JS output: {e}"));
-            continue;
-        }
-        staged += 1;
-    }
+    });
+    let staged = staged_count.into_inner();
+    let mut failures = failures_shared.into_inner().unwrap();
+    failures.sort();
     assert!(
         failures.is_empty(),
         "staging JS output failed:\n{}",
@@ -1021,6 +1059,8 @@ fn emitted_javascript_is_valid_under_node() {
         .join("support")
         .join("js_check.mjs");
     let out = Command::new("node")
+        .arg("--experimental-vm-modules")
+        .arg("--no-warnings")
         .arg(&harness)
         .arg(&root)
         .output()
@@ -1031,7 +1071,7 @@ fn emitted_javascript_is_valid_under_node() {
         let _ = fs::remove_dir_all(&root);
     } else {
         panic!(
-            "emitted JavaScript is not valid under `node --check` — a TypeScript construct survived \
+            "emitted JavaScript does not parse as an ES module under Node — a TypeScript construct survived \
              stripping, or the JS is malformed.\nFAIL <file> <reason>:\n{}\n{}",
             stdout.trim(),
             stderr.trim(),

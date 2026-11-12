@@ -650,6 +650,14 @@ fn append_missing_bindings(names: &mut Vec<String>, extra: &str) {
     names.extend(wanted);
 }
 
+/// #3386: the cookie a route's `SignedCookie` seam reads, if it has one.
+fn signed_cookie_name(
+    h: &bynk_syntax::ast::Handler,
+    actors: &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
+) -> Option<String> {
+    bynk_check::actors::signed_cookie_seam_for(h, actors).map(|s| s.cookie)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_entry(
     context: &str,
@@ -796,8 +804,7 @@ pub fn emit_worker_entry(
                     bearer: bynk_check::actors::bearer_seam_for(h, &table.actors).is_some(),
                     // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
                     oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
-                    signed_cookie: bynk_check::actors::signed_cookie_seam_for(h, &table.actors)
-                        .map(|s| s.cookie),
+                    signed_cookie: signed_cookie_name(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so
@@ -1031,10 +1038,11 @@ pub fn emit_worker_entry(
     let body_has = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
     if http_routes
         .iter()
-        .any(|r| !r.sum && body_has(r) && r.max_body.is_some())
+        .any(|r| !r.sum && body_has(r) && r.max_body.is_some() && !streamed_body(r))
     {
         imports.push("__readBodyCapped".to_string());
     }
+    push_streamed_body_imports(&http_routes, &mut imports);
     if http_routes
         .iter()
         .any(|r| body_has(r) && r.raw.as_deref().is_some_and(|ct| ct != "*/*"))
@@ -2751,6 +2759,19 @@ fn form_field_specs(
 /// codec checking refinements and filling defaults. #3386: a route guarded by a `SignedCookie`
 /// actor consumes that cookie at the seam, so it is hidden from either form. Returns whether the
 /// parameter was a `cookies` one (a `:cookies` path segment is a path parameter instead).
+/// #2341: the `RequestHeaders` a handler is passed. #3386: on a `SignedCookie` route the session
+/// cookie is hidden from its `Cookie` header, as it is from the `cookies` views.
+fn request_headers_arg(route: &HttpRoute) -> TsExpr {
+    let mut args = vec![ident("request")];
+    args.extend(
+        route
+            .signed_cookie
+            .as_deref()
+            .map(|h| str_lit(crate::emitter::escape_ts_string(h))),
+    );
+    call(ident("__requestHeaders"), args)
+}
+
 fn bind_cookies_param(
     route: &HttpRoute,
     p: &bynk_syntax::ast::Param,
@@ -3224,7 +3245,7 @@ fn emit_http_route_dispatch(
         }
         // #2341 (decision A): `headers` is the request's headers, read-only.
         if pname == "headers" && matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
-            call_args.push(call(ident("__requestHeaders"), vec![ident("request")]));
+            call_args.push(request_headers_arg(route));
             continue;
         }
         // #2854 (decision B): `query: RequestQuery` is the raw query string.
@@ -3335,7 +3356,8 @@ fn emit_http_route_dispatch(
         // A capped body is read through the counting reader, so a chunked body, or
         // one whose `Content-Length` understates it, is cut off at the cap with the
         // same `413` as the fast-reject above. A raw route is always capped.
-        let counted = route.max_body;
+        let streamed = streamed_body(route); // pulled by the handler, so not read here
+        let counted = route.max_body.filter(|_| !streamed);
         let raw = route.raw.is_some();
         let form = route.form_fields.as_ref();
         let multipart = route.multipart.as_ref();
@@ -3545,7 +3567,9 @@ fn emit_http_route_dispatch(
                 vec![return_(Some(malformed_400()))],
             ));
         }
-        if raw {
+        if streamed {
+            guarded.push(streamed_body_binding(route));
+        } else if raw {
             // The octets, untouched: no JSON, no base64.
             guarded.push(const_("body", ident("__bytes")));
         } else {
@@ -3677,10 +3701,7 @@ fn emit_http_route_dispatch(
         } else {
             call_args
         };
-    guarded.push(const_(
-        "result",
-        await_expr(call(member(ident("surface"), method_key), surface_args)),
-    ));
+    push_handler_invocation(route, method_key, surface_args, too_large, &mut guarded);
     let inner_ty = http_result_inner(&h.return_type);
     let ser_fn = crate::emitter::serialisation::serialise_ref_via(&inner_ty, "handlers.", ru);
     // #2858: a plain-JSON route's body serialiser runs with the `Option` encoders
@@ -3783,6 +3804,72 @@ fn emit_http_route_dispatch(
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #3380: the runtime imports a context's streamed `@raw` bodies need: the
+/// counted body stream, and the wrapper that turns a mid-read overrun into the
+/// route's `413`.
+fn push_streamed_body_imports(http_routes: &[HttpRoute], imports: &mut Vec<String>) {
+    let has_body = |r: &HttpRoute| r.handler.params.iter().any(|p| p.name.name == "body");
+    if http_routes.iter().any(|r| has_body(r) && streamed_body(r)) {
+        imports.push("__requestBodyStream".to_string());
+        imports.push("__untilBodyTooLarge".to_string());
+    }
+}
+
+/// #3380: `const body = requestBodyStream(request, cap)`: the octets as they
+/// arrive, counted against the cap as the handler pulls them. The checker
+/// requires a cap on every `@raw` route.
+fn streamed_body_binding(route: &HttpRoute) -> TsStmt {
+    let cap = route
+        .max_body
+        .expect("a streamed `@raw` route has a cap (bynk.http.raw_body_unbounded)");
+    const_(
+        "body",
+        call(
+            ident("__requestBodyStream"),
+            vec![ident("request"), num_lit(cap.to_string())],
+        ),
+    )
+}
+
+/// The statements that invoke a route's handler and bind its `result`. A streamed
+/// body that crosses its cap while the handler reads it faults that read with
+/// `BodyTooLarge` (#3380); no response has been built yet, so the router answers the
+/// route's `413`, stamped as the `Content-Length` fast-reject is, and not a `500`.
+fn push_handler_invocation(
+    route: &HttpRoute,
+    method_key: String,
+    surface_args: Vec<TsExpr>,
+    too_large: impl Fn(i64) -> TsExpr,
+    guarded: &mut Vec<TsStmt>,
+) {
+    let invoke = call(member(ident("surface"), method_key), surface_args);
+    let Some(cap) = route.max_body.filter(|_| streamed_body(route)) else {
+        guarded.push(const_("result", await_expr(invoke)));
+        return;
+    };
+    guarded.push(const_(
+        "__handled",
+        await_expr(call(ident("__untilBodyTooLarge"), vec![invoke])),
+    ));
+    guarded.push(if_(
+        member(ident("__handled"), "tooLarge"),
+        block(vec![return_(Some(too_large(cap)))]),
+    ));
+    guarded.push(const_("result", member(ident("__handled"), "value")));
+}
+
+/// #3380: whether `route`'s `body` is a streamed one: a `@raw` route whose `body`
+/// is a `Stream[Bytes]`, handed to the handler as the request body arrives rather
+/// than read whole first.
+fn streamed_body(route: &HttpRoute) -> bool {
+    route.raw.is_some()
+        && route
+            .handler
+            .params
+            .iter()
+            .any(|p| p.name.name == "body" && matches!(p.type_ref, TypeRef::Stream(..)))
 }
 
 /// #2648: the TypeScript binder for a user parameter in a Worker wrapper or

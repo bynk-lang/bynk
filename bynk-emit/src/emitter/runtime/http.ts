@@ -170,6 +170,20 @@ export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
   return typeof error === "object" && error !== null && (error as { bynkBodyTooLarge?: unknown }).bynkBodyTooLarge === true;
 }
 
+// #3380: awaits a streamed route's handler, telling a body that crossed its cap
+// while the handler was reading it (`tooLarge`) from the handler's own result.
+// Anything else the handler throws is rethrown, for the Worker's fault path.
+export async function untilBodyTooLarge<T>(
+  handled: Promise<T>,
+): Promise<{ readonly tooLarge: true } | { readonly tooLarge: false; readonly value: T }> {
+  try {
+    return { tooLarge: false, value: await handled };
+  } catch (e) {
+    if (isBodyTooLarge(e)) return { tooLarge: true };
+    throw e;
+  }
+}
+
 // #3380: the request body of a streamed `@raw` route, as the `Stream[Bytes]`
 // the handler receives (an `AsyncIterable<Uint8Array>`, ADR 0128 D6).
 //
@@ -182,8 +196,9 @@ export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
 //   `readCapped` does. The pull that crosses `cap` cancels the reader and
 //   throws `BodyTooLarge`.
 // - Released. `return()` (an early stop, a faulted sink) cancels the reader once
-//   reading has begun. A stream that is never read is never started: the router
-//   cancels the body itself when the handler returns.
+//   reading has begun. A stream that is never read is never started, and an
+//   unread body is released by the platform when the request ends (checked on
+//   workerd for #3380).
 // - Single-pass is not enforced here: the consumer claims it (`claimStream`),
 //   as the R2 and Fetch bindings' streams are (ADR 0665 C).
 export async function* requestBodyStream(request: Request, cap: number): AsyncGenerator<Uint8Array, void, undefined> {
@@ -721,10 +736,18 @@ export interface RequestHeaders {
 
 /** #2341 (L4): the request's headers, or — in a test — `"name: value"` lines
  *  (`RequestHeaders.of`); a line without a colon is ignored. */
-export function requestHeaders(source: Request | readonly string[]): RequestHeaders {
+export function requestHeaders(source: Request | readonly string[], hideCookie?: string): RequestHeaders {
   let headers: Headers;
   if (source instanceof Request) {
     headers = source.headers;
+    // #3386: a `SignedCookie` actor's credential is consumed at the seam; the handler's view of the
+    // `Cookie` header omits it, as its `cookies` views do (and drops the header if nothing is left).
+    if (hideCookie !== undefined && headers.has("cookie")) {
+      headers = new Headers(headers);
+      const rest = cookiePairs(headers.get("cookie")).filter(([n]) => n !== hideCookie);
+      if (rest.length === 0) headers.delete("cookie");
+      else headers.set("cookie", rest.map(([n, v]) => `${n}=${v}`).join("; "));
+    }
   } else {
     headers = new Headers();
     for (const line of source) {
@@ -1770,5 +1793,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, isBodyTooLarge as __isBodyTooLarge, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cookieObject as __cookieObject, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cookieObject as __cookieObject, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

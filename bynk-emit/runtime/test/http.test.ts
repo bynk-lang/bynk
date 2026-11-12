@@ -11,6 +11,7 @@ import {
   BodyTooLarge,
   isBodyTooLarge,
   requestBodyStream,
+  untilBodyTooLarge,
   applyCors,
   corsPreflightResponse,
   applySecurityHeaders,
@@ -1580,4 +1581,10 @@ test("isBodyTooLarge: only the cap error", () => {
   assert.equal(isBodyTooLarge(new BodyTooLarge(5)), true);
   assert.equal(isBodyTooLarge(new Error("x")), false);
   assert.equal(isBodyTooLarge(null), false);
+});
+
+test("untilBodyTooLarge: a handler's value, an overrun as tooLarge, any other fault rethrown", async () => {
+  assert.deepEqual(await untilBodyTooLarge(Promise.resolve(7)), { tooLarge: false, value: 7 });
+  assert.deepEqual(await untilBodyTooLarge(Promise.reject(new BodyTooLarge(3))), { tooLarge: true });
+  await assert.rejects(() => untilBodyTooLarge(Promise.reject(new Error("boom"))), /boom/);
 });

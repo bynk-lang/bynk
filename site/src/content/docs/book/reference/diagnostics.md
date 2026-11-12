@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. For step-by-step cause-and-fix guidance on the most common ones, see the [troubleshooting guides](/book/troubleshooting/). For a code with a curated explanation, `bynk explain <code>` prints it in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **843** codes in total.
+There are **848** codes in total.
 
 ## Agents
 
@@ -203,6 +203,8 @@ There are **843** codes in total.
 | [`bynk.http.cache_on_non_get`](/book/reference/http/#caching) | A `@cache` annotation is placed on a handler that is not `on http GET`. |  | — |
 | [`bynk.http.cache_public_reads_cookies`](/book/reference/http/#caching) | A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cache_unknown_arg`](/book/reference/http/#caching) | A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`). |  | — |
+| [`bynk.http.cookie_cross_site_without_credentials`](/book/reference/http/#setting-cookies) | A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
+| [`bynk.http.cookie_domain_widens`](/book/reference/http/#setting-cookies) | A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning). | [`http_handler`](/book/reference/grammar/#rule-http_handler) | Warning |
 | [`bynk.http.cookie_host_prefix`](/book/reference/http/#setting-cookies) | A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookie_partitioned_insecure`](/book/reference/http/#setting-cookies) | A `partitioned` cookie literal is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.cookie_samesite_none_insecure`](/book/reference/http/#setting-cookies) | A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
@@ -253,7 +255,7 @@ There are **843** codes in total.
 | [`bynk.http.query_not_http`](/book/reference/http/#request-query) | A `RequestQuery` appears on a handler that is not an HTTP route. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.query_wrong_type`](/book/reference/http/#typed-query) | An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.raw_bad_content_type`](/book/reference/http/#raw-request-bodies) | A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal. |  | — |
-| [`bynk.http.raw_body_not_bytes`](/book/reference/http/#raw-request-bodies) | The `body` of a `@raw` handler is not typed `Bytes`. |  | — |
+| [`bynk.http.raw_body_not_bytes`](/book/reference/http/#raw-request-bodies) | The `body` of a `@raw` handler is not typed `Bytes` or `Stream[Bytes]`. |  | — |
 | [`bynk.http.raw_body_unbounded`](/book/reference/http/#raw-request-bodies) | A `@raw` route has no request-body cap (no `@limit` and no service `limits`). |  | — |
 | `bynk.http.raw_duplicate` | A handler carries more than one `@raw` annotation. |  | — |
 | [`bynk.http.raw_error_status`](/book/reference/http/#error-bodies) | `RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name). |  | — |
@@ -265,6 +267,9 @@ There are **843** codes in total.
 | `bynk.http.security_invalid_field` | A `security` policy field (`hsts`/`nosniff`) has the wrong value shape. |  | — |
 | [`bynk.http.security_not_http`](/book/reference/http/#security-headers) | A `security { }` policy appears on a service that is not `from http`. |  | — |
 | `bynk.http.security_unknown_field` | A `security { }` policy declares a field outside the closed set. |  | — |
+| [`bynk.http.stream_body_not_raw`](/book/reference/http/#streamed-request-bodies) | A `Stream[Bytes]` `body` is on a handler that is not `@raw`. |  | — |
+| [`bynk.http.stream_body_on_sum_route`](/book/reference/http/#streamed-request-bodies) | A route with a streamed `body` has a `by` clause that is a sum of actors, whose wrapper reads the body itself. |  | — |
+| [`bynk.http.stream_body_signature`](/book/reference/http/#streamed-request-bodies) | A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first. |  | — |
 | [`bynk.http.unbound_path_param`](/book/reference/http/#handler-form) | A `:name` route segment has no matching handler parameter. | [`http_handler`](/book/reference/grammar/#rule-http_handler) | — |
 | [`bynk.http.unknown_handler_annotation`](/book/reference/http/#handler-form) | A handler carries an annotation outside the closed set (`@cache`/`@limit`). |  | — |
 
@@ -435,7 +440,6 @@ There are **843** codes in total.
 | [`bynk.generics.codable_op_return`](/book/reference/generics/#capability-operations-take-key-and-codable) | A capability operation's `Codable` type parameter appears in its return type. A `Codable` parameter is encoded at the call site; decoding a provider's reply raises a question this slice does not answer (what a failed decode of stored data means), so typed reads are deferred (constrained-generics slice 3). | [`capability_op`](/book/reference/grammar/#rule-capability_op) | — |
 | [`bynk.generics.duplicate_type_param`](/book/reference/generics/#type-parameters) | A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183). |  | — |
 | [`bynk.generics.generic_non_record`](/book/reference/types/#generic-record-types) | A `type` declaration carries type parameters on a refined, opaque or alias body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
-| [`bynk.generics.generic_record_at_boundary`](/book/reference/testing/#val) | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec. |  | — |
 | [`bynk.generics.generic_sum_embeds`](/book/reference/types/#generic-sums) | A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593). | [`type_decl`](/book/reference/grammar/#rule-type_decl) | — |
 | [`bynk.generics.method_on_generic_type`](/book/reference/generics/#static-methods-on-generic-types) | A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
 | [`bynk.generics.missing_codable_bound`](/book/reference/generics/#codable) | A type parameter is encoded or decoded with `Json.encode`/`Json.decode`, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, but is not declared `Codable` (`[T: Codable]`, or `where A: Codable` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Codable`, beside an existing `Eq`, which `Codable` does not imply (constrained-generics slice 3). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | — |
@@ -447,7 +451,7 @@ There are **843** codes in total.
 | `bynk.generics.redundant_eq_bound` | A type parameter is declared both `Eq` and `Ord` (or `Eq` and `Key`); `Ord` and `Key` imply `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slices 1 and 2, warning). | [`fn_decl`](/book/reference/grammar/#rule-fn_decl) | Warning |
 | [`bynk.generics.type_arg_count`](/book/reference/generics/#type-parameters) | A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183). | [`applied_type_ref`](/book/reference/grammar/#rule-applied_type_ref) | — |
 | [`bynk.generics.type_arg_mismatch`](/book/reference/generics/#type-parameters) | Inferred or explicit type arguments conflict, have the wrong arity, target a non-generic function, or a type parameter shadows a declared type. | [`call`](/book/reference/grammar/#rule-call) | — |
-| [`bynk.generics.uninferable_type_arg`](/book/reference/generics/#the-expected-type-for-every-generic-call) | A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a. | [`call`](/book/reference/grammar/#rule-call) | — |
+| [`bynk.generics.uninferable_type_arg`](/book/reference/generics/#the-expected-type-for-every-generic-call) | A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value. | [`call`](/book/reference/grammar/#rule-call) | — |
 | [`bynk.generics.unknown_constraint`](/book/reference/generics/#bounds) | A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`. | [`type_param`](/book/reference/grammar/#rule-type_param) | — |
 | [`bynk.generics.unknown_where_param`](/book/reference/generics/#bounds) | A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type. | [`where_clause`](/book/reference/grammar/#rule-where_clause) | — |
 | `bynk.held.branch_divergence` | Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2). |  | — |
@@ -1019,6 +1023,7 @@ There are **843** codes in total.
 |---|---|---|---|
 | `bynk.val.agent_not_generable` | A `for all`/`Val` cannot generate an agent — fabricated agent states need not be reachable. | [`for_all`](/book/reference/grammar/#rule-for_all) | — |
 | [`bynk.val.arity`](/book/reference/testing/#val) | `Val[T]` was given the wrong number of pin arguments. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
+| [`bynk.val.generic_type`](/book/reference/testing/#val) | A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.literal_violates`](/book/reference/testing/#val) | A pinned `Val[T]` value violates the type's refinement. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.needs_pin`](/book/reference/testing/#val) | A bare `Val[T]` cannot generate a value (e.g. a `Matches` string); pin one. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |
 | [`bynk.val.outside_test`](/book/reference/testing/#val) | `Val[T]` was used outside a test case body. | [`val_expr`](/book/reference/grammar/#rule-val_expr) | — |

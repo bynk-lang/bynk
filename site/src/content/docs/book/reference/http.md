@@ -483,6 +483,8 @@ or warned about:
 | `bynk.http.cookie_host_prefix` | a `__Host-` name that is not `secure`, has a `domain`, or a `path` other than `/` |
 | `bynk.http.cookie_secure_prefix` | a `__Secure-` name that is not `secure` |
 | `bynk.http.cookie_script_readable` | `httpOnly: false` (a warning) |
+| `bynk.http.cookie_domain_widens` | a `domain` on a cookie whose name is not `__Host-` (a warning): every subdomain receives it |
+| `bynk.http.cookie_cross_site_without_credentials` | a service attaches a `SameSite.Unrestricted` cookie but has no `cors { credentials: true }` (a warning): a cross-origin `fetch` can never send it back |
 | `bynk.http.cache_public_reads_cookies` | `@cache(scope: public)` on a handler that takes `cookies` |
 
 Only a literal is judged. A computed cookie is checked when it is sent: a name that is not
@@ -855,20 +857,92 @@ service registry from http {
   `@limit` or the service's `limits { }` — or it is `bynk.http.raw_body_unbounded`.
   An unbounded binary upload is the denial of service
   [body limits](#request-body-limits) exist to stop.
-- **Buffered, not streamed.** The body is read whole, up to the cap, before the
-  handler runs. Streaming a request body into the handler is not part of this
-  ([#3180](https://github.com/bynk-lang/bynk/issues/3180)); a form post has its own
-  [`@form`](#form-bodies) decoding. A `@raw` handler can still take
-  [`headers: RequestHeaders`](#request-headers) alongside its body, say to read
-  a webhook's event-name header.
+- **Buffered, or streamed.** A `body: Bytes` is read whole, up to the cap, before
+  the handler runs. A `body: Stream[Bytes]` is handed over as it arrives (see
+  [Streamed request bodies](#streamed-request-bodies)). A form post has its own
+  [`@form`](#form-bodies) decoding, and a browser upload its own
+  [`@multipart`](#multipart-bodies), whose parts are buffered. A `@raw` handler can
+  still take [`headers: RequestHeaders`](#request-headers) alongside its body, say to
+  read a webhook's event-name header.
 - **Signatures.** A `Signature` actor on a `@raw` route computes its HMAC over the
   octets as received, and the handler gets those same bytes.
 - **The content type is a contract, not a security boundary.** The handler still
   validates what it receives.
 
+### Streamed request bodies
+
+A `@raw` handler whose `body` is a [`Stream[Bytes]`](/book/reference/types/#stream)
+receives the request body **as it arrives**, instead of after it has been read
+whole. A large upload can then go on to a sink without being held in memory.
+
+```bynk,ignore
+service archives from http {
+  limits { maxBody: 5_000_000_000 }
+
+  @raw(contentType: "application/zip")
+  on PUT("/archives/:name") (name: ArchiveName, headers: RequestHeaders, body: Stream[Bytes])
+      -> Effect[HttpResult[()]] by u: User given Archives {
+    // `size` is the Int parsed from headers.get("content-length");
+    // R2.putStream needs the length up front.
+    let _ <- Archives.putStream(name.value, body, size)
+    NoContent
+  }
+}
+```
+
+- **The type chooses it.** `body: Stream[Bytes]` under `@raw` streams; `body: Bytes`
+  buffers, as above. There is no new annotation. Any other element type is
+  `bynk.http.raw_body_not_bytes`, and a `Stream[Bytes]` `body` without `@raw` is
+  `bynk.http.stream_body_not_raw`. A stream is still refused everywhere else a request
+  or a result crosses a boundary (`bynk.types.stream_at_boundary`): as a result, an
+  agent or `on call` parameter, a stored field or an event, so a streamed body cannot
+  reach an agent.
+- **Lazy, and read once.** Nothing is read from the request until the handler (or a
+  sink) pulls, and each pull reads one chunk, so a slow sink slows the read. Draining
+  the stream, or passing it to a sink or a response, consumes it; a second read faults
+  with `bynk: a stream can be read only once`. The platform buffers a window of its own
+  ahead of the pull, of the order of megabytes.
+- **The cap is still required, and counted as the handler reads.** A declared
+  `Content-Length` over the cap is a `413` before the handler runs, as for a buffered
+  body. A body that crosses the cap while the handler is reading it cancels the read and
+  faults it, and the router answers the same `413 PayloadTooLarge` (a `system` test sees
+  `Rejected(PayloadTooLarge(_))`), not a `500`. The count is of the bytes actually read,
+  so a chunked body, or one whose `Content-Length` understates it, is cut off all the same.
+  A client that is still sending when the `413` is answered may see its connection reset
+  instead of the response; that is the platform's and the client's, and the cap
+  guarantees only that the Worker stops reading.
+- **Do the reading before other effects.** The `413` can follow work the handler has
+  already done. A sink that fails whole is the safe pattern: `R2.putStream` stores
+  nothing if its stream faults.
+- **Sinks.** `R2.putStream(key, body, size)` needs the length up front, so read it from
+  `headers.get("content-length")`; a stream with more or fewer bytes than `size` faults the
+  write and stores nothing. A chunked upload has no `Content-Length`, so it cannot go to
+  `putStream`: pass it to [`Fetch.sendStream`](/book/reference/bynk-capabilities/#streamed-bodies),
+  which needs no length, or answer `411`. A proxy reads the body first, then answers: it
+  does not re-serve the request stream as its response (see below).
+- **Not with a signature or a sum of actors.** A `Signature` actor verifies an HMAC over
+  the whole body before the handler runs (`bynk.http.stream_body_signature`), and a sum
+  of actors reads the body itself (`bynk.http.stream_body_on_sum_route`). Use a
+  `body: Bytes` route for a signed webhook. A single `by` actor is checked on the
+  request's head, before any of the body is pulled.
+- **Answering without reading** is allowed: the unread body is discarded when the request
+  ends. A client that is still sending a large body may see a reset instead of the
+  response. A handler cannot read the request after it has returned, so read first, then
+  answer. Do not build a response from the request stream (a streamed echo through
+  `RawStreamed`): workerd allows it on its own, but it failed under `wrangler dev`'s
+  proxy, and it is not checked on Cloudflare's edge.
+- **Retries and idempotency.** A request body cannot be replayed, so a client that retries
+  sends it again. Take an [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
+  key from the request's head (a path segment or a header), not the body.
+- **What stays buffered.** A [`@multipart`](#multipart-bodies) file part is still held
+  whole. A large browser upload can `PUT` the file itself to a streamed `@raw` route.
+- **On the bundle target** the router is not part of the output: the host calls the
+  handler and supplies the `Stream[Bytes]`, and applies any cap itself. The in-process
+  test tiers pass a `Stream` value directly.
+
 The checks are `bynk.http.raw_on_bodyless` (a method with no body, or a handler
 without `body`), `raw_duplicate`, `raw_unknown_arg`, `raw_bad_content_type`,
-`raw_body_not_bytes` and `raw_body_unbounded`. In a `system` test, a typed call
+`raw_body_not_bytes` (neither `Bytes` nor `Stream[Bytes]`) and `raw_body_unbounded`. In a `system` test, a typed call
 sends the `Bytes` raw under the declared type (`application/octet-stream` for
 `"*/*"`), and a `Wire` body is sent as `text/plain`, so it probes the `415`.
 
@@ -1024,9 +1098,9 @@ for it, so a handler should not branch on that case.
 - **`maxParts` bounds what the handler sees,** not the cost of parsing: the whole capped body is
   parsed first, so `maxBody` is the guard against an oversized upload.
 - **Where the bytes go.** The handler holds the file as `Bytes`, so `R2.put(key, f.bytes)`
-  stores it. A body over the cap is refused, so a large upload does not fit here:
-  streaming a part into the handler is
-  [#3180](https://github.com/bynk-lang/bynk/issues/3180)'s third slice.
+  stores it. A body over the cap is refused, so a large upload does not fit here. A
+  multipart part is not streamed; a large upload is a `PUT` of the file itself to a
+  [streamed `@raw` route](#streamed-request-bodies).
 - **Signatures and sums.** A `Signature` actor signs the octets as received; a `by` that
   is a sum of actors is refused.
 

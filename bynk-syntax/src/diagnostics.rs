@@ -1929,13 +1929,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "generic-record-types",
     },
     Explain {
-        code: "bynk.generics.generic_record_at_boundary",
-        blurb: "Despite its name, this is about `Val[T]`, not about a boundary: a generic type can cross one through its codec. `Val` fabricates a value from the declaration of `T`, which is not yet done for each instantiation of a generic type, bare, `Val[Box]`, or applied, `Val[Box[Int]]`. Build the value with a record literal instead.",
-        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
-        page: "/book/reference/testing",
-        anchor: "val",
-    },
-    Explain {
         code: "bynk.generics.generic_sum_embeds",
         blurb: "`embeds E as V` lets `?` wrap an `E` error in the variant `V`, picking the variant by the error's type. In a generic sum that conversion would have to hold for every instantiation, which is not supported. Drop the `embeds` clause and wrap the error by hand where it is needed, with `.mapErr(Payment)`, or make the sum non-generic.",
         example: "type PayError = enum { Declined }\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)\n    embeds PayError as Payment    // ✗ a generic sum cannot embed\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)             // ✓ no `embeds`; wrap with `.mapErr(Payment)`",
@@ -2309,6 +2302,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "caching",
     },
     Explain {
+        code: "bynk.http.cookie_cross_site_without_credentials",
+        blurb: "A cookie with `SameSite=None` (`SameSite.Unrestricted`) exists to travel on cross-site requests, and a browser attaches cookies to a cross-origin `fetch` only when the request is credentialed and the response carries `Access-Control-Allow-Credentials: true`. A service with no `cors` policy, or one with `credentials: false`, never sends that header, so a cross-origin `fetch` can never send the cookie back. This is a warning, because a `SameSite=None` cookie is still sent on top-level cross-site navigations, cross-site form posts and in embeds (SSO and payment callbacks, widgets), none of which needs CORS. If a page on another origin must send it back with `fetch`, declare `cors { origins: [...], credentials: true }` (the origins must be exact, not `[\"*\"]`), or use `SameSite.Lax` if the cookie need not cross sites at all.",
+        example: "service api from http {\n  on POST(\"/login\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted })   // ⚠ no `cors { credentials: true }`\n  }\n}\n\nservice api from http {\n  cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓\n  …\n}",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
+        code: "bynk.http.cookie_domain_widens",
+        blurb: "A cookie with no `Domain` attribute belongs to exactly the host that set it. Setting `domain` makes it available to that domain and every subdomain, so a sibling service, or a subdomain an attacker can take over, receives it and can set a cookie of the same name. That is rarely wanted, so it is a warning. Drop `domain`; or, if the cookie is a session cookie, name it `__Host-…`, which makes the compiler refuse a `domain` altogether (`bynk.http.cookie_host_prefix`). Keep `domain` only when subdomains genuinely share the login.",
+        example: "Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", domain: Some(\"example.com\") })   // ⚠ every subdomain receives it\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                           // ✓ this host only",
+        page: "/book/reference/http",
+        anchor: "setting-cookies",
+    },
+    Explain {
         code: "bynk.http.cookie_host_prefix",
         blurb: "A cookie named `__Host-…` asks the browser to keep it only if it is `Secure`, has no `Domain` and has `Path=/`. That ties it to this exact host, so a sibling subdomain or an insecure page cannot set or overwrite it. A browser drops one that breaks any of the three, so a literal that does is refused. Remove `secure: false`, the `domain` and any `path` other than `\"/\"`, or rename the cookie.",
         example: "Created(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\", path: \"/app\" })   // ✗ must be `/`\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                 // ✓",
@@ -2582,7 +2589,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.raw_body_not_bytes",
-        blurb: "`@raw` hands the handler the request's octets untouched, so its `body` must be `Bytes`; any other type would have to be decoded from them, and decoding is what `@raw` opts out of. Type `body` as `Bytes` and decode it in the handler, or drop `@raw` to have the router decode a JSON body for you. Without `@raw`, a `Bytes` body is base64 inside JSON.",
+        blurb: "`@raw` hands the handler the request's octets untouched, so its `body` must be `Bytes` (read whole) or `Stream[Bytes]` (read chunk by chunk); any other type would have to be decoded from them, and decoding is what `@raw` opts out of. Type `body` as `Bytes` and decode it in the handler, or drop `@raw` to have the router decode a JSON body for you. Without `@raw`, a `Bytes` body is base64 inside JSON.",
         example: "@raw(contentType: \"image/png\")\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ raw octets are `Bytes`\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }    // ✓",
         page: "/book/reference/http",
         anchor: "raw-request-bodies",
@@ -2643,6 +2650,27 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "service jobs from cron {\n    security { hsts: 180.days }   // ✗ a schedule sends no response headers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
         page: "/book/reference/http",
         anchor: "security-headers",
+    },
+    Explain {
+        code: "bynk.http.stream_body_not_raw",
+        blurb: "A `Stream[Bytes]` `body` is a request body handed to the handler chunk by chunk, so the router must be told to leave it as octets: without `@raw` a body is JSON (or base64 inside JSON for `Bytes`), which has no streamed form. Add `@raw(contentType: \"…\")` and a `@limit`, or take the body as a value (`T`, or `Bytes`) to have it read whole.",
+        example: "@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✗ not `@raw`\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✓",
+        page: "/book/reference/http",
+        anchor: "streamed-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.stream_body_on_sum_route",
+        blurb: "A route `by` a sum of actors, such as `User | Visitor`, reads and verifies the request body itself before the handler runs. A streamed `body` is not read until the handler pulls it, so the two cannot both own it and the pair is refused. Name one actor on the route, or split it into one route per actor.",
+        example: "actor User { auth = Bearer(secret = \"AUTH_JWT_SECRET\"), identity = UserId }\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 5_000_000)\non PUT(\"/avatars\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by who: User | Visitor { … }   // ✗ a sum of actors\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 5_000_000)\non PUT(\"/avatars\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by who: User { … }             // ✓ one actor",
+        page: "/book/reference/http",
+        anchor: "streamed-request-bodies",
+    },
+    Explain {
+        code: "bynk.http.stream_body_signature",
+        blurb: "A `Signature` actor checks an HMAC over the whole request body before the handler runs, so the body has to be held in full. A streamed `body` is read by the handler afterwards, a chunk at a time, and could not have been verified. Take `body: Bytes` on a signed route (a webhook, say), or sign the head (a header or the path) and verify the content another way.",
+        example: "actor Hook { auth = Signature(secret = \"HOOK_SECRET\", header = \"X-Signature\") }\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non POST(\"/hook\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by h: Hook { … }   // ✗ unverifiable\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non POST(\"/hook\") (body: Bytes) -> Effect[HttpResult[()]] by h: Hook { … }          // ✓",
+        page: "/book/reference/http",
+        anchor: "streamed-request-bodies",
     },
     Explain {
         code: "bynk.http.unbound_path_param",
@@ -6083,7 +6111,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 handler parameter or result, a store field or an event field, nor can a record \
                 or sum that carries one in a field, at any depth. Drain it with `collect()` \
                 and send or keep the resulting `List`. A capability operation may take or \
-                return a stream, since its provider runs in the caller's own isolate.",
+                return a stream, since its provider runs in the caller's own isolate, and a \
+                `@raw` HTTP handler's `body` may be a `Stream[Bytes]`, the request body as it \
+                arrives.",
         example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
                   service s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
         page: "/book/reference/types",
@@ -6255,6 +6285,19 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // tests/ages.test.bynk\n\
                   let a = Val[Age](20, 30)   // ✗ two pins\n\
                   let a = Val[Age](20)       // ✓ one",
+        page: "/book/reference/testing",
+        anchor: "val",
+    },
+    Explain {
+        code: "bynk.val.generic_type",
+        blurb: "`Val[T]` fabricates a value for a test from the declaration of `T`. \
+                That is not yet done for each instantiation of a generic type, so \
+                `Val` refuses one whether it is written bare, `Val[Box]`, or \
+                applied, `Val[Box[Int]]`. The type itself is fine, and may cross a \
+                boundary through its codec; only fabrication is missing. Build the \
+                value yourself instead: a record literal for a generic record, \
+                one of its variants for a generic sum.",
+        example: "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
         page: "/book/reference/testing",
         anchor: "val",
     },
@@ -7499,11 +7542,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["type_decl"],
     ),
     dg(
-        "bynk.generics.generic_record_at_boundary",
-        "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). Since v0.174 a generic-record instantiation may otherwise cross a boundary through its monomorphised codec.",
-        &[],
-    ),
-    dg(
         "bynk.generics.generic_sum_embeds",
         "A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593).",
         &["type_decl"],
@@ -7560,7 +7598,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.generics.uninferable_type_arg",
-        "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value in v0.20a.",
+        "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value.",
         &["call"],
     ),
     dg(
@@ -7694,6 +7732,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cache_unknown_arg",
         "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).",
     ),
+    warn(dg(
+        "bynk.http.cookie_cross_site_without_credentials",
+        "A service attaches a `SameSite.Unrestricted` cookie but declares no `cors { credentials: true }`, so a cross-origin `fetch` can never send it back (warning).",
+        &["http_handler"],
+    )),
+    warn(dg(
+        "bynk.http.cookie_domain_widens",
+        "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning).",
+        &["http_handler"],
+    )),
     dg(
         "bynk.http.cookie_host_prefix",
         "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`.",
@@ -7915,7 +7963,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.raw_body_not_bytes",
-        "The `body` of a `@raw` handler is not typed `Bytes`.",
+        "The `body` of a `@raw` handler is not typed `Bytes` or `Stream[Bytes]`.",
     ),
     d(
         "bynk.http.raw_body_unbounded",
@@ -7963,6 +8011,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.security_unknown_field",
         "A `security { }` policy declares a field outside the closed set.",
+    ),
+    d(
+        "bynk.http.stream_body_not_raw",
+        "A `Stream[Bytes]` `body` is on a handler that is not `@raw`.",
+    ),
+    d(
+        "bynk.http.stream_body_on_sum_route",
+        "A route with a streamed `body` has a `by` clause that is a sum of actors, whose wrapper reads the body itself.",
+    ),
+    d(
+        "bynk.http.stream_body_signature",
+        "A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first.",
     ),
     dg(
         "bynk.http.unbound_path_param",
@@ -10164,6 +10224,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.val.arity",
         "`Val[T]` was given the wrong number of pin arguments.",
+        &["val_expr"],
+    ),
+    dg(
+        "bynk.val.generic_type",
+        "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379.",
         &["val_expr"],
     ),
     dg(

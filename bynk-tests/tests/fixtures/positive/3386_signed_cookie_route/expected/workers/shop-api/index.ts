@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __boundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __requestHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -37,7 +37,7 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/session" || path === "/me" || path === "/theme" || path === "/rename")) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/session" || path === "/cookie-header" || path === "/me" || path === "/theme" || path === "/rename")) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
@@ -45,6 +45,14 @@ export default {
           __route = "DELETE /session";
           const result = await surface.http_DELETE_session(request);
           return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: void) => null), __cors_api, request.headers.get("origin")), __security_api);
+        }
+      }
+      {
+        if ((method === "GET" || method === "HEAD") && path === "/cookie-header") {
+          __route = "GET /cookie-header";
+          const result = await surface.http_GET_cookie_header(request, __requestHeaders(request, "__Host-session"));
+          const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
@@ -74,6 +82,11 @@ export default {
           const result = await surface.http_POST_rename(request);
           return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: void) => null), __cors_api, request.headers.get("origin")), __security_api);
         }
+      }
+      if (path === "/cookie-header") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
       if (path === "/me") {
         const __status = method === "OPTIONS" ? 204 : 405;

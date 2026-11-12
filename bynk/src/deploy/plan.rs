@@ -1013,7 +1013,7 @@ pub fn run(
         &opts.environment,
     )
     .with_hyperdrive(&order, &resources, &lock, &hyperdrive_wants);
-    print_plan(&plan, opts.format);
+    print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return ExitCode::SUCCESS;
     }
@@ -2250,7 +2250,7 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
     }
 }
 
-fn print_plan(plan: &Plan<'_>, format: DeployFormat) {
+pub(super) fn print_plan(plan: &Plan<'_>, format: DeployFormat) {
     print!("{}", plan_report(plan, format));
 }
 
