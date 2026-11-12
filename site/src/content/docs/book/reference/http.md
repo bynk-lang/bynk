@@ -926,8 +926,9 @@ service archives from http {
 - **Answering without reading** is allowed: the unread body is discarded when the request
   ends. A client that is still sending a large body may see a reset instead of the
   response. A handler cannot read the request after it has returned, so read first, then
-  answer; a `RawStreamed` response built from the request stream is read as the response
-  is sent.
+  answer. Do not build a response from the request stream (a streamed echo through
+  `RawStreamed`): workerd allows it on its own, but it failed under `wrangler dev`'s
+  proxy, and it is not checked on Cloudflare's edge.
 - **Retries and idempotency.** A request body cannot be replayed, so a client that retries
   sends it again. Take an [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
   key from the request's head (a path segment or a header), not the body.
