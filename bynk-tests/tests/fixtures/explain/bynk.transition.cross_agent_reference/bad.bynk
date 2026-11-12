@@ -1,0 +1,23 @@
+context demo
+
+agent Total {
+    key id: String
+    store sum: Cell[Int] = 0
+
+    on call get() -> Effect[Int] {
+        Effect.pure(sum)
+    }
+}
+
+agent Counter {
+    key id: String
+    store count: Cell[Int] = 0
+
+    transition within_total: new.count <= Total("all").get()
+
+    on call bump() -> Effect[()] {
+        let cur = count
+        count := cur + 1
+        Effect.pure(())
+    }
+}

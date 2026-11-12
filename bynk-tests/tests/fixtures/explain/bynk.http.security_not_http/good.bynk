@@ -1,0 +1,9 @@
+context jobs
+
+service api from http {
+    security { hsts: 180.days }
+
+    on GET("/items") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

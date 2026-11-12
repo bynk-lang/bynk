@@ -1116,7 +1116,7 @@ the message lists the qualified forms (`DbError.Failed(...)` or
 `MailError.Failed(...)`). A `match` arm or `is` pattern never needs
 qualifying, because it reads its scrutinee's sum.
 
-### Error embeddings (v0.154)
+### Error embeddings (v0.154) {#error-embeddings}
 
 A sum used as an error type may declare **embeddings** — a trailing
 `embeds <type> as <Variant>` clause naming a single-payload variant that wraps a

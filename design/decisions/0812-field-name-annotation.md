@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A record field may carry `@name("…")` before it, naming the key the field has on a request where that is not an identifier; this slice adds the syntax and its checks, and the request readers follow (#3343, slice 1)
-probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
----
+# 0812 — `@name("…")` field annotation for external names that are not identifiers
 
-## ADR: field-name-annotation
-title: `@name("…")` field annotation for external names that are not identifiers
-summary: The first field annotation in the language, how it is parsed and where it is legal
+- **Status:** Accepted (v0.557)
 
 **Context.** A typed request record names its inputs by field name, and a field name is an identifier. Real wire names are often not: a `__Host-sid` cookie, a `filter[status]` or `page-size` query key, a `g-recaptcha-response` form field. Today the only way to read one is the raw view (`RequestQuery`, `RequestCookies`), which gives up the boundary's typing and validation. Proposed and accepted as #3343 (general annotation: yes; refuse it on a record also used as a JSON body or store type; refuse case-only duplicate names for cookies and query).
 

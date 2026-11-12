@@ -1,0 +1,14 @@
+context demo
+
+agent Counter {
+    key id: String
+    store count: Cell[Int] = 0
+
+    invariant positive: Effect.pure(count >= 0)
+
+    on call bump() -> Effect[()] {
+        let cur = count
+        count := cur + 1
+        Effect.pure(())
+    }
+}

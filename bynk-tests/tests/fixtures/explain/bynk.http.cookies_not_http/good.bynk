@@ -1,0 +1,9 @@
+context api
+
+type Session = { sid: Option[String] }
+
+service ticker from http {
+    on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

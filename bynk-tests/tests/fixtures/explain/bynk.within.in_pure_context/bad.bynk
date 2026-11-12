@@ -1,0 +1,8 @@
+context demo
+
+consumes bynk { TimedOut }
+
+fn bounded(e: Effect[Int]) -> Int {
+    let r = e.within(1.seconds)
+    0
+}

@@ -1,0 +1,15 @@
+context demo
+
+consumes bynk.cloudflare { EdgeCache }
+
+capability Edge = EdgeCache
+
+agent Index {
+    key name: String
+
+    store hits: Cell[Int]
+
+    on call withdraw(path: String) -> Effect[Bool] given Edge {
+        Edge.purge([path])
+    }
+}
