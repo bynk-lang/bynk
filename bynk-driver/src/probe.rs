@@ -13,6 +13,8 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::npm_install::PackageManager;
+
 /// A parsed tool version. Missing components default to zero, so `"v18"` parses
 /// as `18.0.0` and compares sensibly against a major-version floor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,8 +67,8 @@ impl std::fmt::Display for Version {
 
 /// Where a tool was found — the **provenance** half of a probe. The distinction
 /// between [`Provenance::Path`]/[`Provenance::ProjectLocal`] (installed) and
-/// [`Provenance::Npx`] (fetchable on demand) is the whole point: `npx --yes`
-/// will *download* a package at first use, so it must never read as a green
+/// [`Provenance::Runner`] (fetchable on demand) is the whole point: `npx --yes`
+/// (or `pnpm dlx`, `bunx`) will *download* a package at first use, so it must never read as a green
 /// "ok".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Provenance {
@@ -74,9 +76,10 @@ pub enum Provenance {
     Path(PathBuf),
     /// In a project-local `node_modules/.bin` (preferred over `PATH`).
     ProjectLocal(PathBuf),
-    /// Not installed, but **provisionable** via `npx --yes <tool>` — a deferred
-    /// download, not a present tool.
-    Npx,
+    /// Not installed, but **provisionable** through the package manager's
+    /// runner (`npx --yes`, `pnpm dlx`, `bunx`) — a deferred download, not a
+    /// present tool. Holds the manager whose runner it is.
+    Runner(PackageManager),
     /// Not found, and not provisionable.
     Missing,
 }
@@ -87,8 +90,20 @@ impl Provenance {
         match self {
             Provenance::Path(_) => "path",
             Provenance::ProjectLocal(_) => "project-local",
-            Provenance::Npx => "npx",
+            Provenance::Runner(PackageManager::Pnpm) => "pnpm-dlx",
+            Provenance::Runner(PackageManager::Bun) => "bunx",
+            // Yarn classic has no runner of its own and never reaches here.
+            Provenance::Runner(PackageManager::Npm | PackageManager::Yarn) => "npx",
             Provenance::Missing => "missing",
+        }
+    }
+
+    /// The runner that would fetch the tool (`npx`, `pnpm dlx`, `bunx`), for
+    /// provisionable tools.
+    pub fn runner_label(&self) -> Option<&'static str> {
+        match self {
+            Provenance::Runner(m) => m.runner_label().or(Some("npx")),
+            _ => None,
         }
     }
 
@@ -119,9 +134,9 @@ impl Probe {
         )
     }
 
-    /// Absent but fetchable on demand via `npx`.
+    /// Absent but fetchable on demand through a runner (`npx`, `pnpm dlx`, `bunx`).
     pub fn is_provisionable(&self) -> bool {
-        matches!(self.provenance, Provenance::Npx)
+        matches!(self.provenance, Provenance::Runner(_))
     }
 
     /// Neither installed nor provisionable.
@@ -130,13 +145,15 @@ impl Probe {
     }
 }
 
-/// How a detection should look: where to search, and whether `npx`
+/// How a detection should look: where to search, and whether a runner's
 /// fetch-on-demand counts as a (provisionable) fallback. `node` itself is never
-/// `allow_npx` — you cannot `npx` a runtime.
+/// `allow_npx` — you cannot `npx` a runtime. `manager` is the package manager
+/// whose runner is tried first (`None`: npm, so `npx`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DetectOpts<'a> {
     pub project_root: Option<&'a Path>,
     pub allow_npx: bool,
+    pub manager: Option<PackageManager>,
 }
 
 /// Abstraction over the host so detection is testable. The real implementation
@@ -153,7 +170,7 @@ pub trait Toolbox {
 }
 
 /// Detect a single tool: project-local first (it wins over a global install),
-/// then `PATH`, then — only if `allow_npx` — an `npx` provisionable fallback,
+/// then `PATH`, then — only if `allow_npx` — a runner-provisionable fallback,
 /// else missing.
 pub fn detect(tb: &dyn Toolbox, tool: &str, opts: DetectOpts<'_>) -> Probe {
     if let Some(root) = opts.project_root {
@@ -175,11 +192,13 @@ pub fn detect(tb: &dyn Toolbox, tool: &str, opts: DetectOpts<'_>) -> Probe {
             provenance: Provenance::Path(p),
         };
     }
-    if opts.allow_npx && tb.npx_available() {
+    if opts.allow_npx
+        && let Some(runner) = opts.manager.unwrap_or(PackageManager::Npm).runner(tb)
+    {
         return Probe {
             tool: tool.to_string(),
             version: None,
-            provenance: Provenance::Npx,
+            provenance: Provenance::Runner(runner),
         };
     }
     Probe {
@@ -187,6 +206,23 @@ pub fn detect(tb: &dyn Toolbox, tool: &str, opts: DetectOpts<'_>) -> Probe {
         version: None,
         provenance: Provenance::Missing,
     }
+}
+
+/// Detect `tool` for the project at `project_root`: project-local first, then
+/// `PATH`, then the runner of the package manager detected for the project.
+/// Returns that manager too, since hints follow it.
+pub fn detect_in_project(
+    tb: &dyn Toolbox,
+    tool: &str,
+    project_root: &Path,
+) -> (PackageManager, Probe) {
+    let manager = crate::npm_install::manager_in(project_root, tb);
+    let opts = DetectOpts {
+        project_root: Some(project_root),
+        allow_npx: true,
+        manager: Some(manager),
+    };
+    (manager, detect(tb, tool, opts))
 }
 
 /// #1758: the program to spawn for `tool`: the path `which` resolves on

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use bynk::doctor::{self, Capability, Context, DoctorOptions, Level};
 use bynk::probe::{self, DetectOpts, Provenance, Toolbox, Version};
 use bynk::report::{self, Format};
+use bynk_driver::npm_install::PackageManager;
 
 // ---------------------------------------------------------------------------
 // Fake toolbox
@@ -141,6 +142,7 @@ fn project_local_is_preferred_over_global() {
         DetectOpts {
             project_root: Some(&root),
             allow_npx: true,
+            ..DetectOpts::default()
         },
     );
     assert_eq!(
@@ -159,11 +161,52 @@ fn npx_is_provisionable_not_present() {
         DetectOpts {
             project_root: None,
             allow_npx: true,
+            ..DetectOpts::default()
         },
     );
     assert!(probe.is_provisionable());
     assert!(!probe.is_present(), "npx must never read as installed");
-    assert_eq!(probe.provenance, Provenance::Npx);
+    assert_eq!(probe.provenance, Provenance::Runner(PackageManager::Npm));
+}
+
+/// The probe follows the package manager: pnpm's runner is `pnpm`, bun's is
+/// `bunx`, and Yarn classic, with no runner, falls back to `npx`.
+#[test]
+fn provisionable_follows_the_package_manager_runner() {
+    let probe_for = |fake: &Fake, manager| {
+        probe::detect(
+            fake,
+            "wrangler",
+            DetectOpts {
+                project_root: None,
+                allow_npx: true,
+                manager: Some(manager),
+            },
+        )
+    };
+    let fake = Fake::default()
+        .path_tool("pnpm", "/usr/bin/pnpm", None)
+        .path_tool("bunx", "/usr/bin/bunx", None)
+        .with_npx();
+    for (manager, token) in [
+        (PackageManager::Pnpm, "pnpm-dlx"),
+        (PackageManager::Bun, "bunx"),
+        (PackageManager::Npm, "npx"),
+        // Yarn classic has no runner: `npx` is on PATH, so it is used.
+        (PackageManager::Yarn, "npx"),
+    ] {
+        let probe = probe_for(&fake, manager);
+        assert!(probe.is_provisionable(), "{manager:?}");
+        assert_eq!(probe.provenance.token(), token, "{manager:?}");
+    }
+    // Yarn classic with no `npx`: nothing to provision with.
+    assert!(probe_for(&Fake::default(), PackageManager::Yarn).is_missing());
+    // A detected tool that is not installed falls back to `npx` too.
+    let npx_only = Fake::default().with_npx();
+    assert_eq!(
+        probe_for(&npx_only, PackageManager::Pnpm).provenance,
+        Provenance::Runner(PackageManager::Npm)
+    );
 }
 
 #[test]
@@ -175,6 +218,7 @@ fn absent_with_no_npx_is_missing() {
         DetectOpts {
             project_root: None,
             allow_npx: true,
+            ..DetectOpts::default()
         },
     );
     assert!(probe.is_missing());
@@ -583,4 +627,98 @@ fn human_smoke() {
         assert!(out.contains(token), "human output missing {token}");
     }
     assert!(out.contains("bynk doctor"));
+}
+
+/// A project root holding only a lockfile, so the package manager is detected
+/// by the lockfile rule.
+fn project_with_lockfile(name: &str, lockfile: &str) -> TempProject {
+    let dir = std::env::temp_dir().join(format!("bynk-doctor-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp project");
+    std::fs::write(dir.join(lockfile), "").expect("lockfile");
+    TempProject(dir)
+}
+
+/// A temporary project directory, removed on drop so a failed run cleans up too.
+struct TempProject(PathBuf);
+
+impl Drop for TempProject {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// #3426: `bynk doctor` names the runner it would use and the install commands
+/// of the project's own package manager, not `npx` and `npm install -g`.
+#[test]
+fn doctor_follows_the_projects_package_manager() {
+    // Detection reads the process environment, and an explicit setting beats the
+    // lockfile, so this test does not apply when one is set.
+    if std::env::var_os(bynk_driver::npm_install::PACKAGE_MANAGER_ENV).is_some() {
+        eprintln!("skipping: BYNK_PACKAGE_MANAGER is set");
+        return;
+    }
+    let tested = bynk_emit::TYPESCRIPT_MAJOR_TESTED;
+    let root = project_with_lockfile("pnpm", "pnpm-lock.yaml");
+    let context = Context {
+        project_root: Some(root.0.clone()),
+        in_repo: false,
+        node_floor: bynk_emit::NODE_FLOOR,
+    };
+    let fake = Fake::default()
+        .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
+        .path_tool("pnpm", "/usr/bin/pnpm", None);
+    let report = doctor::diagnose(&fake, &context, &bare());
+    let row_of = |c: Capability, label: &str| {
+        cap(&report, c)
+            .rows
+            .iter()
+            .find(|row| row.label == label)
+            .unwrap_or_else(|| panic!("a {label} row"))
+            .clone()
+    };
+
+    let runner = row_of(Capability::Test, "tsc | tsx");
+    assert_eq!(
+        runner.detail,
+        "tsc provisionable via pnpm dlx (not installed)"
+    );
+    assert!(
+        runner.remedy.as_deref().is_some_and(|r| r
+            .starts_with(&format!("pnpm add -g typescript@{tested}"))
+            && r.contains("`pnpm add -g tsx`")
+            && !r.contains("npm install")),
+        "{:?}",
+        runner.remedy
+    );
+
+    let wrangler = row_of(Capability::Deploy, "wrangler");
+    assert_eq!(
+        wrangler.detail,
+        "provisionable via pnpm dlx (not installed)"
+    );
+    // The stale-cache note is npx's own; pnpm's remedy is the install alone.
+    assert_eq!(wrangler.remedy.as_deref(), Some("pnpm add -g wrangler@4"));
+
+    // Yarn classic has no runner: with `npx` on PATH it is the fallback, named so.
+    let yarn_root = project_with_lockfile("yarn", "yarn.lock");
+    let yarn_context = Context {
+        project_root: Some(yarn_root.0.clone()),
+        ..context
+    };
+    let report = doctor::diagnose(&fake.with_npx(), &yarn_context, &bare());
+    let wrangler = cap(&report, Capability::Deploy)
+        .rows
+        .iter()
+        .find(|row| row.label == "wrangler")
+        .expect("a wrangler row")
+        .clone();
+    assert_eq!(wrangler.detail, "provisionable via npx (not installed)");
+    assert!(
+        wrangler
+            .remedy
+            .as_deref()
+            .is_some_and(|r| r.starts_with("yarn global add wrangler@4")),
+        "{:?}",
+        wrangler.remedy
+    );
 }

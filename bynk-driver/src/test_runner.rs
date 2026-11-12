@@ -17,6 +17,7 @@ use std::process::{Command as ProcCommand, ExitCode, Stdio};
 use crate::project::{BuildTarget, ImportExt, ProjectOutput};
 use clap::ValueEnum;
 
+use crate::npm_install::PackageManager;
 use crate::probe::{DetectOpts, SystemToolbox};
 use crate::test_json::{Case, Location, Suite, TestRun};
 
@@ -968,11 +969,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // #1672: the `npx` fallback provisions the TypeScript major the output is
     // verified against and users get, not an older pin.
     let typescript_pkg = format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
+    let manager = crate::npm_install::system_tool_manager(&input);
     let mut start_failures: Vec<String> = Vec::new();
-    let tsc_runners: Vec<(&str, Vec<&str>)> = vec![
-        ("tsc", vec![]),
-        ("npx", vec!["--yes", "-p", typescript_pkg.as_str(), "tsc"]),
-    ];
+    let tsc_runners = crate::npm_install::system_tool_ladder("tsc", &typescript_pkg, manager);
     for (prog, prefix) in &tsc_runners {
         let Some(path) = resolve_tool(prog) else {
             continue;
@@ -1099,7 +1098,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // #1761 review: a `tsc` that is installed but won't start is reported as
         // such here too, not as missing.
         if !start_failures.is_empty() {
-            return report_start_failures(program, json, stream, &start_failures, true);
+            return report_start_failures(program, json, stream, &start_failures, true, manager);
         }
         return coverage_unsupported(
             program,
@@ -1109,7 +1108,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     // tsx fallback chain.
-    let tsx_runners: Vec<(&str, Vec<&str>)> = vec![("tsx", vec![]), ("npx", vec!["--yes", "tsx"])];
+    let tsx_runners = crate::npm_install::system_tool_ladder("tsx", "tsx", manager);
     for (prog, prefix) in &tsx_runners {
         let Some(path) = resolve_tool(prog) else {
             continue;
@@ -1149,7 +1148,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     if !start_failures.is_empty() {
-        return report_start_failures(program, json, stream, &start_failures, false);
+        return report_start_failures(program, json, stream, &start_failures, false, manager);
     }
 
     if json {
@@ -1164,7 +1163,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         eprintln!(
             "{program} test: requires either `tsc` (with Node.js) or `tsx` on PATH. \
              Install one of:\n{}",
-            install_advice(false)
+            install_advice(manager, false)
         );
     }
     ExitCode::FAILURE
@@ -1226,6 +1225,7 @@ fn report_start_failures(
     stream: bool,
     failures: &[String],
     coverage: bool,
+    manager: PackageManager,
 ) -> ExitCode {
     if json {
         crate::test_stream::print_run(
@@ -1237,23 +1237,29 @@ fn report_start_failures(
         for failure in failures {
             eprintln!("  - {failure}");
         }
-        eprintln!("Or install another:\n{}", install_advice(coverage));
+        eprintln!("Or install another:\n{}", install_advice(manager, coverage));
     }
     ExitCode::FAILURE
 }
 
 /// The install advice for a missing or broken runner, one indented line each.
 /// With `coverage`, only `tsc`, since `--coverage` doesn't accept `tsx`.
-fn install_advice(coverage: bool) -> String {
+fn install_advice(manager: PackageManager, coverage: bool) -> String {
     let tsc = format!(
-        "  - `npm install -g typescript@{}` (provides tsc, which type-checks; requires Node.js to run output)",
-        bynk_emit::TYPESCRIPT_MAJOR_TESTED
+        "  - `{}` (provides tsc, which type-checks; requires Node.js to run output)",
+        manager.global_install(&format!(
+            "typescript@{}",
+            bynk_emit::TYPESCRIPT_MAJOR_TESTED
+        ))
     );
     if coverage {
         return tsc;
     }
+    // A manager with no runner (Yarn classic) points at the `npx` it falls back to.
+    let runner = manager.runner_label().unwrap_or("npx");
     format!(
-        "{tsc}\n  - `npm install -g tsx` (runs TypeScript in one step, without type-checking)\n  Or run inside a project where `npx tsc` / `npx tsx` resolves."
+        "{tsc}\n  - `{}` (runs TypeScript in one step, without type-checking)\n  Or run inside a project where `{runner} tsc` / `{runner} tsx` resolves.",
+        manager.global_install("tsx")
     )
 }
 

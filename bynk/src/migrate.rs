@@ -301,6 +301,7 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
         crate::probe::DetectOpts {
             project_root: Some(root),
             allow_npx: true,
+            manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
     let secrets = live::WranglerSecrets {

@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use bynk::dev::{self, SelectError};
 use bynk::doctor::{self, Capability, Context, DoctorOptions};
 use bynk::probe::{Toolbox, Version};
+use bynk_driver::npm_install::PackageManager;
 
 // ---------------------------------------------------------------------------
 // Minimal fake toolbox (deterministic, host-independent)
@@ -214,15 +215,15 @@ fn dev_warns_about_a_wrangler_too_old_for_the_compatibility_date() {
             DetectOpts {
                 project_root: Some(Path::new("/proj")),
                 allow_npx: true,
+                ..DetectOpts::default()
             },
         )
     };
 
-    let notice = dev::wrangler_age_notice(&detect(&Fake::default().path_tool(
-        "wrangler",
-        "/usr/bin/wrangler",
-        old,
-    )))
+    let notice = dev::wrangler_age_notice(
+        &detect(&Fake::default().path_tool("wrangler", "/usr/bin/wrangler", old)),
+        PackageManager::Npm,
+    )
     .expect("an old wrangler is warned about");
     for part in [
         format!("wrangler {old}"),
@@ -234,25 +235,43 @@ fn dev_warns_about_a_wrangler_too_old_for_the_compatibility_date() {
     }
 
     assert_eq!(
-        dev::wrangler_age_notice(&detect(&Fake::default().path_tool(
-            "wrangler",
-            "/usr/bin/wrangler",
-            min
-        ))),
+        dev::wrangler_age_notice(
+            &detect(&Fake::default().path_tool("wrangler", "/usr/bin/wrangler", min)),
+            PackageManager::Npm
+        ),
         None
     );
-    assert_eq!(dev::wrangler_age_notice(&detect(&Fake::default())), None);
+    assert_eq!(
+        dev::wrangler_age_notice(&detect(&Fake::default()), PackageManager::Npm),
+        None
+    );
 
     // The project's own wrangler is the one `bynk dev` runs, so the fix upgrades
     // it in the project; a global install wouldn't change what runs.
-    let notice = dev::wrangler_age_notice(&detect(
-        &Fake::default()
-            .path_tool("wrangler", "/usr/bin/wrangler", min)
-            .local_tool("wrangler", "/proj/node_modules/.bin/wrangler", old),
-    ))
+    let notice = dev::wrangler_age_notice(
+        &detect(
+            &Fake::default()
+                .path_tool("wrangler", "/usr/bin/wrangler", min)
+                .local_tool("wrangler", "/proj/node_modules/.bin/wrangler", old),
+        ),
+        PackageManager::Npm,
+    )
     .expect("an old project-local wrangler is warned about");
     assert!(
         notice.contains("npm install --save-dev wrangler@4 (in the project)"),
         "{notice}"
+    );
+    let pnpm = dev::wrangler_age_notice(
+        &detect(
+            &Fake::default()
+                .path_tool("wrangler", "/usr/bin/wrangler", min)
+                .local_tool("wrangler", "/proj/node_modules/.bin/wrangler", old),
+        ),
+        PackageManager::Pnpm,
+    )
+    .expect("an old project-local wrangler is warned about");
+    assert!(
+        pnpm.contains("pnpm add -D wrangler@4 (in the project)"),
+        "{pnpm}"
     );
 }

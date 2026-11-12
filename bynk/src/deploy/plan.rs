@@ -1098,16 +1098,9 @@ pub fn run(
     ) {
         return ExitCode::FAILURE;
     }
-    let probe = probe::detect(
-        tb,
-        "wrangler",
-        DetectOpts {
-            project_root: Some(project_root),
-            allow_npx: true,
-        },
-    );
+    let (manager, probe) = probe::detect_in_project(tb, "wrangler", project_root);
     // #1796: before authenticating, so the refusal costs no network call.
-    if let Some(refusal) = wrangler_floor_refusal(&probe, &order, &resources) {
+    if let Some(refusal) = wrangler_floor_refusal(&probe, manager, &order, &resources) {
         eprintln!("{refusal}");
         return ExitCode::FAILURE;
     }
@@ -1896,6 +1889,7 @@ pub(crate) fn foreign_binding_maybe_set_notice(
 /// ([`doctor::wrangler_below_min`]'s own rule).
 pub(crate) fn wrangler_floor_refusal(
     probe: &probe::Probe,
+    manager: bynk_driver::npm_install::PackageManager,
     order: &[String],
     resources: &BTreeMap<String, Resources>,
 ) -> Option<String> {
@@ -1909,7 +1903,7 @@ pub(crate) fn wrangler_floor_refusal(
         "bynk: wrangler {version} is older than {}, the first that reads the Durable Object \
          `exports` `{worker}` declares; the push would fail. Upgrade with `{}`.",
         bynk_emit::WRANGLER_MIN,
-        doctor::wrangler_upgrade_remedy(probe)
+        doctor::wrangler_upgrade_remedy(probe, manager)
     ))
 }
 
@@ -3051,6 +3045,7 @@ pub(crate) mod tests {
     use crate::deploy::config::tests::project;
     use crate::deploy::graph::tests::graph;
     use crate::deploy::ledger::tests::{lock_with_deployed, with_kv, with_queue};
+    use bynk_driver::npm_install::PackageManager;
 
     /// Two contexts that list the same `SignedCookie` key binding: a login service that issues
     /// the cookie and an API that it guards (#3386).
@@ -4060,8 +4055,9 @@ pub(crate) mod tests {
         ]);
         let both = names(&["api", "jobs"]);
 
-        let refusal = wrangler_floor_refusal(&wrangler(old), &both, &resources)
-            .expect("an agent-bearing push below the floor is refused");
+        let refusal =
+            wrangler_floor_refusal(&wrangler(old), PackageManager::Npm, &both, &resources)
+                .expect("an agent-bearing push below the floor is refused");
         for part in [
             format!("wrangler {old}"),
             bynk_emit::WRANGLER_MIN.to_string(),
@@ -4070,23 +4066,35 @@ pub(crate) mod tests {
         ] {
             assert!(refusal.contains(&part), "missing {part:?} in: {refusal}");
         }
+        // The upgrade command follows the detected package manager.
+        let pnpm = wrangler_floor_refusal(&wrangler(old), PackageManager::Pnpm, &both, &resources)
+            .expect("refused");
+        assert!(pnpm.contains("`pnpm add -g wrangler@4`") && !pnpm.contains("npm install"));
 
         // No class in what's pushed (`--context api`), the floor itself, or an
         // unversioned npx wrangler: nothing to refuse.
         assert_eq!(
-            wrangler_floor_refusal(&wrangler(old), &names(&["api"]), &resources),
+            wrangler_floor_refusal(
+                &wrangler(old),
+                PackageManager::Npm,
+                &names(&["api"]),
+                &resources
+            ),
             None
         );
         assert_eq!(
-            wrangler_floor_refusal(&wrangler(min), &both, &resources),
+            wrangler_floor_refusal(&wrangler(min), PackageManager::Npm, &both, &resources),
             None
         );
         let npx = probe::Probe {
             tool: "wrangler".to_string(),
             version: None,
-            provenance: probe::Provenance::Npx,
+            provenance: probe::Provenance::Runner(PackageManager::Npm),
         };
-        assert_eq!(wrangler_floor_refusal(&npx, &both, &resources), None);
+        assert_eq!(
+            wrangler_floor_refusal(&npx, PackageManager::Npm, &both, &resources),
+            None
+        );
     }
 
     /// State-migrations S3 (#2248): a rename and a deletion each get a plan

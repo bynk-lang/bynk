@@ -79,7 +79,9 @@ wrangler's runtime refuses a newer date outright. It doesn't fall back, so
 wrangler that `doctor` would fetch with `npx` can't be versioned without running
 it. If `bynk dev` then fails with "This Worker requires
 compatibility date …", the npx cache holds an older wrangler: clear
-`~/.npm/_npx`, or install one with `npm install -g wrangler@4`.
+`~/.npm/_npx`, or install one with `npm install -g wrangler@4`. (Under pnpm, bun
+or Yarn, the fix is that tool's install command, such as `pnpm add -g
+wrangler@4`.)
 
 An older wrangler also can't deploy an agent. Every generated `wrangler.toml`
 declares its Durable Object classes in an `exports` map, which wrangler reads
@@ -98,13 +100,23 @@ been checked under that major yet, not that anything is wrong. So
 also satisfies the requirement, but it only runs the tests: it doesn't
 type-check them.
 
-### Provenance, and why `npx` isn't "ok"
+### Provenance, and why a runner isn't "ok"
 
 Each tool reports **where** it was found: on your global `PATH`, in a
-project-local `node_modules/.bin`, or only **provisionable via `npx`**. That last
-one is a warning, not a pass: `npx --yes` *downloads* the package the first time
-you use it, so an environment that "works via npx" still pauses to fetch on first
-real use. `doctor` tells you the difference.
+project-local `node_modules/.bin`, or only **provisionable** through your package
+manager's runner: `npx`, `pnpm dlx` or `bunx`. The row names the one it would use
+("provisionable via `pnpm dlx`"), and its `--format json` provenance is `npx`,
+`pnpm-dlx` or `bunx`. That last one is a warning, not a pass: the runner
+*downloads* the package the first time you use it, so an environment that "works
+via `npx`" still pauses to fetch on first real use. `doctor` tells you the
+difference.
+
+The runner and the fix lines follow the [package
+manager bynk detects](/docs/bynk-cli/#installing-npm-packages) for the project (the `package
+manager` row): `pnpm add -g wrangler@4` for a pnpm project, `bun add -g` for bun,
+`yarn global add` for Yarn classic. Yarn classic has no runner, so `doctor` names
+`npx` when it is on `PATH`. A project-local fix uses `pnpm add -D`, `bun add -d`
+or `yarn add -D` the same way.
 
 ### The in-process compiler
 

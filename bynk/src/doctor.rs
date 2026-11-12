@@ -15,6 +15,8 @@
 
 use std::path::PathBuf;
 
+use bynk_driver::npm_install::PackageManager;
+
 use crate::probe::{self, DetectOpts, Probe, Provenance, Toolbox};
 
 /// A unit of work a user might want to do, and the tools it needs.
@@ -228,6 +230,7 @@ fn detect_node(tb: &dyn Toolbox, root: Option<&std::path::Path>, floor: (u32, u3
         DetectOpts {
             project_root: root,
             allow_npx: false,
+            manager: None,
         },
     );
     let shown = format!("{}.{}", floor.0, floor.1);
@@ -263,28 +266,22 @@ fn detect_node(tb: &dyn Toolbox, root: Option<&std::path::Path>, floor: (u32, u3
 
 /// The `tsc | tsx` runner requirement — satisfied by the *better* of the two.
 fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
-    let tsc = probe::detect(
-        tb,
-        "tsc",
-        DetectOpts {
-            project_root: root,
-            allow_npx: true,
-        },
-    );
-    let tsx = probe::detect(
-        tb,
-        "tsx",
-        DetectOpts {
-            project_root: root,
-            allow_npx: true,
-        },
-    );
+    let manager = tool_manager(tb, root);
+    let opts = DetectOpts {
+        project_root: root,
+        allow_npx: true,
+        manager: Some(manager),
+    };
+    let tsc = probe::detect(tb, "tsc", opts);
+    let tsx = probe::detect(tb, "tsx", opts);
     let best = pick_better(&tsc, &tsx);
     let tested = bynk_emit::TYPESCRIPT_MAJOR_TESTED;
     // #1672: lead with the TypeScript that is verified, and the one that
     // type-checks; `tsx` only runs the emitted code.
     let remedy = format!(
-        "npm install -g typescript@{tested} (or `npm install -g tsx`, which runs tests without type-checking)"
+        "{} (or `{}`, which runs tests without type-checking)",
+        manager.global_install(&format!("typescript@{tested}")),
+        manager.global_install("tsx")
     );
     match best {
         // #1672, #3420: a `tsc` below the supported major is unsupported, a real defect
@@ -324,10 +321,14 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
             remedy: None,
         },
         Some(p) => Row {
-            // provisionable via npx
+            // provisionable through the package manager's runner
             label: "tsc | tsx".into(),
             level: Level::Warn,
-            detail: format!("{} provisionable via npx (not installed)", p.tool),
+            detail: format!(
+                "{} provisionable via {} (not installed)",
+                p.tool,
+                p.provenance.runner_label().unwrap_or("npx")
+            ),
             remedy: Some(remedy),
         },
         None => Row {
@@ -356,11 +357,21 @@ pub fn wrangler_below_min(probe: &Probe) -> bool {
 /// the project, since a global install wouldn't change what runs. Shared by
 /// `doctor`'s row and `bynk dev`'s notice so the two can't disagree. No version
 /// in it: it shows in every `--format short` line and the goldens.
-pub fn wrangler_upgrade_remedy(probe: &Probe) -> &'static str {
+pub fn wrangler_upgrade_remedy(probe: &Probe, manager: PackageManager) -> String {
     match probe.provenance {
-        Provenance::ProjectLocal(_) => "npm install --save-dev wrangler@4 (in the project)",
-        _ => "npm install -g wrangler@4",
+        Provenance::ProjectLocal(_) => {
+            format!("{} (in the project)", manager.dev_install("wrangler@4"))
+        }
+        _ => manager.global_install("wrangler@4"),
     }
+}
+
+/// The package manager the toolchain's tool fallbacks and hints follow for the
+/// project at `root`: the detected one, or npm with no project.
+fn tool_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> PackageManager {
+    root.map_or(PackageManager::Npm, |r| {
+        bynk_driver::npm_install::manager_in(r, tb)
+    })
 }
 
 /// #1732: wrangler, checked against [`bynk_emit::WRANGLER_MIN`], the oldest
@@ -385,17 +396,19 @@ fn detect_wrangler(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
     // below-minimum detail names both. Each remedy fits where wrangler came
     // from: a project's own wrangler is upgraded in the project, and only an npx
     // one can be a stale cache.
-    let install = "npm install -g wrangler@4";
+    let manager = tool_manager(tb, root);
+    let install = manager.global_install("wrangler@4");
     let probe = probe::detect(
         tb,
         "wrangler",
         DetectOpts {
             project_root: root,
             allow_npx: true,
+            manager: Some(manager),
         },
     );
     if wrangler_below_min(&probe) {
-        let remedy = wrangler_upgrade_remedy(&probe);
+        let remedy = wrangler_upgrade_remedy(&probe, manager);
         return Row {
             label: "wrangler".into(),
             level: Level::Warn,
@@ -403,11 +416,12 @@ fn detect_wrangler(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
                 "{}, below {min}: `bynk dev` can't serve compatibility date {date}, and agents can't deploy",
                 present_detail(&probe)
             ),
-            remedy: Some(remedy.into()),
+            remedy: Some(remedy),
         };
     }
-    let mut row = npm_row("wrangler", &probe, install);
-    if probe.is_provisionable() {
+    let mut row = npm_row("wrangler", &probe, &install);
+    // Only npx keys a cache on the spec (`wrangler@4`), so only it can be stale.
+    if probe.provenance == Provenance::Runner(PackageManager::Npm) {
         row.remedy = Some(format!(
             "{install}, or clear a stale npx cache (~/.npm/_npx)"
         ));
@@ -486,6 +500,7 @@ fn detect_plain(tb: &dyn Toolbox, tool: &str, remedy: &str) -> Row {
         DetectOpts {
             project_root: None,
             allow_npx: false,
+            manager: None,
         },
     );
     if probe.is_present() {
@@ -517,7 +532,10 @@ fn npm_row(tool: &str, probe: &Probe, remedy: &str) -> Row {
         Row {
             label: tool.into(),
             level: Level::Warn,
-            detail: "provisionable via npx (not installed)".into(),
+            detail: format!(
+                "provisionable via {} (not installed)",
+                probe.provenance.runner_label().unwrap_or("npx")
+            ),
             remedy: Some(remedy.into()),
         }
     } else {

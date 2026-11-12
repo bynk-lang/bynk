@@ -31,7 +31,7 @@ use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
 use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
-use crate::probe::{self, DetectOpts, Provenance, Toolbox};
+use crate::probe::{self, Provenance, Toolbox};
 use crate::report::{self, Format};
 use crate::shell::exit_status_byte;
 use crate::workers;

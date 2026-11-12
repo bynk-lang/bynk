@@ -1082,6 +1082,7 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
         probe::DetectOpts {
             project_root: Some(root),
             allow_npx: true,
+            manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
     let account = LiveAccount {

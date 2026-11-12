@@ -57,6 +57,23 @@ The package manager is the one you already use. The first match wins:
 | bun | `bun install --ignore-scripts` |
 | Yarn | `yarn install --ignore-scripts --non-interactive` (Yarn classic only; Yarn Berry is refused, because its Plug'n'Play layout leaves no `node_modules`) |
 
+The same detection chooses the tool for bynk's *own* tools (`tsc`, `tsx` and
+`wrangler`). When one is not installed, bynk fetches it with the detected tool's
+runner, and `bynk doctor` and the error messages give that tool's install
+command, not `npx` and `npm install -g`:
+
+| Tool | Runs a package's binary | Installs globally | Adds to the project |
+| --- | --- | --- | --- |
+| npm | `npx --yes -p <pkg> <bin>` | `npm install -g <pkg>` | `npm install --save-dev <pkg>` |
+| pnpm | `pnpm dlx --package <pkg> <bin>` | `pnpm add -g <pkg>` | `pnpm add -D <pkg>` |
+| bun | `bunx --package <pkg> <bin>` | `bun add -g <pkg>` | `bun add -d <pkg>` |
+| Yarn classic | none: `npx` if it is on `PATH` | `yarn global add <pkg>` | `yarn add -D <pkg>` |
+
+Yarn classic has no runner, so a Yarn project falls back to `npx` when it is on
+`PATH`, and otherwise gets the install command alone. A detected tool that is not
+installed falls back to `npx` the same way. With nothing detected, bynk uses npm,
+as it always has.
+
 The generated directory has no lockfile to respect: whichever tool installs writes
 its own there, in a directory bynk regenerates. [`bynk.lock`](/book/guides/projects-build-and-deployment/layout/)
 stays the source of truth, and an adapter's npm packages must still be approved
@@ -230,9 +247,10 @@ run it inside a member.
    `--local-worker NAME` drops it, so the dev registry connects the binding to
    your own `wrangler dev` of that Worker. `-- --remote` runs no stand-ins, and
    a `-- -c`/`--config` while stand-ins run is an error.
-   When `wrangler` resolves via `npx` and several contexts are served, it is
-   installed once (`npx --yes wrangler@4 --version`) before they start, so their
-   first-run installs do not race in npm's cache.
+   When `wrangler` resolves through a runner (`npx`, `pnpm dlx` or `bunx`) and
+   several contexts are served, it is installed once (for npm,
+   `npx --yes wrangler@4 --version`) before they start, so their first-run
+   installs do not race in the runner's cache.
 6. Watch the `.bynk` sources; a save rebuilds in place and the affected workers
    hot-reload. Any worker exiting stops the rest — a survivor's bindings would
    point at a context that is gone. So does a SIGINT or SIGTERM sent to `bynk
@@ -252,8 +270,9 @@ serving.
   [`bynk deploy`](#bynk-deploy) must have recorded every KV namespace id the
   Worker binds (the bare `KV` and each derived instance) in `bynk.deploy.lock`.
 - `wrangler` is resolved with the same provenance ordering as `doctor`
-  (project-local `node_modules/.bin` → `PATH` → `npx`). An `npx` resolution is
-  surfaced as a notice — it downloads on first use.
+  (project-local `node_modules/.bin` → `PATH` → your package manager's runner:
+  `npx`, `pnpm dlx` or `bunx`). A runner resolution is surfaced as a notice
+  naming it — it downloads on first use.
 
 ### Lifecycle events
 
