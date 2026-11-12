@@ -1,6 +1,6 @@
 # 0487 — An agent handler cannot `~>` send; a store operation is refused with its own code
 
-- **Status:** Accepted (v0.342)
+- **Status:** Accepted (v0.342). **Amended by [[0824]]** (the refusal moves to `detach`, with `bynk.detach.in_agent_handler` and `bynk.detach.store_op`; `~>` shares it while deprecated).
 
 **Context.** A `~>` send lowers to `deps.__exec.waitUntil(…)`, and `__exec` is
 threaded only into service handlers, from the Worker's request context (ADR
