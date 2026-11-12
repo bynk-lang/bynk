@@ -54,14 +54,6 @@
 //! Windows (the CLI's runner detection is Unix-only) and skips loudly when no
 //! TypeScript runner is on `PATH`. `BYNK_REQUIRE_TSC` turns the skip into a
 //! failure, using the shared `require` contract rather than `.is_ok()`.
-//!
-//! **tsc version (#3413).** Under `BYNK_REQUIRE_TSC` the test runs only when the
-//! `tsc` on `PATH` is major 7, and skips loudly on any other. Every `bynk test`
-//! runs `tsc`, and tsc 5 costs about 4x tsc 7 here (182 s against 45 s on 4
-//! cores). The "Type-check under TypeScript 7" CI job runs it, and fails if tsc
-//! 7 is absent, so the gate is not lost. Locally it runs under whatever `tsc` is
-//! installed. tsc 5 coverage of `bynk test`'s emit is not given up: the tsc 5
-//! legs still run `tsc_verify` and the other behavioural suites.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -242,31 +234,6 @@ fn have_runner() -> bool {
     tool_exists("tsx") || (tool_exists("tsc") && tool_exists("node")) || tool_exists("npx")
 }
 
-/// The major version in a `tsc --version` line (`Version 7.0.2` -> 7).
-fn parse_tsc_major(version_line: &str) -> Option<u32> {
-    version_line
-        .trim()
-        .strip_prefix("Version ")?
-        .split('.')
-        .next()?
-        .parse()
-        .ok()
-}
-
-/// The major version of the `tsc` on `PATH`, or `None` when there is none (the
-/// `tsx` / `npx` ladder then applies) or its output is not recognised.
-fn tsc_major() -> Option<u32> {
-    let out = Command::new("tsc").arg("--version").output().ok()?;
-    parse_tsc_major(&String::from_utf8_lossy(&out.stdout))
-}
-
-/// The major this gate runs under when it is required (CI). #3413: each
-/// `bynk test` runs `tsc`, which under tsc 5 costs ~2.5 CPU-s a fixture (354
-/// fixtures: 182 s on 4 cores) against 45 s under tsc 7. ci.yml's "Type-check
-/// under TypeScript 7" job runs this test under tsc 7 and fails unless tsc 7 is
-/// on `PATH`, so the tsc 5 legs skip it rather than repeat it.
-const REQUIRED_TSC_MAJOR: u32 = 7;
-
 /// Every positive fixture carrying the marker, sorted for a stable report.
 fn marked_fixtures() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive");
@@ -356,18 +323,6 @@ fn marked_positive_fixtures_behave_as_expected() {
         }
         eprintln!(
             "\n!!! BEHAVIOURAL FIXTURES SKIPPED !!!\nno TypeScript runner (tsx or tsc+node) on PATH.\n"
-        );
-        return;
-    }
-
-    // Under `BYNK_REQUIRE_TSC` (CI) only on tsc 7; locally, any tsc runs it.
-    if require::is_required(REQUIRE_ENV)
-        && let Some(major) = tsc_major()
-        && major != REQUIRED_TSC_MAJOR
-    {
-        eprintln!(
-            "\n!!! BEHAVIOURAL FIXTURES SKIPPED !!!\ntsc {major} is on PATH; under {REQUIRE_ENV} this gate runs on tsc \
-             {REQUIRED_TSC_MAJOR} only (#3413). ci.yml's `Type-check under TypeScript 7` job runs it.\n"
         );
         return;
     }
@@ -852,11 +807,4 @@ mod marker {
             "{problems:?}"
         );
     }
-}
-
-#[test]
-fn tsc_major_is_read_from_the_version_line() {
-    assert_eq!(parse_tsc_major("Version 7.0.2\n"), Some(7));
-    assert_eq!(parse_tsc_major("Version 5.9.3"), Some(5));
-    assert_eq!(parse_tsc_major("tsc: command not found"), None);
 }

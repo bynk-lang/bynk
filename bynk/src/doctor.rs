@@ -275,7 +275,6 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
         },
     );
     let best = pick_better(&tsc, &tsx);
-    let floor = bynk_emit::TYPESCRIPT_MAJOR_FLOOR;
     let tested = bynk_emit::TYPESCRIPT_MAJOR_TESTED;
     // #1672: lead with the TypeScript that is verified, and the one that
     // type-checks; `tsx` only runs the emitted code.
@@ -283,7 +282,7 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
         "npm install -g typescript@{tested} (or `npm install -g tsx`, which runs tests without type-checking)"
     );
     match best {
-        // #1672: a `tsc` below the verified floor is unsupported, a real defect
+        // #1672, #3420: a `tsc` below the supported major is unsupported, a real defect
         // in this environment, so it warns. One above the tested major is
         // *reported* as untested but stays `ok`: it is a statement about this
         // repo's verification coverage, not a fault the user has, and a
@@ -293,10 +292,10 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
         Some(p) if p.is_present() && p.tool == "tsc" => {
             let detail = format!("{} {}", p.tool, present_detail(p));
             match p.version.map(|v| v.major) {
-                Some(major) if major < floor => Row {
+                Some(major) if major < tested => Row {
                     label: "tsc | tsx".into(),
                     level: Level::Warn,
-                    detail: format!("{detail}, below floor (≥ {floor})"),
+                    detail: format!("{detail}, below supported (≥ {tested})"),
                     remedy: Some(remedy),
                 },
                 Some(major) if major > tested => Row {

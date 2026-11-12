@@ -182,7 +182,7 @@ fn the_pr_gate_runs_the_linux_tiers_as_parallel_jobs() {
         );
     }
     let jobs = ci_profile_jobs(&yaml);
-    for job in ["test", "test-system", "test-ts7"] {
+    for job in ["test", "test-system"] {
         assert!(
             jobs.iter().any(|(name, _)| name == job),
             "ci.yml job `{job}` must run nextest under a `ci` profile"

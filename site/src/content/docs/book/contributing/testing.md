@@ -89,12 +89,11 @@ type-check. A golden matching the emitter byte for byte proves nothing about
 whether either one type-checks.
 
 It needs `tsc` on `PATH`, or falls back to `npx -p typescript@7 tsc`. CI runs it,
-and the examples' `tsc --strict` check, under both TypeScript majors the output
-is verified against: **5**, the floor, on every test leg, and **7**, the current
-one, in a second pass on the Linux leg. The behaviour suites, which type-check
-their fixtures before running them, run under 5 only in CI. A local run without
-a global `tsc` uses 7 for them, through the fallback.
-The two are `TYPESCRIPT_MAJOR_FLOOR` and `TYPESCRIPT_MAJOR_TESTED` in
+and the examples' `tsc --strict` check, under TypeScript **7**, the only major
+Bynk supports, on every test leg. The behaviour suites, which type-check their
+fixtures before running them, run under it too. A local run without a global
+`tsc` uses 7 through the fallback.
+The major is `TYPESCRIPT_MAJOR_TESTED` in
 `bynk-emit`, which `bynk doctor` and every `npx` fallback also read. Behaviour
 when neither is available:
 

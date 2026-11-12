@@ -191,16 +191,13 @@ pub const NODE_MINOR_FLOOR: u32 = 13;
 /// The Node floor as `(major, minor)`: what `bynk doctor` compares against.
 pub const NODE_FLOOR: (u32, u32) = (NODE_MAJOR_FLOOR, NODE_MINOR_FLOOR);
 
-/// #1672: the oldest TypeScript major the emitted output is verified against.
-/// CI type-checks every positive fixture under it (`tsc_verify`, with
-/// `typescript@5` installed on every test leg).
-pub const TYPESCRIPT_MAJOR_FLOOR: u32 = 5;
-
-/// #1672: the newest TypeScript major the emitted output is verified against —
-/// the one users get from `npm install -g typescript`. CI type-checks every
-/// positive fixture under it too (a second `tsc_verify` pass on the Linux leg),
-/// the `npx` fallbacks provision it, and `bynk doctor` reports a `tsc` newer
-/// than it as untested.
+/// The TypeScript major the emitted output is verified against, and the only
+/// one Bynk supports (#3420): the one users get from `npm install -g
+/// typescript`. Every CI leg installs it and type-checks every positive fixture
+/// under it, the `npx` fallbacks provision it, and `bynk doctor` warns on a
+/// `tsc` below it and reports one newer than it as untested. (There was a lower
+/// floor, 5, until #3420: tsc 5 cost about 4x tsc 7 per `bynk test`, and the
+/// shape of the generated code is meant to be independent of the tooling.)
 pub const TYPESCRIPT_MAJOR_TESTED: u32 = 7;
 
 /// I2 (#1971): the value of every edge key off the deployed path. `bynk dev`

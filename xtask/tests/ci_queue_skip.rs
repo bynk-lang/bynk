@@ -396,7 +396,7 @@ fn the_windows_and_macos_legs_share_the_test_cache_key() {
 #[test]
 fn every_ready_set_job_checks_the_gate() {
     let jobs = jobs();
-    for key in ["test-os", "test-system", "test-ts7", "node-floor", "msrv"] {
+    for key in ["test-os", "test-system", "node-floor", "msrv"] {
         let job = jobs
             .iter()
             .find(|j| j.key == key)
