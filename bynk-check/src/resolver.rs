@@ -304,6 +304,9 @@ pub struct CrossContextInfo {
     /// type of its own) mapped back to the alias its signatures and contract
     /// hash spell.
     pub callee_alias_keys: HashMap<String, HashMap<String, String>>,
+    /// #3446: the records some handler of the unit decodes as its `cookies` parameter (any file
+    /// of the unit): the ones `Record.field.cookie(v)` may write.
+    pub cookie_records: HashSet<String>,
 }
 
 /// Snapshot of one exported capability in a consumed context, as needed for

@@ -4492,9 +4492,10 @@ pub const REQUEST_QUERY_RUNTIME_IMPORTS: &str = ", __requestQuery";
 /// #3277: the `RequestCookies` constructor a test builds a raw cookies view with,
 /// and the header text a system-tier driver sends for one.
 pub const REQUEST_COOKIES_RUNTIME_IMPORTS: &str = ", __requestCookies, __requestCookiesHeader";
-/// #3386: what `Actor.issue(identity)` and `Actor.expire()` lower to.
+/// #3386: what `Actor.issue(identity)` and `Actor.expire()` lower to, and #3446: what a typed
+/// cookie write (`Record.field.cookie(v)`) encodes its value with.
 pub const SESSION_COOKIE_RUNTIME_IMPORTS: &str =
-    ", __issueSessionCookie, __expireSessionCookie, __sessionKeysOf";
+    ", __issueSessionCookie, __expireSessionCookie, __sessionKeysOf, __cookieValue";
 /// #3386: what a `system` driver mints a `SignedCookie` session cookie with.
 pub const SESSION_SIGNING_RUNTIME_IMPORTS: &str = ", __signSessionCookie, __newSessionKey";
 /// #2854: the typed-query serialiser a mixed typed+`Wire` system call and a typed
