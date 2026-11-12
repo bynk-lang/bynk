@@ -1030,7 +1030,7 @@ The table below is normative and total.**
 | `Trace { cap, op }` | `Call(TraceRead { cap, op }, [])` |
 | `Wire(e)` | `Call(WireMarker, [e])` — system tier only |
 | `EffectPure(e)` | `Pure(e)` |
-| `Statement::Do(e)` | `IrStmt::Expr(Await(e))`, with a checker precondition that `e : Effect[()]` |
+| `Statement::Do(e)` | `IrStmt::Expr(Await(e))`, with a checker precondition that `e : Effect[T]` with `T` not a `Result` |
 | `Statement::Send(e)` | `IrStmt::Expr(Send(e))` |
 | `Statement::Assign` on a `Cell` | `IrStmt::Expr(Await(Call(Store { field, op: CellWrite }, [v])))` |
 | `Cell` in value position | `Await(Call(Store { field, op: CellRead }, []))` |
@@ -1042,7 +1042,7 @@ to print it. Desugaring in the parser is how a language loses its own error mess
 
 **R6.9 — Sugar that carries a checker precondition records that precondition as a *checked* fact, not
 as a comment on the desugaring.**
-*Rationale:* `DoStmt.value` "MUST be `Effect[()]`" and `SendStmt` is "legal only when the reply is
+*Rationale:* `DoStmt.value` "MUST be an `Effect[T]`, `T` not a `Result`" and `SendStmt` is "legal only when the reply is
 `Effect[()]`" are doc-comment invariants today.
 
 ### 6.5 The callee taxonomy
@@ -2441,7 +2441,7 @@ calls; the query form is what the editor calls.
 | R6.6 | IIFE-trapped early return; wrapper chosen by text scan | #1, #2 |
 | R6.7 | sugar lowered inconsistently at N sites | #69 |
 | R6.8 | losing the user's construct before the checker sees it | ADR 0161; `bynk-fmt` reprints the surface form |
-| R6.9 | preconditions carried as doc comments | `DoStmt`/`SendStmt` "MUST be `Effect[()]`" |
+| R6.9 | preconditions carried as doc comments | `DoStmt` "MUST be `Effect[T]`, `T` not `Result`"/`SendStmt` "MUST be `Effect[()]`" |
 | R6.10 | a load-bearing guard order duplicated across a crate boundary | `lower_method_call`'s own doc comment; ADR 0168's precedence in a `match` guard |
 | R6.11 | six copies of the kernel vocabulary; four methods missing from completion | #34, #68 |
 | R6.12 | a name list that works by the `count`/`size` coincidence | `is_query_op` |
