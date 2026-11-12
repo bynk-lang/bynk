@@ -638,6 +638,19 @@ mod tests {
     }
 
     #[test]
+    fn a_session_key_variable_gets_the_session_test_key() {
+        let session = BTreeSet::from(["SESSION_KEY".to_string(), "OTHER_KEY".to_string()]);
+        let group = BTreeMap::from([("OTHER_KEY".to_string(), "mine".to_string())]);
+        let vars = dev_vars(&group, &BTreeSet::new(), &session);
+        assert_eq!(vars["SESSION_KEY"], TEST_SESSION_KEY);
+        assert_eq!(vars["OTHER_KEY"], "mine", "a group's own value wins");
+        // A name that is both an ordinary secret and a session key takes the session key.
+        let both = BTreeSet::from(["SESSION_KEY".to_string()]);
+        let vars = dev_vars(&BTreeMap::new(), &both, &session);
+        assert_eq!(vars["SESSION_KEY"], TEST_SESSION_KEY);
+    }
+
+    #[test]
     fn a_group_s_env_wins_and_other_secrets_get_the_test_value() {
         let group = BTreeMap::from([
             ("PAYMENTS".to_string(), "fake".to_string()),
