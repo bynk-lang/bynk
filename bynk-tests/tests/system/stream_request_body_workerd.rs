@@ -296,9 +296,10 @@ fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
         "expected workers/up-smoke — context dasherisation changed?"
     );
 
-    // Its own port band, clear of the other workerd tests': one port for the
-    // Worker and one for its V8 inspector.
-    let port = 9_000 + 2 * (std::process::id() % 500) as u16;
+    // Its own port band, clear of the other workerd tests' (18 100 to 19 899, between
+    // `par_gate_workerd`'s and `binding_workerd`'s): one port for the Worker and one
+    // for its V8 inspector. 9 000 to 9 999 was inside `agent_serialise_workerd`'s.
+    let port = 18_100 + 2 * (std::process::id() % 900) as u16;
     let inspector_port = port + 1;
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
