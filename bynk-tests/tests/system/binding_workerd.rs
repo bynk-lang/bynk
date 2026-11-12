@@ -2058,11 +2058,6 @@ impl Drop for LocalPostgres {
     }
 }
 
-/// KNOWN, TO BE FIXED BY H3 (#3320), and so not exercised here: a `PgJson`
-/// parameter cast `$n::jsonb` is stored as a JSON string, not parsed (the
-/// runtime hands postgres.js already-encoded text, which it encodes again), so
-/// the `jsonb` column below is written by the statement and read back, not bound.
-///
 /// The `Postgres` smoke's Worker: three instances, one per database the smoke
 /// reaches (a real one; a port nothing listens on; a host that does not
 /// resolve). The routes answer plain text so a step is one line.
@@ -2100,7 +2095,7 @@ service api from http {
 	}
 
 	on GET("/insert/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
-		let ran <- Main.run("insert into items (name, qty, meta, stamp, raw) values ($1, $2::bigint, '{\"k\":[1,2]}'::jsonb, $3, $4)", [PgText(name), PgNumeric("1152921504606846976"), PgTimestamp(Instant.fromIso("2026-01-02T03:04:05Z").getOrElse(Instant.fromEpochMillis(0))), PgBytea(Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))])
+		let ran <- Main.run("insert into items (name, qty, meta, stamp, raw) values ($1, $2::bigint, $3::jsonb, $4, $5)", [PgText(name), PgNumeric("1152921504606846976"), PgJson("{\"k\":[1,2]}"), PgTimestamp(Instant.fromIso("2026-01-02T03:04:05Z").getOrElse(Instant.fromEpochMillis(0))), PgBytea(Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))])
 		match ran {
 			Ok(r) => Ok("inserted \(r.rowCount)")
 			Err(e) => Ok(why(e))
@@ -2256,14 +2251,11 @@ fn workers_postgres_runs_through_hyperdrive_on_workerd() {
                 match get(port, path) {
                     Ok((200, body)) => {
                         let body = unquote(&body);
-                        // KNOWN, TO BE FIXED BY H3 (#3320): under local
-                        // Hyperdrive a socket error carries no driver `code`,
-                        // so it arrives as `PgFailed` with an empty SQLSTATE,
-                        // not `PgConnection`. Both forms are accepted so the
-                        // fix does not break this; what is checked is that
-                        // it is a `PgError` and holds nothing of the string.
-                        if !(body.starts_with("connection:") || body.starts_with("failed [] ")) {
-                            failures.push(format!("{path}: not a `PgError`: {body}"));
+                        // A socket error under local Hyperdrive carries no
+                        // driver `code`; it is `PgConnection` all the same
+                        // (H3, #3320), with a fixed message.
+                        if !body.starts_with("connection:") {
+                            failures.push(format!("{path}: not a `PgConnection`: {body}"));
                         }
                         for secret in secrets {
                             if body.contains(secret) {
