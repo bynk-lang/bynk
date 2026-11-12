@@ -24,9 +24,9 @@ export const __AlertsToken: symbol = globalThis.Symbol("Alerts");
 
 export const api = {
   async http_POST_receipt(deps: { Mail: Mail; Ops: Ops; Alerts: Alerts }): globalThis.Promise<HttpResult<string>> {
-    const sent = await deps.Mail.send({ from: "orders@shop.example", to: ["audit@shop.example"], subject: "Receipt", text: Some("Thanks for your order"), cc: [], bcc: [], replyTo: { tag: "None" }, html: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
-    const note = await deps.Ops.send({ from: "orders@shop.example", to: ["ops@shop.example"], subject: "Sent", html: Some("<p>sent</p>"), cc: [], bcc: [], replyTo: { tag: "None" }, text: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
-    const __r0 = await deps.Alerts.send({ from: "alerts@shop.example", to: ["ops@shop.example"], subject: "Alert", text: Some("up"), cc: [], bcc: [], replyTo: { tag: "None" }, html: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
+    const sent = await deps.Mail.send({ from: "orders@shop.example", to: ["audit@shop.example"], subject: "Receipt", text: Some("Thanks for your order"), cc: [], bcc: [], replyTo: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
+    const note = await deps.Ops.send({ from: "orders@shop.example", to: ["ops@shop.example"], subject: "Sent", html: Some("<p>sent</p>"), cc: [], bcc: [], replyTo: { tag: "None" as const }, text: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
+    const __r0 = await deps.Alerts.send({ from: "alerts@shop.example", to: ["ops@shop.example"], subject: "Alert", text: Some("up"), cc: [], bcc: [], replyTo: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
     switch (sent.tag) {
       case "Ok": {
         const id = sent.value;

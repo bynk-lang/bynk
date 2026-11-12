@@ -2173,7 +2173,23 @@ it MAY name the foreign Worker (`worker = "<name>"`). Its name MUST NOT be one a
 context could have (`bynk.actor.foreign_name_is_context_name`): it is what the
 caller sends as `X-Bynk-Caller`, so it must never select a context's edge key.
 It takes **no** `identity` (`bynk.actor.foreign_identity_unsupported`), and is
-admissible only on `on call` handlers.
+admissible only on `on call` handlers. A **`SignedCookie`** actor (#3386) is a
+session cookie Bynk issues and verifies. It MUST name its signing `secret`
+(`bynk.actor.signed_cookie_missing_secret`) and a `ttl`
+(`bynk.actor.signed_cookie_missing_ttl`), the latter a positive whole number of
+seconds (`bynk.actor.signed_cookie_bad_ttl`); its config keys are the closed set
+`secret`, `ttl`, `cookie`, `previous` and `sameSite`
+(`bynk.actor.signed_cookie_unknown_key`, `bynk.actor.signed_cookie_bad_arg`); its
+`cookie` MUST be a cookie-name token (`bynk.actor.signed_cookie_bad_name`); its
+`secret` and `previous` MUST differ from each other and from every other actor's
+secret (`bynk.actor.signed_cookie_secret_shared`); and its `identity` MUST be
+string-constructible (`bynk.actor.signed_cookie_identity_not_string_constructible`).
+A `ttl` over 30 days (`bynk.actor.signed_cookie_ttl_long`) and a `cookie` without the
+`__Host-` prefix (`bynk.actor.signed_cookie_unprefixed`) are warnings. It is `http`
+only, MUST NOT be a sum member (`bynk.actor.signed_cookie_not_in_sum`) or a refinement
+base, and MUST NOT guard a `@cache(scope: public)` route
+(`bynk.actor.signed_cookie_public_cache`). Until its verifier is emitted, a route it
+guards is refused (`bynk.actor.signed_cookie_not_yet_emitted`).
 
 > **Who, not whose.** An actor contract answers *who* is at the boundary — it
 > authenticates a party and seals its identity. It deliberately does **not**

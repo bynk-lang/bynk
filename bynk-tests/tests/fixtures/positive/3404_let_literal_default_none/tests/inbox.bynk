@@ -1,0 +1,12 @@
+suite helpdesk.inbox
+
+case "a let-bound message passed to a function" {
+	let none: Map[String, String] = Map.empty()
+	let ooo = InboundEmail {
+		from: "ada@example.org",
+		to: "support@shop.example",
+		subject: "Out of office",
+		headers: none.insert("auto-submitted", "auto-replied"),
+	}
+	expect triage(ooo, true) is Reply(_)
+}

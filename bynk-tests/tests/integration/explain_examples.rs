@@ -65,6 +65,14 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.actor.signed_cookie_ttl_long",
+        "a warning; `positive/3386_signed_cookie_ttl_long` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.actor.signed_cookie_unprefixed",
+        "a warning; `positive/3386_signed_cookie_unprefixed` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_cross_site_without_credentials",
         "a warning; `positive/3329_cookie_cross_site_without_credentials` holds it with `expected_warnings.txt`, and `positive/3329_cookie_cross_site_credentials` holds the credentialed good case",
     ),

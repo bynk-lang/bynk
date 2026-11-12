@@ -2472,6 +2472,12 @@ impl<'a> Formatter<'a> {
                     bynk_syntax::ast::SchemeArgValue::Int(n) => {
                         format!("{} = {n}", arg.key.name)
                     }
+                    bynk_syntax::ast::SchemeArgValue::Duration { value, unit, .. } => {
+                        format!("{} = {value}.{}", arg.key.name, unit.name())
+                    }
+                    bynk_syntax::ast::SchemeArgValue::Ident(id) => {
+                        format!("{} = {id}", arg.key.name)
+                    }
                 })
                 .collect();
             let config = if args.is_empty() {

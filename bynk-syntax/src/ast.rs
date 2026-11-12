@@ -1715,24 +1715,48 @@ pub struct SchemeArg {
     pub span: Span,
 }
 
-/// A scheme config arg value — a string literal or an integer.
+/// A scheme config arg value — a string literal, an integer, a duration
+/// literal (`12.hours`, #3386) or a bare identifier (`sameSite = Lax`, #3386).
 #[derive(Debug, Clone)]
 pub enum SchemeArgValue {
     Str(String),
     Int(i64),
+    /// A duration literal as written: the magnitude, its unit, and the
+    /// resolved milliseconds.
+    Duration {
+        value: i64,
+        unit: DurationUnit,
+        millis: i64,
+    },
+    /// A bare identifier naming one of a closed set of variants.
+    Ident(String),
 }
 
 impl SchemeArgValue {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             SchemeArgValue::Str(s) => Some(s),
-            SchemeArgValue::Int(_) => None,
+            _ => None,
         }
     }
     pub fn as_int(&self) -> Option<i64> {
         match self {
             SchemeArgValue::Int(n) => Some(*n),
-            SchemeArgValue::Str(_) => None,
+            _ => None,
+        }
+    }
+    /// The duration in milliseconds, for a duration literal.
+    pub fn as_duration_millis(&self) -> Option<i64> {
+        match self {
+            SchemeArgValue::Duration { millis, .. } => Some(*millis),
+            _ => None,
+        }
+    }
+    /// The identifier, for a bare-identifier value.
+    pub fn as_ident(&self) -> Option<&str> {
+        match self {
+            SchemeArgValue::Ident(s) => Some(s),
+            _ => None,
         }
     }
 }

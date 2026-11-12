@@ -25,38 +25,38 @@ export const __MailToken: symbol = globalThis.Symbol("Mail");
 
 export const receipts = {
   async call(to: string, deps: { Mail: Mail }): globalThis.Promise<Result<string, EmailError>> {
-    return deps.Mail.send({ from: "orders@shop.example", to: [to], subject: "Receipt", text: Some("Thanks for your order"), cc: [], bcc: [], replyTo: { tag: "None" }, html: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
+    return deps.Mail.send({ from: "orders@shop.example", to: [to], subject: "Receipt", text: Some("Thanks for your order"), cc: [], bcc: [], replyTo: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
   },
 };
 
 export const fanout = {
   async call(over: boolean, deps: { Mail: Mail }): globalThis.Promise<Result<string, EmailError>> {
-    return deps.Mail.send({ from: "orders@shop.example", to: seventeen(), cc: seventeen(), bcc: (over ? seventeen() : sixteen()), subject: "Bulk", text: Some("hello"), replyTo: { tag: "None" }, html: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
+    return deps.Mail.send({ from: "orders@shop.example", to: seventeen(), cc: seventeen(), bcc: (over ? seventeen() : sixteen()), subject: "Bulk", text: Some("hello"), replyTo: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
   },
 };
 
 export const tagged = {
   async call(name: string, value: string, deps: { Mail: Mail }): globalThis.Promise<Result<string, EmailError>> {
     const extra: ReadonlyMap<string, string> = new globalThis.Map(new globalThis.Map<string, string>()).set(name, value);
-    return deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Tagged", text: Some("hello"), headers: extra, cc: [], bcc: [], replyTo: { tag: "None" }, html: { tag: "None" }, attachments: [] });
+    return deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Tagged", text: Some("hello"), headers: extra, cc: [], bcc: [], replyTo: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [] });
   },
 };
 
 export const attaching = {
   async call(deps: { Mail: Mail }): globalThis.Promise<Result<string, EmailError>> {
-    return deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Invoice", html: Some("<p>attached</p>"), attachments: [{ filename: "invoice.txt", contentType: "text/plain", content: new globalThis.TextEncoder().encode("total: 5"), inline: false }], cc: [], bcc: [], replyTo: { tag: "None" }, text: { tag: "None" }, headers: new globalThis.Map() });
+    return deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Invoice", html: Some("<p>attached</p>"), attachments: [{ filename: "invoice.txt", contentType: "text/plain", content: new globalThis.TextEncoder().encode("total: 5"), inline: false }], cc: [], bcc: [], replyTo: { tag: "None" as const }, text: { tag: "None" as const }, headers: new globalThis.Map() });
   },
 };
 
 export const empty = {
   async call(deps: { Mail: Mail }): globalThis.Promise<Result<string, EmailError>> {
-    return deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Nothing", cc: [], bcc: [], replyTo: { tag: "None" }, text: { tag: "None" }, html: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
+    return deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Nothing", cc: [], bcc: [], replyTo: { tag: "None" as const }, text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
   },
 };
 
 export const api = {
   async http_POST_receipt(deps: { Mail: Mail }): globalThis.Promise<HttpResult<string>> {
-    const sent = await deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Receipt", text: Some("Thanks"), cc: [], bcc: [], replyTo: { tag: "None" }, html: { tag: "None" }, attachments: [], headers: new globalThis.Map() });
+    const sent = await deps.Mail.send({ from: "orders@shop.example", to: ["a@example.com"], subject: "Receipt", text: Some("Thanks"), cc: [], bcc: [], replyTo: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], headers: new globalThis.Map() });
     switch (sent.tag) {
       case "Ok": {
         const id = sent.value;

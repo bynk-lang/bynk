@@ -1066,7 +1066,16 @@ tolerance = <seconds>)?)`. The checker validates which keys each scheme admits.
 {{#grammar scheme_arg}}
 
 One `key = value` pair in a [`scheme_config`](#rule-scheme_config); the value is a
-string or integer literal (e.g. an integer `tolerance` in seconds).
+string or integer literal (e.g. an integer `tolerance` in seconds), a
+[`scheme_duration`](#rule-scheme_duration), or a bare identifier naming a variant
+(`sameSite = Lax`).
+
+### scheme_duration {#rule-scheme_duration}
+
+{{#grammar scheme_duration}}
+
+A duration in a scheme config, `<int>.<unit>` (`ttl = 12.hours`), the same literal the
+expression grammar reads. Only `SignedCookie` takes one.
 
 ### by_clause {#rule-by_clause}
 

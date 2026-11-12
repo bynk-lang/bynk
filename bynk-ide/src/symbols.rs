@@ -2364,6 +2364,10 @@ pub(crate) fn describe_actor(a: &ActorDecl) -> String {
                             format!("{} = \"{}\"", arg.key.name, bynk_fmt::escape_string(s))
                         }
                         SchemeArgValue::Int(n) => format!("{} = {n}", arg.key.name),
+                        SchemeArgValue::Duration { value, unit, .. } => {
+                            format!("{} = {value}.{}", arg.key.name, unit.name())
+                        }
+                        SchemeArgValue::Ident(id) => format!("{} = {id}", arg.key.name),
                     })
                     .collect();
                 out.push_str(&format!("({})", args.join(", ")));

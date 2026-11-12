@@ -9,7 +9,7 @@ import { QueueResult } from "../__bynk_runtime/queue.js";
 import { DmarcVerdict, EmailReply, EmailVerdict, InboundEmail } from "../bynk/cloudflare.js";
 
 export function triage(mail: InboundEmail, dmarc: DmarcVerdict): EmailVerdict {
-  return (__bynkEq(dmarc, DmarcVerdict.DmarcPass) ? EmailVerdict.Reply({ text: Some("Thanks"), subject: { tag: "None" }, html: { tag: "None" } }) : EmailVerdict.Accept);
+  return (__bynkEq(dmarc, DmarcVerdict.DmarcPass) ? EmailVerdict.Reply({ text: Some("Thanks"), subject: { tag: "None" as const }, html: { tag: "None" as const } }) : EmailVerdict.Accept);
 }
 
 export const support = {

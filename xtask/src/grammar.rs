@@ -585,7 +585,9 @@ mod tests {
         // string_tag, string_body, and raw_string (now a rule over the external
         // `_raw_string_line` / `_raw_triple_open` / `raw_string_body` tokens).
         // Net +4.
-        assert_eq!(rules.len(), 196);
+        // #3386 (`SignedCookie`) added: scheme_duration (`ttl = 12.hours` in a
+        // scheme config). Net +1.
+        assert_eq!(rules.len(), 197);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.
