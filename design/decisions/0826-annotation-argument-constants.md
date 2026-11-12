@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `String` constant bound to a literal is accepted as `@name`'s argument, through one resolution pass shared with the SQL rule
----
+# 0826 — A constant in a literal-only annotation argument
 
-## ADR: annotation-argument-constants
-title: A constant in a literal-only annotation argument
-summary: One resolution pass replaces a bare constant argument with its literal ahead of every validator and reader; amends ADR 0678 C for annotation arguments and extends ADR 0762 beyond SQL
+- **Status:** Accepted (v0.575)
 
 **Context.** ADR 0678 C kept a constant out of compile-time positions because "that needs evaluation at check time". ADR 0762 showed that for a literal-only position it does not: a constant's initialiser is the closed static set (ADR 0678 A: no operators, calls or interpolation, cycles refused), so a reference resolves, by following constant-to-constant references, to the literal text in the source. A wire name is the case that matters, since two places must agree on it (`@name("__Host-visits")` on a cookie record's field and the cookie a handler writes) and the language gave no way to say so once (#3445).
 
