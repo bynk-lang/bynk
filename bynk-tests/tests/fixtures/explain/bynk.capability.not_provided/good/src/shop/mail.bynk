@@ -1,0 +1,17 @@
+context shop.mail
+
+capability Mailer {
+	fn send(to: String) -> Effect[()]
+}
+
+provides Mailer = Smtp {
+	fn send(to: String) -> Effect[()] {
+		Effect.pure(())
+	}
+}
+
+service notify {
+	on call(to: String) -> Effect[()] given Mailer {
+		Mailer.send(to)
+	}
+}
