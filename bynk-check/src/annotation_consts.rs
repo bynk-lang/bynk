@@ -13,7 +13,7 @@
 //! OpenAPI readers of `wire_name()`), and replaces the argument's value with the
 //! resolved literal. Those consumers are syntactic and hold no constant table;
 //! resolving once upstream means none of them can miss it. The replaced value
-//! keeps the reference's span, and [`AnnotationArg::from_const`] names the
+//! keeps the reference's span, and [`bynk_syntax::ast::AnnotationArg::from_const`] names the
 //! constant, so a diagnostic points at the reference and the IDE can find the
 //! use.
 //!
