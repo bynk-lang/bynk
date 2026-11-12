@@ -58,3 +58,20 @@ export const api = {
     return __r;
   },
 };
+
+export const replay = {
+  async http_POST_replay_Param_id(id: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<HttpResult<string>> {
+    const cached = await deps.Idempotency.dedup<string>(`shop.hooks.replay.http_POST_replay_Param_id::${id}`);
+    switch (cached.tag) {
+      case "Some": {
+        const v = cached.value;
+        return HttpResult.Ok(v);
+      }
+      case "None": {
+        const __r0 = await deps.Idempotency.remember<string>(`shop.hooks.replay.http_POST_replay_Param_id::${id}`, "computed", 3600000);
+        return HttpResult.Ok("fresh");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};

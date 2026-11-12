@@ -963,10 +963,6 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
 }
 ";
 
-/// P1 (#2590): the body of `bynk.cloudflare`'s `Kv` unit-tier double
-/// ([`platform_double`]). Expiry is kept and listed, not enforced, as on the
-/// integration tier, on the clock `Clock.now()` reads (`__NOW__`, substituted
-/// as `RateLimit`'s is).
 /// `Idempotency`'s double: an in-memory store whose entries and claims expire
 /// on the clock `Clock.now()` reads (`__NOW__`, substituted as for `Kv`; `__CLAIM__` is the module's `Claim`), so a
 /// test that `advance`s the harness clock sees a window lapse.
@@ -1014,6 +1010,10 @@ pub(super) const IDEMPOTENCY_DOUBLE_BODY: &str = r#"  const store = new globalTh
   } as never;
 "#;
 
+/// P1 (#2590): the body of `bynk.cloudflare`'s `Kv` unit-tier double
+/// ([`platform_double`]). Expiry is kept and listed, not enforced, as on the
+/// integration tier, on the clock `Clock.now()` reads (`__NOW__`, substituted
+/// as `RateLimit`'s is).
 pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; metadata: globalThis.Map<string, string>; expiration: number | undefined };
   type Expiration = { tag: string; ttl?: number; instant?: number };
   const store = new globalThis.Map<string, Entry>();

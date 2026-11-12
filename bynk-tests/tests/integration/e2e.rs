@@ -152,7 +152,7 @@ fn is_main_document(doc: &bynk_driver::project::Document) -> bool {
 
 /// Read the build target marker from a fixture root, if present.
 /// Defaults to bundle when no `target.txt` is present.
-fn fixture_target(dir: &Path) -> bynk_driver::project::BuildTarget {
+pub(super) fn fixture_target(dir: &Path) -> bynk_driver::project::BuildTarget {
     let marker = dir.join("target.txt");
     if let Ok(s) = fs::read_to_string(&marker)
         && s.trim() == "workers"
@@ -183,6 +183,21 @@ pub(super) fn compile_fixture(
     fixture_root: &Path,
     target: bynk_driver::project::BuildTarget,
 ) -> Result<bynk_driver::project::ProjectOutput, bynk_driver::project::ProjectFailure> {
+    compile_fixture_with(fixture_root, target, None)
+}
+
+/// [`compile_fixture`] with a recorded schema history, as `bynk build` reads
+/// one from `bynk.schema.lock` (the explain gate's fixtures supply theirs,
+/// #3163). `None` compiles without a registry, as every other fixture does.
+pub(super) fn compile_fixture_with(
+    fixture_root: &Path,
+    target: bynk_driver::project::BuildTarget,
+    schema: Option<bynk_driver::project::SchemaLock>,
+) -> Result<bynk_driver::project::ProjectOutput, bynk_driver::project::ProjectFailure> {
+    let with_schema = |options: bynk_driver::project::CompileOptions| match &schema {
+        Some(lock) => options.schema_registry(lock.clone()),
+        None => options,
+    };
     let bynk_toml = fixture_root.join("bynk.toml");
     if bynk_toml.exists() {
         // Split-paths mode compiles at the default platform — a bynk.toml
@@ -198,19 +213,19 @@ pub(super) fn compile_fixture(
         // `wrangler.toml`, as `bynk-driver`'s option builders arrange.
         let workers = bynk_driver::project::try_read_workers_config(fixture_root)
             .expect("well-formed fixture manifest");
-        bynk_driver::project::compile_project(
-            &bynk_testkit::compile_options_split(fixture_root.to_path_buf(), paths)
+        bynk_driver::project::compile_project(&with_schema(
+            bynk_testkit::compile_options_split(fixture_root.to_path_buf(), paths)
                 .target(target)
                 .compatibility_flags(workers.compatibility_flags),
-        )
+        ))
     } else {
         let src_dir = fixture_root.join("src");
         let platform = fixture_platform(fixture_root);
-        bynk_driver::project::compile_project(
-            &bynk_testkit::compile_options_single(src_dir)
+        bynk_driver::project::compile_project(&with_schema(
+            bynk_testkit::compile_options_single(src_dir)
                 .target(target)
                 .platform(platform),
-        )
+        ))
     }
 }
 
