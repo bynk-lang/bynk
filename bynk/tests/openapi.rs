@@ -604,3 +604,64 @@ fn a_typed_query_is_described_as_query_parameters() {
     assert_eq!(by_name("owner")["description"], "The owner to list.");
     assert!(d["paths"]["/echo"]["get"].get("parameters").is_none());
 }
+
+/// #3343: a field renamed by `@name` is documented under its wire name, in a
+/// `cookie`/`query` parameter and in a form body's properties.
+#[test]
+fn a_renamed_request_field_is_documented_under_its_wire_name() {
+    let dir = scratch("field-names");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type Session = {
+  @name("__Host-sid") sid: Option[String],
+}
+
+type Signup = {
+  --- where the confirmation goes
+  @name("e-mail") email: String,
+  @name("remember-me") remember: Bool = false,
+}
+
+service api from http {
+  on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+
+  @form
+  on POST("/signup") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let params = d["paths"]["/me"]["get"]["parameters"].as_array().unwrap();
+    assert!(
+        params
+            .iter()
+            .any(|p| p["name"] == "__Host-sid" && p["in"] == "cookie"),
+        "the cookie parameter is named by its wire key: {params:?}"
+    );
+    let schema = &d["paths"]["/signup"]["post"]["requestBody"]["content"]["application/x-www-form-urlencoded"]
+        ["schema"];
+    let props = schema["properties"]
+        .as_object()
+        .expect("an inline object schema");
+    assert!(
+        props.contains_key("e-mail") && props.contains_key("remember-me"),
+        "{props:?}"
+    );
+    assert!(
+        !props.contains_key("email"),
+        "the field's own name is not the key: {props:?}"
+    );
+    assert_eq!(
+        props["e-mail"]["description"],
+        "where the confirmation goes"
+    );
+    assert_eq!(schema["required"], serde_json::json!(["e-mail"]));
+}

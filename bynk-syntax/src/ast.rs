@@ -2642,6 +2642,24 @@ pub struct RecordField {
     pub trivia: Trivia,
 }
 
+impl RecordField {
+    /// #3343: the key `@name("…")` gives this field on an HTTP request (a cookie,
+    /// a query key, a form field), `None` when it reads under its own name. The
+    /// checker refuses a `@name` that is not exactly one string literal.
+    pub fn wire_name(&self) -> Option<String> {
+        self.annotations
+            .iter()
+            .find(|a| a.name.name == "name")
+            .and_then(|a| match a.args.as_slice() {
+                [arg] => match &arg.value.kind {
+                    ExprKind::StrLit(s) => Some(s.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+    }
+}
+
 /// Body of a sum-type declaration (v0.2 §3.2).
 #[derive(Debug, Clone)]
 pub struct SumBody {

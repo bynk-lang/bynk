@@ -4702,7 +4702,19 @@ fn lower_json_codec_call(
             // value is always available; a miss is a compiler fault, not a user error.
             let wire = form_encode_wire(&mut pre, &args[0], cx)
                 .expect("`Form.encode` checked a concrete record of form fields");
-            return Some(pre.finish(format!("__formString({wire})")));
+            // #3343: a field renamed by `@name` is written under its wire key.
+            let table = cx
+                .commons()
+                .expr_types
+                .get(&args[0].id)
+                .map(|te| te.ty)
+                .and_then(|ty| ty_to_type_ref(ty, cx.commons().tys()))
+                .and_then(|tref| {
+                    super::workers_entry::renamed_specs_source(&tref, &cx.commons().types)
+                })
+                .map(|t| format!(", {t}"))
+                .unwrap_or_default();
+            return Some(pre.finish(format!("__formString({wire}{table})")));
         }
     }
     if matches!(
@@ -4858,9 +4870,7 @@ fn form_specs_literal(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Option<Str
     let specs = super::workers_entry::record_field_specs(rec, &cx.commons().types, false);
     let items: Vec<String> = specs
         .iter()
-        .map(|(name, kind, list, option)| {
-            format!("{{ name: {name:?}, kind: {kind:?}, list: {list}, option: {option} }}")
-        })
+        .map(super::workers_entry::field_spec_source)
         .collect();
     Some(format!("[{}]", items.join(", ")))
 }

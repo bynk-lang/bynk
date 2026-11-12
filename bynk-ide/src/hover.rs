@@ -778,9 +778,14 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
             (TypeRef::List(..), Some(_)) => format!("repeatable, {note}"),
             _ => note,
         };
+        // #3343: a field renamed by `@name` is read under its wire name.
+        let key_name = match f.wire_name() {
+            Some(w) => format!("{w}` (field `{}", f.name.name),
+            None => f.name.name.clone(),
+        };
         out.push_str(&format!(
             "| `{}` | `{}` | {} |\n",
-            f.name.name,
+            key_name,
             bynk_check::context_checks::ts_type_ref_display(&f.type_ref),
             note
         ));

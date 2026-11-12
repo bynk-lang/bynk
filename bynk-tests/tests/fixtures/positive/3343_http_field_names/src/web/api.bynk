@@ -1,0 +1,67 @@
+context web.api
+
+consumes bynk { File }
+
+type Token = String where NonEmpty && MaxLength(8)
+
+// #3343: `@name("…")` names the key a request record's field has on the wire, where
+// that is not an identifier. The field is `sid` everywhere in Bynk.
+type Session = {
+	@name("__Host-sid") sid: Option[Token],
+	theme: String = "light",
+}
+
+type Filter = {
+	@name("page-size") pageSize: Int = 20,
+	@name("filter[status]") status: Option[String],
+	owner: Option[String],
+}
+
+type Signup = {
+	@name("e-mail") email: String,
+	@name("remember-me") remember: Bool = false,
+}
+
+type Upload = {
+	@name("doc-title") title: String,
+	@name("photo-file") photo: File,
+}
+
+service api from http {
+	limits { maxBody: 4096, maxFile: 64, maxParts: 12 }
+
+	on GET("/me") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor {
+		let sid = match cookies.sid {
+			Some(s) => "\(s)"
+			None => "-"
+		}
+		Ok("\(sid) \(cookies.theme)")
+	}
+
+	on GET("/items") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor {
+		let status = match query.status {
+			Some(s) => s
+			None => "-"
+		}
+		Ok("\(query.pageSize) \(status)")
+	}
+
+	@form
+	on POST("/signup") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(body.email) \(body.remember)")
+	}
+
+	@multipart
+	on POST("/upload") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(body.title) \(body.photo.bytes.length())")
+	}
+
+	// `Form.encode` writes the wire keys and `Form.decode` reads them back.
+	on GET("/roundtrip") () -> Effect[HttpResult[String]] by v: Visitor {
+		let text = Form.encode(Signup { email: "a@b.c", remember: true })
+		match Form.decode[Signup](text) {
+			Ok(s) => Ok("\(text) \(s.email)")
+			Err(_) => BadRequest("bad")
+		}
+	}
+}

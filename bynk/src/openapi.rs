@@ -597,7 +597,9 @@ fn query_parameters(
                 item
             };
             let mut param = Map::new();
-            param.insert("name".into(), json!(f.name.name));
+            // #3343: a field renamed by `@name` is documented under its wire name.
+            let name = f.wire_name().unwrap_or_else(|| f.name.name.clone());
+            param.insert("name".into(), json!(name));
             param.insert("in".into(), json!(location));
             param.insert("required".into(), json!(!optional && f.init.is_none()));
             if let Some(d) = &f.documentation {
@@ -648,10 +650,68 @@ fn request_body_of(
     } else {
         "application/json"
     };
+    // #3343: a form body with a field renamed by `@name` documents the wire keys, so
+    // the schema is written out rather than referencing the record's own component.
+    let schema = if media == "application/json" {
+        None
+    } else {
+        renamed_form_schema(r, components, ty)
+    }
+    .unwrap_or_else(|| r.ref_schema(components, &shape));
     json!({
         "required": true,
-        "content": { media: { "schema": r.ref_schema(components, &shape) } },
+        "content": { media: { "schema": schema } },
     })
+}
+
+/// #3343: the object schema of a form or multipart body record keyed by each field's
+/// wire name, when at least one field is renamed by `@name`; `None` otherwise.
+fn renamed_form_schema(r: &Renderer, components: &mut Components, ty: &TypeRef) -> Option<Value> {
+    let TypeRef::Named(id) = ty else {
+        return None;
+    };
+    let bynk_syntax::ast::TypeBody::Record(record) = &r.types.get(&id.name)?.body else {
+        return None;
+    };
+    if record.fields.iter().all(|f| f.wire_name().is_none()) {
+        return None;
+    }
+    let mut properties = Map::new();
+    let mut required = Vec::new();
+    for f in &record.fields {
+        let (inner, list, optional) = match &f.type_ref {
+            TypeRef::List(inner, _) => (inner.as_ref(), true, false),
+            TypeRef::Option(inner, _) => (inner.as_ref(), false, true),
+            other => (other, false, false),
+        };
+        let item = match inner {
+            TypeRef::Named(n) if n.name == "File" => {
+                json!({ "type": "string", "format": "binary" })
+            }
+            other => r.parameter_schema(components, other),
+        };
+        let mut schema = if list {
+            json!({ "type": "array", "items": item })
+        } else {
+            item
+        };
+        // The component schema carries a field's doc as its description; so does this.
+        if let (Some(d), Some(o)) = (&f.documentation, schema.as_object_mut()) {
+            o.insert("description".into(), json!(d.text.trim()));
+        }
+        let name = f.wire_name().unwrap_or_else(|| f.name.name.clone());
+        if !optional && !list && f.init.is_none() {
+            required.push(json!(name));
+        }
+        properties.insert(name, schema);
+    }
+    let mut schema = Map::new();
+    schema.insert("type".into(), json!("object"));
+    schema.insert("properties".into(), Value::Object(properties));
+    if !required.is_empty() {
+        schema.insert("required".into(), Value::Array(required));
+    }
+    Some(Value::Object(schema))
 }
 
 fn responses_of(
