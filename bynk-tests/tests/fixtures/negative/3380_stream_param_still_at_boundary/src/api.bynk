@@ -1,0 +1,7 @@
+context api
+
+service relay {
+  on call(chunks: Stream[Bytes]) -> Effect[Int] {
+    Effect.pure(0)
+  }
+}

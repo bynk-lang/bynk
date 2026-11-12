@@ -151,6 +151,83 @@ export function byteStreamBody(stream: AsyncIterable<Uint8Array>): ReadableStrea
   return pullBody(stream, (chunk) => (chunk.byteLength === 0 ? [] : [chunk]));
 }
 
+// #3380: a `@raw` route's request body is read past its cap. Thrown by the pull
+// that crosses the cap, so whatever is reading the stream (`collect`, a sink)
+// faults; the Worker entry's fault path answers the route's `413` instead of a
+// `500`. A branded property (not only `instanceof`) so the check also holds for
+// an error that crossed a module copy.
+export class BodyTooLarge extends Error {
+  readonly bynkBodyTooLarge = true;
+  readonly cap: number;
+  constructor(cap: number) {
+    super(`request body exceeds ${cap} bytes`);
+    this.name = "BodyTooLarge";
+    this.cap = cap;
+  }
+}
+
+export function isBodyTooLarge(error: unknown): error is BodyTooLarge {
+  return typeof error === "object" && error !== null && (error as { bynkBodyTooLarge?: unknown }).bynkBodyTooLarge === true;
+}
+
+// #3380: awaits a streamed route's handler, telling a body that crossed its cap
+// while the handler was reading it (`tooLarge`) from the handler's own result.
+// Anything else the handler throws is rethrown, for the Worker's fault path.
+export async function untilBodyTooLarge<T>(
+  handled: Promise<T>,
+): Promise<{ readonly tooLarge: true } | { readonly tooLarge: false; readonly value: T }> {
+  try {
+    return { tooLarge: false, value: await handled };
+  } catch (e) {
+    if (isBodyTooLarge(e)) return { tooLarge: true };
+    throw e;
+  }
+}
+
+// #3380: the request body of a streamed `@raw` route, as the `Stream[Bytes]`
+// the handler receives (an `AsyncIterable<Uint8Array>`, ADR 0128 D6).
+//
+// - Lazy. `request.body` is not touched until the first pull, and each pull
+//   reads one chunk, so a slow sink slows the read of the socket and nothing is
+//   read ahead by this wrapper. (The transport buffers a bounded window of its
+//   own; that is the platform's.)
+// - Counted. The bytes actually read are counted, so a chunked body, or one
+//   whose `Content-Length` understates it, is cut off all the same, as
+//   `readCapped` does. The pull that crosses `cap` cancels the reader and
+//   throws `BodyTooLarge`.
+// - Released. `return()` (an early stop, a faulted sink) cancels the reader once
+//   reading has begun. A stream that is never read is never started, and an
+//   unread body is released by the platform when the request ends (checked on
+//   workerd for #3380).
+// - Single-pass is not enforced here: the consumer claims it (`claimStream`),
+//   as the R2 and Fetch bindings' streams are (ADR 0665 C).
+export async function* requestBodyStream(request: Request, cap: number): AsyncGenerator<Uint8Array, void, undefined> {
+  if (request.body === null) return;
+  const reader = request.body.getReader();
+  let size = 0;
+  let finished = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        finished = true;
+        return;
+      }
+      size += value.byteLength;
+      if (size > cap) {
+        throw new BodyTooLarge(cap);
+      }
+      if (value.byteLength > 0) yield value;
+    }
+  } finally {
+    if (!finished) {
+      // Past the cap, stopped early, or the source threw: release the body. A
+      // failure to cancel must not mask the error that got us here.
+      await reader.cancel().catch(() => {});
+    }
+  }
+}
+
 // #2858: a plain-JSON route's body serialiser. The generated `Option` encoder
 // reads `__bynkPlainJson` and writes `Some(v)` as `v` and `None` as `null`
 // instead of the tagged object; this sets it for the one synchronous

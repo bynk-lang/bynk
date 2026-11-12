@@ -1,0 +1,16 @@
+context api
+
+consumes bynk { Cookie, SameSite }
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: false }
+
+	// An explicit `credentials: false`, and the cookie sits in a nested arm of a `clearCookie`.
+	on POST("/logout") () -> Effect[HttpResult[()]] by v: Visitor {
+		if true {
+			NoContent.clearCookie(Cookie { name: "sid", value: "", sameSite: SameSite.Unrestricted })
+		} else {
+			NoContent
+		}
+	}
+}

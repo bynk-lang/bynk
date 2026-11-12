@@ -1,0 +1,13 @@
+context api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+  @raw(contentType: "image/png")
+  @limit(maxBody: 100)
+  on PUT("/avatar") (body: Stream[Bytes]) -> Effect[HttpResult[String]] by who: User | Visitor {
+    Ok("x")
+  }
+}
