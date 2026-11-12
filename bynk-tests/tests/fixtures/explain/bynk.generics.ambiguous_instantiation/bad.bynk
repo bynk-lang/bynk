@@ -1,0 +1,7 @@
+commons demo
+
+fn same[T: Ord](x: T) -> T { x }
+
+fn wrap[A](g: (A) -> A, x: A) -> A { g(x) }
+
+fn pick() -> Int { wrap(same, 1) }

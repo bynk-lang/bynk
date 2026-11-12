@@ -1,0 +1,7 @@
+context shop
+
+consumes payment
+
+capability Gateway {
+    fn notify() -> Effect[()]
+}
