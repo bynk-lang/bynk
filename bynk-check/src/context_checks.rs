@@ -5648,6 +5648,10 @@ pub(crate) fn validate_field_names(
                         && let ExprKind::Ident(id) = &a.value.kind
                     {
                         err = err.with_note(match consts.get(&id.name) {
+                            Some(c) if matches!(c.ty, TypeRef::Base(BaseType::String, _)) => format!(
+                                "`{}` is declared `String`, but its value does not end at a string literal: every constant it passes through must be declared exactly `String`, and the last bound to a string literal",
+                                id.name,
+                            ),
                             Some(c) => format!(
                                 "`{}` is declared `{}`; `@name` needs a constant declared exactly `String` and bound to a string literal (or to another such constant)",
                                 id.name,

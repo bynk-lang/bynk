@@ -1,0 +1,13 @@
+context web.prefs
+
+uses app.names
+
+type Prefs = {
+  @name(HiddenCookie) hidden: Option[String],
+}
+
+service api from http {
+  on GET("/prefs") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}
