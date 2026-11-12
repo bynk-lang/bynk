@@ -53,6 +53,7 @@ const MODULES = [
   "pglite",
   "agent",
   "auth",
+  "session",
   "connection",
   "messages",
   "locale",
