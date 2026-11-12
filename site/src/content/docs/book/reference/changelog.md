@@ -3,7 +3,7 @@ title: Version compatibility & changelog
 ---
 Bynk is pre-1.0 and developed in small, spec-first increments (see
 [Versioning & roadmap](/book/about/versioning-and-roadmap/)). This book is
-written against **v0.561**.
+written against **v0.562**.
 
 This page is a high-level summary of notable increments, not an exhaustive
 per-commit history. While Bynk is pre-1.0, increments may change behaviour.
@@ -28,6 +28,7 @@ per-commit history. While Bynk is pre-1.0, increments may change behaviour.
 
 | Version | Highlights |
 |---|---|
+| **v0.562.0** | A `MySql` instance kind reaches an existing MySQL or MariaDB database through Hyperdrive over mysql2 (`capability Legacy = MySql`, `?` placeholders, `MySqlValue` and `MySqlError`, an `@tls("…")` option), with the same typed reads, transactions, deploy path and `schema.sql` statement check as `Postgres` |
 | **v0.561.0** | A `Postgres` instance can run on PGlite in tests (`[test] postgres = "pglite"`), and a `schema.sql` switches on a syntax and placeholder-count check of each literal statement (`bynk.postgres.sql_invalid` as a warning, `bynk.postgres.sql_param_count` as an error) |
 | **v0.560.1** | `examples/sessions` reads its `__Host-sid` cookie through a typed `@name("__Host-sid")` record, and the HTTP reference shows both ways to read a prefixed cookie (#3343, closing slice) |
 | **v0.560.0** | `bynk deploy` makes, syncs or adopts the Hyperdrive config of a `Postgres` instance from a connection string in an environment variable `bynk.toml` names, and `bynk dev` wires the local one |

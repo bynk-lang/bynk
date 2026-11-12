@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, emit_abi_shapes, ts_writes, diagnostic_coverage, explained_codes
-changelog: A `MySql` instance kind reaches an existing MySQL or MariaDB database through Hyperdrive over mysql2 (`capability Legacy = MySql`, `?` placeholders, `MySqlValue` and `MySqlError`, an `@tls("…")` option), with the same typed reads, transactions, deploy path and `schema.sql` statement check as `Postgres`
----
+# 0817 — Hyperdrive H5 adds a `MySql` instance kind over mysql2, with its own value and error types and a closed `@tls` set
 
-## ADR: hyperdrive-h5-mysql-instance-kind
-title: Hyperdrive H5 adds a `MySql` instance kind over mysql2, with its own value and error types and a closed `@tls` set
-summary: `MySql` mirrors `Postgres` (same operations, rows, transactions, deploy path) with `?` placeholders, separate `MySqlValue`/`MySqlError` types, mysql2 with `disableEval`, and `@tls` carried to deploy as the config's `sslmode`
+- **Status:** Accepted (v0.562)
 
 **Context.** The Hyperdrive series (H0 to H4) gave a Bynk service a route to an existing Postgres database. H0 fixed that there are two kinds, `Postgres` and `MySql`, both with binding prefix `HYPERDRIVE_`, because the placeholder style, the value set and the error codes differ. This is the last slice, proposal #3322 (part of #3184), decisions A and B accepted as recommended. It mirrors H1 to H4 and changes only what MySQL makes different.
 

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0817](0817-hyperdrive-h5-mysql-instance-kind.md) | **Hyperdrive H5 adds a `MySql` instance kind over mysql2, with its own value and error types and a closed `@tls` set** (v0.562) — `MySql` mirrors `Postgres` (same operations, rows, transactions, deploy path) with `?` placeholders, separate `MySqlValue`/`MySqlError` types, mysql2 with `disableEval`, and `@tls` carried to deploy as the config's `sslmode` | Accepted (v0.562) |
 | [0816](0816-hyperdrive-h4-postgres-test-double-and-sql-check.md) | **Hyperdrive H4 adds an opt-in PGlite `Postgres` test double and a `schema.sql`-gated statement check** (v0.561) — PGlite is adopted as an opt-in double on measurements, stub-only stays the default; a `schema.sql` at the root switches on a syntax warning (sqlparser) and an exact placeholder-count error | Accepted (v0.561) |
 | [0815](0815-hyperdrive-h2-deploy-and-dev.md) | **Hyperdrive H2 provisions a Postgres instance's config from an environment variable, and wires `bynk dev`** (v0.560) — Where the connection string comes from, how a deploy makes, syncs, adopts and prunes the config, and what keeps the string out of every file and message | Accepted (v0.560) |
 | [0814](0814-field-name-readers.md) | **The request readers apply a record field's `@name` wire key** (v0.559) — Where a renamed field is read, written and documented, and what an error names | Accepted (v0.559) |
