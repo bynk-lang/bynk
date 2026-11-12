@@ -1,0 +1,9 @@
+context shop
+
+service api from http {
+    fn double(n: Int) -> Int { n * 2 }
+
+    on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+        Ok(1)
+    }
+}

@@ -3488,6 +3488,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "json-for-non-bynk-clients",
     },
     Explain {
+        code: "bynk.parse.duplicate_limits",
+        blurb: "A service has one `limits` policy, and it sets the body-size cap for its body-taking routes. Two blocks could name different caps, and the reader would not know which holds, so the second is refused. Merge them into one, keeping the cap you mean. A single route can still differ with `@limit` on its handler. `cors`, `security` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_security`, `bynk.parse.duplicate_json`).",
+        example: "service api from http {\n    limits { maxBody: 1_048_576 }\n    limits { maxBody: 4_194_304 }                    // ✗ a second `limits`\n    on POST(\"/a\") (body: Int) -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 4_194_304 }                    // ✓ one cap\n    on POST(\"/a\") (body: Int) -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "request-body-limits",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_security",
+        blurb: "A service has one `security` policy, and it sets the security headers (`hsts`, `nosniff`) stamped on every response. Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
+        example: "service api from http {\n    security { hsts: 180.days }\n    security { nosniff: true }                       // ✗ a second `security`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days, nosniff: true }       // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+        page: "/book/reference/http",
+        anchor: "security-headers",
+    },
+    Explain {
         code: "bynk.parse.empty_agent",
         blurb: "An agent is its storage and the `on call` handlers that read and \
                 change it. One with no handler can never be called, so it is \
@@ -3594,6 +3608,69 @@ pub const EXPLANATIONS: &[Explain] = &[
         anchor: "declaration",
     },
     Explain {
+        code: "bynk.parse.expected_base_type",
+        blurb: "After `type Name =` the parser found something that is not a record `{ … }`, a sum starting with `|`, an `enum` or an `opaque` type, so it wanted a base type (`Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, `Bytes` or `Decimal`) to build on. The commonest cause is a sum written without its leading `|`. Another is naming an existing record or sum, as in `type Id = Order`, which a type declaration cannot do; for a distinct type, use `opaque` over a base type. The position is the first token after the `=`.",
+        example: "type Shape = Circle | Square              // ✗ a sum starts with `|`\ntype Shape = | Circle | Square            // ✓",
+        page: "/book/reference/grammar",
+        anchor: "rule-sum_type",
+    },
+    Explain {
+        code: "bynk.parse.expected_capability_op",
+        blurb: "A capability body is a list of operations, each a signature that starts with `fn`: the capability says what can be done, and a provider supplies how. The parser found something else where the next operation should begin. The commonest cause is leaving off the `fn`. An `on` handler, a `type` or a `let` does not belong in a capability either. The message names the token it found, and the position is where the operation should have started. A provider body has the same rule: `bynk.parse.expected_provider_op`.",
+        example: "capability Clock {\n    now() -> Effect[Int]                  // ✗ an operation starts with `fn`\n}\n\ncapability Clock {\n    fn now() -> Effect[Int]               // ✓\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-capability_op",
+    },
+    Explain {
+        code: "bynk.parse.expected_expression",
+        blurb: "The parser needed an expression, a value, and found a token that cannot start one. The commonest cause is a record written without its type: `{ x: 0 }` is not an expression, so write `Point { x: 0 }`. Others are an operator with nothing after it (`a +`) and a trailing comma in a call (`f(a, )`). The message names the token it found, where the parser gave up. For an operator or a comma with nothing after it that is the token after the mistake, so read what comes before it.",
+        example: "type Point = { x: Int, y: Int }\n\nfn origin() -> Point {\n    { x: 0, y: 0 }                        // ✗ a record literal needs its type's name\n}\n\nfn origin() -> Point {\n    Point { x: 0, y: 0 }                  // ✓\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-record_construction",
+    },
+    Explain {
+        code: "bynk.parse.expected_handler",
+        blurb: "A service or agent body is its handlers, each starting with `on`, beside its own clauses (a service's policies, an agent's `key` and `store` fields). The parser found something else where a handler should begin. The commonest cause is a helper `fn`, or a `let`, written inside the body: declare a helper beside the service, in the context, and its handlers can call it. Another is a handler with its `on` left off (`GET(\"/a\") …`, `call get() …`). The position is the first token of the item that is not a handler.",
+        example: "service api from http {\n    fn double(n: Int) -> Int { n * 2 }    // ✗ only handlers go in a service\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nfn double(n: Int) -> Int { n * 2 }        // ✓ beside the service\n\nservice api from http {\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-handler",
+    },
+    Explain {
+        code: "bynk.parse.expected_item",
+        blurb: "A unit's body is a list of declarations, and the parser found something else where the next one should begin. The message lists what this kind of unit accepts (a commons, a context and a suite differ). The commonest cause is code at the top level, which holds declarations only: a `let` outside any function (a constant is `const Name: Type = …`) or a call. Others are a misspelt keyword (`function`, `pub fn`) and a stray `}` after a fragment-form unit's last declaration. The position is that token, so look just before it too.",
+        example: "let limit = 100                           // ✗ code at the top level of a unit\nconst Limit: Int = 100                    // ✓ a named constant",
+        page: "/book/reference/grammar",
+        anchor: "rule-source_file",
+    },
+    Explain {
+        code: "bynk.parse.expected_predicate",
+        blurb: "After `where`, and after each `&&`, a refinement takes the name of a predicate from a fixed list (`NonNegative`, `InRange(0, 150)` and so on, which the note gives), not a comparison. The list is closed, so the compiler can check a literal against the refinement at compile time. The commonest cause is a comparison such as `where >= 0`; a name that is not on the list, as in `where n > 0`, is `bynk.parse.unknown_predicate`. The position is the token that is not a predicate name.",
+        example: "type Age = Int where >= 0                 // ✗ a predicate is a name, not a comparison\ntype Age = Int where NonNegative          // ✓",
+        page: "/book/reference/refined-types",
+        anchor: "predicates",
+    },
+    Explain {
+        code: "bynk.parse.expected_provider_op",
+        blurb: "A provider body implements the operations its capability declares, each starting with `fn` and carrying a body. The parser found something else where the next operation should begin. The commonest cause is leaving off the `fn`; an `on` handler, a `type` or a `let` does not belong in a provider either. The message names the token it found, and the position is where the operation should have started. A capability body has the same rule: `bynk.parse.expected_capability_op`.",
+        example: "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = FixedClock {\n    now() -> Effect[Int] { Effect.pure(1) }       // ✗ an operation starts with `fn`\n}\n\nprovides Clock = FixedClock {\n    fn now() -> Effect[Int] { Effect.pure(1) }    // ✓\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-provider_op",
+    },
+    Explain {
+        code: "bynk.parse.expected_token",
+        blurb: "The parser was part-way through a construct and the next token had to be one particular token: a `)` closing a list, a `,` between items, a `:`, `=`, `->` or `=>`, or a `}`. The message says which, and what it found instead. The commonest cause is a missing comma: in `fn add(a: Int b: Int)` it finds `b` where `)` was due. Others are `->` for `=>` in a match arm and `:` for `->` before a return type. A missing `)` or `}` is reported at the next token that cannot continue, often on the line below, so read the line above. If the file ended instead, it is `bynk.parse.unexpected_eof`.",
+        example: "fn add(a: Int b: Int) -> Int { a + b }    // ✗ no `,` between the parameters\nfn add(a: Int, b: Int) -> Int { a + b }   // ✓",
+        page: "/book/reference/grammar",
+        anchor: "rule-fn_decl",
+    },
+    Explain {
+        code: "bynk.parse.expected_type",
+        blurb: "A type was expected here, and the next token cannot start one. The message says which position wanted it (`as the return type`, `as the parameter type`). The commonest cause is a type left out: a `->` with nothing before the `{`, or a `:` with nothing after it. A trailing comma in a type-argument list (`Map[String, ]`) and a value where a type belongs (`n: 5`) land here too. The position is the token after the gap, so look just before it.",
+        example: "fn double(n: Int) -> {                    // ✗ no return type after `->`\n    n * 2\n}\n\nfn double(n: Int) -> Int {                // ✓\n    n * 2\n}",
+        page: "/book/reference/grammar",
+        anchor: "rule-_type_ref",
+    },
+    Explain {
         code: "bynk.parse.expected_visibility",
         blurb: "An `exports` clause says how consumers may use what it lists, so it needs a visibility: `exports opaque { … }` keeps a type's shape private to its context, `exports transparent { … }` shows it, and `exports capability { … }` offers a capability. A bare `exports { … }` is refused: the choice decides what other units can rely on, so it is written out. Pick one.",
         example: "exports { P }                           // ✗ no visibility\n\nexports transparent { P }               // ✓",
@@ -3617,6 +3694,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                   type Id = String",
         page: "/book/spec/syntactic-grammar",
         anchor: "",
+    },
+    Explain {
+        code: "bynk.parse.extra_tokens",
+        blurb: "A `.bynk` file holds one `commons` or `context`, and the parser found more after it ended. The commonest cause is a `}` too many: the unit closed early, or an extra brace sits at the end, and the first token after the close is reported, either the stray brace or the next declaration. Count the braces back from there. The other is a second `commons` or `context` in the same file; each goes in its own file. The position is the first token after the unit's end, not the brace that ended it.",
+        example: "commons demo {\n    fn one() -> Int { 1 }\n}\n}                                         // ✗ nothing can follow the unit\n\ncommons demo {\n    fn one() -> Int { 1 }\n}                                         // ✓ the unit closes once",
+        page: "/book/reference/grammar",
+        anchor: "rule-source_file",
     },
     Explain {
         code: "bynk.parse.generic_arg_count",
@@ -4011,6 +4095,13 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "agent Counter {\n    key id: String\n    store n: Cell[Int]\n\n    on call get() -> Effect[Int] { … }\n\n    transition up:                        // ✗ after a handler\n        new.n >= old.n\n}\n\nagent Counter {\n    key id: String\n    store n: Cell[Int]\n\n    transition up:                        // ✓ before the handlers\n        new.n >= old.n\n\n    on call get() -> Effect[Int] { … }\n}",
         page: "/book/reference/agent-invariants",
         anchor: "step-invariants",
+    },
+    Explain {
+        code: "bynk.parse.unexpected_eof",
+        blurb: "The file ended while the parser still needed something: usually a closing `}`, `)` or `]`, or an expression after an operator or a `,`. The message says what it expected, and the position is the end of the file. The commonest cause is a `}` missing at the end of a braced unit or function. A missing brace with further declarations after it is reported as `bynk.parse.expected_token`, at the next `fn` or `type`, so it may be well above the end: check the nesting from the last declaration you edited.",
+        example: "commons demo {\n    fn one() -> Int { 1 }                 // ✗ the file ends with the unit still open\n\ncommons demo {\n    fn one() -> Int { 1 }\n}                                         // ✓ closed",
+        page: "/book/reference/grammar",
+        anchor: "rule-commons_decl",
     },
     Explain {
         code: "bynk.parse.unknown_effect_method",

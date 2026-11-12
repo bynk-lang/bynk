@@ -1,0 +1,9 @@
+context shop
+
+service api from http {
+    limits { maxBody: 4_194_304 }
+
+    on POST("/a") (body: Int) -> Effect[HttpResult[Int]] by Visitor {
+        Ok(body)
+    }
+}

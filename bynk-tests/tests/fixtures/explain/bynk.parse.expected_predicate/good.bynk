@@ -1,0 +1,3 @@
+commons demo
+
+type Age = Int where NonNegative

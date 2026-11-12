@@ -1,0 +1,9 @@
+context shop
+
+service api from http {
+    security { hsts: 180.days, nosniff: true }
+
+    on GET("/a") () -> Effect[HttpResult[Int]] by Visitor {
+        Ok(1)
+    }
+}
