@@ -222,8 +222,8 @@ fn request(
     let mut reader = stream.try_clone().map_err(|e| e.to_string())?;
     let collector = std::thread::spawn(move || {
         let mut all = Vec::new();
-        let _ = reader.read_to_end(&mut all);
-        all
+        let read = reader.read_to_end(&mut all).err().map(|e| e.to_string());
+        (all, read)
     });
     let mut write_all = |bytes: &[u8]| stream.write_all(bytes).is_ok();
     if write_all(head.as_bytes())
@@ -246,10 +246,23 @@ fn request(
             write_all(b"0\r\n\r\n");
         }
     }
-    let raw = collector
+    let (raw, read_error) = collector
         .join()
         .map_err(|_| "reader panicked".to_string())?;
-    parse_reply(&raw)
+    // A connection the platform reset before a response was read shows here as the read
+    // error, not only as a response that will not parse.
+    parse_reply(&raw).map_err(|e| match read_error {
+        Some(read) => format!("{e} (reading the response failed: {read})"),
+        None => e,
+    })
+}
+
+/// A port nothing is listening on: bind port 0, read what the OS chose, release it.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .expect("the OS hands out a free port")
+        .port()
 }
 
 fn chunks_of(total: usize, each: usize) -> Vec<Vec<u8>> {
@@ -296,11 +309,12 @@ fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
         "expected workers/up-smoke — context dasherisation changed?"
     );
 
-    // Its own port band, clear of the other workerd tests' (18 100 to 19 899, between
-    // `par_gate_workerd`'s and `binding_workerd`'s): one port for the Worker and one
-    // for its V8 inspector. 9 000 to 9 999 was inside `agent_serialise_workerd`'s.
-    let port = 18_100 + 2 * (std::process::id() % 900) as u16;
-    let inspector_port = port + 1;
+    // Ports the OS hands out, not a band of our own: every fixed band in this binary is
+    // derived from the same process id, and they already overlap each other (a fixed
+    // band here would have collided with `workers_runtime_smoke`'s 10 000 to 25 000
+    // spans, or `agent_serialise_workerd`'s 6 000 to 9 996). One port for the Worker and
+    // one for its V8 inspector.
+    let (port, inspector_port) = (free_port(), free_port());
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
@@ -429,11 +443,19 @@ fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
         "an overrun through R2.putStream answers 413, not 500\n{}",
         log()
     );
+    assert!(
+        String::from_utf8_lossy(&r.body).contains("PayloadTooLarge"),
+        "it is the route's own 413, naming PayloadTooLarge: {:?}",
+        String::from_utf8_lossy(&r.body)
+    );
     let has = |key: &str| {
-        request(port, "GET", &format!("/r2-has/{key}"), None).map(|r| {
-            String::from_utf8_lossy(&r.body)
+        request(port, "GET", &format!("/r2-has/{key}"), None).and_then(|r| {
+            if r.status != 200 {
+                return Err(format!("/r2-has/{key} answered {}", r.status));
+            }
+            Ok(String::from_utf8_lossy(&r.body)
                 .trim_matches('"')
-                .to_string()
+                .to_string())
         })
     };
     assert_eq!(
